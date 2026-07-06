@@ -716,8 +716,9 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
         hir->func_name = func_name;
         debug::hir::log(debug::hir::Id::CallTarget, "function: " + func_name, debug::Level::Trace);
 
-        static const std::set<std::string> builtin_funcs = {"printf",  "__println__", "__print__",
-                                                            "sprintf", "exit",        "panic"};
+        static const std::set<std::string> builtin_funcs = {
+            "printf", "__println__",      "__print__",          "sprintf", "exit", "panic",
+            "assert", "__builtin_concat", "__builtin_replicate"};
 
         bool is_builtin = builtin_funcs.find(func_name) != builtin_funcs.end();
         bool is_defined = func_defs_.find(func_name) != func_defs_.end();

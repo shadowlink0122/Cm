@@ -1,0 +1,19 @@
+//! platform: sv
+//! description: Multiple clock domains test
+
+#[input] bool clk_a = false;
+#[input] bool clk_b = false;
+#[input] uint data_a = 0;
+#[input] uint data_b = 0;
+#[output] uint out_a = 0;
+#[output] uint out_b = 0;
+
+// クロックドメインA
+async void domain_a(posedge clk_a) {
+    out_a = data_a + 1;
+}
+
+// クロックドメインB
+always void domain_b(posedge clk_b) {
+    out_b = data_b + 2;
+}

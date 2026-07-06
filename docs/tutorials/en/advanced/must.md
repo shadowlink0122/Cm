@@ -129,3 +129,8 @@ Use `--lir-opt` to check optimized LLVM IR:
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Constants and Constant Expressions (const)](const.html) | [Contents](index.html) | Next: [Macros](macros.html) →

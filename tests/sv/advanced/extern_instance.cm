@@ -1,0 +1,27 @@
+//! platform: sv
+
+// extern struct テスト: 外部ハードウェアモジュールのインスタンス化
+
+// 外部モジュール定義（OSCのような発振器IP）
+extern struct OSC {
+    #[sv::param] int FREQ_DIV;
+    #[output] bool OSCOUT;
+}
+
+// ポートとワイヤ
+#[output] bool led = 0;
+bool clk = 0;
+
+// OSCインスタンス（extern struct 型のグローバル変数）
+OSC osc_inst;
+
+// カウンタ
+int counter = 0;
+
+async void blink(posedge clk) {
+    counter = counter + 1;
+    if (counter == 100) {
+        led = !led;
+        counter = 0;
+    }
+}

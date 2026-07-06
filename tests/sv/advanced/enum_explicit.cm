@@ -1,0 +1,24 @@
+//! platform: sv
+//! test: sel=1 -> code=100
+//! test: sel=0 -> code=0
+
+// enum明示タグ値の回帰テスト:
+// メンバー数ではなく最大タグ値からビット幅を計算する必要がある。
+// メンバー数(2個)から幅を求めると typedef が 1'd100 のような
+// 幅不足のリテラルになり不正なSVが生成される。
+
+enum Status {
+    IDLE = 0,
+    ERROR = 100
+}
+
+#[input] uint sel = 0;
+#[output] uint code = 0;
+
+void pick() {
+    if (sel == 1) {
+        code = Status::ERROR as uint;
+    } else {
+        code = Status::IDLE as uint;
+    }
+}

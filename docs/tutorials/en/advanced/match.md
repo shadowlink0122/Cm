@@ -427,3 +427,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Advanced Features](index.html) | [Contents](index.html) | Next: [Advanced - with Keyword (Auto Implementation)](with-keyword.html) →

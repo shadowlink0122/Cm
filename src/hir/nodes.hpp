@@ -355,6 +355,9 @@ struct HirStmt {
 struct HirParam {
     std::string name;
     TypePtr type;
+    // デフォルト引数の式（nullなら必須引数）。
+    // 呼び出し側で引数が省略された場合にMIR loweringが補完に使用する
+    std::shared_ptr<HirExpr> default_value;
 };
 
 // ジェネリック型パラメータ
@@ -381,9 +384,11 @@ struct HirFunction {
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_constructor = false;
     bool is_destructor = false;
-    bool is_static = false;    // staticメソッド（selfパラメータなし）
-    bool is_async = false;     // async関数（JSバックエンド用）
-    bool is_overload = false;  // overloadキーワードの有無
+    bool is_static = false;  // staticメソッド（selfパラメータなし）
+    bool is_async = false;   // async関数（JSバックエンド用）
+    bool is_always = false;  // always修飾子（SVバックエンド用）
+    enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
+    std::vector<std::string> attributes;  // SV属性（sv::latch, sv::clock_domain等）
     HirMethodAccess access = HirMethodAccess::Public;  // メソッドの場合のアクセス修飾子
 };
 
@@ -399,6 +404,8 @@ struct HirField {
     std::string name;
     TypePtr type;
     HirFieldAccess access = HirFieldAccess::Public;  // デフォルトはpublic
+    std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
+    std::string default_value_str;        // デフォルト値の文字列表現（SV用）
 };
 
 // 構造体
@@ -410,6 +417,7 @@ struct HirStruct {
     bool is_export = false;
     bool has_explicit_constructor = false;
     bool is_css = false;
+    bool is_extern = false;  // extern struct（外部HWモジュール）
 };
 
 // メソッドシグネチャ
@@ -522,6 +530,7 @@ struct HirGlobalVar {
     TypePtr type;
     HirExprPtr init;
     bool is_const;
+    bool is_assign = false;  // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
 };
@@ -533,11 +542,17 @@ struct HirExternBlock {
     std::vector<std::unique_ptr<HirFunction>> functions;
 };
 
-using HirDeclKind =
-    std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
-                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
-                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>, std::unique_ptr<HirTypedef>,
-                 std::unique_ptr<HirGlobalVar>, std::unique_ptr<HirExternBlock>>;
+// SV initial ブロック（シミュレーション初期化）
+struct HirInitialBlock {
+    std::vector<HirStmtPtr> body;
+    std::vector<std::string> attributes;
+};
+
+using HirDeclKind = std::variant<std::unique_ptr<HirFunction>, std::unique_ptr<HirStruct>,
+                                 std::unique_ptr<HirInterface>, std::unique_ptr<HirImpl>,
+                                 std::unique_ptr<HirImport>, std::unique_ptr<HirEnum>,
+                                 std::unique_ptr<HirTypedef>, std::unique_ptr<HirGlobalVar>,
+                                 std::unique_ptr<HirExternBlock>, std::unique_ptr<HirInitialBlock>>;
 
 struct HirDecl {
     HirDeclKind kind;

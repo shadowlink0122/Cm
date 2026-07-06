@@ -1,0 +1,15 @@
+//! platform: sv
+
+// always修飾子テスト: always_ff @(posedge clk) 生成確認
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+
+async void tick(posedge clk) {
+    if (rst) {
+        count = 0;
+    } else {
+        count = count + 1;
+    }
+}

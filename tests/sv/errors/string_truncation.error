@@ -1,0 +1,1 @@
+error[SV005]: Non-const string longer than 3 characters is not synthesizable

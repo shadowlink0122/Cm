@@ -1,0 +1,22 @@
+// 配列要素・構造体フィールドへのインクリメント/デクリメントのテスト
+// 回帰: a[0]++ / s.v-- が黙って const 0 に置換され no-op になるバグの検証
+import std::io::println;
+
+struct S {
+    int v;
+}
+
+int main() {
+    int[3] a = [1, 5, 7];
+    a[0]++;
+    a[2]--;
+
+    S s = S{v: 10};
+    s.v--;
+
+    // 後置は旧値を返す
+    int old = a[1]++;
+
+    println("{a[0]} {a[1]} {a[2]} {s.v} {old}");
+    return 0;
+}

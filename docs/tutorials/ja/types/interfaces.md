@@ -220,3 +220,8 @@ impl Circle for Shape {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [型システム編 - ジェネリクス](generics.html) ｜ [目次](index.html) ｜ 次: [型システム編 - 型制約](constraints.html) →

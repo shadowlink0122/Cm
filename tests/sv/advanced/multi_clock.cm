@@ -10,7 +10,7 @@
 #[output] int fast_out = 0;
 #[output] int slow_out = 0;
 
-async func fast_process() {
+async void fast_process() {
     if (rst) {
         fast_out = 0;
     } else {
@@ -18,7 +18,7 @@ async func fast_process() {
     }
 }
 
-async func slow_process() {
+async void slow_process() {
     if (rst) {
         slow_out = 0;
     } else {

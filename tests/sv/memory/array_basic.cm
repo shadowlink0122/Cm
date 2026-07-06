@@ -1,0 +1,19 @@
+//! platform: sv
+
+// 基本的な配列宣言 + 読み書きテスト (BRAM属性なし)
+
+#[input] posedge clk;
+#[input] utiny addr = 0;
+#[input] utiny data_in = 0;
+#[input] bool we = false;
+#[output] utiny data_out = 0;
+
+// BRAM属性なしの通常配列 (内部レジスタ配列として宣言)
+utiny[256] mem;
+
+async void access(posedge clk) {
+    if (we == true) {
+        mem[addr] = data_in;
+    }
+    data_out = mem[addr];
+}

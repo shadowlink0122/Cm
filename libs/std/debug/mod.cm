@@ -1,0 +1,37 @@
+// std::debug - デバッグ支援（アサーション等）
+//
+// 使用例:
+//   import std::debug::assert;
+//
+//   int main() {
+//       int x = 5;
+//       assert(x == 5, "x must be 5");
+//       return 0;
+//   }
+module std.debug;
+
+import std::io::println;
+
+/// アサーション: 条件が偽ならメッセージを出力して異常終了する。
+///
+/// 実行系バックエンド（JIT / LLVM native / WASM / JS）はこの実装が
+/// そのまま実行される: "assertion failed: <msg>" を出力して exit(1)。
+///
+/// SVバックエンドのみ、ハードウェアには exit が存在しないため
+/// コンパイラが呼び出し箇所を即時アサーション
+/// assert (cond) else $error("assertion failed: msg"); に変換する
+/// （シミュレーションで検証され、合成ツールでは無視される。
+///   この関数定義自体はSV出力されない）。
+export void assert(bool cond, string msg) {
+    if (!cond) {
+        println("assertion failed: {msg}");
+        exit(1);
+    }
+}
+
+/// 回復不能なエラー: メッセージを出力して即座に異常終了する。
+/// 全実行系バックエンド共通の実装（"panic: <msg>" を出力して exit(1)）
+export void panic(string msg) {
+    println("panic: {msg}");
+    exit(1);
+}

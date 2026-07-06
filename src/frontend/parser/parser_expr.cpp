@@ -1012,40 +1012,158 @@ ast::ExprPtr Parser::parse_primary() {
         return ast::make_array_literal(std::move(elements), Span{start_pos, previous().end});
     }
 
-    // 暗黙的構造体リテラル: {field1: val1, field2: val2, ...}
-    // 型は文脈から推論される
-    if (consume_if(TokenKind::LBrace)) {
-        debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
-                        debug::Level::Debug);
-        std::vector<ast::StructLiteralField> fields;
+    // {expr, ...} / {N{expr}} / {field: val, ...} (SVプラットフォーム限定)
+    // 3パターンの判別:
+    //   (1) {ident: expr, ...} → 構造体リテラル (colonあり)
+    //   (2) {N{expr}} → 複製 (intリテラル + LBrace)
+    //   (3) {expr, expr, ...} → 連接 (カンマ区切りの式)
+    if (is_sv_platform_ && check(TokenKind::LBrace)) {
+        // 先読みで構造体リテラルかどうかを判別
+        auto saved_pos = pos_;
+        advance();  // { を消費
 
-        if (!check(TokenKind::RBrace)) {
-            do {
-                // フィールド名:値 形式のみ（名前付き初期化必須）
-                if (!check(TokenKind::Ident)) {
-                    error("Expected field name in struct literal (named initialization required)");
-                }
+        // 連接式をパースするヘルパー
+        auto parse_concat_expr = [&]() -> ast::ExprPtr {
+            std::vector<ast::ExprPtr> elements;
+            elements.push_back(parse_expr());
+            while (consume_if(TokenKind::Comma)) {
+                elements.push_back(parse_expr());
+            }
+            expect(TokenKind::RBrace);
+            auto callee = ast::make_ident("__builtin_concat", Span{start_pos, start_pos});
+            return ast::make_call(std::move(callee), std::move(elements),
+                                  Span{start_pos, previous().end});
+        };
 
-                std::string field_name(current().get_string());
-                advance();  // フィールド名を消費
-
-                if (!check(TokenKind::Colon)) {
-                    error("Expected ':' after field name '" + field_name + "' in struct literal");
-                }
-                advance();  // : を消費
-
-                auto value = parse_expr();
-                fields.emplace_back(std::move(field_name), std::move(value));
-            } while (consume_if(TokenKind::Comma));
+        // 空の {} は空の連接として解釈
+        if (check(TokenKind::RBrace)) {
+            advance();  // } を消費
+            // __builtin_concat() を引数なしで呼び出し（空の連接）
+            auto callee = ast::make_ident("__builtin_concat", Span{start_pos, start_pos});
+            std::vector<ast::ExprPtr> elements;
+            return ast::make_call(std::move(callee), std::move(elements),
+                                  Span{start_pos, previous().end});
         }
+        // パターン2: {N{expr}} → 複製式
+        else if (check(TokenKind::IntLiteral)) {
+            auto int_pos = pos_;
+            int64_t count = current().get_int();
+            advance();  // intリテラルを消費
+            if (check(TokenKind::LBrace)) {
+                advance();  // 内側の { を消費
+                auto inner_expr = parse_expr();
+                expect(TokenKind::RBrace);  // 内側の }
+                expect(TokenKind::RBrace);  // 外側の }
+                // __builtin_replicate(count, expr) として表現
+                auto callee = ast::make_ident("__builtin_replicate", Span{start_pos, start_pos});
+                std::vector<ast::ExprPtr> args;
+                args.push_back(ast::make_int_literal(count, Span{start_pos, start_pos}));
+                args.push_back(std::move(inner_expr));
+                return ast::make_call(std::move(callee), std::move(args),
+                                      Span{start_pos, previous().end});
+            }
+            // intリテラルの後にLBraceがない → 連接として解析
+            pos_ = int_pos;
+            return parse_concat_expr();
+        }
+        // パターン1: {ident: ...} → 構造体リテラル
+        else if (check(TokenKind::Ident)) {
+            auto ident_pos = pos_;
+            advance();  // ident を消費
+            if (check(TokenKind::Colon)) {
+                // 構造体リテラル確定
+                pos_ = saved_pos;
+                advance();  // { を再消費
+                debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
+                                debug::Level::Debug);
+                std::vector<ast::StructLiteralField> fields;
 
-        expect(TokenKind::RBrace);
-        debug::par::log(
-            debug::par::Id::PrimaryExpr,
-            "Created implicit struct literal with " + std::to_string(fields.size()) + " fields",
-            debug::Level::Debug);
-        // 型名は空文字列（型推論で解決）
-        return ast::make_struct_literal("", std::move(fields), Span{start_pos, previous().end});
+                if (!check(TokenKind::RBrace)) {
+                    do {
+                        if (!check(TokenKind::Ident)) {
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
+                        }
+
+                        std::string field_name(current().get_string());
+                        advance();
+
+                        if (!check(TokenKind::Colon)) {
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
+                        }
+                        advance();
+
+                        auto value = parse_expr();
+                        fields.emplace_back(std::move(field_name), std::move(value));
+                    } while (consume_if(TokenKind::Comma));
+                }
+
+                expect(TokenKind::RBrace);
+                return ast::make_struct_literal("", std::move(fields),
+                                                Span{start_pos, previous().end});
+            }
+            // ident の後に : がない → 連接として解析
+            pos_ = ident_pos;
+            return parse_concat_expr();
+        }
+        // パターン3: {expr, expr, ...} → 連接式
+        else {
+            return parse_concat_expr();
+        }
+    }
+
+    // 非SVプラットフォーム: 暗黙的構造体リテラル {field: val, ...}
+    // SVプラットフォームでは上のブロックで処理済み
+    if (!is_sv_platform_ && check(TokenKind::LBrace)) {
+        // 先読みで構造体リテラルかどうかを判別
+        auto saved_pos = pos_;
+        advance();  // { を消費
+
+        // {ident: ...} パターン → 構造体リテラル
+        if (check(TokenKind::Ident)) {
+            advance();  // ident を消費
+            if (check(TokenKind::Colon)) {
+                // 構造体リテラル確定
+                pos_ = saved_pos;
+                advance();  // { を再消費
+                debug::par::log(debug::par::Id::PrimaryExpr, "Found implicit struct literal",
+                                debug::Level::Debug);
+                std::vector<ast::StructLiteralField> fields;
+
+                if (!check(TokenKind::RBrace)) {
+                    do {
+                        if (!check(TokenKind::Ident)) {
+                            error(
+                                "Expected field name in struct literal (named initialization "
+                                "required)");
+                        }
+
+                        std::string field_name(current().get_string());
+                        advance();
+
+                        if (!check(TokenKind::Colon)) {
+                            error("Expected ':' after field name '" + field_name +
+                                  "' in struct literal");
+                        }
+                        advance();
+
+                        auto value = parse_expr();
+                        fields.emplace_back(std::move(field_name), std::move(value));
+                    } while (consume_if(TokenKind::Comma));
+                }
+
+                expect(TokenKind::RBrace);
+                return ast::make_struct_literal("", std::move(fields),
+                                                Span{start_pos, previous().end});
+            }
+            // ident の後に : がない → 構造体リテラルではない
+            pos_ = saved_pos;
+        } else {
+            // ident でもない → 構造体リテラルではない
+            pos_ = saved_pos;
+        }
     }
 
     // 括弧式またはラムダ式

@@ -1,0 +1,26 @@
+// 演算結果の型幅ラップのテスト:
+// 回帰: 定数畳み込みがint64のまま値を伝播し、
+// 「INT_MAX + 1 が -2147483648 と表示されるのに w < 0 が false」
+// という表示値と比較値の食い違いが起きるバグの検証
+import std::io::println;
+
+int main() {
+    int a = 2147483647;
+    int w = a + 1;
+    println("w = {w}");
+    if (w < 0) {
+        println("w < 0: true");
+    } else {
+        println("w < 0: false");
+    }
+
+    tiny t = 127;
+    tiny t2 = t + 1;
+    println("t2 = {t2}");
+    if (t2 < 0) {
+        println("t2 < 0: true");
+    } else {
+        println("t2 < 0: false");
+    }
+    return 0;
+}

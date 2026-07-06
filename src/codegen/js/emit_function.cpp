@@ -264,6 +264,10 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
         if (local.is_static)
             continue;
 
+        // グローバル変数はモジュールレベルで宣言済み（emitGlobalVars）なのでスキップ
+        if (local.is_global)
+            continue;
+
         if (!isLocalUsed(local.id)) {
             continue;
         }
@@ -278,41 +282,27 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
         // 変数宣言: 常にIDをサフィックスとして追加（引数以外）
         std::string defaultVal;
 
-        // グローバル変数の場合、MirGlobalVarから初期値を取得
-        bool foundGlobalInit = false;
-        if (local.is_global) {
-            for (const auto& gv : program.global_vars) {
-                if (gv && gv->name == local.name && gv->init_value) {
-                    defaultVal = emitConstant(*gv->init_value);
-                    foundGlobalInit = true;
-                    break;
-                }
-            }
-        }
-
-        if (!foundGlobalInit) {
-            if (local.type) {
-                // インターフェース型がStructとして報告される場合に対応
-                if (local.type->kind == ast::TypeKind::Struct &&
-                    interface_names_.count(local.type->name) > 0) {
-                    // インターフェース型はfat objectとして初期化
-                    defaultVal = "{data: null, vtable: null}";
-                } else if (local.type->kind == ast::TypeKind::Struct) {
-                    // 構造体型：ネストフィールドも含めた完全なデフォルト値を生成
-                    defaultVal = getStructDefaultValue(*local.type);
-                } else if (local.type->kind == ast::TypeKind::Array && local.type->element_type &&
-                           local.type->element_type->kind == ast::TypeKind::Struct &&
-                           local.type->array_size && *local.type->array_size > 0) {
-                    // 構造体の配列：各要素を完全なデフォルト値で初期化
-                    std::string elemDefault = getStructDefaultValue(*local.type->element_type);
-                    defaultVal = "Array.from({length: " + std::to_string(*local.type->array_size) +
-                                 "}, () => (" + elemDefault + "))";
-                } else {
-                    defaultVal = jsDefaultValue(*local.type);
-                }
+        if (local.type) {
+            // インターフェース型がStructとして報告される場合に対応
+            if (local.type->kind == ast::TypeKind::Struct &&
+                interface_names_.count(local.type->name) > 0) {
+                // インターフェース型はfat objectとして初期化
+                defaultVal = "{data: null, vtable: null}";
+            } else if (local.type->kind == ast::TypeKind::Struct) {
+                // 構造体型：ネストフィールドも含めた完全なデフォルト値を生成
+                defaultVal = getStructDefaultValue(*local.type);
+            } else if (local.type->kind == ast::TypeKind::Array && local.type->element_type &&
+                       local.type->element_type->kind == ast::TypeKind::Struct &&
+                       local.type->array_size && *local.type->array_size > 0) {
+                // 構造体の配列：各要素を完全なデフォルト値で初期化
+                std::string elemDefault = getStructDefaultValue(*local.type->element_type);
+                defaultVal = "Array.from({length: " + std::to_string(*local.type->array_size) +
+                             "}, () => (" + elemDefault + "))";
             } else {
-                defaultVal = "null";
+                defaultVal = jsDefaultValue(*local.type);
             }
+        } else {
+            defaultVal = "null";
         }
         std::string varName = sanitizeIdentifier(local.name) + "_" + std::to_string(local.id);
 
@@ -383,6 +373,11 @@ std::string JSCodeGen::getLocalVarName(const mir::MirFunction& func, mir::LocalI
     // static変数の場合はグローバル名を返す
     if (local.is_static) {
         return getStaticVarName(func, localId);
+    }
+
+    // グローバル変数はモジュールレベルの共有名を返す
+    if (local.is_global) {
+        return "__global_" + sanitizeIdentifier(local.name);
     }
 
     // 引数の場合は名前のみ、それ以外はIDサフィックス付き

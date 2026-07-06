@@ -120,3 +120,8 @@ people.sort((Person a, Person b) => {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [高度な機能編 - 関数ポインタ](function-pointers.html) ｜ [目次](index.html) ｜ 次: [高度な機能編 - 文字列操作](strings.html) →

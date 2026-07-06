@@ -92,6 +92,11 @@ int puts(const char* s) {
     return 0;
 }
 
+// exit - WASIのproc_exitへ委譲（panic/assert/ゼロ除算トラップで使用）
+__attribute__((noreturn)) void exit(int code) {
+    __wasi_proc_exit(code);
+}
+
 // strlen - 標準ライブラリ互換のシグネチャ
 size_t strlen(const char* s) {
     if (!s)

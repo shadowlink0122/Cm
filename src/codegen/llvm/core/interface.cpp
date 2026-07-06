@@ -25,6 +25,29 @@ llvm::StructType* MIRToLLVM::getInterfaceFatPtrType(const std::string& interface
     return fatPtrType;
 }
 
+// 具象構造体へのポインタから interface fat pointer 値 {data, vtable} を構築する。
+// 変数初期化・代入・引数渡しの coercion で共通使用する
+llvm::Value* MIRToLLVM::createInterfaceFatPtr(llvm::Value* dataPtr,
+                                              const std::string& concreteTypeName,
+                                              const std::string& interfaceName) {
+    auto fatPtrType = getInterfaceFatPtrType(interfaceName);
+
+    llvm::Value* vtablePtr = nullptr;
+    auto it = vtableGlobals.find(concreteTypeName + "_" + interfaceName);
+    if (it != vtableGlobals.end()) {
+        vtablePtr = it->second;
+    } else {
+        vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
+    }
+
+    llvm::Value* fat = llvm::UndefValue::get(fatPtrType);
+    auto dataCast = builder->CreateBitCast(dataPtr, ctx.getPtrType(), "iface_data");
+    fat = builder->CreateInsertValue(fat, dataCast, {0}, "iface_fat");
+    auto vtableCast = builder->CreateBitCast(vtablePtr, ctx.getPtrType(), "iface_vtable");
+    fat = builder->CreateInsertValue(fat, vtableCast, {1}, "iface_fat");
+    return fat;
+}
+
 // vtable生成
 void MIRToLLVM::generateVTables(const mir::MirProgram& program) {
     for (const auto& vtable : program.vtables) {

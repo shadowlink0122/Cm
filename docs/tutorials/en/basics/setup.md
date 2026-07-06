@@ -402,10 +402,10 @@ For cross-compilation or explicit architecture targeting. Usually auto-detection
 
 ## Related Links
 
-- [Compiler Usage](../compiler/usage.html)
-- [Linter](../compiler/linter.html) - Static analysis
-- [Formatter](../compiler/formatter.html) - Code formatting
-- [JS Backend](../compiler/js-compilation.html) - JavaScript output
+- [Compiler Usage](../compiler/common/usage.html)
+- [Linter](../compiler/common/linter.html) - Static analysis
+- [Formatter](../compiler/common/formatter.html) - Code formatting
+- [JS Backend](../compiler/js/index.html) - JavaScript output
 
 ---
 
@@ -414,3 +414,8 @@ For cross-compilation or explicit architecture targeting. Usually auto-detection
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Introduction](introduction.html) | [Contents](index.html) | Next: [Basics - Hello, World!](hello-world.html) →

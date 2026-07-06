@@ -78,3 +78,8 @@ interface Clone {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Interfaces](interfaces.html) | [Contents](index.html) | Next: [Types - Ownership and Borrowing](ownership.html) →

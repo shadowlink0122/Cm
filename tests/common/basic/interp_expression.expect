@@ -1,0 +1,6 @@
+add = 7
+mul = 12
+mixed = 11
+paren = 14
+call = 6
+cmp = true

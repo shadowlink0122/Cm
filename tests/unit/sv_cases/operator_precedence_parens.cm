@@ -1,0 +1,10 @@
+#[input] uint a;
+#[output] uint flag = 0;
+
+void check() {
+    if ((a & 256) == 0) {
+        flag = 1;
+    } else {
+        flag = 0;
+    }
+}

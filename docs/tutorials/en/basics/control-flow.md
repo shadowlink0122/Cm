@@ -638,3 +638,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Operators](operators.html) | [Contents](index.html) | Next: [Basics - Functions](functions.html) →

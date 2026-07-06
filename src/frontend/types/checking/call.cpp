@@ -106,6 +106,88 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_named(ident->name);
         }
 
+        // exit(code) ビルトイン: プロセスを終了する
+        // （HIRビルトインとして各バックエンドが処理する。std::debug::assert等が使用）
+        if (ident->name == "exit") {
+            if (call.args.size() != 1) {
+                error(current_span_, "exit は exit(終了コード) の形式で使用します");
+                return ast::make_void();
+            }
+            auto code_type = infer_type(*call.args[0]);
+            if (code_type && code_type->kind != ast::TypeKind::Bool && !code_type->is_integer()) {
+                error(current_span_, "exit の終了コードは整数型である必要があります");
+            }
+            return ast::make_void();
+        }
+
+        // SVバックエンド用ビルトイン関数のバイパス
+        if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
+            if (ident->name == "__builtin_replicate") {
+                // __builtin_replicate(count, expr): count * expr のビット幅
+                ast::TypePtr result_type = nullptr;
+                int64_t count = 1;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    auto t = infer_type(*call.args[i]);
+                    if (i == 0) {
+                        // 最初の引数は繰り返し回数
+                        if (auto* lit = call.args[i]->as<ast::LiteralExpr>()) {
+                            if (auto* ival = std::get_if<int64_t>(&lit->value)) {
+                                count = *ival;
+                            }
+                        }
+                    } else if (i == 1) {
+                        // 2番目の引数が複製対象
+                        if (t && t->kind == ast::TypeKind::Array && t->element_type &&
+                            t->element_type->kind == ast::TypeKind::Bit && t->array_size) {
+                            // bit[N] → bit[N * count]
+                            uint32_t new_size = static_cast<uint32_t>(*t->array_size * count);
+                            result_type = ast::make_array(ast::make_bit(), new_size);
+                        } else if (t && t->kind == ast::TypeKind::Bit) {
+                            // 単一bit → bit[count]
+                            result_type =
+                                ast::make_array(ast::make_bit(), static_cast<uint32_t>(count));
+                        } else {
+                            result_type = t;
+                        }
+                    }
+                }
+                return result_type ? result_type : ast::make_void();
+            } else {
+                // __builtin_concat: 全引数のビット幅を合算
+                std::vector<ast::TypePtr> arg_types;
+                uint32_t total_bits = 0;
+                bool all_bit_types = true;
+
+                for (auto& arg : call.args) {
+                    auto t = infer_type(*arg);
+                    arg_types.push_back(t);
+                    if (t && t->kind == ast::TypeKind::Array && t->element_type &&
+                        t->element_type->kind == ast::TypeKind::Bit && t->array_size) {
+                        // bit[N] 型
+                        total_bits += *t->array_size;
+                    } else if (t && t->kind == ast::TypeKind::Bit) {
+                        // 単一bit
+                        total_bits += 1;
+                    } else {
+                        all_bit_types = false;
+                    }
+                }
+
+                if (call.args.empty()) {
+                    // 空の連接は void (または 0ビット)
+                    return ast::make_void();
+                }
+
+                if (all_bit_types && total_bits > 0) {
+                    // bit[N] 同士の連接 → bit[合計ビット幅]
+                    return ast::make_array(ast::make_bit(), total_bits);
+                }
+
+                // それ以外は最初の引数の型をフォールバック
+                return arg_types.empty() ? ast::make_void() : arg_types[0];
+            }
+        }
+
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym) {

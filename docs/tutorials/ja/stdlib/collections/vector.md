@@ -149,3 +149,8 @@ println("{*v.get(2)}");  // 30
 ---
 
 **関連:** [Queue](queue.html) · [HashMap](hashmap.html)
+
+---
+
+<!-- nav -->
+← 前: [std::gpu - GPU計算 (Apple Metal)](../gpu.html) ｜ [目次](../index.html) ｜ 次: [std::collections::queue - FIFOキュー](queue.html) →

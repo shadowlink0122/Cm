@@ -54,3 +54,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [環境構築](setup.html) ｜ [目次](index.html) ｜ 次: [基本編 - 変数と型](variables.html) →

@@ -410,7 +410,6 @@ int main() {
 ## 関連リンク
 
 - [演算子オーバーロード](../advanced/operators.html)
-- [型変換](../types/conversions.html)
 
 ---
 
@@ -420,3 +419,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-10
+
+---
+
+<!-- nav -->
+← 前: [基本編 - 変数と型](variables.html) ｜ [目次](index.html) ｜ 次: [基本編 - 制御構文](control-flow.html) →

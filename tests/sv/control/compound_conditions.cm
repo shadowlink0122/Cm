@@ -1,0 +1,17 @@
+//! platform: sv
+
+// 複合条件テスト: && と || の組み合わせ
+
+#[input]  bool a = 0;
+#[input]  bool b = 0;
+#[input]  bool c = 0;
+#[input]  bool d = 0;
+#[output] bool r1 = 0;
+#[output] bool r2 = 0;
+#[output] bool r3 = 0;
+
+void compound() {
+    r1 = a && b;
+    r2 = c || d;
+    r3 = (a && b) || (c && d);
+}

@@ -1,0 +1,22 @@
+// 文字列補間内の一般式のテスト:
+// 回帰: {a + b} 等の演算子を含む補間式が未対応パターン扱いになり、
+// 未初期化テンポラリのゴミ値が表示されるバグの検証
+import std::io::println;
+
+int get5() {
+    return 5;
+}
+
+int main() {
+    int a = 3;
+    int b = 4;
+    println("add = {a + b}");
+    println("mul = {a * b}");
+    println("mixed = {a + b * 2}");
+    println("paren = {(a + b) * 2}");
+
+    int c = get5();
+    println("call = {c + 1}");
+    println("cmp = {a < b}");
+    return 0;
+}

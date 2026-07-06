@@ -1,0 +1,78 @@
+//! platform: sv
+
+// ビデオタイミングジェネレータ単体テスト
+// 640×480@60Hz VGA タイミング生成のコンパイル検証
+
+// タイミング定数
+const uint H_ACTIVE = 640;
+const uint H_FP     = 16;
+const uint H_SYNC   = 96;
+const uint H_BP     = 48;
+const uint H_TOTAL  = 800;
+const uint V_ACTIVE = 480;
+const uint V_FP     = 10;
+const uint V_SYNC   = 2;
+const uint V_BP     = 33;
+const uint V_TOTAL  = 525;
+
+// ポート
+#[input]  posedge pixel_clk;
+#[output] bool hsync = true;
+#[output] bool vsync = true;
+#[output] bool de    = false;
+#[output] ushort h_count = 0;
+#[output] ushort v_count = 0;
+
+// 内部レジスタ
+uint hc = 0;
+uint vc = 0;
+
+async void process(posedge pixel_clk) {
+    // 水平カウンタ
+    if (hc == H_TOTAL - 1) {
+        hc = 0;
+        if (vc == V_TOTAL - 1) {
+            vc = 0;
+        } else {
+            vc = vc + 1;
+        }
+    } else {
+        hc = hc + 1;
+    }
+
+    // HSYNC (負極性)
+    if (hc >= H_ACTIVE + H_FP) {
+        if (hc < H_ACTIVE + H_FP + H_SYNC) {
+            hsync = false;
+        } else {
+            hsync = true;
+        }
+    } else {
+        hsync = true;
+    }
+
+    // VSYNC (負極性)
+    if (vc >= V_ACTIVE + V_FP) {
+        if (vc < V_ACTIVE + V_FP + V_SYNC) {
+            vsync = false;
+        } else {
+            vsync = true;
+        }
+    } else {
+        vsync = true;
+    }
+
+    // データイネーブル
+    if (hc < H_ACTIVE) {
+        if (vc < V_ACTIVE) {
+            de = true;
+        } else {
+            de = false;
+        }
+    } else {
+        de = false;
+    }
+
+    h_count = hc as ushort;
+    v_count = vc as ushort;
+}

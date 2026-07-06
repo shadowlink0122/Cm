@@ -1,0 +1,14 @@
+#[input] uint op;
+#[input] uint a;
+#[input] uint b;
+#[output] uint r = 0;
+
+void pick() {
+    if (op == 0) {
+        r = a + b;
+    } else if (op == 1) {
+        r = a - b;
+    } else {
+        r = a ^ b;
+    }
+}

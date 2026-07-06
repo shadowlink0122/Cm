@@ -1,0 +1,29 @@
+//! platform: sv
+
+// switch → case/endcase テスト
+
+#[input]  bool clk = false;
+#[input]  bool rst_n = true;
+#[input]  uint sel = 0;
+#[output] uint out = 0;
+
+async void mux(posedge clk, negedge rst_n) {
+    if (rst_n == false) {
+        out = 0;
+    } else {
+        switch (sel) {
+            case(0) {
+                out = 10;
+            }
+            case(1) {
+                out = 20;
+            }
+            case(2) {
+                out = 30;
+            }
+            else {
+                out = 0;
+            }
+        }
+    }
+}

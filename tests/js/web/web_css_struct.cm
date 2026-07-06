@@ -16,12 +16,13 @@ struct CardStyle with Css {
 }
 
 int main() {
-    ButtonStyle btn;
-    btn.background_color = "#4A90D9";
-    btn.color = "white";
-    btn.padding = "12px 24px";
-    btn.border_radius = "8px";
-    btn.font_size = "16px";
+    ButtonStyle btn = {
+        background_color: "#4A90D9",
+        color: "white",
+        padding: "12px 24px",
+        border_radius: "8px",
+        font_size: "16px"
+    };
 
     println("Button CSS:");
     println(btn.css());
@@ -34,11 +35,12 @@ int main() {
 
     println("");
 
-    CardStyle card;
-    card.background_color = "#ffffff";
-    card.border = "1px solid #e0e0e0";
-    card.padding = "24px";
-
+    CardStyle card = {
+        background_color: "#ffffff",
+        border: "1px solid #e0e0e0",
+        padding: "24px"
+    };
+    
     println("Card CSS:");
     println(card.css());
 

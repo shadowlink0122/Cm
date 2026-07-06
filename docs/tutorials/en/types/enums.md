@@ -403,8 +403,8 @@ int main() {
 
 ## Related Links
 
-- [Control Flow](../../basics/control-flow.html)
-- [match Expression](../../advanced/match.html)
+- [Control Flow](../basics/control-flow.html)
+- [match Expression](../advanced/match.html)
 - [Structs](structs.html)
 
 ---
@@ -414,3 +414,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Structs](structs.html) | [Contents](index.html) | Next: [Types - typedef](typedef.html) →

@@ -88,3 +88,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Advanced - Operator Overloading](operators.html) | [Contents](index.html) | Next: [ラムダ式](lambda.html) →

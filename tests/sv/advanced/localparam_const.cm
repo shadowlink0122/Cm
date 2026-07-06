@@ -1,0 +1,23 @@
+//! platform: sv
+
+// const → localparam テスト
+
+const uint CLK_DIV = 27000000;
+const utiny STATE_IDLE = 0;
+const utiny STATE_RUN = 1;
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+
+async void tick(posedge clk) {
+    if (rst) {
+        count = 0;
+    } else {
+        if (count == CLK_DIV) {
+            count = 0;
+        } else {
+            count = count + 1;
+        }
+    }
+}

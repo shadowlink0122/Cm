@@ -1,0 +1,11 @@
+#[input] bool clk = false;
+#[input] uint din;
+#[output] uint dout = 0;
+
+void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < 4; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    dout = acc;
+}

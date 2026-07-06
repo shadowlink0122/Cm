@@ -1,0 +1,13 @@
+#[input] uint sel;
+#[input] uint din;
+#[output] uint lout = 0;
+#[output] uint other = 0;
+
+void latch_one_side() {
+    if (sel == 1) {
+        lout = din;
+        other = 1;
+    } else {
+        other = 2;
+    }
+}

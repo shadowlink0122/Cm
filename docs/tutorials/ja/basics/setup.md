@@ -461,7 +461,7 @@ int main() {
 | 空行の正規化 | 連続する空行は1行に |
 | 単一行ブロック保持 | 短い式は1行のまま |
 
-> **詳細:** [Linter](../compiler/linter.html) / [Formatter](../compiler/formatter.html) チュートリアル
+> **詳細:** [Linter](../compiler/common/linter.html) / [Formatter](../compiler/common/formatter.html) チュートリアル
 
 ---
 
@@ -735,11 +735,11 @@ make build ARCH=x86_64
 
 ## 関連リンク
 
-- [プロジェクト構造](../../PROJECT_STRUCTURE.html)
-- [コンパイラの使い方](../compiler/usage.html)
-- [Linter](../compiler/linter.html) - 静的解析ツール
-- [Formatter](../compiler/formatter.html) - コードフォーマッター
-- [JSバックエンド](../compiler/js-compilation.html) - JavaScript出力
+- [プロジェクト構造](../../../PROJECT_STRUCTURE.html)
+- [コンパイラの使い方](../compiler/common/usage.html)
+- [Linter](../compiler/common/linter.html) - 静的解析ツール
+- [Formatter](../compiler/common/formatter.html) - コードフォーマッター
+- [JSバックエンド](../compiler/js/index.html) - JavaScript出力
 
 ---
 
@@ -748,3 +748,8 @@ make build ARCH=x86_64
 ---
 
 **最終更新:** 2026-02-13
+
+---
+
+<!-- nav -->
+← 前: [はじめに - Cm言語とは](introduction.html) ｜ [目次](index.html) ｜ 次: [基本編 - Hello, World!](hello-world.html) →

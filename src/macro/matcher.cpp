@@ -197,7 +197,8 @@ bool MacroMatcher::match_metavar(const std::vector<Token>& input, size_t& input_
 // 繰り返しのマッチング
 bool MacroMatcher::match_repetition(const std::vector<Token>& input, size_t& input_pos,
                                     const RepetitionNode& repetition, MatchState& state) {
-    std::vector<MatchedFragment> matches;
+    // 繰り返し内の各メタ変数のマッチ結果を保存
+    std::map<std::string, std::vector<MatchedFragment>> rep_bindings;
     size_t match_count = 0;
     size_t current_pos = input_pos;
 
@@ -219,8 +220,10 @@ bool MacroMatcher::match_repetition(const std::vector<Token>& input, size_t& inp
             break;  // マッチ失敗、繰り返し終了
         }
 
-        // マッチ成功
-        // TODO: iter_stateのバインディングをmatchesに追加
+        // マッチ成功: iter_stateのバインディングをrep_bindingsに追加
+        for (const auto& [name, fragment] : iter_state.bindings) {
+            rep_bindings[name].push_back(fragment);
+        }
         match_count++;
         current_pos = iter_state.deepest_match_pos;
 
@@ -246,7 +249,10 @@ bool MacroMatcher::match_repetition(const std::vector<Token>& input, size_t& inp
 
     if (success) {
         input_pos = current_pos;
-        // TODO: matchesをstateのバインディングに追加
+        // rep_bindingsをstateのバインディングに追加（繰り返しとして）
+        for (const auto& [name, fragments] : rep_bindings) {
+            state.bindings[name] = MatchedFragment(fragments);
+        }
     }
 
     return success;
@@ -512,7 +518,8 @@ std::optional<std::vector<Token>> MacroMatcher::match_item(const std::vector<Tok
     }
 
     // 関数、構造体などの定義全体
-    // TODO: より詳細な実装が必要
+    // 現在はステートメントマッチングにフォールバック
+    // 将来的により詳細なアイテム解析を追加可能
     return match_stmt(input, input_pos);
 }
 

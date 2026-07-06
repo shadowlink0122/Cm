@@ -1,0 +1,26 @@
+//! platform: sv
+//! test: s=-3 -> neg=1, lt5=1
+//! test: s=7 -> neg=0, lt5=0
+//! test: s=4 -> neg=0, lt5=1
+
+// 符号付き変数と整数定数の比較の回帰テスト:
+// 定数が 32'd0（unsigned）で出力されると、SVでは片方がunsignedの比較は
+// 全体がunsigned比較になり、負数の判定（s < 0）が常に偽になる。
+// 定数は型に従い 32'sd0 のように符号付きで出力される必要がある。
+
+#[input] int s;
+#[output] uint neg = 0;
+#[output] uint lt5 = 0;
+
+void check() {
+    if (s < 0) {
+        neg = 1;
+    } else {
+        neg = 0;
+    }
+    if (s < -5 + 10) {
+        lt5 = 1;
+    } else {
+        lt5 = 0;
+    }
+}

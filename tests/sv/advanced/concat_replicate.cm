@@ -1,0 +1,13 @@
+//! platform: sv
+
+// SV連接/複製/ビットスライス テスト
+
+#[input]  bit[4] a = 0;
+#[input]  bit[4] b = 0;
+#[output] bit[8] result = 0;
+#[output] bit[12] replicated = 0;
+
+always_comb void compute() {
+    result = {a, b};
+    replicated = {3{a}};
+}

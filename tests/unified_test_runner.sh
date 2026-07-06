@@ -10,7 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Windows対応: 実行ファイルの拡張子
-if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+# 環境変数CM_EXECUTABLEが設定されている場合はそれを使用
+if [ -n "${CM_EXECUTABLE:-}" ]; then
+    # 環境変数から設定済み
+    :
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
     CM_EXECUTABLE="$PROJECT_ROOT/cm.exe"
     IS_WINDOWS=true
 else
@@ -20,6 +24,13 @@ fi
 
 PROGRAMS_DIR="$PROJECT_ROOT/tests"
 TEMP_DIR="$PROJECT_ROOT/.tmp/test_runner"
+
+# cmバイナリの存在確認
+if [ ! -x "$CM_EXECUTABLE" ]; then
+    echo -e "${RED}エラー: cmバイナリが見つかりません: $CM_EXECUTABLE${NC}"
+    echo "make build を実行してコンパイラをビルドしてください"
+    exit 1
+fi
 
 # カラー出力
 RED='\033[0;31m'
@@ -411,23 +422,68 @@ run_single_test() {
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
     local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local current_arch=$(uname -m)
+    local current_opt="o${OPT_LEVEL:-3}"
+
+    # スキップパターンマッチング関数
+    # 形式: backend[-optlevel][:os[:arch]]
+    # 例: llvm, llvm:linux, llvm:linux:x86_64, llvm-o3, llvm-o3:linux:x86_64
+    match_skip_pattern() {
+        local pattern="$1"
+        local backend="$2"
+        local opt="$3"
+        local os="$4"
+        local arch="$5"
+
+        # パターンをパース
+        local p_backend p_opt p_os p_arch
+        if [[ "$pattern" =~ ^([a-z-]+)(-o[0-3])?(:([a-z]+))?(:([a-z0-9_]+))?$ ]]; then
+            p_backend="${BASH_REMATCH[1]}"
+            p_opt="${BASH_REMATCH[2]#-}"  # -o3 -> o3
+            p_os="${BASH_REMATCH[4]}"
+            p_arch="${BASH_REMATCH[6]}"
+        else
+            # 旧形式: backend または backend:os
+            if [[ "$pattern" =~ ^([a-z-]+):([a-z]+)$ ]]; then
+                p_backend="${BASH_REMATCH[1]}"
+                p_os="${BASH_REMATCH[2]}"
+            else
+                p_backend="$pattern"
+            fi
+        fi
+
+        # バックエンドマッチ
+        [[ "$p_backend" != "$backend" ]] && return 1
+
+        # 最適化レベルマッチ（指定されていれば）
+        [[ -n "$p_opt" && "$p_opt" != "$opt" ]] && return 1
+
+        # OSマッチ（指定されていれば）
+        [[ -n "$p_os" && "$p_os" != "$os" ]] && return 1
+
+        # アーキテクチャマッチ（指定されていれば）
+        [[ -n "$p_arch" && "$p_arch" != "$arch" ]] && return 1
+
+        return 0
+    }
 
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
-            # バックエンド名の完全一致チェック
-            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
-                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND"
-                ((SKIPPED++))
-                return
-            fi
-            # backend:os 形式のチェック (例: llvm:linux)
-            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
-                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $BACKEND on $current_os"
-                ((SKIPPED++))
-                return
-            fi
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                # コメントと空行をスキップ
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                line="${line%%#*}"  # インラインコメント除去
+                line="${line// /}"  # 空白除去
+
+                if match_skip_pattern "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
+                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $line"
+                    ((SKIPPED++))
+                    return
+                fi
+            done < "$skip_file"
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
             echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists"
@@ -439,11 +495,18 @@ run_single_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
-                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skipped for $BACKEND"
-                ((SKIPPED++))
-                return
-            fi
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                line="${line%%#*}"
+                line="${line// /}"
+
+                if match_skip_pattern "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
+                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skipped for $line"
+                    ((SKIPPED++))
+                    return
+                fi
+            done < "$category_skip_file"
         else
             echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Category skip file exists"
             ((SKIPPED++))
@@ -1155,8 +1218,8 @@ run_tests_parallel() {
                     # エラーファイルがあれば先頭5行を表示
                     local error_file="${result_file}.error"
                     if [ -f "$error_file" ]; then
-                        echo "  --- Error output (first 5 lines) ---"
-                        head -5 "$error_file" | sed 's/^/  /'
+                        echo "  --- Error output (first 15 lines) ---"
+                        head -15 "$error_file" | sed 's/^/  /'
                         echo "  ---"
                     fi
                     ((FAILED++))
@@ -1206,21 +1269,54 @@ run_parallel_test() {
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
     local category_skip_file="$(dirname "$test_file")/.skip"
+    local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local current_arch=$(uname -m)
+    local current_opt="o${OPT_LEVEL:-3}"
+
+    # スキップパターンマッチング関数（並列版）
+    match_skip_pattern_parallel() {
+        local pattern="$1"
+        local backend="$2"
+        local opt="$3"
+        local os="$4"
+        local arch="$5"
+
+        local p_backend p_opt p_os p_arch
+        if [[ "$pattern" =~ ^([a-z-]+)(-o[0-3])?(:([a-z]+))?(:([a-z0-9_]+))?$ ]]; then
+            p_backend="${BASH_REMATCH[1]}"
+            p_opt="${BASH_REMATCH[2]#-}"
+            p_os="${BASH_REMATCH[4]}"
+            p_arch="${BASH_REMATCH[6]}"
+        else
+            if [[ "$pattern" =~ ^([a-z-]+):([a-z]+)$ ]]; then
+                p_backend="${BASH_REMATCH[1]}"
+                p_os="${BASH_REMATCH[2]}"
+            else
+                p_backend="$pattern"
+            fi
+        fi
+
+        [[ "$p_backend" != "$backend" ]] && return 1
+        [[ -n "$p_opt" && "$p_opt" != "$opt" ]] && return 1
+        [[ -n "$p_os" && "$p_os" != "$os" ]] && return 1
+        [[ -n "$p_arch" && "$p_arch" != "$arch" ]] && return 1
+        return 0
+    }
 
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
-            local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
-            # バックエンド名の完全一致チェック
-            if grep -qx "$BACKEND" "$skip_file" 2>/dev/null; then
-                echo "SKIP:Skipped for $BACKEND" > "$result_file"
-                return
-            fi
-            # backend:os 形式のチェック (例: llvm:linux)
-            if grep -qx "${BACKEND}:${current_os}" "$skip_file" 2>/dev/null; then
-                echo "SKIP:Skipped for $BACKEND on $current_os" > "$result_file"
-                return
-            fi
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                line="${line%%#*}"
+                line="${line// /}"
+
+                if match_skip_pattern_parallel "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
+                    echo "SKIP:Skipped for $line" > "$result_file"
+                    return
+                fi
+            done < "$skip_file"
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
             echo "SKIP:Skip file exists" > "$result_file"
@@ -1231,10 +1327,17 @@ run_parallel_test() {
     # カテゴリ全体の.skipファイルがある場合
     if [ -f "$category_skip_file" ]; then
         if [ -s "$category_skip_file" ]; then
-            if grep -qx "$BACKEND" "$category_skip_file" 2>/dev/null; then
-                echo "SKIP:Category skipped for $BACKEND" > "$result_file"
-                return
-            fi
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                line="${line%%#*}"
+                line="${line// /}"
+
+                if match_skip_pattern_parallel "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
+                    echo "SKIP:Category skipped for $line" > "$result_file"
+                    return
+                fi
+            done < "$category_skip_file"
         else
             echo "SKIP:Category skip file exists" > "$result_file"
             return
@@ -1427,6 +1530,10 @@ PY
                                         cat "$sim_test_file" >> "$output_file"
                                     else
                                         echo "SIM_FAIL" > "$output_file"
+                                        echo "--- 期待値 ---" >> "$output_file"
+                                        cat "$exp_test_file" >> "$output_file" 2>/dev/null
+                                        echo "--- 実際の値 ---" >> "$output_file"
+                                        cat "$sim_test_file" >> "$output_file" 2>/dev/null
                                         exit_code=1
                                     fi
                                     rm -f "$sim_test_file" "$exp_test_file"
@@ -1436,7 +1543,8 @@ PY
                                     echo "COMPILE_OK" > "$output_file"
                                 fi
                             else
-                                echo "SIM_FAIL" >> "$output_file"
+                                echo "SIM_FAIL (vvp exit=$sim_exit)" >> "$output_file"
+                                cat "$sim_output" >> "$output_file" 2>/dev/null
                                 exit_code=1
                             fi
                         fi

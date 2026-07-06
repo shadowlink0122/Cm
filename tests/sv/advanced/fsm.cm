@@ -12,7 +12,7 @@
 #[input] bool go = false;
 #[output] utiny out = 0;
 
-async func tick() {
+async void tick() {
     if (rst) {
         out = 0;
     } else {

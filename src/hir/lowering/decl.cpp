@@ -27,6 +27,8 @@ HirDeclPtr HirLowering::lower_decl(ast::Decl& decl) {
         return lower_module(*mod);
     } else if (auto* extern_block = decl.as<ast::ExternBlockDecl>()) {
         return lower_extern_block(*extern_block);
+    } else if (auto* initial_block = decl.as<ast::InitialBlockDecl>()) {
+        return lower_initial_block(*initial_block);
     } else if (auto* macro = decl.as<ast::MacroDecl>()) {
         // v0.13.0: 型付きマクロをconst変数として処理
         return lower_macro(*macro);
@@ -51,6 +53,20 @@ HirDeclPtr HirLowering::lower_extern_block(ast::ExternBlockDecl& extern_block) {
     return std::make_unique<HirDecl>(std::move(hir_extern));
 }
 
+// SV initial ブロック
+HirDeclPtr HirLowering::lower_initial_block(ast::InitialBlockDecl& initial_block) {
+    auto hir_initial = std::make_unique<HirInitialBlock>();
+    for (const auto& stmt : initial_block.body) {
+        if (auto hir_stmt = lower_stmt(*stmt)) {
+            hir_initial->body.push_back(std::move(hir_stmt));
+        }
+    }
+    for (const auto& attr : initial_block.attributes) {
+        hir_initial->attributes.push_back(attr.name);
+    }
+    return std::make_unique<HirDecl>(std::move(hir_initial));
+}
+
 // 関数
 HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     debug::hir::log(debug::hir::Id::FunctionNode, "function " + func.name, debug::Level::Debug);
@@ -62,6 +78,15 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->is_export = func.visibility == ast::Visibility::Export;
     hir_func->is_extern = func.is_extern;  // externフラグを伝播
     hir_func->is_async = func.is_async;    // asyncフラグを伝播
+    hir_func->is_always = func.is_always;  // alwaysフラグを伝播
+    // always_kind を伝搬（AST→HIR: enum値をintでキャスト）
+    hir_func->always_kind =
+        static_cast<hir::HirFunction::AlwaysKind>(static_cast<int>(func.always_kind));
+
+    // SV属性を伝播（sv::latch, sv::clock_domain等）
+    for (const auto& attr : func.attributes) {
+        hir_func->attributes.push_back(attr.name);
+    }
 
     // ジェネリックパラメータを処理
     for (const auto& param_name : func.generic_params) {
@@ -77,7 +102,14 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     debug::hir::log(debug::hir::Id::FunctionParams, "count=" + std::to_string(func.params.size()),
                     debug::Level::Trace);
     for (const auto& param : func.params) {
-        hir_func->params.push_back({param.name, param.type});
+        HirParam hp;
+        hp.name = param.name;
+        hp.type = param.type;
+        // デフォルト引数式を保持（呼び出し省略時のMIR側補完に使用）
+        if (param.default_value) {
+            hp.default_value = lower_expr(*param.default_value);
+        }
+        hir_func->params.push_back(std::move(hp));
         debug::hir::dump_symbol(param.name, func.name,
                                 param.type ? type_to_string(*param.type) : "auto");
     }
@@ -100,6 +132,7 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     auto hir_st = std::make_unique<HirStruct>();
     hir_st->name = st.name;
     hir_st->is_export = st.visibility == ast::Visibility::Export;
+    hir_st->is_extern = st.is_extern;
     hir_st->auto_impls = st.auto_impls;
     for (const auto& iface_name : st.auto_impls) {
         if (iface_name == "Css") {
@@ -116,7 +149,44 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     }
 
     for (const auto& field : st.fields) {
-        hir_st->fields.push_back({field.name, field.type});
+        HirField hir_field;
+        hir_field.name = field.name;
+        hir_field.type = field.type;
+        // フィールド属性を伝播（sv::param, output 等）
+        for (const auto& attr : field.attributes) {
+            hir_field.attributes.push_back(attr.name);
+        }
+        // フィールドデフォルト値を文字列表現に変換（SV用）
+        if (field.default_value) {
+            if (auto* lit = field.default_value->as<ast::LiteralExpr>()) {
+                if (auto* ival = std::get_if<int64_t>(&lit->value)) {
+                    hir_field.default_value_str = std::to_string(*ival);
+                } else if (auto* bval = std::get_if<bool>(&lit->value)) {
+                    hir_field.default_value_str = *bval ? "1'b1" : "1'b0";
+                } else if (auto* sval = std::get_if<std::string>(&lit->value)) {
+                    hir_field.default_value_str = *sval;
+                }
+            } else if (auto* ident = field.default_value->as<ast::IdentExpr>()) {
+                // 識別子（ポート接続信号名など）
+                hir_field.default_value_str = ident->name;
+            } else if (auto* idx = field.default_value->as<ast::IndexExpr>()) {
+                // 配列インデックスアクセス (例: tmds_r[0])
+                if (auto* obj_ident = idx->object->as<ast::IdentExpr>()) {
+                    std::string idx_str;
+                    if (auto* idx_lit = idx->index->as<ast::LiteralExpr>()) {
+                        if (auto* ival = std::get_if<int64_t>(&idx_lit->value)) {
+                            idx_str = std::to_string(*ival);
+                        }
+                    } else if (auto* idx_ident = idx->index->as<ast::IdentExpr>()) {
+                        idx_str = idx_ident->name;
+                    }
+                    if (!idx_str.empty()) {
+                        hir_field.default_value_str = obj_ident->name + "[" + idx_str + "]";
+                    }
+                }
+            }
+        }
+        hir_st->fields.push_back(std::move(hir_field));
         debug::hir::log(debug::hir::Id::StructField,
                         field.name + " : " + (field.type ? type_to_string(*field.type) : "auto"),
                         debug::Level::Trace);
@@ -434,11 +504,25 @@ HirDeclPtr HirLowering::lower_global_var(ast::GlobalVarDecl& gv) {
     hir_global->name = gv.name;
     hir_global->type = gv.type;
     hir_global->is_const = gv.is_const;
+    hir_global->is_assign = gv.is_assign;
     hir_global->is_export = (gv.visibility == ast::Visibility::Export);
 
     // 属性を伝搬（#[input], #[output] 等、SV用）
+    // 引数付き属性（#[sv::memfile("font.hex")] 等）は name("arg") 形式で保持する
     for (const auto& attr : gv.attributes) {
-        hir_global->attributes.push_back(attr.name);
+        if (attr.args.empty()) {
+            hir_global->attributes.push_back(attr.name);
+        } else {
+            std::string attr_str = attr.name + "(";
+            for (size_t i = 0; i < attr.args.size(); ++i) {
+                if (i > 0) {
+                    attr_str += ", ";
+                }
+                attr_str += "\"" + attr.args[i] + "\"";
+            }
+            attr_str += ")";
+            hir_global->attributes.push_back(attr_str);
+        }
     }
 
     if (gv.init_expr) {

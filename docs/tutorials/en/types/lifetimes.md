@@ -63,3 +63,8 @@ The following features are planned but currently **NOT implemented**:
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Ownership and Borrowing](ownership.html) | [Contents](index.html) | Next: [Advanced Features](../advanced/index.html) →

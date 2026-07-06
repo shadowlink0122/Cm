@@ -133,6 +133,7 @@ class TypeChecker {
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
+    bool is_valid_type(ast::TypePtr type);
 
     // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
     // 代入先がLiteralUnion型の場合、代入する値が許容リテラルに含まれるかチェック
@@ -210,6 +211,8 @@ class TypeChecker {
 
     // ジェネリック関数の登録情報（関数名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_functions_;
+    // 本体を持つ非ジェネリック関数の定義済みシグネチャ（重複定義検出用）
+    std::unordered_map<std::string, std::string> defined_function_sigs_;
 
     // ジェネリック関数の制約情報（関数名 → GenericParamリスト）
     std::unordered_map<std::string, std::vector<ast::GenericParam>> generic_function_constraints_;

@@ -2,9 +2,103 @@
 // extract_named_placeholders, lower_call
 
 #include "../../common/debug.hpp"
+#include "../../frontend/lexer/lexer.hpp"
+#include "../../frontend/parser/parser.hpp"
+#include "../../hir/lowering/fwd.hpp"
 #include "expr.hpp"
 
+#include <functional>
+
 namespace cm::mir {
+
+// 補間内容が「単純な変数参照・メンバ・添字・関数呼び出し」ではなく
+// 演算子を含む一般式かどうかを判定する（トップレベルの演算子のみ検出）。
+// 該当する場合は式パーサへのフォールバックを試みる
+static bool interp_content_is_expression(const std::string& s) {
+    int paren = 0;
+    int bracket = 0;
+    bool in_string = false;
+    char quote = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (in_string) {
+            if (c == quote && (i == 0 || s[i - 1] != '\\')) {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            in_string = true;
+            quote = c;
+            continue;
+        }
+        if (c == '(') {
+            paren++;
+            continue;
+        }
+        if (c == ')') {
+            paren--;
+            continue;
+        }
+        if (c == '[') {
+            bracket++;
+            continue;
+        }
+        if (c == ']') {
+            bracket--;
+            continue;
+        }
+        if (paren != 0 || bracket != 0) {
+            continue;
+        }
+        // 括弧外の as キャスト（例: (*pc) as int）は式として扱う
+        if (c == ' ' && s.compare(i, 4, " as ") == 0) {
+            return true;
+        }
+        switch (c) {
+            case '+':
+            case '/':
+            case '%':
+            case '^':
+            case '~':
+            case '?':
+            case '<':
+            case '>':
+            case '=':
+                return true;
+            case '-':
+                // "->" はポインタメンバアクセスなので除外
+                if (i + 1 < s.size() && s[i + 1] == '>') {
+                    ++i;
+                    break;
+                }
+                return true;
+            case '*':
+                // 先頭の * はデリファレンス（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '&':
+                // 先頭の & はアドレス取得（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '!':
+                // 先頭の ! は論理否定（既存パターンで処理）
+                if (i > 0) {
+                    return true;
+                }
+                break;
+            case '|':
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
+}
 
 std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_placeholders(
     const std::string& format_str, [[maybe_unused]] LoweringContext& ctx) {
@@ -89,9 +183,10 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
                         } else if (!var_name.empty() && var_name[0] == '*') {
-                            // *variable形式 - ポインタのデリファレンス
+                            // *variable形式 - ポインタのデリファレンス（**pp等も許可）
                             std::string ptr_var = var_name.substr(1);
-                            if (!ptr_var.empty() && std::isalpha(ptr_var[0])) {
+                            if (!ptr_var.empty() && (std::isalpha(ptr_var[0]) ||
+                                                     ptr_var[0] == '(' || ptr_var[0] == '*')) {
                                 var_names.push_back("*" + ptr_var);  // *付きで格納
                                 // フォーマット指定子をそのまま維持
                                 converted_format += "{" + format_spec;
@@ -133,9 +228,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         } else if (!var_name.empty() && var_name[0] == '*') {
                             // *variable形式 - ポインタのデリファレンス
                             std::string ptr_var = var_name.substr(1);
-                            // (*ptr).x 形式もサポート
-                            if (!ptr_var.empty() &&
-                                (std::isalpha(ptr_var[0]) || ptr_var[0] == '(')) {
+                            // (*ptr).x 形式と **pp（多重デリファレンス）もサポート
+                            if (!ptr_var.empty() && (std::isalpha(ptr_var[0]) ||
+                                                     ptr_var[0] == '(' || ptr_var[0] == '*')) {
                                 var_names.push_back("*" + ptr_var);  // *付きで格納
                                 converted_format += "{}";
                             } else {
@@ -177,6 +272,164 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
     }
 
     return {var_names, converted_format};
+}
+
+// 補間内の関数呼び出し引数文字列をMIRオペランドへ変換するヘルパー
+// 整数リテラル・boolリテラル・ローカル変数名をサポートする
+// （それ以外の複雑な式は従来どおりダミーの0を返す）
+// ジェネリック構造体の特殊化名（Box<int> → Box__int）を構成する。
+// 補間内メソッド呼び出しの関数名解決で、型引数を落とすと
+// 未定義シンボル参照（Box__get）になるため必ず型引数を反映する
+static std::string interp_specialized_struct_name(const hir::TypePtr& t) {
+    if (!t) {
+        return "";
+    }
+    std::function<std::string(const hir::TypePtr&)> piece =
+        [&](const hir::TypePtr& p) -> std::string {
+        if (!p) {
+            return "unknown";
+        }
+        switch (p->kind) {
+            case hir::TypeKind::Int:
+                return "int";
+            case hir::TypeKind::UInt:
+                return "uint";
+            case hir::TypeKind::Long:
+                return "long";
+            case hir::TypeKind::ULong:
+                return "ulong";
+            case hir::TypeKind::Short:
+                return "short";
+            case hir::TypeKind::UShort:
+                return "ushort";
+            case hir::TypeKind::Tiny:
+                return "tiny";
+            case hir::TypeKind::UTiny:
+                return "utiny";
+            case hir::TypeKind::Float:
+                return "float";
+            case hir::TypeKind::Double:
+                return "double";
+            case hir::TypeKind::Bool:
+                return "bool";
+            case hir::TypeKind::Char:
+                return "char";
+            case hir::TypeKind::String:
+                return "string";
+            case hir::TypeKind::Pointer:
+                return "ptr_" + piece(p->element_type);
+            default:
+                return p->name.empty() ? "unknown" : p->name;
+        }
+    };
+    std::string name = t->name;
+    for (const auto& ta : t->type_args) {
+        name += "__" + piece(ta);
+    }
+    return name;
+}
+
+static MirOperandPtr lower_interp_call_arg(LoweringContext& ctx, const std::string& raw_arg) {
+    // 前後の空白を除去
+    std::string arg = raw_arg;
+    size_t first = arg.find_first_not_of(" \t");
+    if (first == std::string::npos) {
+        arg.clear();
+    } else {
+        size_t last = arg.find_last_not_of(" \t");
+        arg = arg.substr(first, last - first + 1);
+    }
+
+    // 整数リテラル（16進等はstoullのbase=0で解釈、負数はstollで解釈）
+    if (!arg.empty() &&
+        (std::isdigit(static_cast<unsigned char>(arg[0])) ||
+         (arg[0] == '-' && arg.size() > 1 && std::isdigit(static_cast<unsigned char>(arg[1]))))) {
+        try {
+            int64_t value;
+            if (arg[0] == '-') {
+                value = std::stoll(arg, nullptr, 0);
+            } else {
+                value = static_cast<int64_t>(std::stoull(arg, nullptr, 0));
+            }
+            MirConstant arg_const;
+            arg_const.type = hir::make_int();
+            arg_const.value = value;
+            return MirOperand::constant(arg_const);
+        } catch (...) {
+            // 数値として解釈できない場合は下の変数解決へフォールスルー
+        }
+    }
+
+    // boolリテラル
+    if (arg == "true" || arg == "false") {
+        MirConstant arg_const;
+        arg_const.type = hir::make_bool();
+        arg_const.value = (arg == "true");
+        return MirOperand::constant(arg_const);
+    }
+
+    // ローカル変数（従来は整数リテラル以外がすべてダミー0になっていた）
+    if (auto var_id = ctx.resolve_variable(arg)) {
+        hir::TypePtr var_type = nullptr;
+        if (*var_id < ctx.func->locals.size()) {
+            var_type = ctx.func->locals[*var_id].type;
+        }
+        return MirOperand::copy(MirPlace{*var_id}, var_type);
+    }
+
+    // 未対応の式はダミー値（従来挙動を維持）
+    MirConstant arg_const;
+    arg_const.type = hir::make_int();
+    arg_const.value = 0;
+    return MirOperand::constant(arg_const);
+}
+
+// 補間プレースホルダの内容を式としてパースしMIRへ降下する。
+// 内容を返り値とするダミー関数を本物のフロントエンド
+// （Lexer→Parser→HirLowering）でHIRに変換し、そのreturn式を
+// 現在の関数コンテキストで通常の式loweringに掛ける
+std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& content,
+                                                             LoweringContext& ctx) {
+    try {
+        std::string src = "int __interp_expr__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            return std::nullopt;
+        }
+
+        hir::HirLowering hir_lowering;
+        // 補間式内で Color::Blue 等のenumバリアントを解決できるよう、
+        // 元プログラムのenum定義を引き継ぐ
+        if (ctx.enum_defs) {
+            hir_lowering.seed_enum_values(*ctx.enum_defs);
+        }
+        auto hir_program = hir_lowering.lower(program);
+
+        for (auto& decl : hir_program.declarations) {
+            if (!decl) {
+                continue;
+            }
+            auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind);
+            if (!func || !*func || (*func)->name != "__interp_expr__") {
+                continue;
+            }
+            for (auto& stmt : (*func)->body) {
+                if (!stmt) {
+                    continue;
+                }
+                auto* ret = std::get_if<std::unique_ptr<hir::HirReturn>>(&stmt->kind);
+                if (ret && *ret && (*ret)->value) {
+                    return lower_expression(*(*ret)->value, ctx);
+                }
+            }
+        }
+    } catch (...) {
+        // パース不能な内容は従来のパターン処理へフォールバック
+    }
+    return std::nullopt;
 }
 
 // 関数呼び出しのlowering
@@ -277,6 +530,15 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
+                        // 演算子を含む一般式（{a + b} 等）は本物の式パーサで降下する。
+                        // 従来は未対応パターンとして未初期化テンポラリが渡され
+                        // ゴミ値が表示されていた
+                        if (interp_content_is_expression(var_name)) {
+                            if (auto expr_local = lower_interp_expression(var_name, ctx)) {
+                                arg_locals.push_back(*expr_local);
+                                continue;
+                            }
+                        }
                         if (!var_name.empty() && var_name[0] == '!') {
                             // 論理否定演算子の処理
                             std::string inner_expr = var_name.substr(1);
@@ -976,13 +1238,19 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                 std::string obj_name = var_name.substr(0, dot_pos);
                                 std::string member_name = var_name.substr(dot_pos + 1);
 
-                                // メソッド呼び出しかどうかチェック（末尾が "()" の場合）
+                                // メソッド呼び出しかどうかチェック
+                                // （末尾が "()" または "(args...)" の場合）
                                 bool is_method_call = false;
-                                if (member_name.size() > 2 &&
-                                    member_name.substr(member_name.size() - 2) == "()") {
-                                    is_method_call = true;
-                                    member_name = member_name.substr(
-                                        0, member_name.size() - 2);  // "()" を除去
+                                std::string method_args_str;
+                                {
+                                    auto lp = member_name.find('(');
+                                    if (lp != std::string::npos && !member_name.empty() &&
+                                        member_name.back() == ')') {
+                                        is_method_call = true;
+                                        method_args_str =
+                                            member_name.substr(lp + 1, member_name.size() - lp - 2);
+                                        member_name = member_name.substr(0, lp);
+                                    }
                                 }
 
                                 // オブジェクトを解決
@@ -1171,7 +1439,13 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 // 通常の構造体メソッド呼び出し
                                                 // 関数名の形式: StructName__MethodName
                                                 std::string method_name_full =
-                                                    obj_type->name + "__" + member_name;
+                                                    interp_specialized_struct_name(obj_type) +
+                                                    "__" + member_name;
+
+                                                // interface型レシーバは動的ディスパッチ
+                                                const bool recv_is_iface =
+                                                    ctx.interface_names && obj_type &&
+                                                    ctx.interface_names->count(obj_type->name) > 0;
 
                                                 // メソッド呼び出しのための新しいブロックを作成
                                                 BlockId call_block = ctx.new_block();
@@ -1189,10 +1463,38 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 }
                                                 LocalId result = ctx.new_temp(return_type);
 
-                                                // 引数リスト（selfパラメータ）
+                                                // 引数リスト（selfパラメータ）。
+                                                // interfaceはfat pointer値をそのまま渡す
                                                 std::vector<MirOperandPtr> method_args;
                                                 method_args.push_back(
                                                     MirOperand::copy(MirPlace{*obj_id}));
+
+                                                // メソッドの明示的引数（{b.get(0)} 等）を
+                                                // カンマ区切りで解決して追加
+                                                if (!method_args_str.empty()) {
+                                                    std::string cur;
+                                                    int depth = 0;
+                                                    auto flush = [&]() {
+                                                        if (!cur.empty()) {
+                                                            method_args.push_back(
+                                                                lower_interp_call_arg(ctx, cur));
+                                                            cur.clear();
+                                                        }
+                                                    };
+                                                    for (char ac : method_args_str) {
+                                                        if (ac == '(' || ac == '[') {
+                                                            depth++;
+                                                        } else if (ac == ')' || ac == ']') {
+                                                            depth--;
+                                                        }
+                                                        if (ac == ',' && depth == 0) {
+                                                            flush();
+                                                        } else {
+                                                            cur += ac;
+                                                        }
+                                                    }
+                                                    flush();
+                                                }
 
                                                 // メソッド呼び出しのターミネータを作成
                                                 auto call_term = std::make_unique<MirTerminator>();
@@ -1203,9 +1505,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                     std::make_optional(MirPlace{result}),
                                                     after_call_block,
                                                     std::nullopt,  // unwindブロックなし
-                                                    "",            // interface_name
-                                                    member_name,   // method_name
-                                                    false  // is_virtual（自動生成メソッドは非仮想）
+                                                    recv_is_iface
+                                                        ? obj_type->name
+                                                        : std::string(),  // interface_name
+                                                    member_name,          // method_name
+                                                    recv_is_iface         // is_virtual
                                                 };
 
                                                 // 現在のブロックから呼び出しブロックへジャンプ
@@ -1887,11 +2191,27 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                             is_function_call = true;
                                             func_name = var_name.substr(0, paren_pos);
 
-                                            // 引数を解析（簡易実装：現在は単一の整数のみサポート）
+                                            // 引数を解析（トップレベルのカンマで分割）
                                             std::string args_str = var_name.substr(
                                                 paren_pos + 1, var_name.length() - paren_pos - 2);
                                             if (!args_str.empty()) {
-                                                func_args.push_back(args_str);
+                                                int depth = 0;
+                                                std::string cur;
+                                                for (char ch : args_str) {
+                                                    if (ch == '(') {
+                                                        depth++;
+                                                        cur += ch;
+                                                    } else if (ch == ')') {
+                                                        depth--;
+                                                        cur += ch;
+                                                    } else if (ch == ',' && depth == 0) {
+                                                        func_args.push_back(cur);
+                                                        cur.clear();
+                                                    } else {
+                                                        cur += ch;
+                                                    }
+                                                }
+                                                func_args.push_back(cur);
                                             }
                                         }
 
@@ -1909,28 +2229,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 LocalId result = ctx.new_temp(return_type);
 
                                                 // 引数の準備
+                                                // （整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
-                                                    // 簡易実装：整数リテラルのみサポート
-                                                    try {
-                                                        // stoullで符号なし64bit全域をパース（Bug#6:
-                                                        // stoll out of range修正）
-                                                        uint64_t uval =
-                                                            std::stoull(arg_str, nullptr, 0);
-                                                        int64_t value = static_cast<int64_t>(uval);
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = value;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    } catch (...) {
-                                                        // 解析エラーの場合はダミー値
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = 0;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    }
+                                                    call_args.push_back(
+                                                        lower_interp_call_arg(ctx, arg_str));
                                                 }
 
                                                 // 関数ポインタ経由の呼び出し
@@ -1971,27 +2274,30 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                                                 LocalId result = ctx.new_temp(return_type);
 
                                                 // 引数の準備
+                                                // （整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
-                                                    // 簡易実装：整数リテラルのみサポート
-                                                    try {
-                                                        // stoullで符号なし64bit全域をパース（Bug#6:
-                                                        // stoll out of range修正）
-                                                        uint64_t uval =
-                                                            std::stoull(arg_str, nullptr, 0);
-                                                        int64_t value = static_cast<int64_t>(uval);
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = value;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
-                                                    } catch (...) {
-                                                        // 解析エラーの場合はダミー値
-                                                        MirConstant arg_const;
-                                                        arg_const.type = hir::make_int();
-                                                        arg_const.value = 0;
-                                                        call_args.push_back(
-                                                            MirOperand::constant(arg_const));
+                                                    call_args.push_back(
+                                                        lower_interp_call_arg(ctx, arg_str));
+                                                }
+
+                                                // デフォルト引数の補完（{greet(1)} 等、
+                                                // 省略された末尾引数をHIR関数定義から評価）
+                                                if (ctx.hir_func_defs) {
+                                                    auto fit = ctx.hir_func_defs->find(func_name);
+                                                    if (fit != ctx.hir_func_defs->end() &&
+                                                        fit->second) {
+                                                        const auto* hf = fit->second;
+                                                        for (size_t di = func_args.size();
+                                                             di < hf->params.size(); ++di) {
+                                                            if (hf->params[di].default_value) {
+                                                                LocalId dv = lower_expression(
+                                                                    *hf->params[di].default_value,
+                                                                    ctx);
+                                                                call_args.push_back(
+                                                                    MirOperand::copy(MirPlace{dv}));
+                                                            }
+                                                        }
                                                     }
                                                 }
 
@@ -2565,6 +2871,47 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         }
     }
 
+    // ジェネリック構造体メソッドの特殊化名補正。
+    // 文字列補間式のパース経由などHIRに型引数情報が無い場合、呼び出し名が
+    // Box__get のように型引数なしで構成され未定義シンボル参照になる。
+    // レシーバ変数のMIRローカル型は特殊化済み名（Box__int）を持つため、
+    // そこから Box__int__get を再構成する
+    std::string effective_call_name = call.func_name;
+    if (is_method_call) {
+        std::string type_name = call.func_name.substr(0, double_underscore_pos);
+        std::string method_part = call.func_name.substr(double_underscore_pos + 2);
+        hir::TypePtr recv_type = nullptr;
+        const auto& self_arg = call.args[0];
+        if (auto vr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&self_arg->kind)) {
+            if (auto lid = ctx.resolve_variable((*vr)->name)) {
+                if (*lid < ctx.func->locals.size()) {
+                    recv_type = ctx.func->locals[*lid].type;
+                }
+            }
+        } else if (auto un = std::get_if<std::unique_ptr<hir::HirUnary>>(&self_arg->kind)) {
+            // (*p).method(): ポインタ変数の要素型から取得
+            if ((*un)->op == hir::HirUnaryOp::Deref && (*un)->operand) {
+                if (auto vr2 =
+                        std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*un)->operand->kind)) {
+                    if (auto lid = ctx.resolve_variable((*vr2)->name)) {
+                        if (*lid < ctx.func->locals.size()) {
+                            auto t = ctx.func->locals[*lid].type;
+                            if (t && t->kind == hir::TypeKind::Pointer) {
+                                recv_type = t->element_type;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // レシーバ型名が「型名__」で始まる特殊化名なら呼び出し名を補正
+        if (recv_type && !recv_type->name.empty() &&
+            recv_type->name.size() > type_name.size() + 2 &&
+            recv_type->name.compare(0, type_name.size() + 2, type_name + "__") == 0) {
+            effective_call_name = recv_type->name + "__" + method_part;
+        }
+    }
+
     for (size_t i = 0; i < call.args.size(); ++i) {
         const auto& arg = call.args[i];
 
@@ -2733,11 +3080,28 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         } else {
             // 変数が見つからない場合は直接関数参照として処理
             // extern関数などは変数ではなく関数として登録されている
-            func_operand = MirOperand::function_ref(call.func_name);
+            func_operand = MirOperand::function_ref(effective_call_name);
         }
     } else {
         // 直接呼び出し: 関数参照を使用
-        func_operand = MirOperand::function_ref(call.func_name);
+        func_operand = MirOperand::function_ref(effective_call_name);
+    }
+
+    // デフォルト引数の補完。
+    // 通常はHIR loweringが適用するが、文字列補間式のミニパイプライン経由の
+    // 呼び出しでは関数定義情報が無く未補完のまま到達するため、
+    // ここでHIR関数定義のデフォルト式を評価して不足分を追加する
+    if (ctx.hir_func_defs && !call.func_name.empty()) {
+        auto fit = ctx.hir_func_defs->find(call.func_name);
+        if (fit != ctx.hir_func_defs->end() && fit->second) {
+            const auto* hf = fit->second;
+            for (size_t di = call.args.size(); di < hf->params.size(); ++di) {
+                if (hf->params[di].default_value) {
+                    LocalId dv = lower_expression(*hf->params[di].default_value, ctx);
+                    args.push_back(MirOperand::copy(MirPlace{dv}));
+                }
+            }
+        }
     }
 
     // キャプチャ引数を通常の引数の前に挿入

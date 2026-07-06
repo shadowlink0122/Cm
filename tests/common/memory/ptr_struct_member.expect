@@ -1,0 +1,5 @@
+single: 70
+nested: 111 222
+member struct: 333
+member array: 10 999 30
+rect: 1 44

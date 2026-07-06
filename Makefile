@@ -78,6 +78,8 @@ help:
 	@echo "  make build-all      - テストを含む全ビルド"
 	@echo "  make configure      - CMake configure (明示的再構成)"
 	@echo "  make release        - リリースビルド"
+	@echo "  make update-docs-version - チュートリアルのバージョン表記をVERSIONに追従"
+	@echo "  make check-docs-version  - バージョン表記の乖離チェック（CI用）"
 	@echo "  make dist           - 配布用アーカイブ作成 (.tar.gz)"
 	@echo "  make install        - ~/.cm/ にインストール"
 	@echo "  make uninstall      - ~/.cm/ からアンインストール"
@@ -90,7 +92,8 @@ help:
 	@echo "  例: make build ARCH=x86_64"
 	@echo ""
 	@echo "Test Commands (Unit Tests):"
-	@echo "  make test           - すべてのC++ユニットテストを実行"
+	@echo "  make test           - 全テスト実行（unit + integration）"
+	@echo "  make test-unit      - C++ユニットテストのみ"
 	@echo "  make test-lexer     - Lexerテストのみ"
 	@echo "  make test-hir       - HIR Loweringテストのみ"
 	@echo "  make test-mir       - MIR Loweringテストのみ"
@@ -121,6 +124,11 @@ help:
 	@echo "  make test-baremetal   - ベアメタルコンパイルテスト"
 	@echo "  make test-uefi        - UEFIコンパイルテスト"
 	@echo ""
+	@echo "Test Commands (SystemVerilog/Hardware):"
+	@echo "  make test-sv          - SystemVerilogテスト (Cm→SV変換 + Verilator lint)"
+	@echo "  make test-sv-parallel - SystemVerilogテスト（並列）"
+	@echo "  make test-sv-o0/o1/o2/o3 - SystemVerilog最適化レベル別テスト"
+	@echo ""
 	@echo "  make test-all         - すべてのテストを実行"
 	@echo ""
 	@echo "Run Commands:"
@@ -132,9 +140,16 @@ help:
 	@echo "  make format-check - フォーマットをチェック"
 	@echo "  make lint         - C++コードを静的解析(clang-tidy)"
 	@echo ""
+	@echo "x86_64 Debug Commands (macOS Rosetta):"
+	@echo "  make build-x86    - x86_64用コンパイラをビルド"
+	@echo "  make test-x86     - x86_64でテスト実行（Rosetta経由）"
+	@echo "  make debug-x86 FILE=<file> - x86_64で特定テストをデバッグ"
+	@echo "  make clean-x86    - x86_64ビルドをクリーン"
+	@echo ""
 	@echo "Quick Shortcuts:"
 	@echo "  make b   - build"
-	@echo "  make t   - test"
+	@echo "  make t   - test (unit + integration)"
+	@echo "  make tu  - test-unit (C++ unit tests only)"
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
 	@echo "  make tl  - test-llvm"
@@ -149,6 +164,7 @@ help:
 	@echo "  make tw0/tw1/tw2/tw3 - WASM O0-O3（シリアル）"
 	@echo "  make tj0/tj1/tj2/tj3 - JS O0-O3（シリアル）"
 	@echo "  make tjit0/tjit1/tjit2/tjit3 - JIT O0-O3（シリアル）"
+	@echo "  make tsv/tsvp - SystemVerilog（シリアル/パラレル）"
 	@echo "  make tip0/tip1/tip2/tip3 - インタプリタ O0-O3（パラレル）"
 	@echo "  make tlp0/tlp1/tlp2/tlp3 - LLVM O0-O3（パラレル）"
 	@echo "  make twp0/twp1/twp2/twp3 - WASM O0-O3（パラレル）"
@@ -225,6 +241,14 @@ release:
 	@$(BUILD_ENV) cmake --build $(BUILD_DIR) -j$$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 	@$(MAKE) libs
 	@echo "✅ Release build complete! ($(ARCH))"
+
+# チュートリアルのバージョンバッジをVERSIONファイルに追従させる
+.PHONY: update-docs-version check-docs-version
+update-docs-version:
+	@python3 scripts/update_tutorial_version.py
+
+check-docs-version:
+	@python3 scripts/update_tutorial_version.py --check
 
 # 配布物ビルド（tar.gz作成）
 # 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
@@ -320,15 +344,116 @@ rebuild: clean build-all
 
 
 # ========================================
+# x86_64 Debug Commands (macOS Rosetta)
+# ========================================
+
+# x86_64用ビルドディレクトリ
+BUILD_DIR_X86 := build-x86_64
+
+# x86_64用コンパイラをビルド（Rosettaでテスト実行用）
+# ツールチェーンファイル: cmake/toolchains/x86_64-apple-darwin.cmake
+.PHONY: build-x86
+build-x86:
+	@if [ "$$(uname -s)" != "Darwin" ]; then \
+		echo "❌ This target is only available on macOS"; \
+		exit 1; \
+	fi
+	@echo "Building x86_64 compiler (for Rosetta testing)..."
+	@rm -rf $(BUILD_DIR_X86)
+	@BREW_PREFIX=/usr/local && \
+	LLVM_PREFIX=$${BREW_PREFIX}/opt/llvm@17 && \
+	OPENSSL_PREFIX=$${BREW_PREFIX}/opt/openssl@3 && \
+	if [ ! -d "$${LLVM_PREFIX}" ]; then \
+		echo "❌ x86_64 LLVM not found. Install with:"; \
+		echo "   arch -x86_64 /usr/local/bin/brew install llvm@17 openssl@3"; \
+		exit 1; \
+	fi && \
+	arch -x86_64 cmake -B $(BUILD_DIR_X86) \
+		-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/x86_64-apple-darwin.cmake \
+		-DCMAKE_BUILD_TYPE=Debug \
+		-DCM_USE_LLVM=ON \
+		-DCM_TARGET_ARCH=x86_64 \
+		-DLLVM_DIR=$${LLVM_PREFIX}/lib/cmake/llvm \
+		-DCMAKE_PREFIX_PATH="$${LLVM_PREFIX};$${OPENSSL_PREFIX}" \
+		-DOPENSSL_ROOT_DIR=$${OPENSSL_PREFIX} \
+		-DOPENSSL_SSL_LIBRARY=$${OPENSSL_PREFIX}/lib/libssl.dylib \
+		-DOPENSSL_CRYPTO_LIBRARY=$${OPENSSL_PREFIX}/lib/libcrypto.dylib \
+		-DOPENSSL_INCLUDE_DIR=$${OPENSSL_PREFIX}/include \
+		-DCMAKE_C_COMPILER=/usr/bin/clang \
+		-DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+		-DCMAKE_EXE_LINKER_FLAGS="-L$${LLVM_PREFIX}/lib" && \
+	arch -x86_64 cmake --build $(BUILD_DIR_X86) --target cm -j$$(sysctl -n hw.ncpu) && \
+	mv cm cm-x86 && \
+	install_name_tool -change /opt/homebrew/opt/llvm@17/lib/libLLVM.dylib /usr/local/opt/llvm@17/lib/libLLVM.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/llvm@17/lib/libunwind.1.dylib /usr/local/opt/llvm@17/lib/libunwind.1.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib /usr/local/opt/openssl@3/lib/libssl.3.dylib cm-x86 2>/dev/null || true && \
+	install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib /usr/local/opt/openssl@3/lib/libcrypto.3.dylib cm-x86 2>/dev/null || true && \
+	echo "✅ x86_64 build complete! Binary: cm-x86"
+
+# x86_64用テスト実行（Rosettaで実行）
+.PHONY: test-x86
+test-x86: build-x86
+	@echo "Running x86_64 tests via Rosetta..."
+	@CM_EXECUTABLE=./cm-x86 OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
+	@echo "✅ x86_64 tests completed!"
+
+# x86_64で特定のテストをデバッグ実行
+# 使用例: make debug-x86 FILE=tests/common/functions/recursive_function.cm
+.PHONY: debug-x86
+debug-x86: build-x86
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make debug-x86 FILE=<test.cm>"; \
+		exit 1; \
+	fi
+	@echo "=== x86_64 Debug: $(FILE) ==="
+	@echo "--- Compiling ---"
+	@./cm-x86 compile -O3 -o /tmp/debug_x86_test $(FILE) 2>&1 || true
+	@echo ""
+	@echo "--- Running via Rosetta ---"
+	@if [ -f /tmp/debug_x86_test ]; then \
+		/tmp/debug_x86_test 2>&1; \
+		echo "Exit code: $$?"; \
+	else \
+		echo "Compilation failed"; \
+	fi
+
+# x86_64用クリーン
+.PHONY: clean-x86
+clean-x86:
+	@rm -rf $(BUILD_DIR_X86) cm-x86
+	@echo "✅ x86_64 build cleaned!"
+
+# ショートカット
+.PHONY: bx tx dx
+bx: build-x86
+tx: test-x86
+dx: debug-x86
+
+
+# ========================================
 # Unit Test Commands (C++ tests via ctest)
 # ========================================
 
-.PHONY: test
-test:
+.PHONY: test-unit
+test-unit:
 	@echo "Running all C++ unit tests..."
 	@ctest --test-dir $(BUILD_DIR) --output-on-failure
 	@echo ""
 	@echo "✅ All unit tests passed!"
+
+# 全テスト実行（unit + integration）- 並列実行
+.PHONY: test
+test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel
+	@echo ""
+	@echo "=========================================="
+	@echo "✅ All tests completed!"
+	@echo "  - Unit tests (C++)"
+	@echo "  - Interpreter tests (parallel)"
+	@echo "  - LLVM Native tests (parallel)"
+	@echo "  - LLVM WASM tests (parallel)"
+	@echo "  - JavaScript tests (parallel)"
+	@echo "  - SystemVerilog tests (parallel)"
+	@echo "=========================================="
 
 .PHONY: test-lexer
 test-lexer:
@@ -513,13 +638,9 @@ test-all-parallel-nc: build  ## 全バックエンド（パラレル、キャッ
 	@echo "✅ All parallel tests (no cache) completed!"
 	@echo "=========================================="
 
-# すべてのテストを実行
+# すべてのテストを実行（testのエイリアス）
 .PHONY: test-all
-test-all: test test-interpreter test-llvm-all
-	@echo ""
-	@echo "=========================================="
-	@echo "✅ All tests completed!"
-	@echo "=========================================="
+test-all: test
 
 # ========================================
 # Run Commands
@@ -591,6 +712,9 @@ b: build
 
 .PHONY: t
 t: test
+
+.PHONY: tu
+tu: test-unit
 
 .PHONY: ta
 ta: test-all

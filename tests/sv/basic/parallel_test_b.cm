@@ -1,0 +1,10 @@
+//! platform: sv
+//! description: Parallel test verification B - subtractor
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int diff = 0;
+
+void subtract() {
+    diff = a - b;
+}

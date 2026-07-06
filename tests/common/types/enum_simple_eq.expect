@@ -1,0 +1,4 @@
+eq: true
+if: match
+ne: ok
+interp: true false

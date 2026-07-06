@@ -1,0 +1,15 @@
+enum Status {
+    IDLE = 0,
+    ERROR = 100
+}
+
+#[input] uint sel;
+#[output] uint code = 0;
+
+void pick() {
+    if (sel == 1) {
+        code = Status::ERROR as uint;
+    } else {
+        code = Status::IDLE as uint;
+    }
+}

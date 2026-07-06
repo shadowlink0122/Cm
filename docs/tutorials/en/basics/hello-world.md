@@ -54,3 +54,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Environment Setup](setup.html) | [Contents](index.html) | Next: [Basics - Variables and Types](variables.html) →

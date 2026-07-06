@@ -164,6 +164,8 @@ bool isBuiltinFunction(const std::string& name) {
         "memset",
         // 低レベルI/O
         "__print__",
+        // プロセス終了
+        "exit",
     };
     return builtins.count(name) > 0;
 }
@@ -177,6 +179,13 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     // __cm_str_slice: (str, start, end)
     if (name == "__cm_str_slice" && argStrs.size() >= 3) {
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
+    }
+
+    // exit(code): Node.jsでは process.exit、ブラウザ等では例外で停止する
+    if (name == "exit") {
+        std::string code = argStrs.empty() ? "0" : argStrs[0];
+        return "((typeof process !== \"undefined\") ? process.exit(" + code +
+               ") : (() => { throw new Error(\"exit(\" + (" + code + ") + \")\"); })())";
     }
 
     // println系

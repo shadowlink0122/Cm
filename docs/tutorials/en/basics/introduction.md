@@ -58,3 +58,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Basics](index.html) | [Contents](index.html) | Next: [Environment Setup](setup.html) →

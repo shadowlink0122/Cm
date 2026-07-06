@@ -495,6 +495,22 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
         }
     }
 
+    // 単純enum（ペイロードなし、int表現）の __tag は値そのもの。
+    // Tagged Union化されないenum変数への c.__tag は恒等アクセスとして扱う
+    // （enum比較のHIR書き換えが一律に __tag 抽出を挿入するため）
+    if (member.member == "__tag" && (!obj_type || obj_type->kind != hir::TypeKind::Struct)) {
+        if (!needs_deref) {
+            return object;
+        }
+        // ポインタ経由（(*p).__tag）はデリファレンスした値を返す
+        LocalId result = ctx.new_temp(obj_type ? obj_type : hir::make_int());
+        MirPlace src{object};
+        src.projections.push_back(PlaceProjection::deref());
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(src))));
+        return result;
+    }
+
     if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
         debug_msg("MIR",
                   "Error: Member access on non-struct type for member '" + member.member + "'");
@@ -513,6 +529,11 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 
     for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {
         const std::string& field_name = it->second;
+
+        // チェーン途中の単純enumメンバへの __tag も恒等（プロジェクション追加なし）
+        if (field_name == "__tag" && current_type && current_type->kind != hir::TypeKind::Struct) {
+            continue;
+        }
 
         if (!current_type || current_type->kind != hir::TypeKind::Struct) {
             debug_msg("MIR", "Error: Non-struct type in member chain");
@@ -793,6 +814,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 } else {
                     break;
                 }
+            } else if (current_type->kind == hir::TypeKind::String) {
+                current_type = hir::make_char();
+                break;
             } else {
                 break;
             }

@@ -104,3 +104,8 @@ println(content);
 ---
 
 **関連:** [メモリ管理](mem.html) · [数学関数](math.html) · [コアユーティリティ](core-utils.html)
+
+---
+
+<!-- nav -->
+← 前: [Cm 標準ライブラリ (Native向け)](index.html) ｜ [目次](index.html) ｜ 次: [std::mem — メモリ管理](mem.html) →

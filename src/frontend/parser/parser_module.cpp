@@ -742,8 +742,9 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     ast::ExprPtr init;
     if (consume_if(TokenKind::Eq)) {
         init = parse_expr();
-    } else if (!is_sv_port) {
+    } else if (!is_sv_port && !(is_sv_platform_ && check(TokenKind::Semicolon))) {
         // 非SVポートでは初期化子を必須とする
+        // ただしSVプラットフォームでは初期値なし宣言を許可（extern struct インスタンス等）
         error("Expected '=' for global variable initializer");
     }
 
@@ -1060,6 +1061,15 @@ ast::DeclPtr Parser::parse_extern(std::vector<ast::AttributeNode> attributes) {
         }
     }
 
+    // extern struct (外部ハードウェアモジュール / FFI構造体)
+    if (check(TokenKind::KwStruct)) {
+        auto struct_decl = parse_struct(false, std::move(attributes), true);
+        if (auto* s = struct_decl->as<ast::StructDecl>()) {
+            s->is_extern = true;
+        }
+        return struct_decl;
+    }
+
     // extern だけの場合（C++スタイル）
     return parse_extern_decl(std::move(attributes));
 }
@@ -1140,6 +1150,28 @@ ast::DeclPtr Parser::parse_extern_decl(std::vector<ast::AttributeNode> attribute
         func->attributes = std::move(attributes);
     }
     return std::make_unique<ast::Decl>(std::move(func));
+}
+
+// ============================================================
+// SV initial ブロック
+// ============================================================
+ast::DeclPtr Parser::parse_initial_block(std::vector<ast::AttributeNode> attributes) {
+    uint32_t start_pos = current().start;
+    expect(TokenKind::KwInitial);
+    expect(TokenKind::LBrace);
+
+    std::vector<ast::StmtPtr> body;
+    while (!check(TokenKind::RBrace) && !is_at_end()) {
+        if (auto stmt = parse_stmt()) {
+            body.push_back(std::move(stmt));
+        }
+    }
+
+    expect(TokenKind::RBrace);
+
+    auto decl = std::make_unique<ast::InitialBlockDecl>(std::move(body));
+    decl->attributes = std::move(attributes);
+    return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
 }
 
 }  // namespace cm

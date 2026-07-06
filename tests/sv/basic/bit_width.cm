@@ -1,0 +1,21 @@
+//! platform: sv
+
+// bit[N] カスタムビット幅テスト
+// bit[4] → logic [3:0], bit[12] → logic [11:0]
+
+#[input]  bool enable = false;
+#[input]  uint data = 0;
+#[output] bit[4] nibble = 0;
+#[output] bit[12] address = 0;
+
+bit[26] counter = 0;
+
+always_comb void logic_process() {
+    if (enable) {
+        nibble = nibble;
+        address = address;
+    } else {
+        nibble = nibble;
+        address = address;
+    }
+}

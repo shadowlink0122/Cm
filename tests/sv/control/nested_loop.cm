@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: cycles=1 -> total=18
+
+// ネストしたforループのテスト:
+// 外側3回 × 内側3回で (i+j) の総和 = 18 を検証
+
+#[input] posedge clk;
+#[output] uint total = 0;
+
+async void run(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < 3; i = i + 1) {
+        for (uint j = 0; j < 3; j = j + 1) {
+            acc = acc + i + j;
+        }
+    }
+    total = acc;
+}

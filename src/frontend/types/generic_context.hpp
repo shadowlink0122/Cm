@@ -14,6 +14,7 @@ namespace cm {
 // ============================================================
 // ジェネリックコンテキスト
 // ジェネリックパラメータとその制約を管理
+// （実装は generic_context.cpp）
 // ============================================================
 class GenericContext {
    public:
@@ -36,112 +37,35 @@ class GenericContext {
 
    public:
     // 型パラメータを追加
-    void add_type_param(const std::string& name, const std::vector<std::string>& bounds = {}) {
-        size_t index = type_params_.size();
-        type_params_.push_back({name, bounds, nullptr});
-        param_index_[name] = index;
-    }
+    void add_type_param(const std::string& name, const std::vector<std::string>& bounds = {});
 
     // 型パラメータが存在するか
-    bool has_type_param(const std::string& name) const {
-        return param_index_.find(name) != param_index_.end();
-    }
+    bool has_type_param(const std::string& name) const;
 
     // 型パラメータを取得
-    TypeParam* get_type_param(const std::string& name) {
-        auto it = param_index_.find(name);
-        if (it != param_index_.end()) {
-            return &type_params_[it->second];
-        }
-        return nullptr;
-    }
+    TypeParam* get_type_param(const std::string& name);
 
     // 型パラメータを具体的な型にバインド
-    bool bind_type(const std::string& name, ast::TypePtr type) {
-        auto* param = get_type_param(name);
-        if (!param) {
-            return false;
-        }
-        param->concrete_type = type;
-        return true;
-    }
+    bool bind_type(const std::string& name, ast::TypePtr type);
 
     // 型パラメータの具体的な型を取得
-    ast::TypePtr get_concrete_type(const std::string& name) const {
-        auto it = param_index_.find(name);
-        if (it != param_index_.end()) {
-            return type_params_[it->second].concrete_type;
-        }
-        return nullptr;
-    }
+    ast::TypePtr get_concrete_type(const std::string& name) const;
 
     // 型の置換（ジェネリックパラメータを具体的な型に置き換え）
-    ast::TypePtr substitute_type(const ast::Type& type) const {
-        // Genericタイプの場合、ジェネリックパラメータかチェック
-        if (type.kind == ast::TypeKind::Generic) {
-            const std::string& name = type.name;
-            if (auto concrete = get_concrete_type(name)) {
-                return concrete;
-            }
-        }
-
-        // Arrayタイプの場合、要素型を再帰的に置換
-        if (type.kind == ast::TypeKind::Array) {
-            if (type.element_type) {
-                auto substituted = substitute_type(*type.element_type);
-                auto result = ast::make_array(substituted, type.array_size);
-                return result;
-            }
-        }
-
-        // Pointerタイプの場合、指す型を再帰的に置換
-        if (type.kind == ast::TypeKind::Pointer) {
-            if (type.element_type) {
-                auto substituted = substitute_type(*type.element_type);
-                return ast::make_pointer(substituted);
-            }
-        }
-
-        // 置換不要な場合は元の型をコピー
-        return std::make_shared<ast::Type>(type);
-    }
+    ast::TypePtr substitute_type(const ast::Type& type) const;
 
     // 全ての型パラメータを取得
     const std::vector<TypeParam>& type_params() const { return type_params_; }
 
     // クリア
-    void clear() {
-        type_params_.clear();
-        param_index_.clear();
-        constraint_cache_.clear();
-    }
+    void clear();
 
     // 型制約をチェック（インターフェース実装のチェック）
     bool check_bounds(const std::string& param_name, const ast::Type& concrete_type,
-                      const std::function<bool(const std::string&, const std::string&)>& has_impl) {
-        auto* param = get_type_param(param_name);
-        if (!param) {
-            return false;
-        }
-
-        // 全ての制約をチェック
-        std::string type_str = ast::type_to_string(concrete_type);
-        for (const auto& bound : param->bounds) {
-            if (!has_impl(type_str, bound)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+                      const std::function<bool(const std::string&, const std::string&)>& has_impl);
 
     // コンテキストをコピー
-    GenericContext clone() const {
-        GenericContext result;
-        result.type_params_ = type_params_;
-        result.param_index_ = param_index_;
-        return result;
-    }
+    GenericContext clone() const;
 };
 
 }  // namespace cm

@@ -78,3 +78,8 @@ interface Clone {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [型システム編 - インターフェース](interfaces.html) ｜ [目次](index.html) ｜ 次: [型システム編 - 所有権と借用](ownership.html) →

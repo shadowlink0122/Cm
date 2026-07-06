@@ -1,0 +1,18 @@
+//! platform: sv
+
+// 小規模配列テスト (LutRAM属性)
+
+#[input] posedge clk;
+#[input] utiny idx = 0;
+#[input] utiny data_in = 0;
+#[input] bool we = false;
+#[output] utiny val = 0;
+
+#[sv::lutram] utiny[16] lut;
+
+async void lookup(posedge clk) {
+    if (we == true) {
+        lut[idx] = data_in;
+    }
+    val = lut[idx];
+}

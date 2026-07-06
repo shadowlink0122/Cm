@@ -1,0 +1,11 @@
+// 異なるシグネチャの同名関数定義はエラー（自由関数のオーバーロード未対応）。
+// 旧: 診断なしでLLVMモジュール検証エラーまで到達していた
+import std::io::println;
+
+int process(int x) { return x; }
+double process(double x) { return x; }
+
+int main() {
+    println("{process(1)}");
+    return 0;
+}

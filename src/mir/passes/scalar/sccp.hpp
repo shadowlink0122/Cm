@@ -57,7 +57,8 @@ class SparseConditionalConstantPropagation : public OptimizationPass {
     bool can_bind_constant(const MirFunction& func, LocalId local,
                            const MirConstant& constant) const;
     std::optional<MirConstant> eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
-                                              const MirConstant& rhs);
+                                              const MirConstant& rhs,
+                                              const hir::TypePtr& result_type = nullptr);
     std::optional<MirConstant> eval_unary_op(MirUnaryOp op, const MirConstant& operand);
 
     // 定数適用・書き換え

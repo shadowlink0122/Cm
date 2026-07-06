@@ -1,0 +1,22 @@
+//! platform: sv
+
+// 後方互換テスト: 旧構文async funcが引き続きalways_ff @(posedge clk)になる
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+#[output] bool led = false;
+
+// 後方互換: async func → always_ff @(posedge clk)
+async void tick() {
+    if (rst) {
+        count = 0;
+        led = false;
+    } else {
+        count = count + 1;
+        if (count == 25000000) {
+            count = 0;
+            led = !led;
+        }
+    }
+}

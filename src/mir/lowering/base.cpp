@@ -172,7 +172,8 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         if (const_val) {
             const_val->type = gv.type ? gv.type : const_val->type;
             global_const_values[gv.name] = *const_val;
-            return;
+            // SVバックエンドではlocalparam出力のため、global_varsにも登録する
+            // （returnせずフォールスルーで下のMirGlobalVar登録へ進む）
         }
     }
 
@@ -181,6 +182,7 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
     mir_gv->name = gv.name;
     mir_gv->type = gv.type;
     mir_gv->is_const = gv.is_const;
+    mir_gv->is_assign = gv.is_assign;
     mir_gv->is_export = gv.is_export;
     mir_gv->attributes = gv.attributes;  // SV用属性を伝搬（input/output等）
 
@@ -189,6 +191,37 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         auto const_val = try_global_const_eval(*gv.init);
         if (const_val) {
             mir_gv->init_value = std::make_unique<MirConstant>(*const_val);
+        } else {
+            // 定数評価できない初期化式はHIR式のまま保持する
+            // （assign文/const定数のほか、配列リテラル初期値のinitial出力等で
+            //   SVコードジェネレータが使用する）
+            mir_gv->init_expr = gv.init.get();
+        }
+
+        // 構造体リテラル初期化（extern structインスタンスのポート接続用）:
+        // `alu a0 = alu { a: x, b: y };` のフィールド値を文字列/定数として保持する
+        if (const auto* struct_lit =
+                std::get_if<std::unique_ptr<hir::HirStructLiteral>>(&gv.init->kind)) {
+            if (*struct_lit) {
+                for (const auto& field : (*struct_lit)->fields) {
+                    if (!field.value) {
+                        continue;
+                    }
+                    MirConstant field_const;
+                    if (const auto* var_ref =
+                            std::get_if<std::unique_ptr<hir::HirVarRef>>(&field.value->kind)) {
+                        // 信号名接続（識別子）
+                        if (*var_ref) {
+                            field_const.type = hir::make_string();
+                            field_const.value = (*var_ref)->name;
+                            mir_gv->struct_field_inits.emplace_back(field.name, field_const);
+                        }
+                    } else if (auto fc = try_global_const_eval(*field.value)) {
+                        // 定数（パラメータ値等）
+                        mir_gv->struct_field_inits.emplace_back(field.name, *fc);
+                    }
+                }
+            }
         }
     }
 
@@ -341,6 +374,7 @@ MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
     MirStruct mir_struct;
     mir_struct.name = st.name;
     mir_struct.is_css = st.is_css;
+    mir_struct.is_extern = st.is_extern;
 
     // フィールドとレイアウトを計算
     uint32_t current_offset = 0;
@@ -351,6 +385,10 @@ MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
         mir_field.name = field.name;
         // フィールドの型をtypedef/enum解決
         mir_field.type = resolve_typedef(field.type);
+        // フィールド属性を伝播
+        mir_field.attributes = field.attributes;
+        // フィールドデフォルト値を伝播（SV用）
+        mir_field.default_value_str = field.default_value_str;
 
         // 型のサイズとアライメントを取得（簡易版）
         uint32_t size = 0, align = 1;

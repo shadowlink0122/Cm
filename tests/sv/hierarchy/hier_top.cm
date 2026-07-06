@@ -1,0 +1,24 @@
+//! platform: sv
+//! sv: hierarchy
+//! test: x=100, y=23, cycles=2 -> sum=123
+
+// モジュール階層保持のテスト:
+// //! sv: hierarchy 指定時、相対importはフラット化されず
+// import先のポート宣言から extern struct が自動生成され、
+// 別モジュールとしてインスタンス化・連結出力される。
+
+import ./hier_alu;
+
+#[input] posedge clk;
+#[input] uint x;
+#[input] uint y;
+#[output] uint sum = 0;
+
+uint alu_out = 0;
+utiny op_add = 0;
+
+hier_alu alu0 = hier_alu { a: x, b: y, op: op_add, result: alu_out };
+
+async void update(posedge clk) {
+    sum = alu_out;
+}

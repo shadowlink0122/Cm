@@ -1,0 +1,12 @@
+#[input] bool clk = false;
+#[input] uint idx;
+#[output] utiny out = 0;
+
+#[sv::memfile("font.hex")]
+utiny[4] rom = [10, 20, 30, 40];
+
+void read(posedge clk) {
+    if (idx < 4) {
+        out = rom[idx];
+    }
+}

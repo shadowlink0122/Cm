@@ -1,0 +1,10 @@
+//! platform: sv
+//! description: Parallel test verification A - multiplier
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int product = 0;
+
+void multiply() {
+    product = a * b;
+}

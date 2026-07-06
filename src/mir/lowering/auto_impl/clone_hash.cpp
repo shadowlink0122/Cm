@@ -116,7 +116,7 @@ void AutoImplGenerator::generate_builtin_hash_method(const hir::HirStruct& st) {
             block->statements.push_back(MirStatement::assign(
                 MirPlace(new_acc),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
-                                  MirOperand::copy(MirPlace(field_val)))));
+                                  MirOperand::copy(MirPlace(field_val)), hir::make_int())));
             acc = new_acc;
         }
 
@@ -190,7 +190,7 @@ void AutoImplGenerator::generate_builtin_hash_method_for_monomorphized(const Mir
             block->statements.push_back(MirStatement::assign(
                 MirPlace(new_acc),
                 MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
-                                  MirOperand::copy(MirPlace(field_val)))));
+                                  MirOperand::copy(MirPlace(field_val)), hir::make_int())));
             acc = new_acc;
         }
 

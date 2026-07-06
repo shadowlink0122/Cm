@@ -23,7 +23,8 @@ class ConstantFolding : public OptimizationPass {
     std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func);
 
     // ブロック処理
-    bool process_block(BasicBlock& block, std::unordered_map<LocalId, MirConstant>& constants,
+    bool process_block(const MirFunction& func, BasicBlock& block,
+                       std::unordered_map<LocalId, MirConstant>& constants,
                        const std::unordered_set<LocalId>& multiAssigned);
 
     // Rvalue/Operand評価
@@ -34,7 +35,8 @@ class ConstantFolding : public OptimizationPass {
 
     // 演算評価
     std::optional<MirConstant> eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
-                                              const MirConstant& rhs);
+                                              const MirConstant& rhs,
+                                              const hir::TypePtr& result_type = nullptr);
     std::optional<MirConstant> eval_unary_op(MirUnaryOp op, const MirConstant& operand);
     std::optional<MirConstant> eval_cast(const MirConstant& operand,
                                          const hir::TypePtr& target_type);

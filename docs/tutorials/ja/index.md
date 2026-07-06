@@ -7,9 +7,9 @@ has_children: true
 
 [English](../en/)
 
-# Cm言語チュートリアル v0.14.1
+# Cm言語チュートリアル v0.15.1
 
-**対象バージョン:** v0.14.1  
+**対象バージョン:** v0.15.1  
 **最終更新:** 2026-02-20
 
 Cm言語の全機能を段階的に学べる包括的なチュートリアル集です。
@@ -29,7 +29,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [変数と型](basics/variables.html) - プリミティブ型、const/static
    - [演算子](basics/operators.html) - 算術・比較・論理演算
    - [制御構文](basics/control-flow.html) - if/while/for/switch/defer
-   - [関数](basics/functions.html) - 定義・オーバーロード・デフォルト引数
+   - [関数](basics/functions.html) - 定義・デフォルト引数（自由関数のオーバーロードは未対応）
    - [配列](basics/arrays.html) - 宣言・メソッド・for-in
    - [ポインタ](basics/pointers.html) - アドレス・デリファレンス・Array Decay
    - [モジュール](basics/modules.html) - import/export
@@ -89,16 +89,17 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 推定時間: 3時間
 
-4. **[コンパイラ編](compiler/usage.html)** - ビルドとバックエンド
-   - [コンパイラの使い方](compiler/usage.html) - コマンド・オプション
-   - [LLVMバックエンド](compiler/llvm.html) - ネイティブコンパイル
-   - [WASMバックエンド](compiler/wasm.html) - WebAssembly出力
-   - [JSバックエンド](compiler/js-compilation.html) - JavaScript出力
-   - [UEFIベアメタル](compiler/uefi.html) - UEFIアプリケーション開発（no_std）
-   - [プリプロセッサ](compiler/preprocessor.html) - 条件付きコンパイル
-   - [Linter](compiler/linter.html) - 静的解析（cm lint）
-   - [Formatter](compiler/formatter.html) - コードフォーマット（cm fmt）
-   - [最適化](compiler/optimization.html) - O0-O3、末尾呼び出し最適化
+4. **[コンパイラ編](compiler/common/usage.html)** - ビルドとバックエンド
+   - [コンパイラの使い方](compiler/common/usage.html) - コマンド・オプション
+   - [LLVMバックエンド](compiler/native/index.html) - ネイティブコンパイル
+   - [WASMバックエンド](compiler/wasm/index.html) - WebAssembly出力
+   - [JSバックエンド](compiler/js/index.html) - JavaScript出力
+   - [SVバックエンド](compiler/sv/index.html) - SystemVerilog / FPGA出力 🆕
+   - [UEFIベアメタル](compiler/native/uefi.html) - UEFIアプリケーション開発（no_std）
+   - [プリプロセッサ](compiler/common/preprocessor.html) - 条件付きコンパイル
+   - [Linter](compiler/common/linter.html) - 静的解析（cm lint）
+   - [Formatter](compiler/common/formatter.html) - コードフォーマット（cm fmt）
+   - [最適化](compiler/common/optimization.html) - O0-O3、末尾呼び出し最適化
 
 ### パス6: 内部構造を学ぶ（開発者向け）
 
@@ -137,20 +138,22 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 
-## ✅ 実装状況一覧（v0.14.1）
+## ✅ 実装状況一覧（v0.15.1）
 
 | カテゴリ | 機能 | LLVM | WASM | JS | チュートリアル |
 |---------|------|------|------|-----|---------------|
 | **基本** | プリミティブ型 | ✅ | ✅ | ✅ | ✅ [variables](basics/variables.html) |
 | | 制御構文 | ✅ | ✅ | ✅ | ✅ [control-flow](basics/control-flow.html) |
-| | 関数 | ✅ | ✅ | ✅ | ✅ [functions](basics/functions.html) |
+| | 関数・デフォルト引数 | ✅ | ✅ | ✅ | ✅ [functions](basics/functions.html) |
+| | 関数オーバーロード | ❌ | ❌ | ❌ | 未対応（重複定義はエラー診断） |
 | | モジュール | ✅ | ✅ | ✅ | ✅ [modules](basics/modules.html) |
 | **データ** | 構造体 | ✅ | ✅ | ✅ | ✅ [structs](types/structs.html) |
 | | Enum/Tagged Union | ✅ | ✅ | ✅ | ✅ [enums](types/enums.html) |
 | | 配列 | ✅ | ✅ | ✅ | ✅ [arrays](basics/arrays.html) |
 | | ポインタ | ✅ | ✅ | ❌ | ✅ [pointers](basics/pointers.html) |
 | **型** | ジェネリクス | ✅ | ✅ | ✅ | ✅ [generics](types/generics.html) |
-| | インターフェース | ✅ | ✅ | ✅ | ✅ [interfaces](types/interfaces.html) |
+| | インターフェース（静的） | ✅ | ✅ | ✅ | ✅ [interfaces](types/interfaces.html) |
+| | インターフェース動的ディスパッチ | ✅ | ✅ | ✅(値/引数) | ポインタ経由はLLVM系のみ |
 | | 型制約 | ✅ | ✅ | ✅ | ✅ [constraints](types/constraints.html) |
 | **高度** | match式・ガード | ✅ | ✅ | ✅ | ✅ [match](advanced/match.html) |
 | | with自動実装 | ✅ | ✅ | ✅ | ✅ [with](advanced/with-keyword.html) |
@@ -165,11 +168,12 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | Channel | ✅ | ❌ | ❌ | ✅ [channel](stdlib/concurrency/channel.html) |
 | | Atomic | ✅ | ❌ | ❌ | ✅ [atomic](stdlib/concurrency/atomic.html) |
 | | GPU (Metal) | ✅ | ❌ | ❌ | ✅ [gpu](stdlib/gpu.html) |
-| **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/linter.html) |
-| | Formatter | ✅ | - | - | ✅ [formatter](compiler/formatter.html) |
-| | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/preprocessor.html) |
-| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js-compilation.html) |
-| | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/uefi.html) |
+| **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/common/linter.html) |
+| | Formatter | ✅ | - | - | ✅ [formatter](compiler/common/formatter.html) |
+| | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/common/preprocessor.html) |
+| **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js/index.html) |
+| | SVバックエンド | ✅ | ❌ | ❌ | ✅ [sv](compiler/sv/index.html) |
+| | UEFIベアメタル | ✅ | ❌ | ❌ | ✅ [uefi](compiler/native/uefi.html) |
 
 凡例: ✅ 完全対応 | ⚠️ 部分対応 | ❌ 未対応
 
@@ -242,11 +246,12 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
   - [ ] mustキーワード
   - [ ] マクロ
 
-- [ ] コンパイラ編（9チュートリアル）
+- [ ] コンパイラ編（10チュートリアル）
   - [ ] コンパイラの使い方
   - [ ] LLVMバックエンド
   - [ ] WASMバックエンド
   - [ ] JSバックエンド
+  - [ ] SVバックエンド 🆕
   - [ ] UEFIベアメタル
   - [ ] プリプロセッサ
   - [ ] Linter
@@ -262,7 +267,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 **チュートリアル総数:** 43ファイル  
 **推定学習時間:** 18-22時間  
-**対象バージョン:** v0.14.1
+**対象バージョン:** v0.15.1
 
 ---
 
@@ -271,3 +276,13 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 [English](../en/)
+
+---
+
+<!-- nav -->
+次: [基本編](basics/index.html) →
+
+---
+
+<!-- nav -->
+次: [基本編](basics/index.html) →

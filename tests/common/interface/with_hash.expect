@@ -1,5 +1,5 @@
-p1.hash() = 30
-p2.hash() = 30
-p3.hash() = 20
+p1.hash() = 2039431275
+p2.hash() = 2039431275
+p3.hash() = 1651133277
 h1 == h2: true
 h1 == h3: false

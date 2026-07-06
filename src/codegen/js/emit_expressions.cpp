@@ -70,10 +70,62 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
 
-            // 整数除算の場合はMath.truncを使用
-            if (data.op == mir::MirBinaryOp::Div && data.result_type) {
-                if (data.result_type->is_integer()) {
-                    return "Math.trunc(" + lhs + " " + op + " " + rhs + ")";
+            // 整数除算・剰余: ゼロ除算は実行時エラー、除算はMath.truncで整数化。
+            // result_typeが無い場合（文字列補間式のパース経由等）は
+            // オペランド型から整数演算かどうかを判定する
+            const bool int_operands =
+                lhsType && lhsType->is_integer() && rhsType && rhsType->is_integer();
+            const bool int_divmod = (data.result_type && data.result_type->is_integer()) ||
+                                    (!data.result_type && int_operands);
+            if ((data.op == mir::MirBinaryOp::Div || data.op == mir::MirBinaryOp::Mod) &&
+                int_divmod) {
+                std::string safe_rhs =
+                    "((" + rhs +
+                    ") || (() => { throw new Error(\"integer division by zero\"); })())";
+                if (data.op == mir::MirBinaryOp::Div) {
+                    return "Math.trunc(" + lhs + " / " + safe_rhs + ")";
+                }
+                return "(" + lhs + " % " + safe_rhs + ")";
+            }
+
+            // 符号なし型の判定（シフト・ラップアラウンドのセマンティクス切り替え用）
+            auto is_unsigned_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::UTiny || t->kind == TypeKind::UShort ||
+                       t->kind == TypeKind::UInt || t->kind == TypeKind::ULong;
+            };
+            const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
+                             is_unsigned_int(rhsType);
+
+            // 右シフト: JSの >> はint32の算術シフトのため、符号なし型は >>> を使う
+            if (data.op == mir::MirBinaryOp::Shr && uns) {
+                return "(" + lhs + " >>> " + rhs + ")";
+            }
+
+            // 32ビット整数演算のオーバーフロー処理
+            // JSは64ビット浮動小数点数のため、int/uint型の演算で32ビットラップアラウンドが必要。
+            // result_typeが無い場合はオペランド型で判定する
+            const hir::TypePtr& wrap_type =
+                data.result_type ? data.result_type : (lhsType ? lhsType : rhsType);
+            if (wrap_type && wrap_type->is_int32()) {
+                const bool result_unsigned = is_unsigned_int(wrap_type);
+                // 乗算: Math.imul を使用（32ビット整数乗算）
+                if (data.op == mir::MirBinaryOp::Mul) {
+                    std::string mul = "Math.imul(" + lhs + ", " + rhs + ")";
+                    // uintは符号なし32ビットへ再解釈
+                    return result_unsigned ? "(" + mul + " >>> 0)" : mul;
+                }
+                // 加算/減算: 32ビットに切り捨て（uintは >>> 0 で符号なし化）
+                if (data.op == mir::MirBinaryOp::Add || data.op == mir::MirBinaryOp::Sub) {
+                    if (result_unsigned) {
+                        return "((" + lhs + " " + op + " " + rhs + ") >>> 0)";
+                    }
+                    return "((" + lhs + " " + op + " " + rhs + ")|0)";
+                }
+                // 左シフト: uintは符号なし32ビットへ再解釈
+                if (data.op == mir::MirBinaryOp::Shl && result_unsigned) {
+                    return "((" + lhs + " << " + rhs + ") >>> 0)";
                 }
             }
 

@@ -1,0 +1,15 @@
+//! platform: sv
+
+// bool入出力 + 論理演算テスト
+
+#[input]  bool a = false;
+#[input]  bool b = false;
+#[output] bool and_out = false;
+#[output] bool or_out = false;
+#[output] bool not_a = false;
+
+void logic_ops() {
+    and_out = a && b;
+    or_out  = a || b;
+    not_a   = !a;
+}

@@ -14,6 +14,8 @@
 #include "codegen/js/codegen.hpp"
 
 // MIR validation
+#include "cli/options.hpp"
+#include "codegen/sv/hierarchy.hpp"
 #include "common/cache_manager.hpp"
 #include "common/debug_messages.hpp"
 #include "common/source_location.hpp"
@@ -29,6 +31,7 @@
 #include "mir/passes/cleanup/dce.hpp"
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
+#include "mir/passes/loop/const_unroll.hpp"
 #include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
@@ -58,263 +61,36 @@ namespace fs = std::filesystem;
 
 namespace cm {
 
-// バージョン情報を取得（CMakeでコンパイル時に埋め込み）
-std::string get_version() {
-#ifdef CM_VERSION
-    return CM_VERSION;
-#else
-    return "0.15.0";
-#endif
-}
+// CLIオプション処理（Command/Options/parse_options/print_help/get_version）は
+// src/cli/options.{hpp,cpp} へ分離した（013 §4.3-4 巨大TU分割）
+using cli::Command;
+using cli::get_version;
+using cli::Options;
+using cli::parse_options;
+using cli::print_help;
 
-// コマンドラインオプション
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache };
-
-struct Options {
-    Command command = Command::None;
-    std::string input_file;                     // 単一ファイル (run/compile用)
-    std::vector<std::string> input_files;       // 複数ファイル (check/lint用)
-    bool recursive = false;                     // -r オプション
-    std::vector<std::string> exclude_patterns;  // --exclude パターン
-    bool show_ast = false;
-    bool show_hir = false;
-    bool show_mir = false;
-    bool show_mir_opt = false;
-    bool show_lir_opt = false;  // 最適化後のLLVM IRを表示
-    bool emit_llvm = false;
-    bool emit_js = false;         // JavaScript生成
-    std::string target = "";      // ターゲット (native, wasm, js, web)
-    bool run_after_emit = false;  // 生成後に実行
-    int optimization_level = 3;   // デフォルト最適化レベル3
-    bool debug = false;
-    std::string debug_level = "info";
-    bool verbose = false;         // デフォルトは静かなモード
-    bool quiet = false;           // 出力を抑制するモード
-    std::string output_file;      // -o オプション
-    size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
-    bool use_jit = true;          // JITコンパイラ使用（デフォルト）
-    // インクリメンタルビルド設定
-    bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
-    std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
-    std::string cache_subcommand;         // cache サブコマンド（clear/stats）
+// ファイル読み込み結果
+struct ReadFileResult {
+    std::string content;
+    bool success = false;
+    std::string error_message;
 };
 
-// ヘルプメッセージを表示
-void print_help(const char* program_name) {
-    std::cout << "Cm言語コンパイラ v" << get_version() << "\n\n";
-    std::cout << "使用方法:\n";
-    std::cout << "  " << program_name << " <コマンド> [オプション] <ファイル>\n\n";
-    std::cout << "コマンド:\n";
-    std::cout << "  run <file>            プログラムを実行（JIT、デフォルト）\n";
-    std::cout << "  compile <file>        プログラムをコンパイル（LLVM）\n";
-    std::cout << "  check <file>          構文と型チェックのみ実行\n";
-    std::cout << "  lint <file>           静的解析を実行\n";
-    std::cout << "  fmt <file>            コードフォーマット\n";
-
-    std::cout << "  help                  このヘルプを表示\n\n";
-    std::cout << "オプション:\n";
-    std::cout << "  -o <file>             出力ファイル名を指定\n";
-    std::cout << "  -O<n>                 最適化レベル（0-3）\n";
-    std::cout << "  --verbose, -v         詳細な出力を表示\n";
-    std::cout << "  --quiet, -q           出力を抑制\n";
-    std::cout << "  --debug, -d           デバッグ出力を有効化\n";
-    std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
-    std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
-
-    std::cout << "コンパイル時オプション:\n";
-    std::cout << "  --target=<target>     コンパイルターゲット\n";
-    std::cout << "                        native:        ネイティブ実行ファイル（デフォルト）\n";
-    std::cout << "                        wasm:          WebAssembly\n";
-    std::cout << "                        js:            JavaScript (Node.js向け)\n";
-    std::cout << "                        web:           JavaScript + HTML (ブラウザ向け)\n";
-    std::cout << "                        baremetal-arm: ベアメタル ARM Cortex-M\n";
-    std::cout << "                        baremetal-x86: ベアメタル x86_64\n";
-    std::cout << "                        uefi:          UEFI Application\n";
-    std::cout << "                        bm:            baremetal-arm の短縮形\n";
-    std::cout << "  --emit-llvm           LLVM IRを生成\n";
-    std::cout << "  --emit-js             JavaScriptを生成\n";
-    std::cout << "  --run                 生成後に実行\n";
-    std::cout << "  --ast                 AST（抽象構文木）を表示\n";
-    std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
-    std::cout << "  --mir                 MIR（中レベル中間表現）を表示\n";
-    std::cout << "  --mir-opt             最適化後のMIRを表示\n";
-    std::cout << "  --lir-opt             最適化後のLLVM IRを表示（codegen直前）\n\n";
-    std::cout << "インクリメンタルビルド:\n";
-    std::cout << "  --no-cache            キャッシュを無効化（デフォルト: 有効）\n";
-    std::cout << "  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）\n";
-    std::cout << "  cache clear           キャッシュを全削除\n";
-    std::cout << "  cache stats           キャッシュ統計を表示\n\n";
-    std::cout << "その他のオプション:\n";
-    std::cout << "  --lang=ja             日本語デバッグメッセージ\n";
-    std::cout << "  --version             バージョン情報を表示\n\n";
-    std::cout << "例:\n";
-    std::cout << "  " << program_name << " run examples/hello.cm\n";
-    std::cout << "  " << program_name << " compile -O2 -o output src/main.cm\n";
-    std::cout << "  " << program_name
-              << " compile --backend=llvm --target=wasm -o app.wasm main.cm\n";
-    std::cout << "  " << program_name
-              << " compile --backend=llvm --target=bm -o firmware.o main.cm\n";
-    std::cout << "  " << program_name << " check --verbose src/lib.cm\n";
-}
-
-// コマンドラインオプションをパース
-Options parse_options(int argc, char* argv[]) {
-    Options opts;
-
-    if (argc < 2) {
-        return opts;  // コマンドなし
-    }
-
-    // 最初の引数でコマンドを判定
-    std::string cmd = argv[1];
-    if (cmd == "run") {
-        opts.command = Command::Run;
-    } else if (cmd == "compile") {
-        opts.command = Command::Compile;
-    } else if (cmd == "check") {
-        opts.command = Command::Check;
-    } else if (cmd == "lint") {
-        opts.command = Command::Lint;
-    } else if (cmd == "fmt") {
-        opts.command = Command::Fmt;
-    } else if (cmd == "cache") {
-        opts.command = Command::Cache;
-        // サブコマンドを取得
-        if (argc > 2) {
-            opts.cache_subcommand = argv[2];
-        }
-        return opts;
-    } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
-        opts.command = Command::Help;
-        return opts;
-    } else if (cmd == "--version" || cmd == "-v" || cmd == "-V") {
-        std::cout << get_version() << "\n";
-        std::exit(0);
-    } else if (cmd[0] != '-') {
-        // 旧形式は使用不可 - ヘルプを表示
-        std::cerr << "エラー: 不正なコマンド形式です\n";
-        std::cerr << "ファイル '" << cmd << "' を実行するには 'cm run " << cmd
-                  << "' を使用してください\n\n";
-        opts.command = Command::Help;
-        return opts;
-    } else {
-        std::cerr << "不明なコマンド: " << cmd << "\n";
-        std::cerr << "'cm help' でヘルプを表示\n";
-        std::exit(1);
-    }
-
-    // 残りの引数を処理
-    for (int i = 2; i < argc; ++i) {
-        std::string arg = argv[i];
-
-        if (arg == "--verbose" || arg == "-v") {
-            opts.verbose = true;
-        } else if (arg == "--quiet" || arg == "-q") {
-            opts.quiet = true;
-        } else if (arg == "--ast") {
-            opts.show_ast = true;
-        } else if (arg == "--hir") {
-            opts.show_hir = true;
-        } else if (arg == "--mir") {
-            opts.show_mir = true;
-        } else if (arg == "--mir-opt") {
-            opts.show_mir_opt = true;
-        } else if (arg == "--lir-opt") {
-            opts.show_lir_opt = true;
-        } else if (arg == "--emit-llvm") {
-            opts.emit_llvm = true;
-        } else if (arg == "--emit-js") {
-            opts.emit_js = true;
-        } else if (arg.substr(0, 9) == "--target=") {
-            opts.target = arg.substr(9);
-        } else if (arg == "--run") {
-            opts.run_after_emit = true;
-        } else if (arg == "-o") {
-            if (i + 1 < argc) {
-                opts.output_file = argv[++i];
-            } else {
-                std::cerr << "-o オプションには出力ファイル名が必要です\n";
-                std::exit(1);
-            }
-        } else if (arg.substr(0, 2) == "-O") {
-            if (arg.length() > 2) {
-                opts.optimization_level = arg[2] - '0';
-                if (opts.optimization_level < 0 || opts.optimization_level > 3) {
-                    std::cerr << "最適化レベルは0-3の範囲で指定してください\n";
-                    std::exit(1);
-                }
-            }
-        } else if (arg == "--debug" || arg == "-d") {
-            opts.debug = true;
-            debug::set_debug_mode(true);
-        } else if (arg.substr(0, 17) == "--max-output-size") {
-            if (arg.length() > 18 && arg[17] == '=') {
-                try {
-                    opts.max_output_size = std::stoul(arg.substr(18));
-                    if (opts.max_output_size < 1 || opts.max_output_size > 1024) {
-                        std::cerr << "最大出力サイズは1-1024GBの範囲で指定してください\n";
-                        std::exit(1);
-                    }
-                } catch (...) {
-                    std::cerr << "無効な最大出力サイズ: " << arg.substr(18) << "\n";
-                    std::exit(1);
-                }
-            }
-        } else if (arg.substr(0, 3) == "-d=") {
-            opts.debug = true;
-            opts.debug_level = arg.substr(3);
-            debug::set_debug_mode(true);
-            debug::set_level(debug::parse_level(opts.debug_level));
-        } else if (arg == "--lang=ja") {
-            debug::set_lang(1);
-        } else if (arg == "-r" || arg == "--recursive") {
-            // -r オプション: 再帰的にディレクトリをチェック
-            opts.recursive = true;
-        } else if (arg == "--incremental") {
-            opts.incremental = true;
-        } else if (arg == "--no-cache") {
-            opts.incremental = false;
-        } else if (arg.substr(0, 12) == "--cache-dir=") {
-            opts.cache_dir = arg.substr(12);
-            opts.incremental = true;  // --cache-dir指定時は暗黙的に有効化
-        } else if (arg.substr(0, 10) == "--exclude=") {
-            // --exclude=PATTERN: 除外パターン
-            opts.exclude_patterns.push_back(arg.substr(10));
-        } else if (arg[0] != '-') {
-            // check/lint/fmtコマンドでは複数ファイルを許可
-            if (opts.command == Command::Check || opts.command == Command::Lint ||
-                opts.command == Command::Fmt) {
-                opts.input_files.push_back(arg);
-            } else {
-                // run/compileは単一ファイルのみ
-                if (opts.input_file.empty()) {
-                    opts.input_file = arg;
-                } else {
-                    std::cerr << "複数の入力ファイルは指定できません\n";
-                    std::exit(1);
-                }
-            }
-        } else {
-            std::cerr << "不明なオプション: " << arg << "\n";
-            std::cerr << "'cm help' でヘルプを表示\n";
-            std::exit(1);
-        }
-    }
-
-    return opts;
-}
-
 // ファイルを読み込む
-std::string read_file(const std::string& filename) {
+ReadFileResult read_file(const std::string& filename) {
+    ReadFileResult result;
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "エラー: ファイルを開けません: " << filename << "\n";
-        std::exit(1);
+        result.success = false;
+        result.error_message = "エラー: ファイルを開けません: " + filename;
+        return result;
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
-    return buffer.str();
+    result.content = buffer.str();
+    result.success = true;
+    return result;
 }
 
 // ソースコード先頭から //! platform: ディレクティブを解析
@@ -510,6 +286,12 @@ int main(int argc, char* argv[]) {
     // オプションをパース
     Options opts = parse_options(argc, argv);
 
+    // オプションパースでエラーがあった場合
+    if (opts.has_error) {
+        std::cerr << opts.error_message << "\n";
+        return 1;
+    }
+
     // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
     cache::CacheManager::set_compiler_path(argv[0]);
 
@@ -557,7 +339,13 @@ int main(int argc, char* argv[]) {
 
         for (const auto& file : cm_files) {
             try {
-                std::string code = read_file(file);
+                auto file_result = read_file(file);
+                if (!file_result.success) {
+                    std::cerr << file_result.error_message << "\n";
+                    total_errors++;
+                    continue;
+                }
+                std::string code = std::move(file_result.content);
 
                 // //! platform: ディレクティブ検出
                 std::string platform_directive = parse_platform_directive(code);
@@ -587,7 +375,7 @@ int main(int argc, char* argv[]) {
                 // パース
                 Lexer lexer(code);  // lint/checkではディレクティブで自動検出
                 auto tokens = lexer.tokenize();
-                Parser parser(std::move(tokens));
+                Parser parser(std::move(tokens), lexer.is_sv());
                 auto program = parser.parse();
 
                 if (parser.has_errors()) {
@@ -752,12 +540,19 @@ int main(int argc, char* argv[]) {
         // 各ファイルをフォーマット
         size_t total_changes = 0;
         size_t files_modified = 0;
+        size_t files_failed = 0;
 
         fmt::Formatter formatter;
 
         for (const auto& file : cm_files) {
             try {
-                std::string code = read_file(file);
+                auto file_result = read_file(file);
+                if (!file_result.success) {
+                    std::cerr << file_result.error_message << "\n";
+                    files_failed++;
+                    continue;
+                }
+                std::string code = std::move(file_result.content);
 
                 // フォーマット実行
                 auto result = formatter.format(code);
@@ -773,11 +568,15 @@ int main(int argc, char* argv[]) {
                         if (opts.verbose) {
                             std::cout << file << ": " << result.changes_applied << " 箇所の整形\n";
                         }
+                    } else {
+                        std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
+                        files_failed++;
                     }
                 }
 
             } catch (const std::exception& e) {
-                // エラーはスキップ
+                std::cerr << "エラー: " << file << ": " << e.what() << "\n";
+                files_failed++;
             }
         }
 
@@ -786,9 +585,12 @@ int main(int argc, char* argv[]) {
             std::cout << "\n=== フォーマット完了 ===\n";
             std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
             std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            if (files_failed > 0) {
+                std::cout << "失敗: " << files_failed << " ファイル\n";
+            }
         }
 
-        return 0;
+        return files_failed > 0 ? 1 : 0;
     }
 
     // ========== cache コマンド ==========
@@ -848,7 +650,12 @@ int main(int argc, char* argv[]) {
     }
 
     // ファイルを読み込む
-    std::string code = read_file(opts.input_file);
+    auto file_result = read_file(opts.input_file);
+    if (!file_result.success) {
+        std::cerr << file_result.error_message << "\n";
+        return 1;
+    }
+    std::string code = std::move(file_result.content);
 
     // //! platform: ディレクティブチェック
     {
@@ -869,6 +676,29 @@ int main(int argc, char* argv[]) {
                 std::cerr << "ヒント: --target=" << directive
                           << " オプションで対象プラットフォームを指定してください\n\n";
                 return 1;
+            }
+        }
+    }
+
+    // ========== SVモジュール階層の保持（//! sv: hierarchy）==========
+    // 相対importをextern struct宣言に置換し、import先を後段で個別コンパイルする
+    std::vector<std::string> sv_hierarchy_submodules;
+    {
+        bool is_sv_early =
+            (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
+        if (is_sv_early) {
+            auto hres = codegen::sv::process_sv_hierarchy(code, opts.input_file);
+            if (!hres.error.empty()) {
+                std::cerr << "sv階層化エラー: " << hres.error << "\n";
+                return 1;
+            }
+            if (hres.enabled) {
+                code = hres.transformed_source;
+                sv_hierarchy_submodules = hres.submodule_files;
+                if (opts.verbose && !sv_hierarchy_submodules.empty()) {
+                    std::cout << "sv階層化: " << sv_hierarchy_submodules.size()
+                              << " 個のサブモジュールを検出\n";
+                }
             }
         }
     }
@@ -950,6 +780,14 @@ int main(int argc, char* argv[]) {
         if (!preprocess_result.success) {
             std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
             return 1;
+        }
+
+        // デバッグ出力
+        {
+            std::ofstream out(".tmp/preprocessed.cm");
+            if (out) {
+                out << preprocess_result.processed_source;
+            }
         }
 
         // ========== インクリメンタルビルド: キャッシュチェック ==========
@@ -1117,7 +955,7 @@ int main(int argc, char* argv[]) {
         // ========== Parser ==========
         if (opts.debug)
             std::cout << "=== Parser ===\n";
-        Parser parser(std::move(tokens));
+        Parser parser(std::move(tokens), lexer.is_sv());
         auto program = parser.parse();
 
         if (parser.has_errors()) {
@@ -1132,7 +970,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
-            std::exit(1);  // エラー時はexit(1)で終了
+            return 1;  // エラー時は1で終了
         }
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
@@ -1167,8 +1005,8 @@ int main(int argc, char* argv[]) {
                                   .count();
         auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
-        // Check/Lintコマンドの場合のみLint警告を有効化
-        if (opts.command == Command::Check) {
+        // Check/Lintコマンド、または--force-check/--strict指定時にLint警告を有効化
+        if (opts.command == Command::Check || opts.force_check) {
             checker.set_enable_lint_warnings(true);
         }
         bool type_check_ok = checker.check(program);
@@ -1348,8 +1186,8 @@ int main(int argc, char* argv[]) {
         auto phase_opt_start = std::chrono::steady_clock::now();
         // SVターゲットではMIR最適化をスキップ（合成ツールが最適化を行う）
         // DCE/CopyProp/ConstFoldが一時変数代入を除去しHWロジックが消失するため
-        if ((opts.optimization_level > 0 || opts.show_mir_opt) && !is_sv) {
-            if (cm::debug::g_debug_mode)
+        if ((opts.optimization_level > 0 || opts.show_mir_opt || opts.unroll_loops) && !is_sv) {
+            if (cm::debug::debug_mode())
                 std::cerr << "[OPT] Starting optimization at level " << opts.optimization_level
                           << std::endl;
             if (opts.debug)
@@ -1357,13 +1195,22 @@ int main(int argc, char* argv[]) {
                           << std::flush;
 
             // MIR最適化パスマネージャーv2を使用（収束管理と無限ループ防止機能付き）
+            mir::opt::MirOptimizationOptions user_opts;
+            user_opts.unroll_loops = opts.unroll_loops;
+            user_opts.unroll_max_trips = opts.unroll_max_trips;
             mir::opt::run_optimization_passes(mir, opts.optimization_level,
-                                              opts.debug || opts.verbose);
-            if (cm::debug::g_debug_mode)
+                                              opts.debug || opts.verbose, user_opts);
+            if (cm::debug::debug_mode())
                 std::cerr << "[OPT] Optimization complete" << std::endl;
 
             if (opts.debug)
                 std::cout << "最適化完了\n\n";
+        }
+
+        // SVターゲット: 定数トリップカウントのループを静的展開する
+        // （generate/genvar相当。合成ツールは動的whileを展開できないため）
+        if (is_sv) {
+            mir::opt::unroll_constant_loops(mir);
         }
         auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::steady_clock::now() - phase_opt_start)
@@ -1535,11 +1382,29 @@ int main(int argc, char* argv[]) {
 
                 sv_opts.verbose = opts.verbose || opts.debug;
                 sv_opts.sourceFile = opts.input_file;
+                sv_opts.emitMemfile = opts.emit_memfile;
+                sv_opts.strictLint = opts.sv_strict_lint;
 
                 // SystemVerilog コード生成
                 try {
                     cm::codegen::sv::SVCodeGen codegen(sv_opts);
                     codegen.compile(mir);
+
+                    // sv階層化: サブモジュールを個別コンパイルして連結
+                    if (!sv_hierarchy_submodules.empty()) {
+                        std::string hier_error;
+                        if (!codegen::sv::append_submodules(
+                                argv[0], opts.input_file, sv_hierarchy_submodules,
+                                sv_opts.outputFile, opts.optimization_level, opts.emit_memfile,
+                                hier_error)) {
+                            std::cerr << "sv階層化エラー: " << hier_error << "\n";
+                            return 1;
+                        }
+                        if (!opts.quiet) {
+                            std::cout << "✓ サブモジュール " << sv_hierarchy_submodules.size()
+                                      << " 個を連結\n";
+                        }
+                    }
 
                     if (!opts.quiet) {
                         auto compile_end = std::chrono::steady_clock::now();
@@ -1734,7 +1599,7 @@ int main(int argc, char* argv[]) {
                     // 将来 --split-modules オプションで有効化可能
                     cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
 
-                    if (cm::debug::g_debug_mode)
+                    if (cm::debug::debug_mode())
                         std::cerr << "[LLVM] Starting codegen.compile()" << std::endl;
                     auto phase_llvm_start = std::chrono::steady_clock::now();
 
@@ -1817,7 +1682,7 @@ int main(int argc, char* argv[]) {
                     auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now() - phase_llvm_start)
                                              .count();
-                    if (cm::debug::g_debug_mode)
+                    if (cm::debug::debug_mode())
                         std::cerr << "[LLVM] codegen.compile() complete" << std::endl;
 
                     // --lir-opt: 最適化後のLLVM IRを表示

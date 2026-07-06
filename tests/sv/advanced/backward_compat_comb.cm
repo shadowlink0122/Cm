@@ -1,0 +1,16 @@
+//! platform: sv
+
+// 後方互換テスト: void f() (エッジなし) が always_comb になる
+
+#[input]  uint a = 0;
+#[input]  uint b = 0;
+#[output] uint max_val = 0;
+
+// 後方互換: void f() → always_comb
+void find_max() {
+    if (a > b) {
+        max_val = a;
+    } else {
+        max_val = b;
+    }
+}

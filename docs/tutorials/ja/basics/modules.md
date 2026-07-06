@@ -237,7 +237,12 @@ import ./utils::add;
 ## 次のステップ
 
 - [FFI](../advanced/ffi.html) - 外部関数インターフェース
-- [コンパイラの使い方](../compiler/usage.html) - ビルドオプション
+- [コンパイラの使い方](../compiler/common/usage.html) - ビルドオプション
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [ポインタ（Pointers）](pointers.html) ｜ [目次](index.html) ｜ 次: [基本編 - 文字列補間](string-interpolation.html) →

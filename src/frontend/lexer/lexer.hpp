@@ -24,6 +24,9 @@ class Lexer {
     // トークン化（メインエントリ）
     std::vector<Token> tokenize();
 
+    // SVプラットフォームかどうかを返す
+    bool is_sv() const { return platform_ == LexerPlatform::SV; }
+
    private:
     // 次のトークンを取得
     Token next_token();

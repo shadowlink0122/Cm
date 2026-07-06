@@ -217,3 +217,8 @@ impl Circle for Shape {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Generics](generics.html) | [Contents](index.html) | Next: [Types - Constraints](constraints.html) →

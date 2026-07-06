@@ -1,0 +1,24 @@
+// interface型引数による多相: 関数が異なる実装を受け取り
+// 呼び出し側の具象型に応じてディスパッチされることを検証
+import std::io::println;
+
+interface Shape { int area(); }
+
+struct Sq { int s; }
+struct Rect { int w; int h; }
+
+impl Sq for Shape { int area() { return self.s * self.s; } }
+impl Rect for Shape { int area() { return self.w * self.h; } }
+
+int describe(Shape sh) {
+    return sh.area();
+}
+
+int main() {
+    Sq sq = Sq { s: 5 };
+    Rect rc = Rect { w: 3, h: 4 };
+    int a = describe(sq);
+    int b = describe(rc);
+    println("param: {a} {b}");
+    return 0;
+}

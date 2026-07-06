@@ -57,6 +57,7 @@ enum class TypeKind {
     Negedge,  // 立ち下がりエッジクロック信号
     Wire,     // wire修飾（組み合わせ出力）
     Reg,      // reg修飾（レジスタ/順序回路出力）
+    Bit,      // bit[N] 任意ビット幅型（1-bit単位）
 };
 
 // ============================================================
@@ -113,9 +114,11 @@ inline TypeInfo get_primitive_info(TypeKind kind) {
 // 型修飾子
 // ============================================================
 struct TypeQualifiers {
-    bool is_const : 1 = false;
-    bool is_volatile : 1 = false;
-    bool is_mutable : 1 = false;
+    bool is_const : 1;
+    bool is_volatile : 1;
+    bool is_mutable : 1;
+
+    TypeQualifiers() : is_const(false), is_volatile(false), is_mutable(false) {}
 };
 
 // ============================================================
@@ -162,6 +165,9 @@ struct Type {
         return (kind >= TypeKind::Tiny && kind <= TypeKind::ULong) || kind == TypeKind::ISize ||
                kind == TypeKind::USize;
     }
+
+    // 32ビット整数（int/uint）かどうか判定
+    bool is_int32() const { return kind == TypeKind::Int || kind == TypeKind::UInt; }
 
     bool is_signed() const {
         return (kind >= TypeKind::Tiny && kind <= TypeKind::Long) || kind == TypeKind::ISize;
@@ -300,6 +306,9 @@ inline TypePtr make_reg(TypePtr elem) {
     auto t = std::make_shared<Type>(TypeKind::Reg);
     t->element_type = std::move(elem);
     return t;
+}
+inline TypePtr make_bit() {
+    return std::make_shared<Type>(TypeKind::Bit);
 }
 
 inline TypePtr make_pointer(TypePtr elem) {

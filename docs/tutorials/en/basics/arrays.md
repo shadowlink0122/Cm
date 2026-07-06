@@ -265,3 +265,8 @@ This optimization provides:
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Functions](functions.html) | [Contents](index.html) | Next: [Basics - Pointers](pointers.html) →

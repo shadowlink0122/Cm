@@ -8,6 +8,6 @@
 #[input]  bool rst = 0;
 #[output] uint count = 0;
 
-async func tick() {
+async void tick() {
     count = count + 1;
 }

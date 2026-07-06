@@ -177,6 +177,35 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         scopes_.global().define_function(func->name, std::move(param_types), func->return_type,
                                          required_params);
 
+        // 本体を持つ同名関数の重複定義を検出する。
+        // 自由関数のオーバーロードは未対応であり、従来は診断なしで
+        // LLVMの検証エラー（不正なコード生成）まで到達していた。
+        // モジュールのフラット化により同一定義が複数回現れることがあるため、
+        // シグネチャ（引数型・戻り値型・本体文数）が完全一致する重複は許容し、
+        // 異なるシグネチャの同名定義のみをエラーとする
+        if (!func->body.empty() && !func->is_extern && func->generic_params.empty()) {
+            auto type_sig = [](const ast::TypePtr& t) -> std::string {
+                if (!t) {
+                    return "?";
+                }
+                return std::to_string(static_cast<int>(t->kind)) + t->name;
+            };
+            std::string sig = type_sig(func->return_type) + "(";
+            for (const auto& p : func->params) {
+                sig += type_sig(p.type) + ",";
+            }
+            sig += ")#" + std::to_string(func->body.size());
+
+            auto [it, inserted] = defined_function_sigs_.emplace(func->name, sig);
+            if (!inserted && it->second != sig) {
+                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+                error(name_pos, "関数 '" + func->name +
+                                    "' は既に異なるシグネチャで定義されています"
+                                    "（自由関数のオーバーロードは未対応です。"
+                                    "別名を使用してください）");
+            }
+        }
+
         // L100: 関数名はsnake_caseであるべき
         // main関数とネームスペース付き関数は除外
         if (enable_lint_warnings_ && func->name != "main" &&
@@ -255,6 +284,10 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         }
 
         // 型を決定
+        if (gv->type && !is_valid_type(gv->type)) {
+            error(decl.span, "Undefined type: '" + ast::type_to_string(*gv->type) +
+                                 "' for global variable '" + gv->name + "'");
+        }
         ast::TypePtr var_type = gv->type ? resolve_typedef(gv->type) : init_type;
         if (var_type) {
             scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
@@ -328,6 +361,10 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             }
 
             // 型を決定
+            if (macro->type && !is_valid_type(macro->type)) {
+                error(decl.span, "Undefined type: '" + ast::type_to_string(*macro->type) +
+                                     "' for macro '" + macro->name + "'");
+            }
             ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
             if (var_type) {
                 scopes_.global().define(macro->name, var_type, true /* is_const */, false,
@@ -378,6 +415,26 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         check_function(*func);
     } else if (auto* st = decl.as<ast::StructDecl>()) {
         current_span_ = decl.span;
+
+        // ジェネリック型パラメータをコンテキストに登録
+        generic_context_.clear();
+        if (!st->generic_params.empty()) {
+            for (const auto& param : st->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+
+        // 構造体の全フィールドの型が有効かチェック
+        for (const auto& field : st->fields) {
+            if (field.type && !is_valid_type(field.type)) {
+                error(decl.span, "Undefined type: '" + ast::type_to_string(*field.type) +
+                                     "' for field '" + field.name + "' in struct '" + st->name +
+                                     "'");
+            }
+        }
+
+        generic_context_.clear();
+
         bool is_css_struct =
             std::find(st->auto_impls.begin(), st->auto_impls.end(), "Css") != st->auto_impls.end();
         if (is_css_struct) {
@@ -400,6 +457,60 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                 }
             }
         }
+    } else if (auto* en = decl.as<ast::EnumDecl>()) {
+        current_span_ = decl.span;
+
+        // ジェネリック型パラメータをコンテキストに登録
+        generic_context_.clear();
+        if (!en->generic_params.empty()) {
+            for (const auto& param : en->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+
+        for (const auto& member : en->members) {
+            if (member.has_data()) {
+                for (const auto& [field_name, field_type] : member.fields) {
+                    if (field_type && !is_valid_type(field_type)) {
+                        error(decl.span, "Undefined type: '" + ast::type_to_string(*field_type) +
+                                             "' for field '" + field_name + "' in enum variant '" +
+                                             en->name + "::" + member.name + "'");
+                    }
+                }
+            }
+        }
+
+        generic_context_.clear();
+    } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+        current_span_ = decl.span;
+        if (td->type && !is_valid_type(td->type)) {
+            error(decl.span, "Undefined type: '" + ast::type_to_string(*td->type) +
+                                 "' in typedef '" + td->name + "'");
+        }
+    } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
+        current_span_ = decl.span;
+        generic_context_.clear();
+        if (!iface->generic_params.empty()) {
+            for (const auto& param : iface->generic_params) {
+                generic_context_.add_type_param(param);
+            }
+        }
+        for (const auto& method : iface->methods) {
+            if (method.return_type && !is_valid_type(method.return_type)) {
+                error(decl.span,
+                      "Undefined return type: '" + ast::type_to_string(*method.return_type) +
+                          "' in interface method '" + iface->name + "::" + method.name + "'");
+            }
+            for (const auto& param : method.params) {
+                if (param.type && !is_valid_type(param.type)) {
+                    error(decl.span, "Undefined parameter type: '" +
+                                         ast::type_to_string(*param.type) + "' for parameter '" +
+                                         param.name + "' in interface method '" + iface->name +
+                                         "::" + method.name + "'");
+                }
+            }
+        }
+        generic_context_.clear();
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
         check_import(*import);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
@@ -539,6 +650,13 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     if (!impl.target_type)
         return;
 
+    generic_context_.clear();
+    if (!impl.generic_params.empty()) {
+        for (const auto& param : impl.generic_params) {
+            generic_context_.add_type_param(param);
+        }
+    }
+
     std::string type_name = ast::type_to_string(*impl.target_type);
 
     if (!impl.interface_name.empty()) {
@@ -658,6 +776,7 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     }
     current_return_type_ = nullptr;
     current_impl_target_type_.clear();
+    generic_context_.clear();
 }
 
 void TypeChecker::register_enum(ast::EnumDecl& en) {
@@ -787,11 +906,20 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     }
 
     current_return_type_ = resolve_typedef(func.return_type);
+    if (!is_valid_type(func.return_type)) {
+        error(func.name_span, "Undefined return type: '" + ast::type_to_string(*func.return_type) +
+                                  "' in function '" + func.name + "'");
+    }
     if (generic_context_.has_type_param(ast::type_to_string(*func.return_type))) {
         current_return_type_ = func.return_type;
     }
 
     for (const auto& param : func.params) {
+        if (!is_valid_type(param.type)) {
+            error(func.name_span, "Undefined parameter type: '" + ast::type_to_string(*param.type) +
+                                      "' for parameter '" + param.name + "' in function '" +
+                                      func.name + "'");
+        }
         auto resolved_type = resolve_typedef(param.type);
         if (generic_context_.has_type_param(ast::type_to_string(*param.type))) {
             resolved_type = param.type;

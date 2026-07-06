@@ -1,0 +1,16 @@
+//! platform: sv
+
+// #[sv::clock_domain] テスト: カスタムクロック名
+
+#[input]  bool sys_clk = 0;
+#[input]  bool rst = 0;
+#[output] uint count = 0;
+
+#[sv::clock_domain("sys_clk")]
+async void tick() {
+    if (rst) {
+        count = 0;
+    } else {
+        count = count + 1;
+    }
+}

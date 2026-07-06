@@ -1,0 +1,13 @@
+//! platform: sv
+//! description: エラーテスト - ポインタ型はSVターゲットで非サポート（SV002）
+
+#[input] bool clk = false;
+#[output] uint result = 0;
+
+// ポインタ型はSVで合成不可（error[SV002]）
+uint value = 42;
+uint* ptr = &value;
+
+async void update(posedge clk) {
+    result = value;
+}

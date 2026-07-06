@@ -140,6 +140,10 @@ class MacroExpander {
                                              const MatchBindings& bindings,
                                              const SyntaxContext& context);
 
+    // パターン内のメタ変数を収集
+    void collect_metavars_in_pattern(const std::vector<TokenTree>& pattern,
+                                     std::vector<std::string>& metavars);
+
     // トークンストリームからマクロ呼び出しを検出
     std::optional<MacroCall> detect_macro_call(const std::vector<Token>& tokens, size_t& pos);
 

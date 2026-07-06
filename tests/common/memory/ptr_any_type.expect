@@ -1,0 +1,5 @@
+double: 7.25
+bool: true
+long: 1000000000001
+enum before: 0
+enum after: 2 true false

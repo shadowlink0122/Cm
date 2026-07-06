@@ -1,0 +1,10 @@
+// std::debug::panic: メッセージを出力して exit(1) する
+import std::io::println;
+import std::debug::panic;
+
+int main() {
+    println("before");
+    panic("boom");
+    println("unreachable");
+    return 0;
+}

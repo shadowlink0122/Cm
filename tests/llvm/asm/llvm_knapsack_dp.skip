@@ -1,0 +1,4 @@
+# Linux x86_64 LLVM O3 SIGILL issue - inline assembly compatibility
+# Root cause: x86_64 inline assembly ABI differences between Linux and macOS
+# This test uses platform-specific assembly that may behave differently on Linux
+llvm-o3:linux:x86_64

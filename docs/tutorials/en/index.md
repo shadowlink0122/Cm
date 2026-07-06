@@ -7,9 +7,9 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.14.1
+# Cm Language Tutorials v0.15.1
 
-**Target Version:** v0.14.1  
+**Target Version:** v0.15.1  
 **Last Updated:** 2026-02-20
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
@@ -29,7 +29,7 @@ Estimated Time: 3-4 hours
    - [Variables and Types](basics/variables.html) - Primitive types, const/static
    - [Operators](basics/operators.html) - Arithmetic, comparison, logical operations
    - [Control Flow](basics/control-flow.html) - if/while/for/switch/defer
-   - [Functions](basics/functions.html) - Definition, overloading, default arguments
+   - [Functions](basics/functions.html) - Definition, default arguments (free-function overloading not supported)
    - [Arrays](basics/arrays.html) - Declaration, methods, for-in
    - [Pointers](basics/pointers.html) - Addresses, dereference, Array Decay
    - [Modules](basics/modules.html) - Module system and imports
@@ -70,16 +70,17 @@ Estimated Time: 5-6 hours
 
 Estimated Time: 3 hours
 
-4. **[Compiler](compiler/usage.html)** - Build and backends
-   - [Usage](compiler/usage.html) - Commands and options
-   - [LLVM Backend](compiler/llvm.html) - Native compilation
-   - [WASM Backend](compiler/wasm.html) - WebAssembly output
-   - [JS Backend](compiler/js-compilation.html) - JavaScript output
-   - [UEFI Baremetal](compiler/uefi.html) - UEFI application development (no_std)
-   - [Preprocessor](compiler/preprocessor.html) - Conditional compilation
-   - [Linter](compiler/linter.html) - Static analysis (cm lint)
-   - [Formatter](compiler/formatter.html) - Code formatting (cm fmt)
-   - [Optimization](compiler/optimization.html) - O0-O3, tail call optimization
+4. **[Compiler](compiler/common/usage.html)** - Build and backends
+   - [Usage](compiler/common/usage.html) - Commands and options
+   - [LLVM Backend](compiler/native/index.html) - Native compilation
+   - [WASM Backend](compiler/wasm/index.html) - WebAssembly output
+   - [JS Backend](compiler/js/index.html) - JavaScript output
+   - [SV Backend](compiler/sv/index.html) - SystemVerilog / FPGA output 🆕
+   - [UEFI Baremetal](compiler/native/uefi.html) - UEFI application development (no_std)
+   - [Preprocessor](compiler/common/preprocessor.html) - Conditional compilation
+   - [Linter](compiler/common/linter.html) - Static analysis (cm lint)
+   - [Formatter](compiler/common/formatter.html) - Code formatting (cm fmt)
+   - [Optimization](compiler/common/optimization.html) - O0-O3, tail call optimization
 
 ### Path 5: Learning Internals (For Developers)
 
@@ -127,7 +128,7 @@ Estimated Time: 3 hours
 
 **Total Tutorials:** 43 files  
 **Estimated Time:** 18-22 hours  
-**Target Version:** v0.14.1
+**Target Version:** v0.15.1
 
 ---
 
@@ -136,3 +137,13 @@ Estimated Time: 3 hours
 
 ---
 [日本語](../ja/)
+
+---
+
+<!-- nav -->
+Next: [Basics](basics/index.html) →
+
+---
+
+<!-- nav -->
+Next: [Basics](basics/index.html) →

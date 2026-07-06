@@ -1,0 +1,18 @@
+// ポインタのポインタ（int**）回帰テスト:
+// 読み取り・付け替え・二重デリファレンス書き込みと、
+// 補間内 {**pp}（旧: プレースホルダ抽出が多重デリファレンスを拒否、
+// 型欠落でポインタが32bit幅に切り詰められクラッシュ）
+import std::io::println;
+
+int main() {
+    int a = 5;
+    int b = 42;
+    int* p = &a;
+    int** pp = &p;
+    println("deref2: {**pp}");
+    *pp = &b;
+    println("retarget: {*p}");
+    **pp = 100;
+    println("write2: {b}");
+    return 0;
+}

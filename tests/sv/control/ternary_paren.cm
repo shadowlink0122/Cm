@@ -1,0 +1,29 @@
+//! platform: sv
+//! test: val=256, flag=0 -> out=10, result=1
+//! test: val=0, flag=0 -> out=20, result=0
+
+// 三項演算子最適化の括弧テスト
+// if/else が三項演算子に変換される際、条件式 (val & 256 == 0) が
+// 正しく (val & 256) == 0 として評価されることを検証
+// 括弧なしだと val & (256 == 0) = val & 0 = 0 となり常に true になるバグ
+
+#[input]  ushort val = 0;
+#[input]  ushort flag = 0;
+#[output] ushort out = 0;
+#[output] ushort result = 0;
+
+void check() {
+    // このif/elseは三項演算子に最適化される
+    // 条件: (val & 256) == 0 かどうか → bit8 が 0 かどうか
+    if ((val & 16'd256) == 16'd0) {
+        out = 16'd10;
+    } else {
+        out = 16'd20;
+    }
+
+    // val=256 のとき bit8=1 なので (val & 256) != 0 → out=20 が正しい
+    // val=0 のとき bit8=0 なので (val & 256) == 0 → out=10 が正しい
+
+    // 結果検証用: bit8 を直接抽出
+    result = (val >> 16'd8) & 16'd1;
+}

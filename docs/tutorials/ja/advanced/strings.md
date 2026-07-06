@@ -51,8 +51,13 @@ int main() {
 ---
 
 **前の章:** [関数ポインタ](function-pointers.html)  
-**次の章:** [コンパイラの使い方](../compiler/usage.html)
+**次の章:** [コンパイラの使い方](../compiler/common/usage.html)
 
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [ラムダ式](lambda.html) ｜ [目次](index.html) ｜ 次: [スライス型](slices.html) →

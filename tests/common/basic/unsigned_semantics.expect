@@ -1,0 +1,6 @@
+cmp: unsigned
+div = 300000000
+shr = 187500000
+utiny 255 as int = 255
+const cmp: unsigned
+const utiny 255 as int = 255

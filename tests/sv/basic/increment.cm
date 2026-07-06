@@ -1,0 +1,10 @@
+//! platform: sv
+
+// increment ++ 展開テスト: count++ → count = count + 1
+
+#[input]  posedge clk;
+#[output] uint count = 0;
+
+async void ticker(posedge clk) {
+    count++;
+}

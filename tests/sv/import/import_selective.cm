@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: x=640, y=480 -> is_active=1
+
+// 選択的インポートテスト: 特定のシンボルだけをインポート
+import vga_timing::{VGA_H_ACTIVE, VGA_V_ACTIVE, VGA_H_TOTAL, VGA_V_TOTAL};
+
+#[input]  uint x = 0;
+#[input]  uint y = 0;
+#[output] uint is_active = 0;
+
+void check() {
+    // インポートした定数を使用して判定
+    if (x < VGA_H_ACTIVE && y < VGA_V_ACTIVE) {
+        is_active = 1;
+    } else {
+        is_active = 0;
+    }
+}

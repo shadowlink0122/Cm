@@ -105,3 +105,8 @@ void atomic_update(int* ptr, int new_value) {
 ---
 
 **関連:** [スレッド](thread.html) · [Mutex](mutex.html) · [Channel](channel.html)
+
+---
+
+<!-- nav -->
+← 前: [std::sync::channel - メッセージパッシング](channel.html) ｜ [目次](index.html) ｜ 次: [std::gpu - GPU計算 (Apple Metal)](../gpu.html) →

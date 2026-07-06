@@ -1,0 +1,16 @@
+// 整数ゼロ除算のトラップテスト:
+// 回帰: ゼロ除算がトラップせずゴミ値を返す（JITとネイティブで値が相違する）
+// バグの検証。実行時エラーで異常終了することを確認する
+import std::io::println;
+
+int zero() {
+    return 0;
+}
+
+int main() {
+    int a = 10;
+    int z = zero();
+    int r = a / z;
+    println("unreachable {r}");
+    return 0;
+}

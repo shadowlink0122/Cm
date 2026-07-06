@@ -3,6 +3,7 @@
 // リクエスト構築・レスポンス解析をC++側で実装
 
 #include <arpa/inet.h>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +14,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -196,7 +198,8 @@ static CmHttpResponse* parse_response(const std::string& raw) {
 
 // TCP接続してデータ送受信
 static int tcp_connect_and_communicate(const std::string& host, int port,
-                                       const std::string& request, std::string& response) {
+                                       const std::string& request, std::string& response,
+                                       int timeout_ms) {
     struct addrinfo hints, *result;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
@@ -213,16 +216,68 @@ static int tcp_connect_and_communicate(const std::string& host, int port,
         return -2;
     }
 
-    if (connect(fd, result->ai_addr, result->ai_addrlen) < 0) {
-        close(fd);
-        freeaddrinfo(result);
-        return -3;
+    // 非ブロッキング接続によるタイムアウト制御
+    if (timeout_ms > 0) {
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+        int conn_res = connect(fd, result->ai_addr, result->ai_addrlen);
+        if (conn_res < 0) {
+            if (errno != EINPROGRESS) {
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+
+            fd_set write_fds;
+            FD_ZERO(&write_fds);
+            FD_SET(fd, &write_fds);
+
+            struct timeval tv;
+            tv.tv_sec = timeout_ms / 1000;
+            tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+            int select_res = select(fd + 1, nullptr, &write_fds, nullptr, &tv);
+            if (select_res <= 0) {
+                // タイムアウトまたはエラー
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+
+            int socket_error = 0;
+            socklen_t len = sizeof(socket_error);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 ||
+                socket_error != 0) {
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+        }
+
+        // ブロッキングモードを復元
+        fcntl(fd, F_SETFL, flags);
+    } else {
+        if (connect(fd, result->ai_addr, result->ai_addrlen) < 0) {
+            close(fd);
+            freeaddrinfo(result);
+            return -3;
+        }
     }
     freeaddrinfo(result);
 
     // TCP_NODELAY
     int opt = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+
+    // 送受信タイムアウトを設定
+    if (timeout_ms > 0) {
+        struct timeval tv;
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+    }
 
     // リクエスト送信
     const char* data = request.c_str();
@@ -241,6 +296,22 @@ static int tcp_connect_and_communicate(const std::string& host, int port,
     char buf[4096];
     response.clear();
     while (true) {
+        if (timeout_ms > 0) {
+            fd_set read_fds;
+            FD_ZERO(&read_fds);
+            FD_SET(fd, &read_fds);
+
+            struct timeval tv;
+            tv.tv_sec = timeout_ms / 1000;
+            tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+            int select_res = select(fd + 1, &read_fds, nullptr, nullptr, &tv);
+            if (select_res <= 0) {
+                // タイムアウトまたはソケットエラー
+                break;
+            }
+        }
+
         ssize_t n = read(fd, buf, sizeof(buf) - 1);
         if (n <= 0)
             break;
@@ -278,7 +349,8 @@ static SSL_CTX* get_ssl_context() {
 
 // TLS接続してデータ送受信
 static int tls_connect_and_communicate(const std::string& host, int port,
-                                       const std::string& request, std::string& response) {
+                                       const std::string& request, std::string& response,
+                                       int timeout_ms) {
     // TCP接続
     struct addrinfo hints, *result;
     memset(&hints, 0, sizeof(hints));
@@ -296,12 +368,63 @@ static int tls_connect_and_communicate(const std::string& host, int port,
         return -2;  // ソケット作成失敗
     }
 
-    if (connect(fd, result->ai_addr, result->ai_addrlen) < 0) {
-        close(fd);
-        freeaddrinfo(result);
-        return -3;  // 接続拒否
+    // 非ブロッキング接続によるタイムアウト制御
+    if (timeout_ms > 0) {
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+        int conn_res = connect(fd, result->ai_addr, result->ai_addrlen);
+        if (conn_res < 0) {
+            if (errno != EINPROGRESS) {
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+
+            fd_set write_fds;
+            FD_ZERO(&write_fds);
+            FD_SET(fd, &write_fds);
+
+            struct timeval tv;
+            tv.tv_sec = timeout_ms / 1000;
+            tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+            int select_res = select(fd + 1, nullptr, &write_fds, nullptr, &tv);
+            if (select_res <= 0) {
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+
+            int socket_error = 0;
+            socklen_t len = sizeof(socket_error);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0 ||
+                socket_error != 0) {
+                close(fd);
+                freeaddrinfo(result);
+                return -3;
+            }
+        }
+
+        // ブロッキングモードを復元
+        fcntl(fd, F_SETFL, flags);
+    } else {
+        if (connect(fd, result->ai_addr, result->ai_addrlen) < 0) {
+            close(fd);
+            freeaddrinfo(result);
+            return -3;  // 接続拒否
+        }
     }
     freeaddrinfo(result);
+
+    // 送受信タイムアウトを設定
+    if (timeout_ms > 0) {
+        struct timeval tv;
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+    }
 
     // SSL コンテキスト取得
     SSL_CTX* ctx = get_ssl_context();
@@ -347,6 +470,22 @@ static int tls_connect_and_communicate(const std::string& host, int port,
     char buf[4096];
     response.clear();
     while (true) {
+        if (timeout_ms > 0 && SSL_pending(ssl) == 0) {
+            fd_set read_fds;
+            FD_ZERO(&read_fds);
+            FD_SET(fd, &read_fds);
+
+            struct timeval tv;
+            tv.tv_sec = timeout_ms / 1000;
+            tv.tv_usec = (timeout_ms % 1000) * 1000;
+
+            int select_res = select(fd + 1, &read_fds, nullptr, nullptr, &tv);
+            if (select_res <= 0) {
+                // タイムアウトまたはソケットエラー
+                break;
+            }
+        }
+
         int n = SSL_read(ssl, buf, sizeof(buf) - 1);
         if (n <= 0)
             break;
@@ -377,7 +516,7 @@ int64_t cm_http_request_create() {
     req->method = HTTP_GET;
     req->port = 80;
     req->path = "/";
-    req->timeout_ms = 0;
+    req->timeout_ms = 3000;
     req->follow_redirects = true;
     req->max_redirects = 5;
     return reinterpret_cast<int64_t>(req);
@@ -446,12 +585,15 @@ int64_t cm_http_execute(int64_t req_handle) {
     int err;
 #ifdef CM_HAS_OPENSSL
     if (req->port == 443) {
-        err = tls_connect_and_communicate(req->host, req->port, request_str, raw_response);
+        err = tls_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                          req->timeout_ms);
     } else {
-        err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response);
+        err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                          req->timeout_ms);
     }
 #else
-    err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response);
+    err = tcp_connect_and_communicate(req->host, req->port, request_str, raw_response,
+                                      req->timeout_ms);
 #endif
     if (err != 0) {
         auto* resp = new CmHttpResponse();

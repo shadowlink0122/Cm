@@ -193,3 +193,8 @@ ParsedUrl url = parse_url("https://api.example.com:8080/v1/data");
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [std::core — コアユーティリティ](core-utils.html) ｜ [目次](index.html) ｜ 次: [std::net - TCP/UDP通信](network/tcp.html) →

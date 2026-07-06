@@ -182,3 +182,8 @@ struct Point with Eq + Ord {
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Advanced - with Keyword (Auto Implementation)](with-keyword.html) | [Contents](index.html) | Next: [Advanced - Function Pointers](function-pointers.html) →

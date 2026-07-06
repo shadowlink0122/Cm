@@ -409,7 +409,6 @@ int main() {
 ## Related Links
 
 - [Operator Overloading](../advanced/operators.html)
-- [Type Conversions](../types/conversions.html)
 
 ---
 
@@ -419,3 +418,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-10
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Variables and Types](variables.html) | [Contents](index.html) | Next: [Basics - Control Flow](control-flow.html) →

@@ -1,0 +1,16 @@
+//! platform: sv
+
+// always + 非同期リセット (複数エッジ) テスト
+// always_ff @(posedge clk or negedge rst_n) の生成確認
+
+#[input]  bool clk = 0;
+#[input]  bool rst_n = 1;
+#[output] uint count = 0;
+
+async void process(posedge clk, negedge rst_n) {
+    if (rst_n == false) {
+        count = 0;
+    } else {
+        count = count + 1;
+    }
+}

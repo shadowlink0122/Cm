@@ -1,5 +1,7 @@
 #include "folding.hpp"
 
+#include "const_eval.hpp"
+
 namespace cm::mir::opt {
 
 bool ConstantFolding::run(MirFunction& func) {
@@ -20,7 +22,7 @@ bool ConstantFolding::run(MirFunction& func) {
         if (block) {
             // 各ブロックの開始時に定数情報をクリア
             std::unordered_map<LocalId, MirConstant> constants;
-            changed |= process_block(*block, constants, multiAssigned);
+            changed |= process_block(func, *block, constants, multiAssigned);
         }
     }
 
@@ -64,7 +66,7 @@ std::unordered_set<LocalId> ConstantFolding::detect_multi_assigned(const MirFunc
     return multiAssigned;
 }
 
-bool ConstantFolding::process_block(BasicBlock& block,
+bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
                                     std::unordered_map<LocalId, MirConstant>& constants,
                                     const std::unordered_set<LocalId>& multiAssigned) {
     bool changed = false;
@@ -134,6 +136,17 @@ bool ConstantFolding::process_block(BasicBlock& block,
 
             // Rvalueを評価して定数化できるかチェック
             if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
+                // 代入先ローカルの型幅に正規化（狭い型への代入はラップ）
+                if (target < func.locals.size()) {
+                    const auto& local_type = func.locals[target].type;
+                    if (const_eval::integer_bit_width(local_type) > 0) {
+                        if (auto* int_val = std::get_if<int64_t>(&constant->value)) {
+                            constant->value = const_eval::normalize_int(*int_val, local_type);
+                            constant->type = local_type;
+                        }
+                    }
+                }
+
                 // 定数として記録
                 constants[target] = *constant;
 
@@ -198,7 +211,7 @@ std::optional<MirConstant> ConstantFolding::evaluate_rvalue(
 
             if (lhs && rhs) {
                 // 両方が定数なら演算を実行
-                return eval_binary_op(bin_data.op, *lhs, *rhs);
+                return eval_binary_op(bin_data.op, *lhs, *rhs, bin_data.result_type);
             }
             break;
         }
@@ -267,7 +280,8 @@ std::optional<MirConstant> ConstantFolding::evaluate_operand(
 }
 
 std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const MirConstant& lhs,
-                                                           const MirConstant& rhs) {
+                                                           const MirConstant& rhs,
+                                                           const hir::TypePtr& result_type) {
     // Void型（nullリテラル）の演算は定数畳み込みしない
     // nullable型のnull比較は実行時に行う必要がある
     if ((lhs.type && lhs.type->kind == hir::TypeKind::Void) ||
@@ -279,64 +293,80 @@ std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const
     if (auto* lhs_int = std::get_if<int64_t>(&lhs.value)) {
         if (auto* rhs_int = std::get_if<int64_t>(&rhs.value)) {
             MirConstant result;
-            result.type = lhs.type;  // 型を保持
+            // 結果型: MIRのresult_typeを優先し、無ければ幅の広い方へ昇格
+            result.type = (result_type && const_eval::integer_bit_width(result_type) > 0)
+                              ? result_type
+                              : const_eval::promote_types(lhs.type, rhs.type);
+            // 型幅に正規化した値で演算する（オーバーフローは2の補数でラップ）
+            const int64_t lv = const_eval::normalize_int(*lhs_int, lhs.type);
+            const int64_t rv = const_eval::normalize_int(*rhs_int, rhs.type);
+            // どちらかが符号なし型なら比較・除算・剰余・右シフトは符号なしで行う
+            const bool uns = const_eval::use_unsigned_op(lhs.type, rhs.type);
+            const uint64_t ulv = static_cast<uint64_t>(lv);
+            const uint64_t urv = static_cast<uint64_t>(rv);
 
             switch (op) {
                 case MirBinaryOp::Add:
-                    result.value = *lhs_int + *rhs_int;
+                    result.value = const_eval::normalize_int(lv + rv, result.type);
                     return result;
                 case MirBinaryOp::Sub:
-                    result.value = *lhs_int - *rhs_int;
+                    result.value = const_eval::normalize_int(lv - rv, result.type);
                     return result;
                 case MirBinaryOp::Mul:
-                    result.value = *lhs_int * *rhs_int;
+                    result.value = const_eval::normalize_int(lv * rv, result.type);
                     return result;
                 case MirBinaryOp::Div:
-                    if (*rhs_int != 0) {
-                        result.value = *lhs_int / *rhs_int;
+                    if (rv != 0) {
+                        result.value = const_eval::normalize_int(
+                            uns ? static_cast<int64_t>(ulv / urv) : lv / rv, result.type);
                         return result;
                     }
                     break;
                 case MirBinaryOp::Mod:
-                    if (*rhs_int != 0) {
-                        result.value = *lhs_int % *rhs_int;
+                    if (rv != 0) {
+                        result.value = const_eval::normalize_int(
+                            uns ? static_cast<int64_t>(ulv % urv) : lv % rv, result.type);
                         return result;
                     }
                     break;
                 case MirBinaryOp::BitAnd:
-                    result.value = *lhs_int & *rhs_int;
+                    result.value = const_eval::normalize_int(lv & rv, result.type);
                     return result;
                 case MirBinaryOp::BitOr:
-                    result.value = *lhs_int | *rhs_int;
+                    result.value = const_eval::normalize_int(lv | rv, result.type);
                     return result;
                 case MirBinaryOp::BitXor:
-                    result.value = *lhs_int ^ *rhs_int;
+                    result.value = const_eval::normalize_int(lv ^ rv, result.type);
                     return result;
                 case MirBinaryOp::Shl:
-                    result.value = *lhs_int << *rhs_int;
+                    result.value = const_eval::normalize_int(
+                        static_cast<int64_t>(ulv << (urv & 63)), result.type);
                     return result;
                 case MirBinaryOp::Shr:
-                    result.value = *lhs_int >> *rhs_int;
+                    // 符号なし型は論理シフト、符号付き型は算術シフト
+                    result.value = const_eval::normalize_int(
+                        uns ? static_cast<int64_t>(ulv >> (urv & 63)) : lv >> (rv & 63),
+                        result.type);
                     return result;
 
                 // 比較演算（bool結果）
                 case MirBinaryOp::Eq:
-                    result.value = (*lhs_int == *rhs_int);
+                    result.value = (lv == rv);
                     return result;
                 case MirBinaryOp::Ne:
-                    result.value = (*lhs_int != *rhs_int);
+                    result.value = (lv != rv);
                     return result;
                 case MirBinaryOp::Lt:
-                    result.value = (*lhs_int < *rhs_int);
+                    result.value = uns ? (ulv < urv) : (lv < rv);
                     return result;
                 case MirBinaryOp::Le:
-                    result.value = (*lhs_int <= *rhs_int);
+                    result.value = uns ? (ulv <= urv) : (lv <= rv);
                     return result;
                 case MirBinaryOp::Gt:
-                    result.value = (*lhs_int > *rhs_int);
+                    result.value = uns ? (ulv > urv) : (lv > rv);
                     return result;
                 case MirBinaryOp::Ge:
-                    result.value = (*lhs_int >= *rhs_int);
+                    result.value = uns ? (ulv >= urv) : (lv >= rv);
                     return result;
 
                 default:
@@ -364,7 +394,52 @@ std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const
         }
     }
 
-    // TODO: 浮動小数点演算
+    // 浮動小数点演算
+    if (auto* lhs_double = std::get_if<double>(&lhs.value)) {
+        if (auto* rhs_double = std::get_if<double>(&rhs.value)) {
+            MirConstant result;
+            result.type = lhs.type;
+
+            switch (op) {
+                case MirBinaryOp::Add:
+                    result.value = *lhs_double + *rhs_double;
+                    return result;
+                case MirBinaryOp::Sub:
+                    result.value = *lhs_double - *rhs_double;
+                    return result;
+                case MirBinaryOp::Mul:
+                    result.value = *lhs_double * *rhs_double;
+                    return result;
+                case MirBinaryOp::Div:
+                    if (*rhs_double != 0.0) {
+                        result.value = *lhs_double / *rhs_double;
+                        return result;
+                    }
+                    break;
+                // 比較演算
+                case MirBinaryOp::Eq:
+                    result.value = (*lhs_double == *rhs_double);
+                    return result;
+                case MirBinaryOp::Ne:
+                    result.value = (*lhs_double != *rhs_double);
+                    return result;
+                case MirBinaryOp::Lt:
+                    result.value = (*lhs_double < *rhs_double);
+                    return result;
+                case MirBinaryOp::Le:
+                    result.value = (*lhs_double <= *rhs_double);
+                    return result;
+                case MirBinaryOp::Gt:
+                    result.value = (*lhs_double > *rhs_double);
+                    return result;
+                case MirBinaryOp::Ge:
+                    result.value = (*lhs_double >= *rhs_double);
+                    return result;
+                default:
+                    break;
+            }
+        }
+    }
 
     return std::nullopt;
 }
@@ -377,10 +452,10 @@ std::optional<MirConstant> ConstantFolding::eval_unary_op(MirUnaryOp op,
     if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
         switch (op) {
             case MirUnaryOp::Neg:
-                result.value = -*int_val;
+                result.value = const_eval::normalize_int(-*int_val, result.type);
                 return result;
             case MirUnaryOp::BitNot:
-                result.value = ~*int_val;
+                result.value = const_eval::normalize_int(~*int_val, result.type);
                 return result;
             default:
                 break;
@@ -394,6 +469,13 @@ std::optional<MirConstant> ConstantFolding::eval_unary_op(MirUnaryOp op,
         }
     }
 
+    if (auto* double_val = std::get_if<double>(&operand.value)) {
+        if (op == MirUnaryOp::Neg) {
+            result.value = -*double_val;
+            return result;
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -401,6 +483,15 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
                                                       const hir::TypePtr& target_type) {
     MirConstant result;
     result.type = target_type;
+
+    // 整数 -> 整数: ターゲット型の幅・符号に正規化してキャスト
+    // （例: utiny 255 as int → 255、tiny -1 as utiny → 255、int 300 as utiny → 44）
+    if (const_eval::integer_bit_width(target_type) > 0) {
+        if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
+            result.value = const_eval::normalize_int(*int_val, target_type);
+            return result;
+        }
+    }
 
     // Int -> Double
     if (target_type->kind == hir::TypeKind::Float) {

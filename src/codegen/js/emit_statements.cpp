@@ -8,6 +8,29 @@ namespace cm::codegen::js {
 
 using ast::TypeKind;
 
+namespace {
+// 狭い整数型（8/16bit）への代入値をラップする。
+// JSの数値は53bit精度のため、tiny等への代入は明示的な
+// 切り詰めがないと 127+1 が 128 のまま格納されてしまう
+std::string wrapNarrowInt(const std::string& expr, const hir::TypePtr& type) {
+    if (!type) {
+        return expr;
+    }
+    switch (type->kind) {
+        case TypeKind::Tiny:
+            return "((" + expr + " << 24) >> 24)";
+        case TypeKind::UTiny:
+            return "((" + expr + ") & 0xFF)";
+        case TypeKind::Short:
+            return "((" + expr + " << 16) >> 16)";
+        case TypeKind::UShort:
+            return "((" + expr + ") & 0xFFFF)";
+        default:
+            return expr;
+    }
+}
+}  // namespace
+
 void JSCodeGen::emitBasicBlock(const mir::BasicBlock& block, const mir::MirFunction& func,
                                [[maybe_unused]] const mir::MirProgram& program) {
     bool needLabels = func.basic_blocks.size() > 1;
@@ -47,6 +70,39 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
 
             std::string place = emitPlace(data.place, func);
 
+            // interface値へのcoercion: Shape sh = sq; を {data, vtable} で表現する。
+            // 引数渡し（Castで処理される）と同様に、代入でもfatオブジェクトを構築する
+            if (data.place.projections.empty() && target_local < func.locals.size() &&
+                data.rvalue->kind == mir::MirRvalue::Use) {
+                const auto& destType = func.locals[target_local].type;
+                const bool dest_is_iface =
+                    destType && (destType->kind == TypeKind::Interface ||
+                                 (destType->kind == TypeKind::Struct &&
+                                  interface_names_.count(destType->name) > 0));
+                if (dest_is_iface) {
+                    const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                    if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                            useData.operand->kind == mir::MirOperand::Move)) {
+                        hir::TypePtr srcType = getOperandType(*useData.operand, func);
+                        if (srcType && srcType->kind == TypeKind::Struct &&
+                            interface_names_.count(srcType->name) == 0) {
+                            std::string src = emitOperand(*useData.operand, func);
+                            std::string vtableName = sanitizeIdentifier(srcType->name) + "_" +
+                                                     sanitizeIdentifier(destType->name) + "_vtable";
+                            std::string fat = "{ data: " + src + ", vtable: " + vtableName + " }";
+                            if (declare_on_assign_.count(target_local) > 0 &&
+                                declared_locals_.count(target_local) == 0) {
+                                emitter_.emitLine("let " + place + " = " + fat + ";");
+                                declared_locals_.insert(target_local);
+                            } else {
+                                emitter_.emitLine(place + " = " + fat + ";");
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             // クロージャ変数への代入かチェック
             if (target_local < func.locals.size() && data.place.projections.empty() &&
                 func.locals[target_local].is_closure && data.rvalue->kind == mir::MirRvalue::Use) {
@@ -69,6 +125,10 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
             }
 
             std::string rvalue = emitRvalue(*data.rvalue, func);
+            // 狭い整数型（tiny/utiny/short/ushort）への代入は型幅にラップする
+            if (data.place.projections.empty() && target_local < func.locals.size()) {
+                rvalue = wrapNarrowInt(rvalue, func.locals[target_local].type);
+            }
             if (data.place.projections.empty() && declare_on_assign_.count(target_local) > 0 &&
                 declared_locals_.count(target_local) == 0) {
                 emitter_.emitLine("let " + place + " = " + rvalue + ";");

@@ -203,3 +203,8 @@ poll_destroy(poller);
 ---
 
 **関連:** [HTTP通信](../http.html)（高レベルAPI）
+
+---
+
+<!-- nav -->
+← 前: [std::http - HTTP通信ライブラリ](../http.html) ｜ [目次](../index.html) ｜ 次: [並行処理 - 概要](../concurrency/index.html) →

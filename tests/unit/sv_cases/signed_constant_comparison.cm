@@ -1,0 +1,10 @@
+#[input] int s;
+#[output] uint neg = 0;
+
+void check() {
+    if (s < 0) {
+        neg = 1;
+    } else {
+        neg = 0;
+    }
+}

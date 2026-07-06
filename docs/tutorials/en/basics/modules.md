@@ -217,7 +217,7 @@ import ./utils::internal_helper;
 
 ## Related Links
 
-- [Project Structure](../../PROJECT_STRUCTURE.html)
+- [Project Structure](../../../PROJECT_STRUCTURE.html)
 - FFI (Japanese only)
 
 ---
@@ -227,3 +227,8 @@ import ./utils::internal_helper;
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Pointers](pointers.html) | [Contents](index.html) | Next: [Basics - String Interpolation](string-interpolation.html) →

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <chrono>
+#include <cstdio>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <vector>
 
 namespace cm::codegen {
@@ -46,48 +48,13 @@ class BufferedCodeGenerator {
     virtual ~BufferedCodeGenerator() = default;
 
     // コード生成開始
-    void begin_generation() {
-        buffer.str("");
-        buffer.clear();
-        lines.clear();
-        stats = GenerationStats{};
-        has_error = false;
-        error_message.clear();
-        start_time = std::chrono::high_resolution_clock::now();
-    }
+    void begin_generation();
 
     // バッファに行を追加
-    bool append_line(const std::string& line) {
-        // サイズチェック
-        if (!check_limits()) {
-            return false;
-        }
-
-        lines.push_back(line);
-        buffer << line << "\n";
-
-        stats.total_lines++;
-        stats.total_bytes += line.size() + 1;  // +1 for newline
-
-        return true;
-    }
+    bool append_line(const std::string& line);
 
     // バッファに直接書き込み
-    bool append(const std::string& content) {
-        // サイズチェック
-        if (!check_limits()) {
-            return false;
-        }
-
-        buffer << content;
-        stats.total_bytes += content.size();
-
-        // 行数をカウント
-        size_t newlines = std::count(content.begin(), content.end(), '\n');
-        stats.total_lines += newlines;
-
-        return true;
-    }
+    bool append(const std::string& content);
 
     // フォーマット付き追加
     template <typename... Args>
@@ -106,59 +73,13 @@ class BufferedCodeGenerator {
     }
 
     // 制限チェック
-    bool check_limits() {
-        // 時間制限チェック
-        auto elapsed = std::chrono::high_resolution_clock::now() - start_time;
-        if (elapsed > limits.max_generation_time) {
-            set_error("コード生成時間が制限を超過しました");
-            return false;
-        }
-
-        // サイズ制限チェック
-        if (stats.total_bytes > limits.max_bytes) {
-            set_error("生成コードサイズが制限を超過しました");
-            stats.exceeded_limit = true;
-            return false;
-        }
-
-        if (stats.total_lines > limits.max_lines) {
-            set_error("生成コード行数が制限を超過しました");
-            stats.exceeded_limit = true;
-            return false;
-        }
-
-        // 警告閾値チェック
-        if (stats.total_bytes > limits.warning_threshold_bytes) {
-            if (!stats.exceeded_limit) {  // 一度だけ警告
-                std::cerr << "[CODEGEN] 警告: 生成コードが" << (stats.total_bytes / (1024 * 1024))
-                          << "MBに達しています\n";
-            }
-        }
-
-        return true;
-    }
+    bool check_limits();
 
     // コード生成終了
-    std::string end_generation() {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        stats.generation_time =
-            std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        stats.max_buffer_size = buffer.str().size();
-
-        if (has_error) {
-            return "";  // エラー時は空文字列
-        }
-
-        return buffer.str();
-    }
+    std::string end_generation();
 
     // 生成されたコードを取得（検証付き）
-    std::string get_generated_code() {
-        if (has_error) {
-            return "";
-        }
-        return buffer.str();
-    }
+    std::string get_generated_code();
 
     // 行単位で取得
     const std::vector<std::string>& get_lines() const { return lines; }
@@ -178,11 +99,7 @@ class BufferedCodeGenerator {
     size_t current_buffer_size() const { return stats.total_bytes; }
 
    protected:
-    void set_error(const std::string& msg) {
-        has_error = true;
-        error_message = msg;
-        std::cerr << "[CODEGEN] エラー: " << msg << "\n";
-    }
+    void set_error(const std::string& msg);
 };
 
 // 二段階バッファリング（さらに安全）
@@ -201,48 +118,10 @@ class TwoPhaseCodeGenerator : public BufferedCodeGenerator {
 
    public:
     // ブロック単位で追加
-    bool add_block(const std::string& name, const std::string& content, bool is_critical = false) {
-        size_t size = content.size();
-
-        // 推定サイズチェック
-        if (total_estimated_size + size > limits.max_bytes) {
-            if (is_critical) {
-                set_error("必須ブロック '" + name + "' を追加できません（サイズ超過）");
-                return false;
-            }
-            // 非必須ブロックはスキップ
-            return true;
-        }
-
-        blocks.push_back({name, content, size, is_critical});
-        total_estimated_size += size;
-        return true;
-    }
+    bool add_block(const std::string& name, const std::string& content, bool is_critical = false);
 
     // フェーズ2: 実際に生成
-    std::string generate() {
-        begin_generation();
-
-        // ブロックを順番に追加
-        for (const auto& block : blocks) {
-            if (!append("// === " + block.name + " ===\n")) {
-                break;
-            }
-            if (!append(block.content)) {
-                if (block.is_critical) {
-                    set_error("必須ブロック '" + block.name + "' の生成に失敗");
-                    return "";
-                }
-                // 非必須ブロックはスキップして続行
-                continue;
-            }
-            if (!append("\n")) {
-                break;
-            }
-        }
-
-        return end_generation();
-    }
+    std::string generate();
 
     // 推定サイズを事前チェック
     bool validate_size() const { return total_estimated_size <= limits.max_bytes; }
@@ -265,24 +144,10 @@ class ScopedCodeSection {
     bool committed = false;
 
    public:
-    ScopedCodeSection(BufferedCodeGenerator& g, const std::string& name)
-        : gen(g), section_name(name) {
-        start_size = gen.current_buffer_size();
-        gen.append_line("// BEGIN: " + section_name);
-    }
+    ScopedCodeSection(BufferedCodeGenerator& g, const std::string& name);
+    ~ScopedCodeSection();
 
-    ~ScopedCodeSection() {
-        if (!committed) {
-            // エラー時はロールバック（概念的に）
-            std::cerr << "[CODEGEN] セクション '" << section_name
-                      << "' はコミットされませんでした\n";
-        }
-    }
-
-    void commit() {
-        gen.append_line("// END: " + section_name);
-        committed = true;
-    }
+    void commit();
 
     size_t section_size() const { return gen.current_buffer_size() - start_size; }
 };

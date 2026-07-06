@@ -1,0 +1,38 @@
+//! platform: sv
+
+// 深いネストif/elseテスト: 優先度エンコーダ風
+
+#[input]  utiny req = 0;
+#[output] utiny grant = 0;
+#[output] bool valid = false;
+
+void encode() {
+    if ((req & 128) != 0) {
+        grant = 7;
+        valid = true;
+    } else if ((req & 64) != 0) {
+        grant = 6;
+        valid = true;
+    } else if ((req & 32) != 0) {
+        grant = 5;
+        valid = true;
+    } else if ((req & 16) != 0) {
+        grant = 4;
+        valid = true;
+    } else if ((req & 8) != 0) {
+        grant = 3;
+        valid = true;
+    } else if ((req & 4) != 0) {
+        grant = 2;
+        valid = true;
+    } else if ((req & 2) != 0) {
+        grant = 1;
+        valid = true;
+    } else if ((req & 1) != 0) {
+        grant = 0;
+        valid = true;
+    } else {
+        grant = 0;
+        valid = false;
+    }
+}

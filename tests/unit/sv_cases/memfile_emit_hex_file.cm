@@ -1,0 +1,12 @@
+#[input] bool clk = false;
+#[input] uint idx;
+#[output] utiny out = 0;
+
+#[sv::memfile("emit_test.hex")]
+utiny[4] rom = [16, 32, 255, 0];
+
+void read(posedge clk) {
+    if (idx < 4) {
+        out = rom[idx];
+    }
+}

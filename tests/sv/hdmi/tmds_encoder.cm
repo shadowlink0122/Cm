@@ -1,0 +1,57 @@
+//! platform: sv
+
+// TMDS エンコーダ単体テスト
+// DVI 1.0 8b/10b エンコーディングのコンパイル検証
+
+#[input]  posedge clk;
+#[input]  utiny data_in = 0;
+#[input]  bool  c0 = false;
+#[input]  bool  c1 = false;
+#[input]  bool  de = false;
+#[output] ushort tmds_out = 0;
+
+// DC バランスカウンタ (符号付き)
+int cnt = 0;
+
+async void encode(posedge clk) {
+    if (de == true) {
+        // ポップカウント
+        uint n1 = (data_in & 1) + ((data_in >> 1) & 1) + ((data_in >> 2) & 1) + ((data_in >> 3) & 1)
+                + ((data_in >> 4) & 1) + ((data_in >> 5) & 1) + ((data_in >> 6) & 1) + ((data_in >> 7) & 1);
+
+        // ステージ 1: 遷移最小化 (XOR)
+        uint q0 = data_in & 1;
+        uint q1 = ((data_in >> 1) & 1) ^ q0;
+        uint q2 = ((data_in >> 2) & 1) ^ q1;
+        uint q3 = ((data_in >> 3) & 1) ^ q2;
+        uint q4 = ((data_in >> 4) & 1) ^ q3;
+        uint q5 = ((data_in >> 5) & 1) ^ q4;
+        uint q6 = ((data_in >> 6) & 1) ^ q5;
+        uint q7 = ((data_in >> 7) & 1) ^ q6;
+
+        // 10bit 出力組み立て
+        tmds_out = (q0 | (q1 << 1) | (q2 << 2) | (q3 << 3)
+                 | (q4 << 4) | (q5 << 5) | (q6 << 6) | (q7 << 7)
+                 | (1 << 8)) as ushort;
+    } else {
+        // コントロールトークン (DVI 1.0 仕様)
+        // {C1=0,C0=0} = 1101010100 = 852
+        // {C1=0,C0=1} = 0010101011 = 171
+        // {C1=1,C0=0} = 0101010100 = 340
+        // {C1=1,C0=1} = 1010101011 = 683
+        if (c1 == false) {
+            if (c0 == false) {
+                tmds_out = 852;   // {C1=0,C0=0}
+            } else {
+                tmds_out = 171;   // {C1=0,C0=1}
+            }
+        } else {
+            if (c0 == false) {
+                tmds_out = 340;   // {C1=1,C0=0}
+            } else {
+                tmds_out = 683;   // {C1=1,C0=1}
+            }
+        }
+        cnt = 0;
+    }
+}

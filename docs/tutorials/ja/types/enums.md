@@ -419,3 +419,8 @@ int main() {
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [型システム編 - 構造体](structs.html) ｜ [目次](index.html) ｜ 次: [型システム編 - typedef型エイリアス](typedef.html) →

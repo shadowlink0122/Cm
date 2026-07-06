@@ -206,18 +206,79 @@ add_library(cm_frontend INTERFACE)
 target_include_directories(cm_frontend INTERFACE ${CMAKE_SOURCE_DIR}/src/frontend)
 target_link_libraries(cm_frontend INTERFACE cm_common)
 
-# Main executable
-set(CM_SOURCES
-    src/main.cpp
+# ============================================
+# コンポーネント別ソースリスト
+# cm本体と単体テストターゲット（mir_lowering_test等）で共有する。
+# ここに追加したファイルは両方に自動で反映されるため、
+# テストターゲットへの登録漏れによるリンクエラーを防げる。
+# ============================================
+set(CM_LEXER_SOURCES
     src/frontend/lexer/token.cpp
     src/frontend/lexer/lexer.cpp
+)
+set(CM_PARSER_SOURCES
     src/frontend/parser/parser_stmt.cpp
     src/frontend/parser/parser_expr.cpp
     src/frontend/parser/parser_module.cpp
     src/frontend/parser/parser_decl.cpp
     src/frontend/parser/parser_type.cpp
+)
+set(CM_HIR_LOWERING_SOURCES
+    src/hir/lowering/impl.cpp
+    src/hir/lowering/decl.cpp
+    src/hir/lowering/stmt.cpp
+    src/hir/lowering/expr.cpp
+)
+# MIRコア（lowering + 最適化パス + 解析）
+set(CM_MIR_SOURCES
+    src/mir/nodes.cpp
+    src/mir/optimizations/optimization_pipeline.cpp
+    src/mir/lowering/context.cpp
+    src/mir/lowering/base.cpp
+    src/mir/lowering/lowering.cpp
+    src/mir/lowering/auto_impl.cpp
+    src/mir/lowering/impl.cpp
+    src/mir/lowering/monomorphization_impl.cpp
+    src/mir/lowering/monomorphization_utils.cpp
+    # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
+    src/mir/lowering/stmt.cpp
+    src/mir/lowering/expr.cpp
+    src/mir/lowering/expr_basic.cpp
+    src/mir/lowering/expr_ops.cpp
+    src/mir/lowering/expr_call.cpp
+    # MIR passes (最適化パス実装)
+    src/mir/passes/scalar/sccp.cpp
+    src/mir/passes/scalar/folding.cpp
+    src/mir/passes/scalar/propagation.cpp
+    src/mir/passes/scalar/array_base_extraction.cpp
+    src/mir/passes/cleanup/dce.cpp
+    src/mir/passes/cleanup/dse.cpp
+    src/mir/passes/cleanup/simplify_cfg.cpp
+    src/mir/passes/cleanup/program_dce.cpp
+    src/mir/passes/interprocedural/inlining.cpp
+    src/mir/passes/interprocedural/tail_call_elimination.cpp
+    src/mir/passes/loop/licm.cpp
+    src/mir/passes/loop/const_unroll.cpp
+    src/mir/passes/redundancy/gvn.cpp
+    src/mir/passes/core/base.cpp
+    src/mir/passes/core/manager.cpp
+    src/mir/passes/convergence/manager.cpp
+    src/mir/passes/convergence/smart.cpp
+    src/mir/passes/validation/no_std_checker.cpp
+    # MIR analysis (解析モジュール)
+    src/mir/analysis/dominators.cpp
+    src/mir/analysis/loop_analysis.cpp
+)
+
+# Main executable
+set(CM_SOURCES
+    src/main.cpp
+    ${CM_LEXER_SOURCES}
+    ${CM_PARSER_SOURCES}
     # Type checking (分割済み)
+    src/cli/options.cpp
     src/frontend/types/scope.cpp
+    src/frontend/types/generic_context.cpp
     src/frontend/types/checking/decl.cpp
     src/frontend/types/checking/stmt.cpp
     src/frontend/types/checking/expr.cpp
@@ -231,52 +292,16 @@ set(CM_SOURCES
     # Lint configuration
     src/lint/config.cpp
     # HIR lowering (AST -> HIR)
-    src/hir/lowering/impl.cpp
-    src/hir/lowering/decl.cpp
-    src/hir/lowering/stmt.cpp
-    src/hir/lowering/expr.cpp
-    # MIR lowering (HIR -> MIR)
-    src/mir/optimizations/optimization_pipeline.cpp
+    ${CM_HIR_LOWERING_SOURCES}
+    # MIR lowering (HIR -> MIR) + パス + 解析
+    ${CM_MIR_SOURCES}
     src/mir/printer.cpp
-    src/mir/lowering/context.cpp
-    src/mir/lowering/base.cpp
-    src/mir/lowering/lowering.cpp
-    src/mir/lowering/impl.cpp
-    src/mir/lowering/monomorphization_impl.cpp
-    src/mir/lowering/monomorphization_utils.cpp
-    # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
-    src/mir/lowering/stmt.cpp
-    src/mir/lowering/expr.cpp
-    src/mir/lowering/expr_basic.cpp
-    src/mir/lowering/expr_ops.cpp
-    src/mir/lowering/expr_call.cpp
     # auto_impl (トレイト別自動実装)
     src/mir/lowering/auto_impl/generator.cpp
     src/mir/lowering/auto_impl/eq.cpp
     src/mir/lowering/auto_impl/ord.cpp
     src/mir/lowering/auto_impl/clone_hash.cpp
     src/mir/lowering/auto_impl/debug_display_css.cpp
-    # MIR passes (最適化パス実装)
-    src/mir/passes/scalar/sccp.cpp
-    src/mir/passes/scalar/folding.cpp
-    src/mir/passes/scalar/propagation.cpp
-    src/mir/passes/scalar/array_base_extraction.cpp
-    src/mir/passes/cleanup/dce.cpp
-    src/mir/passes/cleanup/dse.cpp
-    src/mir/passes/cleanup/simplify_cfg.cpp
-    src/mir/passes/cleanup/program_dce.cpp
-    src/mir/passes/interprocedural/inlining.cpp
-    src/mir/passes/interprocedural/tail_call_elimination.cpp
-    src/mir/passes/loop/licm.cpp
-    src/mir/passes/redundancy/gvn.cpp
-    src/mir/passes/core/base.cpp
-    src/mir/passes/core/manager.cpp
-    src/mir/passes/convergence/manager.cpp
-    src/mir/passes/convergence/smart.cpp
-    src/mir/passes/validation/no_std_checker.cpp
-    # MIR analysis (解析モジュール)
-    src/mir/analysis/dominators.cpp
-    src/mir/analysis/loop_analysis.cpp
     # MIR分割ユーティリティ（モジュール別分離コンパイル用）
     src/mir/mir_splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)
@@ -292,6 +317,11 @@ set(CM_SOURCES
 
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
+    src/codegen/buffered_codegen.cpp
+    src/codegen/llvm/monitoring/block_monitor.cpp
+    src/codegen/llvm/monitoring/codegen_monitor.cpp
+    src/codegen/llvm/monitoring/output_monitor.cpp
+    src/codegen/llvm/monitoring/compilation_guard.cpp
     src/codegen/js/codegen.cpp
     src/codegen/js/utilities.cpp
     src/codegen/js/emit_function.cpp
@@ -309,6 +339,8 @@ list(APPEND CM_SOURCES
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/sv/codegen.cpp
+    src/codegen/sv/expr_tree.cpp
+    src/codegen/sv/hierarchy.cpp
 )
 
 # Add LLVM sources if enabled
@@ -320,6 +352,9 @@ if(CM_USE_LLVM)
         # LLVM core (shared between native and wasm)
         src/codegen/llvm/core/context.cpp
         src/codegen/llvm/core/mir_to_llvm.cpp
+        src/codegen/llvm/core/statement.cpp
+        src/codegen/llvm/core/rvalue.cpp
+        src/codegen/llvm/core/operand.cpp
         src/codegen/llvm/core/interface.cpp
         src/codegen/llvm/core/terminator.cpp
         src/codegen/llvm/core/print_codegen.cpp
@@ -577,8 +612,7 @@ if(BUILD_TESTING)
         # Unit tests - Lexer
         add_executable(lexer_test
             tests/unit/lexer_test.cpp
-            src/frontend/lexer/token.cpp
-            src/frontend/lexer/lexer.cpp
+            ${CM_LEXER_SOURCES}
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(lexer_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
@@ -588,17 +622,9 @@ if(BUILD_TESTING)
         # Unit tests - HIR Lowering
         add_executable(hir_lowering_test
             tests/unit/hir_lowering_test.cpp
-            src/frontend/lexer/token.cpp
-            src/frontend/lexer/lexer.cpp
-            src/frontend/parser/parser_stmt.cpp
-            src/frontend/parser/parser_expr.cpp
-            src/frontend/parser/parser_module.cpp
-            src/frontend/parser/parser_decl.cpp
-            src/frontend/parser/parser_type.cpp
-            src/hir/lowering/impl.cpp
-            src/hir/lowering/stmt.cpp
-            src/hir/lowering/expr.cpp
-            src/hir/lowering/decl.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
@@ -608,47 +634,10 @@ if(BUILD_TESTING)
         # Unit tests - MIR Lowering
         add_executable(mir_lowering_test
             tests/unit/mir_lowering_test.cpp
-            src/frontend/lexer/token.cpp
-            src/frontend/lexer/lexer.cpp
-            src/frontend/parser/parser_stmt.cpp
-            src/frontend/parser/parser_expr.cpp
-            src/frontend/parser/parser_module.cpp
-            src/frontend/parser/parser_decl.cpp
-            src/frontend/parser/parser_type.cpp
-            src/hir/lowering/impl.cpp
-            src/hir/lowering/stmt.cpp
-            src/hir/lowering/expr.cpp
-            src/hir/lowering/decl.cpp
-            src/mir/lowering/context.cpp
-            src/mir/lowering/base.cpp
-            src/mir/lowering/lowering.cpp
-            src/mir/lowering/impl.cpp
-            src/mir/lowering/stmt.cpp
-            src/mir/lowering/expr.cpp
-            src/mir/lowering/expr_basic.cpp
-            src/mir/lowering/expr_ops.cpp
-            src/mir/lowering/expr_call.cpp
-            src/mir/lowering/monomorphization_impl.cpp
-            src/mir/lowering/monomorphization_utils.cpp
-            src/mir/passes/scalar/sccp.cpp
-            src/mir/passes/scalar/folding.cpp
-            src/mir/passes/scalar/propagation.cpp
-            src/mir/passes/scalar/array_base_extraction.cpp
-            src/mir/passes/cleanup/dce.cpp
-            src/mir/passes/cleanup/dse.cpp
-            src/mir/passes/cleanup/simplify_cfg.cpp
-            src/mir/passes/cleanup/program_dce.cpp
-            src/mir/passes/interprocedural/inlining.cpp
-            src/mir/passes/interprocedural/tail_call_elimination.cpp
-            src/mir/passes/loop/licm.cpp
-            src/mir/passes/redundancy/gvn.cpp
-            src/mir/passes/core/base.cpp
-            src/mir/passes/core/manager.cpp
-            src/mir/passes/convergence/manager.cpp
-            src/mir/passes/convergence/smart.cpp
-            src/mir/passes/validation/no_std_checker.cpp
-            src/mir/analysis/dominators.cpp
-            src/mir/analysis/loop_analysis.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_MIR_SOURCES}
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(mir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
@@ -658,53 +647,43 @@ if(BUILD_TESTING)
         # Unit tests - MIR Optimization
         add_executable(mir_optimization_test
             tests/unit/mir_optimization_test.cpp
-            src/frontend/lexer/token.cpp
-            src/frontend/lexer/lexer.cpp
-            src/frontend/parser/parser_stmt.cpp
-            src/frontend/parser/parser_expr.cpp
-            src/frontend/parser/parser_module.cpp
-            src/frontend/parser/parser_decl.cpp
-            src/frontend/parser/parser_type.cpp
-            src/hir/lowering/impl.cpp
-            src/hir/lowering/stmt.cpp
-            src/hir/lowering/expr.cpp
-            src/hir/lowering/decl.cpp
-            src/mir/lowering/context.cpp
-            src/mir/lowering/base.cpp
-            src/mir/lowering/lowering.cpp
-            src/mir/lowering/impl.cpp
-            src/mir/lowering/stmt.cpp
-            src/mir/lowering/expr.cpp
-            src/mir/lowering/expr_basic.cpp
-            src/mir/lowering/expr_ops.cpp
-            src/mir/lowering/expr_call.cpp
-            src/mir/lowering/monomorphization_impl.cpp
-            src/mir/lowering/monomorphization_utils.cpp
-            src/mir/optimizations/optimization_pipeline.cpp
-            src/mir/passes/scalar/sccp.cpp
-            src/mir/passes/scalar/folding.cpp
-            src/mir/passes/scalar/propagation.cpp
-            src/mir/passes/scalar/array_base_extraction.cpp
-            src/mir/passes/cleanup/dce.cpp
-            src/mir/passes/cleanup/dse.cpp
-            src/mir/passes/cleanup/simplify_cfg.cpp
-            src/mir/passes/cleanup/program_dce.cpp
-            src/mir/passes/interprocedural/inlining.cpp
-            src/mir/passes/interprocedural/tail_call_elimination.cpp
-            src/mir/passes/loop/licm.cpp
-            src/mir/passes/redundancy/gvn.cpp
-            src/mir/passes/core/base.cpp
-            src/mir/passes/core/manager.cpp
-            src/mir/passes/convergence/manager.cpp
-            src/mir/passes/convergence/smart.cpp
-            src/mir/passes/validation/no_std_checker.cpp
-            src/mir/analysis/dominators.cpp
-            src/mir/analysis/loop_analysis.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_MIR_SOURCES}
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(mir_optimization_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(mir_optimization_test gtest_main cm_frontend)
         gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
+
+        # Unit tests - SV Codegen
+        add_executable(sv_codegen_test
+            tests/unit/sv_codegen_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_MIR_SOURCES}
+            src/codegen/buffered_codegen.cpp
+            src/codegen/sv/codegen.cpp
+            src/codegen/sv/expr_tree.cpp
+        )
+        set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        # ゴールデンテスト入力のCmソース断片ディレクトリ
+        target_compile_definitions(sv_codegen_test PRIVATE
+            CM_SV_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/unit/sv_cases")
+        target_include_directories(sv_codegen_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(sv_codegen_test gtest_main cm_frontend)
+        gtest_discover_tests(sv_codegen_test PROPERTIES LABELS "unit")
+
+        # Unit tests - Error handling
+        add_executable(error_test
+            tests/unit/error_test.cpp
+        )
+        set_target_properties(error_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(error_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(error_test gtest_main)
+        gtest_discover_tests(error_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
         # add_executable(mir_interpreter_test

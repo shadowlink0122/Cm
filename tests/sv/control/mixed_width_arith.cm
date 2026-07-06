@@ -1,0 +1,20 @@
+//! platform: sv
+//! test: a=3, b=5 -> sum=8, diff=65534
+//! test: a=10, b=2 -> sum=12, diff=8
+
+// 混合ビット幅演算テスト
+// int(32bit) と ushort(16bit) の混合演算が
+// 正しい幅キャストで生成されることを検証
+
+#[input]  int a = 0;
+#[input]  ushort b = 0;
+#[output] int sum = 0;
+#[output] ushort diff = 0;
+
+void calc() {
+    // int + ushort → int (ushort を 32bit に拡張)
+    sum = a + b;
+
+    // int - ushort → ushort (切り捨てキャスト発生)
+    diff = a - b;
+}

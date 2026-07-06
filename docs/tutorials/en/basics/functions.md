@@ -90,26 +90,23 @@ int main() {
 
 ---
 
-## Function Overloading
+## Function Overloading (not supported)
 
-You can define multiple functions with the same name but different parameters (type or number).
-The `overload` keyword is required.
+**Free-function overloading is currently not supported.** Defining two
+functions with the same name and different signatures is a compile
+error:
 
 ```cm
-overload int max(const int a, const int b) {
-    return a > b ? a : b;
-}
-
-overload double max(double a, double b) {
-    return a > b ? a : b;
-}
-
-int main() {
-    println("max int: {}", max(10, 20));
-    println("max double: {}", max(3.14, 2.71));
-    return 0;
-}
+int process(int x) { return x; }
+double process(double x) { return x; }
+// error: function 'process' is already defined with a different signature
 ```
+
+Use distinct names per type (e.g. `max_int` / `max_double`).
+
+Note that **constructor overloading** IS supported via the
+`overload self(...)` syntax (see [Structs](../types/structs.html)).
+Free-function overloading may be considered in a future version.
 
 ---
 
@@ -225,3 +222,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Basics - Control Flow](control-flow.html) | [Contents](index.html) | Next: [Basics - Arrays](arrays.html) →

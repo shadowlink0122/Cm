@@ -1,0 +1,16 @@
+//! platform: sv
+
+// 後方互換テスト: void f(posedge clk)が引き続きalways_ff @(posedge clk)になる
+
+#[input]  bool clk = 0;
+#[input]  bool rst = 0;
+#[output] utiny shift = 1;
+
+// 後方互換: void f(posedge clk) → always_ff @(posedge clk)
+void shifter(posedge clk) {
+    if (rst) {
+        shift = 1;
+    } else {
+        shift = (shift << 1) | (shift >> 7);
+    }
+}

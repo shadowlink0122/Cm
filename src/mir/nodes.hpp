@@ -2,6 +2,7 @@
 
 #include "../common/span.hpp"
 #include "../frontend/lexer/token.hpp"
+#include "../hir/nodes.hpp"
 #include "../hir/types.hpp"
 
 #include <iostream>
@@ -199,9 +200,10 @@ struct MirOperand {
     static MirOperandPtr constant(MirConstant c) {
         auto op = std::make_unique<MirOperand>();
         op->kind = Constant;
-        op->data = std::move(c);
-        // Constantの場合、MirConstant自体に型情報があるので、それを使用
+        // Constantの場合、MirConstant自体に型情報があるので、それを使用。
+        // move後の c.type は nullptr になるため、move前に取得する
         op->type = c.type;
+        op->data = std::move(c);
         return op;
     }
 
@@ -553,6 +555,7 @@ struct BasicBlock {
     std::vector<BlockId> predecessors;
     std::vector<BlockId> successors;
 
+    BasicBlock() : id(0) {}
     BasicBlock(BlockId i) : id(i) {}
 
     void add_statement(MirStatementPtr stmt) { statements.push_back(std::move(stmt)); }
@@ -562,37 +565,8 @@ struct BasicBlock {
         update_successors();
     }
 
-    void update_successors() {
-        successors.clear();
-        if (!terminator)
-            return;
-
-        switch (terminator->kind) {
-            case MirTerminator::Goto: {
-                auto& data = std::get<MirTerminator::GotoData>(terminator->data);
-                successors.push_back(data.target);
-                break;
-            }
-            case MirTerminator::SwitchInt: {
-                auto& data = std::get<MirTerminator::SwitchIntData>(terminator->data);
-                for (const auto& [_, target] : data.targets) {
-                    successors.push_back(target);
-                }
-                successors.push_back(data.otherwise);
-                break;
-            }
-            case MirTerminator::Call: {
-                auto& data = std::get<MirTerminator::CallData>(terminator->data);
-                successors.push_back(data.success);
-                if (data.unwind) {
-                    successors.push_back(*data.unwind);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-    }
+    // ターミネータからsuccessorsを再計算する（実装は nodes.cpp）
+    void update_successors();
 };
 
 // ============================================================
@@ -635,6 +609,9 @@ struct MirFunction {
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
     bool is_async = false;     // async関数（JSバックエンド用）
+    bool is_always = false;  // always修飾子（SVバックエンド用: always_ff/always_comb）
+    // SVバックエンド: always ブロックの種別
+    enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
     std::vector<LocalDecl> locals;        // ローカル変数（引数も含む）
     std::vector<LocalId> arg_locals;      // 引数に対応するローカルID
@@ -672,28 +649,8 @@ struct MirFunction {
         return nullptr;
     }
 
-    // CFGの構築（predecessorの計算）
-    void build_cfg() {
-        // まずすべてのpredecessorをクリア
-        for (auto& block : basic_blocks) {
-            if (!block)
-                continue;
-            block->predecessors.clear();
-            // terminatorの変更を反映させるためにsuccessorsも更新
-            block->update_successors();
-        }
-
-        // successorからpredecessorを計算
-        for (size_t i = 0; i < basic_blocks.size(); ++i) {
-            if (!basic_blocks[i])
-                continue;
-            for (BlockId succ : basic_blocks[i]->successors) {
-                if (auto* succ_block = get_block(succ)) {
-                    succ_block->predecessors.push_back(i);
-                }
-            }
-        }
-    }
+    // CFGの構築（predecessorの計算、実装は nodes.cpp）
+    void build_cfg();
 };
 
 // ============================================================
@@ -703,7 +660,9 @@ struct MirFunction {
 struct MirStructField {
     std::string name;
     hir::TypePtr type;
-    uint32_t offset;  // バイトオフセット（将来の最適化用）
+    uint32_t offset;                      // バイトオフセット（将来の最適化用）
+    std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
+    std::string default_value_str;        // デフォルト値の文字列表現（SV用）
 };
 
 struct MirStruct {
@@ -715,6 +674,7 @@ struct MirStruct {
     uint32_t size;   // 構造体全体のサイズ
     uint32_t align;  // アライメント要求
     bool is_css = false;
+    bool is_extern = false;  // extern struct（外部HWモジュール）
 
     // インターフェース実装情報
     std::vector<std::string> implemented_interfaces;
@@ -751,48 +711,8 @@ struct MirEnum {
         return false;
     }
 
-    // 最大ペイロードサイズを計算（Tagged Union用）
-    uint32_t max_payload_size() const {
-        uint32_t maxSize = 0;
-        for (const auto& member : members) {
-            uint32_t memberSize = 0;
-            for (const auto& [name, type] : member.fields) {
-                if (!type)
-                    continue;
-                switch (type->kind) {
-                    case hir::TypeKind::Bool:
-                    case hir::TypeKind::Char:
-                    case hir::TypeKind::Tiny:
-                    case hir::TypeKind::UTiny:
-                        memberSize += 1;
-                        break;
-                    case hir::TypeKind::Short:
-                    case hir::TypeKind::UShort:
-                        memberSize += 2;
-                        break;
-                    case hir::TypeKind::Int:
-                    case hir::TypeKind::UInt:
-                    case hir::TypeKind::Float:
-                        memberSize += 4;
-                        break;
-                    case hir::TypeKind::Long:
-                    case hir::TypeKind::ULong:
-                    case hir::TypeKind::Double:
-                    case hir::TypeKind::Pointer:
-                    case hir::TypeKind::String:
-                        memberSize += 8;
-                        break;
-                    default:
-                        memberSize += 8;  // デフォルトはポインタサイズ
-                        break;
-                }
-            }
-            if (memberSize > maxSize) {
-                maxSize = memberSize;
-            }
-        }
-        return maxSize;
-    }
+    // 最大ペイロードサイズを計算（Tagged Union用、実装は nodes.cpp）
+    uint32_t max_payload_size() const;
 };
 
 using MirEnumPtr = std::unique_ptr<MirEnum>;
@@ -880,78 +800,57 @@ struct MirGlobalVar {
     std::string name;
     hir::TypePtr type;
     std::unique_ptr<MirConstant> init_value;  // 初期値（nullptrならゼロ初期化）
+    const hir::HirExpr* init_expr =
+        nullptr;  // 非定数初期化式（assign文用、SVバックエンド等で使用）
     bool is_const = false;
+    bool is_assign = false;  // SV assign文（連続代入）
     bool is_export = false;
     std::vector<std::string> attributes;  // "input", "output" 等（SV用）
+    // extern struct インスタンスのフィールド初期化値
+    // key: フィールド名, value: 初期化値の定数
+    std::vector<std::pair<std::string, MirConstant>> struct_field_inits;
 };
 
 using MirGlobalVarPtr = std::unique_ptr<MirGlobalVar>;
 
+// ============================================================
+// SV initial ブロック
+// ============================================================
+struct MirInitialBlock {
+    std::vector<BasicBlockPtr> blocks;
+    std::vector<std::string> attributes;
+    // HIR文のリスト（SVコードジェネレータで使用）
+    std::vector<const hir::HirStmt*> hir_stmts;
+};
+
+using MirInitialBlockPtr = std::unique_ptr<MirInitialBlock>;
+
 struct MirProgram {
     std::vector<MirFunctionPtr> functions;
-    std::vector<MirStructPtr> structs;         // 構造体定義
-    std::vector<MirEnumPtr> enums;             // enum定義（Tagged Union含む）
-    std::vector<MirInterfacePtr> interfaces;   // インターフェース定義
-    std::vector<VTablePtr> vtables;            // vtable（動的ディスパッチ用）
-    std::vector<MirModulePtr> modules;         // モジュール
-    std::vector<MirImportPtr> imports;         // インポート
-    std::vector<MirGlobalVarPtr> global_vars;  // グローバル変数
+    std::vector<MirStructPtr> structs;               // 構造体定義
+    std::vector<MirEnumPtr> enums;                   // enum定義（Tagged Union含む）
+    std::vector<MirInterfacePtr> interfaces;         // インターフェース定義
+    std::vector<VTablePtr> vtables;                  // vtable（動的ディスパッチ用）
+    std::vector<MirModulePtr> modules;               // モジュール
+    std::vector<MirImportPtr> imports;               // インポート
+    std::vector<MirGlobalVarPtr> global_vars;        // グローバル変数
+    std::vector<MirInitialBlockPtr> initial_blocks;  // SV initial ブロック
     std::string filename;
 
     // typedef定義マップ（名前→解決済み型）
     // LLVM backendでTypeAlias/Struct名の透過的解決に使用
     std::unordered_map<std::string, hir::TypePtr> typedef_defs;
 
+    // 名前検索系ヘルパー（実装は nodes.cpp）
     // 関数を名前で検索
-    const MirFunction* find_function(const std::string& name) const {
-        for (const auto& func : functions) {
-            if (func && func->name == name) {
-                return func.get();
-            }
-        }
-        return nullptr;
-    }
-
+    const MirFunction* find_function(const std::string& name) const;
     // モジュール修飾名で関数を検索（例: "math::add"）
-    const MirFunction* find_function_qualified(const std::string& qualified_name) const {
-        // モジュール修飾名を分割
-        size_t pos = qualified_name.find("::");
-        if (pos != std::string::npos) {
-            std::string module = qualified_name.substr(0, pos);
-            std::string func_name = qualified_name.substr(pos + 2);
-
-            for (const auto& func : functions) {
-                if (func && func->name == func_name && func->module_path == module) {
-                    return func.get();
-                }
-            }
-        } else {
-            // 修飾なしの場合は通常の検索
-            return find_function(qualified_name);
-        }
-        return nullptr;
-    }
-
+    const MirFunction* find_function_qualified(const std::string& qualified_name) const;
     // 構造体を名前で検索
-    const MirStruct* find_struct(const std::string& name) const {
-        for (const auto& st : structs) {
-            if (st && st->name == name) {
-                return st.get();
-            }
-        }
-        return nullptr;
-    }
-
+    const MirStruct* find_struct(const std::string& name) const;
     // vtableを検索
     const VTable* find_vtable(const std::string& type_name,
-                              const std::string& interface_name) const {
-        for (const auto& vt : vtables) {
-            if (vt && vt->type_name == type_name && vt->interface_name == interface_name) {
-                return vt.get();
-            }
-        }
-        return nullptr;
-    }
+                              const std::string& interface_name) const;
 };
 
 }  // namespace cm::mir

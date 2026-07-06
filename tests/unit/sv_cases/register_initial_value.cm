@@ -1,0 +1,9 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+uint counter = 42;
+
+void tick(posedge clk) {
+    out = counter;
+    counter = counter + 1;
+}

@@ -1,0 +1,28 @@
+// ジェネリック構造体のメソッド呼び出し（補間内）とポインタ回帰テスト。
+// 旧: 補間内メソッド呼び出しが型引数なしの名前（Krate__get）で
+// マングリングされ未定義シンボル参照になっていた。引数付き
+// {b.get(0)} は未対応でゴミ値が表示されていた
+import std::io::println;
+
+struct Krate<T> { T val; }
+
+impl Krate<T> {
+    T get() { return self.val; }
+    T pick(int dummy) { return self.val; }
+    int size() { return 1; }
+    void set(T v) { self.val = v; }
+}
+
+int main() {
+    Krate<int> b;
+    b.set(42);
+    println("get: {b.get()}");
+    println("pick: {b.pick(0)}");
+    println("size: {b.size()}");
+
+    // ジェネリック構造体へのポインタ
+    Krate<int>* p = &b;
+    (*p).val = 100;
+    println("ptr write: {b.val} {b.get()}");
+    return 0;
+}

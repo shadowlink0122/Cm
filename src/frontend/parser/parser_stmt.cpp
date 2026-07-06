@@ -424,6 +424,7 @@ bool Parser::is_type_start() {
         case TokenKind::KwNegedge:
         case TokenKind::KwWire:
         case TokenKind::KwReg:
+        case TokenKind::KwBit:
             return true;
         case TokenKind::Star:
             // *type name の形式かチェック（*p = x のような式と区別）

@@ -413,3 +413,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Type System](index.html) | [Contents](index.html) | Next: [Types - Enums](enums.html) →

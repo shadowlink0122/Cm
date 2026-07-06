@@ -150,8 +150,13 @@ int bits = 0xF0;
 
 - [extern宣言](extern.html) — C/C++関数の呼び出し
 - [FFI](ffi.html) — use libc / 構造体の受け渡し
-- [プリプロセッサ](../compiler/preprocessor.html) — `#ifdef`/`#ifndef`/`#end`
+- [プリプロセッサ](../compiler/common/preprocessor.html) — `#ifdef`/`#ifndef`/`#end`
 
 ---
 
 **最終更新:** 2026-02-08
+
+---
+
+<!-- nav -->
+← 前: [extern宣言 — 外部関数の呼び出し](extern.html) ｜ [目次](index.html) ｜ 次: [定数と定数式 (const)](const.html) →

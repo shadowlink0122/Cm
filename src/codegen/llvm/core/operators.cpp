@@ -3,6 +3,8 @@
 
 #include "mir_to_llvm.hpp"
 
+#include <functional>
+
 namespace cm::codegen::llvm_backend {
 
 // 符号なし型かどうかを判定するヘルパー
@@ -20,6 +22,32 @@ static bool isUnsignedType(const hir::TypePtr& type) {
         default:
             return false;
     }
+}
+
+// 整数ゼロ除算の実行時チェックを挿入する。
+// 除数が定数0なら無条件で、非定数なら分岐でトラップする
+// （従来はLLVMのsdiv/udivの未定義動作でゴミ値が返っていた）
+static void emitDivByZeroCheck(llvm::IRBuilder<>* builder, llvm::LLVMContext& llvm_ctx,
+                               llvm::Value* rhs,
+                               const std::function<void(const std::string&)>& panic) {
+    if (!rhs->getType()->isIntegerTy()) {
+        return;
+    }
+    // 非ゼロ定数はチェック不要
+    if (auto* c = llvm::dyn_cast<llvm::ConstantInt>(rhs)) {
+        if (!c->isZero()) {
+            return;
+        }
+    }
+    auto func = builder->GetInsertBlock()->getParent();
+    auto zero = llvm::ConstantInt::get(rhs->getType(), 0);
+    auto is_zero = builder->CreateICmpEQ(rhs, zero, "divzero.check");
+    auto failBB = llvm::BasicBlock::Create(llvm_ctx, "divzero.fail", func);
+    auto contBB = llvm::BasicBlock::Create(llvm_ctx, "divzero.cont", func);
+    builder->CreateCondBr(is_zero, failBB, contBB);
+    builder->SetInsertPoint(failBB);
+    panic("integer division by zero");
+    builder->SetInsertPoint(contBB);
 }
 
 // 浮動小数点型の型昇格（float/doubleの統一）
@@ -100,7 +128,13 @@ static int64_t getElementSize(const hir::TypePtr& type) {
 
 // 二項演算変換
 llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, llvm::Value* rhs,
-                                        const hir::TypePtr& result_type) {
+                                        const hir::TypePtr& result_type,
+                                        const hir::TypePtr& lhs_type,
+                                        const hir::TypePtr& rhs_type) {
+    // 符号なしセマンティクスの判定:
+    // 比較の result_type は bool になるため、オペランド型も参照する
+    const bool operands_unsigned =
+        isUnsignedType(lhs_type) || isUnsignedType(rhs_type) || isUnsignedType(result_type);
     switch (op) {
         // 算術演算
         case mir::MirBinaryOp::Add: {
@@ -371,6 +405,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                                       : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
             }
+            // ゼロ除算の実行時トラップ
+            emitDivByZeroCheck(builder, ctx.getContext(), rhs,
+                               [this](const std::string& msg) { generatePanic(msg); });
+            // 符号なし型は符号なし除算
+            if (operands_unsigned) {
+                return builder->CreateUDiv(lhs, rhs, "udiv");
+            }
             return builder->CreateSDiv(lhs, rhs, "div");
         }
         case mir::MirBinaryOp::Mod: {
@@ -390,6 +431,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                     rhs = is_unsigned ? builder->CreateZExt(rhs, lhs->getType(), "zext")
                                       : builder->CreateSExt(rhs, lhs->getType(), "sext");
                 }
+            }
+            // ゼロ除算の実行時トラップ
+            emitDivByZeroCheck(builder, ctx.getContext(), rhs,
+                               [this](const std::string& msg) { generatePanic(msg); });
+            // 符号なし型は符号なし剰余
+            if (operands_unsigned) {
+                return builder->CreateURem(lhs, rhs, "umod");
             }
             return builder->CreateSRem(lhs, rhs, "mod");
         }
@@ -480,10 +528,15 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = operands_unsigned ? builder->CreateZExt(lhs, rhs->getType())
+                                            : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = operands_unsigned ? builder->CreateZExt(rhs, lhs->getType())
+                                            : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            if (operands_unsigned) {
+                return builder->CreateICmpULT(lhs, rhs, "ult");
             }
             return builder->CreateICmpSLT(lhs, rhs, "lt");
         }
@@ -496,10 +549,15 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = operands_unsigned ? builder->CreateZExt(lhs, rhs->getType())
+                                            : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = operands_unsigned ? builder->CreateZExt(rhs, lhs->getType())
+                                            : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            if (operands_unsigned) {
+                return builder->CreateICmpULE(lhs, rhs, "ule");
             }
             return builder->CreateICmpSLE(lhs, rhs, "le");
         }
@@ -512,10 +570,15 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = operands_unsigned ? builder->CreateZExt(lhs, rhs->getType())
+                                            : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = operands_unsigned ? builder->CreateZExt(rhs, lhs->getType())
+                                            : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            if (operands_unsigned) {
+                return builder->CreateICmpUGT(lhs, rhs, "ugt");
             }
             return builder->CreateICmpSGT(lhs, rhs, "gt");
         }
@@ -528,10 +591,15 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = operands_unsigned ? builder->CreateZExt(lhs, rhs->getType())
+                                            : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = operands_unsigned ? builder->CreateZExt(rhs, lhs->getType())
+                                            : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            if (operands_unsigned) {
+                return builder->CreateICmpUGE(lhs, rhs, "uge");
             }
             return builder->CreateICmpSGE(lhs, rhs, "ge");
         }
@@ -601,10 +669,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = operands_unsigned ? builder->CreateZExt(lhs, rhs->getType())
+                                            : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = operands_unsigned ? builder->CreateZExt(rhs, lhs->getType())
+                                            : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            // 符号なし型は論理シフト、符号付き型は算術シフト
+            if (operands_unsigned) {
+                return builder->CreateLShr(lhs, rhs, "lshr");
             }
             return builder->CreateAShr(lhs, rhs, "shr");
         }

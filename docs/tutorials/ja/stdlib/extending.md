@@ -211,4 +211,9 @@ C++:  delete (Resource*)handle;
 
 ---
 
-**関連:** [FFI](../../advanced/ffi.html) · [LLVMバックエンド](../../compiler/llvm.html)
+**関連:** [FFI](../advanced/ffi.html) · [LLVMバックエンド](../compiler/native/index.html)
+
+---
+
+<!-- nav -->
+← 前: [std::collections::hashmap - 連想配列](collections/hashmap.html) ｜ [目次](index.html) ｜ 次: [コンパイラ編](../compiler/index.html) →

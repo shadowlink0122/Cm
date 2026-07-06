@@ -54,12 +54,16 @@ static std::filesystem::path get_executable_directory() {
 }
 
 // グローバルインスタンス
-std::unique_ptr<ModuleResolver> g_module_resolver;
+// グローバル可変状態を関数ローカルstaticへ集約（013 §4.3-5）。
+// 初回アクセス時に安全に初期化される（マジックスタティック）
+ModuleResolver& get_module_resolver() {
+    static ModuleResolver instance;
+    return instance;
+}
 
 void initialize_module_resolver() {
-    if (!g_module_resolver) {
-        g_module_resolver = std::make_unique<ModuleResolver>();
-    }
+    // 初回アクセスで初期化される（後方互換のため関数は残置）
+    (void)get_module_resolver();
 }
 
 ModuleResolver::ModuleResolver() {
@@ -249,7 +253,7 @@ std::unique_ptr<hir::HirProgram> ModuleResolver::parse_module_file(
     Lexer lex(source);
     auto tokens = lex.tokenize();
 
-    Parser parser(tokens);
+    Parser parser(tokens, lex.is_sv());
     auto ast = parser.parse();
 
     // HIRに変換

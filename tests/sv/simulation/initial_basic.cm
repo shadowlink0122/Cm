@@ -1,0 +1,19 @@
+//! platform: sv
+//! description: Basic initial block test
+
+#[input] bool clk = false;
+#[input] bool rst = true;
+#[output] uint counter = 0;
+
+// シミュレーション初期化ブロック
+initial {
+    counter = 0;
+}
+
+async void update(posedge clk) {
+    if (rst == false) {
+        counter = 0;
+    } else {
+        counter = counter + 1;
+    }
+}

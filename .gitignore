@@ -1,6 +1,7 @@
 # 実行ファイル
 /cm
 /cm.exe
+/cm-x86
 
 # Build artifacts
 build/
@@ -98,3 +99,4 @@ output.sv
 output_tb.sv
 *.vcd
 *.vvp
+obj_dir/

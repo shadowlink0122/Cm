@@ -1,0 +1,23 @@
+//! platform: sv
+//! test: limit=3 -> count=3
+//! test: limit=10 -> count=5
+
+// break付きwhileループのテスト:
+// ループ内からの脱出（break）がexitブロックへの分岐として正しく出力されること
+
+#[input] posedge clk;
+#[input] uint limit;
+#[output] uint count = 0;
+
+async void run(posedge clk) {
+    uint c = 0;
+    uint i = 0;
+    while (i < 5) {
+        if (c >= limit) {
+            break;
+        }
+        c = c + 1;
+        i = i + 1;
+    }
+    count = c;
+}

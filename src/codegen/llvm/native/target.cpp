@@ -247,7 +247,8 @@ void TargetManager::generateStartupCode(llvm::Module& module) {
     }
 
     auto& ctx = module.getContext();
-    auto& builder = *new llvm::IRBuilder<>(ctx);
+    // IRBuilderはこの関数内でのみ使用するためスタック上に確保する
+    llvm::IRBuilder<> builder(ctx);
 
     auto startType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), false);
     auto startFunc =
@@ -274,8 +275,6 @@ void TargetManager::generateStartupCode(llvm::Module& module) {
     builder.CreateBr(loopBB);
     builder.SetInsertPoint(loopBB);
     builder.CreateBr(loopBB);
-
-    delete &builder;
 }
 
 // データセクション初期化

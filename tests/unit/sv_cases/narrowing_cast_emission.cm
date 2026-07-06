@@ -1,0 +1,6 @@
+#[input] uint a;
+#[output] uint wide = 0;
+
+void calc() {
+    wide = ((a + 300) as utiny) + 1000;
+}

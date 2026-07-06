@@ -172,3 +172,8 @@ int main() {
 ---
 
 **Last Updated:** 2026-02-08
+
+---
+
+<!-- nav -->
+← Prev: [Types - Constraints](constraints.html) | [Contents](index.html) | Next: [Types - Scope and Validity](lifetimes.html) →
