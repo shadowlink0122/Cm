@@ -177,7 +177,6 @@ struct Point with Eq + Ord {
 ---
 
 **Previous:** [with Auto-Implementation](with-keyword.html)  
-**Next:** [Function Pointers](function-pointers.html)
 
 ---
 

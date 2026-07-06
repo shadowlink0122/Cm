@@ -408,7 +408,6 @@ int main() {
 ---
 
 **Previous:** [Functions](../basics/functions.html)  
-**Next:** [Enums](enums.html)
 
 ---
 

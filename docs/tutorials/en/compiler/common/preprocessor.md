@@ -224,7 +224,6 @@ Source Code → ImportPreprocessor → ConditionalPreprocessor → Lexer → Par
 ---
 
 **Previous:** [Wasm](../wasm/index.html)  
-**Next:** [Optimization](optimization.html)
 
 ## Related Topics
 

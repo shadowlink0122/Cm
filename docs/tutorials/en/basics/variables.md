@@ -263,7 +263,6 @@ int main() {
 ---
 
 **Previous:** [Hello, World!](hello-world.html)  
-**Next:** [Operators](operators.html)
 
 ---
 

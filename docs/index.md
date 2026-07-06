@@ -4,6 +4,8 @@ title: ホーム
 nav_order: 1
 ---
 
+[English](en/index.html)
+
 # Cm プログラミング言語
 
 **C++の構文とRustにインスパイアされた機能を併せ持つ、モダンなシステムプログラミング言語**
@@ -29,7 +31,7 @@ nav_order: 1
   - [基本編](tutorials/ja/basics/introduction.html) - 変数、関数、制御構文
   - [型システム編](tutorials/ja/types/structs.html) - 構造体、Enum、インターフェース
   - [高度な機能編](tutorials/ja/advanced/match.html) - ジェネリクス、マクロ、match式
-  - [コンパイラ編](tutorials/ja/compiler/usage.html) - LLVM/JSバックエンド、最適化
+  - [コンパイラ編](tutorials/ja/compiler/index.html) - LLVM/WASM/JS/SVバックエンド、最適化
   - [標準ライブラリ編](tutorials/ja/stdlib/) - HTTP、ネットワーク、スレッド、GPU
 
 - **[クイックスタートガイド](QUICKSTART.html)** - 5分で始めるCm言語
@@ -50,7 +52,7 @@ nav_order: 1
 
 ## 🎯 言語の特徴
 
-### ✅ 言語コア (v0.14.0)
+### ✅ 言語コア
 
 - **C++ライクな構文** - 親しみやすく読みやすい
 - **強力な型システム** - コンパイル時の安全性
@@ -65,7 +67,8 @@ nav_order: 1
 
 - **LLVM Native** - ARM64/x86_64 ネイティブコード生成
 - **WASM** - WebAssemblyバックエンド
-- **JavaScript** - Node.js/ブラウザ向けJS生成（通過率77%）
+- **JavaScript** - Node.js/ブラウザ向けJS生成
+- **SystemVerilog** - FPGA向けRTL生成（合成・シミュレーション検証付き）
 
 ### ✅ 標準ライブラリ (Native向け)
 
@@ -128,7 +131,8 @@ ctest --test-dir build
 | HIR/MIR | ✅ 完了 | 80%+ |
 | LLVM Backend | ✅ 完了 | 85%+ |
 | WASM Backend | ✅ 完了 | 80%+ |
-| JS Backend | ✅ 完了 | 77% |
+| JS Backend | ✅ 完了 | 85% |
+| SV Backend | ✅ 完了 | 95%+ |
 | 標準ライブラリ | 🔄 進行中 | 30%+ |
 
 ---
@@ -152,7 +156,7 @@ ctest --test-dir build
 
 ---
 
-**最終更新:** v0.14.0 (2026年2月)
+**最終更新:** v0.15.1 (2026-07-06)
 
 © 2025-2026 Cm Language Project
 

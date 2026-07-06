@@ -212,7 +212,6 @@ always void blink(posedge clk, negedge rst_n) {
 ---
 
 **Previous:** [WASM Backend](../wasm/index.html)  
-**Next:** [Types and Ports](types.html)
 
 ---
 

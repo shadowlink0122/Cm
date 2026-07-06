@@ -188,7 +188,6 @@ int main() {
 ---
 
 **Previous:** [Enums](enums.html)  
-**Next:** [Generics](generics.html)
 
 ---
 

@@ -410,7 +410,6 @@ int main() {
 ---
 
 **Previous:** [Structs](structs.html)  
-**Next:** [typedef](typedef.html)
 ---
 
 **Last Updated:** 2026-02-08
