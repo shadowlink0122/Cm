@@ -80,6 +80,6 @@ impl Circle for Drawable {
 
 ---
 
-**Last Updated:** v0.15.1 (2026-07-06)
+**Last Updated:** v0.16.0 (2026-07-06)
 
 © 2025-2026 Cm Language Project
