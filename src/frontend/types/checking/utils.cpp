@@ -56,6 +56,18 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
 }
 
 bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
+    // ビットベクタと整数の互換（v0.16.0 ビットスライス）:
+    // bit[N] への整数代入・整数文脈での bit[N] 使用を許可する
+    {
+        auto is_bit_vec = [](const ast::TypePtr& t) {
+            return t && t->kind == ast::TypeKind::Array && t->element_type &&
+                   t->element_type->kind == ast::TypeKind::Bit;
+        };
+        if ((is_bit_vec(a) && b && b->is_integer()) || (is_bit_vec(b) && a && a->is_integer())) {
+            return true;
+        }
+    }
+
     if (!a || !b)
         return false;
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)

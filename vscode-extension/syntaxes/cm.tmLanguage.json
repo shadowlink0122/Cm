@@ -585,6 +585,10 @@
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.bitslice.cm",
+          "match": "\\+:"
+        },
+        {
           "name": "keyword.operator.logical.cm",
           "match": "(&&|\\|\\||!(?!=))"
         },

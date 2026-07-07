@@ -1,0 +1,12 @@
+//! platform: sv
+//! test: din=43981, cycles=2 -> hi_out=171, lo_out=205
+
+#[input] posedge clk;
+#[input] bit[16] din;
+#[output] bit[8] hi_out = 0;
+#[output] bit[8] lo_out = 0;
+
+async void split(posedge clk) {
+    hi_out = din[15:8];
+    lo_out = din[7:0];
+}

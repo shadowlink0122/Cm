@@ -123,6 +123,27 @@ utiny ch = TITLE[i] as utiny;
   Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants
   (typed string lengths are being considered in the [v0.16.0 roadmap](../../../../design/v0.16.0/roadmap.html)).
 
+## Bit slices (v0.16.0)
+
+Read and write sub-ranges of `bit[N]` / integer values using SV-style
+descending, inclusive ranges:
+
+```cm
+bit[16] word = 0xABCD;
+bit[8] hi = word[15:8];      // 0xAB (constant range)
+word[11:4] = 0xFF;           // partial assignment (read-modify-write)
+
+uint i = 1;
+bit[4] nib = word[i*4 +: 4]; // variable base + constant width
+```
+
+- Range/width must be **integer literals** (v0.16.0 restriction); the
+  base of `+:` may be any integer expression
+- Desugared to shifts+masks shared by all backends, so execution
+  backends (JIT/native/WASM/JS) produce identical results
+- Max width 64; the result type is `bit[w]` (interchangeable with integers)
+
+
 ---
 
 <!-- nav -->

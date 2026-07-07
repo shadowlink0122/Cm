@@ -5,6 +5,42 @@
 
 namespace cm::hir {
 
+namespace {
+
+// ビットスライス判定: bit[N] / bit / 整数型
+bool is_bits_type(const ast::TypePtr& t) {
+    if (!t) {
+        return false;
+    }
+    if (t->kind == ast::TypeKind::Array && t->element_type &&
+        t->element_type->kind == ast::TypeKind::Bit) {
+        return true;
+    }
+    return t->is_integer() || t->kind == ast::TypeKind::Bit;
+}
+
+// 整数リテラル値の取り出し（checkerで検証済みの前提）
+std::optional<int64_t> slice_lit(const ast::ExprPtr& e) {
+    if (!e) {
+        return std::nullopt;
+    }
+    if (auto* lit = e->as<ast::LiteralExpr>()) {
+        if (auto* iv = std::get_if<int64_t>(&lit->value)) {
+            return *iv;
+        }
+    }
+    return std::nullopt;
+}
+
+// int64リテラルのHIR式を作る
+HirExprPtr make_int_lit(int64_t v, ast::TypePtr t) {
+    auto lit = std::make_unique<HirLiteral>();
+    lit->value = v;
+    return std::make_unique<HirExpr>(std::move(lit), std::move(t));
+}
+
+}  // namespace
+
 // 式の変換
 HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
     debug::hir::log(debug::hir::Id::ExprLower, "", debug::Level::Trace);
@@ -325,6 +361,68 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
     // 代入演算子の場合
     if (binary.op == ast::BinaryOp::Assign) {
         debug::hir::log(debug::hir::Id::AssignLower, "Assignment detected", debug::Level::Debug);
+
+        // ビットスライスへの代入（v0.16.0）:
+        // x[hi:lo] = v → x = (x & ~(mask<<lo)) | ((v & mask) << lo)
+        // （read-modify-write脱糖。対象式は副作用のない左辺値であること）
+        if (auto* sl = binary.left->as<ast::SliceExpr>()) {
+            ast::TypePtr sobj_type = sl->object ? sl->object->type : nullptr;
+            if (is_bits_type(sobj_type) &&
+                (sl->is_part_select || (sl->start && sl->end && !sl->step))) {
+                int64_t width = 0;
+                HirExprPtr shift1;  // mask<<shift 用
+                HirExprPtr shift2;  // (v&mask)<<shift 用
+                if (sl->is_part_select) {
+                    auto w = slice_lit(sl->end);
+                    if (w) {
+                        width = *w;
+                        shift1 = lower_expr(*sl->start);
+                        shift2 = lower_expr(*sl->start);
+                    }
+                } else {
+                    auto hi = slice_lit(sl->start);
+                    auto lo = slice_lit(sl->end);
+                    if (hi && lo && *hi >= *lo) {
+                        width = *hi - *lo + 1;
+                        shift1 = make_int_lit(*lo, ast::make_int());
+                        shift2 = make_int_lit(*lo, ast::make_int());
+                    }
+                }
+                if (width > 0 && shift1 && shift2) {
+                    int64_t mask = (width >= 64) ? -1 : ((int64_t{1} << width) - 1);
+                    auto mk_bin = [&](HirBinaryOp op, HirExprPtr l, HirExprPtr r, ast::TypePtr t) {
+                        auto b = std::make_unique<HirBinary>();
+                        b->op = op;
+                        b->lhs = std::move(l);
+                        b->rhs = std::move(r);
+                        return std::make_unique<HirExpr>(std::move(b), std::move(t));
+                    };
+                    // ~(mask << lo)
+                    auto mask_shifted = mk_bin(HirBinaryOp::Shl, make_int_lit(mask, sobj_type),
+                                               std::move(shift1), sobj_type);
+                    auto un = std::make_unique<HirUnary>();
+                    un->op = HirUnaryOp::BitNot;
+                    un->operand = std::move(mask_shifted);
+                    auto inv_mask = std::make_unique<HirExpr>(std::move(un), sobj_type);
+                    // x & ~(...)
+                    auto cleared = mk_bin(HirBinaryOp::BitAnd, lower_expr(*sl->object),
+                                          std::move(inv_mask), sobj_type);
+                    // (v & mask) << lo
+                    auto v_masked = mk_bin(HirBinaryOp::BitAnd, lower_expr(*binary.right),
+                                           make_int_lit(mask, sobj_type), sobj_type);
+                    auto v_shifted =
+                        mk_bin(HirBinaryOp::Shl, std::move(v_masked), std::move(shift2), sobj_type);
+                    // 合成して代入
+                    auto merged = mk_bin(HirBinaryOp::BitOr, std::move(cleared),
+                                         std::move(v_shifted), sobj_type);
+                    auto assign = std::make_unique<HirBinary>();
+                    assign->op = HirBinaryOp::Assign;
+                    assign->lhs = lower_expr(*sl->object);
+                    assign->rhs = std::move(merged);
+                    return std::make_unique<HirExpr>(std::move(assign), sobj_type);
+                }
+            }
+        }
 
         auto lhs_type = binary.left->type;
         auto rhs_type = binary.right->type;
@@ -826,6 +924,49 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
 
     auto obj_hir = lower_expr(*slice.object);
     TypePtr obj_type = obj_hir->type;
+    if (!obj_type && slice.object) {
+        obj_type = slice.object->type;
+    }
+
+    // ビットスライスの読み取り（v0.16.0）:
+    // x[hi:lo] → (x >> lo) & ((1<<w)-1) / x[base +: w] → (x >> base) & ((1<<w)-1)
+    // 全バックエンド共通のシフト+マスク脱糖（SVへの[hi:lo]直接出力は将来最適化）
+    if (is_bits_type(obj_type) &&
+        (slice.is_part_select || (slice.start && slice.end && !slice.step))) {
+        int64_t width = 0;
+        HirExprPtr shift_amount;
+        if (slice.is_part_select) {
+            auto w = slice_lit(slice.end);
+            if (w) {
+                width = *w;
+                shift_amount = lower_expr(*slice.start);
+            }
+        } else {
+            auto hi = slice_lit(slice.start);
+            auto lo = slice_lit(slice.end);
+            if (hi && lo && *hi >= *lo) {
+                width = *hi - *lo + 1;
+                shift_amount = make_int_lit(*lo, ast::make_int());
+            }
+        }
+        if (width > 0 && shift_amount) {
+            int64_t mask = (width >= 64) ? -1 : ((int64_t{1} << width) - 1);
+            ast::TypePtr result_type =
+                ast::make_array(ast::make_bit(), static_cast<uint32_t>(width));
+            // (obj >> shift)
+            auto shr = std::make_unique<HirBinary>();
+            shr->op = HirBinaryOp::Shr;
+            shr->lhs = std::move(obj_hir);
+            shr->rhs = std::move(shift_amount);
+            auto shr_expr = std::make_unique<HirExpr>(std::move(shr), obj_type);
+            // ... & mask
+            auto band = std::make_unique<HirBinary>();
+            band->op = HirBinaryOp::BitAnd;
+            band->lhs = std::move(shr_expr);
+            band->rhs = make_int_lit(mask, obj_type);
+            return std::make_unique<HirExpr>(std::move(band), result_type);
+        }
+    }
 
     // 文字列スライス
     if (obj_type && obj_type->kind == ast::TypeKind::String) {

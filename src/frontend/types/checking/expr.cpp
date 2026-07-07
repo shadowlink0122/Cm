@@ -629,6 +629,62 @@ ast::TypePtr TypeChecker::infer_index(ast::IndexExpr& idx) {
 ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
     auto obj_type = infer_type(*slice.object);
 
+    // ビットスライス（v0.16.0）: オブジェクトが bit[N] または整数型のとき、
+    // x[hi:lo]（定数範囲・SVと同じ降順・両端含む）と x[base +: width] を
+    // ビット選択として解釈する。結果型は bit[w]
+    {
+        bool obj_is_bits =
+            obj_type && ((obj_type->kind == ast::TypeKind::Array && obj_type->element_type &&
+                          obj_type->element_type->kind == ast::TypeKind::Bit) ||
+                         obj_type->is_integer() || obj_type->kind == ast::TypeKind::Bit);
+        auto lit_value = [](const ast::ExprPtr& e) -> std::optional<int64_t> {
+            if (!e) {
+                return std::nullopt;
+            }
+            if (auto* lit = e->as<ast::LiteralExpr>()) {
+                if (auto* iv = std::get_if<int64_t>(&lit->value)) {
+                    return *iv;
+                }
+            }
+            return std::nullopt;
+        };
+        if (obj_is_bits && slice.is_part_select) {
+            // base は任意の整数式、width は正の整数リテラル
+            auto base_type = infer_type(*slice.start);
+            if (!base_type || !base_type->is_integer()) {
+                error(current_span_, "パートセレクトの基点は整数型である必要があります");
+            }
+            auto w = lit_value(slice.end);
+            if (!w || *w <= 0 || *w > 64) {
+                error(current_span_,
+                      "パートセレクトの幅は1〜64の整数リテラルで指定してください"
+                      "（v0.16.0時点の制限）");
+                return ast::make_error();
+            }
+            return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*w));
+        }
+        if (obj_is_bits && slice.start && slice.end && !slice.step) {
+            auto hi = lit_value(slice.start);
+            auto lo = lit_value(slice.end);
+            if (!hi || !lo) {
+                error(current_span_,
+                      "ビットスライスの範囲は整数リテラルで指定してください"
+                      "（v0.16.0時点の制限。例: x[7:4]）");
+                return ast::make_error();
+            }
+            if (*lo < 0 || *hi < *lo || *hi - *lo + 1 > 64) {
+                error(current_span_, "ビットスライス範囲が不正です（hi >= lo >= 0、幅は64以下）");
+                return ast::make_error();
+            }
+            if (obj_type->kind == ast::TypeKind::Array && obj_type->array_size &&
+                *hi >= static_cast<int64_t>(*obj_type->array_size)) {
+                error(current_span_, "ビットスライスの上位ビットが型の幅を超えています");
+                return ast::make_error();
+            }
+            return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*hi - *lo + 1));
+        }
+    }
+
     if (slice.start) {
         auto start_type = infer_type(*slice.start);
         if (!start_type || !start_type->is_integer()) {

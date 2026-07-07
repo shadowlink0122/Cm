@@ -477,6 +477,17 @@ ast::ExprPtr Parser::parse_postfix() {
                 start_expr = parse_expr();
             }
 
+            // インデックスドパートセレクト: x[base +: width]（ビットスライス）
+            if (start_expr && consume_if(TokenKind::PlusColon)) {
+                auto width_expr = parse_expr();
+                expect(TokenKind::RBracket);
+                auto slice = std::make_unique<ast::SliceExpr>(
+                    std::move(expr), std::move(start_expr), std::move(width_expr));
+                slice->is_part_select = true;
+                expr = std::make_unique<ast::Expr>(std::move(slice));
+                continue;
+            }
+
             // コロンがあればスライス
             if (consume_if(TokenKind::Colon)) {
                 is_slice = true;

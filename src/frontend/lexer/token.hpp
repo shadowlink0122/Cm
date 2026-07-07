@@ -146,6 +146,7 @@ enum class TokenKind {
     LtLtEq,
     GtGtEq,
     PlusPlus,
+    PlusColon,  // +: （ビットスライスのインデックスドパートセレクト）
     MinusMinus,
     Question,
     Colon,

@@ -612,6 +612,7 @@ Token Lexer::scan_operator(uint32_t start, char c) {
         case '+':
             return match('+')   ? make(TokenKind::PlusPlus)
                    : match('=') ? make(TokenKind::PlusEq)
+                   : match(':') ? make(TokenKind::PlusColon)
                                 : make(TokenKind::Plus);
         case '-':
             return match('>')   ? make(TokenKind::ThinArrow)
