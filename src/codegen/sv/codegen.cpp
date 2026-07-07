@@ -202,6 +202,11 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
         case hir::TypeKind::Array:
             // bit[N] → logic [N-1:0] に変換
             if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
+                // #[sv::parameter] によるサイズ指定は記号のまま出力（bit[WIDTH]）
+                if (!type->size_param_name.empty() &&
+                    sv_param_names_.count(type->size_param_name) > 0) {
+                    return "logic [" + type->size_param_name + "-1:0]";
+                }
                 if (type->array_size && *type->array_size > 1) {
                     return "logic [" + std::to_string(*type->array_size - 1) + ":0]";
                 }
@@ -278,6 +283,10 @@ std::string SVCodeGen::getArraySuffix(const hir::TypePtr& type) const {
         // bit[N] は packed dimension として mapType で処理済みなのでスキップ
         if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
             return "";
+        }
+        // #[sv::parameter] によるサイズ指定は記号のまま出力
+        if (!type->size_param_name.empty() && sv_param_names_.count(type->size_param_name) > 0) {
+            return " [0:" + type->size_param_name + "-1]" + getArraySuffix(type->element_type);
         }
         return " [0:" + std::to_string(*type->array_size - 1) + "]" +
                getArraySuffix(type->element_type);
@@ -356,8 +365,18 @@ void SVCodeGen::emitPortList(const std::vector<SVPort>& ports) {
 }
 
 void SVCodeGen::emitModule(const SVModule& mod) {
-    // module宣言
-    emitIndented("module " + mod.name + " ");
+    // module宣言（#[sv::parameter] があれば #(parameter ...) ヘッダ付き）
+    if (!mod.header_parameters.empty()) {
+        emitLine("module " + mod.name + " #(");
+        increaseIndent();
+        for (size_t i = 0; i < mod.header_parameters.size(); ++i) {
+            emitLine(mod.header_parameters[i] + (i + 1 < mod.header_parameters.size() ? "," : ""));
+        }
+        decreaseIndent();
+        emitIndented(") ");
+    } else {
+        emitIndented("module " + mod.name + " ");
+    }
 
     // ポートリスト
     emitPortList(mod.ports);
@@ -1581,6 +1600,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 break;
             }
         }
+        // モジュールパラメータ（#[sv::parameter]）とも衝突チェック
+        if (!is_param_var && sv_param_names_.count(name) > 0) {
+            is_param_var = true;
+        }
         if (is_param_var)
             continue;
         // 既に登録済みの宣言もスキップ（変数名の部分一致で検出）
@@ -2599,6 +2622,24 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 // === MIR解析: プログラム全体 ===
 
 void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
+    // #[sv::parameter] 付きconstを事前収集（ポート幅の記号出力で参照）
+    sv_param_names_.clear();
+    for (const auto& gv : program.global_vars) {
+        if (!gv || !gv->is_const) {
+            continue;
+        }
+        for (const auto& attr : gv->attributes) {
+            if (attr == "sv::parameter" || attr == "verilog::parameter") {
+                std::string pname = gv->name;
+                auto ns = pname.rfind("::");
+                if (ns != std::string::npos) {
+                    pname = pname.substr(ns + 2);
+                }
+                sv_param_names_.insert(pname);
+            }
+        }
+    }
+
     global_string_lengths_.clear();
     for (const auto& gv : program.global_vars) {
         if (gv && gv->is_const && gv->type && gv->type->kind == hir::TypeKind::String) {
@@ -2765,22 +2806,24 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                         }
 
                         if (is_sv_param) {
-                            // デフォルト値: フィールドの default_value_str → struct_field_inits →
-                            // "0"
+                            // 値の優先順位: インスタンスのstructリテラル（上書き）→
+                            // フィールドのデフォルト値 → "0"
                             std::string val = "0";
-                            if (!field.default_value_str.empty()) {
-                                val = field.default_value_str;
-                            } else {
-                                for (const auto& [fname, fconst] : gv->struct_field_inits) {
-                                    if (fname == field.name) {
-                                        if (auto* ival = std::get_if<int64_t>(&fconst.value)) {
-                                            val = std::to_string(*ival);
-                                        } else if (auto* bval = std::get_if<bool>(&fconst.value)) {
-                                            val = *bval ? "1" : "0";
-                                        }
-                                        break;
+                            bool overridden = false;
+                            for (const auto& [fname, fconst] : gv->struct_field_inits) {
+                                if (fname == field.name) {
+                                    if (auto* ival = std::get_if<int64_t>(&fconst.value)) {
+                                        val = std::to_string(*ival);
+                                        overridden = true;
+                                    } else if (auto* bval = std::get_if<bool>(&fconst.value)) {
+                                        val = *bval ? "1" : "0";
+                                        overridden = true;
                                     }
+                                    break;
                                 }
+                            }
+                            if (!overridden && !field.default_value_str.empty()) {
+                                val = field.default_value_str;
                             }
                             params.push_back("." + field.name + "(" + val + ")");
                         } else if (is_port) {
@@ -2880,6 +2923,29 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             } else {
                 type_str = mapType(gv->type);
             }
+            // #[sv::parameter]: localparamではなくモジュールパラメータとして出力
+            bool is_module_param = false;
+            for (const auto& attr : gv->attributes) {
+                if (attr == "sv::parameter" || attr == "verilog::parameter") {
+                    is_module_param = true;
+                }
+            }
+            if (is_module_param) {
+                std::string pdecl = "parameter " + param_name;
+                if (gv->init_value) {
+                    // パラメータ既定値は上書き可能にするためサイズなしで出力
+                    if (auto* iv = std::get_if<int64_t>(&gv->init_value->value)) {
+                        pdecl += " = " + std::to_string(*iv);
+                    } else {
+                        pdecl += " = " + emitConstant(*gv->init_value, gv->type);
+                    }
+                } else if (gv->init_expr) {
+                    pdecl += " = " + emitHirExpr(*gv->init_expr);
+                }
+                default_mod.header_parameters.push_back(pdecl);
+                continue;
+            }
+
             std::string localparam_decl =
                 "localparam " + type_str + " " + param_name + getArraySuffix(gv->type);
             if (gv->init_value) {
@@ -3434,6 +3500,20 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     ss << "`timescale 1ns / 1ps\n\n";
 
     ss << "module " << mod.name << "_tb;\n\n";
+
+    // モジュールパラメータをTB側にlocalparamとして写す
+    // （信号宣言の [WIDTH-1:0] などがTB内でも解決できるように）
+    for (const auto& hp : mod.header_parameters) {
+        std::string lp = hp;
+        const std::string pfx = "parameter ";
+        if (lp.rfind(pfx, 0) == 0) {
+            lp = "localparam " + lp.substr(pfx.size());
+        }
+        ss << "    " << lp << ";\n";
+    }
+    if (!mod.header_parameters.empty()) {
+        ss << "\n";
+    }
 
     // ポートに対応する信号宣言
     for (const auto& port : mod.ports) {

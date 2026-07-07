@@ -83,6 +83,45 @@ endmodule
 
 回帰テスト: `tests/sv/hierarchy/hier_top`
 
+## モジュールパラメータ（#[sv::parameter]・v0.16.0）
+
+サブモジュール側で `#[sv::parameter]` を付けた const は
+`module #(parameter ...)` として出力され、ポート・内部信号の幅も
+記号のまま（`[WIDTH-1:0]`）保たれます:
+
+```cm
+// shifter.cm
+#[sv::parameter] const uint WIDTH = 8;
+
+#[input] posedge clk;
+#[input] bit[WIDTH] din;
+#[output] bit[WIDTH] dout = 0;
+```
+
+```systemverilog
+module shifter #(
+    parameter WIDTH = 8
+) (
+    input  logic clk,
+    input  logic [WIDTH-1:0] din,
+    output logic [WIDTH-1:0] dout
+);
+```
+
+階層インスタンス化では、structリテラルのフィールドとして
+パラメータを上書きできます（省略時はデフォルト値）:
+
+```cm
+import ./shifter;
+
+shifter sh0 = shifter { WIDTH: 16, clk: clk, din: data_in, dout: wide_out };
+// → shifter #(.WIDTH(16)) sh0 (.clk(clk), ...);
+```
+
+> パラメータに依存する定数ループ展開や、パラメータ幅のメモリ配列
+> （`bit[WIDTH][DEPTH]`）は未対応です（v0.16.0ロードマップ A5/A6）。
+
+
 ---
 
 <!-- nav -->

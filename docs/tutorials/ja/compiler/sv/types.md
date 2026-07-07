@@ -126,8 +126,9 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
 > **注意:** `const` は常に `localparam` にマッピングされます。
-> `parameter` は生成されません（モジュール自体のパラメータ化はv0.16.0で対応予定。
-> [v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html) 参照）。
+> モジュールパラメータは `#[sv::parameter] const` で宣言します
+> （v0.16.0で対応。[モジュール階層](hierarchy.html)参照）。
+> 通常の `const` は従来どおり `localparam` になります。
 
 ---
 

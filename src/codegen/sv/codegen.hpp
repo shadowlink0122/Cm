@@ -42,7 +42,8 @@ struct SVPort {
 struct SVModule {
     std::string name;
     std::vector<SVPort> ports;
-    std::vector<std::string> parameters;           // parameter宣言
+    std::vector<std::string> parameters;           // localparam宣言
+    std::vector<std::string> header_parameters;    // module #(parameter ...) 宣言
     std::vector<std::string> type_declarations;    // typedef enum/struct packed 宣言
     std::vector<std::string> always_ff_blocks;     // always_ff ブロック
     std::vector<std::string> always_comb_blocks;   // always_comb ブロック
@@ -69,6 +70,8 @@ class SVCodeGen : public BufferedCodeGenerator {
    private:
     SVCodeGenOptions options_;
     std::string generated_code_;
+    // #[sv::parameter] 付きconstの名前（幅の記号出力用）
+    std::set<std::string> sv_param_names_;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
 

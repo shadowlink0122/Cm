@@ -3,6 +3,16 @@
 優先度: 1（v0.16.0の中核）
 関連: [roadmap.md](roadmap.html) A1/A2
 
+> **✅ 2026-07-07 実装済み（属性構文に洗練）**: 宣言はモジュールレベル
+> `<const ...>` 案ではなく、既存属性系に統一した
+> `#[sv::parameter] const uint WIDTH = 8;` とした（言語コア変更なし）。
+> P1（#(parameter)ヘッダ）・P2（[WIDTH-1:0]記号幅。checkerが
+> size_param_nameを解決後も保持するよう変更）・P3（階層でのextern struct
+> への写しとstructリテラル上書き→ #(.WIDTH(16))）まで完了。
+> P4（ベンダプリミティブ実例）とパラメータ幅メモリ（bit[W][D]）・
+> パラメータ依存ループ展開は未対応（ロードマップA5/A6扱い）。
+> 検証: sv/hierarchy/param_top（シミュレーションで幅16の実効を確認）。
+
 ## 目標
 
 パラメタライズドIPをCmで記述し、`#(parameter WIDTH = 8)` 付きSVモジュールとして

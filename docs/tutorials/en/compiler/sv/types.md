@@ -127,7 +127,7 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 
 > **Note:** `const` always maps to `localparam`.
 > `parameter` is never generated (parameterizing the module itself is not yet supported;
-> module parameterization is planned for v0.16.0; see the [v0.16.0 roadmap](../../../../design/v0.16.0/roadmap.html)).
+> module parameters are declared with `#[sv::parameter] const` (since v0.16.0; see [Module hierarchy](hierarchy.html))).
 
 ---
 

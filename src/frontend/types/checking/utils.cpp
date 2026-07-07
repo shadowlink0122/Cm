@@ -759,7 +759,9 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
             int64_t size = *sym->const_int_value;
             if (size > 0 && size <= INT32_MAX) {
                 type->array_size = static_cast<uint32_t>(size);
-                type->size_param_name.clear();  // 解決済みなのでクリア
+                // 注: size_param_name は解決後も保持する。
+                // SVバックエンドが #[sv::parameter] の幅を記号のまま
+                // （[WIDTH-1:0]）出力するために使用する（v0.16.0 設計01）
 
                 debug::tc::log(debug::tc::Id::TypeInfer,
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),

@@ -67,6 +67,33 @@ instance in `top`.
 
 Regression test: `tests/sv/hierarchy/hier_top`
 
+## Module parameters (#[sv::parameter], v0.16.0)
+
+A const marked `#[sv::parameter]` in the submodule becomes a
+`module #(parameter ...)`, and port/internal widths stay symbolic
+(`[WIDTH-1:0]`):
+
+```cm
+// shifter.cm
+#[sv::parameter] const uint WIDTH = 8;
+
+#[input] posedge clk;
+#[input] bit[WIDTH] din;
+#[output] bit[WIDTH] dout = 0;
+```
+
+When instantiating through the hierarchy, override parameters as
+struct-literal fields (defaults apply when omitted):
+
+```cm
+shifter sh0 = shifter { WIDTH: 16, clk: clk, din: data_in, dout: wide_out };
+// → shifter #(.WIDTH(16)) sh0 (...);
+```
+
+> Parameter-dependent constant-loop unrolling and parameter-width
+> memories (`bit[WIDTH][DEPTH]`) are not yet supported (roadmap A5/A6).
+
+
 ---
 
 <!-- nav -->

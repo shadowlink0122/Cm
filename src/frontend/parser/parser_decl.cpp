@@ -334,11 +334,12 @@ bool Parser::is_global_var_start() {
 
     advance();
 
-    // 配列サフィックス [N] をスキップ（bit[4], utiny[1024] 等）
+    // 配列サフィックス [N] をスキップ（bit[4], utiny[1024], bit[WIDTH] 等。
+    // サイズはリテラルまたはconst/パラメータ参照の識別子）
     while (!is_at_end() && check(TokenKind::LBracket)) {
         advance();  // [
-        if (!is_at_end() && check(TokenKind::IntLiteral)) {
-            advance();  // N
+        if (!is_at_end() && (check(TokenKind::IntLiteral) || check(TokenKind::Ident))) {
+            advance();  // N or NAME
         }
         if (!is_at_end() && check(TokenKind::RBracket)) {
             advance();  // ]

@@ -41,7 +41,7 @@ class SVCodegenTest : public ::testing::Test {
     // Cmソース → 生成SV文字列
     std::string compile_to_sv(const std::string& code, bool emit_memfile = false,
                               bool unroll_loops = false, bool strict_lint = false) {
-        Lexer lex(code);
+        Lexer lex(code, LexerPlatform::SV);
         std::vector<Token> tokens = lex.tokenize();
         Parser p(tokens);
         auto ast = p.parse();
@@ -298,6 +298,18 @@ TEST_F(SVCodegenTest, LintOffReduction) {
 
     std::string strict = compile_to_sv(code, false, false, /*strict_lint=*/true);
     expect_not_contains(strict, "lint_off");
+}
+
+// #[sv::parameter]: module #(parameter) ヘッダと記号幅の出力
+TEST_F(SVCodegenTest, ModuleParameterEmission) {
+    const std::string code = load_case("module_parameter");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "module sv_codegen_test_out #(");
+    expect_contains(sv, "parameter WIDTH = 8");
+    expect_contains(sv, "input logic [WIDTH-1:0] din");
+    expect_contains(sv, "output logic [WIDTH-1:0] dout");
+    // localparamとしては出力されない
+    expect_not_contains(sv, "localparam");
 }
 
 // #[sv::tri]: トライステート駆動（inout tri + assign 'z）
