@@ -643,7 +643,7 @@
         },
         {
           "name": "constant.numeric.binary.cm",
-          "match": "\\b0[bB][01]+\\b"
+          "match": "\\b0[bB][01?]+\\b"
         },
         {
           "name": "constant.numeric.octal.cm",

@@ -1479,6 +1479,26 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
 
 // matchパターン要素の解析（単一パターン）
 std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
+    // don't careビット付き2進リテラル（0b1?00）→ マスク付きパターン
+    if (check(TokenKind::MaskedBinLiteral)) {
+        std::string bits(current().get_string());
+        advance();
+        int64_t value = 0;
+        int64_t mask = 0;
+        for (char c : bits) {
+            value <<= 1;
+            mask <<= 1;
+            if (c == '1') {
+                value |= 1;
+                mask |= 1;
+            } else if (c == '0') {
+                mask |= 1;
+            }
+            // '?' は value=0, mask=0（don't care）
+        }
+        return ast::MatchPattern::make_masked(value, mask);
+    }
+
     uint32_t start_pos = current().start;
 
     // ワイルドカード (_)

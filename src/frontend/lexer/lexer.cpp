@@ -303,13 +303,21 @@ Token Lexer::scan_number(uint32_t start) {
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
-    // 2進数チェック
+    // 2進数チェック（'?' はdon't careビット。matchパターン専用のマスク付きリテラル）
     if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
         advance();
-        while (!is_at_end() && (peek() == '0' || peek() == '1')) {
+        bool has_dontcare = false;
+        while (!is_at_end() && (peek() == '0' || peek() == '1' || peek() == '?')) {
+            if (peek() == '?') {
+                has_dontcare = true;
+            }
             advance();
         }
         std::string text(source_.substr(start + 2, pos_ - start - 2));
+        if (has_dontcare) {
+            // ビット列テキストをそのまま保持し、パーサ側で値/マスクに変換する
+            return Token(TokenKind::MaskedBinLiteral, start, pos_, text);
+        }
         uint64_t uval = std::stoull(text, nullptr, 2);
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);

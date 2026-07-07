@@ -346,7 +346,10 @@ static MirOperandPtr lower_interp_call_arg(LoweringContext& ctx, const std::stri
          (arg[0] == '-' && arg.size() > 1 && std::isdigit(static_cast<unsigned char>(arg[1]))))) {
         try {
             int64_t value;
-            if (arg[0] == '-') {
+            // 0b/0B 2進リテラルはstoullのbase=0が解釈しないため手動対応
+            if (arg.size() > 2 && arg[0] == '0' && (arg[1] == 'b' || arg[1] == 'B')) {
+                value = static_cast<int64_t>(std::stoull(arg.substr(2), nullptr, 2));
+            } else if (arg[0] == '-') {
                 value = std::stoll(arg, nullptr, 0);
             } else {
                 value = static_cast<int64_t>(std::stoull(arg, nullptr, 0));

@@ -1,0 +1,20 @@
+import std::io::println;
+
+// 4bit命令デコーダ（don't careビットのデモ）
+uint decode(uint op) {
+    match (op) {
+        0b1?00 => { return 1; }  // 1x00 → LOAD系
+        0b0?1? => { return 2; }  // 0x1x → ALU系
+        0b0000 => { return 3; }  // NOP
+        _ => { return 0; }
+    }
+    return 0;
+}
+
+int main() {
+    println("{decode(0b1000)} {decode(0b1100)}");  // LOAD: 1 1
+    println("{decode(0b0010)} {decode(0b0111)}");  // ALU: 2 2
+    println("{decode(0b0000)}");                   // NOP: 3
+    println("{decode(0b1111)}");                   // その他: 0
+    return 0;
+}

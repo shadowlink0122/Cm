@@ -2205,7 +2205,9 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     merge = findMergeBlock(func, sd.targets[0].second, sd.targets[1].second);
                 }
 
-                ss << indent() << "case (" << cond << ")\n";
+                // matchは網羅性検査済み・switchはdefault生成があるため、
+                // シミュレーション時の重複ヒット検出が得られる unique case を出力する
+                ss << indent() << "unique case (" << cond << ")\n";
                 increaseIndent();
 
                 // 各ターゲットのケース（同じ遷移先ブロックごとに値をカンマ区切りでグループ化）

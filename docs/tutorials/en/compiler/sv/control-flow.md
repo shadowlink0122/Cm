@@ -159,6 +159,24 @@ if ((r_qm & 256) == 0) { ... }
 // → if (((r_qm & 32'd256) == 32'd0))
 ```
 
+## Don't-care bit matching (v0.16.0)
+
+`?` in a binary literal means "don't compare this bit" — ideal for
+instruction decoders:
+
+```cm
+match (op) {
+    0b1?00 => { kind = 1; }   // matches 1x00 (bit2 ignored)
+    0b0?1? => { kind = 2; }
+    _ => { kind = 0; }
+}
+```
+
+- Desugared to `(op & mask) == value` if-else chains, identical on all backends
+- `?` literals are match-pattern only (not usable in expressions)
+- Plain match/switch now emits `unique case` in SV, enabling duplicate-hit detection in simulation
+
+
 ---
 
 <!-- nav -->

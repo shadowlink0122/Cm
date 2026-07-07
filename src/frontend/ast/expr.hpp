@@ -395,7 +395,8 @@ enum class MatchPatternKind {
     EnumVariant,             // enum値 (Option::Some, Color::Red)
     EnumVariantWithBinding,  // enum値 + バインディング (Option::Some(value))
     Range,                   // 範囲パターン (1...10)
-    Or                       // ORパターン (1 | 2 | 3)
+    Or,                      // ORパターン (1 | 2 | 3)
+    Masked,  // don't careビット付きリテラル（0b1?00。matchパターン専用）
 };
 
 struct MatchPattern {
@@ -406,6 +407,8 @@ struct MatchPattern {
     std::string binding_name;  // EnumVariantWithBinding用（束縛変数名）
     ExprPtr range_start;       // Range用（開始値）
     ExprPtr range_end;         // Range用（終了値）
+    int64_t masked_value = 0;  // Masked用: 比較値（?は0）
+    int64_t masked_mask = 0;   // Masked用: 有効ビットマスク（?は0）
     std::vector<std::unique_ptr<MatchPattern>> or_patterns;  // Or用
 
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
@@ -419,6 +422,15 @@ struct MatchPattern {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::Variable;
         p->var_name = std::move(name);
+        return p;
+    }
+
+    // don't careビット付きリテラル（0b1?00）
+    static std::unique_ptr<MatchPattern> make_masked(int64_t value, int64_t mask) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Masked;
+        p->masked_value = value;
+        p->masked_mask = mask;
         return p;
     }
 

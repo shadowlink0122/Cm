@@ -2327,6 +2327,21 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
         }
 
+        case ast::MatchPatternKind::Masked: {
+            // (scrutinee & mask) == value
+            auto band = std::make_unique<HirBinary>();
+            band->op = HirBinaryOp::BitAnd;
+            band->lhs = std::move(scrutinee_copy);
+            band->rhs = make_int_lit(pattern.masked_mask, scrutinee->type);
+            auto masked = std::make_unique<HirExpr>(std::move(band), scrutinee->type);
+            auto cond = std::make_unique<HirBinary>();
+            cond->op = HirBinaryOp::Eq;
+            cond->lhs = std::move(masked);
+            cond->rhs = make_int_lit(pattern.masked_value, scrutinee->type);
+            return std::make_unique<HirExpr>(std::move(cond),
+                                             std::make_shared<ast::Type>(ast::TypeKind::Bool));
+        }
+
         case ast::MatchPatternKind::Range: {
             // 範囲パターン: start <= scrutinee && scrutinee <= end
             auto start_val = lower_expr(*pattern.range_start);
