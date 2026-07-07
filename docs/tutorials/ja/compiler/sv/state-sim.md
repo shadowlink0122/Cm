@@ -202,6 +202,30 @@ end
   `SIM_FAIL_EXPECTED`（assert不成立を期待する失敗系テスト）を書きます
 
 
+### 実回路のテストパターン（-D SIM）
+
+実機ではOSC/PLLから供給されるクロックを、シミュレーション時だけ
+外部注入に切り替えるには `-D` 定義と `#ifdef` を組み合わせます:
+
+```cm
+#ifdef SIM
+#[input] posedge clk;            // シミュレーション: クロック注入
+const uint DEBOUNCE_COUNT = 2;   // タイミング短縮
+#end
+#ifndef SIM
+extern struct OSC { ... }        // 実機: 内蔵オシレータ
+bool clk = false;
+OSC osc_inst;
+const uint DEBOUNCE_COUNT = 525000;
+#end
+```
+
+```bash
+cm compile --target=sv -D SIM design.cm -o design.sv   # テスト用
+cm compile --target=sv design.cm -o design.sv          # 合成用（無影響）
+```
+
+
 ---
 
 <!-- nav -->

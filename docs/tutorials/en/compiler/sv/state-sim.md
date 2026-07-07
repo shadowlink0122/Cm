@@ -179,6 +179,30 @@ void tb() {
   `SIM_FAIL_EXPECTED` (expect a failing assertion) in `.expect`
 
 
+### Testing real circuits (-D SIM)
+
+Combine `-D` defines with `#ifdef` to swap the OSC/PLL clock for an
+injected one only during simulation:
+
+```cm
+#ifdef SIM
+#[input] posedge clk;            // simulation: injected clock
+const uint DEBOUNCE_COUNT = 2;   // shortened timing
+#end
+#ifndef SIM
+extern struct OSC { ... }        // hardware: built-in oscillator
+bool clk = false;
+OSC osc_inst;
+const uint DEBOUNCE_COUNT = 525000;
+#end
+```
+
+```bash
+cm compile --target=sv -D SIM design.cm -o design.sv   # for tests
+cm compile --target=sv design.cm -o design.sv          # for synthesis
+```
+
+
 ---
 
 <!-- nav -->
