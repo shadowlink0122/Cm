@@ -144,6 +144,13 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             debug::hir::log(debug::hir::Id::IdentifierRef, "function reference: " + ident->name,
                             debug::Level::Debug);
         }
+        // 型未設定/エラー型の場合はシード型（補間ミニパイプライン）から補完
+        if ((!type || type->is_error()) && !seeded_var_types_.empty()) {
+            auto sit = seeded_var_types_.find(ident->name);
+            if (sit != seeded_var_types_.end()) {
+                type = sit->second;
+            }
+        }
         return std::make_unique<HirExpr>(std::move(var_ref), type);
     } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
         return lower_binary(*binary, type);
@@ -927,7 +934,6 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
     if (!obj_type && slice.object) {
         obj_type = slice.object->type;
     }
-
     // ビットスライスの読み取り（v0.16.0）:
     // x[hi:lo] → (x >> lo) & ((1<<w)-1) / x[base +: w] → (x >> base) & ((1<<w)-1)
     // 全バックエンド共通のシフト+マスク脱糖（SVへの[hi:lo]直接出力は将来最適化）
@@ -2211,6 +2217,13 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
     switch (pattern.kind) {
         case ast::MatchPatternKind::Literal: {
             auto pattern_value = lower_expr(*pattern.value);
+            // bit[N] スクルティニは比較型をuintへ正規化（ICmp型不一致防止）
+            if (scrutinee_copy && scrutinee_copy->type &&
+                scrutinee_copy->type->kind == ast::TypeKind::Array &&
+                scrutinee_copy->type->element_type &&
+                scrutinee_copy->type->element_type->kind == ast::TypeKind::Bit) {
+                scrutinee_copy->type = ast::make_uint();
+            }
             auto cond = std::make_unique<HirBinary>();
             cond->op = HirBinaryOp::Eq;
             cond->lhs = std::move(scrutinee_copy);
@@ -2328,16 +2341,26 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
         }
 
         case ast::MatchPatternKind::Masked: {
-            // (scrutinee & mask) == value
+            // (scrutinee & mask) == value。
+            // bit[N] スクルティニ（ビットスライス結果等）は比較型をuintへ正規化する
+            // （bit[N]定数がLLVMでiNに、値側がi32になりICmp型不一致になるため）
+            ast::TypePtr cmp_type = scrutinee->type;
+            if (cmp_type && cmp_type->kind == ast::TypeKind::Array && cmp_type->element_type &&
+                cmp_type->element_type->kind == ast::TypeKind::Bit) {
+                cmp_type = ast::make_uint();
+                if (scrutinee_copy) {
+                    scrutinee_copy->type = cmp_type;
+                }
+            }
             auto band = std::make_unique<HirBinary>();
             band->op = HirBinaryOp::BitAnd;
             band->lhs = std::move(scrutinee_copy);
-            band->rhs = make_int_lit(pattern.masked_mask, scrutinee->type);
-            auto masked = std::make_unique<HirExpr>(std::move(band), scrutinee->type);
+            band->rhs = make_int_lit(pattern.masked_mask, cmp_type);
+            auto masked = std::make_unique<HirExpr>(std::move(band), cmp_type);
             auto cond = std::make_unique<HirBinary>();
             cond->op = HirBinaryOp::Eq;
             cond->lhs = std::move(masked);
-            cond->rhs = make_int_lit(pattern.masked_value, scrutinee->type);
+            cond->rhs = make_int_lit(pattern.masked_value, cmp_type);
             return std::make_unique<HirExpr>(std::move(cond),
                                              std::make_shared<ast::Type>(ast::TypeKind::Bool));
         }

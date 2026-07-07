@@ -49,6 +49,11 @@ static bool interp_content_is_expression(const std::string& s) {
             continue;
         }
         if (paren != 0 || bracket != 0) {
+            // 括弧内の ':'（ビットスライス x[3:0] / パートセレクト +: ）は
+            // 本物の式パーサで処理すべき式マーカー
+            if (c == ':' && bracket != 0) {
+                return true;
+            }
             continue;
         }
         // 括弧外の as キャスト（例: (*pc) as int）は式として扱う
@@ -130,15 +135,24 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 
         if (format_str[pos] == '{') {
             size_t end = pos + 1;
-            // :: は変数名の一部として扱う（enum値のため）
+            // :: は変数名の一部として扱う（enum値のため）。
+            // [] / () 内の ':' はビットスライス（x[3:0]）等の式の一部であり
+            // フォーマット指定子ではない
+            int fspec_depth = 0;
             while (end < format_str.length() && format_str[end] != '}') {
-                // フォーマット指定子のコロンをチェック（:: ではない場合）
-                if (format_str[end] == ':' &&
+                char fc = format_str[end];
+                if (fc == '[' || fc == '(') {
+                    fspec_depth++;
+                }
+                if (fc == ']' || fc == ')') {
+                    fspec_depth--;
+                }
+                // フォーマット指定子のコロンをチェック（:: ではなく、括弧の外）
+                if (fc == ':' && fspec_depth == 0 &&
                     (end + 1 >= format_str.length() || format_str[end + 1] != ':')) {
                     break;  // フォーマット指定子の開始
                 }
-                if (format_str[end] == ':' && end + 1 < format_str.length() &&
-                    format_str[end + 1] == ':') {
+                if (fc == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
                     end += 2;  // :: をスキップ
                 } else {
                     end++;
@@ -148,16 +162,26 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
             if (end < format_str.length() || end == format_str.length()) {
                 std::string content = format_str.substr(pos + 1, end - pos - 1);
 
-                // フォーマット指定子を探す（:: はスキップ）
+                // フォーマット指定子を探す（:: と括弧内はスキップ）
                 size_t colon_pos = std::string::npos;
+                int cdepth = 0;
                 for (size_t i = pos + 1; i < format_str.length(); ++i) {
-                    if (format_str[i] == ':' &&
+                    char cc = format_str[i];
+                    if (cc == '}') {
+                        break;
+                    }
+                    if (cc == '[' || cc == '(') {
+                        cdepth++;
+                    }
+                    if (cc == ']' || cc == ')') {
+                        cdepth--;
+                    }
+                    if (cc == ':' && cdepth == 0 &&
                         (i + 1 >= format_str.length() || format_str[i + 1] != ':')) {
                         colon_pos = i;
                         break;
                     }
-                    if (format_str[i] == ':' && i + 1 < format_str.length() &&
-                        format_str[i + 1] == ':') {
+                    if (cc == ':' && i + 1 < format_str.length() && format_str[i + 1] == ':') {
                         i++;  // :: をスキップ
                     }
                 }
@@ -408,6 +432,18 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
         // 元プログラムのenum定義を引き継ぐ
         if (ctx.enum_defs) {
             hir_lowering.seed_enum_values(*ctx.enum_defs);
+        }
+        // 変数の型も引き継ぐ（ビットスライス等の型依存脱糖のため）
+        {
+            std::unordered_map<std::string, hir::TypePtr> var_types;
+            if (ctx.func) {
+                for (const auto& local : ctx.func->locals) {
+                    if (!local.name.empty() && local.type) {
+                        var_types.emplace(local.name, local.type);
+                    }
+                }
+            }
+            hir_lowering.seed_variable_types(std::move(var_types));
         }
         auto hir_program = hir_lowering.lower(program);
 
