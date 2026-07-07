@@ -406,13 +406,20 @@ int main(int argc, char* argv[]) {
                 config.parse_disable_comments(code);
 
                 for (const auto& diag : checker.diagnostics()) {
-                    // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)
+                    // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)。
+                    // 誤爆防止のため「メッセージ末尾」かつ「英字1-3字+数字2-4桁」の
+                    // 形式に限定する（[0:0] や int[3] 等の型表記はルールIDではない）
                     std::string rule_id;
                     auto bracket_pos = diag.message.rfind('[');
                     auto close_pos = diag.message.rfind(']');
                     if (bracket_pos != std::string::npos && close_pos != std::string::npos &&
-                        close_pos > bracket_pos) {
-                        rule_id = diag.message.substr(bracket_pos + 1, close_pos - bracket_pos - 1);
+                        close_pos > bracket_pos && close_pos == diag.message.size() - 1) {
+                        std::string candidate =
+                            diag.message.substr(bracket_pos + 1, close_pos - bracket_pos - 1);
+                        static const std::regex rule_pattern("^[A-Za-z]{1,3}[0-9]{2,4}$");
+                        if (std::regex_match(candidate, rule_pattern)) {
+                            rule_id = candidate;
+                        }
                     }
 
                     // 設定で無効化されているルールはスキップ

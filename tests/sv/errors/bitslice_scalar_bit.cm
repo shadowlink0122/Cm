@@ -1,0 +1,9 @@
+//! platform: sv
+// スカラーbit（幅1）への [0:0] 以外のビットスライスは型エラー（レビュー指摘対応）
+#[input] posedge clk;
+#[input] bit x;
+#[output] bit y = 0;
+
+async void f(posedge clk) {
+    y = x[3:0];
+}

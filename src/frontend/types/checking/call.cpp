@@ -127,7 +127,10 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 error(current_span_, "step は step(クロック数) の形式で使用します");
                 return ast::make_void();
             }
-            infer_type(*call.args[0]);
+            auto step_arg = infer_type(*call.args[0]);
+            if (!step_arg || !step_arg->is_integer()) {
+                error(current_span_, "step の引数は整数型（クロック数）である必要があります");
+            }
             return ast::make_void();
         }
 

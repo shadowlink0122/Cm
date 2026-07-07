@@ -176,9 +176,10 @@ std::string SVCodeGen::generateProjectTCL(const std::string& module_name,
         ss << " -device_version $device_version";
     }
     ss << " -force\n\n";
-    ss << "add_file " << fs::absolute(sv_path).string() << "\n";
+    // パスに空白等が含まれてもTclが正しく解釈できるようbracesで囲む
+    ss << "add_file {" << fs::absolute(sv_path).string() << "}\n";
     if (!cst_path.empty()) {
-        ss << "add_file " << fs::absolute(cst_path).string() << "\n";
+        ss << "add_file {" << fs::absolute(cst_path).string() << "}\n";
     }
     ss << "\nset_option -verilog_std sysv2017\n";
     ss << "set_option -top_module " << module_name << "\n";

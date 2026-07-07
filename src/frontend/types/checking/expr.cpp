@@ -661,6 +661,11 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
                       "（v0.16.0時点の制限）");
                 return ast::make_error();
             }
+            // スカラーbit（幅1）に幅2以上のパートセレクトは不可
+            if (obj_type->kind == ast::TypeKind::Bit && *w != 1) {
+                error(current_span_, "スカラーbit（幅1）へのパートセレクト幅は1のみ有効です");
+                return ast::make_error();
+            }
             return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*w));
         }
         if (obj_is_bits && slice.start && slice.end && !slice.step) {
@@ -679,6 +684,11 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
             if (obj_type->kind == ast::TypeKind::Array && obj_type->array_size &&
                 *hi >= static_cast<int64_t>(*obj_type->array_size)) {
                 error(current_span_, "ビットスライスの上位ビットが型の幅を超えています");
+                return ast::make_error();
+            }
+            // スカラーbitは幅1として扱い、[0:0] 以外の範囲はエラー
+            if (obj_type->kind == ast::TypeKind::Bit && (*hi != 0 || *lo != 0)) {
+                error(current_span_, "スカラーbit（幅1）へのビットスライスは [0:0] のみ有効です");
                 return ast::make_error();
             }
             return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*hi - *lo + 1));

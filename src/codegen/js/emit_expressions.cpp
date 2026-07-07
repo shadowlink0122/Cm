@@ -98,6 +98,36 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
                              is_unsigned_int(rhsType);
 
+            // 64ビット整数のビット演算はBigIntで行う。
+            // JSのビット演算子（>> >>> << & | ^）は32ビット固定のため、
+            // long/ulongではシフト量>=32やbit32以上のマスクが壊れる
+            // （精度はNumberの53bitに制限される点は従来どおり）
+            auto is_64bit_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::Long || t->kind == TypeKind::ULong;
+            };
+            const bool wide64 = is_64bit_int(data.result_type) || is_64bit_int(lhsType);
+            if (wide64) {
+                const std::string reinterpret = uns ? "BigInt.asUintN" : "BigInt.asIntN";
+                const std::string blhs = "BigInt(Math.trunc(" + lhs + "))";
+                const std::string brhs = "BigInt(Math.trunc(" + rhs + "))";
+                switch (data.op) {
+                    case mir::MirBinaryOp::Shr:
+                        return "Number(" + reinterpret + "(64, " + blhs + ") >> " + brhs + ")";
+                    case mir::MirBinaryOp::Shl:
+                        return "Number(" + reinterpret + "(64, " + blhs + " << " + brhs + "))";
+                    case mir::MirBinaryOp::BitAnd:
+                        return "Number(" + reinterpret + "(64, " + blhs + " & " + brhs + "))";
+                    case mir::MirBinaryOp::BitOr:
+                        return "Number(" + reinterpret + "(64, " + blhs + " | " + brhs + "))";
+                    case mir::MirBinaryOp::BitXor:
+                        return "Number(" + reinterpret + "(64, " + blhs + " ^ " + brhs + "))";
+                    default:
+                        break;
+                }
+            }
+
             // 右シフト: JSの >> はint32の算術シフトのため、符号なし型は >>> を使う
             if (data.op == mir::MirBinaryOp::Shr && uns) {
                 return "(" + lhs + " >>> " + rhs + ")";
