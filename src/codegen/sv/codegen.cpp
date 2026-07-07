@@ -1396,6 +1396,14 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     if (func.name == "assert" || func.name == "panic")
         return;
 
+    // #[sv::testbench] 関数はテストベンチ生成専用（モジュール本体へは出力しない）
+    for (const auto& attr : func.attributes) {
+        if (attr == "sv::testbench" || attr == "verilog::testbench") {
+            testbench_fn_ = &func;
+            return;
+        }
+    }
+
     // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic
     // void関数は always_comb / always_ff にフォールスルー
     if (!func.is_always && !func.is_async &&
@@ -2626,6 +2634,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     // #[sv::parameter] 付きconstを事前収集（ポート幅の記号出力で参照）
     sv_param_names_.clear();
+    testbench_fn_ = nullptr;
     for (const auto& gv : program.global_vars) {
         if (!gv || !gv->is_const) {
             continue;
@@ -3593,7 +3602,16 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         ss << "        #10;\n\n";
     }
 
-    if (!test_cases.empty()) {
+    if (testbench_fn_ && !testbench_fn_->hir_stmts.empty()) {
+        // #[sv::testbench] 関数によるサイクル精度テストシーケンス
+        ss << "        // Cmテストベンチ関数（#[sv::testbench]）\n";
+        for (const auto* stmt : testbench_fn_->hir_stmts) {
+            if (stmt) {
+                ss << emitTestbenchStmt(*stmt);
+            }
+        }
+        ss << "\n";
+    } else if (!test_cases.empty()) {
         // テストシナリオベースの検証
         int test_num = 1;
         for (const auto& tc : test_cases) {
@@ -3639,6 +3657,89 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     ss << "endmodule\n";
 
     return ss.str();
+}
+
+// #[sv::testbench] 関数のHIR文をテストベンチのinitial文へ変換する。
+// 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/
+// assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
+std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
+    const std::string ind = "        ";
+
+    // 式文（代入・step・assert・println）
+    if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
+        if (!*expr_stmt || !(*expr_stmt)->expr) {
+            return "";
+        }
+        const hir::HirExpr& e = *(*expr_stmt)->expr;
+
+        // 呼び出し
+        if (auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&e.kind)) {
+            const auto& c = **call;
+            if (c.func_name == "step") {
+                std::string n = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);
+                return ind + "repeat (" + n + ") @(posedge clk);\n" + ind + "#1; // NBA確定待ち\n";
+            }
+            if (c.func_name == "assert") {
+                std::string cond = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);
+                std::string msg = "assertion";
+                if (c.args.size() > 1) {
+                    if (auto* lit =
+                            std::get_if<std::unique_ptr<hir::HirLiteral>>(&c.args[1]->kind)) {
+                        if (auto* sv = std::get_if<std::string>(&(*lit)->value)) {
+                            msg = *sv;
+                        }
+                    }
+                }
+                std::string out;
+                out += ind + "if (!(" + cond + ")) begin\n";
+                out += ind + "    $display(\"FAIL: " + msg + "\");\n";
+                out += ind + "    $fatal(1);\n";
+                out += ind + "end else begin\n";
+                out += ind + "    $display(\"PASS: " + msg + "\");\n";
+                out += ind + "end\n";
+                return out;
+            }
+            if (c.func_name == "println" || c.func_name == "__println__" ||
+                c.func_name == "print") {
+                std::string msg;
+                if (!c.args.empty()) {
+                    if (auto* lit =
+                            std::get_if<std::unique_ptr<hir::HirLiteral>>(&c.args[0]->kind)) {
+                        if (auto* sv = std::get_if<std::string>(&(*lit)->value)) {
+                            msg = *sv;
+                        }
+                    }
+                }
+                return ind + "$display(\"" + msg + "\");\n";
+            }
+            // その他の呼び出しは非対応（コメントとして残す）
+            return ind + "// 未対応のテストベンチ呼び出し: " + c.func_name + "\n";
+        }
+
+        // 代入式（HirBinary Assign）: ブロッキング代入でDUT入力を駆動
+        if (auto* bin = std::get_if<std::unique_ptr<hir::HirBinary>>(&e.kind)) {
+            if (*bin && (*bin)->op == hir::HirBinaryOp::Assign && (*bin)->lhs && (*bin)->rhs) {
+                return ind + emitHirExpr(*(*bin)->lhs) + " = " + emitHirExpr(*(*bin)->rhs) + ";\n";
+            }
+        }
+
+        return ind + emitHirExpr(e) + ";\n";
+    }
+
+    // 単純代入文
+    if (auto* assign = std::get_if<std::unique_ptr<hir::HirAssign>>(&stmt.kind)) {
+        if (*assign && (*assign)->target && (*assign)->value) {
+            return ind + emitHirExpr(*(*assign)->target) + " = " + emitHirExpr(*(*assign)->value) +
+                   ";\n";
+        }
+    }
+
+    // その他はベストエフォートで既存エミッタへ
+    std::string sv_stmt = emitHirStmt(stmt);
+    if (!sv_stmt.empty()) {
+        return ind + sv_stmt + "\n";
+    }
+    return "";
 }
 
 // === XDC制約ファイル生成 ===

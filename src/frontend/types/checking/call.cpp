@@ -120,6 +120,17 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
+        // step(n): SVテストベンチ関数（#[sv::testbench]）専用の組み込み。
+        // nクロック進める（SVでは repeat(n) @(posedge clk) に変換される）
+        if (ident->name == "step") {
+            if (call.args.size() != 1) {
+                error(current_span_, "step は step(クロック数) の形式で使用します");
+                return ast::make_void();
+            }
+            infer_type(*call.args[0]);
+            return ast::make_void();
+        }
+
         // SVバックエンド用ビルトイン関数のバイパス
         if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
             if (ident->name == "__builtin_replicate") {

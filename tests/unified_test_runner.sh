@@ -905,7 +905,7 @@ EOJS
                     echo -e "${YELLOW}[WARN]${NC} verilator/iverilog not found, skip build verification"
                 fi
 
-                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST |SIM_FAIL_EXPECTED)" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
                     # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
@@ -918,7 +918,16 @@ EOJS
                             # vvpでシミュレーション実行
                             vvp "$sim_binary" > "$sim_output" 2>&1
                             local sim_exit=$?
-                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                            if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
+                                # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）
+                                if [ $sim_exit -ne 0 ]; then
+                                    echo "SIM_FAIL_EXPECTED" > "$output_file"
+                                    exit_code=0
+                                else
+                                    echo "SIM_UNEXPECTED_PASS" > "$output_file"
+                                    exit_code=1
+                                fi
+                            elif [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
                                 # シミュレーション成功: TEST行の検証
                                 local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
                                 local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
@@ -1506,7 +1515,7 @@ PY
                     exit_code=$?
                 fi
 
-                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST |SIM_FAIL_EXPECTED)" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
                     # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
@@ -1517,7 +1526,16 @@ PY
                         if [ $? -eq 0 ]; then
                             vvp "$sim_binary" > "$sim_output" 2>&1
                             local sim_exit=$?
-                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                            if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
+                                # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）
+                                if [ $sim_exit -ne 0 ]; then
+                                    echo "SIM_FAIL_EXPECTED" > "$output_file"
+                                    exit_code=0
+                                else
+                                    echo "SIM_UNEXPECTED_PASS" > "$output_file"
+                                    exit_code=1
+                                fi
+                            elif [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
                                 local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
                                 local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
                                 if [ -n "$expect_test_lines" ]; then

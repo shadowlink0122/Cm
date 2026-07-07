@@ -149,6 +149,36 @@ definition itself is not emitted to SV).
 
 Regression test: `tests/sv/simulation/assert_immediate`
 
+## Cm testbench functions (#[sv::testbench], v0.16.0)
+
+Sequential stimulus that single-shot `//! test:` vectors cannot express
+can be written as a Cm function. A function marked `#[sv::testbench]`
+is translated into the testbench's initial block:
+
+```cm
+import std::debug::assert;
+
+#[sv::testbench]
+void tb() {
+    din = 5;
+    step(1);                      // advance one clock
+    assert(dout == 5, "first value latched");
+    din = 7;
+    step(2);
+    assert(dout == 7, "second value latched");
+}
+```
+
+- **`step(n)`**: wait n clocks (builtin available only in testbench functions)
+- **`assert(cond, msg)`**: prints PASS, or prints FAIL and `$fatal`s
+  (non-zero sim exit → detected by the test runner)
+- **`println("...")`** → `$display` (string literals only)
+- Assignments drive DUT inputs as blocking assigns
+- A testbench function takes precedence over `//! test:` vectors
+- In the test runner, use `SIM_OK` (expect completion) or
+  `SIM_FAIL_EXPECTED` (expect a failing assertion) in `.expect`
+
+
 ---
 
 <!-- nav -->

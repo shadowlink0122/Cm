@@ -157,6 +157,51 @@ end
 
 回帰テスト: `tests/sv/simulation/assert_immediate`
 
+## Cmテストベンチ関数（#[sv::testbench]・v0.16.0）
+
+`//! test:` の単発ベクタでは書けない**系列刺激**を、Cmの関数として記述できます。
+`#[sv::testbench]` を付けた関数がSVテストベンチのinitialブロックに変換されます:
+
+```cm
+import std::debug::assert;
+import std::io::println;
+
+#[sv::testbench]
+void tb() {
+    din = 5;
+    step(1);                      // 1クロック進める
+    assert(dout == 5, "first value latched");
+    din = 7;
+    step(2);
+    assert(dout == 7, "second value latched");
+    println("sequence done");
+}
+```
+
+生成されるTB（抜粋）:
+
+```systemverilog
+din = 5;
+repeat (1) @(posedge clk);
+#1; // NBA確定待ち
+if (!((dout == 5))) begin
+    $display("FAIL: first value latched");
+    $fatal(1);
+end else begin
+    $display("PASS: first value latched");
+end
+```
+
+- **`step(n)`**: nクロック待機（テストベンチ関数専用の組み込み）
+- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`
+  （シミュレーションが非0終了するためテストランナーが失敗を検出）
+- **`println("...")`**: `$display`（文字列リテラルのみ）
+- 代入はブロッキング代入としてDUT入力を駆動します
+- testbench関数がある場合、`//! test:` ベクタより優先されます
+- テストランナーでは `.expect` に `SIM_OK`（完走期待）または
+  `SIM_FAIL_EXPECTED`（assert不成立を期待する失敗系テスト）を書きます
+
+
 ---
 
 <!-- nav -->

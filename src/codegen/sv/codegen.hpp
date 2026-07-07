@@ -72,6 +72,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string generated_code_;
     // #[sv::parameter] 付きconstの名前（幅の記号出力用）
     std::set<std::string> sv_param_names_;
+    // #[sv::testbench] 関数（テストベンチ生成で使用）
+    const mir::MirFunction* testbench_fn_ = nullptr;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
 
@@ -192,6 +194,7 @@ class SVCodeGen : public BufferedCodeGenerator {
 
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);
+    std::string emitTestbenchStmt(const hir::HirStmt& stmt);
 
     // === XDC制約ファイル出力 ===
     std::string generateXDC(const mir::MirProgram& program);
