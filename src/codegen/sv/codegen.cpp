@@ -3725,8 +3725,21 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
-                std::cerr << "warning[SV004]: Floating-point requires IP core: " << gv->name
-                          << "\n";
+                // 従来は警告のみで logic [31:0] として出力され、演算結果が
+                // 静かに壊れていた。非対応として明示エラーにする
+                std::cerr << "error[SV004]: 浮動小数点型はSVターゲット非対応です: " << gv->name
+                          << "（固定小数点で記述するか、ベンダーIPを extern struct で"
+                             "利用してください）\n";
+                has_error = true;
+                break;
+            case hir::TypeKind::Array:
+                // 動的配列（スライス）は実行時確保が前提のため合成不能。
+                // 従来は無警告で未定義のランタイム関数呼び出しを出力していた
+                if (!gv->type->array_size.has_value() && gv->type->size_param_name.empty()) {
+                    std::cerr << "error[SV006]: 動的配列（スライス）はSVターゲット非対応です: "
+                              << gv->name << "（固定長配列 T[N] を使用してください）\n";
+                    has_error = true;
+                }
                 break;
             default:
                 break;
@@ -3754,6 +3767,20 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 case hir::TypeKind::String:
                     // String types not synthesizable error is removed to allow local string
                     // constants/temporaries
+                    break;
+                case hir::TypeKind::Float:
+                case hir::TypeKind::Double:
+                    std::cerr << "error[SV004]: 浮動小数点型はSVターゲット非対応です: "
+                              << func->name << "::" << local.name << "\n";
+                    has_error = true;
+                    break;
+                case hir::TypeKind::Array:
+                    if (!local.type->array_size.has_value() &&
+                        local.type->size_param_name.empty()) {
+                        std::cerr << "error[SV006]: 動的配列（スライス）はSVターゲット非対応です: "
+                                  << func->name << "::" << local.name << "\n";
+                        has_error = true;
+                    }
                     break;
                 default:
                     break;

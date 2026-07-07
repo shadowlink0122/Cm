@@ -144,6 +144,24 @@ These semantics are continuously verified by simulation-backed regression tests 
 - `advanced/enum_explicit` / `advanced/reg_init` — explicit enum values and initial values
 - `memory/array_port` — array ports
 
+## Unsupported features (explicit errors / no syntax)
+
+Features that produce **explicit errors** on the SV target
+(execution-backend-only features):
+
+| Feature | Error | Alternative |
+|---|---|---|
+| Pointer types | SV002 | design with signals/arrays |
+| Non-const string > 3 chars | SV005 | const strings (localparam) |
+| Floating point (float/double) | SV004 | fixed point, or vendor IP via extern struct |
+| Dynamic arrays (slices) | SV006 | fixed-size arrays `T[N]` |
+
+SV constructs with **no Cm syntax** (no support planned):
+`force/release`, `specify`, UDPs, drive strengths, `fork/join`, events,
+DPI-C, SV interface/modport (different from Cm interfaces; use hierarchy +
+structs), delays `#10` (used only inside generated testbenches).
+
+
 ---
 
 <!-- nav -->

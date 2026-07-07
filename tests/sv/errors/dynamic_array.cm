@@ -1,0 +1,10 @@
+//! platform: sv
+// 動的配列（スライス）はSVターゲット非対応（SV006エラー）
+#[input] posedge clk;
+#[output] uint total = 0;
+
+uint[] dyn = [1, 2, 3];
+
+async void f(posedge clk) {
+    total = dyn[0];
+}

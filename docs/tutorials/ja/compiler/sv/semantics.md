@@ -144,6 +144,23 @@ output logic [31:0] data [0:3]  // 次元が保持される
 - `advanced/enum_explicit` / `advanced/reg_init` — enum明示値・初期値
 - `memory/array_port` — 配列ポート
 
+## サポート対象外の機能（明示エラー / 表現なし）
+
+SVターゲットで**明示エラー**になるもの（実行系バックエンド専用機能）:
+
+| 機能 | エラー | 代替 |
+|---|---|---|
+| ポインタ型 | SV002 | 信号・配列で設計する |
+| 3文字超の非const string | SV005 | const文字列（localparam化）を使う |
+| 浮動小数点（float/double） | SV004 | 固定小数点、またはベンダーIPを extern struct で利用 |
+| 動的配列（スライス） | SV006 | 固定長配列 `T[N]` |
+
+Cmに構文が存在せず**表現できない**SV構文（対応予定なし）:
+`force/release`・`specify`・UDP・信号強度・`fork/join`・イベント・
+DPI-C・SV interface/modport（Cmのinterfaceとは別概念。階層+構造体で代替）・
+遅延 `#10`（テストベンチ自動生成の内部でのみ使用）。
+
+
 ---
 
 <!-- nav -->
