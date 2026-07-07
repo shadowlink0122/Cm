@@ -1384,6 +1384,14 @@ int main(int argc, char* argv[]) {
                 sv_opts.sourceFile = opts.input_file;
                 sv_opts.emitMemfile = opts.emit_memfile;
                 sv_opts.strictLint = opts.sv_strict_lint;
+                sv_opts.emitConstraints = opts.emit_constraints;
+                {
+                    // //! sv: device: / option: ディレクティブを反映
+                    auto dirs = codegen::sv::parse_sv_project_directives(code);
+                    sv_opts.devicePN = dirs.device_pn;
+                    sv_opts.deviceVersion = dirs.device_version;
+                    sv_opts.toolOptions = dirs.tool_options;
+                }
 
                 // SystemVerilog コード生成
                 try {

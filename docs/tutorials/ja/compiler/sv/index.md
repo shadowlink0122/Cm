@@ -29,6 +29,7 @@ SVバックエンドの詳細はトピック別のページに分かれていま
 | [状態初期化とシミュレーション](state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、アサーション、テスト実行 |
 | [メモリ初期化](memory.html) | 配列初期値、#[sv::memfile]/$readmemh、--emit-memfile |
 | [モジュール階層](hierarchy.html) | //! sv: hierarchy によるサブモジュールのインスタンス化 |
+| [実機I/O](board-io.html) | ピン制約生成・トライステート・CDC同期（v0.16.0） |
 | [意味論保証](semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
 
 ---

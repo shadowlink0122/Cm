@@ -300,6 +300,23 @@ TEST_F(SVCodegenTest, LintOffReduction) {
     expect_not_contains(strict, "lint_off");
 }
 
+// #[sv::tri]: トライステート駆動（inout tri + assign 'z）
+TEST_F(SVCodegenTest, TristateEmission) {
+    const std::string code = load_case("tristate");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "inout tri sda");
+    expect_contains(sv, "assign sda = sda_oe ? sda_out : 1'bz;");
+}
+
+// #[sv::sync]: CDC 2FF同期段の生成
+TEST_F(SVCodegenTest, CdcSyncEmission) {
+    const std::string code = load_case("cdc_sync");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "(* async_reg = \"true\" *) logic btn_sync_meta1;");
+    expect_contains(sv, "btn_sync_meta1 <= async_btn;");
+    expect_contains(sv, "btn_sync <= btn_sync_meta1;");
+}
+
 // 配列型ポートはアンパックド次元を保持する
 TEST_F(SVCodegenTest, ArrayPortDimension) {
     const std::string code = load_case("array_port_dimension");

@@ -22,6 +22,10 @@ struct SVCodeGenOptions {
     int indentSpaces = 4;      // インデント幅
     bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
     bool strictLint = false;   // lint_off抑止を一切出力しない（--sv-strict-lint）
+    bool emitConstraints = false;  // #[sv::pin]属性から.cst/.tclを生成（--emit-constraints）
+    std::string devicePN;          // //! sv: device: の型番（.tcl生成に使用）
+    std::string deviceVersion;     // //! sv: device: の版（例: C）
+    std::vector<std::string> toolOptions;  // //! sv: option: の列（set_option -<name> 1）
 };
 
 // モジュールポート情報
@@ -189,11 +193,30 @@ class SVCodeGen : public BufferedCodeGenerator {
     // === XDC制約ファイル出力 ===
     std::string generateXDC(const mir::MirProgram& program);
 
+    // 物理制約生成（constraints.cpp）
+    struct CollectedPin {
+        std::string port_name;
+        std::string pin_loc;
+        std::vector<std::pair<std::string, std::string>> params;
+    };
+    std::vector<CollectedPin> collectPins(const mir::MirProgram& program);
+    std::string generateCST(const mir::MirProgram& program);
+    std::string generateProjectTCL(const std::string& module_name, const std::string& sv_path,
+                                   const std::string& cst_path);
+
     // === 非合成型チェック ===
     bool validateSynthesizableTypes(const mir::MirProgram& program);
 
     // === ファイル出力 ===
     void writeToFile(const std::string& content, const std::string& path);
 };
+
+// //! sv: device: / //! sv: option: ディレクティブの抽出結果
+struct SvProjectDirectives {
+    std::string device_pn;
+    std::string device_version;
+    std::vector<std::string> tool_options;
+};
+SvProjectDirectives parse_sv_project_directives(const std::string& source);
 
 }  // namespace cm::codegen::sv

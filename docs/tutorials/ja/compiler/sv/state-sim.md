@@ -160,4 +160,4 @@ end
 ---
 
 <!-- nav -->
-← 前: [SVバックエンド - モジュール階層の保持](hierarchy.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 意味論保証](semantics.html) →
+← 前: [SVバックエンド - 実機I/O（ピン制約・トライステート・CDC）](board-io.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 意味論保証](semantics.html) →

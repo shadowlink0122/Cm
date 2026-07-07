@@ -86,4 +86,4 @@ endmodule
 ---
 
 <!-- nav -->
-← 前: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 状態初期化とシミュレーション](state-sim.html) →
+← 前: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 実機I/O（ピン制約・トライステート・CDC）](board-io.html) →

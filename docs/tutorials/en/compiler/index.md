@@ -57,6 +57,7 @@ and `sv/` (SystemVerilog / FPGA).
 | [Data structures](sv/data.html) | 🟡 Intermediate | Concatenation, enum FSMs, arrays, strings |
 | [Memory initialization](sv/memory.html) | 🟡 Intermediate | Array initializers, $readmemh, --emit-memfile |
 | [Module hierarchy](sv/hierarchy.html) | 🟡 Intermediate | Submodules via //! sv: hierarchy |
+| [Board I/O](sv/board-io.html) | 🟡 Intermediate | #[sv::pin], --emit-constraints, tristate, CDC sync |
 | [State init and simulation](sv/state-sim.html) | 🟡 Intermediate | Initial values, initial blocks, testbenches, assertions |
 | [Semantics guarantees](sv/semantics.html) | 🟡 Intermediate | Guaranteed Cm↔SV semantic correspondences |
 

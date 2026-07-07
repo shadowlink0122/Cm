@@ -590,6 +590,43 @@ std::string SVCodeGen::buildArrayInitial(const mir::MirGlobalVar& gv, const std:
     return ss.str();
 }
 
+// #[sv::tri(oe: "...", out: "...")] / #[sv::sync(clk: "...", src: "...", stages: N)]
+// の key:value 引数を取り出す簡易パーサ
+static std::map<std::string, std::string> parseSvAttrKV(const std::string& attr,
+                                                        const std::string& name) {
+    std::map<std::string, std::string> kv;
+    const std::string prefix = name + "(";
+    if (attr.rfind(prefix, 0) != 0 || attr.empty() || attr.back() != ')') {
+        return kv;
+    }
+    std::string body = attr.substr(prefix.size(), attr.size() - prefix.size() - 1);
+    std::string cur;
+    bool in_str = false;
+    auto flush = [&]() {
+        auto colon = cur.find(':');
+        if (colon != std::string::npos) {
+            kv[cur.substr(0, colon)] = cur.substr(colon + 1);
+        }
+        cur.clear();
+    };
+    for (char c : body) {
+        if (c == '"') {
+            in_str = !in_str;
+            continue;
+        }
+        if (c == ',' && !in_str) {
+            flush();
+            continue;
+        }
+        if (c == ' ' && !in_str && cur.empty()) {
+            continue;
+        }
+        cur += c;
+    }
+    flush();
+    return kv;
+}
+
 // #[sv::memfile("path.hex")] / #[verilog::memfile("path.hex")] 属性からパスを抽出する
 std::string SVCodeGen::getMemfilePath(const mir::MirGlobalVar& gv) {
     for (const auto& attr : gv.attributes) {
@@ -2943,9 +2980,30 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 has_rst = true;
         } else if (is_inout) {
             if (emitted_var_names.count(var_name) == 0) {
-                default_mod.ports.push_back({SVPort::InOut, var_name, mapType(gv->type),
+                // トライステート属性付きは複数ドライバ可能なnet型（tri）で宣言する
+                bool has_tri = false;
+                for (const auto& attr : gv->attributes) {
+                    if (attr.rfind("sv::tri(", 0) == 0) {
+                        has_tri = true;
+                    }
+                }
+                std::string port_type = has_tri ? "tri" : mapType(gv->type);
+                default_mod.ports.push_back({SVPort::InOut, var_name, port_type,
                                              getBitWidth(gv->type), getArraySuffix(gv->type)});
                 emitted_var_names.insert(var_name);
+
+                // #[sv::tri(oe: "...", out: "...")]: トライステート駆動を生成。
+                // oe=1 で out を駆動、oe=0 でハイインピーダンス（'z）
+                for (const auto& attr : gv->attributes) {
+                    auto kv = parseSvAttrKV(attr, "sv::tri");
+                    if (kv.count("oe") && kv.count("out")) {
+                        int w = getBitWidth(gv->type);
+                        std::string zlit = (w > 1) ? (std::to_string(w) + "'bz") : "1'bz";
+                        default_mod.assign_statements.push_back(
+                            "assign " + var_name + " = " + kv["oe"] + " ? " + kv["out"] + " : " +
+                            zlit + ";  // トライステート（#[sv::tri]）");
+                    }
+                }
             }
         } else if (is_output) {
             if (emitted_var_names.count(var_name) == 0) {
@@ -2954,6 +3012,47 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 emitted_var_names.insert(var_name);
             }
         } else {
+            // #[sv::sync(clk: "...", src: "...", stages: N)]: CDC 2FF同期段を生成
+            bool handled_sync = false;
+            for (const auto& attr : gv->attributes) {
+                auto kv = parseSvAttrKV(attr, "sv::sync");
+                if (kv.count("clk") && kv.count("src")) {
+                    int stages = 2;
+                    if (kv.count("stages")) {
+                        stages = std::max(1, std::atoi(kv["stages"].c_str()));
+                    }
+                    std::string type_str = mapType(gv->type);
+                    // メタステーブル段の宣言（合成属性 async_reg 付き）
+                    std::vector<std::string> regs;
+                    for (int i = 1; i < stages; ++i) {
+                        std::string meta = var_name + "_meta" + std::to_string(i);
+                        default_mod.reg_declarations.push_back("(* async_reg = \"true\" *) " +
+                                                               type_str + " " + meta + ";");
+                        regs.push_back(meta);
+                    }
+                    default_mod.reg_declarations.push_back("(* async_reg = \"true\" *) " +
+                                                           type_str + " " + var_name + ";");
+                    // 同期段のalwaysブロック
+                    std::ostringstream blk;
+                    blk << "    // CDC同期（#[sv::sync] stages=" << stages << "）\n";
+                    blk << "    always @(posedge " << kv["clk"] << ") begin\n";
+                    std::string prev = kv["src"];
+                    for (const auto& r : regs) {
+                        blk << "        " << r << " <= " << prev << ";\n";
+                        prev = r;
+                    }
+                    blk << "        " << var_name << " <= " << prev << ";\n";
+                    blk << "    end";
+                    default_mod.always_ff_blocks.push_back(blk.str());
+                    emitted_var_names.insert(var_name);
+                    handled_sync = true;
+                    break;
+                }
+            }
+            if (handled_sync) {
+                continue;
+            }
+
             // 属性なし → 内部レジスタ/ワイヤとして宣言
             if (emitted_var_names.count(var_name) == 0) {
                 std::string array_suffix = getArraySuffix(gv->type);
@@ -3177,6 +3276,33 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
             tb_path += "_tb.sv";
         }
         writeToFile(tb_code, tb_path);
+    }
+
+    // Gowin制約出力（--emit-constraints指定時）
+    if (options_.emitConstraints) {
+        std::string stem = options_.outputFile;
+        auto dot = stem.rfind('.');
+        if (dot != std::string::npos) {
+            stem = stem.substr(0, dot);
+        }
+        std::string cst = generateCST(program);
+        std::string cst_path;
+        if (!cst.empty()) {
+            cst_path = stem + ".cst";
+            writeToFile(cst, cst_path);
+            if (options_.verbose) {
+                std::cout << "✓ ピン制約生成: " << cst_path << "\n";
+            }
+        }
+        std::string module_name = modules_.empty() ? "top" : modules_[0].name;
+        std::string tcl = generateProjectTCL(module_name, options_.outputFile, cst_path);
+        if (!tcl.empty()) {
+            std::string tcl_path = stem + "_build.tcl";
+            writeToFile(tcl, tcl_path);
+            if (options_.verbose) {
+                std::cout << "✓ プロジェクトスクリプト生成: " << tcl_path << "\n";
+            }
+        }
     }
 
     // XDC制約出力（ピン属性があれば）

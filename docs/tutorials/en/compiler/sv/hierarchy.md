@@ -70,4 +70,4 @@ Regression test: `tests/sv/hierarchy/hier_top`
 ---
 
 <!-- nav -->
-← Prev: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) | [Contents](index.html) | Next: [SV Backend - State Initialization and Simulation](state-sim.html) →
+← Prev: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) | [Contents](index.html) | Next: [SV Backend - Board I/O (Pin Constraints, Tristate, CDC)](board-io.html) →

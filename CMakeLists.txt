@@ -341,6 +341,7 @@ list(APPEND CM_SOURCES
     src/codegen/sv/codegen.cpp
     src/codegen/sv/expr_tree.cpp
     src/codegen/sv/hierarchy.cpp
+    src/codegen/sv/constraints.cpp
 )
 
 # Add LLVM sources if enabled
@@ -666,6 +667,7 @@ if(BUILD_TESTING)
             ${CM_MIR_SOURCES}
             src/codegen/buffered_codegen.cpp
             src/codegen/sv/codegen.cpp
+            src/codegen/sv/constraints.cpp
             src/codegen/sv/expr_tree.cpp
         )
         set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
@@ -699,4 +701,3 @@ endif()
 
 # Installation
 # install(TARGETS cm RUNTIME DESTINATION bin)
-

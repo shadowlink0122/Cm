@@ -29,6 +29,7 @@ The SV backend documentation is split into topic-specific pages:
 | [State Initialization and Simulation](state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
 | [Memory initialization](memory.html) | Array initializers, #[sv::memfile]/$readmemh, --emit-memfile |
 | [Module hierarchy](hierarchy.html) | Submodule instantiation via //! sv: hierarchy |
+| [Board I/O](board-io.html) | Pin constraint emission, tristate, CDC sync (v0.16.0) |
 | [Semantic Guarantees](semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
 
 ---

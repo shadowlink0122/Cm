@@ -152,4 +152,4 @@ Regression test: `tests/sv/simulation/assert_immediate`
 ---
 
 <!-- nav -->
-← Prev: [SV Backend - Preserving Module Hierarchy](hierarchy.html) | [Contents](index.html) | Next: [SV Backend - Semantic Guarantees](semantics.html) →
+← Prev: [SV Backend - Board I/O (Pin Constraints, Tristate, CDC)](board-io.html) | [Contents](index.html) | Next: [SV Backend - Semantic Guarantees](semantics.html) →
