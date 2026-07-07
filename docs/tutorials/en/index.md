@@ -10,7 +10,7 @@ has_children: true
 # Cm Language Tutorials v0.16.0
 
 **Target Version:** v0.16.0  
-**Last Updated:** v0.16.0 (2026-07-06)
+**Last Updated:** v0.16.0 (2026-07-07)
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
 
@@ -132,7 +132,7 @@ Estimated Time: 3 hours
 
 ---
 
-**Last Updated:** v0.16.0 (2026-07-06)  
+**Last Updated:** v0.16.0 (2026-07-07)  
 **Author:** Cm Language Development Team
 
 

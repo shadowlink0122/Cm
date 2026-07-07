@@ -52,6 +52,7 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-memfile        SV: 配列リテラル初期値を.hexファイルとして書き出す\n";
     std::cout << "  --sv-strict-lint      SV: lint_off抑止を出力しない（幅警告を可視化）\n";
     std::cout << "  --emit-constraints    SV: #[sv::pin]属性から.cst/.tclを生成（Gowin）\n";
+    std::cout << "  -D <NAME>             条件付きコンパイル定義を追加（#ifdef用）\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -154,6 +155,12 @@ Options parse_options(int argc, char* argv[]) {
             opts.sv_strict_lint = true;
         } else if (arg == "--emit-constraints") {
             opts.emit_constraints = true;
+        } else if (arg == "-D" && i + 1 < argc) {
+            opts.defines.push_back(argv[++i]);
+        } else if (arg.rfind("-D", 0) == 0 && arg.size() > 2) {
+            opts.defines.push_back(arg.substr(2));
+        } else if (arg.rfind("--define=", 0) == 0) {
+            opts.defines.push_back(arg.substr(9));
         } else if (arg == "--funroll-loops") {
             opts.unroll_loops = true;
         } else if (arg.substr(0, 16) == "--funroll-loops=") {

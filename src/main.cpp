@@ -370,6 +370,9 @@ int main(int argc, char* argv[]) {
 
                 // 条件付きコンパイル
                 preprocessor::ConditionalPreprocessor conditional;
+                for (const auto& def : opts.defines) {
+                    conditional.define(def);
+                }
                 code = conditional.process(code);
 
                 // パース
@@ -910,6 +913,10 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Conditional Preprocessor ===\n";
         preprocessor::ConditionalPreprocessor conditional;
+        // -D オプションのユーザ定義を追加
+        for (const auto& def : opts.defines) {
+            conditional.define(def);
+        }
         // ターゲットに応じたプリプロセッサ定数を追加
         if (opts.target == "baremetal-arm" || opts.target == "bm" ||
             opts.target == "baremetal-x86" || opts.target == "bm-x86") {
