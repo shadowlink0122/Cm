@@ -74,6 +74,10 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::set<std::string> sv_param_names_;
     // #[sv::testbench] 関数（テストベンチ生成で使用）
     const mir::MirFunction* testbench_fn_ = nullptr;
+    // プロセスのクロック信号名（テストベンチのクロック検出用）
+    std::set<std::string> process_clock_names_;
+    // テストベンチで使用するクロックポート名（generateTestbenchで決定）
+    std::string tb_clk_name_;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
 

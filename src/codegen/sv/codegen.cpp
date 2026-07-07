@@ -1677,6 +1677,8 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     edge_type = "posedge";
                     edge_clock = local.name;
                     has_explicit_edge = true;
+                    // テストベンチのクロック検出用にプロセスクロック名を記録
+                    process_clock_names_.insert(local.name);
                 }
                 all_edges.push_back({"posedge", local.name});
             }
@@ -2957,8 +2959,29 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 continue;
             }
 
-            std::string localparam_decl =
-                "localparam " + type_str + " " + param_name + getArraySuffix(gv->type);
+            // 配列const: localparamのunpacked配列はiverilogが未対応のため、
+            // 信号宣言 + initialブロックでの要素別初期化として出力する
+            std::string arr_suffix = getArraySuffix(gv->type);
+            if (!arr_suffix.empty() && gv->init_expr) {
+                if (auto* arr =
+                        std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&gv->init_expr->kind)) {
+                    default_mod.parameters.push_back(type_str + " " + param_name + arr_suffix +
+                                                     ";");
+                    std::stringstream arr_init;
+                    arr_init << "    // const配列 " << param_name << " の初期化\n";
+                    arr_init << "    initial begin\n";
+                    for (size_t ei = 0; ei < (*arr)->elements.size(); ++ei) {
+                        arr_init << "        " << param_name << "[" << ei
+                                 << "] = " << emitHirExpr(*(*arr)->elements[ei]) << ";\n";
+                    }
+                    arr_init << "    end\n";
+                    default_mod.initial_blocks.push_back(arr_init.str());
+                    emitted_var_names.insert(var_name);
+                    continue;
+                }
+            }
+
+            std::string localparam_decl = "localparam " + type_str + " " + param_name + arr_suffix;
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             } else if (gv->init_expr) {
@@ -3543,13 +3566,28 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     }
     ss << "    );\n\n";
 
-    // クロック生成（clkポートがある場合）
+    // クロック生成: "clk" ポート、なければプロセスのクロックとして
+    // 使われている入力ポート（pixel_clk 等）を採用する
     bool has_clk = false;
+    std::string tb_clk = "clk";
+    for (const auto& port : mod.ports) {
+        if (port.name == "clk" && port.direction == SVPort::Input) {
+            has_clk = true;
+        }
+    }
+    if (!has_clk) {
+        for (const auto& port : mod.ports) {
+            if (port.direction == SVPort::Input && process_clock_names_.count(port.name)) {
+                has_clk = true;
+                tb_clk = port.name;
+                break;
+            }
+        }
+    }
+    tb_clk_name_ = tb_clk;
     std::string rst_name;         // リセット信号の実際のポート名
     bool rst_active_low = false;  // アクティブLowリセットかどうか
     for (const auto& port : mod.ports) {
-        if (port.name == "clk" && port.direction == SVPort::Input)
-            has_clk = true;
         if (port.direction == SVPort::Input) {
             if (port.name == "rst") {
                 rst_name = "rst";
@@ -3564,8 +3602,8 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     if (has_clk) {
         ss << "    // クロック生成 (10ns周期 = 100MHz)\n";
-        ss << "    initial clk = 0;\n";
-        ss << "    always #5 clk = ~clk;\n\n";
+        ss << "    initial " << tb_clk << " = 0;\n";
+        ss << "    always #5 " << tb_clk << " = ~" << tb_clk << ";\n\n";
     }
 
     // テストシーケンス
@@ -3577,9 +3615,9 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
     ss << "        $dumpvars(0, " << mod.name << "_tb);\n\n";
 
-    // 入力ポート初期化
+    // 入力ポート初期化（クロックはクロック生成側で駆動する）
     for (const auto& port : mod.ports) {
-        if (port.direction == SVPort::Input && port.name != "clk") {
+        if (port.direction == SVPort::Input && port.name != "clk" && port.name != tb_clk) {
             ss << "        " << port.name << " = 0;\n";
         }
     }
@@ -3677,7 +3715,9 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
             const auto& c = **call;
             if (c.func_name == "step") {
                 std::string n = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);
-                return ind + "repeat (" + n + ") @(posedge clk);\n" + ind + "#1; // NBA確定待ち\n";
+                const std::string& ck = tb_clk_name_.empty() ? "clk" : tb_clk_name_;
+                return ind + "repeat (" + n + ") @(posedge " + ck + ");\n" + ind +
+                       "#1; // NBA確定待ち\n";
             }
             if (c.func_name == "assert") {
                 std::string cond = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);

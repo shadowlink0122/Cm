@@ -174,6 +174,7 @@ void tb() {
   (non-zero sim exit → detected by the test runner)
 - **`println("...")`** → `$display` (string literals only)
 - Assignments drive DUT inputs as blocking assigns
+- Clock ports named other than `clk` (e.g. `pixel_clk`) are auto-detected from process clocks
 - A testbench function takes precedence over `//! test:` vectors
 - In the test runner, use `SIM_OK` (expect completion) or
   `SIM_FAIL_EXPECTED` (expect a failing assertion) in `.expect`
