@@ -252,6 +252,24 @@ check-docs-version:
 
 # 配布物ビルド（tar.gz作成）
 # 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
+# ============================================================
+# VSCode拡張: ビルド (.vsix生成) / ローカルインストール
+# ============================================================
+# pnpm run package は prepackage(verify-version) で package.json と
+# VERSION ファイルの整合を検証してから .vsix を生成する
+.PHONY: vscode-extension
+vscode-extension:
+	@echo "VSCode拡張をビルド中..."
+	@cd vscode-extension && pnpm install --silent && pnpm run package
+	@echo "✅ VSCode拡張ビルド完了:"
+	@ls -lh vscode-extension/cm-language-*.vsix | awk '{print "  " $$9 " (" $$5 ")"}'
+
+.PHONY: vscode-extension-install
+vscode-extension-install: vscode-extension
+	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
+	code --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
+	echo "✅ VSCode拡張をインストールしました (cm-language-$$VERSION)"
+
 .PHONY: dist
 dist: release
 	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
