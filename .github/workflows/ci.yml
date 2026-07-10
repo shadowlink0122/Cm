@@ -21,13 +21,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
+      # ローカル開発環境（LLVM 17系）と整形結果を揃えるためバージョンを固定する
+      - name: Install clang-format-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-17 || {
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+            sudo apt-get install -y clang-format-17
+          }
 
+      # make format-check と同じ対象（src/tests の全C++ファイル）を検査し、
+      # 違反があればジョブを失敗させる
       - name: Check C++ format
         run: |
-          find src -name '*.cpp' -o -name '*.hpp' | head -50 | \
-            xargs clang-format --dry-run --Werror 2>&1 || echo "Format check completed"
+          find src tests -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) -print0 | \
+            xargs -0 clang-format-17 --dry-run -Werror -style=file
 
   # ========================================
   # Extension Lint - VSCode拡張機能チェック（独立・並列）
@@ -141,6 +150,10 @@ jobs:
           ls -la build/lib/ || echo "No lib directory"
           ./cm --version || echo "cm not found"
           echo "✅ Build completed (${{ matrix.arch }})"
+
+      # make format-check の .cm 整形検証と同じゲート（ビルド済みのcmを使用）
+      - name: Check Cm format (tests/common, libs)
+        run: find tests/common libs -type f -name '*.cm' -print0 | xargs -0 ./cm fmt --check -q
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
