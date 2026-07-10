@@ -17,6 +17,18 @@
 機能が5ステップの一部に該当しない場合（例: 純リファクタリングでチュートリアル
 変更なし）は、該当しない理由をコミットメッセージに明記する。
 
+## テスト規約
+
+- **unitテスト（`tests/unit/`）はコンパイラの単体機能のみ**を対象とする
+  （例: lexerのトークン列検証、エラー型の挙動）。テストケースに
+  Cmプログラムを文字列として埋め込まない
+- コンパイルパイプラインを通すテスト（HIR/MIR lowering・最適化パス・
+  コード生成・フォーマッタ等）は **integrationテスト（`tests/integration/`）**
+  に置き、Cmプログラムは `tests/integration/cases/<対象>/` の .cm ファイルに
+  分割する（gtestからは case ディレクトリのマクロ経由で読み込む）
+- 実行: `make test-unit` / `make test-integration`（ctestラベル
+  `unit` / `integration` で分離）
+
 ## バージョン運用
 
 - ブランチ名 `feature/vX.Y.Z` と `VERSION` ファイルは一致させる（CIが検証）

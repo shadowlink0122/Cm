@@ -156,37 +156,14 @@ jobs:
   # Unit Tests（ビルド共有、matrix並列）
   # ========================================
   unit-test:
-    name: 単体テスト ${{ matrix.test_name }} (${{ matrix.os }})
+    name: 単体テスト ${{ matrix.test_bin }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-15]
-        include:
-          - os: ubuntu-latest
-            test_name: Lexer
-            test_bin: lexer_test
-          - os: macos-15
-            test_name: Lexer
-            test_bin: lexer_test
-          - os: ubuntu-latest
-            test_name: HIR Lowering
-            test_bin: hir_lowering_test
-          - os: macos-15
-            test_name: HIR Lowering
-            test_bin: hir_lowering_test
-          - os: ubuntu-latest
-            test_name: MIR Lowering
-            test_bin: mir_lowering_test
-          - os: macos-15
-            test_name: MIR Lowering
-            test_bin: mir_lowering_test
-          - os: ubuntu-latest
-            test_name: MIR Optimization
-            test_bin: mir_optimization_test
-          - os: macos-15
-            test_name: MIR Optimization
-            test_bin: mir_optimization_test
+        # コンパイラ単体機能のテスト（tests/unit/）
+        test_bin: [lexer_test, error_test]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -222,7 +199,63 @@ jobs:
           brew install llvm@${{ env.LLVM_VERSION }} openssl@3
           echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
 
-      - name: Run ${{ matrix.test_name }} Test
+      - name: Run ${{ matrix.test_bin }}
+        run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:test-results.xml
+
+  # ========================================
+  # C++ Integration Tests（コンパイルパイプラインを通すgtest。
+  # Cmプログラムは tests/integration/cases/ から読み込む）
+  # ========================================
+  cpp-integration-test:
+    name: C++統合テスト ${{ matrix.test_bin }} (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+        # tests/integration/ のgtest（ケースファイルはcheckoutから読む）
+        test_bin:
+          - hir_lowering_test
+          - mir_lowering_test
+          - mir_optimization_test
+          - sv_codegen_test
+          - formatter_test
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-${{ matrix.os }}
+
+      - run: chmod +x build/bin/* cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
+
+      - name: Install LLVM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          if [ ! -d "/usr/lib/llvm-${{ env.LLVM_VERSION }}" ]; then
+            wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+            sudo ./llvm.sh ${{ env.LLVM_VERSION }}
+          fi
+          sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev
+          echo "/usr/lib/llvm-${{ env.LLVM_VERSION }}/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@${{ env.LLVM_VERSION }} openssl@3
+          echo "$(brew --prefix llvm@${{ env.LLVM_VERSION }})/bin" >> $GITHUB_PATH
+
+      - name: Run ${{ matrix.test_bin }}
         run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:test-results.xml
 
   # ========================================

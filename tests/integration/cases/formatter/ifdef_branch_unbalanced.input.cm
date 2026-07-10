@@ -1,0 +1,7 @@
+#ifdef TEST
+void tb() {
+#else
+void main() {
+#end
+int x = 1;
+}

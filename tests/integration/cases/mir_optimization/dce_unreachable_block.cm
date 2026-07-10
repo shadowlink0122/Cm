@@ -1,0 +1,4 @@
+int main() {
+    return 42;
+    int x = 100;  // 到達不可能
+}

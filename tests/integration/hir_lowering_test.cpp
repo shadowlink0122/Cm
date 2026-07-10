@@ -2,6 +2,7 @@
 #include "../../src/frontend/parser/parser.hpp"
 #include "../../src/hir/lowering/lowering.hpp"
 
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <sstream>
@@ -9,10 +10,20 @@
 using namespace cm;
 
 // ============================================================
-// テストヘルパー
+// HIR lowering 統合テスト
 // ============================================================
+// Cmソースは tests/integration/cases/hir_lowering/ の .cm ファイルに分割
 class HirLoweringTest : public ::testing::Test {
    protected:
+    std::string load_case(const std::string& name) {
+        std::string path = std::string(CM_HIR_CASE_DIR) + "/" + name + ".cm";
+        std::ifstream ifs(path);
+        EXPECT_TRUE(ifs.is_open()) << "ケースファイルを読み込めません: " << path;
+        std::stringstream ss;
+        ss << ifs.rdbuf();
+        return ss.str();
+    }
+
     std::unique_ptr<hir::HirProgram> parse_and_lower(const std::string& code) {
         // レクサー
         Lexer lex(code);
@@ -30,19 +41,17 @@ class HirLoweringTest : public ::testing::Test {
 
         return std::make_unique<hir::HirProgram>(std::move(hir));
     }
+
+    std::unique_ptr<hir::HirProgram> lower_case(const std::string& name) {
+        return parse_and_lower(load_case(name));
+    }
 };
 
 // ============================================================
 // 関数宣言のテスト
 // ============================================================
 TEST_F(HirLoweringTest, SimpleFunctionDecl) {
-    const std::string code = R"(
-        int main() {
-            return 0;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("simple_function_decl");
     ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
@@ -54,13 +63,7 @@ TEST_F(HirLoweringTest, SimpleFunctionDecl) {
 
 // 関数パラメータのテスト
 TEST_F(HirLoweringTest, FunctionWithParams) {
-    const std::string code = R"(
-        int add(int x, int y) {
-            return x + y;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("function_with_params");
     ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
@@ -75,14 +78,7 @@ TEST_F(HirLoweringTest, FunctionWithParams) {
 // 構造体宣言のテスト
 // ============================================================
 TEST_F(HirLoweringTest, StructDecl) {
-    const std::string code = R"(
-        struct Point {
-            int x;
-            int y;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("struct_decl");
     ASSERT_EQ(hir->declarations.size(), 1u);
 
     auto* st = std::get<std::unique_ptr<hir::HirStruct>>(hir->declarations[0]->kind).get();
@@ -99,14 +95,7 @@ TEST_F(HirLoweringTest, StructDecl) {
 
 // let文のテスト
 TEST_F(HirLoweringTest, LetStatement) {
-    const std::string code = R"(
-        int main() {
-            int x = 42;
-            const int y = 100;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("let_statement");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 2u);
 
@@ -126,17 +115,7 @@ TEST_F(HirLoweringTest, LetStatement) {
 
 // if文のテスト
 TEST_F(HirLoweringTest, IfStatement) {
-    const std::string code = R"(
-        int main() {
-            if (true) {
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("if_statement");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 1u);
 
@@ -153,13 +132,7 @@ TEST_F(HirLoweringTest, IfStatement) {
 
 // 二項演算のテスト
 TEST_F(HirLoweringTest, BinaryExpression) {
-    const std::string code = R"(
-        int main() {
-            int x = 10 + 20;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("binary_expression");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     auto* let = std::get<std::unique_ptr<hir::HirLet>>(func->body[0]->kind).get();
     ASSERT_NE(let->init, nullptr);
@@ -171,14 +144,7 @@ TEST_F(HirLoweringTest, BinaryExpression) {
 
 // 複合代入演算子の脱糖テスト
 TEST_F(HirLoweringTest, CompoundAssignmentDesugaring) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            x += 5;
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("compound_assignment");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 2u);
 
@@ -198,16 +164,7 @@ TEST_F(HirLoweringTest, CompoundAssignmentDesugaring) {
 
 // while文の脱糖
 TEST_F(HirLoweringTest, WhileLoopDesugaring) {
-    const std::string code = R"(
-        int main() {
-            int i = 0;
-            while (i < 10) {
-                i = i + 1;
-            }
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("while_loop_desugaring");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 2u);
 
@@ -222,15 +179,7 @@ TEST_F(HirLoweringTest, WhileLoopDesugaring) {
 
 // for文の脱糖
 TEST_F(HirLoweringTest, ForLoopDesugaring) {
-    const std::string code = R"(
-        int main() {
-            for (int i = 0; i < 10; i++) {
-                int x = i;
-            }
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("for_loop_desugaring");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
 
     // forループはHirForとして保持される
@@ -252,16 +201,7 @@ TEST_F(HirLoweringTest, ForLoopDesugaring) {
 // ブロック文のテスト
 // ============================================================
 TEST_F(HirLoweringTest, BlockStatement) {
-    const std::string code = R"(
-        int main() {
-            {
-                int x = 1;
-                int y = 2;
-            }
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("block_statement");
     auto* func = std::get<std::unique_ptr<hir::HirFunction>>(hir->declarations[0]->kind).get();
     ASSERT_EQ(func->body.size(), 1u);
 
@@ -285,21 +225,6 @@ TEST_F(HirLoweringTest, EmptyProgram) {
 // 複数宣言のテスト
 // ============================================================
 TEST_F(HirLoweringTest, MultipleDeclarations) {
-    const std::string code = R"(
-        struct Point {
-            int x;
-            int y;
-        }
-
-        int add(int a, int b) {
-            return a + b;
-        }
-
-        int main() {
-            return add(1, 2);
-        }
-    )";
-
-    auto hir = parse_and_lower(code);
+    auto hir = lower_case("multiple_declarations");
     EXPECT_EQ(hir->declarations.size(), 3u);
 }

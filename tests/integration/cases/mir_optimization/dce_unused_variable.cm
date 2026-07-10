@@ -1,0 +1,5 @@
+int main() {
+    int unused = 42;
+    int used = 10;
+    return used;
+}

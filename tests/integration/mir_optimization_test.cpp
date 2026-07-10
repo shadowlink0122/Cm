@@ -9,6 +9,7 @@
 #include "../../src/mir/passes/scalar/propagation.hpp"
 #include "../../src/mir/printer.hpp"
 
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <sstream>
@@ -16,10 +17,20 @@
 using namespace cm;
 
 // ============================================================
-// テストヘルパー
+// MIR最適化パス 統合テスト
 // ============================================================
+// Cmソースは tests/integration/cases/mir_optimization/ の .cm ファイルに分割
 class MirOptimizationTest : public ::testing::Test {
    protected:
+    std::string load_case(const std::string& name) {
+        std::string path = std::string(CM_MIR_OPT_CASE_DIR) + "/" + name + ".cm";
+        std::ifstream ifs(path);
+        EXPECT_TRUE(ifs.is_open()) << "ケースファイルを読み込めません: " << path;
+        std::stringstream ss;
+        ss << ifs.rdbuf();
+        return ss.str();
+    }
+
     std::unique_ptr<mir::MirProgram> compile_to_mir(const std::string& code) {
         // レクサー → パーサー → HIR → MIR
         Lexer lex(code);
@@ -34,6 +45,10 @@ class MirOptimizationTest : public ::testing::Test {
         auto mir_program = mir_lowering.lower(hir);
 
         return std::make_unique<mir::MirProgram>(std::move(mir_program));
+    }
+
+    std::unique_ptr<mir::MirProgram> compile_case(const std::string& name) {
+        return compile_to_mir(load_case(name));
     }
 
     // 特定の最適化パスを実行
@@ -92,15 +107,7 @@ class MirOptimizationTest : public ::testing::Test {
 // 定数畳み込みのテスト
 // ============================================================
 TEST_F(MirOptimizationTest, ConstantFolding_Simple) {
-    const std::string code = R"(
-        int main() {
-            int x = 2 + 3;
-            int y = x * 4;
-            return y;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("constant_folding_simple");
     auto& func = *mir->functions[0];
 
     // 最適化前: 定数演算がそのまま
@@ -118,18 +125,7 @@ TEST_F(MirOptimizationTest, ConstantFolding_Simple) {
 }
 
 TEST_F(MirOptimizationTest, ConstantFolding_Comparison) {
-    const std::string code = R"(
-        int main() {
-            bool x = 10 > 5;
-            bool y = 3 == 3;
-            if (x && y) {
-                return 1;
-            }
-            return 0;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("constant_folding_comparison");
 
     // 定数畳み込みを実行
     mir::opt::ConstantFolding folding;
@@ -145,15 +141,7 @@ TEST_F(MirOptimizationTest, ConstantFolding_Comparison) {
 // デッドコード除去のテスト
 // ============================================================
 TEST_F(MirOptimizationTest, DeadCodeElimination_UnusedVariable) {
-    const std::string code = R"(
-        int main() {
-            int unused = 42;
-            int used = 10;
-            return used;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("dce_unused_variable");
     auto& func = *mir->functions[0];
 
     // 最適化前の文の数をカウント
@@ -181,14 +169,7 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnusedVariable) {
 }
 
 TEST_F(MirOptimizationTest, DeadCodeElimination_UnreachableBlock) {
-    const std::string code = R"(
-        int main() {
-            return 42;
-            int x = 100;  // 到達不可能
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("dce_unreachable_block");
     auto& func = *mir->functions[0];
 
     size_t blocks_before = 0;
@@ -215,16 +196,7 @@ TEST_F(MirOptimizationTest, DeadCodeElimination_UnreachableBlock) {
 // コピー伝播のテスト
 // ============================================================
 TEST_F(MirOptimizationTest, CopyPropagation_Simple) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            int y = x;
-            int z = y;
-            return z;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("copy_propagation_simple");
     auto& func = *mir->functions[0];
 
     // コピー伝播を実行
@@ -237,17 +209,7 @@ TEST_F(MirOptimizationTest, CopyPropagation_Simple) {
 }
 
 TEST_F(MirOptimizationTest, CopyPropagation_Chain) {
-    const std::string code = R"(
-        int main() {
-            int a = 5;
-            int b = a;
-            int c = b;
-            int d = c;
-            return d + 1;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("copy_propagation_chain");
 
     // コピー伝播を実行
     mir::opt::CopyPropagation cp;
@@ -262,17 +224,7 @@ TEST_F(MirOptimizationTest, CopyPropagation_Chain) {
 // 最適化パイプラインのテスト
 // ============================================================
 TEST_F(MirOptimizationTest, OptimizationPipeline_Standard) {
-    const std::string code = R"(
-        int main() {
-            int x = 2 + 3;    // 定数畳み込み
-            int y = x;        // コピー伝播
-            int z = y * 2;    // 定数畳み込み（伝播後）
-            int unused = 100; // デッドコード除去
-            return z;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("pipeline_standard");
 
     // 標準的な最適化パイプラインを実行
     mir::opt::OptimizationPipeline pipeline;
@@ -288,17 +240,7 @@ TEST_F(MirOptimizationTest, OptimizationPipeline_Standard) {
 }
 
 TEST_F(MirOptimizationTest, OptimizationPipeline_Fixpoint) {
-    const std::string code = R"(
-        int main() {
-            int a = 1;
-            int b = a + 1;
-            int c = b + 1;
-            int d = c + 1;
-            return d;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("pipeline_fixpoint");
 
     // 収束するまで最適化を繰り返す
     mir::opt::OptimizationPipeline pipeline;
@@ -314,17 +256,7 @@ TEST_F(MirOptimizationTest, OptimizationPipeline_Fixpoint) {
 // 制御フロー簡略化のテスト
 // ============================================================
 TEST_F(MirOptimizationTest, SimplifyControlFlow_GotoChain) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            if (x > 5) {
-                x = 20;
-            }
-            return x;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("simplify_control_flow_goto_chain");
 
     // 制御フロー簡略化を実行
     mir::opt::SimplifyControlFlow scf;
@@ -337,31 +269,7 @@ TEST_F(MirOptimizationTest, SimplifyControlFlow_GotoChain) {
 // 統合テスト
 // ============================================================
 TEST_F(MirOptimizationTest, IntegrationTest_ComplexOptimization) {
-    const std::string code = R"(
-        int main() {
-            int sum = 0;
-            int i = 0;
-
-            // 定数条件
-            if (10 > 5) {
-                sum = 100;
-            } else {
-                sum = 200;  // 到達不可能
-            }
-
-            // 定数演算
-            int x = 2 * 3 + 4;
-            int y = x;
-
-            // 未使用変数
-            int unused1 = 999;
-            int unused2 = unused1 + 1;
-
-            return sum + y;
-        }
-    )";
-
-    auto mir = compile_to_mir(code);
+    auto mir = compile_case("integration_complex_optimization");
 
     // フル最適化パイプライン
     mir::opt::OptimizationPipeline pipeline;

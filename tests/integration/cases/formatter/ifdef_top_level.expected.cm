@@ -1,0 +1,3 @@
+#ifdef TEST
+    bool a = true;
+#end

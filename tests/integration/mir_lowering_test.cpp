@@ -3,6 +3,7 @@
 #include "../../src/hir/lowering/lowering.hpp"
 #include "../../src/mir/lowering/lowering.hpp"
 
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <sstream>
@@ -10,10 +11,20 @@
 using namespace cm;
 
 // ============================================================
-// テストヘルパー
+// MIR lowering 統合テスト
 // ============================================================
+// Cmソースは tests/integration/cases/mir_lowering/ の .cm ファイルに分割
 class MirLoweringTest : public ::testing::Test {
    protected:
+    std::string load_case(const std::string& name) {
+        std::string path = std::string(CM_MIR_LOWERING_CASE_DIR) + "/" + name + ".cm";
+        std::ifstream ifs(path);
+        EXPECT_TRUE(ifs.is_open()) << "ケースファイルを読み込めません: " << path;
+        std::stringstream ss;
+        ss << ifs.rdbuf();
+        return ss.str();
+    }
+
     std::unique_ptr<mir::MirProgram> parse_and_lower(const std::string& code) {
         // レクサー → パーサー → HIR → MIR
         Lexer lex(code);
@@ -28,6 +39,10 @@ class MirLoweringTest : public ::testing::Test {
         auto mir = mir_lowering.lower(hir);
 
         return std::make_unique<mir::MirProgram>(std::move(mir));
+    }
+
+    std::unique_ptr<mir::MirProgram> lower_case(const std::string& name) {
+        return parse_and_lower(load_case(name));
     }
 
     // 基本ブロックの数をカウント
@@ -46,13 +61,7 @@ class MirLoweringTest : public ::testing::Test {
 // 基本的な関数のテスト
 // ============================================================
 TEST_F(MirLoweringTest, SimpleFunctionWithReturn) {
-    const std::string code = R"(
-        int main() {
-            return 42;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("simple_function_with_return");
     ASSERT_EQ(mir->functions.size(), 1u);
 
     const auto& func = *mir->functions[0];
@@ -72,15 +81,7 @@ TEST_F(MirLoweringTest, SimpleFunctionWithReturn) {
 // 変数宣言のテスト
 // ============================================================
 TEST_F(MirLoweringTest, VariableDeclaration) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            int y = x + 5;
-            return y;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("variable_declaration");
     const auto& func = *mir->functions[0];
 
     // ローカル変数が作成されているか
@@ -102,19 +103,7 @@ TEST_F(MirLoweringTest, VariableDeclaration) {
 // if文のテスト（CFG構築）
 // ============================================================
 TEST_F(MirLoweringTest, IfStatementCFG) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            if (x > 5) {
-                x = 20;
-            } else {
-                x = 30;
-            }
-            return x;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("if_statement_cfg");
     const auto& func = *mir->functions[0];
 
     // if文により複数のブロックが生成される
@@ -132,14 +121,7 @@ TEST_F(MirLoweringTest, IfStatementCFG) {
 // 二項演算の分解テスト
 // ============================================================
 TEST_F(MirLoweringTest, ComplexExpressionDecomposition) {
-    const std::string code = R"(
-        int main() {
-            int x = 1 + 2 * 3;
-            return x;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("complex_expression_decomposition");
     const auto& func = *mir->functions[0];
 
     // 複雑な式は一時変数を使って分解される
@@ -159,17 +141,7 @@ TEST_F(MirLoweringTest, ComplexExpressionDecomposition) {
 // ループのテスト
 // ============================================================
 TEST_F(MirLoweringTest, LoopStructure) {
-    const std::string code = R"(
-        int main() {
-            int i = 0;
-            while (i < 10) {
-                i = i + 1;
-            }
-            return i;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("loop_structure");
     const auto& func = *mir->functions[0];
 
     // ループは複数のブロックを生成
@@ -194,15 +166,7 @@ TEST_F(MirLoweringTest, LoopStructure) {
 // 三項演算子のテスト
 // ============================================================
 TEST_F(MirLoweringTest, TernaryOperator) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            int y = x > 5 ? 100 : 200;
-            return y;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("ternary_operator");
     const auto& func = *mir->functions[0];
 
     // 三項演算子は分岐構造を生成
@@ -213,17 +177,7 @@ TEST_F(MirLoweringTest, TernaryOperator) {
 // CFGの接続テスト
 // ============================================================
 TEST_F(MirLoweringTest, CFGConnectivity) {
-    const std::string code = R"(
-        int main() {
-            int x = 10;
-            if (true) {
-                x = 20;
-            }
-            return x;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("cfg_connectivity");
     auto& func = *mir->functions[0];
 
     // CFGを構築
@@ -247,12 +201,7 @@ TEST_F(MirLoweringTest, CFGConnectivity) {
 // 空の関数のテスト
 // ============================================================
 TEST_F(MirLoweringTest, EmptyFunction) {
-    const std::string code = R"(
-        void main() {
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("empty_function");
     const auto& func = *mir->functions[0];
 
     // 少なくとも1つのブロック（エントリー）
@@ -268,19 +217,7 @@ TEST_F(MirLoweringTest, EmptyFunction) {
 // ローカル変数のスコープテスト
 // ============================================================
 TEST_F(MirLoweringTest, LocalVariableScope) {
-    const std::string code = R"(
-        int main() {
-            {
-                int x = 10;
-            }
-            {
-                int y = 20;
-            }
-            return 0;
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("local_variable_scope");
     const auto& func = *mir->functions[0];
 
     // ブロックスコープ内の変数も正しく処理される
@@ -291,17 +228,7 @@ TEST_F(MirLoweringTest, LocalVariableScope) {
 // 複数の関数のテスト
 // ============================================================
 TEST_F(MirLoweringTest, MultipleFunctions) {
-    const std::string code = R"(
-        int add(int a, int b) {
-            return a + b;
-        }
-
-        int main() {
-            return add(1, 2);
-        }
-    )";
-
-    auto mir = parse_and_lower(code);
+    auto mir = lower_case("multiple_functions");
     EXPECT_EQ(mir->functions.size(), 2u);
 
     // 各関数が正しく変換されているか

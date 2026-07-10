@@ -1,0 +1,5 @@
+void f() {
+#ifdef TEST
+int x = 1;
+#end
+}

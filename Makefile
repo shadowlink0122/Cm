@@ -94,6 +94,7 @@ help:
 	@echo "Test Commands (Unit Tests):"
 	@echo "  make test           - 全テスト実行（unit + integration）"
 	@echo "  make test-unit      - C++ユニットテストのみ"
+	@echo "  make test-integration - C++統合テストのみ"
 	@echo "  make test-lexer     - Lexerテストのみ"
 	@echo "  make test-hir       - HIR Loweringテストのみ"
 	@echo "  make test-mir       - MIR Loweringテストのみ"
@@ -150,6 +151,8 @@ help:
 	@echo "  make b   - build"
 	@echo "  make t   - test (unit + integration)"
 	@echo "  make tu  - test-unit (C++ unit tests only)"
+	@echo "  make ti  - test-integration (C++ integration tests)"
+	@echo "  make tuf - test-uefi"
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
 	@echo "  make tl  - test-llvm"
@@ -454,10 +457,19 @@ dx: debug-x86
 
 .PHONY: test-unit
 test-unit:
-	@echo "Running all C++ unit tests..."
-	@ctest --test-dir $(BUILD_DIR) --output-on-failure
+	@echo "Running C++ unit tests..."
+	@ctest --test-dir $(BUILD_DIR) -L unit --output-on-failure
 	@echo ""
 	@echo "✅ All unit tests passed!"
+
+# C++統合テスト（コンパイルパイプラインを通すgtest。
+# Cmプログラムは tests/integration/cases/ の .cm ファイルから読み込む）
+.PHONY: test-integration
+test-integration:
+	@echo "Running C++ integration tests..."
+	@ctest --test-dir $(BUILD_DIR) -L integration --output-on-failure
+	@echo ""
+	@echo "✅ All integration tests passed!"
 
 # cm test コマンドのE2Eテスト（JIT/SVディスパッチ）
 .PHONY: test-cm-test
@@ -467,11 +479,12 @@ test-cm-test:
 
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
+test: test-unit test-integration test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
 	@echo "  - Unit tests (C++)"
+	@echo "  - Integration tests (C++)"
 	@echo "  - Interpreter tests (parallel)"
 	@echo "  - LLVM Native tests (parallel)"
 	@echo "  - LLVM WASM tests (parallel)"
@@ -745,6 +758,9 @@ t: test
 .PHONY: tu
 tu: test-unit
 
+.PHONY: ti
+ti: test-integration
+
 .PHONY: ta
 ta: test-all
 
@@ -807,8 +823,9 @@ tla: test-llvm-all
 .PHONY: tb
 tb: test-baremetal
 
-.PHONY: tu
-tu: test-uefi
+# （tu は test-unit のショートカットのため、UEFIは tuf を使う）
+.PHONY: tuf
+tuf: test-uefi
 
 .PHONY: tbu
 tbu: test-baremetal test-uefi
