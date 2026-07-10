@@ -56,6 +56,10 @@ void f(posedge clk) {
   - indentationRules: `#ifdef`/`#ifndef`/`#else` で次行インデント増、
     `#end`/`#else` の行自体をデデント（エディタの自動インデント）
   - folding: `#ifdef`/`#ifndef` 〜 `#end` を折りたたみ可能に
+  - `colorizedBracketPairs` を `{}` と `()` に限定。VSCodeのブラケットペア
+    色付けはネスト深さで `[` `]` を塗り替える（struct内の属性括弧が
+    深さ2のピンクになる）ため、角括弧を対象外にして tmLanguage の
+    配色（`[` `]`=黄）を常に適用する
 
 ## テスト計画
 

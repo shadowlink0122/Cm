@@ -92,5 +92,15 @@
   "indentationRules": {
     "increaseIndentPattern": "^(((?!\\/\\/).)*(\\{[^}\"'`]*|\\([^)\"'`]*|\\[[^\\]\"'`]*)|\\s*#\\s*(ifdef|ifndef|else)\\b.*)$",
     "decreaseIndentPattern": "^((?!.*?\\/\\*).*\\*/)?\\s*([\\}\\]].*|#\\s*(end|else)\\b.*)$"
-  }
+  },
+  "colorizedBracketPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "(",
+      ")"
+    ]
+  ]
 }
