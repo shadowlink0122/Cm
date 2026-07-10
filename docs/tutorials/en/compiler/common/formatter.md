@@ -63,6 +63,26 @@ int main() {
 }
 ```
 
+### 2.1 Conditional-compilation block indentation (v0.16.0)
+
+The contents of `#ifdef` / `#ifndef` / `#else` ... `#end` blocks are
+indented one level. The directives themselves stay at the enclosing
+indent level, and nesting or combining with braces is supported:
+
+```cm
+// Before
+#ifdef TEST
+#[input] posedge clk;
+const uint N = 1;
+#end
+
+// After
+#ifdef TEST
+    #[input] posedge clk;
+    const uint N = 1;
+#end
+```
+
 ### 3. Single-line Block Preservation
 
 Short blocks are kept on a single line:

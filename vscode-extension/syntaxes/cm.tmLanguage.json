@@ -91,7 +91,7 @@
       "patterns": [
         {
           "name": "meta.preprocessor.macro.cm",
-          "begin": "^\\s*#\\s*(define|undef)\\b",
+          "begin": "^\\s*(#\\s*(?:define|undef))\\b",
           "end": "$",
           "beginCaptures": {
             "1": {
@@ -107,7 +107,7 @@
         },
         {
           "name": "meta.preprocessor.conditional.cm",
-          "match": "^\\s*#\\s*(ifdef|ifndef|if|elif|elseif|else|endif)\\b",
+          "match": "^\\s*(#\\s*(?:ifdef|ifndef|elseif|elif|else|endif|end|if))\\b",
           "captures": {
             "1": {
               "name": "keyword.control.directive.cm"
@@ -116,7 +116,7 @@
         },
         {
           "name": "meta.preprocessor.diagnostic.cm",
-          "begin": "^\\s*#\\s*(error|warning)\\b",
+          "begin": "^\\s*(#\\s*(?:error|warning))\\b",
           "end": "$",
           "beginCaptures": {
             "1": {
@@ -132,7 +132,16 @@
         },
         {
           "name": "meta.preprocessor.include.cm",
-          "match": "^\\s*#\\s*(include)\\b",
+          "match": "^\\s*(#\\s*include)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.cm"
+            }
+          }
+        },
+        {
+          "name": "meta.preprocessor.other.cm",
+          "match": "^\\s*(#[A-Za-z_][A-Za-z0-9_]*)\\b",
           "captures": {
             "1": {
               "name": "keyword.control.directive.cm"
@@ -723,18 +732,18 @@
           "end": "(\\])",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.definition.attribute.cm"
+              "name": "punctuation.definition.attribute.cm keyword.control.directive.cm"
             }
           },
           "endCaptures": {
             "1": {
-              "name": "punctuation.definition.attribute.cm"
+              "name": "punctuation.definition.attribute.cm keyword.control.directive.cm"
             }
           },
           "patterns": [
             {
-              "name": "keyword.other.attribute.test.cm",
-              "match": "\\btest\\b"
+              "name": "keyword.other.attribute.cm",
+              "match": "\\b(test|input|output|inout|target)\\b"
             },
             {
               "name": "entity.name.function.attribute.cm",

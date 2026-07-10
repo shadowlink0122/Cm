@@ -63,6 +63,26 @@ int main() {
 }
 ```
 
+### 2.1 条件付きコンパイルブロックのインデント（v0.16.0）
+
+`#ifdef` / `#ifndef` / `#else` 〜 `#end` のブロック内容は1段インデントされます。
+ディレクティブ自体は外側のインデントレベルに置かれ、ネストや
+ブレースとの組み合わせにも対応します：
+
+```cm
+// Before
+#ifdef TEST
+#[input] posedge clk;
+const uint N = 1;
+#end
+
+// After
+#ifdef TEST
+    #[input] posedge clk;
+    const uint N = 1;
+#end
+```
+
 ### 3. 単一行ブロックの保持
 
 短いブロックは単一行のまま保持されます：

@@ -4,9 +4,9 @@
 import std::io::println;
 
 #ifdef TEST
-int helper() {
-    return 1;
-}
+    int helper() {
+        return 1;
+    }
 #end
 
 #[test]

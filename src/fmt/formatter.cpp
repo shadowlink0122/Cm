@@ -213,9 +213,10 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     std::ostringstream result;
     std::string line;
     bool first = true;
-    int brace_depth = 0;          // 現在のブレース深さ
-    int bracket_depth = 0;        // 現在のブラケット深さ（配列[]）
-    int paren_depth = 0;          // 現在の丸括弧深さ（関数引数等）
+    int brace_depth = 0;    // 現在のブレース深さ
+    int bracket_depth = 0;  // 現在のブラケット深さ（配列[]）
+    int paren_depth = 0;    // 現在の丸括弧深さ（関数引数等）
+    int ifdef_depth = 0;  // 条件付きコンパイルブロック深さ（#ifdef/#ifndef〜#end）
     bool in_backtick = false;     // バッククォート文字列内かどうか
     int backtick_base_depth = 0;  // バッククォート開始時の深さ
 
@@ -316,8 +317,17 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             paren_depth--;
         }
 
-        // インデントを計算（ブレース深さ + ブラケット深さ + 丸括弧深さ）
-        int total_depth = brace_depth + bracket_depth + paren_depth;
+        // 条件付きコンパイルディレクティブの判定
+        // （ブロック内容を1段インデントする。#ifdef/#else自体は外側の深さで出力）
+        bool is_cond_open = (content.rfind("#ifdef", 0) == 0 || content.rfind("#ifndef", 0) == 0);
+        bool is_cond_else = (content.rfind("#else", 0) == 0);
+        bool is_cond_end = (content.rfind("#end", 0) == 0);
+        if ((is_cond_else || is_cond_end) && ifdef_depth > 0) {
+            ifdef_depth--;
+        }
+
+        // インデントを計算（ブレース + ブラケット + 丸括弧 + 条件付きコンパイル深さ）
+        int total_depth = brace_depth + bracket_depth + paren_depth + ifdef_depth;
         size_t indent = static_cast<size_t>(total_depth) * indent_width_;
 
         // 正規化されたインデントで出力
@@ -326,6 +336,11 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             changes++;
         }
         result << new_line;
+
+        // #ifdef/#ifndef/#else の次行からブロック内容を1段深くする
+        if (is_cond_open || is_cond_else) {
+            ifdef_depth++;
+        }
 
         // 行内のブレース・ブラケットを数える（文字列やコメント内は除外）
         bool in_string = false;
