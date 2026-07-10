@@ -39,14 +39,16 @@ void f(posedge clk) {
 - `fmt/formatter.cpp` `normalize_indentation`: `ifdef_depth` を追加。
   `#ifdef`/`#ifndef` の次行から+1、`#end` で-1、`#else` は
   出力時-1/次行+1（`} else {` と同じ扱い）
-- VSCode `cm.tmLanguage.json`:
-  - 条件ディレクティブの正規表現に `end` を追加し、`#` 自体も
-    `keyword.control.directive.cm` に含める（指摘1・2）
-  - `#define`/`#undef`/`#error`/`#warning`/`#include` も同様に `#` を含める
-  - 未知の `#ディレクティブ` のキャッチオール規則を追加（将来の構文）
-  - 属性 `#[` `]` に `keyword.control.directive.cm` を併記し、
-    `test`/`input`/`output`/`inout`/`target` を
-    `keyword.other.attribute.cm` として強調（指摘3）
+- VSCode `cm.tmLanguage.json`（`#` 構文の統一配色）:
+  - 配色規則: **`#` = 白（デフォルト前景）、属性の `[` `]` = 黄、
+    中身・ディレクティブ名 = ピンク**
+    - ディレクティブ `#ifdef` 等: `#` → `punctuation.definition.directive`、
+      名前 → `keyword.control.directive`（ピンク）。`end` を追加（指摘1）
+    - 属性 `#[...]`: `#` → `punctuation.definition.attribute`、
+      `[` `]` → `entity.name.function.attribute.bracket`（黄）、
+      中身は一律 `keyword.control.attribute`（ピンク）（指摘3）
+  - `#define`/`#undef`/`#error`/`#warning`/`#include` も同じ配色規則
+  - 未知の `#ディレクティブ` のキャッチオール規則を追加（将来の構文）（指摘2）
 - VSCode `language-configuration.json`:
   - indentationRules: `#ifdef`/`#ifndef`/`#else` で次行インデント増、
     `#end`/`#else` の行自体をデデント（エディタの自動インデント）
