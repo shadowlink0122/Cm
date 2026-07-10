@@ -66,7 +66,7 @@ class Formatter {
     /// ファイル末尾に1つの改行を保証
     std::string ensure_trailing_newline(const std::string& code, size_t& changes);
 
-    /// 行末コメントの位置揃え
+    /// 行末コメントの最小間隔を保証（位置は手動調整を尊重）
     std::string align_inline_comments(const std::string& code, size_t& changes);
 };
 

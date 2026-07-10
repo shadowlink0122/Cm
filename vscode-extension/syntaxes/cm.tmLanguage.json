@@ -110,13 +110,16 @@
         },
         {
           "name": "meta.preprocessor.conditional.cm",
-          "match": "^\\s*(#)\\s*(ifdef|ifndef|elseif|elif|else|endif|end|if)\\b",
+          "match": "^\\s*(#)\\s*(ifdef|ifndef|elseif|elif|else|endif|end|if)\\b\\s*([A-Za-z_][A-Za-z0-9_]*)?",
           "captures": {
             "1": {
               "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
+            },
+            "3": {
+              "name": "storage.type.primitive.cm"
             }
           }
         },

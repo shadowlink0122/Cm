@@ -83,6 +83,44 @@ const uint N = 1;
 #end
 ```
 
+### 2.2 Continuation-line indentation (v0.16.0)
+
+Continuation lines of a wrapped long expression are indented one level
+deeper than the first line of the statement. The first wrap adds one
+level, and subsequent wraps align to the same depth:
+
+```cm
+// Before
+uint n1 = (a & 1) + ((a >> 1) & 1)
++ ((a >> 2) & 1)
++ ((a >> 3) & 1);
+
+// After
+uint n1 = (a & 1) + ((a >> 1) & 1)
+    + ((a >> 2) & 1)
+    + ((a >> 3) & 1);
+```
+
+Continuation lines that carry an unclosed parenthesis follow the
+parenthesis depth instead:
+
+```cm
+out = (q0 | (q1 << 1) | (q2 << 2)
+    | (q3 << 3)
+    | (1 << 8)) as ushort;
+```
+
+### 2.3 Trailing-comment position (v0.16.0)
+
+Manually adjusted trailing-comment positions are respected. The gap
+between code and comment is widened to two spaces only when it is
+smaller than that:
+
+```cm
+tmds_out = 852;   // manually aligned comments stay as-is
+tmds_out = 171;   // (the 3-space adjustment is preserved)
+```
+
 ### 3. Single-line Block Preservation
 
 Short blocks are kept on a single line:

@@ -6,30 +6,30 @@ import std::io::println;
 
 int main() {
     #ifdef __x86_64__
-    println("=== LLVM Operand Test ===");
+        println("=== LLVM Operand Test ===");
 
-    // 変数初期化
-    int x = 50;
+        // 変数初期化
+        int x = 50;
 
-    // x86_64 AT&T構文: addl $imm, %reg
-    // ${+r:x}が$0に変換される
-    __asm__("addl $$10, ${+r:x}");
+        // x86_64 AT&T構文: addl $imm, %reg
+        // ${+r:x}が$0に変換される
+        __asm__("addl $$10, ${+r:x}");
 
-    // asm結果を直接表示
-    println("Result (should be 60):");
-    println(x);
+        // asm結果を直接表示
+        println("Result (should be 60):");
+        println(x);
 
     #else
-    // ARM64版
-    println("=== LLVM Operand Test ===");
+        // ARM64版
+        println("=== LLVM Operand Test ===");
 
-    int x = 50;
+        int x = 50;
 
-    // ARM64: add wN, wN, #imm
-    __asm__("add ${+r:x}, ${+r:x}, #10");
+        // ARM64: add wN, wN, #imm
+        __asm__("add ${+r:x}, ${+r:x}, #10");
 
-    println("Result (should be 60):");
-    println(x);
+        println("Result (should be 60):");
+        println(x);
 
     #end
     return 0;
