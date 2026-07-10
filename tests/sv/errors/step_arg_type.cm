@@ -10,7 +10,7 @@ async void ff(posedge clk) {
     dout = din;
 }
 
-#[sv::testbench]
+#[test]
 void tb() {
     step("x");
     assert(dout == 0, "never reached");

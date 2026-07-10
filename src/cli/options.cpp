@@ -25,7 +25,8 @@ void print_help(const char* program_name) {
     std::cout << "  check <file>          構文と型チェックのみ実行\n";
     std::cout << "  lint <file>           静的解析を実行\n";
     std::cout << "  fmt <file>            コードフォーマット\n";
-
+    std::cout << "  test <file>           #[test] 関数を実行（//! platform: sv は\n";
+    std::cout << "                        iverilogシミュレーション、それ以外はJIT実行）\n";
     std::cout << "  help                  このヘルプを表示\n\n";
     std::cout << "オプション:\n";
     std::cout << "  -o <file>             出力ファイル名を指定\n";
@@ -53,6 +54,7 @@ void print_help(const char* program_name) {
     std::cout << "  --sv-strict-lint      SV: lint_off抑止を出力しない（幅警告を可視化）\n";
     std::cout << "  --emit-constraints    SV: #[sv::pin]属性から.cst/.tclを生成（Gowin）\n";
     std::cout << "  -D <NAME>             条件付きコンパイル定義を追加（#ifdef用）\n";
+    std::cout << "  --test                #[test] 関数を含めてコンパイル（TESTを自動定義）\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -101,6 +103,10 @@ Options parse_options(int argc, char* argv[]) {
         opts.command = Command::Lint;
     } else if (cmd == "fmt") {
         opts.command = Command::Fmt;
+    } else if (cmd == "test") {
+        // #[test] 関数を実行（//! platform: でSVシミュレーション/JITを振り分け）
+        opts.command = Command::Test;
+        opts.test_mode = true;
     } else if (cmd == "cache") {
         opts.command = Command::Cache;
         // サブコマンドを取得
@@ -155,6 +161,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.sv_strict_lint = true;
         } else if (arg == "--emit-constraints") {
             opts.emit_constraints = true;
+        } else if (arg == "--test") {
+            opts.test_mode = true;
         } else if (arg == "-D" && i + 1 < argc) {
             opts.defines.push_back(argv[++i]);
         } else if (arg.rfind("-D", 0) == 0 && arg.size() > 2) {

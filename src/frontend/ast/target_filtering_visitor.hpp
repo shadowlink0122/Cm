@@ -15,9 +15,12 @@ namespace cm::ast {
 
 class TargetFilteringVisitor {
     Target target_;
+    // テストモード（cm test / --test）でのみ #[test] 宣言を残す
+    bool include_tests_;
 
    public:
-    explicit TargetFilteringVisitor(Target t) : target_(t) {}
+    explicit TargetFilteringVisitor(Target t, bool include_tests = false)
+        : target_(t), include_tests_(include_tests) {}
 
     void visit(Program& prog) { filter_decls(prog.declarations); }
 
@@ -81,6 +84,11 @@ class TargetFilteringVisitor {
 
     bool check_target_attributes(const std::vector<AttributeNode>& attrs) {
         for (const auto& attr : attrs) {
+            // #[test] 宣言はテストモード以外で除去する
+            // （テストビルド限定コンパイル。Rustの #[cfg(test)] + #[test] に相当）
+            if (attr.name == "test" && !include_tests_) {
+                return false;
+            }
             if (attr.name == "target") {
                 // printf("Found target attr\n");
                 if (!check_target_condition(attr.args)) {

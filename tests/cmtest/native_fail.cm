@@ -1,0 +1,7 @@
+// cm test (JITフロー): assert失敗で非0終了するケース
+import std::debug::assert;
+
+#[test]
+void always_fails() {
+    assert(1 == 2, "must fail");
+}

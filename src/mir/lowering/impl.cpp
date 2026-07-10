@@ -163,9 +163,9 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         static_cast<MirFunction::AlwaysKind>(static_cast<int>(func.always_kind));
     mir_func->attributes = func.attributes;  // SV属性を伝搬（sv::latch等）
 
-    // #[sv::testbench] 関数はSVテストベンチ生成でHIR文を直接変換するため保持する
+    // #[test] 関数はSVテストベンチ生成でHIR文を直接変換するため保持する
     for (const auto& attr : func.attributes) {
-        if (attr == "sv::testbench" || attr == "verilog::testbench") {
+        if (attr == "test") {
             for (const auto& stmt : func.body) {
                 if (stmt) {
                     mir_func->hir_stmts.push_back(stmt.get());

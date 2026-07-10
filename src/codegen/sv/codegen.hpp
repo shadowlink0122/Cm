@@ -72,8 +72,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::string generated_code_;
     // #[sv::parameter] 付きconstの名前（幅の記号出力用）
     std::set<std::string> sv_param_names_;
-    // #[sv::testbench] 関数（テストベンチ生成で使用）
-    const mir::MirFunction* testbench_fn_ = nullptr;
+    // #[test] 関数（テストベンチ生成で使用、宣言順）
+    std::vector<const mir::MirFunction*> testbench_fns_;
     // プロセスのクロック信号名（テストベンチのクロック検出用）
     std::set<std::string> process_clock_names_;
     // テストベンチで使用するクロックポート名（generateTestbenchで決定）

@@ -876,13 +876,21 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         // BFS: エントリポイントから到達可能な関数を収集
         std::queue<std::string> worklist;
 
-        // エントリポイント: export関数、main、extern関数
+        // エントリポイント: export関数、main、extern関数、#[test]関数
         for (const auto& func : program.functions) {
             if (!func)
                 continue;
+            // #[test] 関数はJITテストランナーが直接呼び出すため到達可能扱いにする
+            bool is_test_fn = false;
+            for (const auto& attr : func->attributes) {
+                if (attr == "test") {
+                    is_test_fn = true;
+                    break;
+                }
+            }
             if (func->is_export || func->is_extern || func->name == "main" ||
                 func->name == "_start" || func->name == "start_kernel" ||
-                func->name.find("__lambda_") == 0) {
+                func->name.find("__lambda_") == 0 || is_test_fn) {
                 if (reachableFunctions.insert(func->name).second) {
                     worklist.push(func->name);
                 }

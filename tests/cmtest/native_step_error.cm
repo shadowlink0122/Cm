@@ -1,0 +1,8 @@
+// cm test (JITフロー): step() はSVプラットフォーム専用のためエラーになるケース
+import std::debug::assert;
+
+#[test]
+void uses_step() {
+    step(1);
+    assert(true, "never reached");
+}

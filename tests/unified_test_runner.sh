@@ -885,7 +885,7 @@ EOJS
 
             # Stage 1: Cm → SV コンパイル
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile \
-                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+                --target=sv --test "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
                 # Stage 2: SVビルド検証 (Verilator or iverilog)
@@ -1503,7 +1503,7 @@ PY
 
             # Stage 1: Cm → SV コンパイル
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile \
-                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+                --target=sv --test "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
                 # Stage 2: SVビルド検証 (Verilator or iverilog)

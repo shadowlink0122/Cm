@@ -1,0 +1,18 @@
+// cm test (JITフロー): #[test] 関数が宣言順に実行され全て成功するケース
+import std::debug::assert;
+
+#ifdef TEST
+int double_it(int x) {
+    return x * 2;
+}
+#end
+
+#[test]
+void doubles_small_numbers() {
+    assert(double_it(2) == 4, "double 2");
+}
+
+#[test]
+void doubles_negative() {
+    assert(double_it(-3) == -6, "double -3");
+}

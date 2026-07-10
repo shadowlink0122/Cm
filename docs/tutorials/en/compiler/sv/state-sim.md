@@ -149,17 +149,19 @@ definition itself is not emitted to SV).
 
 Regression test: `tests/sv/simulation/assert_immediate`
 
-## Cm testbench functions (#[sv::testbench], v0.16.0)
+## #[test] functions (v0.16.0)
 
 Sequential stimulus that single-shot `//! test:` vectors cannot express
-can be written as a Cm function. A function marked `#[sv::testbench]`
-is translated into the testbench's initial block:
+can be written as a Cm function. The function immediately following
+`#[test]` becomes a test (no `#ifdef`/`#end` wrapper needed). On the SV
+target, each test function is translated into the testbench's initial
+block in declaration order:
 
 ```cm
 import std::debug::assert;
 
-#[sv::testbench]
-void tb() {
+#[test]
+void latch_sequence() {
     din = 5;
     step(1);                      // advance one clock
     assert(dout == 5, "first value latched");
@@ -169,28 +171,53 @@ void tb() {
 }
 ```
 
-- **`step(n)`**: wait n clocks (builtin available only in testbench functions)
+`#[test]` functions are compiled **only in test mode** (equivalent to
+Rust's `#[cfg(test)]` + `#[test]`). Normal `cm compile` / `cm run`
+removes them before type checking, so synthesis builds are unaffected.
+
+`cm test` picks the execution backend from the `//! platform:`
+directive:
+
+```bash
+cm test design.cm     # //! platform: sv → generate SV+TB, run iverilog/vvp
+cm test logic.cm      # no platform → run each #[test] function via JIT
+```
+
+- SV platform: all `#[test]` functions run **sequentially in one
+  initial block, in declaration order** (sharing DUT state)
+- native/JIT: each function runs **in isolation** (fresh state per
+  test), printing `[PASS] <name>` on completion. `step()` is
+  unavailable without a clock — use `//! platform: sv` for clocked tests
+- To integrate with an external flow, `cm compile --target=sv --test`
+  generates SV+TB including the `#[test]` functions
+
+Notes:
+
+- **`step(n)`**: wait n clocks (builtin available only in `#[test]`
+  functions on the SV platform)
 - **`assert(cond, msg)`**: prints PASS, or prints FAIL and `$fatal`s
   (non-zero sim exit → detected by the test runner)
 - **`println("...")`** → `$display` (string literals only)
 - Assignments drive DUT inputs as blocking assigns
 - Clock ports named other than `clk` (e.g. `pixel_clk`) are auto-detected from process clocks
-- A testbench function takes precedence over `//! test:` vectors
+- `#[test]` functions take precedence over `//! test:` vectors
+- `#[test]` functions must take no arguments and return `void`
 - In the test runner, use `SIM_OK` (expect completion) or
   `SIM_FAIL_EXPECTED` (expect a failing assertion) in `.expect`
 
 
-### Testing real circuits (-D SIM)
+### Testing real circuits (#ifdef TEST)
 
-Combine `-D` defines with `#ifdef` to swap the OSC/PLL clock for an
-injected one only during simulation:
+Combine `#ifdef` with the auto-defined `TEST` symbol to swap the
+OSC/PLL clock for an injected one only during tests. Test mode
+(`cm test` / `--test`) defines `TEST` automatically:
 
 ```cm
-#ifdef SIM
-#[input] posedge clk;            // simulation: injected clock
+#ifdef TEST
+#[input] posedge clk;            // test: injected clock
 const uint DEBOUNCE_COUNT = 2;   // shortened timing
 #end
-#ifndef SIM
+#ifndef TEST
 extern struct OSC { ... }        // hardware: built-in oscillator
 bool clk = false;
 OSC osc_inst;
@@ -199,9 +226,11 @@ const uint DEBOUNCE_COUNT = 525000;
 ```
 
 ```bash
-cm compile --target=sv -D SIM design.cm -o design.sv   # for tests
-cm compile --target=sv design.cm -o design.sv          # for synthesis
+cm test design.cm                              # tests (TEST auto-defined)
+cm compile --target=sv design.cm -o design.sv  # synthesis (tests removed)
 ```
+
+Custom `-D` defines such as `-D SIM` can still be combined as before.
 
 
 ---

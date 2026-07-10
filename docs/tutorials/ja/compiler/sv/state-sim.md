@@ -157,17 +157,19 @@ end
 
 回帰テスト: `tests/sv/simulation/assert_immediate`
 
-## Cmテストベンチ関数（#[sv::testbench]・v0.16.0）
+## #[test] テスト関数（v0.16.0）
 
 `//! test:` の単発ベクタでは書けない**系列刺激**を、Cmの関数として記述できます。
-`#[sv::testbench]` を付けた関数がSVテストベンチのinitialブロックに変換されます:
+`#[test]` を付けた**直後の関数**がテスト対象になります（`#ifdef`/`#end` で
+囲う必要はありません）。SVでは各テスト関数がテストベンチのinitialブロックに
+宣言順で変換されます:
 
 ```cm
 import std::debug::assert;
 import std::io::println;
 
-#[sv::testbench]
-void tb() {
+#[test]
+void latch_sequence() {
     din = 5;
     step(1);                      // 1クロック進める
     assert(dout == 5, "first value latched");
@@ -177,6 +179,26 @@ void tb() {
     println("sequence done");
 }
 ```
+
+`#[test]` 関数は**テストモードでのみコンパイル**されます（Rustの
+`#[cfg(test)]` + `#[test]` に相当）。通常の `cm compile` / `cm run` では
+型チェック前に除去されるため、合成用ビルドへの影響はゼロです。
+
+テストの実行は `cm test` が `//! platform:` ディレクティブを見て
+バックエンドを自動選択します:
+
+```bash
+cm test design.cm     # //! platform: sv → SV+TB生成 + iverilog/vvp実行
+cm test logic.cm      # platform指定なし → 各#[test]関数をJITで直接実行
+```
+
+- SVプラットフォーム: 全 `#[test]` 関数を**宣言順に同一initialブロックで
+  逐次実行**します（DUT状態を共有）
+- native/JIT: 関数ごとに**独立実行**（状態隔離）し、完了ごとに
+  `[PASS] <関数名>` を表示します。`step()` はクロック概念がないため使えません
+  （`//! platform: sv` を指定してください）
+- 既存フローに組み込む場合は `cm compile --target=sv --test ...` で
+  `#[test]` 関数を含めてSV+TBだけ生成できます
 
 生成されるTB（抜粋）:
 
@@ -192,28 +214,30 @@ end else begin
 end
 ```
 
-- **`step(n)`**: nクロック待機（テストベンチ関数専用の組み込み）
+- **`step(n)`**: nクロック待機（`#[test]` 関数・SVプラットフォーム専用の組み込み）
 - **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`
   （シミュレーションが非0終了するためテストランナーが失敗を検出）
 - **`println("...")`**: `$display`（文字列リテラルのみ）
 - 代入はブロッキング代入としてDUT入力を駆動します
 - クロックポートが `clk` 以外の名前（`pixel_clk` 等）でも、プロセスのクロックに使われている入力ポートを自動検出します
-- testbench関数がある場合、`//! test:` ベクタより優先されます
+- `#[test]` 関数がある場合、`//! test:` ベクタより優先されます
+- `#[test]` 関数は引数なし・戻り値 `void` である必要があります
 - テストランナーでは `.expect` に `SIM_OK`（完走期待）または
   `SIM_FAIL_EXPECTED`（assert不成立を期待する失敗系テスト）を書きます
 
 
-### 実回路のテストパターン（-D SIM）
+### 実回路のテストパターン（#ifdef TEST）
 
-実機ではOSC/PLLから供給されるクロックを、シミュレーション時だけ
-外部注入に切り替えるには `-D` 定義と `#ifdef` を組み合わせます:
+実機ではOSC/PLLから供給されるクロックを、テスト時だけ外部注入に
+切り替えるには `#ifdef` を組み合わせます。テストモード
+（`cm test` / `--test`）では定義 `TEST` が自動で追加されます:
 
 ```cm
-#ifdef SIM
-#[input] posedge clk;            // シミュレーション: クロック注入
+#ifdef TEST
+#[input] posedge clk;            // テスト: クロック注入
 const uint DEBOUNCE_COUNT = 2;   // タイミング短縮
 #end
-#ifndef SIM
+#ifndef TEST
 extern struct OSC { ... }        // 実機: 内蔵オシレータ
 bool clk = false;
 OSC osc_inst;
@@ -222,9 +246,11 @@ const uint DEBOUNCE_COUNT = 525000;
 ```
 
 ```bash
-cm compile --target=sv -D SIM design.cm -o design.sv   # テスト用
-cm compile --target=sv design.cm -o design.sv          # 合成用（無影響）
+cm test design.cm                              # テスト（TESTが自動定義）
+cm compile --target=sv design.cm -o design.sv  # 合成用（テストコードは除去）
 ```
+
+`-D SIM` など任意の名前のユーザー定義も従来通り併用できます。
 
 
 ---

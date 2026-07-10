@@ -733,6 +733,10 @@
           },
           "patterns": [
             {
+              "name": "keyword.other.attribute.test.cm",
+              "match": "\\btest\\b"
+            },
+            {
               "name": "entity.name.function.attribute.cm",
               "match": "[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*"
             },

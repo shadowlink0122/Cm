@@ -613,7 +613,7 @@ struct MirFunction {
     // SVバックエンド: always ブロックの種別
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
-    // #[sv::testbench] 関数用: HIR文への参照（SVテストベンチ生成で使用。
+    // #[test] 関数用: HIR文への参照（SVテストベンチ生成で使用。
     // MirInitialBlock::hir_stmts と同じ寿命モデル＝HIRプログラム存命中のみ有効）
     std::vector<const hir::HirStmt*> hir_stmts;
     std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）

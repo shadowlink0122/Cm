@@ -1396,10 +1396,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     if (func.name == "assert" || func.name == "panic")
         return;
 
-    // #[sv::testbench] 関数はテストベンチ生成専用（モジュール本体へは出力しない）
+    // #[test] 関数はテストベンチ生成専用（モジュール本体へは出力しない）
     for (const auto& attr : func.attributes) {
-        if (attr == "sv::testbench" || attr == "verilog::testbench") {
-            testbench_fn_ = &func;
+        if (attr == "test") {
+            testbench_fns_.push_back(&func);
             return;
         }
     }
@@ -2636,7 +2636,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     // #[sv::parameter] 付きconstを事前収集（ポート幅の記号出力で参照）
     sv_param_names_.clear();
-    testbench_fn_ = nullptr;
+    testbench_fns_.clear();
     for (const auto& gv : program.global_vars) {
         if (!gv || !gv->is_const) {
             continue;
@@ -3640,15 +3640,27 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         ss << "        #10;\n\n";
     }
 
-    if (testbench_fn_ && !testbench_fn_->hir_stmts.empty()) {
-        // #[sv::testbench] 関数によるサイクル精度テストシーケンス
-        ss << "        // Cmテストベンチ関数（#[sv::testbench]）\n";
-        for (const auto* stmt : testbench_fn_->hir_stmts) {
-            if (stmt) {
-                ss << emitTestbenchStmt(*stmt);
-            }
+    bool has_tb_stmts = false;
+    for (const auto* fn : testbench_fns_) {
+        if (fn && !fn->hir_stmts.empty()) {
+            has_tb_stmts = true;
+            break;
         }
-        ss << "\n";
+    }
+    if (has_tb_stmts) {
+        // #[test] 関数によるサイクル精度テストシーケンス（宣言順に逐次実行）
+        for (const auto* fn : testbench_fns_) {
+            if (!fn || fn->hir_stmts.empty()) {
+                continue;
+            }
+            ss << "        // ---- test: " << fn->name << " ----\n";
+            for (const auto* stmt : fn->hir_stmts) {
+                if (stmt) {
+                    ss << emitTestbenchStmt(*stmt);
+                }
+            }
+            ss << "\n";
+        }
     } else if (!test_cases.empty()) {
         // テストシナリオベースの検証
         int test_num = 1;
@@ -3697,7 +3709,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     return ss.str();
 }
 
-// #[sv::testbench] 関数のHIR文をテストベンチのinitial文へ変換する。
+// #[test] 関数のHIR文をテストベンチのinitial文へ変換する。
 // 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/
 // assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
 std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {

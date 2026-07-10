@@ -893,6 +893,21 @@ void TypeChecker::register_print() {
 }
 
 void TypeChecker::check_function(ast::FunctionDecl& func) {
+    // #[test] 関数は「引数なし・戻り値void」に限定する
+    // （SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
+    for (const auto& attr : func.attributes) {
+        if (attr.name == "test") {
+            if (!func.params.empty()) {
+                error(func.name_span, "#[test] 関数 '" + func.name + "' は引数を取れません");
+            }
+            if (!func.return_type || func.return_type->kind != ast::TypeKind::Void) {
+                error(func.name_span,
+                      "#[test] 関数 '" + func.name + "' の戻り値は void である必要があります");
+            }
+            break;
+        }
+    }
+
     scopes_.push();
 
     generic_context_.clear();

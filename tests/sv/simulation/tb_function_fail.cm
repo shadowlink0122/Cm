@@ -10,7 +10,7 @@ async void ff(posedge clk) {
     dout = din;
 }
 
-#[sv::testbench]
+#[test]
 void tb() {
     din = 5;
     step(1);

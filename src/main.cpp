@@ -157,6 +157,55 @@ bool is_baremetal_platform(const std::string& directive) {
            directive.find("uefi") != std::string::npos;
 }
 
+// cm test (SVフロー): 生成済みSV+テストベンチを iverilog + vvp でシミュレーション実行する。
+// $readmemh の相対パスを解決するため、生成物ディレクトリをCWDにして実行する。
+// 戻り値: 終了コード（テストベンチの $fatal で非0 = テスト失敗）
+int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
+#if defined(_WIN32)
+    (void)sv_path;
+    (void)quiet;
+    std::cerr << "エラー: SVテストのシミュレーション実行はWindowsでは未対応です\n";
+    return 1;
+#else
+    // 子プロセス（iverilog/vvp）の出力と順序が入れ替わらないようフラッシュする
+    std::cout.flush();
+    namespace fs = std::filesystem;
+    fs::path sv(sv_path);
+    fs::path dir = sv.parent_path();
+    if (dir.empty()) {
+        dir = ".";
+    }
+    std::string stem = sv.stem().string();
+    fs::path tb = dir / (stem + "_tb.sv");
+    fs::path sim = dir / (stem + "_sim");
+
+    if (std::system("command -v iverilog >/dev/null 2>&1") != 0 ||
+        std::system("command -v vvp >/dev/null 2>&1") != 0) {
+        std::cerr << "エラー: iverilog / vvp が見つかりません（SVテストの実行に必要）\n";
+        std::cerr << "ヒント: macOS: brew install icarus-verilog / "
+                     "Ubuntu: sudo apt-get install iverilog\n";
+        return 1;
+    }
+    if (!fs::exists(tb)) {
+        std::cerr << "エラー: テストベンチが生成されていません: " << tb.string() << "\n";
+        return 1;
+    }
+    std::string compile_cmd =
+        "iverilog -g2012 -o '" + sim.string() + "' '" + sv.string() + "' '" + tb.string() + "'";
+    if (std::system(compile_cmd.c_str()) != 0) {
+        std::cerr << "エラー: iverilog コンパイルに失敗しました\n";
+        return 1;
+    }
+    std::string run_cmd = "cd '" + dir.string() + "' && vvp '" + fs::absolute(sim).string() + "'";
+    int rc = std::system(run_cmd.c_str());
+    int exit_code = WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
+    if (exit_code == 0 && !quiet) {
+        std::cout << "✓ SVテスト成功\n";
+    }
+    return exit_code;
+#endif
+}
+
 // 除外パターンにマッチするか判定
 bool matches_exclude_pattern(const std::string& filepath,
                              const std::vector<std::string>& patterns) {
@@ -372,6 +421,10 @@ int main(int argc, char* argv[]) {
                 preprocessor::ConditionalPreprocessor conditional;
                 for (const auto& def : opts.defines) {
                     conditional.define(def);
+                }
+                // テストモード（--test）: TEST を自動定義
+                if (opts.test_mode) {
+                    conditional.define("TEST");
                 }
                 code = conditional.process(code);
 
@@ -667,6 +720,45 @@ int main(int argc, char* argv[]) {
     }
     std::string code = std::move(file_result.content);
 
+    // ========== cm test: プラットフォームディレクティブでバックエンドを振り分け ==========
+    // //! platform: sv → SVテストベンチ生成 + iverilog/vvpシミュレーション
+    // それ以外        → JITで各 #[test] 関数を実行
+    bool run_sv_sim = false;  // SVフローで生成後にシミュレーションを実行する
+    if (opts.command == Command::Test) {
+        std::string directive = parse_platform_directive(code);
+        bool sv_platform = false;
+        {
+            std::istringstream ss(directive);
+            std::string token;
+            while (std::getline(ss, token, '|')) {
+                if (token == "sv" || token == "verilog" || token == "systemverilog") {
+                    sv_platform = true;
+                }
+            }
+        }
+        if (sv_platform) {
+            // SVフロー: compileと同じ経路でSV+TBを生成し、後段でシミュレーションを実行
+            opts.command = Command::Compile;
+            opts.target = "sv";
+            run_sv_sim = true;
+            if (opts.output_file.empty()) {
+                std::filesystem::create_directories(".tmp/test");
+                std::string stem = std::filesystem::path(opts.input_file).stem().string();
+                opts.output_file = ".tmp/test/" + stem + ".sv";
+            }
+        } else {
+            // JITフロー: Runと同じ経路で #[test] 関数を実行
+            if (!match_platform_directive(directive, "native") &&
+                !match_platform_directive(directive, "jit")) {
+                std::cerr << "エラー: platform '" << directive
+                          << "' のテスト実行は未対応です（sv または native/JIT のみ）\n";
+                std::cerr << "  ファイル: " << opts.input_file << "\n";
+                return 1;
+            }
+            opts.command = Command::Run;
+        }
+    }
+
     // //! platform: ディレクティブチェック
     {
         std::string directive = parse_platform_directive(code);
@@ -924,6 +1016,11 @@ int main(int argc, char* argv[]) {
         for (const auto& def : opts.defines) {
             conditional.define(def);
         }
+        // テストモード（cm test / --test）: TEST を自動定義
+        // （#[test] と連動するテスト補助コードを #ifdef TEST で書けるようにする）
+        if (opts.test_mode) {
+            conditional.define("TEST");
+        }
         // ターゲットに応じたプリプロセッサ定数を追加
         if (opts.target == "baremetal-arm" || opts.target == "bm" ||
             opts.target == "baremetal-x86" || opts.target == "bm-x86") {
@@ -1002,7 +1099,8 @@ int main(int argc, char* argv[]) {
 
             debug::ast::log(debug::ast::Id::Validate, "target=" + target_to_string(active_target),
                             debug::Level::Info);
-            ast::TargetFilteringVisitor target_filter(active_target);
+            // テストモード以外では #[test] 宣言も除去される
+            ast::TargetFilteringVisitor target_filter(active_target, opts.test_mode);
             target_filter.visit(program);
         }
 
@@ -1313,6 +1411,62 @@ int main(int argc, char* argv[]) {
         // ========== Backend ==========
         if (opts.command == Command::Run) {
 #ifdef CM_LLVM_ENABLED
+            // ========== ネイティブテストランナー（cm test / run --test）==========
+            // #[test] 関数を宣言順に、関数ごとに独立したJITで実行する（状態隔離）。
+            // 成功 = 関数が正常リターン。assert失敗は exit(1) で即時停止する。
+            if (opts.test_mode) {
+                std::vector<const mir::MirFunction*> test_fns;
+                for (const auto& func : mir.functions) {
+                    if (!func) {
+                        continue;
+                    }
+                    for (const auto& attr : func->attributes) {
+                        if (attr == "test") {
+                            test_fns.push_back(func.get());
+                            break;
+                        }
+                    }
+                }
+                if (test_fns.empty()) {
+                    std::cerr << "エラー: #[test] 関数が見つかりません: " << opts.input_file
+                              << "\n";
+                    return 1;
+                }
+                // step() はSVプラットフォーム専用（クロック概念が実行系に存在しない）
+                for (const auto* fn : test_fns) {
+                    for (const auto& block : fn->basic_blocks) {
+                        if (!block || !block->terminator ||
+                            block->terminator->kind != mir::MirTerminator::Call) {
+                            continue;
+                        }
+                        const auto& data =
+                            std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                        if (data.func && data.func->kind == mir::MirOperand::FunctionRef &&
+                            std::get<std::string>(data.func->data) == "step") {
+                            std::cerr << "エラー: step() は //! platform: sv のテストでのみ"
+                                         "使用できます（テスト関数: "
+                                      << fn->name << "）\n";
+                            std::cerr << "ヒント: クロック駆動のテストはファイル先頭に "
+                                         "//! platform: sv を指定してください\n";
+                            return 1;
+                        }
+                    }
+                }
+                std::setvbuf(stdout, nullptr, _IONBF, 0);
+                for (const auto* fn : test_fns) {
+                    cm::codegen::jit::JITEngine jit;
+                    auto result = jit.execute(mir, fn->name, opts.optimization_level);
+                    if (!result.success) {
+                        std::cerr << "JIT実行エラー (" << fn->name << "): " << result.errorMessage
+                                  << "\n";
+                        return 1;
+                    }
+                    std::cout << "[PASS] " << fn->name << "\n";
+                }
+                std::cout << "✓ " << test_fns.size() << " 件のテストが成功\n";
+                return 0;
+            }
+
             // JITキャッシュ: ソースが変更されていない場合、キャッシュされたバイナリを直接実行
             if (opts.incremental && !cache_fingerprint.empty()) {
                 cache::CacheManager cache_mgr(cache_config);
@@ -1435,6 +1589,11 @@ int main(int argc, char* argv[]) {
                                               .count();
                         std::cout << "✓ SystemVerilog 生成完了: " << sv_opts.outputFile << " ("
                                   << compile_ms << "ms)\n";
+                    }
+
+                    // cm test (SVフロー): 生成物をiverilog+vvpでシミュレーション実行
+                    if (run_sv_sim) {
+                        return run_sv_test_simulation(sv_opts.outputFile, opts.quiet);
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "SystemVerilog コード生成エラー: " << e.what() << "\n";

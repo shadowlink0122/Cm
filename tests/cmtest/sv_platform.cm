@@ -1,0 +1,18 @@
+//! platform: sv
+// cm test (SVフロー): platformディレクティブからSVシミュレーションが選択されるケース
+import std::debug::assert;
+
+#[input] posedge clk;
+#[input] uint din;
+#[output] uint dout = 0;
+
+async void ff(posedge clk) {
+    dout = din;
+}
+
+#[test]
+void latch_value() {
+    din = 9;
+    step(1);
+    assert(dout == 9, "value latched");
+}

@@ -120,7 +120,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
-        // step(n): SVテストベンチ関数（#[sv::testbench]）専用の組み込み。
+        // step(n): テスト関数（#[test]、SVプラットフォーム）専用の組み込み。
         // nクロック進める（SVでは repeat(n) @(posedge clk) に変換される）
         if (ident->name == "step") {
             if (call.args.size() != 1) {
