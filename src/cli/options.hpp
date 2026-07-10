@@ -46,6 +46,8 @@ struct Options {
     std::vector<std::string> defines;  // -D NAME: 条件付きコンパイル定義
     // テストモード（cm test / --test）: #[test]関数を含めてコンパイルし、TESTを自動定義
     bool test_mode = false;
+    // fmt --check: 整形せず、要整形ファイルがあれば非0終了（CIゲート用）
+    bool fmt_check = false;
     // ユーザ指定のMIR最適化オプション
     bool unroll_loops = false;  // --funroll-loops: 定数ループの静的展開
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数

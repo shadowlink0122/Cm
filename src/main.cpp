@@ -620,20 +620,28 @@ int main(int argc, char* argv[]) {
                 // フォーマット実行
                 auto result = formatter.format(code);
 
-                // 変更があればファイルを上書き
                 if (result.modified) {
-                    std::ofstream ofs(file);
-                    if (ofs) {
-                        ofs << result.formatted_code;
+                    if (opts.fmt_check) {
+                        // --check: 書き込まず要整形ファイルとして報告
+                        std::cout << file << ": 要整形（" << result.changes_applied << " 箇所）\n";
                         files_modified++;
                         total_changes += result.changes_applied;
-
-                        if (opts.verbose) {
-                            std::cout << file << ": " << result.changes_applied << " 箇所の整形\n";
-                        }
                     } else {
-                        std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
-                        files_failed++;
+                        // 変更があればファイルを上書き
+                        std::ofstream ofs(file);
+                        if (ofs) {
+                            ofs << result.formatted_code;
+                            files_modified++;
+                            total_changes += result.changes_applied;
+
+                            if (opts.verbose) {
+                                std::cout << file << ": " << result.changes_applied
+                                          << " 箇所の整形\n";
+                            }
+                        } else {
+                            std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
+                            files_failed++;
+                        }
                     }
                 }
 
@@ -645,14 +653,25 @@ int main(int argc, char* argv[]) {
 
         // サマリー表示（quietモードでは抑制）
         if (!opts.quiet) {
-            std::cout << "\n=== フォーマット完了 ===\n";
-            std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
-            std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            if (opts.fmt_check) {
+                std::cout << "\n=== フォーマットチェック完了 ===\n";
+                std::cout << "要整形: " << files_modified << "/" << cm_files.size()
+                          << " ファイル\n";
+            } else {
+                std::cout << "\n=== フォーマット完了 ===\n";
+                std::cout << "ファイル数: " << files_modified << "/" << cm_files.size()
+                          << " 修正\n";
+                std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            }
             if (files_failed > 0) {
                 std::cout << "失敗: " << files_failed << " ファイル\n";
             }
         }
 
+        // --check では要整形ファイルの存在も失敗として扱う（CIゲート用）
+        if (opts.fmt_check && files_modified > 0) {
+            return 1;
+        }
         return files_failed > 0 ? 1 : 0;
     }
 

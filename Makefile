@@ -721,8 +721,12 @@ format-check:
 	@echo "Checking code formatting..."
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -style=file -dry-run -Werror {} \; 2>&1 && \
-		echo "✅ Format check passed!" || \
-		(echo "❌ Format check failed! Run 'make format' to fix." && exit 1)
+		echo "✅ C++ format check passed!" || \
+		(echo "❌ C++ format check failed! Run 'make format' to fix." && exit 1)
+	@echo "Checking Cm code formatting..."
+	@find tests/common libs -type f -name "*.cm" | xargs ./cm fmt --check -q && \
+		echo "✅ Cm format check passed!" || \
+		(echo "❌ Cm format check failed! Run 'make format' to fix." && exit 1)
 
 .PHONY: lint
 lint: format-check

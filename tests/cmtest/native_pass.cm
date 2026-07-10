@@ -2,9 +2,9 @@
 import std::debug::assert;
 
 #ifdef TEST
-int double_it(int x) {
-    return x * 2;
-}
+    int double_it(int x) {
+        return x * 2;
+    }
 #end
 
 #[test]

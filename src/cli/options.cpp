@@ -55,6 +55,7 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-constraints    SV: #[sv::pin]属性から.cst/.tclを生成（Gowin）\n";
     std::cout << "  -D <NAME>             条件付きコンパイル定義を追加（#ifdef用）\n";
     std::cout << "  --test                #[test] 関数を含めてコンパイル（TESTを自動定義）\n";
+    std::cout << "  --check               fmt: 整形せず、要整形ファイルがあれば非0終了\n";
     std::cout << "  --run                 生成後に実行\n";
     std::cout << "  --ast                 AST（抽象構文木）を表示\n";
     std::cout << "  --hir                 HIR（高レベル中間表現）を表示\n";
@@ -163,6 +164,8 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_constraints = true;
         } else if (arg == "--test") {
             opts.test_mode = true;
+        } else if (arg == "--check") {
+            opts.fmt_check = true;
         } else if (arg == "-D" && i + 1 < argc) {
             opts.defines.push_back(argv[++i]);
         } else if (arg.rfind("-D", 0) == 0 && arg.size() > 2) {
