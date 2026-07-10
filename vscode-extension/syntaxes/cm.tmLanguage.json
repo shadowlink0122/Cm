@@ -10,9 +10,6 @@
       "include": "#platform-directive"
     },
     {
-      "include": "#attributes"
-    },
-    {
       "include": "#preprocessor"
     },
     {
@@ -23,6 +20,9 @@
     },
     {
       "include": "#strings"
+    },
+    {
+      "include": "#attributes"
     },
     {
       "include": "#import-statement"
@@ -95,7 +95,7 @@
           "end": "$",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.definition.directive.cm"
+              "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
@@ -113,7 +113,7 @@
           "match": "^\\s*(#)\\s*(ifdef|ifndef|elseif|elif|else|endif|end|if)\\b",
           "captures": {
             "1": {
-              "name": "punctuation.definition.directive.cm"
+              "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
@@ -126,7 +126,7 @@
           "end": "$",
           "beginCaptures": {
             "1": {
-              "name": "punctuation.definition.directive.cm"
+              "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
@@ -144,7 +144,7 @@
           "match": "^\\s*(#)\\s*(include)\\b",
           "captures": {
             "1": {
-              "name": "punctuation.definition.directive.cm"
+              "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
@@ -156,7 +156,7 @@
           "match": "^\\s*(#)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b",
           "captures": {
             "1": {
-              "name": "punctuation.definition.directive.cm"
+              "name": "punctuation.definition.directive.cm storage.type.directive.cm"
             },
             "2": {
               "name": "keyword.control.directive.cm"
@@ -525,6 +525,10 @@
           "match": "\\b(__asm__|__sizeof__|__typeof__|__typename__|__alignof__)\\b"
         },
         {
+          "name": "keyword.control.sv.cm",
+          "match": "\\b(assign)\\b"
+        },
+        {
           "name": "storage.modifier.sv.cm",
           "match": "\\b(always_comb|always_ff|always_latch|always|initial|posedge|negedge)\\b"
         }
@@ -743,27 +747,21 @@
       "patterns": [
         {
           "name": "meta.attribute.cm",
-          "begin": "(#)(\\[)",
-          "end": "(\\])",
-          "beginCaptures": {
+          "match": "(#)(\\[)([^\\]]*)(\\])",
+          "captures": {
             "1": {
-              "name": "punctuation.definition.attribute.cm"
+              "name": "punctuation.definition.attribute.cm storage.type.directive.cm"
             },
             "2": {
               "name": "entity.name.function.attribute.bracket.cm"
-            }
-          },
-          "endCaptures": {
-            "1": {
+            },
+            "3": {
+              "name": "keyword.control.attribute.cm"
+            },
+            "4": {
               "name": "entity.name.function.attribute.bracket.cm"
             }
-          },
-          "patterns": [
-            {
-              "name": "keyword.control.attribute.cm",
-              "match": "[^\\]]+"
-            }
-          ]
+          }
         }
       ]
     }

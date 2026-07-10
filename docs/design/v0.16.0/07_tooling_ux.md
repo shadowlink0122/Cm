@@ -40,13 +40,14 @@ void f(posedge clk) {
   `#ifdef`/`#ifndef` の次行から+1、`#end` で-1、`#else` は
   出力時-1/次行+1（`} else {` と同じ扱い）
 - VSCode `cm.tmLanguage.json`（`#` 構文の統一配色）:
-  - 配色規則: **`#` = 白（デフォルト前景）、属性の `[` `]` = 黄、
-    中身・ディレクティブ名 = ピンク**
-    - ディレクティブ `#ifdef` 等: `#` → `punctuation.definition.directive`、
+  - 配色規則: **`#` = 青、属性の `[` `]` = 黄、中身・ディレクティブ名 = ピンク、
+    `assign` = ピンク**
+    - ディレクティブ `#ifdef` 等: `#` → `storage.type.directive`（青）、
       名前 → `keyword.control.directive`（ピンク）。`end` を追加（指摘1）
-    - 属性 `#[...]`: `#` → `punctuation.definition.attribute`、
-      `[` `]` → `entity.name.function.attribute.bracket`（黄）、
-      中身は一律 `keyword.control.attribute`（ピンク）（指摘3）
+    - 属性 `#[...]`: 単一行マッチで `#`（青）・`[` `]`（黄）・中身（ピンク）を
+      キャプチャ（指摘3）。begin/end方式をやめたことで、閉じない `#[` による
+      複数行へのピンク漏れを根絶し、どのネスト・インデントでも同一ハイライト
+    - コメント・文字列を属性より先に評価し、コメント内の `#[...]` の誤着色を防止
   - `#define`/`#undef`/`#error`/`#warning`/`#include` も同じ配色規則
   - 未知の `#ディレクティブ` のキャッチオール規則を追加（将来の構文）（指摘2）
 - VSCode `language-configuration.json`:
