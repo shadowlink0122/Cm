@@ -747,21 +747,35 @@
       "patterns": [
         {
           "name": "meta.attribute.cm",
-          "match": "(#)(\\[)([^\\]]*)(\\])",
-          "captures": {
+          "begin": "(#)(\\[)",
+          "end": "(\\])|(?=$)",
+          "beginCaptures": {
             "1": {
               "name": "punctuation.definition.attribute.cm storage.type.directive.cm"
             },
             "2": {
               "name": "entity.name.function.attribute.bracket.cm"
-            },
-            "3": {
-              "name": "keyword.control.attribute.cm"
-            },
-            "4": {
+            }
+          },
+          "endCaptures": {
+            "1": {
               "name": "entity.name.function.attribute.bracket.cm"
             }
-          }
+          },
+          "patterns": [
+            {
+              "name": "punctuation.separator.namespace.cm",
+              "match": "::"
+            },
+            {
+              "name": "keyword.control.attribute.cm",
+              "match": "[^\\]:]+"
+            },
+            {
+              "name": "keyword.control.attribute.cm",
+              "match": ":"
+            }
+          ]
         }
       ]
     }
