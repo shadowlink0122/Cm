@@ -95,7 +95,10 @@
 | 問題 | 影響 | 状態 |
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
-| WASMで common/collections/nested_vector_lifecycle_test、common/memory/array_ptr_cast がskip | 理由未記録 | 設計09 G2で調査・解消予定 |
+| WASMでネストVec（Vec<Vec<T>>）の2行目push後に既存行のlen()が破壊される | common/collections/nested_vector_lifecycle_test をskip（理由記録済み） | 実バグとして設計09 G2で記録。修正は別課題 |
+| 改行を含む選択的import構文 `import mod::{A,\n B}` がパーサ未対応 | common/advanced_modules/import_features をskip | 全バックエンド共通の構文ギャップ |
+| WASMのO3で配列ポインタキャスト後の読み出しが0になる | common/memory/array_ptr_cast をO3のみskip（O0・ネイティブは正常） | 実バグとして設計09 G2で記録。修正は別課題 |
+| std::fs が未実装 | common/fs・common/file_io の2テストをskip | 実装時に有効化 |
 | JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
 
 ## 更新規則

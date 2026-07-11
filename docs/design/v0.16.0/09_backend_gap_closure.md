@@ -101,6 +101,13 @@ SV002/004/005/006 の型検査で捕捉されない非対応構文が、以下�
 | tutorials/{ja,en}/compiler/sv/types.md | `float`/`double` を「警告（SV004）」と記述しているが、v0.16.0で明示エラーに変更済み | エラーである旨に更新 |
 | docs/FEATURES.md | バックエンド表がv0.14.0時点のままで SV/UEFI/baremetal を欠き、診断コード表に SV0xx 帯がない | バックエンド表・診断表を現状へ更新し、マトリクスへのリンクを追加 |
 
+## 実施結果（2026-07-11）
+
+- **G1 完了**: SV007を4箇所+`#[test]`内の未対応呼び出し（計5箇所）に実装。ゴールデンテスト2件（sv007_inline_asm / sv007_test_unknown_call）を追加し、既存コーパスがフォールバック経路に到達しないことをフルスイートで確認
+- **G2 完了**: memory/array_ptr_cast はO0で成功するため有効化し、O3のみ理由つきskipに限定（O3で配列ポインタキャスト後の読み出しが0になる実バグを記録）。collections/nested_vector_lifecycle_test は実バグを確認（ネストVecの2行目push後に `row1.len()` が3→4に破壊される。ネイティブは正常）。skipへ理由とllvm-wasmパターンを記録し、修正は別課題とする
+- **G3 完了**: multi_field_extract.skip（死にファイル）を削除しテストを有効化。enum_char_value に期待値を追加して有効化。fs系2件（std::fs未実装）・import_features（改行を含む選択的import構文が未パース）・address_interpolation（実アドレス出力で非決定的）・llvm/io/input（対話入力）に理由を記録。SVの期待値欠落5件に COMPILE_OK 期待値を追加して有効化。ランナーを「コメントのみのskip=理由つき全バックエンドスキップ」に対応させ、空skipには理由記載を促す警告を追加
+- **G4〜G6 完了**: Stage 1（マトリクス・ドキュメント修正）で対応済み
+
 ## 段階分割
 
 1. **Stage 1（本設計と同時・ドキュメント）**: G5 マトリクス新設、G6 不整合修正、G4 既知の問題の記載

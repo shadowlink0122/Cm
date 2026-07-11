@@ -471,12 +471,14 @@ run_single_test() {
     if [ -f "$skip_file" ]; then
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
+            local has_pattern=0
             while IFS= read -r line || [[ -n "$line" ]]; do
                 # コメントと空行をスキップ
                 [[ "$line" =~ ^[[:space:]]*# ]] && continue
                 [[ -z "${line// }" ]] && continue
                 line="${line%%#*}"  # インラインコメント除去
                 line="${line// /}"  # 空白除去
+                has_pattern=1
 
                 if match_skip_pattern "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
                     echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $line"
@@ -484,9 +486,17 @@ run_single_test() {
                     return
                 fi
             done < "$skip_file"
+            # パターン行がなくコメント（理由）のみの場合、全バックエンドでスキップ
+            if [ "$has_pattern" -eq 0 ]; then
+                local skip_reason=$(grep -m1 '^[[:space:]]*#' "$skip_file" | sed 's/^[[:space:]]*#[[:space:]]*//')
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - ${skip_reason:-理由未記載}"
+                ((SKIPPED++))
+                return
+            fi
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
-            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists"
+            # （skipファイルには理由をコメントで記録すること）
+            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists (理由未記載: ${skip_file} にコメントで理由を記録してください)"
             ((SKIPPED++))
             return
         fi
@@ -1315,20 +1325,28 @@ run_parallel_test() {
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
+            local has_pattern=0
             while IFS= read -r line || [[ -n "$line" ]]; do
                 [[ "$line" =~ ^[[:space:]]*# ]] && continue
                 [[ -z "${line// }" ]] && continue
                 line="${line%%#*}"
                 line="${line// /}"
+                has_pattern=1
 
                 if match_skip_pattern_parallel "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
                     echo "SKIP:Skipped for $line" > "$result_file"
                     return
                 fi
             done < "$skip_file"
+            # パターン行がなくコメント（理由）のみの場合、全バックエンドでスキップ
+            if [ "$has_pattern" -eq 0 ]; then
+                local skip_reason=$(grep -m1 '^[[:space:]]*#' "$skip_file" | sed 's/^[[:space:]]*#[[:space:]]*//')
+                echo "SKIP:${skip_reason:-理由未記載}" > "$result_file"
+                return
+            fi
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
-            echo "SKIP:Skip file exists" > "$result_file"
+            echo "SKIP:Skip file exists (理由未記載)" > "$result_file"
             return
         fi
     fi

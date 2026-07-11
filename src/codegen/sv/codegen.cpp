@@ -1322,8 +1322,22 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             // 式ツリー経由で生成する（優先順位括弧はプリンタが構造から決定）
             return buildRvalueTree(rvalue, func, target_width)->to_string();
 
-        default:
-            return "/* unsupported rvalue */";
+        case mir::MirRvalue::Ref: {
+            // 借用はSVでは参照先の信号そのもの（連接lowering等で発生する）
+            const auto& ref_data = std::get<mir::MirRvalue::RefData>(rvalue.data);
+            return emitPlace(ref_data.place, func);
+        }
+
+        default: {
+            // 静かなコメント化は「合法だが意味の違うSV」を生むため明示エラーにする（SV007）
+            static const char* kRvalueNames[] = {"Use",       "BinaryOp", "UnaryOp",      "Ref",
+                                                 "Aggregate", "Cast",     "FormatConvert"};
+            int k = static_cast<int>(rvalue.kind);
+            std::string kind_name = (k >= 0 && k <= 6) ? kRvalueNames[k] : std::to_string(k);
+            throw std::runtime_error(
+                "エラー[SV007]: SVターゲットで非対応の式です（MirRvalue::" + kind_name +
+                "）。参照・集約構築・フォーマット変換は合成できません");
+        }
     }
 }
 
@@ -1734,8 +1748,13 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
         case mir::MirStatement::StorageDead:
         case mir::MirStatement::Nop:
             return "";  // SVでは不要
+        case mir::MirStatement::Asm:
+            throw std::runtime_error(
+                "エラー[SV007]: インラインアセンブリ（__asm__）はSVターゲットで使用できません");
         default:
-            return "// unsupported statement";
+            throw std::runtime_error(
+                "エラー[SV007]: SVターゲットで非対応の文です（MirStatement kind=" +
+                std::to_string(static_cast<int>(stmt.kind)) + "）");
     }
 }
 
@@ -4484,8 +4503,10 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
                 }
                 return ind + "$display(\"" + msg + "\");\n";
             }
-            // その他の呼び出しは非対応（コメントとして残す）
-            return ind + "// 未対応のテストベンチ呼び出し: " + c.func_name + "\n";
+            // その他の呼び出しは非対応（静かに握り潰さず明示エラーにする）
+            throw std::runtime_error(
+                "エラー[SV007]: #[test] 関数内で非対応の呼び出しです: " + c.func_name +
+                "（使用できるのは step / assert / println と入力ポートへの代入です）");
         }
 
         // 代入式（HirBinary Assign）: ブロッキング代入でDUT入力を駆動
@@ -4833,8 +4854,13 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
         }
     }
 
-    // 未対応の式: 0を返す
-    return "0 /* unsupported expr */";
+    // 未対応の式: 0への静かな縮退は回路の意味を変えるため明示エラーにする（SV007）
+    {
+        std::string ctx = emitting_testbench_ ? "#[test] 関数内で非対応の式です"
+                                              : "initialブロックで非対応のHIR式です";
+        throw std::runtime_error("エラー[SV007]: " + ctx +
+                                 "（variant index=" + std::to_string(expr.kind.index()) + "）");
+    }
 }
 
 // HIR文をSVに変換（initial block用）
@@ -4913,8 +4939,14 @@ std::string SVCodeGen::emitHirStmt(const hir::HirStmt& stmt) {
         }
     }
 
-    // 未対応の文
-    return "/* unsupported stmt */";
+    // 未対応の文: 静かなコメント化は検証漏れの温床になるため明示エラーにする（SV007）
+    {
+        std::string ctx = emitting_testbench_ ? "#[test] 関数内で非対応の文です"
+                                                "（step/assert/代入/println/if等が使用できます）"
+                                              : "initialブロックで非対応のHIR文です";
+        throw std::runtime_error("エラー[SV007]: " + ctx +
+                                 "（variant index=" + std::to_string(stmt.kind.index()) + "）");
+    }
 }
 
 }  // namespace cm::codegen::sv

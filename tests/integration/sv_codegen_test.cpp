@@ -193,6 +193,20 @@ TEST_F(SVCodegenTest, ReservedIdentifierRejected) {
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
+// 非対応構文（インラインアセンブリ）はSV007で明示エラーになる
+// （従来は // unsupported statement として静かにコメント化されていた）
+TEST_F(SVCodegenTest, InlineAsmRejectedWithSV007) {
+    const std::string code = load_case("sv007_inline_asm");
+    EXPECT_THROW(compile_to_sv(code), std::runtime_error);
+}
+
+// #[test] 内の未対応呼び出し（ユーザー関数）はSV007で明示エラーになる
+// （従来はコメントとして静かに握り潰されていた）
+TEST_F(SVCodegenTest, TestbenchUnknownCallRejectedWithSV007) {
+    const std::string code = load_case("sv007_test_unknown_call");
+    EXPECT_THROW(compile_to_sv(code), std::runtime_error);
+}
+
 // 定数畳み込み後に未使用となったlocalparamは出力されない
 TEST_F(SVCodegenTest, UnusedLocalparamRemoved) {
     const std::string code = load_case("unused_localparam");

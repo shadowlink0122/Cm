@@ -1,0 +1,19 @@
+#[input] posedge clk;
+#[output] uint out = 0;
+
+uint counter = 0;
+
+void tick(posedge clk) {
+    counter = counter + 1;
+    out = counter;
+}
+
+void helper() {
+    counter = 0;
+}
+
+#[test]
+void tb() {
+    helper();
+    step(1);
+}

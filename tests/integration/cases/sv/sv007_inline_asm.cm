@@ -1,0 +1,7 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+void tick(posedge clk) {
+    __asm__("nop");
+    out = out + 1;
+}
