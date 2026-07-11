@@ -18,6 +18,7 @@
 | 制御フロー（if/while/for/match） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 関数・オーバーロード | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | struct / impl / interface | ✅ | ✅ | ✅ | ✅ | ⚠️ 合成可能な範囲（メソッドは function automatic 化） | ✅ | ✅ |
+| 自動実装 `with` / `#[derive]`（Eq/Ord/Copy/Clone/Hash/Debug/Display/Css） | ✅ | ✅ | ✅ | ✅ Cssはjs/web専用 | ⚠️ Eq/Ord等の演算子は式写像の範囲、Debug/Displayはstring制約（SV005）に従う | ⚠️ 未検証（string出力はテキストAPI経由） | ⚠️ 未検証（Debug/Displayは出力手段なし） |
 | enum（タグのみ） | ✅ | ✅ | ✅ | ✅ | ✅ typedef enum化 | ✅ | ✅ |
 | enum（ペイロード付き / tagged union） | ✅ | ✅ | ✅ | ✅ | ❌ 非合成型 | ✅ | ✅ |
 | ジェネリクス | ✅ | ✅ | ✅ | ✅ | ⚠️ `#[sv::parameter]` によるモジュールパラメータ写像 | ✅ | ✅ |
@@ -100,6 +101,11 @@
 | WASMのO3で配列ポインタキャスト後の読み出しが0になる | common/memory/array_ptr_cast をO3のみskip（O0・ネイティブは正常） | 実バグとして設計09 G2で記録。修正は別課題 |
 | std::fs が未実装 | common/fs・common/file_io の2テストをskip | 実装時に有効化 |
 | JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
+| 構造体同士のユニオン（`typedef Shape = Circle \| Rect`）がミスコンパイル | checkは通過するが実行時にゴミ値（診断なし） | 2026-07-11の検証で発見。修正は別課題 |
+| ユニオン値のprintln補間 `{v}` が空文字になる | ユニオン変数・構造体メンバとも空出力 | 同上 |
+| ユニオンの誤った型での `as` 取り出しがタグ検査なしでクラッシュ | `Value v = 42 as Value; v as string` → SIGSEGV（診断なし） | ユニオン型の実行時型判別（match型パターン・`is`）が未実装のため安全な判別手段がない。設計11の可変長引数（ユニオンスライス糖衣）の前提機能として要設計 |
+| 固定長構造体配列→スライス変換（`Point[] s = arr;`）がSIGBUS | 要素アクセスでクラッシュ。`int[]` は正常 | 2026-07-11の検証で発見。修正は別課題 |
+| 構造体スライス要素の補間直接参照 `{s[i].x}` がゴミ値 | ローカル変数へコピーすれば正常（サイレント誤コンパイル） | 同上 |
 
 ## 更新規則
 

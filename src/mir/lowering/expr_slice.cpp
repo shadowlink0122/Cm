@@ -124,7 +124,20 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                 BlockId success_block = ctx.new_block();
                 std::vector<MirOperandPtr> args;
                 args.push_back(MirOperand::copy(slice_place));
-                args.push_back(MirOperand::copy(MirPlace{value_local}));
+                if (push_func == "cm_slice_push_blob") {
+                    // blob pushはデータ先頭へのポインタを受け取る（ユニオン値は集約のため）
+                    hir::TypePtr value_type = nullptr;
+                    if (value_local < ctx.func->locals.size()) {
+                        value_type = ctx.func->locals[value_local].type;
+                    }
+                    LocalId addr_local =
+                        ctx.new_temp(hir::make_pointer(value_type ? value_type : hir::make_int()));
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{addr_local}, MirRvalue::ref(MirPlace{value_local}, false)));
+                    args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                } else {
+                    args.push_back(MirOperand::copy(MirPlace{value_local}));
+                }
 
                 auto call_term = std::make_unique<MirTerminator>();
                 call_term->kind = MirTerminator::Call;

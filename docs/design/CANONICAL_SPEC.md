@@ -153,6 +153,8 @@ struct Point with Eq {
 
 旧仕様の自由関数形式 `Complex operator+(const Complex& a, ...)` は存在しない（`const T&` 参照型も未実装。ポインタ `T*` を使用する）。
 
+**計画**: 自動実装の指定として `#[derive(...)]` 属性を追加予定（`with` はそのまま有効。第6節の計画注記を参照）。
+
 ## 4. impl ブロック構文
 
 **2つの形式：**
@@ -251,6 +253,8 @@ struct Point3D with Debug, Clone {
 #[derive(Debug, Clone)]  // ❌ Rust風アトリビュート
 struct Point3D { }
 ```
+
+**計画（v0.16.0設計10）**: `#[derive(...)]` 属性を `with` と等価な自動実装記法として追加予定（`with` は破壊的変更なしでそのまま有効。上記の「間違い」例は実装完了時に削除する）。詳細は [設計10](v0.16.0/10_derive_attribute.html) を参照。なお `with` を構造体メンバ埋め込みへ転用する案は見送りとした（[経緯](../archive/unimplemented/with_struct_embedding.html)）。
 
 ### 6.1 メンバ修飾子
 

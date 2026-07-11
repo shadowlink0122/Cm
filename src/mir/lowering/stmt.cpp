@@ -266,7 +266,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     if (!let.init && let.type && let.type->kind == hir::TypeKind::Array &&
         !let.type->array_size.has_value()) {
         // 動的配列（スライス）の初期化
-        hir::TypePtr elem_type = let.type->element_type ? let.type->element_type : hir::make_int();
+        // typedefエイリアス（例: Value = int | string）を解決してから要素サイズを決める
+        hir::TypePtr elem_type =
+            ctx.resolve_typedef(let.type->element_type ? let.type->element_type : hir::make_int());
 
         // 要素サイズを取得
         int64_t elem_size = 4;  // デフォルトはint
@@ -284,6 +286,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         } else if (elem_kind == hir::TypeKind::Struct) {
             // TODO: 構造体のサイズを計算
             elem_size = 8;
+        } else if (elem_kind == hir::TypeKind::Union) {
+            // ユニオン型はtag+最大ペイロードのblobとして格納する
+            elem_size = union_slice_elem_size(elem_type);
         } else if (elem_kind == hir::TypeKind::Array) {
             // 多次元配列の場合、内側の配列サイズを計算
             // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
@@ -388,8 +393,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                 if (auto* arr_lit =
                         std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&let.init->kind)) {
                     const auto& elements = (*arr_lit)->elements;
-                    hir::TypePtr elem_type =
-                        let.type->element_type ? let.type->element_type : hir::make_int();
+                    // typedefエイリアスを解決してから要素サイズ・push関数を決める
+                    hir::TypePtr elem_type = ctx.resolve_typedef(
+                        let.type->element_type ? let.type->element_type : hir::make_int());
 
                     // 要素サイズを取得
                     int64_t elem_size = 4;  // デフォルトはint
@@ -408,6 +414,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
                         elem_size = 8;
+                    } else if (elem_kind == hir::TypeKind::Union) {
+                        // ユニオン型はtag+最大ペイロードのblobとして格納する
+                        elem_size = union_slice_elem_size(elem_type);
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元配列の場合、内側の配列サイズを計算
                         // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
@@ -467,6 +476,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                elem_kind == hir::TypeKind::String ||
                                elem_kind == hir::TypeKind::Struct) {
                         push_func = "cm_slice_push_ptr";
+                    } else if (elem_kind == hir::TypeKind::Union) {
+                        // ユニオン型要素はblobとしてメモリコピー（push側と統一）
+                        push_func = "cm_slice_push_blob";
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 配列要素（多次元スライス）はスライス構造体をコピー
                         push_func = "cm_slice_push_slice";
@@ -577,7 +589,20 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                         BlockId success_block = ctx.new_block();
                         std::vector<MirOperandPtr> args;
                         args.push_back(MirOperand::copy(MirPlace{local}));
-                        args.push_back(MirOperand::copy(MirPlace{elem_value}));
+                        if (push_func == "cm_slice_push_blob") {
+                            // blob pushはデータ先頭へのポインタを受け取る
+                            hir::TypePtr value_type = nullptr;
+                            if (elem_value < ctx.func->locals.size()) {
+                                value_type = ctx.func->locals[elem_value].type;
+                            }
+                            LocalId addr_local = ctx.new_temp(
+                                hir::make_pointer(value_type ? value_type : hir::make_int()));
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{addr_local}, MirRvalue::ref(MirPlace{elem_value}, false)));
+                            args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                        } else {
+                            args.push_back(MirOperand::copy(MirPlace{elem_value}));
+                        }
 
                         auto call_term = std::make_unique<MirTerminator>();
                         call_term->kind = MirTerminator::Call;

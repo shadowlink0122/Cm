@@ -1,0 +1,28 @@
+import std::io::println;
+// struct_multidim_member.cm - 構造体メンバの多次元配列（読み書き・コピー）
+
+struct Matrix {
+    int[2][3] grid;
+    int id;
+}
+
+int main() {
+    Matrix m;
+    m.id = 7;
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 3; j++) {
+            m.grid[i][j] = i * 10 + j;
+        }
+    }
+
+    println("m[0][0]={m.grid[0][0]}");
+    println("m[1][2]={m.grid[1][2]}");
+
+    // 構造体コピーの値セマンティクス
+    Matrix n = m;
+    n.grid[1][2] = 99;
+    println("m[1][2] after copy={m.grid[1][2]}");
+    println("n[1][2]={n.grid[1][2]}");
+
+    return 0;
+}

@@ -973,6 +973,13 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
 
     expect(TokenKind::RBrace);
 
+    // #[derive] は enum 未対応（将来拡張の余地として明示エラー）
+    for (const auto& attr : attributes) {
+        if (attr.name == "derive") {
+            error("#[derive] is not supported on enums yet");
+        }
+    }
+
     auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     enum_decl->attributes = std::move(attributes);

@@ -749,6 +749,43 @@
     "attributes": {
       "patterns": [
         {
+          "name": "meta.attribute.derive.cm",
+          "begin": "(#)(\\[)\\s*(derive)\\s*(\\()",
+          "end": "(\\))\\s*(\\])|(?=$)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.attribute.cm storage.type.directive.cm"
+            },
+            "2": {
+              "name": "entity.name.function.attribute.bracket.cm"
+            },
+            "3": {
+              "name": "keyword.control.attribute.cm"
+            },
+            "4": {
+              "name": "punctuation.section.arguments.begin.cm"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.arguments.end.cm"
+            },
+            "2": {
+              "name": "entity.name.function.attribute.bracket.cm"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.interface.cm",
+              "match": "[A-Za-z_][A-Za-z0-9_]*"
+            },
+            {
+              "name": "punctuation.separator.comma.cm",
+              "match": ","
+            }
+          ]
+        },
+        {
           "name": "meta.attribute.cm",
           "begin": "(#)(\\[)",
           "end": "(\\])|(?=$)",

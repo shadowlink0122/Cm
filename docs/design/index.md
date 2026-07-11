@@ -31,6 +31,8 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [07 ツーリングUX](v0.16.0/07_tooling_ux.html) | #構文ハイライト・条件ブロック/継続行インデント |
 | [08 SVコード生成の精査報告](v0.16.0/08_sv_codegen_audit.html) | 実回路監査・バグ修正・品質改善の記録 |
 | [09 バックエンドギャップ解消](v0.16.0/09_backend_gap_closure.html) | SV007エラー化・skip棚卸し・対応マトリクス新設 |
+| [10 #[derive]属性による自動実装](v0.16.0/10_derive_attribute.html) | #[derive(...)]をwith構文と併存する自動実装記法として追加（非破壊） |
+| [11 ユーザー定義derive可能interface](v0.16.0/11_user_defined_derive.html) | フィールドイントロスペクション・可変長引数・#[derivable]の前方検討（実装対象外） |
 
 ## アーカイブ
 

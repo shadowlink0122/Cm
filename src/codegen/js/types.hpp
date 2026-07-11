@@ -133,8 +133,10 @@ inline std::string jsDefaultValue(const hir::Type& type) {
             // 配列の要素型に応じた初期化
             if (type.array_size && *type.array_size > 0 && type.element_type) {
                 std::string elemDefault = jsDefaultValue(*type.element_type);
-                if (type.element_type->kind == TypeKind::Struct) {
-                    // 構造体の配列：各要素をコンストラクタで初期化
+                if (type.element_type->kind == TypeKind::Struct ||
+                    type.element_type->kind == TypeKind::Array) {
+                    // 構造体・配列（多次元）の要素：要素ごとに新しいインスタンスを生成
+                    // （fillは同一参照を共有するため多次元で全行がエイリアスになる）
                     return "Array.from({length: " + std::to_string(*type.array_size) + "}, () => " +
                            elemDefault + ")";
                 } else {

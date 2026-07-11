@@ -1,0 +1,63 @@
+import std::io::println;
+// derive_complex_fields.cm - 複雑なフィールド型（配列・ネスト構造体）への自動実装
+// Eq×固定長配列（要素比較）・Hash×ネスト構造体（再帰）の回帰テスト
+
+struct Inner with Hash {
+    int v;
+}
+
+#[derive(Eq, Hash)]
+struct Outer {
+    Inner inner;
+    int w;
+    int[3] data;
+}
+
+int main() {
+    Outer a;
+    a.inner.v = 1;
+    a.w = 2;
+    a.data[0] = 10;
+    a.data[1] = 20;
+    a.data[2] = 30;
+
+    Outer b;
+    b.inner.v = 1;
+    b.w = 2;
+    b.data[0] = 10;
+    b.data[1] = 20;
+    b.data[2] = 30;
+
+    Outer c;
+    c.inner.v = 1;
+    c.w = 2;
+    c.data[0] = 10;
+    c.data[1] = 20;
+    c.data[2] = 99;
+
+    if (a == b) {
+        println("a == b: true");
+    } else {
+        println("a == b: false");
+    }
+
+    if (a == c) {
+        println("a == c: true");
+    } else {
+        println("a == c: false");
+    }
+
+    if (a.hash() == b.hash()) {
+        println("hash(a) == hash(b): true");
+    } else {
+        println("hash(a) == hash(b): false");
+    }
+
+    if (a.hash() == c.hash()) {
+        println("hash(a) == hash(c): true");
+    } else {
+        println("hash(a) == hash(c): false");
+    }
+
+    return 0;
+}

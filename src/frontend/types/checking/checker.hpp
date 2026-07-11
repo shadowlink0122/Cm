@@ -111,6 +111,7 @@ class TypeChecker {
     // 自動実装 (auto_impl.cpp)
     // ============================================================
     void register_auto_impl(const ast::StructDecl& st, const std::string& iface_name);
+    bool validate_derive_field_types(const ast::StructDecl& st, const std::string& iface_name);
     void register_auto_eq_impl(const ast::StructDecl& st);
     void register_auto_ord_impl(const ast::StructDecl& st);
     void register_auto_clone_impl(const ast::StructDecl& st);

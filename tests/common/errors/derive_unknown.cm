@@ -1,0 +1,9 @@
+// #[derive]に未知のインターフェース名を指定するとエラー
+#[derive(Foo)]
+struct P {
+    int x;
+}
+
+int main() {
+    return 0;
+}

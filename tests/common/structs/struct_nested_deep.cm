@@ -1,0 +1,46 @@
+import std::io::println;
+// struct_nested_deep.cm - 3階層ネスト構造体（アクセスチェーン・関数渡し・戻り値）
+
+struct Inner {
+    int x;
+}
+
+struct Middle {
+    Inner inner;
+    int y;
+}
+
+struct Outer {
+    Middle mid;
+    int z;
+}
+
+int read_deep(Outer o) {
+    return o.mid.inner.x + o.mid.y + o.z;
+}
+
+Outer make_outer(int base) {
+    Outer o;
+    o.mid.inner.x = base;
+    o.mid.y = base * 10;
+    o.z = base * 100;
+    return o;
+}
+
+int main() {
+    Outer o = make_outer(3);
+    println("x={o.mid.inner.x}");
+    println("y={o.mid.y}");
+    println("z={o.z}");
+    println("sum={read_deep(o)}");
+
+    // 中間階層への代入
+    Middle m;
+    m.inner.x = 42;
+    m.y = 7;
+    o.mid = m;
+    println("after assign x={o.mid.inner.x}");
+    println("after assign y={o.mid.y}");
+
+    return 0;
+}

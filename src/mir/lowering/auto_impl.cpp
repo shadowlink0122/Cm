@@ -191,45 +191,140 @@ void MirLowering::generate_builtin_hash_method_for_monomorphized(const MirStruct
         block->statements.push_back(MirStatement::assign(MirPlace(mir_func->return_local),
                                                          MirRvalue::use(std::move(const_zero))));
     } else {
+        // ネスト構造体フィールドの__hashを先に生成（再帰的自動実装）
+        for (const auto& field : st.fields) {
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                std::string nested_func_name = field.type->name + "__hash";
+                bool exists = false;
+                for (const auto& func : mir_program.functions) {
+                    if (func && func->name == nested_func_name) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    for (const auto& mir_st : mir_program.structs) {
+                        if (mir_st && mir_st->name == field.type->name) {
+                            generate_builtin_hash_method_for_monomorphized(*mir_st);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         LocalId acc = mir_func->add_local("_hash_acc", hir::make_int(), true, false);
 
-        auto const_zero = std::make_unique<MirOperand>();
-        const_zero->kind = MirOperand::Constant;
-        MirConstant c_zero;
-        c_zero.value = int64_t(0);
-        c_zero.type = hir::make_int();
-        const_zero->data = c_zero;
+        auto make_int_const = [&](int64_t v) {
+            auto op = std::make_unique<MirOperand>();
+            op->kind = MirOperand::Constant;
+            MirConstant c;
+            c.value = v;
+            c.type = hir::make_int();
+            op->data = c;
+            return op;
+        };
 
         block->statements.push_back(
-            MirStatement::assign(MirPlace(acc), MirRvalue::use(std::move(const_zero))));
+            MirStatement::assign(MirPlace(acc), MirRvalue::use(make_int_const(0))));
+
+        BlockId current_block = entry_block;
+
+        // acc = acc + value をカレントブロックへ追加する
+        auto mix_value = [&](LocalId value, const std::string& tag) {
+            auto* cur_block = mir_func->get_block(current_block);
+            LocalId new_acc = mir_func->add_local("_new_acc" + tag, hir::make_int(), true, false);
+            cur_block->statements.push_back(MirStatement::assign(
+                MirPlace(new_acc),
+                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
+                                  MirOperand::copy(MirPlace(value)))));
+            acc = new_acc;
+        };
 
         for (size_t i = 0; i < st.fields.size(); ++i) {
             const auto& field = st.fields[i];
+            const std::string tag = std::to_string(i);
+            auto* cur_block = mir_func->get_block(current_block);
 
-            // フィールド値を取得
-            LocalId field_val =
-                mir_func->add_local("_field" + std::to_string(i), field.type, true, false);
-            auto self_place = MirPlace(self_local, {PlaceProjection::field(i)});
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(field_val), MirRvalue::use(MirOperand::copy(self_place))));
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                // ネスト構造体: Field__hash を呼び出して結果を混合する
+                LocalId field_val = mir_func->add_local("_field" + tag, field.type, true, false);
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_val), MirRvalue::use(MirOperand::copy(
+                                             MirPlace(self_local, {PlaceProjection::field(i)})))));
 
-            // フィールド値をint型の一時変数にコピー（プリミティブ型を想定、暗黙変換）
-            LocalId field_as_int =
-                mir_func->add_local("_f_int" + std::to_string(i), hir::make_int(), true, false);
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(field_as_int), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+                LocalId hash_val =
+                    mir_func->add_local("_f_hash" + tag, hir::make_int(), true, false);
+                BlockId next_block = mir_func->add_block();
 
-            LocalId new_acc =
-                mir_func->add_local("_new_acc" + std::to_string(i), hir::make_int(), true, false);
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(new_acc),
-                MirRvalue::binary(MirBinaryOp::Add, MirOperand::copy(MirPlace(acc)),
-                                  MirOperand::copy(MirPlace(field_as_int)))));
-            acc = new_acc;
+                std::vector<MirOperandPtr> hash_args;
+                hash_args.push_back(MirOperand::copy(MirPlace(field_val)));
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref(field.type->name + "__hash"),
+                                            std::move(hash_args),
+                                            MirPlace(hash_val),
+                                            next_block,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                cur_block->terminator = std::move(call_term);
+                current_block = next_block;
+
+                mix_value(hash_val, tag);
+            } else if (field.type && field.type->kind == hir::TypeKind::Array &&
+                       (field.type->array_size.has_value() || field.type->dimensions.size() == 1)) {
+                // 固定長1次元配列: 要素を順に混合する（コンパイル時展開）
+                uint32_t n = field.type->array_size.has_value() ? *field.type->array_size
+                                                                : field.type->dimensions[0];
+                auto elem_type =
+                    field.type->element_type ? field.type->element_type : hir::make_int();
+                for (uint32_t j = 0; j < n; ++j) {
+                    const std::string etag = tag + "_" + std::to_string(j);
+                    LocalId idx = mir_func->add_local("_idx" + etag, hir::make_int(), true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(idx), MirRvalue::use(make_int_const(int64_t(j)))));
+
+                    LocalId elem_val = mir_func->add_local("_elem" + etag, elem_type, true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(elem_val), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                self_local, {PlaceProjection::field(i),
+                                                             PlaceProjection::index(idx)})))));
+
+                    LocalId elem_as_int =
+                        mir_func->add_local("_e_int" + etag, hir::make_int(), true, false);
+                    cur_block->statements.push_back(
+                        MirStatement::assign(MirPlace(elem_as_int),
+                                             MirRvalue::use(MirOperand::copy(MirPlace(elem_val)))));
+
+                    mix_value(elem_as_int, etag);
+                }
+            } else {
+                // プリミティブ型: int値として混合する
+                LocalId field_val = mir_func->add_local("_field" + tag, field.type, true, false);
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_val), MirRvalue::use(MirOperand::copy(
+                                             MirPlace(self_local, {PlaceProjection::field(i)})))));
+
+                LocalId field_as_int =
+                    mir_func->add_local("_f_int" + tag, hir::make_int(), true, false);
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_as_int), MirRvalue::use(MirOperand::copy(MirPlace(field_val)))));
+
+                mix_value(field_as_int, tag);
+            }
         }
 
-        block->statements.push_back(MirStatement::assign(
+        auto* final_block = mir_func->get_block(current_block);
+        final_block->statements.push_back(MirStatement::assign(
             MirPlace(mir_func->return_local), MirRvalue::use(MirOperand::copy(MirPlace(acc)))));
+        final_block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Hash"] = func_name;
+        mir_program.functions.push_back(std::move(mir_func));
+        return;
     }
 
     block->terminator = MirTerminator::return_value();
@@ -314,61 +409,137 @@ void MirLowering::generate_builtin_hash_method(const hir::HirStruct& st) {
         block->statements.push_back(MirStatement::assign(MirPlace(mir_func->return_local),
                                                          MirRvalue::use(std::move(const_basis))));
     } else {
+        // ネスト構造体フィールドの__hashを先に生成（再帰的自動実装）
+        for (const auto& field : st.fields) {
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                std::string nested_func_name = field.type->name + "__hash";
+                bool exists = false;
+                for (const auto& func : mir_program.functions) {
+                    if (func && func->name == nested_func_name) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    for (const auto& mir_st : mir_program.structs) {
+                        if (mir_st && mir_st->name == field.type->name) {
+                            generate_builtin_hash_method_for_monomorphized(*mir_st);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // FNV-1a: hash ^= field; hash *= prime
         LocalId acc = mir_func->add_local("_hash_acc", hir::make_int(), true, false);
 
+        auto make_int_const = [&](int64_t v) {
+            auto op = std::make_unique<MirOperand>();
+            op->kind = MirOperand::Constant;
+            MirConstant c;
+            c.value = v;
+            c.type = hir::make_int();
+            op->data = c;
+            return op;
+        };
+
         // 初期値 = FNV_OFFSET_BASIS
-        auto const_basis = std::make_unique<MirOperand>();
-        const_basis->kind = MirOperand::Constant;
-        MirConstant c_basis;
-        c_basis.value = FNV_OFFSET_BASIS;
-        c_basis.type = hir::make_int();
-        const_basis->data = c_basis;
-
         block->statements.push_back(
-            MirStatement::assign(MirPlace(acc), MirRvalue::use(std::move(const_basis))));
+            MirStatement::assign(MirPlace(acc), MirRvalue::use(make_int_const(FNV_OFFSET_BASIS))));
 
-        // FNV_PRIME定数
-        auto make_prime = [&]() {
-            auto const_prime = std::make_unique<MirOperand>();
-            const_prime->kind = MirOperand::Constant;
-            MirConstant c_prime;
-            c_prime.value = FNV_PRIME;
-            c_prime.type = hir::make_int();
-            const_prime->data = c_prime;
-            return const_prime;
+        BlockId current_block = entry_block;
+
+        // hash = (hash ^ value) * FNV_PRIME をカレントブロックへ追加する
+        auto mix_value = [&](LocalId value, const std::string& tag) {
+            auto* cur_block = mir_func->get_block(current_block);
+            LocalId xor_acc = mir_func->add_local("_xor" + tag, hir::make_int(), true, false);
+            cur_block->statements.push_back(MirStatement::assign(
+                MirPlace(xor_acc),
+                MirRvalue::binary(MirBinaryOp::BitXor, MirOperand::copy(MirPlace(acc)),
+                                  MirOperand::copy(MirPlace(value)), hir::make_int())));
+
+            LocalId mul_acc = mir_func->add_local("_mul" + tag, hir::make_int(), true, false);
+            cur_block->statements.push_back(MirStatement::assign(
+                MirPlace(mul_acc),
+                MirRvalue::binary(MirBinaryOp::Mul, MirOperand::copy(MirPlace(xor_acc)),
+                                  make_int_const(FNV_PRIME), hir::make_int())));
+            acc = mul_acc;
         };
 
         for (size_t i = 0; i < st.fields.size(); ++i) {
             const auto& field = st.fields[i];
+            const std::string tag = std::to_string(i);
+            auto* cur_block = mir_func->get_block(current_block);
 
-            // フィールド値を読み込み
-            LocalId field_val =
-                mir_func->add_local("_f" + std::to_string(i), field.type, true, false);
-            auto field_place = MirPlace(self_local, {PlaceProjection::field(i)});
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(field_val), MirRvalue::use(MirOperand::copy(field_place))));
+            if (field.type && field.type->kind == hir::TypeKind::Struct) {
+                // ネスト構造体: Field__hash を呼び出して結果を混合する
+                LocalId field_val = mir_func->add_local("_f" + tag, field.type, true, false);
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_val), MirRvalue::use(MirOperand::copy(
+                                             MirPlace(self_local, {PlaceProjection::field(i)})))));
 
-            // hash ^= field_val (XOR)
-            LocalId xor_acc =
-                mir_func->add_local("_xor" + std::to_string(i), hir::make_int(), true, false);
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(xor_acc),
-                MirRvalue::binary(MirBinaryOp::BitXor, MirOperand::copy(MirPlace(acc)),
-                                  MirOperand::copy(MirPlace(field_val)), hir::make_int())));
+                LocalId hash_val =
+                    mir_func->add_local("_f_hash" + tag, hir::make_int(), true, false);
+                BlockId next_block = mir_func->add_block();
 
-            // hash *= FNV_PRIME
-            LocalId mul_acc =
-                mir_func->add_local("_mul" + std::to_string(i), hir::make_int(), true, false);
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(mul_acc),
-                MirRvalue::binary(MirBinaryOp::Mul, MirOperand::copy(MirPlace(xor_acc)),
-                                  make_prime(), hir::make_int())));
-            acc = mul_acc;
+                std::vector<MirOperandPtr> hash_args;
+                hash_args.push_back(MirOperand::copy(MirPlace(field_val)));
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref(field.type->name + "__hash"),
+                                            std::move(hash_args),
+                                            MirPlace(hash_val),
+                                            next_block,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                cur_block->terminator = std::move(call_term);
+                current_block = next_block;
+
+                mix_value(hash_val, tag);
+            } else if (field.type && field.type->kind == hir::TypeKind::Array &&
+                       (field.type->array_size.has_value() || field.type->dimensions.size() == 1)) {
+                // 固定長1次元配列: 要素を順に混合する（コンパイル時展開）
+                uint32_t n = field.type->array_size.has_value() ? *field.type->array_size
+                                                                : field.type->dimensions[0];
+                auto elem_type =
+                    field.type->element_type ? field.type->element_type : hir::make_int();
+                for (uint32_t j = 0; j < n; ++j) {
+                    const std::string etag = tag + "_" + std::to_string(j);
+                    LocalId idx = mir_func->add_local("_idx" + etag, hir::make_int(), true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(idx), MirRvalue::use(make_int_const(int64_t(j)))));
+
+                    LocalId elem_val = mir_func->add_local("_elem" + etag, elem_type, true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(elem_val), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                self_local, {PlaceProjection::field(i),
+                                                             PlaceProjection::index(idx)})))));
+
+                    mix_value(elem_val, etag);
+                }
+            } else {
+                // プリミティブ型: 値を直接混合する
+                LocalId field_val = mir_func->add_local("_f" + tag, field.type, true, false);
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(field_val), MirRvalue::use(MirOperand::copy(
+                                             MirPlace(self_local, {PlaceProjection::field(i)})))));
+
+                mix_value(field_val, tag);
+            }
         }
 
-        block->statements.push_back(MirStatement::assign(
+        auto* final_block = mir_func->get_block(current_block);
+        final_block->statements.push_back(MirStatement::assign(
             MirPlace(mir_func->return_local), MirRvalue::use(MirOperand::copy(MirPlace(acc)))));
+        final_block->terminator = MirTerminator::return_value();
+
+        impl_info[st.name]["Hash"] = func_name;
+        mir_program.functions.push_back(std::move(mir_func));
+        return;
     }
 
     block->terminator = MirTerminator::return_value();

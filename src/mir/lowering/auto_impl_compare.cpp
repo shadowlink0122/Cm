@@ -113,6 +113,68 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
                                                              false};
                 cur_block->terminator = std::move(eq_call_term);
                 current_block = eq_call_success;
+            } else if (field.type && field.type->kind == hir::TypeKind::Array &&
+                       (field.type->array_size.has_value() || field.type->dimensions.size() == 1)) {
+                // 固定長1次元配列は要素ごとに比較してANDで畳み込む（コンパイル時展開）
+                uint32_t n = field.type->array_size.has_value() ? *field.type->array_size
+                                                                : field.type->dimensions[0];
+                auto elem_type =
+                    field.type->element_type ? field.type->element_type : hir::make_int();
+
+                auto make_idx_const = [&](int64_t v) {
+                    auto op = std::make_unique<MirOperand>();
+                    op->kind = MirOperand::Constant;
+                    MirConstant c;
+                    c.value = v;
+                    c.type = hir::make_int();
+                    op->data = c;
+                    return op;
+                };
+
+                LocalId elem_acc = 0;
+                for (uint32_t j = 0; j < n; ++j) {
+                    const std::string etag = std::to_string(i) + "_" + std::to_string(j);
+                    LocalId idx = mir_func->add_local("_idx" + etag, hir::make_int(), true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(idx), MirRvalue::use(make_idx_const(int64_t(j)))));
+
+                    LocalId self_elem =
+                        mir_func->add_local("_self_e" + etag, elem_type, true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(self_elem), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                 self_local, {PlaceProjection::field(i),
+                                                              PlaceProjection::index(idx)})))));
+
+                    LocalId other_elem =
+                        mir_func->add_local("_other_e" + etag, elem_type, true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(other_elem), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                  other_local, {PlaceProjection::field(i),
+                                                                PlaceProjection::index(idx)})))));
+
+                    LocalId elem_cmp =
+                        mir_func->add_local("_ecmp" + etag, hir::make_bool(), true, false);
+                    cur_block->statements.push_back(MirStatement::assign(
+                        MirPlace(elem_cmp),
+                        MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_elem)),
+                                          MirOperand::copy(MirPlace(other_elem)))));
+
+                    if (j == 0) {
+                        elem_acc = elem_cmp;
+                    } else {
+                        LocalId new_acc =
+                            mir_func->add_local("_eacc" + etag, hir::make_bool(), true, false);
+                        cur_block->statements.push_back(MirStatement::assign(
+                            MirPlace(new_acc),
+                            MirRvalue::binary(MirBinaryOp::And,
+                                              MirOperand::copy(MirPlace(elem_acc)),
+                                              MirOperand::copy(MirPlace(elem_cmp)))));
+                        elem_acc = new_acc;
+                    }
+                }
+
+                cur_block->statements.push_back(MirStatement::assign(
+                    MirPlace(cmp_result), MirRvalue::use(MirOperand::copy(MirPlace(elem_acc)))));
             } else {
                 // プリミティブ型は直接比較
                 cur_block->statements.push_back(MirStatement::assign(
@@ -649,11 +711,75 @@ void MirLowering::generate_builtin_eq_operator(const hir::HirStruct& st) {
             block->statements.push_back(MirStatement::assign(
                 MirPlace(other_field), MirRvalue::use(MirOperand::copy(other_place))));
 
-            // 比較結果を格納
-            block->statements.push_back(MirStatement::assign(
-                MirPlace(cmp_result),
-                MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_field)),
-                                  MirOperand::copy(MirPlace(other_field)))));
+            if (field.type && field.type->kind == hir::TypeKind::Array &&
+                (field.type->array_size.has_value() || field.type->dimensions.size() == 1)) {
+                // 固定長1次元配列は要素ごとに比較してANDで畳み込む（コンパイル時展開）
+                uint32_t n = field.type->array_size.has_value() ? *field.type->array_size
+                                                                : field.type->dimensions[0];
+                auto elem_type =
+                    field.type->element_type ? field.type->element_type : hir::make_int();
+
+                auto make_idx_const = [&](int64_t v) {
+                    auto op = std::make_unique<MirOperand>();
+                    op->kind = MirOperand::Constant;
+                    MirConstant c;
+                    c.value = v;
+                    c.type = hir::make_int();
+                    op->data = c;
+                    return op;
+                };
+
+                LocalId elem_acc = 0;
+                for (uint32_t j = 0; j < n; ++j) {
+                    const std::string etag = std::to_string(i) + "_" + std::to_string(j);
+                    LocalId idx = mir_func->add_local("_idx" + etag, hir::make_int(), true, false);
+                    block->statements.push_back(MirStatement::assign(
+                        MirPlace(idx), MirRvalue::use(make_idx_const(int64_t(j)))));
+
+                    LocalId self_elem =
+                        mir_func->add_local("_self_e" + etag, elem_type, true, false);
+                    block->statements.push_back(MirStatement::assign(
+                        MirPlace(self_elem), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                 self_local, {PlaceProjection::field(i),
+                                                              PlaceProjection::index(idx)})))));
+
+                    LocalId other_elem =
+                        mir_func->add_local("_other_e" + etag, elem_type, true, false);
+                    block->statements.push_back(MirStatement::assign(
+                        MirPlace(other_elem), MirRvalue::use(MirOperand::copy(MirPlace(
+                                                  other_local, {PlaceProjection::field(i),
+                                                                PlaceProjection::index(idx)})))));
+
+                    LocalId elem_cmp =
+                        mir_func->add_local("_ecmp" + etag, hir::make_bool(), true, false);
+                    block->statements.push_back(MirStatement::assign(
+                        MirPlace(elem_cmp),
+                        MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_elem)),
+                                          MirOperand::copy(MirPlace(other_elem)))));
+
+                    if (j == 0) {
+                        elem_acc = elem_cmp;
+                    } else {
+                        LocalId new_acc =
+                            mir_func->add_local("_eacc" + etag, hir::make_bool(), true, false);
+                        block->statements.push_back(MirStatement::assign(
+                            MirPlace(new_acc),
+                            MirRvalue::binary(MirBinaryOp::And,
+                                              MirOperand::copy(MirPlace(elem_acc)),
+                                              MirOperand::copy(MirPlace(elem_cmp)))));
+                        elem_acc = new_acc;
+                    }
+                }
+
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(cmp_result), MirRvalue::use(MirOperand::copy(MirPlace(elem_acc)))));
+            } else {
+                // 比較結果を格納
+                block->statements.push_back(MirStatement::assign(
+                    MirPlace(cmp_result),
+                    MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace(self_field)),
+                                      MirOperand::copy(MirPlace(other_field)))));
+            }
         }
 
         // 全ての比較結果をANDで結合

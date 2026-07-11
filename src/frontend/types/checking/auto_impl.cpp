@@ -4,11 +4,26 @@
 
 #include "../type_checker.hpp"
 
+#include <set>
+
 namespace cm {
 
 void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::string& iface_name) {
-    if (interface_names_.find(iface_name) == interface_names_.end()) {
-        error(current_span_, "Unknown interface '" + iface_name + "' in 'with' clause");
+    // 導出可能セット（コンパイラ組み込み）。with / #[derive] 共通の検証
+    static const std::set<std::string> derivable_interfaces = {"Eq",   "Ord",   "Copy",    "Clone",
+                                                               "Hash", "Debug", "Display", "Css"};
+
+    if (derivable_interfaces.find(iface_name) == derivable_interfaces.end()) {
+        if (interface_names_.find(iface_name) == interface_names_.end()) {
+            error(current_span_, "Unknown interface '" + iface_name + "' in 'with' / #[derive]");
+        } else {
+            error(current_span_, "Interface '" + iface_name + "' is not derivable; use 'impl " +
+                                     st.name + " for " + iface_name + "' instead");
+        }
+        return;
+    }
+
+    if (!validate_derive_field_types(st, iface_name)) {
         return;
     }
 
@@ -51,6 +66,65 @@ void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::strin
     else if (iface_name == "Css") {
         register_auto_css_impl(st);
     }
+}
+
+// 導出対象フィールド型の検証。未対応の組み合わせは不正なコード生成の代わりに明示エラーを出す
+bool TypeChecker::validate_derive_field_types(const ast::StructDecl& st,
+                                              const std::string& iface_name) {
+    // Clone/Copy は集約コピー、Css は専用生成のためフィールド型の制限なし
+    if (iface_name == "Clone" || iface_name == "Copy" || iface_name == "Css") {
+        return true;
+    }
+
+    for (const auto& field : st.fields) {
+        const auto& t = field.type;
+        if (!t) {
+            continue;
+        }
+        std::string reason;
+
+        if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
+            reason = "union-typed fields are not supported";
+        } else if (t->kind == ast::TypeKind::Array) {
+            bool fixed_1d =
+                !t->is_multidim_array() && (t->array_size.has_value() || t->dimensions.size() == 1);
+            const auto& elem = t->element_type;
+            if (iface_name == "Eq") {
+                bool elem_ok = elem && elem->is_primitive() && elem->kind != ast::TypeKind::Void;
+                if (!fixed_1d) {
+                    reason = "only fixed-size one-dimensional arrays can be compared";
+                } else if (!elem_ok) {
+                    reason = "array elements must be primitive types";
+                }
+            } else if (iface_name == "Hash") {
+                bool elem_ok = elem && (elem->is_integer() || elem->kind == ast::TypeKind::Bool ||
+                                        elem->kind == ast::TypeKind::Char);
+                if (!fixed_1d) {
+                    reason = "only fixed-size one-dimensional arrays can be hashed";
+                } else if (!elem_ok) {
+                    reason = "array elements must be integer, bool, or char";
+                }
+            } else {
+                // Ord / Debug / Display
+                reason = "array fields are not supported";
+            }
+        } else if (iface_name == "Hash") {
+            if (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString) {
+                reason = "string fields are not supported";
+            } else if (t->is_floating()) {
+                reason = "floating-point fields are not supported";
+            } else if (t->kind == ast::TypeKind::Pointer) {
+                reason = "pointer fields are not supported";
+            }
+        }
+
+        if (!reason.empty()) {
+            error(current_span_, "Cannot derive '" + iface_name + "' for struct '" + st.name +
+                                     "': field '" + field.name + "' (" + reason + ")");
+            return false;
+        }
+    }
+    return true;
 }
 
 void TypeChecker::register_auto_eq_impl(const ast::StructDecl& st) {

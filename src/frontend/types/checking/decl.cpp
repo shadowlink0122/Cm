@@ -5,6 +5,7 @@
 #include "../type_checker.hpp"
 
 #include <algorithm>
+#include <set>
 
 namespace cm {
 
@@ -235,7 +236,17 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
         }
 
+        // with / #[derive] を合わせた同一interfaceの重複指定はエラー（記述ミス検出）
+        std::set<std::string> seen_auto_impls;
         for (const auto& iface_name : st->auto_impls) {
+            if (!seen_auto_impls.insert(iface_name).second) {
+                Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
+                error(name_pos, "Interface '" + iface_name +
+                                    "' is specified more than once in 'with' / #[derive] for "
+                                    "struct '" +
+                                    st->name + "'");
+                continue;
+            }
             register_auto_impl(*st, iface_name);
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {

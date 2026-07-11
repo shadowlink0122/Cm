@@ -1,0 +1,13 @@
+// with と #[derive] で同一インターフェースを重複指定するとエラー
+interface Eq<T> {
+    operator bool ==(T other);
+}
+
+#[derive(Eq)]
+struct P with Eq {
+    int x;
+}
+
+int main() {
+    return 0;
+}

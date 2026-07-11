@@ -468,6 +468,18 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         } while (consume_if(TokenKind::Comma));
     }
 
+    // #[derive(...)] 属性は with と同一の自動実装機構へ合流する
+    for (const auto& attr : attributes) {
+        if (attr.name == "derive") {
+            if (attr.args.empty()) {
+                error("#[derive] requires at least one interface name");
+            }
+            for (const auto& arg : attr.args) {
+                auto_impls.push_back(arg);
+            }
+        }
+    }
+
     // where句をパース
     if (consume_if(TokenKind::KwWhere)) {
         do {

@@ -1,0 +1,4 @@
+a == b: true
+a == c: false
+hash(a) == hash(b): true
+hash(a) == hash(c): false

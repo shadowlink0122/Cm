@@ -866,6 +866,16 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         }
     }
 
+    // スライスの場合、HIR型はtypedefエイリアス未解決のことがあるため、
+    // 解決済みのMIRローカル型がユニオンならそちらを優先する
+    if (is_slice && array < ctx.func->locals.size()) {
+        hir::TypePtr array_type = ctx.func->locals[array].type;
+        if (array_type && array_type->kind == hir::TypeKind::Array && array_type->element_type &&
+            array_type->element_type->kind == hir::TypeKind::Union) {
+            elem_type = array_type->element_type;
+        }
+    }
+
     LocalId result = ctx.new_temp(elem_type);
 
     // スライスの場合は関数呼び出しを生成（多次元は非対応）
@@ -890,6 +900,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 get_func = "cm_slice_get_ptr";
+            } else if (elem_kind == hir::TypeKind::Union) {
+                // ユニオン型要素: blob格納のため要素先頭へのポインタを取得する
+                get_func = "cm_slice_get_element_ptr";
             }
         }
 
@@ -898,11 +911,18 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         args.push_back(MirOperand::copy(MirPlace{array}));
         args.push_back(MirOperand::copy(MirPlace{index_locals[0]}));
 
+        // ユニオン型要素は要素ポインタを受けてからデリファレンスでロードする
+        bool deref_result = (get_func == "cm_slice_get_element_ptr");
+        LocalId call_dest = result;
+        if (deref_result) {
+            call_dest = ctx.new_temp(hir::make_pointer(elem_type));
+        }
+
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
         call_term->data = MirTerminator::CallData{MirOperand::function_ref(get_func),
                                                   std::move(args),
-                                                  MirPlace{result},
+                                                  MirPlace{call_dest},
                                                   success_block,
                                                   std::nullopt,
                                                   "",
@@ -910,6 +930,12 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                                                   false};
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
+
+        if (deref_result) {
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{result},
+                MirRvalue::use(MirOperand::copy(MirPlace{call_dest, {PlaceProjection::deref()}}))));
+        }
 
         return result;
     }
@@ -1035,9 +1061,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
         LocalId field_value;
 
         if (is_slice_field && is_array_literal && arr_lit) {
-            // 配列リテラルからスライスを作成
-            hir::TypePtr elem_type =
-                field_type->element_type ? field_type->element_type : hir::make_int();
+            // 配列リテラルからスライスを作成（typedefエイリアスは解決してから判定）
+            hir::TypePtr elem_type = ctx.resolve_typedef(
+                field_type->element_type ? field_type->element_type : hir::make_int());
 
             // 要素サイズを取得
             int64_t elem_size = 4;  // デフォルトはint
@@ -1055,6 +1081,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 elem_size = 8;
+            } else if (elem_kind == hir::TypeKind::Union) {
+                // ユニオン型はtag+最大ペイロードのblobとして格納する
+                elem_size = union_slice_elem_size(elem_type);
             }
 
             // スライス用の一時変数を作成
