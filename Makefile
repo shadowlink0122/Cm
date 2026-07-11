@@ -270,7 +270,17 @@ vscode-extension:
 .PHONY: vscode-extension-install
 vscode-extension-install: vscode-extension
 	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
-	code --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
+	CODE_BIN=$$(command -v code || true); \
+	if [ -z "$$CODE_BIN" ] && [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]; then \
+		CODE_BIN="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"; \
+	fi; \
+	if [ -z "$$CODE_BIN" ]; then \
+		echo "エラー: code コマンドが見つかりません。"; \
+		echo "VSCodeのコマンドパレット（Cmd+Shift+P）で 'Shell Command: Install code command in PATH' を実行するか、"; \
+		echo "次を手動で実行してください: <VSCodeのcodeバイナリ> --install-extension vscode-extension/cm-language-$$VERSION.vsix"; \
+		exit 1; \
+	fi; \
+	"$$CODE_BIN" --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
 	echo "✅ VSCode拡張をインストールしました (cm-language-$$VERSION)"
 
 .PHONY: dist
