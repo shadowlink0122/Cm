@@ -193,6 +193,29 @@ TEST_F(SVCodegenTest, ReservedIdentifierRejected) {
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
+// 定数畳み込み後に未使用となったlocalparamは出力されない
+TEST_F(SVCodegenTest, UnusedLocalparamRemoved) {
+    const std::string code = load_case("unused_localparam");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "USED_CONST");
+    expect_not_contains(sv, "UNUSED_CONST");
+}
+
+// 関数ローカル変数は名前付きalwaysブロック内に宣言される
+// （モジュールスコープへホイストしない）
+TEST_F(SVCodegenTest, LocalsDeclaredInsideNamedBlock) {
+    const std::string code = load_case("block_local_decl");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "begin : tick_blk");
+    // ローカル宣言はブロックラベルより後（＝ブロック内）に現れる
+    size_t label_pos = sv.find("begin : tick_blk");
+    size_t decl_pos = sv.find("doubled");
+    ASSERT_NE(label_pos, std::string::npos) << sv;
+    if (decl_pos != std::string::npos) {
+        EXPECT_GT(decl_pos, label_pos) << sv;
+    }
+}
+
 // async関数のクロックが内部信号（OSC等で駆動）の場合、
 // 自動のclk/rstポートを注入しない（重複宣言になる不具合の修正）
 TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {

@@ -35,6 +35,9 @@ struct SVCodeGenOptions {
     int indentSpaces = 4;      // インデント幅
     bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
     bool strictLint = false;   // lint_off抑止を一切出力しない（--sv-strict-lint）
+    bool keepAlwaysFF = false;  // always_ff/always_comb等を保持（--sv-always-ff。
+                                // 既定はGowin EDA互換のためalways @へ置換する）
+    bool warnNba = false;  // posedge関数内で代入済み状態変数の参照を警告（--sv-warn-nba）
     bool emitConstraints = false;  // #[sv::pin]属性から.cst/.tclを生成（--emit-constraints）
     std::string devicePN;          // //! sv: device: の型番（.tcl生成に使用）
     std::string deviceVersion;     // //! sv: device: の版（例: C）
@@ -91,6 +94,13 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::set<std::string> process_clock_names_;
     // テストベンチで使用するクロックポート名（generateTestbenchで決定）
     std::string tb_clk_name_;
+    // テストベンチ生成中フラグ（#[test] からのDUT内部信号参照を dut. 階層参照へ解決）
+    bool emitting_testbench_ = false;
+    // テストベンチ対象モジュールのポート名 / 入力ポート名
+    std::set<std::string> tb_port_names_;
+    std::set<std::string> tb_input_names_;
+    // モジュールスコープ信号名（内部レジスタ含む。dut. 階層参照の判定用）
+    std::set<std::string> module_signal_names_;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
 
@@ -212,6 +222,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);
     std::string emitTestbenchStmt(const hir::HirStmt& stmt);
+    // #[test] からの代入先を検証（入力ポート以外への代入をエラーにする）
+    void validateTestbenchAssignTarget(const hir::HirExpr& lhs);
 
     // === XDC制約ファイル出力 ===
     std::string generateXDC(const mir::MirProgram& program);

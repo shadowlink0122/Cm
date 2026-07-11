@@ -1576,6 +1576,8 @@ int main(int argc, char* argv[]) {
                 sv_opts.topModule = sv_top_module;
                 sv_opts.emitMemfile = opts.emit_memfile;
                 sv_opts.strictLint = opts.sv_strict_lint;
+                sv_opts.keepAlwaysFF = opts.sv_always_ff;
+                sv_opts.warnNba = opts.sv_warn_nba;
                 sv_opts.emitConstraints = opts.emit_constraints;
                 {
                     // //! sv: device: / option: ディレクティブを反映

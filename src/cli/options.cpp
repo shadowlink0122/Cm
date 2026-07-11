@@ -52,6 +52,10 @@ void print_help(const char* program_name) {
     std::cout << "  --emit-js             JavaScriptを生成\n";
     std::cout << "  --emit-memfile        SV: 配列リテラル初期値を.hexファイルとして書き出す\n";
     std::cout << "  --sv-strict-lint      SV: lint_off抑止を出力しない（幅警告を可視化）\n";
+    std::cout << "  --sv-always-ff        SV: "
+                 "always_ff/always_comb等を保持（既定はGowin互換のalways @）\n";
+    std::cout << "  --sv-warn-nba         SV: "
+                 "posedge関数内で代入済み状態変数の参照（前サイクル値）を警告\n";
     std::cout << "  --emit-constraints    SV: #[sv::pin]属性から.cst/.tclを生成（Gowin）\n";
     std::cout << "  -D <NAME>             条件付きコンパイル定義を追加（#ifdef用）\n";
     std::cout << "  --test                #[test] 関数を含めてコンパイル（TESTを自動定義）\n";
@@ -160,6 +164,10 @@ Options parse_options(int argc, char* argv[]) {
             opts.emit_memfile = true;
         } else if (arg == "--sv-strict-lint") {
             opts.sv_strict_lint = true;
+        } else if (arg == "--sv-always-ff") {
+            opts.sv_always_ff = true;
+        } else if (arg == "--sv-warn-nba") {
+            opts.sv_warn_nba = true;
         } else if (arg == "--emit-constraints") {
             opts.emit_constraints = true;
         } else if (arg == "--test") {

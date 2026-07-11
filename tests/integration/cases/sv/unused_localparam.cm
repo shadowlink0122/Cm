@@ -1,0 +1,9 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+const uint USED_CONST = 7;
+const uint UNUSED_CONST = 99;
+
+void tick(posedge clk) {
+    out = out + USED_CONST;
+}

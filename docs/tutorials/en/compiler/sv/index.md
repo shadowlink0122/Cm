@@ -96,6 +96,41 @@ endmodule
 > `!led` is also converted to SV's `~led` (bitwise negation).
 > A variable's declared initial value (`uint counter = 0;`) is emitted as its power-on initial value.
 
+### State-variable assignments take effect next cycle (important)
+
+Assignments to module-level state variables inside a posedge function
+are converted to SV non-blocking assignments (`<=`). This means **every
+read inside the function sees the previous cycle's value, and the
+assignment takes effect at the start of the next cycle** — unlike
+sequential software execution:
+
+```cm
+void count(posedge clk) {
+    btn_prev = btn_state;             // "scheduled" for the next cycle
+    if (btn_prev && !btn_state) {     // reads the PREVIOUS btn_prev
+        presses = presses + 1;        // → works as edge detection
+    }
+}
+```
+
+Under sequential semantics the condition above would always be false,
+but in hardware it works as intended. Conversely, code that expects to
+use the newly assigned value within the same cycle produces a different
+circuit than intended — use **local variables** (immediate assignment)
+for same-cycle values. Compile with `--sv-warn-nba` to list every read
+of an already-assigned state variable.
+
+When a state variable is assigned multiple times, the last executed
+assignment wins (same rule as SV non-blocking assignment).
+
+### Generated-code inspection options (v0.16.0)
+
+| Option | Effect |
+|---|---|
+| `--sv-warn-nba` | Warn on reads of already-assigned state variables (previous-cycle values) |
+| `--sv-strict-lint` | Do not emit `lint_off` suppressions; expose Verilator width warnings |
+| `--sv-always-ff` | Keep `always_ff`/`always_comb` (default converts to Gowin-compatible `always @`) |
+
 ### Top module name (v0.16.0)
 
 A `module NAME;` declaration determines the SV top module name.

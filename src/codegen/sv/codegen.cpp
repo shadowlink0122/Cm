@@ -673,11 +673,97 @@ void SVCodeGen::emitModule(const SVModule& mod) {
 
     increaseIndent();
 
-    // parameter宣言
-    for (const auto& param : mod.parameters) {
+    // ==== 使用判定コーパス ====
+    // 未使用localparam・未使用テンポラリの除去のため、モジュール本文
+    // （全ブロック・宣言・ポート型）のテキストを集約して識別子の使用を判定する
+    std::string usage_corpus;
+    for (const auto* vec :
+         {&mod.always_ff_blocks, &mod.always_comb_blocks, &mod.always_latch_blocks,
+          &mod.assign_statements, &mod.function_blocks, &mod.instance_blocks, &mod.initial_blocks,
+          &mod.wire_declarations, &mod.reg_declarations, &mod.type_declarations,
+          &mod.header_parameters}) {
+        for (const auto& b : *vec) {
+            usage_corpus += b;
+            usage_corpus += '\n';
+        }
+    }
+    for (const auto& port : mod.ports) {
+        usage_corpus += port.sv_type + " " + port.array_suffix + "\n";
+    }
+    auto used_in_corpus = [](const std::string& text, const std::string& name) {
+        size_t pos = 0;
+        while ((pos = text.find(name, pos)) != std::string::npos) {
+            bool at_start =
+                (pos == 0 || (!std::isalnum(static_cast<unsigned char>(text[pos - 1])) &&
+                              text[pos - 1] != '_'));
+            size_t after = pos + name.size();
+            bool at_end =
+                (after >= text.size() ||
+                 (!std::isalnum(static_cast<unsigned char>(text[after])) && text[after] != '_'));
+            if (at_start && at_end) {
+                return true;
+            }
+            pos += name.size();
+        }
+        return false;
+    };
+    // localparam宣言文から名前を取り出す（" = " より前の最後の識別子トークン）
+    auto param_decl_name = [](const std::string& decl) -> std::string {
+        auto eq = decl.find(" = ");
+        if (eq == std::string::npos) {
+            return "";
+        }
+        std::string head = decl.substr(0, eq);
+        // 末尾から識別子トークンを探す（配列サフィックス "[0:N]" 等は読み飛ばす）
+        size_t end = head.size();
+        while (end > 0) {
+            size_t start = head.find_last_of(" \t", end - 1);
+            std::string tok = (start == std::string::npos)
+                                  ? head.substr(0, end)
+                                  : head.substr(start + 1, end - start - 1);
+            if (!tok.empty() &&
+                (std::isalpha(static_cast<unsigned char>(tok[0])) || tok[0] == '_')) {
+                return tok;
+            }
+            if (start == std::string::npos) {
+                break;
+            }
+            end = start;
+        }
+        return "";
+    };
+
+    // parameter宣言（定数畳み込み後に未使用となったlocalparamは出力しない。
+    // localparam同士の参照があり得るため固定点まで反復する）
+    std::vector<std::string> live_params = mod.parameters;
+    {
+        bool removed = true;
+        while (removed) {
+            removed = false;
+            for (size_t i = 0; i < live_params.size(); ++i) {
+                std::string name = param_decl_name(live_params[i]);
+                if (name.empty()) {
+                    continue;
+                }
+                std::string others;
+                for (size_t j = 0; j < live_params.size(); ++j) {
+                    if (j != i) {
+                        others += live_params[j];
+                        others += '\n';
+                    }
+                }
+                if (!used_in_corpus(usage_corpus, name) && !used_in_corpus(others, name)) {
+                    live_params.erase(live_params.begin() + static_cast<ptrdiff_t>(i));
+                    removed = true;
+                    break;
+                }
+            }
+        }
+    }
+    for (const auto& param : live_params) {
         emitLine(param);
     }
-    if (!mod.parameters.empty()) {
+    if (!live_params.empty()) {
         append_line("");
     }
 
@@ -747,7 +833,9 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     // always_ff ブロック
     for (const auto& block : mod.always_ff_blocks) {
         // Gowin EDA 互換のため always_ff @ を always @ に置換
-        std::string modified = replace_all(block, "always_ff @", "always @");
+        // （--sv-always-ff 指定時は保持し、多重ドライバ検査等のSV機能を活かす）
+        std::string modified =
+            options_.keepAlwaysFF ? block : replace_all(block, "always_ff @", "always @");
         emit(modified);
         append_line("");
     }
@@ -755,7 +843,9 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     // always_comb ブロック
     for (const auto& block : mod.always_comb_blocks) {
         // Gowin EDA 互換のため always_comb を always @(*) に置換
-        std::string modified = replace_all(block, "always_comb begin", "always @(*) begin");
+        std::string modified = options_.keepAlwaysFF
+                                   ? block
+                                   : replace_all(block, "always_comb begin", "always @(*) begin");
         emit(modified);
         append_line("");
     }
@@ -763,7 +853,9 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     // always_latch ブロック
     for (const auto& block : mod.always_latch_blocks) {
         // Gowin EDA 互換のため always_latch を always @(*) に置換
-        std::string modified = replace_all(block, "always_latch begin", "always @(*) begin");
+        std::string modified = options_.keepAlwaysFF
+                                   ? block
+                                   : replace_all(block, "always_latch begin", "always @(*) begin");
         emit(modified);
         append_line("");
     }
@@ -1847,8 +1939,12 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }  // if (!is_void && !has_edge_param)
     }
 
-    // ローカル変数を内部ワイヤ/レジスタとして宣言
-    // （ポートと名前が衝突する変数は除外）
+    // ローカル変数・一時変数をalwaysブロック内ローカルとして宣言する候補を収集
+    // （モジュールスコープへのホイストをやめ、スコープ汚染と
+    //   function内ローカルとの名前衝突（VARHIDDEN）を防ぐ。
+    //   ポートやモジュール信号と名前が衝突する変数は従来どおり宣言しない＝
+    //   モジュールスコープの実体を参照する）
+    std::vector<std::pair<std::string, std::string>> block_local_decls;  // {名前, 宣言文}
     std::set<std::string> port_names;
     for (const auto& port : mod.ports) {
         port_names.insert(port.name);
@@ -1857,6 +1953,13 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         std::string name = local.name;
         if (name.empty() || name == "_0")
             continue;  // 戻り値用
+        // モジュール信号への参照はローカルではない
+        if (local.is_global)
+            continue;
+        // posedge/negedge型パラメータはセンシティビティ指定であり変数ではない
+        if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                           local.type->kind == hir::TypeKind::Negedge))
+            continue;
         // 不正なSV識別子をスキップ（@return等）
         if (name.find('@') != std::string::npos)
             continue;
@@ -1913,7 +2016,16 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             }
         }
         if (!already_declared) {
-            mod.reg_declarations.push_back(decl);
+            bool dup_candidate = false;
+            for (const auto& c : block_local_decls) {
+                if (c.first == name) {
+                    dup_candidate = true;
+                    break;
+                }
+            }
+            if (!dup_candidate) {
+                block_local_decls.push_back({name, decl});
+            }
         }
     }
 
@@ -2051,6 +2163,20 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         block_ss << indent() << "always_comb begin\n";
     }
 
+    // ブロック内ローカル宣言のスコープとして名前付きブロックにする
+    // （名前付きブロック内の変数宣言はVerilog-2001から全ツールで有効）
+    {
+        std::string header = block_ss.str();
+        const std::string begin_nl = " begin\n";
+        if (header.size() >= begin_nl.size() &&
+            header.compare(header.size() - begin_nl.size(), begin_nl.size(), begin_nl) == 0) {
+            header.replace(header.size() - begin_nl.size(), begin_nl.size(),
+                           " begin : " + display_name + "_blk\n");
+            block_ss.str("");
+            block_ss << header;
+        }
+    }
+
     increaseIndent();
 
     // CFG再帰走査でブロックを構造化出力
@@ -2066,7 +2192,36 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // 式ツリー化（Phase 2）により単一定義テンポラリは出力時に
     // 構造的へインライン展開済み。テキストベースのインライン展開パス
     // （Pass1/Pass2）は不要になった
-    block_ss << raw_ss.str();
+    const std::string body_text = raw_ss.str();
+
+    // 本文で実際に使用されるローカル変数のみブロック内に宣言する
+    // （単一定義テンポラリは式ツリーへインライン済みのため宣言不要）
+    {
+        auto used_in_body = [&body_text](const std::string& name) {
+            size_t pos = 0;
+            while ((pos = body_text.find(name, pos)) != std::string::npos) {
+                bool at_start =
+                    (pos == 0 || (!std::isalnum(static_cast<unsigned char>(body_text[pos - 1])) &&
+                                  body_text[pos - 1] != '_'));
+                size_t after = pos + name.size();
+                bool at_end = (after >= body_text.size() ||
+                               (!std::isalnum(static_cast<unsigned char>(body_text[after])) &&
+                                body_text[after] != '_'));
+                if (at_start && at_end) {
+                    return true;
+                }
+                pos += name.size();
+            }
+            return false;
+        };
+        for (const auto& c : block_local_decls) {
+            if (used_in_body(c.first)) {
+                block_ss << indent() << c.second << "\n";
+            }
+        }
+    }
+
+    block_ss << body_text;
 
     decreaseIndent();
     block_ss << indent() << "end\n";
@@ -2952,6 +3107,15 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     SVModule default_mod;
     default_mod.name = "top";
 
+    // モジュールスコープ信号名を収集（テストベンチのdut.階層参照判定に使用）
+    module_signal_names_.clear();
+    for (const auto& gv : program.global_vars) {
+        if (gv && !gv->name.empty()) {
+            module_signal_names_.insert(gv->name);
+            module_signal_names_.insert(strip_namespace(gv->name));
+        }
+    }
+
     // ソースファイル名からモジュール名を推定（SV予約語を回避）
     auto extractBaseName = [](const std::string& path) -> std::string {
         std::string base = path;
@@ -3454,11 +3618,60 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
-    // ポートにclk/rstが含まれていない場合、自動追加。
-    // 対象は「エッジ型（posedge/negedge）パラメータを持たないasync関数」が
-    // ある場合のみ。明示的なクロックを持つasync関数は、そのクロックが
-    // 入力ポートでも内部信号（OSC等で駆動）でも解決済みのため注入しない
-    // （内部クロックと自動注入の `input clk` が重複宣言になる不具合の修正）
+    // クロック信号の解決。
+    // エッジ型（posedge/negedge）パラメータのクロック名が
+    // 入力ポートにもグローバル信号（OSC等で駆動される内部クロック）にも
+    // 無い場合のみ、その名前で入力ポートを自動生成する。
+    // （従来は無条件に `input clk, rst` を注入していたため、内部クロックと
+    //   重複宣言になる不具合があった）
+    auto global_signal_exists = [&program](const std::string& n) {
+        for (const auto& gv : program.global_vars) {
+            if (gv && gv->name == n) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto port_exists = [&default_mod](const std::string& n) {
+        for (const auto& port : default_mod.ports) {
+            if (port.name == n) {
+                return true;
+            }
+        }
+        return false;
+    };
+    {
+        std::vector<std::string> missing_clocks;
+        for (const auto& func : program.functions) {
+            if (!func) {
+                continue;
+            }
+            for (const auto& local : func->locals) {
+                if (local.is_global || !local.type) {
+                    continue;
+                }
+                if (local.type->kind != hir::TypeKind::Posedge &&
+                    local.type->kind != hir::TypeKind::Negedge) {
+                    continue;
+                }
+                const std::string& cn = local.name;
+                if (cn.empty() || global_signal_exists(cn) || port_exists(cn)) {
+                    continue;
+                }
+                if (std::find(missing_clocks.begin(), missing_clocks.end(), cn) ==
+                    missing_clocks.end()) {
+                    missing_clocks.push_back(cn);
+                }
+            }
+        }
+        for (auto it = missing_clocks.rbegin(); it != missing_clocks.rend(); ++it) {
+            default_mod.ports.insert(default_mod.ports.begin(),
+                                     SVPort{SVPort::Input, *it, "logic", 1, ""});
+        }
+    }
+
+    // エッジ型パラメータを持たないasync関数がある場合は
+    // 従来どおり暗黙の clk/rst を自動追加する
     bool has_async = false;
     for (const auto& func : program.functions) {
         if (!func || !func->is_async) {
@@ -3480,17 +3693,6 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             break;
         }
     }
-
-    // clk/rst と同名のグローバル信号が既に宣言されている場合も注入しない
-    // （重複宣言の防止）
-    auto global_signal_exists = [&program](const std::string& n) {
-        for (const auto& gv : program.global_vars) {
-            if (gv && gv->name == n) {
-                return true;
-            }
-        }
-        return false;
-    };
     // 明示的なエッジトリガー入力ポート（posedge/negedge）がある場合は自動追加しない
     bool has_edge_trigger = false;
     for (const auto& gv : program.global_vars) {
@@ -3701,6 +3903,98 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
         }
     }
 
+    // --sv-warn-nba: posedge/negedge関数内で「代入した状態変数をその後で参照」を警告する。
+    // 状態変数への代入は次サイクル反映（ノンブロッキング代入）のため、
+    // 直後の参照は前サイクル値を読む。ソフトウェア的な逐次実行とは結果が
+    // 異なるため、意図の確認を促す（基本ブロック内の保守的な検査）
+    if (options_.warnNba) {
+        for (const auto& func : program.functions) {
+            if (!func) {
+                continue;
+            }
+            bool has_edge = false;
+            for (const auto& local : func->locals) {
+                if (!local.is_global && local.type &&
+                    (local.type->kind == hir::TypeKind::Posedge ||
+                     local.type->kind == hir::TypeKind::Negedge)) {
+                    has_edge = true;
+                    break;
+                }
+            }
+            if (!has_edge) {
+                continue;
+            }
+            auto is_state_var = [&func](mir::LocalId id) {
+                return id < func->locals.size() && func->locals[id].is_global;
+            };
+            std::set<std::string> warned;
+            auto check_operand = [&](const mir::MirOperandPtr& op,
+                                     const std::set<mir::LocalId>& assigned) {
+                if (!op ||
+                    (op->kind != mir::MirOperand::Move && op->kind != mir::MirOperand::Copy)) {
+                    return;
+                }
+                auto* pl = std::get_if<mir::MirPlace>(&op->data);
+                if (!pl || assigned.count(pl->local) == 0) {
+                    return;
+                }
+                const std::string& nm = func->locals[pl->local].name;
+                if (warned.insert(nm).second) {
+                    std::cerr << "警告: SVターゲット: 関数 '" << strip_namespace(func->name)
+                              << "' 内で代入した状態変数 '" << nm
+                              << "' をその後で参照しています。posedge関数内の代入は"
+                              << "次サイクル反映（ノンブロッキング代入）のため、"
+                              << "この参照は前サイクルの値を読みます\n";
+                }
+            };
+            for (const auto& bb : func->basic_blocks) {
+                if (!bb) {
+                    continue;
+                }
+                std::set<mir::LocalId> assigned;
+                for (const auto& stmt : bb->statements) {
+                    if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                        continue;
+                    }
+                    const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+                    // 右辺の読み取りを先に検査（自己更新 x = x + 1 は対象外になる）
+                    if (ad.rvalue) {
+                        switch (ad.rvalue->kind) {
+                            case mir::MirRvalue::Use:
+                                check_operand(
+                                    std::get<mir::MirRvalue::UseData>(ad.rvalue->data).operand,
+                                    assigned);
+                                break;
+                            case mir::MirRvalue::BinaryOp: {
+                                const auto& bd =
+                                    std::get<mir::MirRvalue::BinaryOpData>(ad.rvalue->data);
+                                check_operand(bd.lhs, assigned);
+                                check_operand(bd.rhs, assigned);
+                                break;
+                            }
+                            case mir::MirRvalue::UnaryOp:
+                                check_operand(
+                                    std::get<mir::MirRvalue::UnaryOpData>(ad.rvalue->data).operand,
+                                    assigned);
+                                break;
+                            case mir::MirRvalue::Cast:
+                                check_operand(
+                                    std::get<mir::MirRvalue::CastData>(ad.rvalue->data).operand,
+                                    assigned);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    // 左辺: 状態変数への代入を記録
+                    if (is_state_var(ad.place.local)) {
+                        assigned.insert(ad.place.local);
+                    }
+                }
+            }
+        }
+    }
+
     loop_name_counter_ = 0;
     begin_generation();
 
@@ -3726,17 +4020,21 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
         std::cout << "  サイズ: " << get_stats().total_bytes << " bytes\n";
     }
 
-    // テストベンチ自動生成（モジュールがあれば）
+    // テストベンチ自動生成（テスト内容がある場合のみ。
+    // #[test] 関数も //! test: ディレクティブも無いビルドでは
+    // 空のテストベンチを出力しない）
     if (!modules_.empty()) {
         std::string tb_code = generateTestbench(modules_[0]);
-        std::string tb_path = options_.outputFile;
-        auto dot = tb_path.rfind('.');
-        if (dot != std::string::npos) {
-            tb_path = tb_path.substr(0, dot) + "_tb.sv";
-        } else {
-            tb_path += "_tb.sv";
+        if (!tb_code.empty()) {
+            std::string tb_path = options_.outputFile;
+            auto dot = tb_path.rfind('.');
+            if (dot != std::string::npos) {
+                tb_path = tb_path.substr(0, dot) + "_tb.sv";
+            } else {
+                tb_path += "_tb.sv";
+            }
+            writeToFile(tb_code, tb_path);
         }
-        writeToFile(tb_code, tb_path);
     }
 
     // Gowin制約出力（--emit-constraints指定時）
@@ -3890,6 +4188,31 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
             }
         }
     }
+
+    // テスト内容（#[test] 関数 / //! test: ディレクティブ）が無ければ
+    // テストベンチ自体を生成しない
+    bool has_test_fn = false;
+    for (const auto* fn : testbench_fns_) {
+        if (fn && !fn->hir_stmts.empty()) {
+            has_test_fn = true;
+            break;
+        }
+    }
+    if (test_cases.empty() && !has_test_fn) {
+        return "";
+    }
+
+    // #[test] からの参照解決用にポート名を記録し、テストベンチ生成モードへ
+    // （DUT内部信号の読み取りは dut. 階層参照として出力する）
+    tb_port_names_.clear();
+    tb_input_names_.clear();
+    for (const auto& port : mod.ports) {
+        tb_port_names_.insert(port.name);
+        if (port.direction == SVPort::Input) {
+            tb_input_names_.insert(port.name);
+        }
+    }
+    emitting_testbench_ = true;
 
     ss << "// 自動生成テストベンチ - Cm compiler\n";
     ss << "`timescale 1ns / 1ps\n\n";
@@ -4067,7 +4390,43 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     ss << "endmodule\n";
 
+    emitting_testbench_ = false;
     return ss.str();
+}
+
+// #[test] からの代入先を検証する。
+// 駆動できるのはDUTの入力ポートのみ（出力ポート・内部信号への代入は
+// 意図しない多重駆動や不正な階層代入になるため明確なエラーで停止する。
+// 内部信号の「読み取り」は dut. 階層参照として対応済み）
+void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
+    // 配列アクセス等はルートの識別子まで辿る
+    const hir::HirExpr* root = &lhs;
+    while (true) {
+        if (auto* idx = std::get_if<std::unique_ptr<hir::HirIndex>>(&root->kind)) {
+            if (*idx && (*idx)->object) {
+                root = (*idx)->object.get();
+                continue;
+            }
+        }
+        break;
+    }
+    auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&root->kind);
+    if (!var || !*var) {
+        return;
+    }
+    const std::string& nm = (*var)->name;
+    if (tb_input_names_.count(nm) > 0) {
+        return;  // 入力ポート: OK
+    }
+    if (tb_port_names_.count(nm) > 0) {
+        throw std::runtime_error("#[test] からDUTの出力ポート '" + nm +
+                                 "' へは代入できません（読み取りのみ可能です）");
+    }
+    if (module_signal_names_.count(nm) > 0) {
+        throw std::runtime_error("#[test] からDUT内部信号 '" + nm +
+                                 "' へは代入できません（assertでの読み取りは可能です）。"
+                                 "#[input] ポート経由で駆動してください");
+    }
 }
 
 // #[test] 関数のHIR文をテストベンチのinitial文へ変換する。
@@ -4132,6 +4491,7 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
         // 代入式（HirBinary Assign）: ブロッキング代入でDUT入力を駆動
         if (auto* bin = std::get_if<std::unique_ptr<hir::HirBinary>>(&e.kind)) {
             if (*bin && (*bin)->op == hir::HirBinaryOp::Assign && (*bin)->lhs && (*bin)->rhs) {
+                validateTestbenchAssignTarget(*(*bin)->lhs);
                 return ind + emitHirExpr(*(*bin)->lhs) + " = " + emitHirExpr(*(*bin)->rhs) + ";\n";
             }
         }
@@ -4142,6 +4502,7 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
     // 単純代入文
     if (auto* assign = std::get_if<std::unique_ptr<hir::HirAssign>>(&stmt.kind)) {
         if (*assign && (*assign)->target && (*assign)->value) {
+            validateTestbenchAssignTarget(*(*assign)->target);
             return ind + emitHirExpr(*(*assign)->target) + " = " + emitHirExpr(*(*assign)->value) +
                    ";\n";
         }
@@ -4340,7 +4701,14 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
     // 識別子（変数参照）
     if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
         if (*var) {
-            return (*var)->name;
+            const std::string& nm = (*var)->name;
+            // テストベンチ生成中: ポート以外のDUT内部信号（内部レジスタ等）は
+            // 階層参照（dut.名前）として読み取る
+            if (emitting_testbench_ && tb_port_names_.count(nm) == 0 &&
+                module_signal_names_.count(nm) > 0) {
+                return "dut." + nm;
+            }
+            return nm;
         }
     }
 
