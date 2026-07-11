@@ -65,9 +65,7 @@ int main() {
 
 ### 2.1 Conditional-compilation block indentation (v0.16.0)
 
-The contents of `#ifdef` / `#ifndef` / `#else` ... `#end` blocks are
-indented one level. The directives themselves stay at the enclosing
-indent level, and nesting or combining with braces is supported:
+The contents of `#ifdef` / `#ifndef` / `#else` ... `#end` blocks are indented one level. The directives themselves stay at the enclosing indent level, and nesting or combining with braces is supported:
 
 ```cm
 // Before
@@ -85,9 +83,7 @@ const uint N = 1;
 
 ### 2.2 Continuation-line indentation (v0.16.0)
 
-Continuation lines of a wrapped long expression are indented one level
-deeper than the first line of the statement. The first wrap adds one
-level, and subsequent wraps align to the same depth:
+Continuation lines of a wrapped long expression are indented one level deeper than the first line of the statement. The first wrap adds one level, and subsequent wraps align to the same depth:
 
 ```cm
 // Before
@@ -101,8 +97,7 @@ uint n1 = (a & 1) + ((a >> 1) & 1)
     + ((a >> 3) & 1);
 ```
 
-Continuation lines that carry an unclosed parenthesis follow the
-parenthesis depth instead:
+Continuation lines that carry an unclosed parenthesis follow the parenthesis depth instead:
 
 ```cm
 out = (q0 | (q1 << 1) | (q2 << 2)
@@ -112,9 +107,7 @@ out = (q0 | (q1 << 1) | (q2 << 2)
 
 ### 2.3 Trailing-comment position (v0.16.0)
 
-Manually adjusted trailing-comment positions are respected. The gap
-between code and comment is widened to two spaces only when it is
-smaller than that:
+Manually adjusted trailing-comment positions are respected. The gap between code and comment is widened to two spaces only when it is smaller than that:
 
 ```cm
 tmds_out = 852;   // manually aligned comments stay as-is
@@ -204,5 +197,4 @@ To check code style in CI:
 
 ---
 
-<!-- nav -->
-← Prev: [Linter (cm lint)](linter.html) | [Contents](../index.html) | Next: [MIR最適化パス](optimization.html) →
+<!-- nav -->← Prev: [Linter (cm lint)](linter.html) | [Contents](../index.html) | Next: [MIR最適化パス](optimization.html) →
