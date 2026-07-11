@@ -771,8 +771,49 @@
               "match": "::"
             },
             {
+              "name": "meta.attribute.arguments.cm",
+              "begin": "\\(",
+              "end": "\\)|(?=$)",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.section.arguments.begin.cm"
+                }
+              },
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.arguments.end.cm"
+                }
+              },
+              "patterns": [
+                {
+                  "match": "([A-Za-z_][A-Za-z0-9_]*)\\s*(:)(?!:)",
+                  "captures": {
+                    "1": {
+                      "name": "variable.other.member.cm"
+                    },
+                    "2": {
+                      "name": "punctuation.separator.key-value.cm"
+                    }
+                  }
+                },
+                {
+                  "include": "#strings"
+                },
+                {
+                  "include": "#numbers"
+                },
+                {
+                  "include": "#constants"
+                },
+                {
+                  "name": "punctuation.separator.comma.cm",
+                  "match": ","
+                }
+              ]
+            },
+            {
               "name": "keyword.control.attribute.cm",
-              "match": "[^\\]:]+"
+              "match": "[^\\]:(]+"
             },
             {
               "name": "keyword.control.attribute.cm",
