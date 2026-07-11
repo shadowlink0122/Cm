@@ -8,6 +8,7 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 |---|---|
 | [正式言語仕様（CANONICAL_SPEC）](CANONICAL_SPEC.html) | 言語の完全な仕様（実装準拠） |
 | [文法定義（cm_grammar）](cm_grammar.html) | BNFベースの文法定義 |
+| [バックエンド対応マトリクス](backend_support_matrix.html) | 構文・機能×バックエンドの対応可否とテスト方針 |
 | [エラー処理方針](error_handling_policy.html) | 例外/Result/診断APIの使い分け方針 |
 
 ## ロードマップ
@@ -25,6 +26,11 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [02 物理制約ファイル生成](v0.16.0/02_constraints_emission.html) | #[sv::pin] / --emit-constraints（.cst/.tcl） |
 | [03 トライステートとCDC](v0.16.0/03_tristate_cdc.html) | 'z リテラル・#[sv::sync] |
 | [04 ビットスライスとcasez](v0.16.0/04_bitslice_casez.html) | [hi:lo] / [base +: W] 構文・unique casez |
+| [05 SV回路検証フレームワーク](v0.16.0/05_sv_verification.html) | サイクル精度テストベンチ（Layer 1） |
+| [06 #[test]統一テスト属性](v0.16.0/06_test_attribute.html) | #[test] / cm test コマンド |
+| [07 ツーリングUX](v0.16.0/07_tooling_ux.html) | #構文ハイライト・条件ブロック/継続行インデント |
+| [08 SVコード生成の精査報告](v0.16.0/08_sv_codegen_audit.html) | 実回路監査・バグ修正・品質改善の記録 |
+| [09 バックエンドギャップ解消](v0.16.0/09_backend_gap_closure.html) | SV007エラー化・skip棚卸し・対応マトリクス新設 |
 
 ## アーカイブ
 

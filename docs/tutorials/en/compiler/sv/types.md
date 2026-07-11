@@ -47,7 +47,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ### Non-Synthesizable Types (Compile Errors)
 
-Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend. `float`/`double` emit a warning (`warning[SV004]`, an IP core is required). `string` is only practical as a const constant (see [Data Structures](data.html#strings)).
+Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend. `float`/`double` also cause a **compile error** (`error[SV004]`, changed from a warning in v0.16.0; an IP core is required for synthesis). `string` is only practical as a const constant (non-const strings longer than 3 characters raise `error[SV005]`; see [Data Structures](data.html#strings)).
 
 ---
 
