@@ -96,6 +96,20 @@ endmodule
 > `!led` もSVの `~led` (ビット反転) に変換されます。
 > 変数の宣言初期値（`uint counter = 0;`）は電源投入時初期値として出力されます。
 
+### トップモジュール名（v0.16.0）
+
+`module NAME;` 宣言があるとSVのトップモジュール名に使われます。
+宣言がなければソースファイル名から推定されます:
+
+```cm
+//! platform: sv
+module hdmi_colorbar;  // → module hdmi_colorbar ( ... );
+```
+
+また、SystemVerilogの予約語（`program`・`priority`・`bind` 等）と
+衝突する変数・関数名はコンパイルエラーになります。生成SVが不正な
+構文になるのを防ぐためなので、別の名前に変更してください。
+
 ---
 
 ## プラットフォームディレクティブ

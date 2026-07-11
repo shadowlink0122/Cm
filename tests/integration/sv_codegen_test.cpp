@@ -46,6 +46,9 @@ class SVCodegenTest : public ::testing::Test {
         Parser p(tokens);
         auto ast = p.parse();
 
+        // 本番パイプラインと同様に `module NAME;` 宣言からトップ名を取得
+        std::string top_module = codegen::sv::extract_top_module_name(ast);
+
         hir::HirLowering hir_lowering;
         auto hir = hir_lowering.lower(ast);
 
@@ -61,6 +64,7 @@ class SVCodegenTest : public ::testing::Test {
         options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
         options.emitMemfile = emit_memfile;
         options.strictLint = strict_lint;
+        options.topModule = top_module;
         codegen::sv::SVCodeGen gen(options);
         gen.compile(mir);
         return gen.getGeneratedCode();
@@ -172,6 +176,34 @@ TEST_F(SVCodegenTest, RegisterInitialValue) {
     const std::string code = load_case("register_initial_value");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "counter = 32'd42;");
+}
+
+// `module NAME;` ヘッダ宣言がSVトップモジュール名に反映される
+// （従来はファイル名由来の名前になり宣言が無視されていた）
+TEST_F(SVCodegenTest, ModuleTopName) {
+    const std::string code = load_case("module_top_name");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "module my_top");
+}
+
+// SV予約語と衝突する識別子（program等）は明確なエラーで停止する
+// （従来はそのまま出力され、iverilog等で構文エラーになっていた）
+TEST_F(SVCodegenTest, ReservedIdentifierRejected) {
+    const std::string code = load_case("sv_reserved_identifier");
+    EXPECT_THROW(compile_to_sv(code), std::runtime_error);
+}
+
+// async関数のクロックが内部信号（OSC等で駆動）の場合、
+// 自動のclk/rstポートを注入しない（重複宣言になる不具合の修正）
+TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
+    const std::string code = load_case("async_internal_clock");
+    std::string sv = compile_to_sv(code);
+    expect_not_contains(sv, "input logic clk");
+    expect_not_contains(sv, "input logic rst");
+    // 内部信号としてのclk宣言（初期値付き）は1つだけ存在する
+    size_t first = sv.find("logic clk");
+    ASSERT_NE(first, std::string::npos) << sv;
+    EXPECT_EQ(sv.find("logic clk", first + 1), std::string::npos) << sv;
 }
 
 // プロセス内ループはwhileループとして再構成され、

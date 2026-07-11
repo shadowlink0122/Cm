@@ -96,6 +96,20 @@ endmodule
 > `!led` is also converted to SV's `~led` (bitwise negation).
 > A variable's declared initial value (`uint counter = 0;`) is emitted as its power-on initial value.
 
+### Top module name (v0.16.0)
+
+A `module NAME;` declaration determines the SV top module name.
+Without it, the name is inferred from the source file name:
+
+```cm
+//! platform: sv
+module hdmi_colorbar;  // → module hdmi_colorbar ( ... );
+```
+
+Variable and function names that collide with SystemVerilog reserved
+words (`program`, `priority`, `bind`, etc.) are rejected with a compile
+error, since they would produce invalid SV. Rename the identifier.
+
 ---
 
 ## Platform Directive

@@ -1,0 +1,9 @@
+#[output] uint out = 0;
+
+bool clk = false;
+uint counter = 0;
+
+async void tick(posedge clk) {
+    counter = counter + 1;
+    out = counter;
+}

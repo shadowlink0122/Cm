@@ -1105,6 +1105,10 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
 
+        // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得
+        // （lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
+        const std::string sv_top_module = codegen::sv::extract_top_module_name(program);
+
         // ========== Target Filtering ==========
         {
             Target active_target = Target::Native;
@@ -1569,6 +1573,7 @@ int main(int argc, char* argv[]) {
 
                 sv_opts.verbose = opts.verbose || opts.debug;
                 sv_opts.sourceFile = opts.input_file;
+                sv_opts.topModule = sv_top_module;
                 sv_opts.emitMemfile = opts.emit_memfile;
                 sv_opts.strictLint = opts.sv_strict_lint;
                 sv_opts.emitConstraints = opts.emit_constraints;

@@ -1,5 +1,6 @@
 #include "codegen.hpp"
 
+#include "../../frontend/ast/typedef.hpp"
 #include "../../mir/analysis/dominators.hpp"
 
 #include <algorithm>
@@ -22,6 +23,12 @@ std::string replace_all(std::string str, const std::string& from, const std::str
         start_pos += to.length();
     }
     return str;
+}
+
+// 名前空間修飾（encoder::tmds_r 等）を除いた末尾の識別子を取得
+std::string strip_namespace(const std::string& name) {
+    auto pos = name.rfind("::");
+    return (pos != std::string::npos) ? name.substr(pos + 2) : name;
 }
 
 // 符号付き整数型であるか判定
@@ -155,6 +162,277 @@ bool is_integer_type(const hir::TypePtr& type) {
     }
 }
 }  // namespace
+
+// SystemVerilog（IEEE 1800-2017 Annex B）の予約語判定。
+// Cm識別子がそのままSVへ出力されるため、衝突すると不正なSVになる
+bool is_sv_reserved_word(const std::string& name) {
+    static const std::unordered_set<std::string> kReserved = {"accept_on",
+                                                              "alias",
+                                                              "always",
+                                                              "always_comb",
+                                                              "always_ff",
+                                                              "always_latch",
+                                                              "and",
+                                                              "assert",
+                                                              "assign",
+                                                              "assume",
+                                                              "automatic",
+                                                              "before",
+                                                              "begin",
+                                                              "bind",
+                                                              "bins",
+                                                              "binsof",
+                                                              "bit",
+                                                              "break",
+                                                              "buf",
+                                                              "bufif0",
+                                                              "bufif1",
+                                                              "byte",
+                                                              "case",
+                                                              "casex",
+                                                              "casez",
+                                                              "cell",
+                                                              "chandle",
+                                                              "checker",
+                                                              "class",
+                                                              "clocking",
+                                                              "cmos",
+                                                              "config",
+                                                              "const",
+                                                              "constraint",
+                                                              "context",
+                                                              "continue",
+                                                              "cover",
+                                                              "covergroup",
+                                                              "coverpoint",
+                                                              "cross",
+                                                              "deassign",
+                                                              "default",
+                                                              "defparam",
+                                                              "design",
+                                                              "disable",
+                                                              "dist",
+                                                              "do",
+                                                              "edge",
+                                                              "else",
+                                                              "end",
+                                                              "endcase",
+                                                              "endchecker",
+                                                              "endclass",
+                                                              "endclocking",
+                                                              "endconfig",
+                                                              "endfunction",
+                                                              "endgenerate",
+                                                              "endgroup",
+                                                              "endinterface",
+                                                              "endmodule",
+                                                              "endpackage",
+                                                              "endprimitive",
+                                                              "endprogram",
+                                                              "endproperty",
+                                                              "endspecify",
+                                                              "endsequence",
+                                                              "endtable",
+                                                              "endtask",
+                                                              "enum",
+                                                              "event",
+                                                              "eventually",
+                                                              "expect",
+                                                              "export",
+                                                              "extends",
+                                                              "extern",
+                                                              "final",
+                                                              "first_match",
+                                                              "for",
+                                                              "force",
+                                                              "foreach",
+                                                              "forever",
+                                                              "fork",
+                                                              "forkjoin",
+                                                              "function",
+                                                              "generate",
+                                                              "genvar",
+                                                              "global",
+                                                              "highz0",
+                                                              "highz1",
+                                                              "if",
+                                                              "iff",
+                                                              "ifnone",
+                                                              "ignore_bins",
+                                                              "illegal_bins",
+                                                              "implements",
+                                                              "implies",
+                                                              "import",
+                                                              "incdir",
+                                                              "include",
+                                                              "initial",
+                                                              "inout",
+                                                              "input",
+                                                              "inside",
+                                                              "instance",
+                                                              "int",
+                                                              "integer",
+                                                              "interconnect",
+                                                              "interface",
+                                                              "intersect",
+                                                              "join",
+                                                              "join_any",
+                                                              "join_none",
+                                                              "large",
+                                                              "let",
+                                                              "liblist",
+                                                              "library",
+                                                              "local",
+                                                              "localparam",
+                                                              "logic",
+                                                              "longint",
+                                                              "macromodule",
+                                                              "matches",
+                                                              "medium",
+                                                              "modport",
+                                                              "module",
+                                                              "nand",
+                                                              "negedge",
+                                                              "nettype",
+                                                              "new",
+                                                              "nexttime",
+                                                              "nmos",
+                                                              "nor",
+                                                              "noshowcancelled",
+                                                              "not",
+                                                              "notif0",
+                                                              "notif1",
+                                                              "null",
+                                                              "or",
+                                                              "output",
+                                                              "package",
+                                                              "packed",
+                                                              "parameter",
+                                                              "pmos",
+                                                              "posedge",
+                                                              "primitive",
+                                                              "priority",
+                                                              "program",
+                                                              "property",
+                                                              "protected",
+                                                              "pull0",
+                                                              "pull1",
+                                                              "pulldown",
+                                                              "pullup",
+                                                              "pulsestyle_ondetect",
+                                                              "pulsestyle_onevent",
+                                                              "pure",
+                                                              "rand",
+                                                              "randc",
+                                                              "randcase",
+                                                              "randsequence",
+                                                              "rcmos",
+                                                              "real",
+                                                              "realtime",
+                                                              "ref",
+                                                              "reg",
+                                                              "reject_on",
+                                                              "release",
+                                                              "repeat",
+                                                              "restrict",
+                                                              "return",
+                                                              "rnmos",
+                                                              "rpmos",
+                                                              "rtran",
+                                                              "rtranif0",
+                                                              "rtranif1",
+                                                              "s_always",
+                                                              "s_eventually",
+                                                              "s_nexttime",
+                                                              "s_until",
+                                                              "s_until_with",
+                                                              "scalared",
+                                                              "sequence",
+                                                              "shortint",
+                                                              "shortreal",
+                                                              "showcancelled",
+                                                              "signed",
+                                                              "small",
+                                                              "soft",
+                                                              "solve",
+                                                              "specify",
+                                                              "specparam",
+                                                              "static",
+                                                              "string",
+                                                              "strong",
+                                                              "strong0",
+                                                              "strong1",
+                                                              "struct",
+                                                              "super",
+                                                              "supply0",
+                                                              "supply1",
+                                                              "sync_accept_on",
+                                                              "sync_reject_on",
+                                                              "table",
+                                                              "tagged",
+                                                              "task",
+                                                              "this",
+                                                              "throughout",
+                                                              "time",
+                                                              "timeprecision",
+                                                              "timeunit",
+                                                              "tran",
+                                                              "tranif0",
+                                                              "tranif1",
+                                                              "tri",
+                                                              "tri0",
+                                                              "tri1",
+                                                              "triand",
+                                                              "trior",
+                                                              "trireg",
+                                                              "type",
+                                                              "typedef",
+                                                              "union",
+                                                              "unique",
+                                                              "unique0",
+                                                              "unsigned",
+                                                              "until",
+                                                              "until_with",
+                                                              "untyped",
+                                                              "use",
+                                                              "uwire",
+                                                              "var",
+                                                              "vectored",
+                                                              "virtual",
+                                                              "void",
+                                                              "wait",
+                                                              "wait_order",
+                                                              "wand",
+                                                              "weak",
+                                                              "weak0",
+                                                              "weak1",
+                                                              "while",
+                                                              "wildcard",
+                                                              "wire",
+                                                              "with",
+                                                              "within",
+                                                              "wor",
+                                                              "xnor",
+                                                              "xor"};
+    return kReserved.count(name) > 0;
+}
+
+// `module NAME;` ヘッダ宣言（本体なしのトップレベルModuleDecl）から
+// トップモジュール名を取得する。importの内容はnamespaceに包まれて
+// トップレベルには現れないため、最初に見つかったものがメインファイルの宣言
+std::string extract_top_module_name(const ast::Program& program) {
+    for (const auto& decl : program.declarations) {
+        if (!decl) {
+            continue;
+        }
+        if (const auto* mod = decl->as<ast::ModuleDecl>()) {
+            if (mod->declarations.empty() && !mod->path.segments.empty()) {
+                return mod->path.segments.back();
+            }
+        }
+    }
+    return "";
+}
 
 SVCodeGen::SVCodeGen(const SVCodeGenOptions& options) : options_(options) {}
 
@@ -2686,24 +2964,20 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         return base;
     };
 
-    // SV予約語リスト（モジュール名として使用不可）
-    static const std::set<std::string> sv_reserved = {
-        "output",   "input",     "inout",   "module",  "wire",    "reg",     "logic",
-        "begin",    "end",       "if",      "else",    "for",     "while",   "case",
-        "default",  "assign",    "always",  "initial", "posedge", "negedge", "task",
-        "function", "parameter", "integer", "real",    "time",    "event"};
-
-    // ソースファイル名を優先してモジュール名を決定
-    if (!options_.sourceFile.empty()) {
+    // モジュール名の決定: `module NAME;` 宣言 > ソースファイル名 > 出力ファイル名
+    if (!options_.topModule.empty()) {
+        default_mod.name = is_sv_reserved_word(options_.topModule) ? options_.topModule + "_mod"
+                                                                   : options_.topModule;
+    } else if (!options_.sourceFile.empty()) {
         std::string base = extractBaseName(options_.sourceFile);
-        if (!base.empty() && sv_reserved.find(base) == sv_reserved.end()) {
+        if (!base.empty() && !is_sv_reserved_word(base)) {
             default_mod.name = base;
         } else if (!base.empty()) {
             default_mod.name = base + "_mod";
         }
     } else if (!options_.outputFile.empty()) {
         std::string base = extractBaseName(options_.outputFile);
-        if (!base.empty() && sv_reserved.find(base) == sv_reserved.end()) {
+        if (!base.empty() && !is_sv_reserved_word(base)) {
             default_mod.name = base;
         } else if (!base.empty()) {
             default_mod.name = base + "_mod";
@@ -3180,14 +3454,43 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
-    // ポートにclk/rstが含まれていない場合、自動追加（async funcがある場合のみ）
+    // ポートにclk/rstが含まれていない場合、自動追加。
+    // 対象は「エッジ型（posedge/negedge）パラメータを持たないasync関数」が
+    // ある場合のみ。明示的なクロックを持つasync関数は、そのクロックが
+    // 入力ポートでも内部信号（OSC等で駆動）でも解決済みのため注入しない
+    // （内部クロックと自動注入の `input clk` が重複宣言になる不具合の修正）
     bool has_async = false;
     for (const auto& func : program.functions) {
-        if (func && func->is_async) {
+        if (!func || !func->is_async) {
+            continue;
+        }
+        bool has_edge_param = false;
+        for (const auto& local : func->locals) {
+            if (local.is_global) {
+                continue;
+            }
+            if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                               local.type->kind == hir::TypeKind::Negedge)) {
+                has_edge_param = true;
+                break;
+            }
+        }
+        if (!has_edge_param) {
             has_async = true;
             break;
         }
     }
+
+    // clk/rst と同名のグローバル信号が既に宣言されている場合も注入しない
+    // （重複宣言の防止）
+    auto global_signal_exists = [&program](const std::string& n) {
+        for (const auto& gv : program.global_vars) {
+            if (gv && gv->name == n) {
+                return true;
+            }
+        }
+        return false;
+    };
     // 明示的なエッジトリガー入力ポート（posedge/negedge）がある場合は自動追加しない
     bool has_edge_trigger = false;
     for (const auto& gv : program.global_vars) {
@@ -3214,11 +3517,11 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         has_clk = true;
         has_rst = true;
     }
-    if (has_async && !has_clk) {
+    if (has_async && !has_clk && !global_signal_exists("clk")) {
         default_mod.ports.insert(default_mod.ports.begin(),
                                  SVPort{SVPort::Input, "clk", "logic", 1, ""});
     }
-    if (has_async && !has_rst) {
+    if (has_async && !has_rst && !global_signal_exists("rst")) {
         // clkの実際の位置を検索して直後に挿入
         size_t insert_pos = 0;
         for (size_t i = 0; i < default_mod.ports.size(); ++i) {
@@ -3338,6 +3641,64 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
     // 非合成型チェック（エラーがあればコンパイル停止）
     if (!validateSynthesizableTypes(program)) {
         throw std::runtime_error("SVターゲットで非合成型が検出されました");
+    }
+
+    // SV予約語と衝突する識別子のチェック。
+    // そのまま出力すると不正なSV（iverilog等で構文エラー）になるため、
+    // 明確なエラーとしてコンパイルを停止する
+    {
+        std::vector<std::string> collisions;
+        auto check_name = [&](const std::string& raw, const std::string& kind) {
+            std::string name = strip_namespace(raw);
+            if (is_sv_reserved_word(name)) {
+                collisions.push_back(kind + " '" + name + "'");
+            }
+        };
+        for (const auto& gv : program.global_vars) {
+            if (gv) {
+                check_name(gv->name, "変数");
+            }
+        }
+        for (const auto& func : program.functions) {
+            if (!func) {
+                continue;
+            }
+            // モジュール本体へ出力されない関数は対象外
+            // （analyzeFunctionのスキップ条件と対応: main / assert・panic
+            //   イントリンシック / #[test] テスト関数）
+            std::string fn_name = strip_namespace(func->name);
+            if (fn_name == "main" || fn_name == "assert" || fn_name == "panic") {
+                continue;
+            }
+            bool is_test_fn = false;
+            for (const auto& attr : func->attributes) {
+                if (attr == "test") {
+                    is_test_fn = true;
+                    break;
+                }
+            }
+            if (is_test_fn) {
+                continue;
+            }
+            check_name(func->name, "関数");
+            for (const auto& local : func->locals) {
+                // ユーザー定義のローカル変数のみ（コンパイラ生成の一時変数は対象外）
+                if (local.is_user_variable && !local.is_global && !local.name.empty()) {
+                    check_name(local.name, "変数");
+                }
+            }
+        }
+        if (!collisions.empty()) {
+            std::string msg = "SystemVerilogの予約語と衝突する識別子があります: ";
+            for (size_t i = 0; i < collisions.size(); ++i) {
+                if (i > 0) {
+                    msg += ", ";
+                }
+                msg += collisions[i];
+            }
+            msg += "。別の名前に変更してください";
+            throw std::runtime_error(msg);
+        }
     }
 
     loop_name_counter_ = 0;

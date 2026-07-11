@@ -12,12 +12,25 @@
 #include <unordered_set>
 #include <vector>
 
+namespace cm::ast {
+struct Program;
+}
+
 namespace cm::codegen::sv {
+
+/// `module NAME;` ヘッダ宣言からトップモジュール名を取得する。
+/// トップレベルの本体なしModuleDecl（最初のもの）を採用し、無ければ空文字を返す
+std::string extract_top_module_name(const ast::Program& program);
+
+/// SystemVerilog（IEEE 1800-2017）の予約語かどうかを判定する
+bool is_sv_reserved_word(const std::string& name);
 
 // SystemVerilog コード生成オプション
 struct SVCodeGenOptions {
     std::string outputFile = "output.sv";
-    std::string sourceFile;    // 入力ソースファイル（テストベンチ生成用）
+    std::string sourceFile;  // 入力ソースファイル（テストベンチ生成用）
+    std::string
+        topModule;  // `module NAME;` 宣言由来のトップモジュール名（空ならファイル名から推定）
     bool verbose = false;      // 詳細出力
     int indentSpaces = 4;      // インデント幅
     bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
