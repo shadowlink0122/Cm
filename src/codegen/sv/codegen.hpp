@@ -80,6 +80,11 @@ class SVCodeGen : public BufferedCodeGenerator {
     // MIRプログラムからSystemVerilogを生成
     void compile(const mir::MirProgram& program);
 
+    // SV予約語と衝突する識別子を検査し、衝突があれば例外で停止する
+    void validateReservedIdentifiers(const mir::MirProgram& program) const;
+    // --sv-warn-nba: posedge関数内で代入済み状態変数の参照を警告する
+    void warnNbaReadback(const mir::MirProgram& program) const;
+
     // 生成されたSVコードを取得
     std::string getGeneratedCode() const { return generated_code_; }
 

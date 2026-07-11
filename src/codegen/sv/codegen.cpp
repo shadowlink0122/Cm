@@ -31,6 +31,25 @@ std::string strip_namespace(const std::string& name) {
     return (pos != std::string::npos) ? name.substr(pos + 2) : name;
 }
 
+// テキスト中に識別子 name が単語境界つきで出現するか
+// （未使用localparam・未使用テンポラリの除去やブロック内ローカル宣言の判定に使用）
+bool contains_identifier(const std::string& text, const std::string& name) {
+    size_t pos = 0;
+    while ((pos = text.find(name, pos)) != std::string::npos) {
+        bool at_start = (pos == 0 || (!std::isalnum(static_cast<unsigned char>(text[pos - 1])) &&
+                                      text[pos - 1] != '_'));
+        size_t after = pos + name.size();
+        bool at_end =
+            (after >= text.size() ||
+             (!std::isalnum(static_cast<unsigned char>(text[after])) && text[after] != '_'));
+        if (at_start && at_end) {
+            return true;
+        }
+        pos += name.size();
+    }
+    return false;
+}
+
 // 符号付き整数型であるか判定
 bool is_signed_type(const hir::TypePtr& type) {
     if (!type)
@@ -166,254 +185,76 @@ bool is_integer_type(const hir::TypePtr& type) {
 // SystemVerilog（IEEE 1800-2017 Annex B）の予約語判定。
 // Cm識別子がそのままSVへ出力されるため、衝突すると不正なSVになる
 bool is_sv_reserved_word(const std::string& name) {
-    static const std::unordered_set<std::string> kReserved = {"accept_on",
-                                                              "alias",
-                                                              "always",
-                                                              "always_comb",
-                                                              "always_ff",
-                                                              "always_latch",
-                                                              "and",
-                                                              "assert",
-                                                              "assign",
-                                                              "assume",
-                                                              "automatic",
-                                                              "before",
-                                                              "begin",
-                                                              "bind",
-                                                              "bins",
-                                                              "binsof",
-                                                              "bit",
-                                                              "break",
-                                                              "buf",
-                                                              "bufif0",
-                                                              "bufif1",
-                                                              "byte",
-                                                              "case",
-                                                              "casex",
-                                                              "casez",
-                                                              "cell",
-                                                              "chandle",
-                                                              "checker",
-                                                              "class",
-                                                              "clocking",
-                                                              "cmos",
-                                                              "config",
-                                                              "const",
-                                                              "constraint",
-                                                              "context",
-                                                              "continue",
-                                                              "cover",
-                                                              "covergroup",
-                                                              "coverpoint",
-                                                              "cross",
-                                                              "deassign",
-                                                              "default",
-                                                              "defparam",
-                                                              "design",
-                                                              "disable",
-                                                              "dist",
-                                                              "do",
-                                                              "edge",
-                                                              "else",
-                                                              "end",
-                                                              "endcase",
-                                                              "endchecker",
-                                                              "endclass",
-                                                              "endclocking",
-                                                              "endconfig",
-                                                              "endfunction",
-                                                              "endgenerate",
-                                                              "endgroup",
-                                                              "endinterface",
-                                                              "endmodule",
-                                                              "endpackage",
-                                                              "endprimitive",
-                                                              "endprogram",
-                                                              "endproperty",
-                                                              "endspecify",
-                                                              "endsequence",
-                                                              "endtable",
-                                                              "endtask",
-                                                              "enum",
-                                                              "event",
-                                                              "eventually",
-                                                              "expect",
-                                                              "export",
-                                                              "extends",
-                                                              "extern",
-                                                              "final",
-                                                              "first_match",
-                                                              "for",
-                                                              "force",
-                                                              "foreach",
-                                                              "forever",
-                                                              "fork",
-                                                              "forkjoin",
-                                                              "function",
-                                                              "generate",
-                                                              "genvar",
-                                                              "global",
-                                                              "highz0",
-                                                              "highz1",
-                                                              "if",
-                                                              "iff",
-                                                              "ifnone",
-                                                              "ignore_bins",
-                                                              "illegal_bins",
-                                                              "implements",
-                                                              "implies",
-                                                              "import",
-                                                              "incdir",
-                                                              "include",
-                                                              "initial",
-                                                              "inout",
-                                                              "input",
-                                                              "inside",
-                                                              "instance",
-                                                              "int",
-                                                              "integer",
-                                                              "interconnect",
-                                                              "interface",
-                                                              "intersect",
-                                                              "join",
-                                                              "join_any",
-                                                              "join_none",
-                                                              "large",
-                                                              "let",
-                                                              "liblist",
-                                                              "library",
-                                                              "local",
-                                                              "localparam",
-                                                              "logic",
-                                                              "longint",
-                                                              "macromodule",
-                                                              "matches",
-                                                              "medium",
-                                                              "modport",
-                                                              "module",
-                                                              "nand",
-                                                              "negedge",
-                                                              "nettype",
-                                                              "new",
-                                                              "nexttime",
-                                                              "nmos",
-                                                              "nor",
-                                                              "noshowcancelled",
-                                                              "not",
-                                                              "notif0",
-                                                              "notif1",
-                                                              "null",
-                                                              "or",
-                                                              "output",
-                                                              "package",
-                                                              "packed",
-                                                              "parameter",
-                                                              "pmos",
-                                                              "posedge",
-                                                              "primitive",
-                                                              "priority",
-                                                              "program",
-                                                              "property",
-                                                              "protected",
-                                                              "pull0",
-                                                              "pull1",
-                                                              "pulldown",
-                                                              "pullup",
-                                                              "pulsestyle_ondetect",
-                                                              "pulsestyle_onevent",
-                                                              "pure",
-                                                              "rand",
-                                                              "randc",
-                                                              "randcase",
-                                                              "randsequence",
-                                                              "rcmos",
-                                                              "real",
-                                                              "realtime",
-                                                              "ref",
-                                                              "reg",
-                                                              "reject_on",
-                                                              "release",
-                                                              "repeat",
-                                                              "restrict",
-                                                              "return",
-                                                              "rnmos",
-                                                              "rpmos",
-                                                              "rtran",
-                                                              "rtranif0",
-                                                              "rtranif1",
-                                                              "s_always",
-                                                              "s_eventually",
-                                                              "s_nexttime",
-                                                              "s_until",
-                                                              "s_until_with",
-                                                              "scalared",
-                                                              "sequence",
-                                                              "shortint",
-                                                              "shortreal",
-                                                              "showcancelled",
-                                                              "signed",
-                                                              "small",
-                                                              "soft",
-                                                              "solve",
-                                                              "specify",
-                                                              "specparam",
-                                                              "static",
-                                                              "string",
-                                                              "strong",
-                                                              "strong0",
-                                                              "strong1",
-                                                              "struct",
-                                                              "super",
-                                                              "supply0",
-                                                              "supply1",
-                                                              "sync_accept_on",
-                                                              "sync_reject_on",
-                                                              "table",
-                                                              "tagged",
-                                                              "task",
-                                                              "this",
-                                                              "throughout",
-                                                              "time",
-                                                              "timeprecision",
-                                                              "timeunit",
-                                                              "tran",
-                                                              "tranif0",
-                                                              "tranif1",
-                                                              "tri",
-                                                              "tri0",
-                                                              "tri1",
-                                                              "triand",
-                                                              "trior",
-                                                              "trireg",
-                                                              "type",
-                                                              "typedef",
-                                                              "union",
-                                                              "unique",
-                                                              "unique0",
-                                                              "unsigned",
-                                                              "until",
-                                                              "until_with",
-                                                              "untyped",
-                                                              "use",
-                                                              "uwire",
-                                                              "var",
-                                                              "vectored",
-                                                              "virtual",
-                                                              "void",
-                                                              "wait",
-                                                              "wait_order",
-                                                              "wand",
-                                                              "weak",
-                                                              "weak0",
-                                                              "weak1",
-                                                              "while",
-                                                              "wildcard",
-                                                              "wire",
-                                                              "with",
-                                                              "within",
-                                                              "wor",
-                                                              "xnor",
-                                                              "xor"};
+    // clang-format off
+    static const std::unordered_set<std::string> kReserved = {
+        // a
+        "accept_on", "alias", "always", "always_comb", "always_ff", "always_latch", "and",
+        "assert", "assign", "assume", "automatic",
+        // b
+        "before", "begin", "bind", "bins", "binsof", "bit", "break", "buf", "bufif0", "bufif1",
+        "byte",
+        // c
+        "case", "casex", "casez", "cell", "chandle", "checker", "class", "clocking", "cmos",
+        "config", "const", "constraint", "context", "continue", "cover", "covergroup",
+        "coverpoint", "cross",
+        // d
+        "deassign", "default", "defparam", "design", "disable", "dist", "do",
+        // e
+        "edge", "else", "end", "endcase", "endchecker", "endclass", "endclocking", "endconfig",
+        "endfunction", "endgenerate", "endgroup", "endinterface", "endmodule", "endpackage",
+        "endprimitive", "endprogram", "endproperty", "endsequence", "endspecify", "endtable",
+        "endtask", "enum", "event", "eventually", "expect", "export", "extends", "extern",
+        // f
+        "final", "first_match", "for", "force", "foreach", "forever", "fork", "forkjoin",
+        "function",
+        // g
+        "generate", "genvar", "global",
+        // h
+        "highz0", "highz1",
+        // i
+        "if", "iff", "ifnone", "ignore_bins", "illegal_bins", "implements", "implies", "import",
+        "incdir", "include", "initial", "inout", "input", "inside", "instance", "int", "integer",
+        "interconnect", "interface", "intersect",
+        // j
+        "join", "join_any", "join_none",
+        // l
+        "large", "let", "liblist", "library", "local", "localparam", "logic", "longint",
+        // m
+        "macromodule", "matches", "medium", "modport", "module",
+        // n
+        "nand", "negedge", "nettype", "new", "nexttime", "nmos", "nor", "noshowcancelled", "not",
+        "notif0", "notif1", "null",
+        // o
+        "or", "output",
+        // p
+        "package", "packed", "parameter", "pmos", "posedge", "primitive", "priority", "program",
+        "property", "protected", "pull0", "pull1", "pulldown", "pullup", "pulsestyle_ondetect",
+        "pulsestyle_onevent", "pure",
+        // r
+        "rand", "randc", "randcase", "randsequence", "rcmos", "real", "realtime", "ref", "reg",
+        "reject_on", "release", "repeat", "restrict", "return", "rnmos", "rpmos", "rtran",
+        "rtranif0", "rtranif1",
+        // s
+        "s_always", "s_eventually", "s_nexttime", "s_until", "s_until_with", "scalared",
+        "sequence", "shortint", "shortreal", "showcancelled", "signed", "small", "soft", "solve",
+        "specify", "specparam", "static", "string", "strong", "strong0", "strong1", "struct",
+        "super", "supply0", "supply1", "sync_accept_on", "sync_reject_on",
+        // t
+        "table", "tagged", "task", "this", "throughout", "time", "timeprecision", "timeunit",
+        "tran", "tranif0", "tranif1", "tri", "tri0", "tri1", "triand", "trior", "trireg", "type",
+        "typedef",
+        // u
+        "union", "unique", "unique0", "unsigned", "until", "until_with", "untyped", "use",
+        "uwire",
+        // v
+        "var", "vectored", "virtual", "void",
+        // w
+        "wait", "wait_order", "wand", "weak", "weak0", "weak1", "while", "wildcard", "wire",
+        "with", "within", "wor",
+        // x
+        "xnor", "xor",
+    };
+    // clang-format on
     return kReserved.count(name) > 0;
 }
 
@@ -690,23 +531,6 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     for (const auto& port : mod.ports) {
         usage_corpus += port.sv_type + " " + port.array_suffix + "\n";
     }
-    auto used_in_corpus = [](const std::string& text, const std::string& name) {
-        size_t pos = 0;
-        while ((pos = text.find(name, pos)) != std::string::npos) {
-            bool at_start =
-                (pos == 0 || (!std::isalnum(static_cast<unsigned char>(text[pos - 1])) &&
-                              text[pos - 1] != '_'));
-            size_t after = pos + name.size();
-            bool at_end =
-                (after >= text.size() ||
-                 (!std::isalnum(static_cast<unsigned char>(text[after])) && text[after] != '_'));
-            if (at_start && at_end) {
-                return true;
-            }
-            pos += name.size();
-        }
-        return false;
-    };
     // localparam宣言文から名前を取り出す（" = " より前の最後の識別子トークン）
     auto param_decl_name = [](const std::string& decl) -> std::string {
         auto eq = decl.find(" = ");
@@ -752,7 +576,8 @@ void SVCodeGen::emitModule(const SVModule& mod) {
                         others += '\n';
                     }
                 }
-                if (!used_in_corpus(usage_corpus, name) && !used_in_corpus(others, name)) {
+                if (!contains_identifier(usage_corpus, name) &&
+                    !contains_identifier(others, name)) {
                     live_params.erase(live_params.begin() + static_cast<ptrdiff_t>(i));
                     removed = true;
                     break;
@@ -794,20 +619,7 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         }
     }
     auto temp_used_somewhere = [&](const std::string& name) {
-        size_t pos = 0;
-        while ((pos = all_blocks_text.find(name, pos)) != std::string::npos) {
-            bool at_start = (pos == 0 || (!std::isalnum(all_blocks_text[pos - 1]) &&
-                                          all_blocks_text[pos - 1] != '_'));
-            size_t after = pos + name.size();
-            bool at_end =
-                (after >= all_blocks_text.size() ||
-                 (!std::isalnum(all_blocks_text[after]) && all_blocks_text[after] != '_'));
-            if (at_start && at_end) {
-                return true;
-            }
-            pos += name.size();
-        }
-        return false;
+        return contains_identifier(all_blocks_text, name);
     };
     bool emitted_any_reg = false;
     for (const auto& reg : mod.reg_declarations) {
@@ -1667,10 +1479,7 @@ std::vector<std::string> SVCodeGen::findIncompletelyAssignedSignals(const mir::M
     std::vector<std::string> names;
     for (mir::LocalId g : incomplete) {
         std::string name = func.locals[g].name;
-        auto ns_pos = name.rfind("::");
-        if (ns_pos != std::string::npos) {
-            name = name.substr(ns_pos + 2);
-        }
+        name = strip_namespace(name);
         names.push_back(name);
     }
     return names;
@@ -1826,10 +1635,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
             // 関数名のnamespace::フラット化（import時の alu_lib::add → add）
             std::string flat_func_name = func.name;
-            auto fn_ns = flat_func_name.rfind("::");
-            if (fn_ns != std::string::npos) {
-                flat_func_name = flat_func_name.substr(fn_ns + 2);
-            }
+            flat_func_name = strip_namespace(flat_func_name);
 
             if (flat_func_name == "stringToUint") {
                 std::ostringstream fn_ss;
@@ -2055,10 +1861,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
 
     // 関数名コメントを追加（namespace::プレフィックスをフラット化）
     std::string display_name = func.name;
-    auto dn_ns = display_name.rfind("::");
-    if (dn_ns != std::string::npos) {
-        display_name = display_name.substr(dn_ns + 2);
-    }
+    display_name = strip_namespace(display_name);
     block_ss << indent() << "// " << display_name << "\n";
 
     // SV固有型: posedge/negedge型パラメータの検出
@@ -2217,21 +2020,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     // （単一定義テンポラリは式ツリーへインライン済みのため宣言不要）
     {
         auto used_in_body = [&body_text](const std::string& name) {
-            size_t pos = 0;
-            while ((pos = body_text.find(name, pos)) != std::string::npos) {
-                bool at_start =
-                    (pos == 0 || (!std::isalnum(static_cast<unsigned char>(body_text[pos - 1])) &&
-                                  body_text[pos - 1] != '_'));
-                size_t after = pos + name.size();
-                bool at_end = (after >= body_text.size() ||
-                               (!std::isalnum(static_cast<unsigned char>(body_text[after])) &&
-                                body_text[after] != '_'));
-                if (at_start && at_end) {
-                    return true;
-                }
-                pos += name.size();
-            }
-            return false;
+            return contains_identifier(body_text, name);
         };
         for (const auto& c : block_local_decls) {
             if (used_in_body(c.first)) {
@@ -2830,10 +2619,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             };
 
             auto cleanName = [](std::string name) -> std::string {
-                auto ns_pos = name.rfind("::");
-                if (ns_pos != std::string::npos) {
-                    name = name.substr(ns_pos + 2);
-                }
+                name = strip_namespace(name);
                 return name;
             };
 
@@ -3096,10 +2882,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         for (const auto& attr : gv->attributes) {
             if (attr == "sv::parameter" || attr == "verilog::parameter") {
                 std::string pname = gv->name;
-                auto ns = pname.rfind("::");
-                if (ns != std::string::npos) {
-                    pname = pname.substr(ns + 2);
-                }
+                pname = strip_namespace(pname);
                 sv_param_names_.insert(pname);
             }
         }
@@ -3115,10 +2898,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 }
             }
             std::string var_name = gv->name;
-            auto ns_pos = var_name.rfind("::");
-            if (ns_pos != std::string::npos) {
-                var_name = var_name.substr(ns_pos + 2);
-            }
+            var_name = strip_namespace(var_name);
             global_string_lengths_[var_name] = L;
         }
     }
@@ -3225,10 +3005,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
         // 変数名のフラット化 (namespace:: を除去)
         std::string var_name = gv->name;
-        auto ns_pos = var_name.rfind("::");
-        if (ns_pos != std::string::npos) {
-            var_name = var_name.substr(ns_pos + 2);
-        }
+        var_name = strip_namespace(var_name);
 
         // extern struct インスタンスの検出（型名ベース）
         if (gv->type) {
@@ -3368,10 +3145,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         if (gv->is_const) {
             // import/export時の重複排除: namespace::付き名前はフラット化
             std::string param_name = gv->name;
-            auto ns_pos = param_name.rfind("::");
-            if (ns_pos != std::string::npos) {
-                param_name = param_name.substr(ns_pos + 2);
-            }
+            param_name = strip_namespace(param_name);
             // 同名のlocalparamが既に出力済みならスキップ
             if (emitted_param_names.count(param_name)) {
                 continue;
@@ -3762,10 +3536,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
         // 関数名のnamespace::フラット化
         std::string flat_name = func->name;
-        auto fn_ns_pos = flat_name.rfind("::");
-        if (fn_ns_pos != std::string::npos) {
-            flat_name = flat_name.substr(fn_ns_pos + 2);
-        }
+        flat_name = strip_namespace(flat_name);
         // 同名関数が既に出力済みならスキップ
         if (emitted_function_names.count(flat_name)) {
             continue;
@@ -3858,161 +3629,168 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
 // === メインコンパイル処理 ===
 
+// SV予約語と衝突する識別子のチェック。
+// そのまま出力すると不正なSV（iverilog等で構文エラー）になるため、
+// 明確なエラーとしてコンパイルを停止する（監査08 A-4対応）
+void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) const {
+    std::vector<std::string> collisions;
+    auto check_name = [&](const std::string& raw, const std::string& kind) {
+        std::string name = strip_namespace(raw);
+        if (is_sv_reserved_word(name)) {
+            collisions.push_back(kind + " '" + name + "'");
+        }
+    };
+    for (const auto& gv : program.global_vars) {
+        if (gv) {
+            check_name(gv->name, "変数");
+        }
+    }
+    for (const auto& func : program.functions) {
+        if (!func) {
+            continue;
+        }
+        // モジュール本体へ出力されない関数は対象外
+        // （analyzeFunctionのスキップ条件と対応: main / assert・panic
+        //   イントリンシック / #[test] テスト関数）
+        std::string fn_name = strip_namespace(func->name);
+        if (fn_name == "main" || fn_name == "assert" || fn_name == "panic") {
+            continue;
+        }
+        bool is_test_fn = false;
+        for (const auto& attr : func->attributes) {
+            if (attr == "test") {
+                is_test_fn = true;
+                break;
+            }
+        }
+        if (is_test_fn) {
+            continue;
+        }
+        check_name(func->name, "関数");
+        for (const auto& local : func->locals) {
+            // ユーザー定義のローカル変数のみ（コンパイラ生成の一時変数は対象外）
+            if (local.is_user_variable && !local.is_global && !local.name.empty()) {
+                check_name(local.name, "変数");
+            }
+        }
+    }
+    if (!collisions.empty()) {
+        std::string msg = "SystemVerilogの予約語と衝突する識別子があります: ";
+        for (size_t i = 0; i < collisions.size(); ++i) {
+            if (i > 0) {
+                msg += ", ";
+            }
+            msg += collisions[i];
+        }
+        msg += "。別の名前に変更してください";
+        throw std::runtime_error(msg);
+    }
+}
+
+// --sv-warn-nba: posedge/negedge関数内で「代入した状態変数をその後で参照」を警告する。
+// 状態変数への代入は次サイクル反映（ノンブロッキング代入）のため、
+// 直後の参照は前サイクル値を読む。ソフトウェア的な逐次実行とは結果が
+// 異なるため、意図の確認を促す（基本ブロック内の保守的な検査）
+void SVCodeGen::warnNbaReadback(const mir::MirProgram& program) const {
+    if (!options_.warnNba) {
+        return;
+    }
+    for (const auto& func : program.functions) {
+        if (!func) {
+            continue;
+        }
+        bool has_edge = false;
+        for (const auto& local : func->locals) {
+            if (!local.is_global && local.type &&
+                (local.type->kind == hir::TypeKind::Posedge ||
+                 local.type->kind == hir::TypeKind::Negedge)) {
+                has_edge = true;
+                break;
+            }
+        }
+        if (!has_edge) {
+            continue;
+        }
+        auto is_state_var = [&func](mir::LocalId id) {
+            return id < func->locals.size() && func->locals[id].is_global;
+        };
+        std::set<std::string> warned;
+        auto check_operand = [&](const mir::MirOperandPtr& op,
+                                 const std::set<mir::LocalId>& assigned) {
+            if (!op || (op->kind != mir::MirOperand::Move && op->kind != mir::MirOperand::Copy)) {
+                return;
+            }
+            auto* pl = std::get_if<mir::MirPlace>(&op->data);
+            if (!pl || assigned.count(pl->local) == 0) {
+                return;
+            }
+            const std::string& nm = func->locals[pl->local].name;
+            if (warned.insert(nm).second) {
+                std::cerr << "警告: SVターゲット: 関数 '" << strip_namespace(func->name)
+                          << "' 内で代入した状態変数 '" << nm
+                          << "' をその後で参照しています。posedge関数内の代入は"
+                          << "次サイクル反映（ノンブロッキング代入）のため、"
+                          << "この参照は前サイクルの値を読みます\n";
+            }
+        };
+        for (const auto& bb : func->basic_blocks) {
+            if (!bb) {
+                continue;
+            }
+            std::set<mir::LocalId> assigned;
+            for (const auto& stmt : bb->statements) {
+                if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                    continue;
+                }
+                const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+                // 右辺の読み取りを先に検査（自己更新 x = x + 1 は対象外になる）
+                if (ad.rvalue) {
+                    switch (ad.rvalue->kind) {
+                        case mir::MirRvalue::Use:
+                            check_operand(
+                                std::get<mir::MirRvalue::UseData>(ad.rvalue->data).operand,
+                                assigned);
+                            break;
+                        case mir::MirRvalue::BinaryOp: {
+                            const auto& bd =
+                                std::get<mir::MirRvalue::BinaryOpData>(ad.rvalue->data);
+                            check_operand(bd.lhs, assigned);
+                            check_operand(bd.rhs, assigned);
+                            break;
+                        }
+                        case mir::MirRvalue::UnaryOp:
+                            check_operand(
+                                std::get<mir::MirRvalue::UnaryOpData>(ad.rvalue->data).operand,
+                                assigned);
+                            break;
+                        case mir::MirRvalue::Cast:
+                            check_operand(
+                                std::get<mir::MirRvalue::CastData>(ad.rvalue->data).operand,
+                                assigned);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                // 左辺: 状態変数への代入を記録
+                if (is_state_var(ad.place.local)) {
+                    assigned.insert(ad.place.local);
+                }
+            }
+        }
+    }
+}
+
 void SVCodeGen::compile(const mir::MirProgram& program) {
     // 非合成型チェック（エラーがあればコンパイル停止）
     if (!validateSynthesizableTypes(program)) {
         throw std::runtime_error("SVターゲットで非合成型が検出されました");
     }
 
-    // SV予約語と衝突する識別子のチェック。
-    // そのまま出力すると不正なSV（iverilog等で構文エラー）になるため、
-    // 明確なエラーとしてコンパイルを停止する
-    {
-        std::vector<std::string> collisions;
-        auto check_name = [&](const std::string& raw, const std::string& kind) {
-            std::string name = strip_namespace(raw);
-            if (is_sv_reserved_word(name)) {
-                collisions.push_back(kind + " '" + name + "'");
-            }
-        };
-        for (const auto& gv : program.global_vars) {
-            if (gv) {
-                check_name(gv->name, "変数");
-            }
-        }
-        for (const auto& func : program.functions) {
-            if (!func) {
-                continue;
-            }
-            // モジュール本体へ出力されない関数は対象外
-            // （analyzeFunctionのスキップ条件と対応: main / assert・panic
-            //   イントリンシック / #[test] テスト関数）
-            std::string fn_name = strip_namespace(func->name);
-            if (fn_name == "main" || fn_name == "assert" || fn_name == "panic") {
-                continue;
-            }
-            bool is_test_fn = false;
-            for (const auto& attr : func->attributes) {
-                if (attr == "test") {
-                    is_test_fn = true;
-                    break;
-                }
-            }
-            if (is_test_fn) {
-                continue;
-            }
-            check_name(func->name, "関数");
-            for (const auto& local : func->locals) {
-                // ユーザー定義のローカル変数のみ（コンパイラ生成の一時変数は対象外）
-                if (local.is_user_variable && !local.is_global && !local.name.empty()) {
-                    check_name(local.name, "変数");
-                }
-            }
-        }
-        if (!collisions.empty()) {
-            std::string msg = "SystemVerilogの予約語と衝突する識別子があります: ";
-            for (size_t i = 0; i < collisions.size(); ++i) {
-                if (i > 0) {
-                    msg += ", ";
-                }
-                msg += collisions[i];
-            }
-            msg += "。別の名前に変更してください";
-            throw std::runtime_error(msg);
-        }
-    }
+    validateReservedIdentifiers(program);
 
-    // --sv-warn-nba: posedge/negedge関数内で「代入した状態変数をその後で参照」を警告する。
-    // 状態変数への代入は次サイクル反映（ノンブロッキング代入）のため、
-    // 直後の参照は前サイクル値を読む。ソフトウェア的な逐次実行とは結果が
-    // 異なるため、意図の確認を促す（基本ブロック内の保守的な検査）
-    if (options_.warnNba) {
-        for (const auto& func : program.functions) {
-            if (!func) {
-                continue;
-            }
-            bool has_edge = false;
-            for (const auto& local : func->locals) {
-                if (!local.is_global && local.type &&
-                    (local.type->kind == hir::TypeKind::Posedge ||
-                     local.type->kind == hir::TypeKind::Negedge)) {
-                    has_edge = true;
-                    break;
-                }
-            }
-            if (!has_edge) {
-                continue;
-            }
-            auto is_state_var = [&func](mir::LocalId id) {
-                return id < func->locals.size() && func->locals[id].is_global;
-            };
-            std::set<std::string> warned;
-            auto check_operand = [&](const mir::MirOperandPtr& op,
-                                     const std::set<mir::LocalId>& assigned) {
-                if (!op ||
-                    (op->kind != mir::MirOperand::Move && op->kind != mir::MirOperand::Copy)) {
-                    return;
-                }
-                auto* pl = std::get_if<mir::MirPlace>(&op->data);
-                if (!pl || assigned.count(pl->local) == 0) {
-                    return;
-                }
-                const std::string& nm = func->locals[pl->local].name;
-                if (warned.insert(nm).second) {
-                    std::cerr << "警告: SVターゲット: 関数 '" << strip_namespace(func->name)
-                              << "' 内で代入した状態変数 '" << nm
-                              << "' をその後で参照しています。posedge関数内の代入は"
-                              << "次サイクル反映（ノンブロッキング代入）のため、"
-                              << "この参照は前サイクルの値を読みます\n";
-                }
-            };
-            for (const auto& bb : func->basic_blocks) {
-                if (!bb) {
-                    continue;
-                }
-                std::set<mir::LocalId> assigned;
-                for (const auto& stmt : bb->statements) {
-                    if (!stmt || stmt->kind != mir::MirStatement::Assign) {
-                        continue;
-                    }
-                    const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
-                    // 右辺の読み取りを先に検査（自己更新 x = x + 1 は対象外になる）
-                    if (ad.rvalue) {
-                        switch (ad.rvalue->kind) {
-                            case mir::MirRvalue::Use:
-                                check_operand(
-                                    std::get<mir::MirRvalue::UseData>(ad.rvalue->data).operand,
-                                    assigned);
-                                break;
-                            case mir::MirRvalue::BinaryOp: {
-                                const auto& bd =
-                                    std::get<mir::MirRvalue::BinaryOpData>(ad.rvalue->data);
-                                check_operand(bd.lhs, assigned);
-                                check_operand(bd.rhs, assigned);
-                                break;
-                            }
-                            case mir::MirRvalue::UnaryOp:
-                                check_operand(
-                                    std::get<mir::MirRvalue::UnaryOpData>(ad.rvalue->data).operand,
-                                    assigned);
-                                break;
-                            case mir::MirRvalue::Cast:
-                                check_operand(
-                                    std::get<mir::MirRvalue::CastData>(ad.rvalue->data).operand,
-                                    assigned);
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    // 左辺: 状態変数への代入を記録
-                    if (is_state_var(ad.place.local)) {
-                        assigned.insert(ad.place.local);
-                    }
-                }
-            }
-        }
-    }
+    // --sv-warn-nba: 代入済み状態変数の参照（前サイクル値）を警告
+    warnNbaReadback(program);
 
     loop_name_counter_ = 0;
     begin_generation();
@@ -4109,433 +3887,6 @@ void SVCodeGen::writeToFile(const std::string& content, const std::string& path)
 }
 
 // === テストベンチ自動生成 ===
-
-std::string SVCodeGen::generateTestbench(const SVModule& mod) {
-    std::ostringstream ss;
-
-    // ソースファイルから//! test:コメントをパース
-    struct TestCase {
-        std::vector<std::pair<std::string, std::string>> inputs;    // {name, value}
-        std::vector<std::pair<std::string, std::string>> expected;  // {name, value}
-        int cycles = 0;  // async用: クロックサイクル数
-    };
-    std::vector<TestCase> test_cases;
-
-    if (!options_.sourceFile.empty()) {
-        std::ifstream src(options_.sourceFile);
-        if (src.is_open()) {
-            std::string line;
-            while (std::getline(src, line)) {
-                // "//! test:" プレフィックスを検出
-                auto pos = line.find("//! test:");
-                if (pos == std::string::npos)
-                    continue;
-                std::string test_spec = line.substr(pos + 9);
-
-                TestCase tc;
-                // "->" で入力と期待出力を分割
-                auto arrow = test_spec.find("->");
-                std::string input_part, output_part;
-                if (arrow != std::string::npos) {
-                    input_part = test_spec.substr(0, arrow);
-                    output_part = test_spec.substr(arrow + 2);
-                } else {
-                    input_part = test_spec;
-                }
-
-                // 入力パース: "a=3, b=5" or "cycles=5"
-                std::istringstream iss(input_part);
-                std::string token;
-                while (std::getline(iss, token, ',')) {
-                    // 空白除去
-                    size_t s = token.find_first_not_of(' ');
-                    size_t e = token.find_last_not_of(' ');
-                    if (s == std::string::npos)
-                        continue;
-                    token = token.substr(s, e - s + 1);
-
-                    auto eq = token.find('=');
-                    if (eq != std::string::npos) {
-                        std::string name = token.substr(0, eq);
-                        std::string val = token.substr(eq + 1);
-                        // 名前と値の空白除去
-                        size_t ns = name.find_first_not_of(' ');
-                        size_t ne = name.find_last_not_of(' ');
-                        if (ns != std::string::npos)
-                            name = name.substr(ns, ne - ns + 1);
-                        size_t vs = val.find_first_not_of(' ');
-                        size_t ve = val.find_last_not_of(' ');
-                        if (vs != std::string::npos)
-                            val = val.substr(vs, ve - vs + 1);
-
-                        if (name == "cycles") {
-                            tc.cycles = std::stoi(val);
-                        } else {
-                            tc.inputs.push_back({name, val});
-                        }
-                    }
-                }
-
-                // 期待出力パース: "result=8, out=0"
-                if (!output_part.empty()) {
-                    std::istringstream oss(output_part);
-                    while (std::getline(oss, token, ',')) {
-                        size_t s = token.find_first_not_of(' ');
-                        size_t e = token.find_last_not_of(' ');
-                        if (s == std::string::npos)
-                            continue;
-                        token = token.substr(s, e - s + 1);
-
-                        auto eq = token.find('=');
-                        if (eq != std::string::npos) {
-                            std::string name = token.substr(0, eq);
-                            std::string val = token.substr(eq + 1);
-                            size_t ns = name.find_first_not_of(' ');
-                            size_t ne = name.find_last_not_of(' ');
-                            if (ns != std::string::npos)
-                                name = name.substr(ns, ne - ns + 1);
-                            size_t vs = val.find_first_not_of(' ');
-                            size_t ve = val.find_last_not_of(' ');
-                            if (vs != std::string::npos)
-                                val = val.substr(vs, ve - vs + 1);
-                            tc.expected.push_back({name, val});
-                        }
-                    }
-                }
-
-                test_cases.push_back(tc);
-            }
-        }
-    }
-
-    // テスト内容（#[test] 関数 / //! test: ディレクティブ）が無ければ
-    // テストベンチ自体を生成しない
-    bool has_test_fn = false;
-    for (const auto* fn : testbench_fns_) {
-        if (fn && !fn->hir_stmts.empty()) {
-            has_test_fn = true;
-            break;
-        }
-    }
-    if (test_cases.empty() && !has_test_fn) {
-        return "";
-    }
-
-    // #[test] からの参照解決用にポート名を記録し、テストベンチ生成モードへ
-    // （DUT内部信号の読み取りは dut. 階層参照として出力する）
-    tb_port_names_.clear();
-    tb_input_names_.clear();
-    for (const auto& port : mod.ports) {
-        tb_port_names_.insert(port.name);
-        if (port.direction == SVPort::Input) {
-            tb_input_names_.insert(port.name);
-        }
-    }
-    emitting_testbench_ = true;
-
-    ss << "// 自動生成テストベンチ - Cm compiler\n";
-    ss << "`timescale 1ns / 1ps\n\n";
-
-    ss << "module " << mod.name << "_tb;\n\n";
-
-    // モジュールパラメータをTB側にlocalparamとして写す
-    // （信号宣言の [WIDTH-1:0] などがTB内でも解決できるように）
-    for (const auto& hp : mod.header_parameters) {
-        std::string lp = hp;
-        const std::string pfx = "parameter ";
-        if (lp.rfind(pfx, 0) == 0) {
-            lp = "localparam " + lp.substr(pfx.size());
-        }
-        ss << "    " << lp << ";\n";
-    }
-    if (!mod.header_parameters.empty()) {
-        ss << "\n";
-    }
-
-    // ポートに対応する信号宣言
-    for (const auto& port : mod.ports) {
-        ss << "    " << port.sv_type << " " << port.name << port.array_suffix << ";\n";
-    }
-    ss << "\n";
-
-    // DUTインスタンス化
-    ss << "    // DUTインスタンス\n";
-    ss << "    " << mod.name << " dut (\n";
-    for (size_t i = 0; i < mod.ports.size(); ++i) {
-        ss << "        ." << mod.ports[i].name << "(" << mod.ports[i].name << ")";
-        if (i + 1 < mod.ports.size())
-            ss << ",";
-        ss << "\n";
-    }
-    ss << "    );\n\n";
-
-    // クロック生成: "clk" ポート、なければプロセスのクロックとして
-    // 使われている入力ポート（pixel_clk 等）を採用する
-    bool has_clk = false;
-    std::string tb_clk = "clk";
-    for (const auto& port : mod.ports) {
-        if (port.name == "clk" && port.direction == SVPort::Input) {
-            has_clk = true;
-        }
-    }
-    if (!has_clk) {
-        for (const auto& port : mod.ports) {
-            if (port.direction == SVPort::Input && process_clock_names_.count(port.name)) {
-                has_clk = true;
-                tb_clk = port.name;
-                break;
-            }
-        }
-    }
-    tb_clk_name_ = tb_clk;
-    std::string rst_name;         // リセット信号の実際のポート名
-    bool rst_active_low = false;  // アクティブLowリセットかどうか
-    for (const auto& port : mod.ports) {
-        if (port.direction == SVPort::Input) {
-            if (port.name == "rst") {
-                rst_name = "rst";
-                rst_active_low = false;
-            } else if (port.name == "rst_n") {
-                rst_name = "rst_n";
-                rst_active_low = true;
-            }
-        }
-    }
-    bool has_rst = !rst_name.empty();
-
-    if (has_clk) {
-        ss << "    // クロック生成 (10ns周期 = 100MHz)\n";
-        ss << "    initial " << tb_clk << " = 0;\n";
-        ss << "    always #5 " << tb_clk << " = ~" << tb_clk << ";\n\n";
-    }
-
-    // テストシーケンス
-    // VCDはシミュレーション実行時のカレントディレクトリに出力する。
-    // コンパイル時の-oの相対パスを埋め込むと、シミュレータを別の
-    // ディレクトリから実行したときに開けず異常終了するため
-    ss << "    // テストシーケンス\n";
-    ss << "    initial begin\n";
-    ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
-    ss << "        $dumpvars(0, " << mod.name << "_tb);\n\n";
-
-    // 入力ポート初期化（クロックはクロック生成側で駆動する）
-    for (const auto& port : mod.ports) {
-        if (port.direction == SVPort::Input && port.name != "clk" && port.name != tb_clk) {
-            ss << "        " << port.name << " = 0;\n";
-        }
-    }
-    ss << "\n";
-
-    // リセットシーケンス（実際のポート名を使用）
-    if (has_rst) {
-        ss << "        // リセット\n";
-        if (rst_active_low) {
-            // アクティブLow: 0→1（リセット解除）
-            ss << "        " << rst_name << " = 0;\n";
-            ss << "        #20;\n";
-            ss << "        " << rst_name << " = 1;\n";
-        } else {
-            // アクティブHigh: 1→0（リセット解除）
-            ss << "        " << rst_name << " = 1;\n";
-            ss << "        #20;\n";
-            ss << "        " << rst_name << " = 0;\n";
-        }
-        ss << "        #10;\n\n";
-    }
-
-    bool has_tb_stmts = false;
-    for (const auto* fn : testbench_fns_) {
-        if (fn && !fn->hir_stmts.empty()) {
-            has_tb_stmts = true;
-            break;
-        }
-    }
-    if (has_tb_stmts) {
-        // #[test] 関数によるサイクル精度テストシーケンス（宣言順に逐次実行）
-        for (const auto* fn : testbench_fns_) {
-            if (!fn || fn->hir_stmts.empty()) {
-                continue;
-            }
-            ss << "        // ---- test: " << fn->name << " ----\n";
-            for (const auto* stmt : fn->hir_stmts) {
-                if (stmt) {
-                    ss << emitTestbenchStmt(*stmt);
-                }
-            }
-            ss << "\n";
-        }
-    } else if (!test_cases.empty()) {
-        // テストシナリオベースの検証
-        int test_num = 1;
-        for (const auto& tc : test_cases) {
-            ss << "        // テスト " << test_num << "\n";
-
-            // 入力値設定
-            for (const auto& [name, val] : tc.inputs) {
-                ss << "        " << name << " = " << val << ";\n";
-            }
-
-            // 評価待ち
-            if (tc.cycles > 0) {
-                // async: 指定サイクル分クロックを待つ
-                ss << "        repeat(" << tc.cycles << ") @(posedge clk);\n";
-                ss << "        #1; // 安定化\n";
-            } else if (has_clk) {
-                // クロック付きだがcycles未指定: 1サイクル待ち
-                ss << "        @(posedge clk);\n";
-                ss << "        #1;\n";
-            } else {
-                // 組み合わせ回路: 伝搬遅延待ち
-                ss << "        #10;\n";
-            }
-
-            // 出力値の表示と検証
-            for (const auto& [name, val] : tc.expected) {
-                ss << "        $display(\"TEST " << test_num << ": " << name << "=%0d\", " << name
-                   << ");\n";
-            }
-            ss << "\n";
-            test_num++;
-        }
-    } else {
-        // テストシナリオなし: 基本的な動作確認
-        ss << "        // テスト実行\n";
-        ss << "        #100;\n\n";
-    }
-
-    ss << "        $display(\"=== Test Complete ===\");\n";
-    ss << "        $finish;\n";
-    ss << "    end\n\n";
-
-    ss << "endmodule\n";
-
-    emitting_testbench_ = false;
-    return ss.str();
-}
-
-// #[test] からの代入先を検証する。
-// 駆動できるのはDUTの入力ポートのみ（出力ポート・内部信号への代入は
-// 意図しない多重駆動や不正な階層代入になるため明確なエラーで停止する。
-// 内部信号の「読み取り」は dut. 階層参照として対応済み）
-void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
-    // 配列アクセス等はルートの識別子まで辿る
-    const hir::HirExpr* root = &lhs;
-    while (true) {
-        if (auto* idx = std::get_if<std::unique_ptr<hir::HirIndex>>(&root->kind)) {
-            if (*idx && (*idx)->object) {
-                root = (*idx)->object.get();
-                continue;
-            }
-        }
-        break;
-    }
-    auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&root->kind);
-    if (!var || !*var) {
-        return;
-    }
-    const std::string& nm = (*var)->name;
-    if (tb_input_names_.count(nm) > 0) {
-        return;  // 入力ポート: OK
-    }
-    if (tb_port_names_.count(nm) > 0) {
-        throw std::runtime_error("#[test] からDUTの出力ポート '" + nm +
-                                 "' へは代入できません（読み取りのみ可能です）");
-    }
-    if (module_signal_names_.count(nm) > 0) {
-        throw std::runtime_error("#[test] からDUT内部信号 '" + nm +
-                                 "' へは代入できません（assertでの読み取りは可能です）。"
-                                 "#[input] ポート経由で駆動してください");
-    }
-}
-
-// #[test] 関数のHIR文をテストベンチのinitial文へ変換する。
-// 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/
-// assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
-std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
-    const std::string ind = "        ";
-
-    // 式文（代入・step・assert・println）
-    if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
-        if (!*expr_stmt || !(*expr_stmt)->expr) {
-            return "";
-        }
-        const hir::HirExpr& e = *(*expr_stmt)->expr;
-
-        // 呼び出し
-        if (auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&e.kind)) {
-            const auto& c = **call;
-            if (c.func_name == "step") {
-                std::string n = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);
-                const std::string& ck = tb_clk_name_.empty() ? "clk" : tb_clk_name_;
-                return ind + "repeat (" + n + ") @(posedge " + ck + ");\n" + ind +
-                       "#1; // NBA確定待ち\n";
-            }
-            if (c.func_name == "assert") {
-                std::string cond = c.args.empty() ? "1" : emitHirExpr(*c.args[0]);
-                std::string msg = "assertion";
-                if (c.args.size() > 1) {
-                    if (auto* lit =
-                            std::get_if<std::unique_ptr<hir::HirLiteral>>(&c.args[1]->kind)) {
-                        if (auto* sv = std::get_if<std::string>(&(*lit)->value)) {
-                            msg = *sv;
-                        }
-                    }
-                }
-                std::string out;
-                out += ind + "if (!(" + cond + ")) begin\n";
-                out += ind + "    $display(\"FAIL: " + msg + "\");\n";
-                out += ind + "    $fatal(1);\n";
-                out += ind + "end else begin\n";
-                out += ind + "    $display(\"PASS: " + msg + "\");\n";
-                out += ind + "end\n";
-                return out;
-            }
-            if (c.func_name == "println" || c.func_name == "__println__" ||
-                c.func_name == "print") {
-                std::string msg;
-                if (!c.args.empty()) {
-                    if (auto* lit =
-                            std::get_if<std::unique_ptr<hir::HirLiteral>>(&c.args[0]->kind)) {
-                        if (auto* sv = std::get_if<std::string>(&(*lit)->value)) {
-                            msg = *sv;
-                        }
-                    }
-                }
-                return ind + "$display(\"" + msg + "\");\n";
-            }
-            // その他の呼び出しは非対応（静かに握り潰さず明示エラーにする）
-            throw std::runtime_error(
-                "エラー[SV007]: #[test] 関数内で非対応の呼び出しです: " + c.func_name +
-                "（使用できるのは step / assert / println と入力ポートへの代入です）");
-        }
-
-        // 代入式（HirBinary Assign）: ブロッキング代入でDUT入力を駆動
-        if (auto* bin = std::get_if<std::unique_ptr<hir::HirBinary>>(&e.kind)) {
-            if (*bin && (*bin)->op == hir::HirBinaryOp::Assign && (*bin)->lhs && (*bin)->rhs) {
-                validateTestbenchAssignTarget(*(*bin)->lhs);
-                return ind + emitHirExpr(*(*bin)->lhs) + " = " + emitHirExpr(*(*bin)->rhs) + ";\n";
-            }
-        }
-
-        return ind + emitHirExpr(e) + ";\n";
-    }
-
-    // 単純代入文
-    if (auto* assign = std::get_if<std::unique_ptr<hir::HirAssign>>(&stmt.kind)) {
-        if (*assign && (*assign)->target && (*assign)->value) {
-            validateTestbenchAssignTarget(*(*assign)->target);
-            return ind + emitHirExpr(*(*assign)->target) + " = " + emitHirExpr(*(*assign)->value) +
-                   ";\n";
-        }
-    }
-
-    // その他はベストエフォートで既存エミッタへ
-    std::string sv_stmt = emitHirStmt(stmt);
-    if (!sv_stmt.empty()) {
-        return ind + sv_stmt + "\n";
-    }
-    return "";
-}
 
 // === XDC制約ファイル生成 ===
 
@@ -4684,269 +4035,6 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
         }
     }
     return !has_error;
-}
-
-// HIR式をSVに変換（assign文の非定数式用）
-std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
-    // リテラル
-    if (auto* lit = std::get_if<std::unique_ptr<hir::HirLiteral>>(&expr.kind)) {
-        if (*lit) {
-            const auto& value = (*lit)->value;
-            if (std::holds_alternative<int64_t>(value)) {
-                return std::to_string(std::get<int64_t>(value));
-            } else if (std::holds_alternative<double>(value)) {
-                return std::to_string(std::get<double>(value));
-            } else if (std::holds_alternative<bool>(value)) {
-                return std::get<bool>(value) ? "1'b1" : "1'b0";
-            } else if (std::holds_alternative<char>(value)) {
-                return std::to_string(static_cast<int64_t>(std::get<char>(value)));
-            } else if (std::holds_alternative<std::string>(value)) {
-                return "\"" + std::get<std::string>(value) + "\"";
-            }
-        }
-    }
-    // 配列リテラル
-    if (auto* arr = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&expr.kind)) {
-        if (*arr) {
-            std::string res = "'{";
-            for (size_t i = 0; i < (*arr)->elements.size(); ++i) {
-                if (i > 0)
-                    res += ", ";
-                res += emitHirExpr(*(*arr)->elements[i]);
-            }
-            res += "}";
-            return res;
-        }
-    }
-
-    // 識別子（変数参照）
-    if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
-        if (*var) {
-            const std::string& nm = (*var)->name;
-            // テストベンチ生成中: ポート以外のDUT内部信号（内部レジスタ等）は
-            // 階層参照（dut.名前）として読み取る
-            if (emitting_testbench_ && tb_port_names_.count(nm) == 0 &&
-                module_signal_names_.count(nm) > 0) {
-                return "dut." + nm;
-            }
-            return nm;
-        }
-    }
-
-    // 二項演算
-    if (auto* binary = std::get_if<std::unique_ptr<hir::HirBinary>>(&expr.kind)) {
-        if (*binary && (*binary)->lhs && (*binary)->rhs) {
-            std::string lhs = emitHirExpr(*(*binary)->lhs);
-            std::string rhs = emitHirExpr(*(*binary)->rhs);
-            std::string op;
-            switch ((*binary)->op) {
-                case hir::HirBinaryOp::Add:
-                    op = "+";
-                    break;
-                case hir::HirBinaryOp::Sub:
-                    op = "-";
-                    break;
-                case hir::HirBinaryOp::Mul:
-                    op = "*";
-                    break;
-                case hir::HirBinaryOp::Div:
-                    op = "/";
-                    break;
-                case hir::HirBinaryOp::Mod:
-                    op = "%";
-                    break;
-                case hir::HirBinaryOp::BitAnd:
-                    op = "&";
-                    break;
-                case hir::HirBinaryOp::BitOr:
-                    op = "|";
-                    break;
-                case hir::HirBinaryOp::BitXor:
-                    op = "^";
-                    break;
-                case hir::HirBinaryOp::Shl:
-                    op = "<<";
-                    break;
-                case hir::HirBinaryOp::Shr:
-                    op = ">>";
-                    break;
-                case hir::HirBinaryOp::And:
-                    op = "&&";
-                    break;
-                case hir::HirBinaryOp::Or:
-                    op = "||";
-                    break;
-                case hir::HirBinaryOp::Eq:
-                    op = "==";
-                    break;
-                case hir::HirBinaryOp::Ne:
-                    op = "!=";
-                    break;
-                case hir::HirBinaryOp::Lt:
-                    op = "<";
-                    break;
-                case hir::HirBinaryOp::Le:
-                    op = "<=";
-                    break;
-                case hir::HirBinaryOp::Gt:
-                    op = ">";
-                    break;
-                case hir::HirBinaryOp::Ge:
-                    op = ">=";
-                    break;
-                case hir::HirBinaryOp::Assign:
-                    // 代入式: SVでは式として括弧に包めないため
-                    // 素の代入形式で返す（式文経由で "lhs = rhs;" になる）
-                    return lhs + " = " + rhs;
-                default:
-                    op = "?";
-                    break;
-            }
-            return "(" + lhs + " " + op + " " + rhs + ")";
-        }
-    }
-
-    // 単項演算
-    if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&expr.kind)) {
-        if (*unary && (*unary)->operand) {
-            std::string operand = emitHirExpr(*(*unary)->operand);
-            std::string op;
-            switch ((*unary)->op) {
-                case hir::HirUnaryOp::Neg:
-                    op = "-";
-                    break;
-                case hir::HirUnaryOp::Not:
-                    op = "!";
-                    break;
-                case hir::HirUnaryOp::BitNot:
-                    op = "~";
-                    break;
-                default:
-                    op = "?";
-                    break;
-            }
-            return op + operand;
-        }
-    }
-
-    // メンバアクセス
-    if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&expr.kind)) {
-        if (*member && (*member)->object) {
-            std::string obj = emitHirExpr(*(*member)->object);
-            return obj + "." + (*member)->member;
-        }
-    }
-
-    // 三項演算子
-    if (auto* ternary = std::get_if<std::unique_ptr<hir::HirTernary>>(&expr.kind)) {
-        if (*ternary && (*ternary)->condition && (*ternary)->then_expr && (*ternary)->else_expr) {
-            std::string cond = emitHirExpr(*(*ternary)->condition);
-            std::string then_e = emitHirExpr(*(*ternary)->then_expr);
-            std::string else_e = emitHirExpr(*(*ternary)->else_expr);
-            return "(" + cond + " ? " + then_e + " : " + else_e + ")";
-        }
-    }
-
-    // キャスト
-    if (auto* cast = std::get_if<std::unique_ptr<hir::HirCast>>(&expr.kind)) {
-        if (*cast && (*cast)->operand) {
-            return emitHirExpr(*(*cast)->operand);
-        }
-    }
-
-    // 未対応の式: 0への静かな縮退は回路の意味を変えるため明示エラーにする（SV007）
-    {
-        std::string ctx = emitting_testbench_ ? "#[test] 関数内で非対応の式です"
-                                              : "initialブロックで非対応のHIR式です";
-        throw std::runtime_error("エラー[SV007]: " + ctx +
-                                 "（variant index=" + std::to_string(expr.kind.index()) + "）");
-    }
-}
-
-// HIR文をSVに変換（initial block用）
-std::string SVCodeGen::emitHirStmt(const hir::HirStmt& stmt) {
-    // 代入文
-    if (auto* assign = std::get_if<std::unique_ptr<hir::HirAssign>>(&stmt.kind)) {
-        if (*assign && (*assign)->target && (*assign)->value) {
-            std::string lhs = emitHirExpr(*(*assign)->target);
-            std::string rhs = emitHirExpr(*(*assign)->value);
-            return lhs + " = " + rhs + ";";
-        }
-    }
-
-    // 変数宣言（let文）
-    if (auto* let = std::get_if<std::unique_ptr<hir::HirLet>>(&stmt.kind)) {
-        if (*let) {
-            std::string sv_type = mapType((*let)->type);
-            std::string init_val = (*let)->init ? emitHirExpr(*(*let)->init) : "0";
-            return sv_type + " " + (*let)->name + " = " + init_val + ";";
-        }
-    }
-
-    // 式文
-    if (auto* expr_stmt = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&stmt.kind)) {
-        if (*expr_stmt && (*expr_stmt)->expr) {
-            return emitHirExpr(*(*expr_stmt)->expr) + ";";
-        }
-    }
-
-    // ブロック文
-    if (auto* block = std::get_if<std::unique_ptr<hir::HirBlock>>(&stmt.kind)) {
-        if (*block) {
-            std::ostringstream ss;
-            ss << "begin\n";
-            for (const auto& s : (*block)->stmts) {
-                if (s) {
-                    std::string sv_stmt = emitHirStmt(*s);
-                    if (!sv_stmt.empty()) {
-                        ss << "    " << sv_stmt << "\n";
-                    }
-                }
-            }
-            ss << "end";
-            return ss.str();
-        }
-    }
-
-    // if文
-    if (auto* if_stmt = std::get_if<std::unique_ptr<hir::HirIf>>(&stmt.kind)) {
-        if (*if_stmt && (*if_stmt)->cond) {
-            std::ostringstream ss;
-            std::string cond = emitHirExpr(*(*if_stmt)->cond);
-            ss << "if (" << cond << ") begin\n";
-            for (const auto& s : (*if_stmt)->then_block) {
-                if (s) {
-                    std::string sv_stmt = emitHirStmt(*s);
-                    if (!sv_stmt.empty()) {
-                        ss << "    " << sv_stmt << "\n";
-                    }
-                }
-            }
-            ss << "end";
-            if (!(*if_stmt)->else_block.empty()) {
-                ss << " else begin\n";
-                for (const auto& s : (*if_stmt)->else_block) {
-                    if (s) {
-                        std::string sv_stmt = emitHirStmt(*s);
-                        if (!sv_stmt.empty()) {
-                            ss << "    " << sv_stmt << "\n";
-                        }
-                    }
-                }
-                ss << "end";
-            }
-            return ss.str();
-        }
-    }
-
-    // 未対応の文: 静かなコメント化は検証漏れの温床になるため明示エラーにする（SV007）
-    {
-        std::string ctx = emitting_testbench_ ? "#[test] 関数内で非対応の文です"
-                                                "（step/assert/代入/println/if等が使用できます）"
-                                              : "initialブロックで非対応のHIR文です";
-        throw std::runtime_error("エラー[SV007]: " + ctx +
-                                 "（variant index=" + std::to_string(stmt.kind.index()) + "）");
-    }
 }
 
 }  // namespace cm::codegen::sv

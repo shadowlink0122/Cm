@@ -339,6 +339,7 @@ list(APPEND CM_SOURCES
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/sv/codegen.cpp
+    src/codegen/sv/testbench.cpp
     src/codegen/sv/expr_tree.cpp
     src/codegen/sv/hierarchy.cpp
     src/codegen/sv/constraints.cpp
@@ -676,6 +677,7 @@ if(BUILD_TESTING)
             ${CM_MIR_SOURCES}
             src/codegen/buffered_codegen.cpp
             src/codegen/sv/codegen.cpp
+            src/codegen/sv/testbench.cpp
             src/codegen/sv/constraints.cpp
             src/codegen/sv/expr_tree.cpp
         )
