@@ -239,8 +239,12 @@ set(CM_MIR_SOURCES
     src/mir/lowering/base.cpp
     src/mir/lowering/lowering.cpp
     src/mir/lowering/auto_impl.cpp
+    src/mir/lowering/auto_impl_compare.cpp
+    src/mir/lowering/auto_impl_css.cpp
+    src/mir/lowering/auto_impl_debug.cpp
     src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp
+    src/mir/lowering/mono_structs.cpp
     src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
@@ -249,6 +253,8 @@ set(CM_MIR_SOURCES
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
     src/mir/lowering/expr_interp.cpp
+    src/mir/lowering/expr_println.cpp
+    src/mir/lowering/expr_slice.cpp
     # MIR passes (最適化パス実装)
     src/mir/passes/scalar/sccp.cpp
     src/mir/passes/scalar/folding.cpp

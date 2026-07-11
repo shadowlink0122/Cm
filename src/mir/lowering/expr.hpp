@@ -22,6 +22,13 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_unary(const hir::HirUnary& un, LoweringContext& ctx);
     LocalId lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
                        LoweringContext& ctx);
+
+    // builtin別のlowering（該当しなければnullopt）
+    std::optional<LocalId> try_lower_println(const hir::HirCall& call,
+                                             const hir::TypePtr& result_type, LoweringContext& ctx);
+    std::optional<LocalId> try_lower_slice_builtin(const hir::HirCall& call,
+                                                   const hir::TypePtr& result_type,
+                                                   LoweringContext& ctx);
     LocalId lower_index(const hir::HirIndex& idx, LoweringContext& ctx);
     LocalId lower_member(const hir::HirMember& mem, LoweringContext& ctx);
     LocalId lower_ternary(const hir::HirTernary& ternary, LoweringContext& ctx);
