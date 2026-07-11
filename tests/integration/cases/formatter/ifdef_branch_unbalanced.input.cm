@@ -1,7 +1,7 @@
 #ifdef TEST
-void tb() {
+    void tb() {
 #else
-void main() {
+    void main() {
 #end
-int x = 1;
+    int x = 1;
 }

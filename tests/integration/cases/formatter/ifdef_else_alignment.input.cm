@@ -1,9 +1,9 @@
 #ifdef A
-#ifdef B
-int x = 1;
+    #ifdef B
+        int x = 1;
+    #else
+        int x = 2;
+    #end
 #else
-int x = 2;
-#end
-#else
-int y = 3;
+    int y = 3;
 #end

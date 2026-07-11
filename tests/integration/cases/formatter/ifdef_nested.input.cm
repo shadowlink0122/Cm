@@ -1,6 +1,6 @@
 #ifdef A
-#ifdef B
-bool ab = true;
-#end
-bool tail = true;
+    #ifdef B
+        bool ab = true;
+    #end
+    bool tail = true;
 #end
