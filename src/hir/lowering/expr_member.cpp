@@ -882,6 +882,20 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
     auto hir = std::make_unique<HirMember>();
     hir->object = lower_expr(*mem.object);
     hir->member = mem.member;
+    // 型チェッカーを通らない経路（文字列補間のミニパイプライン）では、
+    // シードされた構造体フィールド定義からメンバ型を補完する
+    if ((!type || type->is_error()) && !seeded_struct_fields_.empty() && hir->object &&
+        hir->object->type) {
+        auto sit = seeded_struct_fields_.find(hir->object->type->name);
+        if (sit != seeded_struct_fields_.end()) {
+            for (const auto& [field_name, field_type] : sit->second) {
+                if (field_name == mem.member) {
+                    type = field_type;
+                    break;
+                }
+            }
+        }
+    }
     debug::hir::log(debug::hir::Id::FieldName, "field: " + mem.member, debug::Level::Trace);
     return std::make_unique<HirExpr>(std::move(hir), type);
 }

@@ -7,6 +7,7 @@
 #include "../../hir/lowering/fwd.hpp"
 #include "expr.hpp"
 
+#include <functional>
 #include <string>
 
 namespace cm::mir {

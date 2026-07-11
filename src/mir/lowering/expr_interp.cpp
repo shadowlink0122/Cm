@@ -3,12 +3,14 @@
 // ============================================================
 
 #include "../../common/debug.hpp"
+#include "../../common/text_utils.hpp"
 #include "../../frontend/lexer/lexer.hpp"
 #include "../../frontend/parser/parser.hpp"
 #include "../../hir/lowering/fwd.hpp"
 #include "expr.hpp"
 #include "interp_internal.hpp"
 
+#include <cctype>
 #include <functional>
 
 namespace cm::mir {
@@ -228,6 +230,21 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
         if (ctx.enum_defs) {
             hir_lowering.seed_enum_values(*ctx.enum_defs);
         }
+        // 構造体フィールドも引き継ぐ（{c.values[0]} 等のメンバ型解決のため）
+        if (ctx.struct_defs) {
+            std::unordered_map<std::string, std::vector<std::pair<std::string, hir::TypePtr>>>
+                struct_fields;
+            for (const auto& [struct_name, st] : *ctx.struct_defs) {
+                if (!st) {
+                    continue;
+                }
+                auto& fields = struct_fields[struct_name];
+                for (const auto& field : st->fields) {
+                    fields.push_back({field.name, field.type});
+                }
+            }
+            hir_lowering.seed_struct_fields(std::move(struct_fields));
+        }
         // 変数の型も引き継ぐ（ビットスライス等の型依存脱糖のため）
         {
             std::unordered_map<std::string, hir::TypePtr> var_types;
@@ -256,7 +273,44 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                 }
                 auto* ret = std::get_if<std::unique_ptr<hir::HirReturn>>(&stmt->kind);
                 if (ret && *ret && (*ret)->value) {
-                    return lower_expression(*(*ret)->value, ctx);
+                    // ミニパイプラインは型チェッカーを通らないため、メソッド呼び出しの
+                    // 戻り型が未設定になる。既知の関数定義（末尾一致でも探索）から補完する
+                    auto& ret_expr = *(*ret)->value;
+                    if (!ret_expr.type || ret_expr.type->is_error()) {
+                        if (auto* call_expr =
+                                std::get_if<std::unique_ptr<hir::HirCall>>(&ret_expr.kind)) {
+                            if (*call_expr) {
+                                const std::string& callee = (*call_expr)->func_name;
+                                if (ctx.hir_func_defs) {
+                                    auto fit = ctx.hir_func_defs->find(callee);
+                                    if (fit == ctx.hir_func_defs->end()) {
+                                        for (const auto& [fn_name, fn] : *ctx.hir_func_defs) {
+                                            if (fn && fn_name.size() > callee.size() &&
+                                                fn_name.compare(fn_name.size() - callee.size(),
+                                                                callee.size(), callee) == 0) {
+                                                ret_expr.type = fn->return_type;
+                                                break;
+                                            }
+                                        }
+                                    } else if (fit->second) {
+                                        ret_expr.type = fit->second->return_type;
+                                    }
+                                }
+                                // 自動実装メソッドの既知シグネチャ（Debug/Display/CSS）
+                                if (!ret_expr.type || ret_expr.type->is_error()) {
+                                    auto base = cm::text::strip_namespace(callee);
+                                    if (base == "debug" || base == "display" ||
+                                        base == "to_string" || base == "toString" ||
+                                        base == "css" || base == "to_css") {
+                                        ret_expr.type = hir::make_string();
+                                    } else if (base == "is_css" || base == "isCss") {
+                                        ret_expr.type = hir::make_bool();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return lower_expression(ret_expr, ctx);
                 }
             }
         }
@@ -264,6 +318,35 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
         // パース不能な内容は従来のパターン処理へフォールバック
     }
     return std::nullopt;
+}
+
+// 補間プレースホルダの内容を値ローカルへ解決する。
+// 単純な識別子は直接参照し、それ以外は本物の式パーサ＋既存の
+// lowering経路（lower_interp_expression）で評価する。
+// 解決不能な内容は従来どおりエラー型のダミー値を返す
+LocalId ExprLowering::resolve_interp_placeholder(const std::string& content, LoweringContext& ctx) {
+    bool plain = !content.empty() &&
+                 (std::isalpha(static_cast<unsigned char>(content[0])) || content[0] == '_');
+    if (plain) {
+        for (char c : content) {
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+                plain = false;
+                break;
+            }
+        }
+    }
+    if (plain) {
+        if (auto var_id = ctx.resolve_variable(content)) {
+            return *var_id;
+        }
+    }
+    if (auto expr_local = lower_interp_expression(content, ctx)) {
+        return *expr_local;
+    }
+    if (auto var_id = ctx.resolve_variable(content)) {
+        return *var_id;
+    }
+    return ctx.new_temp(hir::make_error());
 }
 
 }  // namespace cm::mir

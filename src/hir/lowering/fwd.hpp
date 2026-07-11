@@ -24,6 +24,13 @@ class HirLowering {
         seeded_var_types_ = std::move(types);
     }
 
+    // 外部で解決済みの構造体フィールド定義を引き継ぐ（文字列補間ミニパイプライン用）。
+    // 型チェッカーを通らない経路でメンバアクセスの型を補完するために使用する
+    void seed_struct_fields(
+        std::unordered_map<std::string, std::vector<std::pair<std::string, TypePtr>>> defs) {
+        seeded_struct_fields_ = std::move(defs);
+    }
+
     // 外部で解決済みのenum定義を引き継ぐ（文字列補間式のミニパイプライン用）。
     // "Enum::Variant" → タグ値 の形式で enum_values_ に登録する
     void seed_enum_values(
@@ -41,6 +48,9 @@ class HirLowering {
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
     std::unordered_map<std::string, TypePtr> seeded_var_types_;  // 補間ミニパイプライン用
+    // 補間ミニパイプライン用: 構造体名 → {フィールド名, 型} の一覧
+    std::unordered_map<std::string, std::vector<std::pair<std::string, TypePtr>>>
+        seeded_struct_fields_;
     std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0: Tagged Union
     std::unordered_map<std::string, int64_t> macro_values_;  // v0.13.0: int型定数マクロ
     std::unordered_map<std::string, std::string> macro_string_values_;  // v0.13.0: string型マクロ

@@ -60,6 +60,9 @@ class ExprLowering : public MirLoweringBase {
     std::optional<LocalId> lower_interp_expression(const std::string& content,
                                                    LoweringContext& ctx);
 
+    // 補間プレースホルダを値ローカルへ解決（識別子直接参照 or 式パーサ経由）
+    LocalId resolve_interp_placeholder(const std::string& content, LoweringContext& ctx);
+
    protected:
     // HIR二項演算子をMIRに変換
     MirBinaryOp convert_binary_op(hir::HirBinaryOp op);
