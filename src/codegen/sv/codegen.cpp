@@ -1,5 +1,6 @@
 #include "codegen.hpp"
 
+#include "../../common/text_utils.hpp"
 #include "../../frontend/ast/typedef.hpp"
 #include "../../mir/analysis/dominators.hpp"
 
@@ -15,40 +16,9 @@
 namespace cm::codegen::sv {
 
 namespace {
-// 文字列内の特定の部分文字列をすべて別の文字列に置換する
-std::string replace_all(std::string str, const std::string& from, const std::string& to) {
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length();
-    }
-    return str;
-}
-
-// 名前空間修飾（encoder::tmds_r 等）を除いた末尾の識別子を取得
-std::string strip_namespace(const std::string& name) {
-    auto pos = name.rfind("::");
-    return (pos != std::string::npos) ? name.substr(pos + 2) : name;
-}
-
-// テキスト中に識別子 name が単語境界つきで出現するか
-// （未使用localparam・未使用テンポラリの除去やブロック内ローカル宣言の判定に使用）
-bool contains_identifier(const std::string& text, const std::string& name) {
-    size_t pos = 0;
-    while ((pos = text.find(name, pos)) != std::string::npos) {
-        bool at_start = (pos == 0 || (!std::isalnum(static_cast<unsigned char>(text[pos - 1])) &&
-                                      text[pos - 1] != '_'));
-        size_t after = pos + name.size();
-        bool at_end =
-            (after >= text.size() ||
-             (!std::isalnum(static_cast<unsigned char>(text[after])) && text[after] != '_'));
-        if (at_start && at_end) {
-            return true;
-        }
-        pos += name.size();
-    }
-    return false;
-}
+using cm::text::contains_identifier;
+using cm::text::replace_all;
+using cm::text::strip_namespace;
 
 // 符号付き整数型であるか判定
 bool is_signed_type(const hir::TypePtr& type) {

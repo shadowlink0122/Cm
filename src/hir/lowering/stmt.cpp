@@ -1,4 +1,5 @@
 // lowering_stmt.cpp - 文のlowering
+#include "../../common/text_utils.hpp"
 #include "fwd.hpp"
 
 namespace cm::hir {
@@ -709,10 +710,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                     auto enum_it = enum_defs_.find(original_enum_name);
                     if (enum_it != enum_defs_.end() && enum_it->second) {
                         // バリアント名を取得（Type::Variant形式からVariantを抽出）
-                        auto sep = variant_name.rfind("::");
-                        std::string short_variant = (sep != std::string::npos)
-                                                        ? variant_name.substr(sep + 2)
-                                                        : variant_name;
+                        std::string short_variant = cm::text::strip_namespace(variant_name);
                         // enum定義からフィールド型を取得
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == short_variant && !member.fields.empty()) {
@@ -796,10 +794,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                 if (!original_enum_name.empty()) {
                     auto enum_it = enum_defs_.find(original_enum_name);
                     if (enum_it != enum_defs_.end() && enum_it->second) {
-                        auto sep = variant_name.rfind("::");
-                        std::string short_variant = (sep != std::string::npos)
-                                                        ? variant_name.substr(sep + 2)
-                                                        : variant_name;
+                        std::string short_variant = cm::text::strip_namespace(variant_name);
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == short_variant && !member.fields.empty()) {
                                 payload_type = member.fields[0].second;

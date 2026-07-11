@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 式の型推論
 // ============================================================
 
+#include "../../../common/text_utils.hpp"
 #include "../type_checker.hpp"
 
 #include <functional>
@@ -785,10 +786,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                     if (enum_it != enum_defs_.end() && enum_it->second) {
                         // バリアント名を取得（Type::Variant形式からVariantを抽出）
                         std::string variant_name = arm.pattern->enum_variant;
-                        auto sep = variant_name.rfind("::");
-                        if (sep != std::string::npos) {
-                            variant_name = variant_name.substr(sep + 2);
-                        }
+                        variant_name = cm::text::strip_namespace(variant_name);
                         // enum定義からフィールド型を取得
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == variant_name && !member.fields.empty()) {
