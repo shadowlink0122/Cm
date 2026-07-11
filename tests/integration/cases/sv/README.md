@@ -1,6 +1,6 @@
 # sv — SVコード生成ゴールデンテストの入力ソース
 
-`tests/integration/sv_codegen_test.cpp` が読み込むCmソース断片。ファイル名はテスト名のsnake_case（例: `SignedConstantComparison` →`signed_constant_comparison.cm`）。
+`tests/integration/sv_codegen_test.cpp` が読み込むCmソース断片。テーマ別のサブフォルダ（expr/ control/ process/ memory/ module/ verify/ errors/）に配置し、ファイル名はテスト名のsnake_case（例: `SignedConstantComparison` →`signed_constant_comparison.cm`）。
 
 ## E2Eテスト（tests/sv/）との役割の違い
 

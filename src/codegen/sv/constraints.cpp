@@ -236,4 +236,54 @@ SvProjectDirectives parse_sv_project_directives(const std::string& source) {
     return result;
 }
 
+std::string SVCodeGen::generateXDC(const mir::MirProgram& program) {
+    std::ostringstream ss;
+    bool has_pins = false;
+
+    for (const auto& gv : program.global_vars) {
+        if (!gv)
+            continue;
+
+        std::string pin_name;
+        std::string iostandard = "LVCMOS33";  // デフォルト
+
+        for (const auto& attr : gv->attributes) {
+            // sv::pin("XX") 形式の解析
+            std::string prefix1 = "sv::pin(\"";
+            std::string prefix2 = "verilog::pin(\"";
+            if (attr.find(prefix1) == 0 && attr.size() > prefix1.size() + 2) {
+                pin_name = attr.substr(prefix1.size(), attr.size() - prefix1.size() - 2);
+            } else if (attr.find(prefix2) == 0 && attr.size() > prefix2.size() + 2) {
+                pin_name = attr.substr(prefix2.size(), attr.size() - prefix2.size() - 2);
+            }
+
+            // sv::iostandard("XX") 形式の解析
+            std::string io_prefix1 = "sv::iostandard(\"";
+            std::string io_prefix2 = "verilog::iostandard(\"";
+            if (attr.find(io_prefix1) == 0 && attr.size() > io_prefix1.size() + 2) {
+                iostandard = attr.substr(io_prefix1.size(), attr.size() - io_prefix1.size() - 2);
+            } else if (attr.find(io_prefix2) == 0 && attr.size() > io_prefix2.size() + 2) {
+                iostandard = attr.substr(io_prefix2.size(), attr.size() - io_prefix2.size() - 2);
+            }
+        }
+
+        if (!pin_name.empty()) {
+            if (!has_pins) {
+                ss << "## Cm compiler 自動生成 XDC 制約ファイル\n\n";
+                has_pins = true;
+            }
+            ss << "set_property -dict { PACKAGE_PIN " << pin_name << "  IOSTANDARD " << iostandard
+               << " } [get_ports {" << gv->name << "}]\n";
+
+            // clk ポートにはクロック制約を追加
+            if (gv->name.find("clk") != std::string::npos) {
+                ss << "create_clock -add -name " << gv->name << "_pin -period 10.00 [get_ports {"
+                   << gv->name << "}]\n";
+            }
+        }
+    }
+
+    return ss.str();
+}
+
 }  // namespace cm::codegen::sv

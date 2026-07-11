@@ -132,7 +132,7 @@ TEST(SVExprTreeTest, UnaryOverBinaryParens) {
 // 符号付き変数と整数定数の比較: 定数は 'sd（符号付き）で出力される。
 // 32'd0 だと SV では unsigned 比較になり s < 0 が常に偽になる
 TEST_F(SVCodegenTest, SignedConstantComparison) {
-    const std::string code = load_case("signed_constant_comparison");
+    const std::string code = load_case("expr/signed_constant_comparison");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "32'sd0");
     expect_not_contains(sv, "s < 32'd0");
@@ -141,7 +141,7 @@ TEST_F(SVCodegenTest, SignedConstantComparison) {
 // ビットマスクと比較の組み合わせ: 括弧が保持される。
 // SVでは == が & より優先されるため、括弧が消えると恒偽になる
 TEST_F(SVCodegenTest, OperatorPrecedenceParens) {
-    const std::string code = load_case("operator_precedence_parens");
+    const std::string code = load_case("expr/operator_precedence_parens");
     std::string sv = compile_to_sv(code);
     // 単体テスト経路ではリテラルがint型（'sd）になるため両対応でチェック
     bool has_parens = sv.find("(a & 32'd256) == 32'd0") != std::string::npos ||
@@ -151,21 +151,21 @@ TEST_F(SVCodegenTest, OperatorPrecedenceParens) {
 
 // 式の途中の縮小キャストはサイズキャスト N'(...) として出力される
 TEST_F(SVCodegenTest, NarrowingCastEmission) {
-    const std::string code = load_case("narrowing_cast_emission");
+    const std::string code = load_case("expr/narrowing_cast_emission");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "8'(");
 }
 
 // 符号付き型の右シフトは算術シフト >>> で出力される
 TEST_F(SVCodegenTest, ArithmeticShiftRight) {
-    const std::string code = load_case("arithmetic_shift_right");
+    const std::string code = load_case("expr/arithmetic_shift_right");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, ">>>");
 }
 
 // enumのビット幅はメンバー数ではなく最大タグ値から計算される
 TEST_F(SVCodegenTest, EnumExplicitTagWidth) {
-    const std::string code = load_case("enum_explicit_tag_width");
+    const std::string code = load_case("expr/enum_explicit_tag_width");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "7'd100");
     expect_not_contains(sv, "1'd100");
@@ -173,7 +173,7 @@ TEST_F(SVCodegenTest, EnumExplicitTagWidth) {
 
 // モジュールレベル変数の宣言初期値はレジスタ初期値として出力される
 TEST_F(SVCodegenTest, RegisterInitialValue) {
-    const std::string code = load_case("register_initial_value");
+    const std::string code = load_case("memory/register_initial_value");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "counter = 32'd42;");
 }
@@ -181,7 +181,7 @@ TEST_F(SVCodegenTest, RegisterInitialValue) {
 // `module NAME;` ヘッダ宣言がSVトップモジュール名に反映される
 // （従来はファイル名由来の名前になり宣言が無視されていた）
 TEST_F(SVCodegenTest, ModuleTopName) {
-    const std::string code = load_case("module_top_name");
+    const std::string code = load_case("module/module_top_name");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "module my_top");
 }
@@ -189,27 +189,27 @@ TEST_F(SVCodegenTest, ModuleTopName) {
 // SV予約語と衝突する識別子（program等）は明確なエラーで停止する
 // （従来はそのまま出力され、iverilog等で構文エラーになっていた）
 TEST_F(SVCodegenTest, ReservedIdentifierRejected) {
-    const std::string code = load_case("sv_reserved_identifier");
+    const std::string code = load_case("errors/sv_reserved_identifier");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
 // 非対応構文（インラインアセンブリ）はSV007で明示エラーになる
 // （従来は // unsupported statement として静かにコメント化されていた）
 TEST_F(SVCodegenTest, InlineAsmRejectedWithSV007) {
-    const std::string code = load_case("sv007_inline_asm");
+    const std::string code = load_case("errors/sv007_inline_asm");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
 // #[test] 内の未対応呼び出し（ユーザー関数）はSV007で明示エラーになる
 // （従来はコメントとして静かに握り潰されていた）
 TEST_F(SVCodegenTest, TestbenchUnknownCallRejectedWithSV007) {
-    const std::string code = load_case("sv007_test_unknown_call");
+    const std::string code = load_case("errors/sv007_test_unknown_call");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
 // 定数畳み込み後に未使用となったlocalparamは出力されない
 TEST_F(SVCodegenTest, UnusedLocalparamRemoved) {
-    const std::string code = load_case("unused_localparam");
+    const std::string code = load_case("module/unused_localparam");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "USED_CONST");
     expect_not_contains(sv, "UNUSED_CONST");
@@ -218,7 +218,7 @@ TEST_F(SVCodegenTest, UnusedLocalparamRemoved) {
 // 関数ローカル変数は名前付きalwaysブロック内に宣言される
 // （モジュールスコープへホイストしない）
 TEST_F(SVCodegenTest, LocalsDeclaredInsideNamedBlock) {
-    const std::string code = load_case("block_local_decl");
+    const std::string code = load_case("process/block_local_decl");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "begin : tick_blk");
     // ローカル宣言はブロックラベルより後（＝ブロック内）に現れる
@@ -233,7 +233,7 @@ TEST_F(SVCodegenTest, LocalsDeclaredInsideNamedBlock) {
 // async関数のクロックが内部信号（OSC等で駆動）の場合、
 // 自動のclk/rstポートを注入しない（重複宣言になる不具合の修正）
 TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
-    const std::string code = load_case("async_internal_clock");
+    const std::string code = load_case("module/async_internal_clock");
     std::string sv = compile_to_sv(code);
     expect_not_contains(sv, "input logic clk");
     expect_not_contains(sv, "input logic rst");
@@ -246,7 +246,7 @@ TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
 // プロセス内ループはwhileループとして再構成され、
 // ループ後のコードが到達可能な位置に出力される
 TEST_F(SVCodegenTest, WhileLoopReconstruction) {
-    const std::string code = load_case("while_loop_reconstruction");
+    const std::string code = load_case("control/while_loop_reconstruction");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "while (");
     // 代入方式（ブロッキング/ノンブロッキング）は文脈依存のため "= total;" で両対応
@@ -255,7 +255,7 @@ TEST_F(SVCodegenTest, WhileLoopReconstruction) {
 
 // 配列リテラル初期値はinitialブロックとして出力される
 TEST_F(SVCodegenTest, ArrayInitialBlock) {
-    const std::string code = load_case("array_initial_block");
+    const std::string code = load_case("memory/array_initial_block");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "initial begin");
     expect_contains(sv, "rom[0] = 10;");
@@ -265,7 +265,7 @@ TEST_F(SVCodegenTest, ArrayInitialBlock) {
 // 定数トリップカウントのループは静的展開され while が残らない
 // （generate/genvar相当。合成ツールは動的whileを展開できない）
 TEST_F(SVCodegenTest, ConstantLoopUnroll) {
-    const std::string code = load_case("constant_loop_unroll");
+    const std::string code = load_case("control/constant_loop_unroll");
     std::string sv = compile_to_sv(code, /*emit_memfile=*/false, /*unroll_loops=*/true);
     expect_not_contains(sv, "while (");
     // 4回分の本体が直列に展開されている（XOR演算が4回出現）
@@ -278,7 +278,7 @@ TEST_F(SVCodegenTest, ConstantLoopUnroll) {
 
 // #[sv::memfile] 属性付き配列は $readmemh のinitial文として出力される
 TEST_F(SVCodegenTest, MemfileReadmemh) {
-    const std::string code = load_case("memfile_readmemh");
+    const std::string code = load_case("memory/memfile_readmemh");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "initial $readmemh(\"font.hex\", rom);");
     // memfile指定時は要素代入のinitialブロックは出力されない
@@ -287,7 +287,7 @@ TEST_F(SVCodegenTest, MemfileReadmemh) {
 
 // 初期値なしの #[sv::memfile] 配列（外部hex提供）でも $readmemh が出力される
 TEST_F(SVCodegenTest, MemfileWithoutInitializer) {
-    const std::string code = load_case("memfile_without_initializer");
+    const std::string code = load_case("memory/memfile_without_initializer");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "initial $readmemh(\"data.hex\", ram);");
     expect_contains(sv, "ram_style");
@@ -295,7 +295,7 @@ TEST_F(SVCodegenTest, MemfileWithoutInitializer) {
 
 // --emit-memfile: 配列リテラル初期値が.hexファイルとして書き出される
 TEST_F(SVCodegenTest, MemfileEmitHexFile) {
-    const std::string code = load_case("memfile_emit_hex_file");
+    const std::string code = load_case("memory/memfile_emit_hex_file");
     std::string sv = compile_to_sv(code, /*emit_memfile=*/true);
     expect_contains(sv, "initial $readmemh(\"emit_test.hex\", rom);");
 
@@ -316,7 +316,7 @@ TEST_F(SVCodegenTest, MemfileEmitHexFile) {
 
 // assert() は即時アサーション assert (...) else $error(...); として出力される
 TEST_F(SVCodegenTest, ImmediateAssertion) {
-    const std::string code = load_case("immediate_assertion");
+    const std::string code = load_case("verify/immediate_assertion");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "assert (");
     expect_contains(sv, "else $error(\"assertion failed: value out of range\");");
@@ -325,7 +325,7 @@ TEST_F(SVCodegenTest, ImmediateAssertion) {
 // ラッチ推論（Phase 3）: if前にデフォルト代入があれば組み合わせ回路
 // （従来の「if行数 vs else行数」テキスト判定では誤ってラッチ扱いだった）
 TEST_F(SVCodegenTest, LatchInferenceDefaultAssignIsComb) {
-    const std::string code = load_case("latch_inference_default_assign_is_comb");
+    const std::string code = load_case("process/latch_inference_default_assign_is_comb");
     std::string sv = compile_to_sv(code);
     expect_not_contains(sv, "ラッチ推論");
 }
@@ -333,7 +333,7 @@ TEST_F(SVCodegenTest, LatchInferenceDefaultAssignIsComb) {
 // ラッチ推論（Phase 3）: if/elseがあっても片側でしか代入されない信号はラッチ
 // （従来のテキスト判定ではif/elseが揃っていると見逃していた）
 TEST_F(SVCodegenTest, LatchInferenceOneSidedAssignIsLatch) {
-    const std::string code = load_case("latch_inference_one_sided_assign_is_latch");
+    const std::string code = load_case("process/latch_inference_one_sided_assign_is_latch");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "ラッチ推論: lout が全パスで代入されません");
 }
@@ -341,7 +341,7 @@ TEST_F(SVCodegenTest, LatchInferenceOneSidedAssignIsLatch) {
 // 三項演算子の構造的判定（Phase 2b）: 同一変数への単一代入のif/elseは
 // cond ? a : b に、else-ifチェーンは入れ子の三項に畳まれる
 TEST_F(SVCodegenTest, StructuralTernaryChain) {
-    const std::string code = load_case("structural_ternary_chain");
+    const std::string code = load_case("expr/structural_ternary_chain");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "r = (op == 32'sd0) ? a + b : (op == 32'sd1) ? a - b : a ^ b;");
     expect_not_contains(sv, "if (op");
@@ -349,7 +349,7 @@ TEST_F(SVCodegenTest, StructuralTernaryChain) {
 
 // 複数文の分岐は三項化されずif/elseのまま出力される
 TEST_F(SVCodegenTest, MultiStatementBranchStaysIfElse) {
-    const std::string code = load_case("multi_statement_branch_stays_if_else");
+    const std::string code = load_case("control/multi_statement_branch_stays_if_else");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "if (sel == 32'sd1) begin");
     expect_contains(sv, "end else begin");
@@ -358,7 +358,7 @@ TEST_F(SVCodegenTest, MultiStatementBranchStaysIfElse) {
 // lint_off抑止（項目9）: UNUSED/UNDRIVENは出力されず、WIDTH系のみ既定で抑止。
 // --sv-strict-lint 相当では一切出力されない
 TEST_F(SVCodegenTest, LintOffReduction) {
-    const std::string code = load_case("lint_off_reduction");
+    const std::string code = load_case("verify/lint_off_reduction");
     std::string sv = compile_to_sv(code);
     expect_not_contains(sv, "lint_off UNUSED");
     expect_not_contains(sv, "lint_off UNDRIVEN");
@@ -371,7 +371,7 @@ TEST_F(SVCodegenTest, LintOffReduction) {
 
 // #[sv::parameter]: module #(parameter) ヘッダと記号幅の出力
 TEST_F(SVCodegenTest, ModuleParameterEmission) {
-    const std::string code = load_case("module_parameter");
+    const std::string code = load_case("module/module_parameter");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "module sv_codegen_test_out #(");
     expect_contains(sv, "parameter WIDTH = 8");
@@ -383,7 +383,7 @@ TEST_F(SVCodegenTest, ModuleParameterEmission) {
 
 // #[sv::tri]: トライステート駆動（inout tri + assign 'z）
 TEST_F(SVCodegenTest, TristateEmission) {
-    const std::string code = load_case("tristate");
+    const std::string code = load_case("module/tristate");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "inout tri sda");
     expect_contains(sv, "assign sda = sda_oe ? sda_out : 1'bz;");
@@ -391,7 +391,7 @@ TEST_F(SVCodegenTest, TristateEmission) {
 
 // #[sv::sync]: CDC 2FF同期段の生成
 TEST_F(SVCodegenTest, CdcSyncEmission) {
-    const std::string code = load_case("cdc_sync");
+    const std::string code = load_case("module/cdc_sync");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "(* async_reg = \"true\" *) logic btn_sync_meta1;");
     expect_contains(sv, "btn_sync_meta1 <= async_btn;");
@@ -400,7 +400,7 @@ TEST_F(SVCodegenTest, CdcSyncEmission) {
 
 // 配列型ポートはアンパックド次元を保持する
 TEST_F(SVCodegenTest, ArrayPortDimension) {
-    const std::string code = load_case("array_port_dimension");
+    const std::string code = load_case("memory/array_port_dimension");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "data [0:3]");
 }

@@ -50,33 +50,33 @@ class FormatterIntegrationTest : public ::testing::Test {
 
 // トップレベルの #ifdef: 内容を1段インデント、ディレクティブは外側の深さ
 TEST_F(FormatterIntegrationTest, IfdefTopLevelIndent) {
-    expect_format_case("ifdef_top_level");
+    expect_format_case("ifdef/top_level");
 }
 
 // ネストした #ifdef: 各レベルで1段ずつ深くなる
 TEST_F(FormatterIntegrationTest, IfdefNestedIndent) {
-    expect_format_case("ifdef_nested");
+    expect_format_case("ifdef/nested");
 }
 
 // #else は対応する #ifdef と同列に揃う（ネスト時も含む）
 TEST_F(FormatterIntegrationTest, IfdefElseAlignment) {
-    expect_format_case("ifdef_else_alignment");
+    expect_format_case("ifdef/else_alignment");
 }
 
 // 関数内（ブレース深さ1）の #ifdef: ブレース深さと合算
 TEST_F(FormatterIntegrationTest, IfdefInsideFunction) {
-    expect_format_case("ifdef_inside_function");
+    expect_format_case("ifdef/inside_function");
 }
 
 // #ifdef 内に波括弧ブロックを含むケース
 TEST_F(FormatterIntegrationTest, IfdefContainingBraces) {
-    expect_format_case("ifdef_containing_braces");
+    expect_format_case("ifdef/containing_braces");
 }
 
 // 分岐ごとに波括弧が不均衡なケース: #else で分岐開始状態に復元されるため
 // ディレクティブが波括弧カウントの影響を受けず崩れない
 TEST_F(FormatterIntegrationTest, IfdefBranchUnbalancedBraces) {
-    expect_format_case("ifdef_branch_unbalanced");
+    expect_format_case("ifdef/branch_unbalanced");
 }
 
 // ============================================================
@@ -85,17 +85,17 @@ TEST_F(FormatterIntegrationTest, IfdefBranchUnbalancedBraces) {
 
 // 演算子先頭（+ 等）の継続行: 1回目で+1段、2回目以降も同じ深さ
 TEST_F(FormatterIntegrationTest, ContinuationOperatorLeading) {
-    expect_format_case("continuation_operator");
+    expect_format_case("continuation/operator");
 }
 
 // 演算子末尾（&& 等）で折り返した継続行も同様
 TEST_F(FormatterIntegrationTest, ContinuationTrailingOperator) {
-    expect_format_case("continuation_trailing_op");
+    expect_format_case("continuation/trailing_op");
 }
 
 // 未閉括弧を持ち越す継続行は括弧深さのインデントに従う
 TEST_F(FormatterIntegrationTest, ContinuationParenCarry) {
-    expect_stable_case("continuation_paren_carry");
+    expect_stable_case("continuation/paren_carry");
 }
 
 // ============================================================
@@ -104,12 +104,12 @@ TEST_F(FormatterIntegrationTest, ContinuationParenCarry) {
 
 // 行末コメントの手動調整位置は保持される（2スペース以上なら変更しない）
 TEST_F(FormatterIntegrationTest, TrailingCommentManualSpacing) {
-    expect_stable_case("trailing_comment_manual");
+    expect_stable_case("style/trailing_comment_manual");
 }
 
 // 裸ブロックの { は前の行に結合されない
 TEST_F(FormatterIntegrationTest, BareBlockNotJoined) {
-    expect_stable_case("bare_block");
+    expect_stable_case("style/bare_block");
 }
 
 // ============================================================
@@ -119,15 +119,15 @@ TEST_F(FormatterIntegrationTest, BareBlockNotJoined) {
 // 幅付きリテラルの ' が文字リテラル開始と誤認されると
 // 行内の括弧カウントが狂い、後続行のインデントが崩れる
 TEST_F(FormatterIntegrationTest, SizedLiteralDoesNotBreakIndent) {
-    expect_stable_case("sized_literal_indent");
+    expect_stable_case("literal/sized_indent");
 }
 
 // 2進・16進の幅付きリテラルも同様
 TEST_F(FormatterIntegrationTest, SizedLiteralBinaryHex) {
-    expect_stable_case("sized_literal_binary_hex");
+    expect_stable_case("literal/sized_binary_hex");
 }
 
 // 通常の文字リテラルは引き続き認識される（内部の括弧はカウントされない）
 TEST_F(FormatterIntegrationTest, CharLiteralStillRecognized) {
-    expect_stable_case("char_literal_paren");
+    expect_stable_case("literal/char_paren");
 }
