@@ -228,6 +228,8 @@ set(CM_HIR_LOWERING_SOURCES
     src/hir/lowering/decl.cpp
     src/hir/lowering/stmt.cpp
     src/hir/lowering/expr.cpp
+    src/hir/lowering/expr_member.cpp
+    src/hir/lowering/expr_match.cpp
 )
 # MIRコア（lowering + 最適化パス + 解析）
 set(CM_MIR_SOURCES
@@ -246,6 +248,7 @@ set(CM_MIR_SOURCES
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
+    src/mir/lowering/expr_interp.cpp
     # MIR passes (最適化パス実装)
     src/mir/passes/scalar/sccp.cpp
     src/mir/passes/scalar/folding.cpp
@@ -287,6 +290,8 @@ set(CM_SOURCES
     src/frontend/types/checking/auto_impl.cpp
     src/frontend/types/checking/utils.cpp
     src/preprocessor/import.cpp
+    src/preprocessor/export_filter.cpp
+    src/preprocessor/module_resolve.cpp
     src/preprocessor/conditional.cpp
     src/module/resolver.cpp
     # Lint configuration
