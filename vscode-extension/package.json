@@ -24,14 +24,14 @@
   "icon": "images/icon.png",
   "scripts": {
     "compile": "tsc -p ./",
-    "update-version": "tsc -p ./ && node out/update-version.js",
-    "verify-version": "tsc -p ./ && node out/verify-version.js",
+    "update-version": "tsc -p ./ && node out/scripts/update-version.js",
+    "verify-version": "tsc -p ./ && node out/scripts/verify-version.js",
     "prepackage": "npm run verify-version",
     "package": "pnpm exec vsce package --allow-missing-repository --skip-license",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write 'scripts/**/*.ts'",
-    "format:check": "prettier --check 'scripts/**/*.ts'"
+    "format": "prettier --write 'scripts/**/*.ts' 'src/**/*.ts'",
+    "format:check": "prettier --check 'scripts/**/*.ts' 'src/**/*.ts'"
   },
   "contributes": {
     "languages": [
@@ -64,7 +64,25 @@
         "label": "Cm Icons",
         "path": "./iconTheme.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Cm",
+      "properties": {
+        "cm.dimInactiveCode": {
+          "type": "boolean",
+          "default": true,
+          "description": "明らかに無効なスコープ（未定義シンボルの#ifdef、リテラルfalseのif等）をトーンダウン表示する"
+        },
+        "cm.activeDefines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "エディタ上で定義済みとみなすシンボル（例: [\"TEST\"]）。#ifdef判定に使用"
+        }
+      }
+    }
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -74,6 +92,11 @@
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
-    "@eslint/js": "^9.0.0"
-  }
+    "@eslint/js": "^9.0.0",
+    "@types/vscode": "^1.80.0"
+  },
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onLanguage:cm"
+  ]
 }

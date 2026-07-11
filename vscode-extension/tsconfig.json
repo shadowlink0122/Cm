@@ -6,7 +6,7 @@
             "ES2020"
         ],
         "outDir": "./out",
-        "rootDir": "./scripts",
+        "rootDir": ".",
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
@@ -16,7 +16,8 @@
         "sourceMap": false
     },
     "include": [
-        "scripts/**/*.ts"
+        "scripts/**/*.ts",
+        "src/**/*.ts"
     ],
     "exclude": [
         "node_modules",

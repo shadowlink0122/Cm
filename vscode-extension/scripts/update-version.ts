@@ -15,9 +15,9 @@ interface PackageJson {
 }
 
 // パス設定
-const rootDir = path.join(__dirname, '../..');
+const rootDir = path.join(__dirname, '../../..');
 const versionFile = path.join(rootDir, 'VERSION');
-const packageJsonPath = path.join(__dirname, '../package.json');
+const packageJsonPath = path.join(__dirname, '../../package.json');
 
 // VERSIONファイルを読み込み
 if (!fs.existsSync(versionFile)) {
