@@ -4,9 +4,7 @@
 
 ## 概要
 
-Cmコンパイラが `LLVM module verification failed: Instruction does not dominate all uses!` エラーを
-生成するバグ。MIRで関数パラメータが条件分岐内で再代入される場合、SSA形式の`locals[]`マップが
-block-local値に汚染され、LLVM IRの支配関係が壊れる。
+Cmコンパイラが `LLVM module verification failed: Instruction does not dominate all uses!` エラーを生成するバグ。MIRで関数パラメータが条件分岐内で再代入される場合、SSA形式の`locals[]`マップがblock-local値に汚染され、LLVM IRの支配関係が壊れる。
 
 ## 再現条件
 
@@ -22,8 +20,7 @@ block-local値に汚染され、LLVM IRの支配関係が壊れる。
 2. **`allocatedLocals`未登録**: パラメータは `allocatedLocals` に含まれない
 3. **MIR再代入**: `_4 = copy(_20)` がbb6で実行
 4. **SSA代入パス**: `isAllocated == false` → `locals[_4] = rvalue` (= `%load11` from bb6)
-5. **cross-block使用**: bb8 (preds: bb6, bb7) で `_21 = copy(_4)` → `convertOperand` が
-   `locals[_4]` = `%load11`（bb6のload命令）を直接使用 → bb7→bb8パスで未定義
+5. **cross-block使用**: bb8 (preds: bb6, bb7) で `_21 = copy(_4)` → `convertOperand` が`locals[_4]` = `%load11`（bb6のload命令）を直接使用 → bb7→bb8パスで未定義
 
 ### MIRパターン
 
@@ -89,8 +86,7 @@ if (reassignedArgLocals.count(localIdx) > 0) {
 
 ## 重要な注意点
 
-- **projectionチェック必須**: `_1.*.0 = copy(_4)` はフィールド書込みであり、`_1`の再代入ではない
-  → `projections.empty()` チェックなしだとimplメソッドのselfフィールド更新が壊れる
+- **projectionチェック必須**: `_1.*.0 = copy(_4)` はフィールド書込みであり、`_1`の再代入ではない→ `projections.empty()` チェックなしだとimplメソッドのselfフィールド更新が壊れる
 - **LLVM mem2regパス**: 不要なallocaはLLVMのmem2regパスが自動的にSSA形式に最適化
 
 ## テスト結果

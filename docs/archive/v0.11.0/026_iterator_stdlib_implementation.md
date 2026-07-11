@@ -1,7 +1,6 @@
 # イテレータシステム 標準ライブラリ実装仕様
 
-作成日: 2026-01-11
-関連文書: 025_iterator_explicit_interface_design.md
+作成日: 2026-01-11関連文書: 025_iterator_explicit_interface_design.md
 
 ## 標準ライブラリコレクションのイテレータ実装
 
@@ -593,5 +592,4 @@ Vec<int> result = vec.iter()
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 実装仕様書
+**作成者:** Claude Code **ステータス:** 実装仕様書

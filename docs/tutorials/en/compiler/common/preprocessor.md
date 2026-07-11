@@ -21,8 +21,7 @@ nav_order: 7
 
 ## What is Conditional Compilation?
 
-Cm's preprocessor **filters source code before compilation**.
-You can switch code based on the target architecture or operating system.
+Cm's preprocessor **filters source code before compilation**. You can switch code based on the target architecture or operating system.
 
 ```cm
 import std::io::println;

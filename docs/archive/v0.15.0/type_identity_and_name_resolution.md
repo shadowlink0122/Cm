@@ -8,12 +8,9 @@
 
 ### 現状の問題
 
-`stmt.cpp` の enum coercion 判定で `resolved_type->name == enum_name` という**文字列名比較**を行っている。
-モノモーフ化エンジンが `Option<ulong>` → `Option__ulong` と名前を変換するため、
-パターンのソースレベル名 `Option` と不一致が生じる。
+`stmt.cpp` の enum coercion 判定で `resolved_type->name == enum_name` という**文字列名比較**を行っている。モノモーフ化エンジンが `Option<ulong>` → `Option__ulong` と名前を変換するため、パターンのソースレベル名 `Option` と不一致が生じる。
 
-v0.14.2では `get_enum_base_name()` で `__` 以前を抽出するベース名比較を導入したが、
-これは命名規約に依存した緩和策であり、ユーザーが `__` を含む型名を使用した場合に誤動作のリスクがある。
+v0.14.2では `get_enum_base_name()` で `__` 以前を抽出するベース名比較を導入したが、これは命名規約に依存した緩和策であり、ユーザーが `__` を含む型名を使用した場合に誤動作のリスクがある。
 
 ### 目標設計
 
@@ -33,15 +30,12 @@ v0.14.2では `get_enum_base_name()` で `__` 以前を抽出するベース名�
 
 ### 現状の問題
 
-MIR lowering (`impl.cpp`) の関数定義側と、LLVM codegen (`utils.cpp`) の関数呼び出し側で
-**異なる命名規約**を使用している。
+MIR lowering (`impl.cpp`) の関数定義側と、LLVM codegen (`utils.cpp`) の関数呼び出し側で**異なる命名規約**を使用している。
 
 - 定義側: `current_module_path + "::"` プレフィックスのみ除去（v0.14.2修正）
-- 呼び出側: `declareExternalFunction` が単純名で `functions` テーブルを検索、
-  見つからなければ `name + "_"` 前方一致フォールバック
+- 呼び出側: `declareExternalFunction` が単純名で `functions` テーブルを検索、見つからなければ `name + "_"` 前方一致フォールバック
 
-v0.14.2では前方一致を一意候補限定にし、namespace剥がしをモジュール限定にしたが、
-呼び出し側と定義側の命名ルールが統一されていない根本問題は残っている。
+v0.14.2では前方一致を一意候補限定にし、namespace剥がしをモジュール限定にしたが、呼び出し側と定義側の命名ルールが統一されていない根本問題は残っている。
 
 ### 目標設計
 

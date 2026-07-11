@@ -1,14 +1,10 @@
 # SV Backend - Board I/O (Pin Constraints, Tristate, CDC)
 
-Features added in v0.16.0 for wiring designs to real boards and handling
-asynchronous inputs.
+Features added in v0.16.0 for wiring designs to real boards and handling asynchronous inputs.
 
 ## Pin constraints and project script emission (--emit-constraints)
 
-Physical pin assignments live next to the port declarations via the
-`#[sv::pin]` attribute, and the compiler can emit Gowin `.cst` (pin
-constraints) and `.tcl` (project script) files. This structurally
-prevents the manual-sync errors that happen when port names change.
+Physical pin assignments live next to the port declarations via the `#[sv::pin]` attribute, and the compiler can emit Gowin `.cst` (pin constraints) and `.tcl` (project script) files. This structurally prevents the manual-sync errors that happen when port names change.
 
 ```cm
 //! platform: sv
@@ -30,19 +26,14 @@ cm compile --target=sv blink.cm -o blink.sv --emit-constraints
 gw_sh blink_build.tcl
 ```
 
-- The first argument of `#[sv::pin]` is the physical pin (required).
-  Remaining `key: value` pairs map `io_type` / `drive` / `pull` / `slew`
-  to official attribute names (IO_TYPE etc.); unknown keys are
-  upper-cased and passed through (open to tool-specific attributes)
+- The first argument of `#[sv::pin]` is the physical pin (required). Remaining `key: value` pairs map `io_type` / `drive` / `pull` / `slew` to official attribute names (IO_TYPE etc.); unknown keys are upper-cased and passed through (open to tool-specific attributes)
 - Without `//! sv: device:` only the `.cst` is generated
 - With `--emit-constraints`, ports lacking `#[sv::pin]` produce warnings
 - Emission is opt-in; existing hand-written .cst/.tcl workflows keep working
 
 ## Tristate (#[sv::tri])
 
-Bidirectional open-drain buses (e.g. I2C) are declared with an
-output-enable/output pair. oe=1 drives, oe=0 releases to high impedance
-(`'z`).
+Bidirectional open-drain buses (e.g. I2C) are declared with an output-enable/output pair. oe=1 drives, oe=0 releases to high impedance (`'z`).
 
 ```cm
 #[inout]
@@ -58,14 +49,11 @@ inout tri sda;
 assign sda = sda_oe ? sda_out : 1'bz;
 ```
 
-The port is declared as the multi-driver net type `tri`. Reads behave as
-ordinary values (assuming a bus pull-up). Do not assign to `sda`
-directly — control it through oe/out.
+The port is declared as the multi-driver net type `tri`. Reads behave as ordinary values (assuming a bus pull-up). Do not assign to `sda` directly — control it through oe/out.
 
 ## Clock-domain-crossing synchronization (#[sv::sync])
 
-Asynchronous inputs such as buttons cause metastability when used
-directly. `#[sv::sync]` declaratively generates a 2FF synchronizer.
+Asynchronous inputs such as buttons cause metastability when used directly. `#[sv::sync]` declaratively generates a 2FF synchronizer.
 
 ```cm
 #[input] posedge clk;
@@ -85,8 +73,7 @@ always @(posedge clk) begin
 end
 ```
 
-`stages` defaults to 2. Generated registers carry the
-`(* async_reg = "true" *)` synthesis attribute.
+`stages` defaults to 2. Generated registers carry the `(* async_reg = "true" *)` synthesis attribute.
 
 ---
 

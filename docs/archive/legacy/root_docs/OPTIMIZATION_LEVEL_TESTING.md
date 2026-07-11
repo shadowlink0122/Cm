@@ -99,7 +99,7 @@ O3でのみテスト実行（高速）：
 | LLVM WASM       | ✅ | ✅ | ✅ | ✅ |
 | JavaScript      | ✅ | ✅ | ✅ | ✅ |
 
-**実行条件**: 
+**実行条件**:
 - `github.ref == 'refs/heads/main'`
 - PRではスキップ（時間短縮）
 - mainへのマージ後に完全テスト

@@ -47,9 +47,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ### Non-Synthesizable Types (Compile Errors)
 
-Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend.
-`float`/`double` emit a warning (`warning[SV004]`, an IP core is required).
-`string` is only practical as a const constant (see [Data Structures](data.html#strings)).
+Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend. `float`/`double` emit a warning (`warning[SV004]`, an IP core is required). `string` is only practical as a const constant (see [Data Structures](data.html#strings)).
 
 ---
 
@@ -97,8 +95,7 @@ Literals are **automatically annotated with a bit width** based on the type from
 
 ### Signed Constants Are Emitted with `'sd`
 
-In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**.
-Cm emits constants as signed (`'sd`) according to their type, so negative checks like `s < 0` work correctly:
+In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**. Cm emits constants as signed (`'sd`) according to their type, so negative checks like `s < 0` work correctly:
 
 ```cm
 int s;

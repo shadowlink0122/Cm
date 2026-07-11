@@ -420,8 +420,7 @@ int main() {
 
 ## Bit slices (v0.16.0)
 
-Read/write bit ranges of integers and `bit[N]` values (see
-[SV Backend - Data structures](../compiler/sv/data.html)):
+Read/write bit ranges of integers and `bit[N]` values (see [SV Backend - Data structures](../compiler/sv/data.html)):
 
 ```cm
 uint x = 0xABCD;

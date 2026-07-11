@@ -182,5 +182,4 @@ src/mir/lowering/
 
 ---
 
-作成日時: 2025年12月13日
-作成者: Claude Code Assistant
+作成日時: 2025年12月13日作成者: Claude Code Assistant

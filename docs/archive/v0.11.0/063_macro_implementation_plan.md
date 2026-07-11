@@ -1,9 +1,6 @@
 # Cm言語 マクロシステム実装計画
 
-作成日: 2026-01-11
-対象バージョン: v0.11.0
-ステータス: 実装計画
-関連文書: 060_cm_macro_system_design.md, 061_pin_library_design.md
+作成日: 2026-01-11対象バージョン: v0.11.0ステータス: 実装計画関連文書: 060_cm_macro_system_design.md, 061_pin_library_design.md
 
 ## エグゼクティブサマリー
 
@@ -429,6 +426,4 @@ private:
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 実装計画
-**次ステップ:** TokenTreeとMacroParserの実装開始
+**作成者:** Claude Code **ステータス:** 実装計画**次ステップ:** TokenTreeとMacroParserの実装開始

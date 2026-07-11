@@ -11,8 +11,7 @@ nav_order: 5
 
 Cm言語コンパイラの使い方とバックエンドを学ぶチュートリアル集です。推定学習時間: 3時間
 
-バックエンド別にディレクトリが分かれています:
-`common/`（共通ツール）、`native/`（LLVMネイティブ・UEFI）、`wasm/`、`js/`、`sv/`（SystemVerilog/FPGA）
+バックエンド別にディレクトリが分かれています: `common/`（共通ツール）、`native/`（LLVMネイティブ・UEFI）、`wasm/`、`js/`、`sv/`（SystemVerilog/FPGA）
 
 ---
 

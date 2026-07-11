@@ -7,8 +7,7 @@
 Cm言語の特徴である「構造体定義からCSSを生成する」機能のJSバックエンド実装です。
 
 ### 1.1 設計思想
-構造体のフィールドとデフォルト値をCSSプロパティにマッピングします。
-JS実行時、またはコンパイル時にCSS文字列を生成し、ドキュメントに注入します。
+構造体のフィールドとデフォルト値をCSSプロパティにマッピングします。JS実行時、またはコンパイル時にCSS文字列を生成し、ドキュメントに注入します。
 
 ### 1.2 変換ロジック
 
@@ -21,8 +20,7 @@ struct MyButtonStyle {
 }
 ```
 
-**JS (Runtime Extraction):**
-構造体のメタデータ（リフレクション情報）を利用して、インスタンス化されたタイミング、あるいは静的にCSSクラスを生成します。
+**JS (Runtime Extraction):**構造体のメタデータ（リフレクション情報）を利用して、インスタンス化されたタイミング、あるいは静的にCSSクラスを生成します。
 
 ```javascript
 class MyButtonStyle {
@@ -54,8 +52,7 @@ let style = new MyButtonStyle();
 ## 2. DOM連携
 
 ### 2.1 DOM APIのバインディング
-ブラウザのネイティブAPI（`document`, `window`, `HTMLElement`）への型定義を提供します。
-`extern` ブロックを使用して定義します。
+ブラウザのネイティブAPI（`document`, `window`, `HTMLElement`）への型定義を提供します。`extern` ブロックを使用して定義します。
 
 ```rust
 // std/web/dom.cm

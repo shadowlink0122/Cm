@@ -1,7 +1,6 @@
 # 開発ツールの再編成レポート
 
-作成日: 2026-01-11
-ステータス: 完了
+作成日: 2026-01-11ステータス: 完了
 
 ## 実施内容
 
@@ -9,8 +8,7 @@
 
 BNF検証ツールを適切なディレクトリに移動しました：
 
-**移動前:** `src/frontend/tools/validate_bnf.py`
-**移動後:** `scripts/validate_bnf.py`
+**移動前:** `src/frontend/tools/validate_bnf.py` **移動後:** `scripts/validate_bnf.py`
 
 ### 2. 理由
 
@@ -93,6 +91,4 @@ BNF検証ツールを`scripts/`ディレクトリに移動し、プロジェク�
 
 ---
 
-**作成者:** Claude Code
-**承認:** 完了
-**影響:** なし（ツールパスの変更のみ）
+**作成者:** Claude Code **承認:** 完了**影響:** なし（ツールパスの変更のみ）

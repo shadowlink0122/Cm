@@ -1,12 +1,10 @@
 # 定数ジェネリックパラメータ（Const Generics）設計
 
-作成日: 2026-01-11
-関連文書: 027_iterator_required_language_features.md
+作成日: 2026-01-11関連文書: 027_iterator_required_language_features.md
 
 ## 概要
 
-定数ジェネリックパラメータは、コンパイル時定数を型パラメータとして扱う機能です。
-固定長配列への`Iterable`実装や、コンパイル時サイズ検証に必要です。
+定数ジェネリックパラメータは、コンパイル時定数を型パラメータとして扱う機能です。固定長配列への`Iterable`実装や、コンパイル時サイズ検証に必要です。
 
 ## 構文設計
 
@@ -59,8 +57,7 @@ std::vector<GenericParam> generic_params;
 ### src/frontend/parser/parser.hpp
 
 ```cpp
-// parse_generic_params()の拡張
-GenericParam parse_generic_param() {
+// parse_generic_params()の拡張GenericParam parse_generic_param() {
     GenericParam param;
     
     if (consume_if(TokenKind::KwConst)) {
@@ -87,8 +84,7 @@ GenericParam parse_generic_param() {
 ### 定数式の評価
 
 ```cpp
-// src/frontend/types/checking/expr.cpp
-struct ConstExpr {
+// src/frontend/types/checking/expr.cpp struct ConstExpr {
     TypePtr type;
     std::variant<int64_t, bool, char> value;
 };
@@ -105,9 +101,7 @@ ConstExpr evaluate_const_expr(ast::Expr& expr) {
 ### ジェネリック具体化時のサイズ解決
 
 ```cpp
-// impl<T, const N: int> T[N] for Iterable<T>
-//                  ↓ 具体化
-// impl int[5] for Iterable<int>
+// impl<T, const N: int> T[N] for Iterable<T> //                  ↓ 具体化// impl int[5] for Iterable<int>
 
 void instantiate_generic(const GenericParam& param, const TypeArg& arg) {
     if (param.kind == GenericParam::Kind::Const) {
@@ -122,8 +116,7 @@ void instantiate_generic(const GenericParam& param, const TypeArg& arg) {
 ### 定数パラメータの伝播
 
 ```cpp
-// src/hir/nodes.hpp
-struct HirGenericParam {
+// src/hir/nodes.hpp struct HirGenericParam {
     enum class Kind { Type, Const };
     Kind kind;
     std::string name;
@@ -139,8 +132,7 @@ struct HirGenericParam {
 LLVMレベルでは具体的な値として生成：
 
 ```llvm
-; Array<int, 5>
-%Array_int_5 = type { [5 x i32] }
+; Array<int, 5> %Array_int_5 = type { [5 x i32] }
 ```
 
 ## 使用例
@@ -154,9 +146,7 @@ impl<T, const N: int> T[N] for Iterable<T> {
     }
 }
 
-// 使用
-int[5] arr = [1, 2, 3, 4, 5];
-for (int x in arr.iter()) {
+// 使用int[5] arr = [1, 2, 3, 4, 5]; for (int x in arr.iter()) {
     println("{x}");
 }
 ```

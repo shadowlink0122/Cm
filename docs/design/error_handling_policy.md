@@ -1,18 +1,14 @@
 # エラー処理方針（013 §4.3-6 の明文化）
 
-作成日: 2026-07-05
-対象: Cmコンパイラ実装（C++）
+作成日: 2026-07-05対象: Cmコンパイラ実装（C++）
 
 013調査で指摘された「例外と `optional`/`Result` の混在」に対する方針を定める。
 
 ## 現状（2026-07-05 実測）
 
-- `throw` 使用: **50箇所**（内訳: codegen/llvm 25、codegen/js 7、preprocessor 5、
-  frontend/types 4、その他 9）
+- `throw` 使用: **50箇所**（内訳: codegen/llvm 25、codegen/js 7、preprocessor 5、frontend/types 4、その他 9）
 - `Result<T>` / `std::optional` 使用: 141箇所
-- 統一エラー基盤は実装済み: `src/common/error.hpp`
-  （`cm::Error`（種別/コード/メッセージ/Span）、`Result<T> = std::variant<T, Error>`、
-  `ErrorCollector`。`error_test` でテスト済み）
+- 統一エラー基盤は実装済み: `src/common/error.hpp`（`cm::Error`（種別/コード/メッセージ/Span）、`Result<T> = std::variant<T, Error>`、`ErrorCollector`。`error_test` でテスト済み）
 
 ## 方針
 
@@ -31,8 +27,7 @@
 **呼び出し境界で `Result<T>` または success/error_message 構造体で返す。**
 
 - 例: `ImportPreprocessor::ProcessResult`、`read_file` の `ReadFileResult`
-- 内部実装でthrowを使う場合は、公開APIの境界で必ず捕捉して
-  `Result`/構造体へ変換する（例外を境界の外へ漏らさない）
+- 内部実装でthrowを使う場合は、公開APIの境界で必ず捕捉して`Result`/構造体へ変換する（例外を境界の外へ漏らさない）
 
 ### 3. 内部不変条件違反（コンパイラ自身のバグ）
 
@@ -45,8 +40,7 @@
 ## 新規コードの規約
 
 1. 新規の公開APIは `Result<T>` か success フィールド付き構造体を返す
-2. ユーザに見せるエラーは必ず `cm::Error` を経由する（生の `std::cerr` 直書き禁止。
-   ただし診断表示層そのものは除く）
+2. ユーザに見せるエラーは必ず `cm::Error` を経由する（生の `std::cerr` 直書き禁止。ただし診断表示層そのものは除く）
 3. `catch (...)` での握りつぶし禁止（変換して伝播するか、ログを残す）
 4. デストラクタ・コード生成の出力パスでは throw しない
 

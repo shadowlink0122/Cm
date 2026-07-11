@@ -1,7 +1,6 @@
 # イテレータシステム実装メモ
 
-作成日: 2026-01-11
-関連文書: 023_iterator_system_complete_implementation.md
+作成日: 2026-01-11関連文書: 023_iterator_system_complete_implementation.md
 
 ## 実装に必要な言語機能の確認
 
@@ -164,5 +163,4 @@ ArrayIterator<T>:
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 実装準備段階
+**作成者:** Claude Code **ステータス:** 実装準備段階

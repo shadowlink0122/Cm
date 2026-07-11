@@ -2,9 +2,7 @@
 
 ## 1. 概要
 
-Cm言語でOSなし（ベアメタル）環境とUEFI環境のプログラミングを実現する。
-既存の `no_std` 基盤（`TargetConfig`, `setupNoStd()`, `__cm_alloc/__cm_panic`）を拡張し、
-実際にコンパイル〜実行まで動作する環境を整備する。
+Cm言語でOSなし（ベアメタル）環境とUEFI環境のプログラミングを実現する。既存の `no_std` 基盤（`TargetConfig`, `setupNoStd()`, `__cm_alloc/__cm_panic`）を拡張し、実際にコンパイル〜実行まで動作する環境を整備する。
 
 ### ゴール
 

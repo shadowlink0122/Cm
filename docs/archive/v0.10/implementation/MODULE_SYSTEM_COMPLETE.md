@@ -84,7 +84,7 @@ int main() {
 - `src/frontend/lexer/token.cpp`: トークン文字列化
 
 ### 2. パーサー（2ファイル）
-- `src/frontend/parser/parser_expr.cpp`: 
+- `src/frontend/parser/parser_expr.cpp`:
   - 複数レベル`::`演算子のサポート
   - `A::B::C::D`のような深いネスト対応
 

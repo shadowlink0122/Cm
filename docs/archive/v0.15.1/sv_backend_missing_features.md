@@ -1,8 +1,6 @@
 # svバックエンド 不足機能の実装案
 
-作成日: 2026-07-04
-対象バージョン: v0.15.1
-言語: 日本語（[English](sv_backend_missing_features_en.html)）
+作成日: 2026-07-04対象バージョン: v0.15.1言語: 日本語（[English](sv_backend_missing_features_en.html)）
 
 CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査で判明した、svバックエンドに不足している機能と実装案をまとめる。各項目は「CPU開発に必要な順」に並べている。
 
@@ -48,24 +46,11 @@ CmCPU（Tang Console 138K向けCPU開発）での実運用と2026-07-04の調査
 
 **難易度**: 高（analyzeMIRの単一 `default_mod` 前提の解消が必要）
 
-**段階的実装計画（2026-07-05調査で具体化）**:
-importのフラット化は**テキストベースのpreprocessor**（`src/preprocessor/import.cpp`）で
-行われるため、階層化はパース前の段階から手を入れる必要がある。以下の段階に分割する:
+**段階的実装計画（2026-07-05調査で具体化）**: importのフラット化は**テキストベースのpreprocessor**（`src/preprocessor/import.cpp`）で行われるため、階層化はパース前の段階から手を入れる必要がある。以下の段階に分割する:
 
-- **Stage 1（暫定運用・実装不要）**: サブモジュールを個別に
-  `cm compile --target=sv sub.cm -o sub.sv` でコンパイルし、トップ側では
-  `extern struct Sub { ... }` としてポートを宣言してインスタンス化する。
-  named port connection の生成経路は実装済みのため今日から運用可能
-  （欠点: ポート宣言の二重管理）。
-- **Stage 2（extern struct自動生成）**: `//! sv: hierarchy` 指定時、
-  `import ./alu;` をフラット化せず、alu.cm の `#[input]/#[output]` 宣言から
-  extern struct 相当の宣言を自動合成してトップのASTに注入する。
-  同時に alu.cm を再帰的にSVコンパイルし、生成モジュールを同一.svファイルに
-  連結出力する（`modules_` ベクタは複数モジュール対応済み）。
-- **Stage 3（真の複数モジュールMIR）**: `MirProgram::modules` を実際に使い、
-  analyzeMIRの単一 `default_mod` 前提を解消してモジュールごとに
-  ポート解決・always分類を行う。項目2のパラメータオーバーライド
-  `#(.WIDTH(8))` もこの段階で実装する。
+- **Stage 1（暫定運用・実装不要）**: サブモジュールを個別に`cm compile --target=sv sub.cm -o sub.sv` でコンパイルし、トップ側では`extern struct Sub { ... }` としてポートを宣言してインスタンス化する。named port connection の生成経路は実装済みのため今日から運用可能（欠点: ポート宣言の二重管理）。
+- **Stage 2（extern struct自動生成）**: `//! sv: hierarchy` 指定時、`import ./alu;` をフラット化せず、alu.cm の `#[input]/#[output]` 宣言からextern struct 相当の宣言を自動合成してトップのASTに注入する。同時に alu.cm を再帰的にSVコンパイルし、生成モジュールを同一.svファイルに連結出力する（`modules_` ベクタは複数モジュール対応済み）。
+- **Stage 3（真の複数モジュールMIR）**: `MirProgram::modules` を実際に使い、analyzeMIRの単一 `default_mod` 前提を解消してモジュールごとにポート解決・always分類を行う。項目2のパラメータオーバーライド`#(.WIDTH(8))` もこの段階で実装する。
 
 ## 2. モジュールパラメータ（`module #(parameter ...)`）
 
@@ -182,8 +167,7 @@ importのフラット化は**テキストベースのpreprocessor**（`src/prepr
 > lint_off を一切出力しない（幅警告の可視化・段階的な警告潰し用）。
 > ユニットテスト: `LintOffReduction`。
 
-**残り**: WIDTH系警告（混合幅演算由来、実デザインで約1,900件）を潰し、
-最終的に `--sv-strict-lint` をデフォルト化する。
+**残り**: WIDTH系警告（混合幅演算由来、実デザインで約1,900件）を潰し、最終的に `--sv-strict-lint` をデフォルト化する。
 
 **難易度**: 中（幅推論の拡充が必要）
 
@@ -246,10 +230,7 @@ importのフラット化は**テキストベースのpreprocessor**（`src/prepr
 > 5行テキストパターン検出パスと冗長三項除去パスを削除。
 > ユニットテスト: `StructuralTernaryChain` / `MultiStatementBranchStaysIfElse`。
 
-**現状（Phase 1〜3完了・項目11実質完了）**: 式のツリー化・テンポラリの
-構造的インライン展開・三項演算子の構造的判定・ラッチ推論のMIR解析化まで完了。
-残るテキスト変換は else-if正規化（`end else begin` + `if` の行結合）のみで、
-これは純粋な整形処理（意味に影響しない）のため現状のままとする。
+**現状（Phase 1〜3完了・項目11実質完了）**: 式のツリー化・テンポラリの構造的インライン展開・三項演算子の構造的判定・ラッチ推論のMIR解析化まで完了。残るテキスト変換は else-if正規化（`end else begin` + `if` の行結合）のみで、これは純粋な整形処理（意味に影響しない）のため現状のままとする。
 
 ---
 
@@ -257,44 +238,10 @@ importのフラット化は**テキストベースのpreprocessor**（`src/prepr
 
 svバックエンド以外で、同日の調査により以下の重大バグが確認されている（詳細な再現コードは調査記録参照）。これらは別途対応が必要:
 
-1. ~~**関数内からのグローバル変数への単純代入が無視される**~~ → **✅ 2026-07-04 修正済み**。
-   根本原因は2つ: (a) `DeadCodeElimination::remove_dead_stores` がグローバル/static変数への
-   ストアを「関数内で読まれていない」という理由で削除、(b) SCCPがグローバルの定数値を
-   関数呼び出しをまたいで伝播。DCEでグローバル/staticを常に使用扱いにし、
-   SCCPの `can_bind_constant` でグローバル/staticの束縛を禁止した。
-   さらに2026-07-05、JSバックエンドがグローバル変数を関数ごとのローカル `let` として
-   複製していた欠陥も修正（モジュールレベルの `__global_<name>` 宣言に一本化）。
-   回帰テスト: `tests/common/basic/global_assign`
-2. ~~**演算結果の格納値が型幅に切り詰められず、表示値と比較値が食い違う**~~ → **✅ 2026-07-05 修正済み**。
-   SCCP/ConstantFoldingの定数畳み込みがint64のまま値を伝播していた。
-   共有ヘルパー `const_eval.hpp` を新設し、(a) 畳み込み結果を結果型
-   （`BinaryOpData.result_type`、無ければ幅の広い方へ昇格）の幅・符号に正規化、
-   (b) 代入時に代入先ローカルの型幅へ正規化（狭い型への代入はラップ）するようにした。
-   回帰テスト: `tests/common/basic/int_width_wrap`
-3. ~~**unsignedセマンティクスの崩壊**~~ → **✅ 2026-07-05 修正済み**。
-   (a) 定数畳み込み: 符号なし型の比較・除算・剰余・右シフトを符号なしで評価、
-   (b) LLVM codegen: `convertBinaryOp` にオペランドHIR型を渡し
-   udiv/urem/lshr/icmp u{lt,le,gt,ge} を選択、拡張もzext/sextを符号で切り替え、
-   (c) キャストの拡張をソース型の符号で決定（`utiny 255 as int` が -1 になる欠陥を修正）、
-   (d) JS codegen: 符号なし右シフトを `>>>`、uintの加減乗・左シフトを `>>> 0` で符号なし化。
-   既存テスト `ulong_large_hex` の期待値はバグを焼き込んでいたため修正
-   （`ulong >> 63` は論理シフトで 1 が正しい）。
-   回帰テスト: `tests/common/basic/unsigned_semantics`
-4. ~~**文字列補間内の式 `{a + b}` 等がゴミ値を出力**~~ → **✅ 2026-07-05 修正済み**。
-   MIR loweringの補間プレースホルダ解析が変数名パターン専用で、
-   演算子を含む式は未初期化テンポラリのまま渡されていた。
-   演算子を含む内容は本物のフロントエンド（Lexer→Parser→HirLowering）で
-   式としてパースし、通常の式loweringに掛けるフォールバックを追加した。
-   回帰テスト: `tests/common/basic/interp_expression`
-5. ~~**配列要素・構造体フィールドへの `++`/`--` が無効**~~ → **✅ 2026-07-04 修正済み**。
-   `lower_unary` のinc/decが `HirVarRef` 以外を黙って `const 0` に置換していた。
-   Index/Member/Deref（多次元・ポインタ自動deref含む）のprojection付きplaceを構築して
-   read-modify-write を生成するようにした（後置の旧値返却も対応）。
-   回帰テスト: `tests/common/basic/incdec_place`
-6. ~~**整数ゼロ除算がトラップせずゴミ値**~~ → **✅ 2026-07-05 修正済み**。
-   LLVM codegenの整数div/remにゼロチェック分岐を挿入し、除数0で
-   `integer division by zero` を出力して exit(1) するようにした
-   （非ゼロ定数除数はチェックを省略）。JSバックエンドも同名エラーをthrow。
-   WASMランタイムに `exit`（proc_exit委譲）を追加。
-   回帰テスト: `tests/common/errors/div_by_zero`
+1. ~~**関数内からのグローバル変数への単純代入が無視される**~~ → **✅ 2026-07-04 修正済み**。根本原因は2つ: (a) `DeadCodeElimination::remove_dead_stores` がグローバル/static変数へのストアを「関数内で読まれていない」という理由で削除、(b) SCCPがグローバルの定数値を関数呼び出しをまたいで伝播。DCEでグローバル/staticを常に使用扱いにし、SCCPの `can_bind_constant` でグローバル/staticの束縛を禁止した。さらに2026-07-05、JSバックエンドがグローバル変数を関数ごとのローカル `let` として複製していた欠陥も修正（モジュールレベルの `__global_<name>` 宣言に一本化）。回帰テスト: `tests/common/basic/global_assign`
+2. ~~**演算結果の格納値が型幅に切り詰められず、表示値と比較値が食い違う**~~ → **✅ 2026-07-05 修正済み**。SCCP/ConstantFoldingの定数畳み込みがint64のまま値を伝播していた。共有ヘルパー `const_eval.hpp` を新設し、(a) 畳み込み結果を結果型（`BinaryOpData.result_type`、無ければ幅の広い方へ昇格）の幅・符号に正規化、(b) 代入時に代入先ローカルの型幅へ正規化（狭い型への代入はラップ）するようにした。回帰テスト: `tests/common/basic/int_width_wrap`
+3. ~~**unsignedセマンティクスの崩壊**~~ → **✅ 2026-07-05 修正済み**。(a) 定数畳み込み: 符号なし型の比較・除算・剰余・右シフトを符号なしで評価、(b) LLVM codegen: `convertBinaryOp` にオペランドHIR型を渡しudiv/urem/lshr/icmp u{lt,le,gt,ge} を選択、拡張もzext/sextを符号で切り替え、(c) キャストの拡張をソース型の符号で決定（`utiny 255 as int` が -1 になる欠陥を修正）、(d) JS codegen: 符号なし右シフトを `>>>`、uintの加減乗・左シフトを `>>> 0` で符号なし化。既存テスト `ulong_large_hex` の期待値はバグを焼き込んでいたため修正（`ulong >> 63` は論理シフトで 1 が正しい）。回帰テスト: `tests/common/basic/unsigned_semantics`
+4. ~~**文字列補間内の式 `{a + b}` 等がゴミ値を出力**~~ → **✅ 2026-07-05 修正済み**。MIR loweringの補間プレースホルダ解析が変数名パターン専用で、演算子を含む式は未初期化テンポラリのまま渡されていた。演算子を含む内容は本物のフロントエンド（Lexer→Parser→HirLowering）で式としてパースし、通常の式loweringに掛けるフォールバックを追加した。回帰テスト: `tests/common/basic/interp_expression`
+5. ~~**配列要素・構造体フィールドへの `++`/`--` が無効**~~ → **✅ 2026-07-04 修正済み**。`lower_unary` のinc/decが `HirVarRef` 以外を黙って `const 0` に置換していた。Index/Member/Deref（多次元・ポインタ自動deref含む）のprojection付きplaceを構築してread-modify-write を生成するようにした（後置の旧値返却も対応）。回帰テスト: `tests/common/basic/incdec_place`
+6. ~~**整数ゼロ除算がトラップせずゴミ値**~~ → **✅ 2026-07-05 修正済み**。LLVM codegenの整数div/remにゼロチェック分岐を挿入し、除数0で`integer division by zero` を出力して exit(1) するようにした（非ゼロ定数除数はチェックを省略）。JSバックエンドも同名エラーをthrow。WASMランタイムに `exit`（proc_exit委譲）を追加。回帰テスト: `tests/common/errors/div_by_zero`
 7. 構造体は関数へ参照渡し・配列は値渡しという**引数渡し規約の不整合**（設計判断の明文化が必要）

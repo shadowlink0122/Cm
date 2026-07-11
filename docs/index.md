@@ -160,5 +160,4 @@ ctest --test-dir build
 
 © 2025-2026 Cm Language Project
 
----
-[English Version here](en/index.html)
+--- [English Version here](en/index.html)

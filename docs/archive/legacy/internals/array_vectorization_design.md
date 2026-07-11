@@ -224,7 +224,7 @@ llvm::Type* convertType(const hir::TypePtr& type) {
 1. **基本2D配列**: `int[300][300]` matmul
 2. **3D配列**: `int[10][20][30]` アクセス
 3. **構造体配列**: `Point[100]` フィールドアクセス
-4. **構造体内配列**: `struct { int[10] arr; }` 
+4. **構造体内配列**: `struct { int[10] arr; }`
 5. **ネスト構造体**: `struct { Point[10] points; }`
 
 ### パフォーマンス目標

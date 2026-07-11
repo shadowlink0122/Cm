@@ -86,9 +86,7 @@ void bitops() {
 //! test: cycles=1 -> sum=6
 ```
 
-`cycles=N` でNクロック進めてから出力を検証します。
-クロック（`clk`）は自動生成（10ns周期）、リセット（`rst`/`rst_n`）があれば
-リセットシーケンスも自動挿入されます。
+`cycles=N` でNクロック進めてから出力を検証します。クロック（`clk`）は自動生成（10ns周期）、リセット（`rst`/`rst_n`）があればリセットシーケンスも自動挿入されます。
 
 > **注意:** 複数の `//! test:` ケースは同一シミュレーション内で連続実行されます。
 > レジスタ状態はケース間でリセットされません。
@@ -114,8 +112,7 @@ make test
 2. **リント**: `verilator --lint-only`（fallback: `iverilog -g2012`）が通ること — `.expect` に `COMPILE_OK`
 3. **シミュレーション**: `iverilog + vvp` を実行し `TEST k: name=val` 行を `.expect` と比較 — `.expect` に `SIM_OK` + `TEST` 行
 
-エラーテストは `foo.cm` + `foo.error`（期待するエラーの説明）を置くと、
-コンパイルが**失敗すること**を検証します。
+エラーテストは `foo.cm` + `foo.error`（期待するエラーの説明）を置くと、コンパイルが**失敗すること**を検証します。
 
 ### x86_64デバッグ（macOS開発者向け）
 
@@ -131,8 +128,7 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 
 ## アサーション（std::debug::assert）
 
-`std::debug::assert` は SVターゲットでは**即時アサーション**として出力されます。
-シミュレーションで検証され、合成ツールでは無視されます:
+`std::debug::assert` は SVターゲットでは**即時アサーション**として出力されます。シミュレーションで検証され、合成ツールでは無視されます:
 
 ```cm
 import std::debug::assert;
@@ -150,19 +146,14 @@ always @(posedge clk) begin
 end
 ```
 
-- 実行系バックエンド（JIT/native/WASM/JS）では標準ライブラリの実装が実行され、
-  違反時に `assertion failed: <msg>` を出力して `exit(1)` します
-- SVのみ、ハードウェアに `exit` が存在しないため即時アサーションへ変換されます
-  （標準ライブラリの関数定義自体はSV出力されません）
+- 実行系バックエンド（JIT/native/WASM/JS）では標準ライブラリの実装が実行され、違反時に `assertion failed: <msg>` を出力して `exit(1)` します
+- SVのみ、ハードウェアに `exit` が存在しないため即時アサーションへ変換されます（標準ライブラリの関数定義自体はSV出力されません）
 
 回帰テスト: `tests/sv/simulation/assert_immediate`
 
 ## #[test] テスト関数（v0.16.0）
 
-`//! test:` の単発ベクタでは書けない**系列刺激**を、Cmの関数として記述できます。
-`#[test]` を付けた**直後の関数**がテスト対象になります（`#ifdef`/`#end` で
-囲う必要はありません）。SVでは各テスト関数がテストベンチのinitialブロックに
-宣言順で変換されます:
+`//! test:` の単発ベクタでは書けない**系列刺激**を、Cmの関数として記述できます。`#[test]` を付けた**直後の関数**がテスト対象になります（`#ifdef`/`#end` で囲う必要はありません）。SVでは各テスト関数がテストベンチのinitialブロックに宣言順で変換されます:
 
 ```cm
 import std::debug::assert;
@@ -180,25 +171,18 @@ void latch_sequence() {
 }
 ```
 
-`#[test]` 関数は**テストモードでのみコンパイル**されます（Rustの
-`#[cfg(test)]` + `#[test]` に相当）。通常の `cm compile` / `cm run` では
-型チェック前に除去されるため、合成用ビルドへの影響はゼロです。
+`#[test]` 関数は**テストモードでのみコンパイル**されます（Rustの`#[cfg(test)]` + `#[test]` に相当）。通常の `cm compile` / `cm run` では型チェック前に除去されるため、合成用ビルドへの影響はゼロです。
 
-テストの実行は `cm test` が `//! platform:` ディレクティブを見て
-バックエンドを自動選択します:
+テストの実行は `cm test` が `//! platform:` ディレクティブを見てバックエンドを自動選択します:
 
 ```bash
 cm test design.cm     # //! platform: sv → SV+TB生成 + iverilog/vvp実行
 cm test logic.cm      # platform指定なし → 各#[test]関数をJITで直接実行
 ```
 
-- SVプラットフォーム: 全 `#[test]` 関数を**宣言順に同一initialブロックで
-  逐次実行**します（DUT状態を共有）
-- native/JIT: 関数ごとに**独立実行**（状態隔離）し、完了ごとに
-  `[PASS] <関数名>` を表示します。`step()` はクロック概念がないため使えません
-  （`//! platform: sv` を指定してください）
-- 既存フローに組み込む場合は `cm compile --target=sv --test ...` で
-  `#[test]` 関数を含めてSV+TBだけ生成できます
+- SVプラットフォーム: 全 `#[test]` 関数を**宣言順に同一initialブロックで逐次実行**します（DUT状態を共有）
+- native/JIT: 関数ごとに**独立実行**（状態隔離）し、完了ごとに`[PASS] <関数名>` を表示します。`step()` はクロック概念がないため使えません（`//! platform: sv` を指定してください）
+- 既存フローに組み込む場合は `cm compile --target=sv --test ...` で`#[test]` 関数を含めてSV+TBだけ生成できます
 
 生成されるTB（抜粋）:
 
@@ -215,22 +199,18 @@ end
 ```
 
 - **`step(n)`**: nクロック待機（`#[test]` 関数・SVプラットフォーム専用の組み込み）
-- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`
-  （シミュレーションが非0終了するためテストランナーが失敗を検出）
+- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`（シミュレーションが非0終了するためテストランナーが失敗を検出）
 - **`println("...")`**: `$display`（文字列リテラルのみ）
 - 代入はブロッキング代入としてDUT入力を駆動します
 - クロックポートが `clk` 以外の名前（`pixel_clk` 等）でも、プロセスのクロックに使われている入力ポートを自動検出します
 - `#[test]` 関数がある場合、`//! test:` ベクタより優先されます
 - `#[test]` 関数は引数なし・戻り値 `void` である必要があります
-- テストランナーでは `.expect` に `SIM_OK`（完走期待）または
-  `SIM_FAIL_EXPECTED`（assert不成立を期待する失敗系テスト）を書きます
+- テストランナーでは `.expect` に `SIM_OK`（完走期待）または`SIM_FAIL_EXPECTED`（assert不成立を期待する失敗系テスト）を書きます
 
 
 ### 実回路のテストパターン（#ifdef TEST）
 
-実機ではOSC/PLLから供給されるクロックを、テスト時だけ外部注入に
-切り替えるには `#ifdef` を組み合わせます。テストモード
-（`cm test` / `--test`）では定義 `TEST` が自動で追加されます:
+実機ではOSC/PLLから供給されるクロックを、テスト時だけ外部注入に切り替えるには `#ifdef` を組み合わせます。テストモード（`cm test` / `--test`）では定義 `TEST` が自動で追加されます:
 
 ```cm
 #ifdef TEST

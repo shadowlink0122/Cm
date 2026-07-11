@@ -7,8 +7,7 @@ parent: Tutorials
 
 # Types - Scope and Validity
 
-**Difficulty:** 🔴 Advanced
-**Time:** 10 minutes
+**Difficulty:** 🔴 Advanced **Time:** 10 minutes
 
 ## Current Implementation Status
 

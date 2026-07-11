@@ -19,8 +19,7 @@ title: Development
 | 4. VSCode拡張 | 新構文・キーワード・属性・組み込み関数のハイライト反映 | `vscode-extension/syntaxes/` |
 | 5. リリースノート | 変更履歴への追記 | `docs/releases/v<バージョン>.md` |
 
-一部ステップが該当しない場合（純リファクタリング等）は、理由をコミットメッセージに明記します。
-実装完了した設計文書は `docs/archive/v<対応バージョン>/` へ、破棄した提案は `docs/archive/unimplemented/` へ移動します。
+一部ステップが該当しない場合（純リファクタリング等）は、理由をコミットメッセージに明記します。実装完了した設計文書は `docs/archive/v<対応バージョン>/` へ、破棄した提案は `docs/archive/unimplemented/` へ移動します。
 
 ## 必要環境
 

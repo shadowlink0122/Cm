@@ -1,8 +1,6 @@
 # SV Backend: Missing Features and Implementation Proposals
 
-Created: 2026-07-04
-Target version: v0.15.1
-Language: English ([日本語](sv_backend_missing_features.html))
+Created: 2026-07-04 Target version: v0.15.1 Language: English ([日本語](sv_backend_missing_features.html))
 
 This document summarizes the features missing from the sv backend, together with implementation proposals, based on real-world use in CmCPU (CPU development targeting the Tang Console 138K) and the investigation on 2026-07-04. Items are ordered by "how much CPU development needs them".
 

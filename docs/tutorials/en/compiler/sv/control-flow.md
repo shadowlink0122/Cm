@@ -96,10 +96,7 @@ How it works internally:
 
 ### break (disable idiom)
 
-Loop exits are emitted as `disable` on a named block (Verilog-1995
-compatible). The SV-2005 `break` keyword is not used because older
-Icarus Verilog (v11 and earlier) and some synthesis tools do not
-support it:
+Loop exits are emitted as `disable` on a named block (Verilog-1995 compatible). The SV-2005 `break` keyword is not used because older Icarus Verilog (v11 and earlier) and some synthesis tools do not support it:
 
 ```systemverilog
 begin : __loop0
@@ -115,13 +112,7 @@ end
 
 ### Static unrolling of constant loops (generate equivalent)
 
-Loops whose initial value, bound, and step are all constants are
-statically unrolled at compile time for the SV target, so no `while`
-remains in the generated SV (synthesis tools cannot unroll dynamic
-while loops). Limits: 1024 iterations / 50,000 statements after
-unrolling. `while (true) + break` and dynamically-bounded loops are
-still emitted as while + disable.
-Regression test: `tests/sv/control/const_loop_unroll`.
+Loops whose initial value, bound, and step are all constants are statically unrolled at compile time for the SV target, so no `while` remains in the generated SV (synthesis tools cannot unroll dynamic while loops). Limits: 1024 iterations / 50,000 statements after unrolling. `while (true) + break` and dynamically-bounded loops are still emitted as while + disable. Regression test: `tests/sv/control/const_loop_unroll`.
 
 ### Nested Loops
 
@@ -150,9 +141,7 @@ Nested loops are also reconstructed correctly (an inner loop is identified by it
 
 ### Precedence Guarantee
 
-The structure of expressions in Cm source (parentheses, evaluation order) is preserved in the generated SV.
-In SV, `==` binds tighter than `&`, so losing parentheses would change the meaning —
-the compiler always emits the necessary parentheses:
+The structure of expressions in Cm source (parentheses, evaluation order) is preserved in the generated SV. In SV, `==` binds tighter than `&`, so losing parentheses would change the meaning —the compiler always emits the necessary parentheses:
 
 ```cm
 if ((r_qm & 256) == 0) { ... }
@@ -161,8 +150,7 @@ if ((r_qm & 256) == 0) { ... }
 
 ## Don't-care bit matching (v0.16.0)
 
-`?` in a binary literal means "don't compare this bit" — ideal for
-instruction decoders:
+`?` in a binary literal means "don't compare this bit" — ideal for instruction decoders:
 
 ```cm
 match (op) {

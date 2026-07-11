@@ -1,7 +1,6 @@
 # 設計ドキュメント
 
-Cm言語コンパイラの設計文書の一覧。実装が完了した設計文書は
-[アーカイブ](../archive/)の対応バージョンフォルダへ移動される。
+Cm言語コンパイラの設計文書の一覧。実装が完了した設計文書は[アーカイブ](../archive/)の対応バージョンフォルダへ移動される。
 
 ## 言語仕様（living documents）
 
@@ -29,7 +28,4 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 
 ## アーカイブ
 
-実装済み: [archive/v0.15.1/](../archive/v0.15.1/)（SVバックエンド式ツリー化・
-interface動的ディスパッチ・最適化オプション等）、
-[archive/v0.15.0/](../archive/v0.15.0/)（SVバックエンド初期設計）ほか各バージョン。
-未実装・破棄提案: [archive/unimplemented/](../archive/unimplemented/)
+実装済み: [archive/v0.15.1/](../archive/v0.15.1/)（SVバックエンド式ツリー化・interface動的ディスパッチ・最適化オプション等）、[archive/v0.15.0/](../archive/v0.15.0/)（SVバックエンド初期設計）ほか各バージョン。未実装・破棄提案: [archive/unimplemented/](../archive/unimplemented/)

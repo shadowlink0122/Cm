@@ -12,8 +12,7 @@ parent: Tutorials
 
 ## Overview
 
-In Cm, you can overload operators for structs using the `operator` keyword.
-Operators are defined directly inside `impl T { ... }` blocks.
+In Cm, you can overload operators for structs using the `operator` keyword. Operators are defined directly inside `impl T { ... }` blocks.
 
 ## Supported Operators
 

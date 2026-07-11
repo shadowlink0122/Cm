@@ -205,8 +205,7 @@ endmodule
 
 ### 4.2 `++`/`--` の展開
 
-`self.count++` はMIR loweringで `self.count = self.count + 1` に展開される（`expr_ops.cpp` L710-763）。
-SVバックエンドはこのMIRを入力とするため、追加の変換は不要:
+`self.count++` はMIR loweringで `self.count = self.count + 1` に展開される（`expr_ops.cpp` L710-763）。SVバックエンドはこのMIRを入力とするため、追加の変換は不要:
 
 ```
 Cm:   self.count++;
@@ -572,8 +571,7 @@ output/
 
 ### 8.4 ファイルリスト生成
 
-合成ツールやVerilatorは複数ファイルの依存順を指定する必要がある。
-SV バックエンドは **`filelist.f`** を自動生成する。
+合成ツールやVerilatorは複数ファイルの依存順を指定する必要がある。SV バックエンドは **`filelist.f`** を自動生成する。
 
 ```
 // filelist.f (依存順 = リーフモジュールから)
@@ -642,8 +640,7 @@ error[SV001]: Circular module dependency detected
 
 ### 9.1 検証の考え方
 
-生成されたSVが**文字列として期待通り**であることと、**実際にビルドが通る（合成可能な有効なSV）** であることは別問題。
-CmのSVバックエンドテストは以下の3段階で検証する:
+生成されたSVが**文字列として期待通り**であることと、**実際にビルドが通る（合成可能な有効なSV）** であることは別問題。CmのSVバックエンドテストは以下の3段階で検証する:
 
 ```
 Stage 1: Cm → SV 生成         ← コンパイラが正しくSVを出力するか
@@ -735,8 +732,7 @@ sv)
 COMPILE_OK
 ```
 
-SVバックエンドのテストは **ビルド成功(`COMPILE_OK`)を期待出力**とする。
-これはUEFI/baremetalテストと同じパターン。
+SVバックエンドのテストは **ビルド成功(`COMPILE_OK`)を期待出力**とする。これはUEFI/baremetalテストと同じパターン。
 
 特定のSVコード内容を検証したい場合は `.expect.sv` ファイルで別途diff比較も可能。
 

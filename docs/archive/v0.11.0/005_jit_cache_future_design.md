@@ -130,5 +130,4 @@ void JITEngine::applyProfileGuidedOptimization(const JITProfile& profile) {
 
 ## ステータス
 
-**現在**: 検討段階メモ（v0.11.0では未実装）
-**優先度**: 中（パフォーマンス改善後に着手）
+**現在**: 検討段階メモ（v0.11.0では未実装）**優先度**: 中（パフォーマンス改善後に着手）

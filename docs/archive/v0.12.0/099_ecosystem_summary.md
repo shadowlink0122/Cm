@@ -1,6 +1,5 @@
 # Cm Language Ecosystem Summary
-**Date**: 2026-01-15
-**Version**: v0.12.0
+**Date**: 2026-01-15 **Version**: v0.12.0
 
 ## 🎯 完成した設計ドキュメント
 
@@ -44,8 +43,7 @@ version = "0.1.0"
 
 ## 🎨 Cmアイコンデザイン
 
-**Document**: [icons/cm-icon.svg](./icons/cm-icon.svg)
-**Variants**: [icons/cm-icon-variants.md](./icons/cm-icon-variants.md)
+**Document**: [icons/cm-icon.svg](./icons/cm-icon.svg) **Variants**: [icons/cm-icon-variants.md](./icons/cm-icon-variants.md)
 
 ### デザインコンセプト
 - **'C'文字**: C言語の系譜を表現

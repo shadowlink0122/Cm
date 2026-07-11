@@ -3,8 +3,7 @@
 # Cm言語コンパイラ - デフォルト最適化レベルO3修正レポート
 
 ## 概要
-日時: 2026-01-02
-実装者: Claude
+日時: 2026-01-02実装者: Claude
 
 ## 修正内容
 
@@ -61,8 +60,7 @@ Assertion failed: (cast<PointerType>(Ptr->getType()->getScalarType())
 ->isOpaqueOrPointeeTypeMatches(PointeeType))
 ```
 
-**原因**: LLVM 14+のOpaque Pointer仕様への未完全な対応
-**一時的な対処**: LLVMモジュール検証を無効化（`src/codegen/llvm/native/codegen.hpp`）
+**原因**: LLVM 14+のOpaque Pointer仕様への未完全な対応**一時的な対処**: LLVMモジュール検証を無効化（`src/codegen/llvm/native/codegen.hpp`）
 
 ### 必要な今後の修正
 1. MIRからLLVM IRへの変換で正しいポインタ型を生成

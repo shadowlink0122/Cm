@@ -1,7 +1,6 @@
 # Cm言語 STL実装ロードマップ
 
-作成日: 2026-01-10
-対象: v0.11.0
+作成日: 2026-01-10対象: v0.11.0
 
 ## エグゼクティブサマリー
 
@@ -1739,10 +1738,7 @@ Dynamic array with automatic memory management.
 
 #### Example:
 ```cm
-Vec<int> numbers;
-numbers.push(10);
-numbers.push(20);
-int sum = numbers.get(0) + numbers.get(1);
+Vec<int> numbers; numbers.push(10); numbers.push(20); int sum = numbers.get(0) + numbers.get(1);
 ```
 
 #### Methods:
@@ -1760,10 +1756,7 @@ Hash table implementation with chaining.
 
 #### Example:
 ```cm
-HashMap<string, int> ages;
-ages.put("Alice", 30);
-ages.put("Bob", 25);
-int* alice_age = ages.get("Alice");
+HashMap<string, int> ages; ages.put("Alice", 30); ages.put("Bob", 25); int* alice_age = ages.get("Alice");
 ```
 
 #### Methods:
@@ -1798,9 +1791,7 @@ Double-ended queue with O(1) operations at both ends.
 Smart pointer with unique ownership.
 
 ```cm
-UniquePtr<MyClass> ptr = UniquePtr<MyClass>::make(MyClass());
-ptr->method();
-// Automatically deleted when ptr goes out of scope
+UniquePtr<MyClass> ptr = UniquePtr<MyClass>::make(MyClass()); ptr->method(); // Automatically deleted when ptr goes out of scope
 ```
 
 ## Error Handling

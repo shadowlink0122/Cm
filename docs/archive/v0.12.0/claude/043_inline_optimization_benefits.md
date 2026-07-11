@@ -1,8 +1,6 @@
 # インライン関数最適化が効果的な場面
 
-作成日: 2026-01-11
-対象バージョン: v0.11.0
-ステータス: 実践ガイド
+作成日: 2026-01-11対象バージョン: v0.11.0ステータス: 実践ガイド
 
 ## エグゼクティブサマリー
 
@@ -441,6 +439,4 @@ static void BM_WithInline(benchmark::State& state) {
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 実践ガイド
-**関連文書:** 040_inline_expansion_design.md
+**作成者:** Claude Code **ステータス:** 実践ガイド**関連文書:** 040_inline_expansion_design.md

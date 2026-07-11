@@ -1,6 +1,5 @@
 # Antigravity Extension for Cm Language
-**Date**: 2026-01-15
-**Version**: v0.12.0
+**Date**: 2026-01-15 **Version**: v0.12.0
 
 ## 概要
 

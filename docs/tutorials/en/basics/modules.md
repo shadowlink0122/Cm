@@ -183,8 +183,7 @@ int main() {
 
 ## Circular Dependencies
 
-Cm detects circular dependencies (A imports B, B imports A) and reports an error.
-Refactor common code into a third module to resolve this.
+Cm detects circular dependencies (A imports B, B imports A) and reports an error. Refactor common code into a third module to resolve this.
 
 ---
 

@@ -11,9 +11,7 @@ nav_order: 5
 
 Tutorials for using the Cm compiler and its backends. Estimated time: 3 hours.
 
-Pages are organized by backend:
-`common/` (shared tools), `native/` (LLVM native / UEFI), `wasm/`, `js/`,
-and `sv/` (SystemVerilog / FPGA).
+Pages are organized by backend: `common/` (shared tools), `native/` (LLVM native / UEFI), `wasm/`, `js/`, and `sv/` (SystemVerilog / FPGA).
 
 ---
 

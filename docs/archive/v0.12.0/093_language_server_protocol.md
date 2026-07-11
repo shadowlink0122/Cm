@@ -1,6 +1,5 @@
 # Cm Language Server Protocol (LSP) Implementation
-**Date**: 2026-01-14
-**Version**: v0.12.0
+**Date**: 2026-01-14 **Version**: v0.12.0
 
 ## 概要
 

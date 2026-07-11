@@ -4,8 +4,7 @@
 
 ## 1. 配列リテラル初期値（小規模向け）
 
-配列の初期値は `initial` ブロックとして出力されます。FPGA合成ツールは
-ROM/RAMの初期内容として扱い、シミュレーションでは時刻0に初期化されます:
+配列の初期値は `initial` ブロックとして出力されます。FPGA合成ツールはROM/RAMの初期内容として扱い、シミュレーションでは時刻0に初期化されます:
 
 ```cm
 utiny[4] rom = [10, 20, 30, 40];
@@ -25,8 +24,7 @@ end
 
 ## 2. `#[sv::memfile]` 属性（大規模向け）
 
-hexファイルからの読み込み（`$readmemh`）を出力します。
-巨大なフォントROM等をcase文で記述する必要がなくなります:
+hexファイルからの読み込み（`$readmemh`）を出力します。巨大なフォントROM等をcase文で記述する必要がなくなります:
 
 ```cm
 #[sv::bram]
@@ -44,8 +42,7 @@ initial $readmemh("font.hex", font_rom);
 
 ## 3. `--emit-memfile` オプション
 
-配列リテラル初期値を `.hex` ファイルとしてコンパイル時に書き出します
-（出力先は生成SVと同じディレクトリ）:
+配列リテラル初期値を `.hex` ファイルとしてコンパイル時に書き出します（出力先は生成SVと同じディレクトリ）:
 
 ```bash
 cm compile --target=sv rom.cm -o rom.sv --emit-memfile
@@ -65,8 +62,7 @@ ff
 00
 ```
 
-Cmソースで初期値を管理しつつ、生成SVは `$readmemh` 参照になるため、
-大規模ROMでもSVファイルが肥大化しません。
+Cmソースで初期値を管理しつつ、生成SVは `$readmemh` 参照になるため、大規模ROMでもSVファイルが肥大化しません。
 
 回帰テスト: `tests/sv/memory/array_init`、`tests/sv/memory/readmemh`
 

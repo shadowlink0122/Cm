@@ -359,7 +359,7 @@ println("Value: {}", x);
 
 1. **Parser**: Creates AST with string literal `"Value: {}"`
 
-2. **HIR**: 
+2. **HIR**:
    - Detects interpolation in string
    - Splits into parts: `["Value: ", x]`
    - Generates: `"Value: " + toString(x)`

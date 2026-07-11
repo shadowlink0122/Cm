@@ -5,8 +5,7 @@ parent: Compiler
 
 # Compiling Cm to JavaScript
 
-The Cm compiler provides a backend that converts Cm source code to JavaScript.
-Generated JS code can be executed with Node.js or in browsers.
+The Cm compiler provides a backend that converts Cm source code to JavaScript. Generated JS code can be executed with Node.js or in browsers.
 
 ## Basic Usage
 

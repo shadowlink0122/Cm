@@ -1,7 +1,6 @@
 # v0.16.0 SVバックエンド拡充ロードマップ
 
-作成日: 2026-07-06
-対象: v0.16.0（SVバックエンドの機能充実をテーマとするマイナーバージョン）
+作成日: 2026-07-06対象: v0.16.0（SVバックエンドの機能充実をテーマとするマイナーバージョン）
 
 本文書は3つの調査結果をまとめたものである。
 
@@ -15,14 +14,7 @@
 
 ### 1.1 対応済み（v0.15.1時点の到達点）
 
-module/ポート宣言（input/output/inout・配列ポート）、`always @(posedge/negedge)`・
-組み合わせ回路（`@(*)`、MIR解析によるラッチ推論）、非同期リセット（複数エッジ感度）、
-if/case（switch）、三項演算子、whileループ再構成（disable方式）+定数ループ静的展開
-（generate相当）、enum typedef（明示タグ幅）、localparam（const）、配列と
-`#[sv::bram/lutram]`、`$readmemh`/initialブロック、連接`{a,b}`/複製`{N{a}}`、
-即時アサーション、サイズキャスト`N'()`、符号付き演算（`$signed`/`>>>`）、
-モジュール階層（`//! sv: hierarchy` Stage 2、named port connection）、
-テストベンチ自動生成、import/exportフラット化、多重クロックドメイン。
+module/ポート宣言（input/output/inout・配列ポート）、`always @(posedge/negedge)`・組み合わせ回路（`@(*)`、MIR解析によるラッチ推論）、非同期リセット（複数エッジ感度）、if/case（switch）、三項演算子、whileループ再構成（disable方式）+定数ループ静的展開（generate相当）、enum typedef（明示タグ幅）、localparam（const）、配列と`#[sv::bram/lutram]`、`$readmemh`/initialブロック、連接`{a,b}`/複製`{N{a}}`、即時アサーション、サイズキャスト`N'()`、符号付き演算（`$signed`/`>>>`）、モジュール階層（`//! sv: hierarchy` Stage 2、named port connection）、テストベンチ自動生成、import/exportフラット化、多重クロックドメイン。
 
 ### 1.2 未対応構文・機能（優先度分類）
 
@@ -50,15 +42,11 @@ if/case（switch）、三項演算子、whileループ再構成（disable方式�
 
 #### C. 対象外と明記するもの（合成外・ニッチ）
 
-`force/release`、`specify`ブロック、UDP、信号強度、`fork/join`、イベント`->`、
-`real`型ポート、DPI-C、SV interface/modport（Cmのinterfaceとは別物。階層+構造体で代替）、
-遅延`#10`（テストベンチ生成内でのみ使用）。これらは「サポートしない」と
-ドキュメントで宣言し、検出時は明示エラーにする。
+`force/release`、`specify`ブロック、UDP、信号強度、`fork/join`、イベント`->`、`real`型ポート、DPI-C、SV interface/modport（Cmのinterfaceとは別物。階層+構造体で代替）、遅延`#10`（テストベンチ生成内でのみ使用）。これらは「サポートしない」とドキュメントで宣言し、検出時は明示エラーにする。
 
 ### 1.3 ベンダープリミティブ（PLL等）
 
-`extern struct` によるインスタンス化で原理的には可能だが、パラメータ渡し（A1/A2）が
-ないため実用に達していない。A1完了後に rPLL/OSC 等の実例をチュートリアル化する。
+`extern struct` によるインスタンス化で原理的には可能だが、パラメータ渡し（A1/A2）がないため実用に達していない。A1完了後に rPLL/OSC 等の実例をチュートリアル化する。
 
 ---
 
@@ -66,12 +54,8 @@ if/case（switch）、三項演算子、whileループ再構成（disable方式�
 
 ### 2.1 現状の実態（CmCPUでの運用）
 
-- **.cst（物理制約）**: `IO_LOC "led_ready" U12;` + `IO_PORT "led_ready" IO_TYPE=LVCMOS33 DRIVE=8;`
-  の羅列。**エントリはCmのポート宣言と1:1対応**しており、ポート名変更のたびに
-  手動同期が必要（現に信号名の不整合バグの温床になっている）
-- **.tcl（プロジェクトスクリプト）**: デバイス型番・ソースファイルパス・topモジュール名・
-  合成オプション（`use_ready_as_gpio` 等）・`run all`。**ファイルパスとtop名はcmの出力に
-  依存**しており、これも手動同期
+- **.cst（物理制約）**: `IO_LOC "led_ready" U12;` + `IO_PORT "led_ready" IO_TYPE=LVCMOS33 DRIVE=8;`の羅列。**エントリはCmのポート宣言と1:1対応**しており、ポート名変更のたびに手動同期が必要（現に信号名の不整合バグの温床になっている）
+- **.tcl（プロジェクトスクリプト）**: デバイス型番・ソースファイルパス・topモジュール名・合成オプション（`use_ready_as_gpio` 等）・`run all`。**ファイルパスとtop名はcmの出力に依存**しており、これも手動同期
 
 ### 2.2 設計案の比較
 
@@ -103,17 +87,11 @@ bool led_ready = false;
 - `cm compile --target=sv --emit-constraints` で `<top>.cst` と `<top>_build.tcl` を併産
   - .cst: `#[sv::pin]` 付きポートから `IO_LOC`/`IO_PORT` 行を生成
   - .tcl: device/optionディレクティブ + 生成SVパス + top名 + `add_file <top>.cst` + `run all`
-- **ピン割り当ては定数ではなく属性とする**（値として演算する需要はなく、
-  ポート宣言との物理的な同居が同期エラーを構造的に防ぐため）
-- ボード定義の再利用は「ボードファイル」で対応:
-  `//! sv: board: ./boards/tang_console_138k.cm` — ピン名→物理ピンの対応表を
-  constで持つCmファイルを参照し、`#[sv::pin(board::LED_READY)]` のように使う（第2段階）
-- タイミング制約（SDC）は本設計の枠外とし、v0.16では生成対象にしない
-  （クロック定義のみ `//! sv: clock: clk 50MHz` → SDC生成を検討課題として残す）
+- **ピン割り当ては定数ではなく属性とする**（値として演算する需要はなく、ポート宣言との物理的な同居が同期エラーを構造的に防ぐため）
+- ボード定義の再利用は「ボードファイル」で対応: `//! sv: board: ./boards/tang_console_138k.cm` — ピン名→物理ピンの対応表をconstで持つCmファイルを参照し、`#[sv::pin(board::LED_READY)]` のように使う（第2段階）
+- タイミング制約（SDC）は本設計の枠外とし、v0.16では生成対象にしない（クロック定義のみ `//! sv: clock: clk 50MHz` → SDC生成を検討課題として残す）
 
-**個別ファイルとして残すべきもの**: ベンダツールの細かなオプション（電圧・温度グレード、
-配置制約等）を書き込んだ既存 .tcl/.cst 資産。生成機能はオプトインであり、
-`--emit-constraints` を使わない限り従来運用に影響しない。
+**個別ファイルとして残すべきもの**: ベンダツールの細かなオプション（電圧・温度グレード、配置制約等）を書き込んだ既存 .tcl/.cst 資産。生成機能はオプトインであり、`--emit-constraints` を使わない限り従来運用に影響しない。
 
 ---
 
@@ -129,5 +107,4 @@ bool led_ready = false;
 | 6 | B4: WIDTH警告解消 → strict-lintデフォルト化 | 継続的改善（v0.15.1で計測基盤済み） |
 | 7 | A5/A6/B5/B6 | 上記完了後、需要に応じて |
 
-セクションCの「サポートしない構文」は早期にドキュメント宣言+明示エラー化する
-（工数極小で期待値管理の効果が大きい）。
+セクションCの「サポートしない構文」は早期にドキュメント宣言+明示エラー化する（工数極小で期待値管理の効果が大きい）。

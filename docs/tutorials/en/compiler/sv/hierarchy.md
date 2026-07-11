@@ -1,8 +1,6 @@
 # SV Backend - Preserving Module Hierarchy
 
-By default `import` flattens all symbols into a single module. With the
-`//! sv: hierarchy` directive, relative imports are kept as separate
-module instances instead.
+By default `import` flattens all symbols into a single module. With the `//! sv: hierarchy` directive, relative imports are kept as separate module instances instead.
 
 ## Usage
 
@@ -49,29 +47,20 @@ async void update(posedge clk) {
 }
 ```
 
-The generated `.sv` contains both modules, with a named port connection
-instance in `top`.
+The generated `.sv` contains both modules, with a named port connection instance in `top`.
 
 ## Mechanics and constraints
 
-- An extern struct is auto-generated from the imported file's port
-  declarations (`#[input]`/`#[output]`/`#[inout]`); the instance type
-  name is the file stem (`alu.cm` → `alu`)
-- Imported files are compiled to SV individually and concatenated into
-  the top-level `.sv`. Nested hierarchy imports and circular-import
-  detection are supported
-- Signals connected to instance outputs do not get declaration
-  initializers (the instance drives them)
-- Only simple relative imports (`import ./name;`) participate;
-  selective imports (`::{...}`) and aliases are still flattened
+- An extern struct is auto-generated from the imported file's port declarations (`#[input]`/`#[output]`/`#[inout]`); the instance type name is the file stem (`alu.cm` → `alu`)
+- Imported files are compiled to SV individually and concatenated into the top-level `.sv`. Nested hierarchy imports and circular-import detection are supported
+- Signals connected to instance outputs do not get declaration initializers (the instance drives them)
+- Only simple relative imports (`import ./name;`) participate; selective imports (`::{...}`) and aliases are still flattened
 
 Regression test: `tests/sv/hierarchy/hier_top`
 
 ## Module parameters (#[sv::parameter], v0.16.0)
 
-A const marked `#[sv::parameter]` in the submodule becomes a
-`module #(parameter ...)`, and port/internal widths stay symbolic
-(`[WIDTH-1:0]`):
+A const marked `#[sv::parameter]` in the submodule becomes a `module #(parameter ...)`, and port/internal widths stay symbolic (`[WIDTH-1:0]`):
 
 ```cm
 // shifter.cm
@@ -82,8 +71,7 @@ A const marked `#[sv::parameter]` in the submodule becomes a
 #[output] bit[WIDTH] dout = 0;
 ```
 
-When instantiating through the hierarchy, override parameters as
-struct-literal fields (defaults apply when omitted):
+When instantiating through the hierarchy, override parameters as struct-literal fields (defaults apply when omitted):
 
 ```cm
 shifter sh0 = shifter { WIDTH: 16, clk: clk, din: data_in, dout: wide_out };

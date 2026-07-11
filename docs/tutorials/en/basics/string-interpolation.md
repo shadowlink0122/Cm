@@ -7,8 +7,7 @@ parent: Tutorials
 
 # Basics - String Interpolation
 
-Cm string literals support interpolation with `{}`.
-This page covers embedding variables, expressions, and function calls, plus format specifiers.
+Cm string literals support interpolation with `{}`. This page covers embedding variables, expressions, and function calls, plus format specifiers.
 
 ---
 
@@ -99,9 +98,7 @@ println("JSON: {{\"key\": {value}}}");
 
 ## Interpolation on the SV Backend
 
-On the SystemVerilog target, strings are treated as packed vector constants, so
-`println`-style interpolation is only usable in limited contexts such as simulation `initial` blocks.
-See the [SV Backend Semantic Guarantees](../compiler/sv/semantics.html) for details.
+On the SystemVerilog target, strings are treated as packed vector constants, so `println`-style interpolation is only usable in limited contexts such as simulation `initial` blocks. See the [SV Backend Semantic Guarantees](../compiler/sv/semantics.html) for details.
 
 ---
 

@@ -50,8 +50,7 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ## 列挙型 (FSM)
 
-Cmの `enum` はSVの `typedef enum logic` に変換されます。
-ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:
+Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:
 
 ```cm
 enum State { IDLE, RUN, DONE, ERROR }
@@ -106,8 +105,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 ### const文字列（推奨）
 
-const の string はパックドベクトル定数（`localparam`）になり、
-インデックスアクセスはパートセレクトに変換されます:
+const の string はパックドベクトル定数（`localparam`）になり、インデックスアクセスはパートセレクトに変換されます:
 
 ```cm
 export const string TITLE = "HELLO CM";
@@ -119,9 +117,7 @@ utiny ch = TITLE[i] as utiny;
 
 ### 制限
 
-- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。
-  3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください
-  （[v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html)で長さの型化を検討中）。
+- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください（[v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html)で長さの型化を検討中）。
 
 ## ビットスライス（v0.16.0）
 
