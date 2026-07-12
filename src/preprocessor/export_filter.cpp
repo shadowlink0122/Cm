@@ -116,6 +116,22 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                 while (p < line.size() && (std::isalnum(static_cast<unsigned char>(line[p])) ||
                                            line[p] == '_' || line[p] == '*'))
                     p++;
+                // ジェネリック型引数（Result<string, string> 等）をスキップ
+                if (p > type_start && p < line.size() && line[p] == '<') {
+                    int depth = 0;
+                    while (p < line.size()) {
+                        if (line[p] == '<')
+                            depth++;
+                        else if (line[p] == '>' && --depth == 0) {
+                            p++;
+                            break;
+                        }
+                        p++;
+                    }
+                    // ポインタ修飾（Result<T,E>* 等）
+                    while (p < line.size() && line[p] == '*')
+                        p++;
+                }
                 if (p > type_start) {
                     p = skip_ws(line, p);
                     // 名前を取得

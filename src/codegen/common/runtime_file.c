@@ -113,10 +113,13 @@ bool cm_file_exists(const char* path) {
 }
 
 /// ファイル削除
+/// remove(3)ではなくunlink(2)を使用する: Cm側のstd::fsがremoveという名前の
+/// 関数をエクスポートするため、ネイティブリンク時にlibcのremoveが隠蔽されて
+/// 無限再帰（cm_file_remove→Cmのremove→cm_file_remove）になるのを防ぐ
 bool cm_file_remove(const char* path) {
     if (!path)
         return false;
-    return remove(path) == 0;
+    return unlink(path) == 0;
 }
 
 /// ファイルサイズを取得

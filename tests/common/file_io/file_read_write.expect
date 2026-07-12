@@ -1,0 +1,7 @@
+write_file: OK
+exists: OK
+size: OK (35 bytes)
+read_file: OK
+remove: OK
+exists after remove: OK
+All file I/O tests passed!

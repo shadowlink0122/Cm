@@ -60,18 +60,57 @@ bool ok = input_bool("OK? ");          // 真偽値入力
 
 ---
 
-## ファイル I/O
+## ファイル I/O（std::fs）
+
+**v0.16.0以降**: ファイル操作は `std::fs` モジュールで提供されます（Native/JITバックエンド。JS/WASMは未対応）。
 
 ```cm
-import std::io::{read_file, write_file};
+import std::io::println;
+import std::fs::{write_file, read_file, append_file, exists, remove, size};
 
-// ファイル書き込み
+// 基本API（bool/値返却）
 write_file("output.txt", "Hello, File!");
-
-// ファイル読み込み
 string content = read_file("output.txt");
-println(content);
+append_file("output.txt", "\nmore");
+bool ok = exists("output.txt");
+long bytes = size("output.txt");
+remove("output.txt");
 ```
+
+### Result API（推奨・Rust準拠）
+
+エラーを `Result` で受け取れます。`?` 演算子でそのまま伝播できます。
+
+```cm
+import std::io::println;
+import std::fs::{read_to_string, write_all, remove_file};
+
+Result<string, string> load_config(string path) {
+    string content = read_to_string(path)?;   // 存在しなければErrを伝播
+    return Result::Ok(content);
+}
+
+int main() {
+    match (load_config("config.txt")) {
+        Result::Ok(c) => println("loaded: {c}"),
+        Result::Err(e) => println("error: {e}"),
+    }
+    return 0;
+}
+```
+
+| 関数 | 戻り値 | 説明 |
+|------|--------|------|
+| `read_file(path)` | `string` | ファイル全体を読み込み（失敗時は空文字列） |
+| `write_file(path, content)` | `bool` | 上書き書き込み |
+| `append_file(path, content)` | `bool` | 追記 |
+| `exists(path)` | `bool` | 存在確認 |
+| `remove(path)` | `bool` | 削除 |
+| `size(path)` | `long` | サイズ（バイト。失敗時-1） |
+| `read_to_string(path)` | `Result<string, string>` | 読み込み（Rustのfs::read_to_string相当） |
+| `write_all(path, content)` | `Result<bool, string>` | 上書き書き込み |
+| `append_all(path, content)` | `Result<bool, string>` | 追記 |
+| `remove_file(path)` | `Result<bool, string>` | 削除（Rustのfs::remove_file相当） |
 
 ---
 

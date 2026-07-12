@@ -1,0 +1,89 @@
+// std::fs - ファイルシステム操作（native/JITバックエンド）
+// ネイティブランタイム（runtime_file.c）のcm_file_*関数を呼び出す。
+// JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
+module std.fs;
+
+use libc {
+    string cm_file_read_all(string path);
+    bool cm_file_write_all(string path, string content);
+    bool cm_file_append(string path, string content);
+    bool cm_file_exists(string path);
+    bool cm_file_remove(string path);
+    long cm_file_size(string path);
+}
+
+// ============================================================
+// 基本API（bool/値返却）
+// ============================================================
+
+/// ファイル全体を文字列として読み込む（失敗時は空文字列）
+export string read_file(string path) {
+    return cm_file_read_all(path);
+}
+
+/// 文字列をファイルへ書き込む（上書き）。成功したらtrue
+export bool write_file(string path, string content) {
+    return cm_file_write_all(path, content);
+}
+
+/// 文字列をファイル末尾へ追記する。成功したらtrue
+export bool append_file(string path, string content) {
+    return cm_file_append(path, content);
+}
+
+/// ファイルが存在するか
+export bool exists(string path) {
+    return cm_file_exists(path);
+}
+
+/// ファイルを削除する。成功したらtrue
+export bool remove(string path) {
+    return cm_file_remove(path);
+}
+
+/// ファイルサイズ（バイト）を返す（失敗時は-1）
+export long size(string path) {
+    return cm_file_size(path);
+}
+
+// ============================================================
+// Result API（推奨）: Rustのstd::fsに準拠したエラーハンドリング
+// ============================================================
+
+/// ファイル全体を文字列として読み込む（Rustのfs::read_to_string相当）
+export Result<string, string> read_to_string(string path) {
+    if (!cm_file_exists(path)) {
+        return Result::Err("no such file: " + path);
+    }
+    string content = cm_file_read_all(path);
+    return Result::Ok(content);
+}
+
+/// 文字列をファイルへ書き込む（上書き。Rustのfs::write相当）
+/// 注: 関数名はlibcのwriteとのシンボル衝突（std::ioの出力が壊れる）を
+/// 避けるためwrite_allとする
+export Result<bool, string> write_all(string path, string content) {
+    if (cm_file_write_all(path, content)) {
+        return Result::Ok(true);
+    }
+    return Result::Err("failed to write: " + path);
+}
+
+/// 文字列をファイル末尾へ追記する
+export Result<bool, string> append_all(string path, string content) {
+    if (cm_file_append(path, content)) {
+        return Result::Ok(true);
+    }
+    return Result::Err("failed to append: " + path);
+}
+
+/// ファイルを削除する（Rustのfs::remove_file相当）
+export Result<bool, string> remove_file(string path) {
+    if (!cm_file_exists(path)) {
+        return Result::Err("no such file: " + path);
+    }
+    if (cm_file_remove(path)) {
+        return Result::Ok(true);
+    }
+    return Result::Err("failed to remove: " + path);
+}

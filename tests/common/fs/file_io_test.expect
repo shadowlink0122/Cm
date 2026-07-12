@@ -4,5 +4,7 @@ Checking exists: SUCCESS
 Reading from file: SUCCESS
 Appending to file: SUCCESS
 Verifying append: SUCCESS
-Removing file: SUCCESS
+read_to_string: SUCCESS
+read_to_string missing: SUCCESS (no such file: no_such_file.txt)
+remove_file: SUCCESS
 === Test Completed ===

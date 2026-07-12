@@ -97,7 +97,8 @@
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
 | 名前空間内で定義した構造体を同namespace関数の引数/戻り値型・非修飾呼び出しで参照できない | common/advanced_modules/import_features をskip（複数行export・大文字エイリアスの旧skip理由は2026-07-12修正済み。回帰: multiline_export） | exportリスト型モジュールの選択的import抽出の未対応とあわせてモジュール系の残ギャップとして記録 |
-| std::fs が未実装 | common/fs・common/file_io の2テストをskip | 実装時に有効化 |
+| std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
+| `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
 | JSバックエンドのユニオンはタグを持たないboxed値表現 | `as` の検査と `is` 判定はtypeofベースのため、構造体同士など同typeofの変種は判別できない（プリミティブ×stringの誤castは検出される） | タグ付き表現への移行は別課題 |
 
