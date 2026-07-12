@@ -8,6 +8,32 @@
 
 namespace cm::hir {
 
+namespace {
+
+// 配列HOF（map/filter/reduce等）共通のデータ引数・サイズ引数を構築する。
+// 固定長配列: 配列アドレス(&arr) + 静的サイズ。
+// スライス: CmSlice*値そのもの + サイズ-1（ランタイムが負サイズをCmSlice*として展開する。
+// 従来はvalue_or(0)でサイズ0が埋め込まれ、スライスへのHOFがサイレントに空結果を返していた）
+void push_array_hof_args(HirCall& call, HirExprPtr obj_hir, const TypePtr& obj_type) {
+    const bool is_slice = !obj_type->array_size.has_value();
+    if (is_slice) {
+        call.args.push_back(std::move(obj_hir));
+    } else {
+        auto addr_op = std::make_unique<HirUnary>();
+        addr_op->op = HirUnaryOp::AddrOf;
+        addr_op->operand = std::move(obj_hir);
+        auto ptr_type = ast::make_pointer(obj_type->element_type);
+        call.args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+    }
+
+    auto size_lit = std::make_unique<HirLiteral>();
+    size_lit->value =
+        is_slice ? int64_t{-1} : static_cast<int64_t>(obj_type->array_size.value_or(0));
+    call.args.push_back(std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+}
+
+}  // namespace
+
 // メンバアクセス / メソッド呼び出し
 HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
     // メソッド呼び出しの場合
@@ -90,7 +116,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 hir->func_name = "__builtin_array_forEach";
                 hir->args.push_back(std::move(obj_hir));
                 auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+                // スライスはサイズ-1（ランタイムが負サイズをCmSlice*として展開する）
+                size_lit->value = obj_type->array_size.has_value()
+                                      ? static_cast<int64_t>(*obj_type->array_size)
+                                      : int64_t{-1};
                 hir->args.push_back(
                     std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
                 for (auto& arg : mem.args) {
@@ -111,17 +140,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                     suffix = "_i64";
                 }
                 hir->func_name = "__builtin_array_reduce" + suffix;
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数と初期値
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
@@ -134,15 +154,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "some") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_some_i32";
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
@@ -154,15 +167,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "every") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_every_i32";
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
@@ -174,15 +180,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "findIndex") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_findIndex_i32";
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
@@ -194,15 +193,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "indexOf") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_indexOf_i32";
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
@@ -214,15 +206,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "includes" || mem.member == "contains") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_includes_i32";
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
                 }
@@ -234,17 +219,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "map") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_map";
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
@@ -259,17 +235,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "filter") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_filter";
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
@@ -284,17 +251,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "reverse" && obj_type->array_size.has_value()) {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_reverse";
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin reverse()",
                                 debug::Level::Debug);
                 // 動的配列（スライス）を返す
@@ -305,17 +263,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "sort" && obj_type->array_size.has_value()) {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_sort";
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin sort()",
                                 debug::Level::Debug);
                 // 動的配列（スライス）を返す
@@ -326,17 +275,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (mem.member == "sortBy" && obj_type->array_size.has_value()) {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_sortBy";
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コンパレータ関数
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));
@@ -374,17 +314,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                     suffix = "_i64";
                 }
                 hir->func_name = "__builtin_array_first" + suffix;
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin first()",
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
@@ -416,17 +347,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                     suffix = "_i64";
                 }
                 hir->func_name = "__builtin_array_last" + suffix;
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin last()",
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
@@ -442,17 +364,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                     suffix = "_i64";
                 }
                 hir->func_name = "__builtin_array_find" + suffix;
-                // 配列のアドレス
-                auto addr_op = std::make_unique<HirUnary>();
-                addr_op->op = HirUnaryOp::AddrOf;
-                addr_op->operand = std::move(obj_hir);
-                auto ptr_type = ast::make_pointer(obj_type->element_type);
-                hir->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
-                // 配列サイズ
-                auto size_lit = std::make_unique<HirLiteral>();
-                size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
-                hir->args.push_back(
-                    std::make_unique<HirExpr>(std::move(size_lit), ast::make_int()));
+                // データ引数とサイズ引数（固定長配列/スライス共通）
+                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
                 for (auto& arg : mem.args) {
                     hir->args.push_back(lower_expr(*arg));

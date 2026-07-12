@@ -518,6 +518,14 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
+                ${CMAKE_SOURCE_DIR}/src/codegen/common/runtime_alloc.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/common/runtime_file.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_asm.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_format.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_io.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_platform.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_print.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_slice.c
             COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 

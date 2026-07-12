@@ -1,0 +1,26 @@
+// slice_higher_order.cm - 可変長スライスへの高階関数（サイズ-1番兵方式）
+// 従来はサイズ0が埋め込まれサイレントに空結果を返していた（v0.16.0で修正）
+import std::io::println;
+int add(int acc, int x) { return acc + x; }
+bool is_even(int x) { return x % 2 == 0; }
+int dbl(int x) { return x * 2; }
+int main() {
+    int[] xs = [1, 2, 3, 4, 5];
+    int[] doubled = xs.map(dbl);
+    println("map: {doubled[0]} {doubled[4]} len={doubled.len()}");
+    int[] evens = xs.filter(is_even);
+    println("filter: len={evens.len()} e0={evens[0]}");
+    int total = xs.reduce(add, 0);
+    println("reduce: {total}");
+    bool s = xs.some(is_even);
+    bool e = xs.every(is_even);
+    int f = xs.find(is_even);
+    int fi = xs.findIndex(is_even);
+    int io = xs.indexOf(4);
+    bool inc = xs.includes(3);
+    println("some={s} every={e} find={f} findIndex={fi} indexOf={io} includes={inc}");
+    long[] ls = [10, 20, 30];
+    long lf = ls.find((long x) => { return x > 15; });
+    println("long find={lf}");
+    return 0;
+}

@@ -110,7 +110,8 @@ int total = numbers
 // 220
 ```
 
-Note (as of v0.16.0): higher-order functions such as `map`/`filter`/`reduce` work on fixed-size arrays (`int[10]` etc.). Support for growable slices (`int[]`) is recorded as a known issue (see the backend support matrix).
+Higher-order functions work on both fixed-size arrays (`int[10]` etc.) and growable slices (`int[]`).
+Note (as of v0.16.0): calling methods with function arguments inside string interpolation (such as `{xs.some(fn)}`) has a known limitation — assign the result to a variable first (see the backend support matrix).
 
 ---
 

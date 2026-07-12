@@ -1433,6 +1433,52 @@ int main(int argc, char* argv[]) {
 
         // ========== Backend ==========
         if (opts.command == Command::Run) {
+            // ========== --target指定時のディスパッチ ==========
+            // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で
+            // 実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
+            if (opts.target == "js" || opts.target == "web") {
+                // JS生成 → Node.jsで実行
+                cm::codegen::js::JSCodeGenOptions js_opts;
+                js_opts.outputFile =
+                    opts.output_file.empty()
+                        ? (std::filesystem::temp_directory_path() / "cm_run_output.js").string()
+                        : opts.output_file;
+                js_opts.generateHTML = false;
+                js_opts.verbose = opts.verbose || opts.debug;
+                try {
+                    cm::codegen::js::JSCodeGen codegen(js_opts);
+                    codegen.compile(mir);
+                } catch (const std::exception& e) {
+                    std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+                if (std::system("command -v node > /dev/null 2>&1") != 0) {
+                    std::cerr << "エラー: node が見つかりません（--target=js の実行に必要です）\n";
+                    std::cerr << "ヒント: cm compile --target=js で生成した .js を任意の"
+                                 "JS実行系で実行してください\n";
+                    return 1;
+                }
+                std::string cmd = "node " + js_opts.outputFile;
+                int exec_result = std::system(cmd.c_str());
+#if defined(_WIN32)
+                return exec_result;
+#else
+                return WEXITSTATUS(exec_result);
+#endif
+            }
+            if (opts.target == "wasm") {
+                std::cerr << "エラー: cm run は --target=wasm の直接実行に未対応です\n";
+                std::cerr << "ヒント: cm compile --emit-llvm --target=wasm -o out.wasm の後、"
+                             "wasmtime out.wasm 等で実行してください\n";
+                return 1;
+            }
+            if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+                std::cerr << "エラー: cm run は --target=sv の直接実行に未対応です\n";
+                std::cerr << "ヒント: シミュレーション実行は cm test（//! platform: sv）を"
+                             "使用してください\n";
+                return 1;
+            }
+
 #ifdef CM_LLVM_ENABLED
             // ========== ネイティブテストランナー（cm test / run --test）==========
             // #[test] 関数を宣言順に、関数ごとに独立したJITで実行する（状態隔離）。

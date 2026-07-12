@@ -265,6 +265,38 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
             std::string operand = emitOperand(*data.operand, func);
 
+            // ユニオンからの取り出し（Union as T）はtypeofで実変種を検査する
+            // （LLVM系バックエンドのタグ検査と同等の失敗動作。従来は String(42) のように
+            // 黙って型強制され「誤った型でのas」が成功扱いになっていた）
+            {
+                hir::TypePtr srcType = getOperandType(*data.operand, func);
+                if (srcType && srcType->kind == TypeKind::Union && data.target_type) {
+                    auto guard_cast = [&](const std::string& expected_typeof,
+                                          const std::string& conv_prefix,
+                                          const std::string& conv_suffix) {
+                        return "((v) => { if (typeof v !== \"" + expected_typeof +
+                               "\") { console.log(\"invalid union cast: active variant does "
+                               "not match target type\"); ((typeof process !== \"undefined\") ? "
+                               "process.exit(1) : (() => { throw new Error(\"invalid union "
+                               "cast\"); })()); } return " +
+                               conv_prefix + "v" + conv_suffix + "; })(" + operand + ")";
+                    };
+                    if (data.target_type->kind == TypeKind::String) {
+                        return guard_cast("string", "", "");
+                    }
+                    if (data.target_type->is_integer()) {
+                        return guard_cast("number", "Math.trunc(", ")");
+                    }
+                    if (data.target_type->is_floating()) {
+                        return guard_cast("number", "", "");
+                    }
+                    if (data.target_type->kind == TypeKind::Bool) {
+                        return guard_cast("boolean", "Boolean(", ")");
+                    }
+                    // 構造体バリアント等はtypeofで判別できないため無検査で通す
+                }
+            }
+
             // 型変換
             if (data.target_type) {
                 if (data.target_type->is_integer()) {

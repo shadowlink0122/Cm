@@ -409,6 +409,11 @@ typedef int8_t (*FilterFnI64Closure)(int64_t, int64_t);
 
 // map: i32配列に関数を適用し、新しいスライスを返す
 void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -432,6 +437,11 @@ void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
 
 // map (クロージャ版): キャプチャ値付きで関数を適用
 void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -453,6 +463,11 @@ void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, int
 
 // map: i64配列に関数を適用
 void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -474,6 +489,11 @@ void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
 
 // map_i64 (クロージャ版)
 void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -495,6 +515,11 @@ void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr,
 
 // filter: i32配列から条件を満たす要素を抽出
 void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -521,6 +546,11 @@ void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
 
 // filter (クロージャ版)
 void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -545,6 +575,11 @@ void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, 
 
 // filter: i64配列から条件を満たす要素を抽出
 void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
@@ -570,6 +605,11 @@ void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
 // filter_i64 (クロージャ版)
 void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr,
                                          int64_t capture) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
     if (!arr_ptr || !fn_ptr || size <= 0)
         return NULL;
 
