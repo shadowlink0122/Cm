@@ -102,6 +102,8 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_sortBy_i32",
         "__builtin_array_sortBy_i64",
         "__builtin_array_sortBy",
+        "__builtin_array_forEach_i32",
+        "__builtin_array_forEach_i64",
         // クロージャー版
         "__builtin_array_map_closure",
         "__builtin_array_filter_closure",
@@ -425,6 +427,11 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
          name == "cm_slice_push_ptr") &&
         argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
+    }
+    if ((name == "__builtin_array_forEach_i32" || name == "__builtin_array_forEach_i64") &&
+        argStrs.size() >= 3) {
+        // forEach: 第2引数（サイズ）はJSでは不要（配列自身が長さを持つ）
+        return "__cm_unwrap(" + argStrs[0] + ").forEach((x) => " + argStrs[2] + "(x))";
     }
     if (name == "cm_slice_push_blob" && argStrs.size() >= 2) {
         // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、

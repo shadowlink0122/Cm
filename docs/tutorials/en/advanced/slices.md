@@ -1,102 +1,126 @@
 ---
-title: スライス型
+title: Slices
 parent: Advanced
 ---
 
 [日本語](../../ja/advanced/slices.html)
 
-# スライス型
+# Slices
 
-**学習目標:** 動的スライス型と高階関数の使い方を学びます。  
-**所要時間:** 20分  
-**難易度:** 🟡 中級
-
----
-
-## 概要
-
-スライス型 `T[]` は動的サイズの配列参照を表し、強力な高階関数を提供します。
+**Goal:** learn the growable slice type and its higher-order functions.
+**Time:** 20 min
+**Level:** 🟡 Intermediate
 
 ---
 
-## 基本構文
+## Overview
 
-```cm
-// 配列からスライスを作成
-
-// 部分スライス
-```
+The slice type `T[]` is a growable array with mutation operations (push/pop, etc.) and higher-order functions.
 
 ---
 
-## 多次元スライス
+## Creating Slices
 
 ```cm
-// 2次元スライス
-    [1, 2, 3],
-    [4, 5, 6],
-    [7, 8, 9]
-];
+int main() {
+    // Empty slice + push
+    int[] xs = [];
+    xs.push(10);
+    xs.push(20);
 
-```
+    // Literal initialization
+    int[] ys = [1, 2, 3];
 
----
+    // From a fixed-size array (elements are copied)
+    int[5] arr = [1, 2, 3, 4, 5];
+    int[] zs = arr;
 
-## 高階関数
-
-### map - 変換
-
-各要素に関数を適用して新しい配列を返します。
-
-```cm
-// [2, 4, 6, 8, 10]
-```
-
-### filter - 絞り込み
-
-条件を満たす要素のみを抽出します。
-
-```cm
-// [2, 4]
-```
-
-### reduce - 集約
-
-全要素を1つの値に集約します。
-
-```cm
-// 15
-```
-
-### find - 検索
-
-条件を満たす最初の要素を返します。
-
-```cm
-// 4
-```
-
-### some - 存在確認
-
-条件を満たす要素が1つでもあればtrue。
-
-```cm
-bool has_even = nums.some((x) => { return x % 2 == 0; });
-// true
-```
-
-### every - 全件確認
-
-全要素が条件を満たせばtrue。
-
-```cm
-bool all_even = nums.every((x) => { return x % 2 == 0; });
-// true
+    // Subslices
+    int[] mid = arr[1:4];   // [2, 3, 4]
+    int[] head = arr[:2];   // [1, 2]
+    int[] tail = arr[3:];   // [4, 5]
+    return 0;
+}
 ```
 
 ---
 
-## Method Chaining
+## Reading and Writing Elements
+
+```cm
+import std::io::println;
+
+int main() {
+    int[] xs = [1, 2, 3];
+    int a = xs[0];   // read
+    xs[1] = 99;      // write
+    println("x1={xs[1]}");
+    return 0;
+}
+```
+
+---
+
+## Slice-Only Methods
+
+In addition to the array methods (see the [Arrays](../basics/arrays.html) method reference), slices provide:
+
+| Method | Returns | Description |
+|---|---|---|
+| `.push(v)` | `void` | Append an element |
+| `.pop()` | `T` | Remove and return the last element |
+| `.remove(i)` / `.delete(i)` | `void` | Remove the element at index i |
+| `.clear()` | `void` | Remove all elements |
+| `.cap()` / `.capacity()` | `int` | Allocated capacity |
+
+```cm
+import std::io::println;
+
+int main() {
+    int[] xs = [];
+    xs.push(10);
+    xs.push(20);
+    xs.push(30);
+
+    int p = xs.pop();      // 30
+    xs.remove(0);          // [20]
+    println("len={xs.len()} cap={xs.cap()}");
+    xs.clear();            // []
+    return 0;
+}
+```
+
+Any element type works (primitives, string, structs, union types, nested slices `T[][]`).
+Struct and union elements are stored by value — mutating the source variable after push does not affect the slice.
+
+---
+
+## Higher-Order Functions
+
+`map` / `filter` / `reduce` / `find` / `findIndex` / `some` / `every` / `forEach` / `sort` / `sortBy` / `reverse` / `first` / `last` are available (shared with fixed-size arrays).
+
+```cm
+import std::io::println;
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+int main() {
+    int[] nums = [1, 2, 3, 4, 5];
+
+    int[] doubled = nums.map((int x) => { return x * 2; });    // [2, 4, 6, 8, 10]
+    int[] evens = nums.filter(is_even);                        // [2, 4]
+    int total = nums.reduce((int acc, int x) => { return acc + x; }, 0);  // 15
+    int found = nums.find(is_even);                            // 2
+    bool has_even = nums.some(is_even);                        // true
+    bool all_even = nums.every(is_even);                       // false
+    println("total={total} found={found}");
+    return 0;
+}
+```
+
+### Method Chaining
 
 Higher-order functions can be chained (lambda parameters require type annotations, and the `reduce` argument order is `reduce(function, initial)`):
 
@@ -110,14 +134,16 @@ int total = numbers
 // 220
 ```
 
-Higher-order functions work on both fixed-size arrays (`int[10]` etc.) and growable slices (`int[]`).
 Note (as of v0.16.0): calling methods with function arguments inside string interpolation (such as `{xs.some(fn)}`) has a known limitation — assign the result to a variable first (see the backend support matrix).
 
 ---
 
-## 構造体のスライス
+## Slices of Structs
 
 ```cm
+struct Person {
+    string name;
+    int age;
 }
 
 Person[] people = [
@@ -135,15 +161,40 @@ string[] names = people
 
 ---
 
-## 次のステップ
+## Slices of Union Types
 
-- [配列](../basics/arrays.html) - 配列の基礎
-- [ラムダ式](lambda.html) - 無名関数の詳細
+A union element type lets values of different types coexist in one slice.
+Since the actual type of each element is not statically known, extract with `as` (extracting as the wrong type stops with a runtime error).
+
+```cm
+import std::io::println;
+
+typedef Value = int | string;
+
+int main() {
+    Value[] vals = [];
+    vals.push(42 as Value);
+    vals.push("hello" as Value);
+
+    int n = vals[0] as int;
+    string s = vals[1] as string;
+    println("n={n} s={s}");
+    return 0;
+}
+```
+
 ---
 
-**Last Updated:** 2026-02-08
+## Next Steps
+
+- [Arrays](../basics/arrays.html) - array basics and the method reference
+- [Lambdas](lambda.html)
+
+---
+
+**Last Updated:** 2026-07-12
 
 ---
 
 <!-- nav -->
-← Prev: [Advanced - String Operations](strings.html) | [Contents](index.html) | Next: [FFI（Foreign Function Interface）](ffi.html) →
+← Prev: [Advanced - Strings](strings.html) | [Contents](index.html) | Next: [FFI (Foreign Function Interface)](ffi.html) →

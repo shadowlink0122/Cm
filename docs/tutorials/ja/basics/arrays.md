@@ -8,43 +8,32 @@ parent: Tutorials
 # 配列（Arrays）
 
 Cm言語の配列は、C++スタイルの固定長配列をサポートします。
+可変長のスライス型 `T[]` については[スライス型](../advanced/slices.html)を参照してください。
 
 ## 📋 目次
 
 - [基本的な使い方](#基本的な使い方)
-- [配列の初期化](#配列の初期化)
-- [インデックスアクセス](#インデックスアクセス)
-- [配列メソッド](#配列メソッド)
+- [要素のアクセス](#要素のアクセス)
+- [メソッド一覧](#メソッド一覧)
+- [検索メソッド](#検索メソッド)
+- [高階関数メソッド](#高階関数メソッド)
+- [並べ替え・先頭末尾](#並べ替え先頭末尾)
 - [構造体配列](#構造体配列)
 - [ポインタへの変換](#ポインタへの変換)
 - [for-in構文](#for-in構文)
+- [多次元配列](#多次元配列)
 
 ## 基本的な使い方
 
-### 配列宣言
-
 ```cm
-// 基本的な配列宣言
+// 基本的な配列宣言（ゼロ初期化）
 int[5] numbers;
 
 // 宣言と初期化
 int[3] values = [1, 2, 3];
 
-// サイズ推論
-int[] auto_size = {10, 20, 30};  // サイズ3と推論
-```
-
-## 配列の初期化
-
-```cm
-// ゼロ初期化
-int[10] zeros;  // すべて0
-
-// リテラル初期化
-int[5] primes = {2, 3, 5, 7, 11};
-
-// 部分初期化
-int[5] partial = [1, 2];  // {1, 2, 0, 0, 0}
+// 部分初期化（残りは0）
+int[5] partial = [1, 2];  // [1, 2, 0, 0, 0]
 ```
 
 ## 要素のアクセス
@@ -60,48 +49,95 @@ int main() {
 
 > **v0.11.0の変更点**: 境界チェックが導入されました。範囲外のインデックスにアクセスすると、プログラムは安全に停止（パニック）します。
 
-## 配列のメソッド
+## メソッド一覧
 
-### サイズ取得
+固定長配列 `T[N]` で使用できるメソッドの一覧です（スライス `T[]` でも全て使用できます）。
+
+| メソッド | 戻り値 | 説明 |
+|---|---|---|
+| `.size()` / `.len()` / `.length()` | `int` | 要素数 |
+| `.dim()` | `int` | 次元数（多次元配列用） |
+| `.indexOf(v)` | `int` | 最初に一致する位置（なければ-1） |
+| `.includes(v)` / `.contains(v)` | `bool` | 要素が含まれるか |
+| `.find(fn)` | `T` | 条件を満たす最初の要素 |
+| `.findIndex(fn)` | `int` | 条件を満たす最初の位置（なければ-1） |
+| `.some(fn)` | `bool` | いずれかが条件を満たすか |
+| `.every(fn)` | `bool` | すべてが条件を満たすか |
+| `.map(fn)` | `T[]` | 各要素を変換した新しいスライス |
+| `.filter(fn)` | `T[]` | 条件を満たす要素の新しいスライス |
+| `.reduce(fn, init)` | `T` | 畳み込み（引数順は関数, 初期値） |
+| `.forEach(fn)` | `void` | 各要素に関数を適用 |
+| `.sort()` | `T[]` | 昇順に並べた新しいスライス |
+| `.sortBy(cmp)` | `T[]` | 比較関数で並べた新しいスライス |
+| `.reverse()` | `T[]` | 逆順の新しいスライス |
+| `.first()` / `.last()` | `T` | 先頭 / 末尾の要素 |
+| `arr[a:b]` | `T[]` | 部分スライス（[スライス型](../advanced/slices.html)参照） |
+
+関数を取るメソッドには、名前付き関数またはラムダ（引数の型注釈が必要）を渡します。
+
+## 検索メソッド
 
 ```cm
-int[5] arr;
+int main() {
+    int[5] numbers = [1, 2, 3, 4, 5];
 
-int size1 = arr.size();     // 5
-int size2 = arr.len();      // 5
-int size3 = arr.length();   // 5（全て同じ）
+    int pos = numbers.indexOf(3);        // 2
+    int not_found = numbers.indexOf(10); // -1
+
+    bool has_3 = numbers.includes(3);    // true
+    bool has_5 = numbers.contains(5);    // true（includesのエイリアス）
+    return 0;
+}
 ```
 
-### 要素検索
+## 高階関数メソッド
 
 ```cm
-int[5] numbers = [1, 2, 3, 4, 5];
+import std::io::println;
 
-// indexOf - 要素の位置を検索
-int pos = numbers.indexOf(3);  // 2
-int not_found = numbers.indexOf(10);  // -1
+bool is_even(int x) {
+    return x % 2 == 0;
+}
 
-// includes - 要素が含まれているか
-bool has_3 = numbers.includes(3);  // true
-bool has_10 = numbers.includes(10);  // false
+int add(int acc, int x) {
+    return acc + x;
+}
 
-// contains（includesのエイリアス）
-bool has_5 = numbers.contains(5);  // true
+int main() {
+    int[5] numbers = [1, 2, 3, 4, 5];
+
+    // ラムダは引数に型注釈が必要
+    bool has_even = numbers.some((int x) => { return x % 2 == 0; });  // true
+    bool all_positive = numbers.every((int x) => { return x > 0; });  // true
+    int idx = numbers.findIndex((int x) => { return x > 3; });        // 3（値4の位置）
+
+    // 名前付き関数も渡せる
+    int[] evens = numbers.filter(is_even);   // [2, 4]
+    int[] doubled = numbers.map((int x) => { return x * 2; });  // [2, 4, 6, 8, 10]
+    int total = numbers.reduce(add, 0);      // 15（引数順は 関数, 初期値）
+
+    bool s = numbers.some(is_even);
+    println("some={s} total={total}");
+    return 0;
+}
 ```
 
-### 高階関数メソッド
+注意（v0.16.0時点）: 文字列補間の中で関数呼び出しを伴うメソッド（`{numbers.some(fn)}` 等）を直接使うと正しく展開されない既知の制限があります。上例のように一度変数に受けてから補間してください。
+
+## 並べ替え・先頭末尾
 
 ```cm
-int[5] numbers = [1, 2, 3, 4, 5];
+int main() {
+    int[5] nums = [3, 1, 4, 1, 5];
 
-// some - いずれかが条件を満たすか
-bool has_even = numbers.some(|x| x % 2 == 0);  // true
+    int[] sorted = nums.sort();       // [1, 1, 3, 4, 5]（元の配列は不変）
+    int[] rev = nums.reverse();       // [5, 1, 4, 1, 3]
+    int[] desc = nums.sortBy((int a, int b) => { return b - a; });  // 降順
 
-// every - すべてが条件を満たすか
-bool all_positive = numbers.every(|x| x > 0);  // true
-
-// findIndex - 条件を満たす最初の要素のインデックス
-int idx = numbers.findIndex(|x| x > 3);  // 3 (値4のインデックス)
+    int f = nums.first();  // 3
+    int l = nums.last();   // 5
+    return 0;
+}
 ```
 
 ## 構造体配列
@@ -116,18 +152,15 @@ int main() {
     // 構造体配列の宣言
     Point[3] points;
 
-    // 初期化
+    // フィールドへの代入
     points[0].x = 10;
     points[0].y = 20;
 
-    points[1].x = 30;
-    points[1].y = 40;
-
-    // 構造体配列の初期化リスト
-    Point[2] pts = {
-        Point(1, 2),
-        Point(3, 4)
-    };
+    // 構造体リテラルでの初期化
+    Point[2] pts = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 }
+    ];
     return 0;
 }
 ```
@@ -144,24 +177,7 @@ int main() {
     int* p = arr;  // arr[0]のアドレス
 
     // ポインタ経由でアクセス
-    int first = *p;     // 1
-    int second = *(p + 1);  // 2
-    return 0;
-}
-```
-
-### 関数に配列を渡す
-
-```cm
-void print_array(int* data, int size) {
-    for (int i = 0; i < size; i++) {
-        println("{}", data[i]);
-    }
-}
-
-int main() {
-    int[5] numbers = [1, 2, 3, 4, 5];
-    print_array(numbers, 5);  // 配列→ポインタ変換
+    int first = *p;  // 1
     return 0;
 }
 ```
@@ -171,26 +187,24 @@ int main() {
 範囲ベースのforループで配列を反復処理できます。
 
 ```cm
-struct Point { int x; int y; }
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
 
 int main() {
     int[5] numbers = [1, 2, 3, 4, 5];
 
     // 型指定あり
     for (int n in numbers) {
-        println("{}", n);
+        println("{n}");
     }
 
     // 型推論
     for (n in numbers) {
-        println("{}", n);
-    }
-
-    // 構造体配列
-    Point[3] points = {Point(1, 2), Point(3, 4), Point(5, 6)};
-
-    for (Point p in points) {
-        println("({}, {})", p.x, p.y);
+        println("{n}");
     }
     return 0;
 }
@@ -199,18 +213,23 @@ int main() {
 ## 多次元配列
 
 ```cm
-// 2次元配列
-int[3][4] matrix;
+int main() {
+    // 2次元配列
+    int[3][4] matrix;
 
-// 初期化
-matrix[0][0] = 1;
-matrix[0][1] = 2;
+    // 初期化
+    matrix[0][0] = 1;
+    matrix[0][1] = 2;
 
-// ループでアクセス
-for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 4; j++) {
-        matrix[i][j] = i * 4 + j;
+    // ループでアクセス
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            matrix[i][j] = i * 4 + j;
+        }
     }
+
+    int d = matrix.dim();  // 2（次元数）
+    return 0;
 }
 ```
 
@@ -218,47 +237,27 @@ for (int i = 0; i < 3; i++) {
 
 **配列自動フラット化:** Cm v0.11.0は多次元配列を自動的に最適化し、キャッシュ性能を向上させます。
 
-```cm
-// ユーザーコード（変更不要）
-int[500][500] matrix;
-matrix[i][j] = value;
-
-// 内部最適化（自動）：
-// - キャッシュ局所性向上のため1次元配列に変換
-// - 大規模な行列で最大250倍高速化
-// - ユーザーに完全に透過的
-```
-
-この最適化により：
-- 行列演算が**200-250倍高速化**
-- キャッシュミス率を**90%削減**
-- コード変更不要
+- キャッシュ局所性向上のため内部的に1次元配列へ変換（ユーザーに透過的）
+- 大規模な行列演算で200-250倍の高速化・キャッシュミス率90%削減
 
 ## 実装状況
 
 | バックエンド | 状態 |
 |------------|------|
-| インタプリタ | ✅ 完全対応 |
-| LLVM Native | ✅ 完全対応 |
+| JIT / LLVM Native | ✅ 完全対応 |
 | WASM | ✅ 完全対応 |
-
-## サンプルコード
-
-完全なサンプルは以下を参照してください：
-
-- `examples/arrays/basic_array.cm` - 基本的な配列操作
-- `examples/arrays/struct_array.cm` - 構造体配列
-- `tests/test_programs/array/` - テストケース
+| JS | ✅ 完全対応 |
+| SV | ⚠️ 固定長配列はRAM/ROM推論（メソッドは合成可能な範囲） |
 
 ## 関連ドキュメント
 
+- [スライス型](../advanced/slices.html) - 可変長スライスとpush/pop等の操作
 - [ポインタ](pointers.html) - ポインタ操作
 - [for-in構文](control-flow.html) - 範囲ベースループ
-- メソッド一覧 - 配列メソッド詳細
 
 ---
 
-**更新日:** 2026-02-08
+**更新日:** 2026-07-12
 
 ---
 

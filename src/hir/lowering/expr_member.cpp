@@ -113,7 +113,14 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "forEach") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_forEach";
+                // 要素型に応じてサフィックスを決定（ランタイムはi32/i64のみ提供）
+                std::string foreach_suffix = "_i32";
+                if (obj_type->element_type &&
+                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                    foreach_suffix = "_i64";
+                }
+                hir->func_name = "__builtin_array_forEach" + foreach_suffix;
                 hir->args.push_back(std::move(obj_hir));
                 auto size_lit = std::make_unique<HirLiteral>();
                 // スライスはサイズ-1（ランタイムが負サイズをCmSlice*として展開する）
@@ -272,7 +279,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 return std::make_unique<HirExpr>(std::move(hir), return_type);
             }
 
-            if (mem.member == "sortBy" && obj_type->array_size.has_value()) {
+            // sortByは固定長配列・スライス共通（スライスはサイズ-1番兵でランタイム展開）
+            if (mem.member == "sortBy") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_array_sortBy";
                 // データ引数とサイズ引数（固定長配列/スライス共通）
