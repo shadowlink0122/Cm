@@ -40,8 +40,22 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     return ast::make_int();
                 }
             } else {
-                // type_argsなし: 従来通りint型に変換
-                return ast::make_int();
+                // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）は
+                // Tagged Unionとして保持し、値enum（従来型）のみintへ解決する
+                // （一律int化すると関数返却・match束縛でペイロードが失われる）
+                bool is_tagged_union = false;
+                auto def_it = enum_defs_.find(type->name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    for (const auto& member : def_it->second->members) {
+                        if (member.has_data()) {
+                            is_tagged_union = true;
+                            break;
+                        }
+                    }
+                }
+                if (!is_tagged_union) {
+                    return ast::make_int();
+                }
             }
         }
 

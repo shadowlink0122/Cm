@@ -181,6 +181,7 @@ enum class UnaryOp {
     PreDec,   // --x
     PostInc,  // x++
     PostDec,  // x--
+    Try,      // expr? （Result/Optionのエラー伝播）
 };
 
 inline const char* unary_op_str(UnaryOp op) {

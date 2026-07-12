@@ -543,6 +543,45 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
     otype = resolve_typedef(otype);
 
     switch (unary.op) {
+        case ast::UnaryOp::Try: {
+            // ?演算子: Result<T,E>/Option<T> のエラー伝播。
+            // OkならT、Err/Noneなら現在の関数からそのまま早期returnする
+            std::string base = otype->name;
+            auto lt = base.find('<');
+            if (lt != std::string::npos) {
+                base = base.substr(0, lt);
+            }
+            bool is_result_like =
+                (otype->kind == ast::TypeKind::Struct && (base == "Result" || base == "Option"));
+            if (!is_result_like) {
+                error(current_span_, "'?' はResult/Option型の値にのみ使用できます（対象の型: " +
+                                         ast::type_to_string(*otype) + "）");
+                return ast::make_error();
+            }
+            // 現在の関数の戻り値型も同じ種別（Result?はResult返却関数、Option?はOption返却関数）
+            std::string ret_base;
+            if (current_return_type_) {
+                ret_base = current_return_type_->name;
+                auto rlt = ret_base.find('<');
+                if (rlt != std::string::npos) {
+                    ret_base = ret_base.substr(0, rlt);
+                }
+            }
+            if (ret_base != base) {
+                error(current_span_,
+                      "'?' は" + base +
+                          "を返す関数の中でのみ使用できます"
+                          "（現在の関数の戻り値型: " +
+                          (current_return_type_ ? ast::type_to_string(*current_return_type_)
+                                                : std::string("なし")) +
+                          "）");
+            }
+            // Ok/Someのペイロード型を返す
+            if (!otype->type_args.empty() && otype->type_args[0]) {
+                return otype->type_args[0];
+            }
+            return ast::make_int();
+        }
         case ast::UnaryOp::Neg:
             if (!otype->is_numeric()) {
                 error(current_span_, "Negation requires numeric operand");

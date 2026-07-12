@@ -97,6 +97,22 @@ __attribute__((noreturn)) void exit(int code) {
     __wasi_proc_exit(code);
 }
 
+// panic - メッセージを出力して異常終了する（Result/Optionのunwrap等で使用。
+// ネイティブランタイムの__cm_panicと同じ "panic: <msg>" 形式）
+__attribute__((noreturn)) void panic(const char* message) {
+    wasm_write_stdout("panic: ", 7);
+    if (message) {
+        wasm_write_stdout(message, (size_t)wasm_strlen(message));
+    }
+    wasm_write_stdout("\n", 1);
+    // wasiの終了コードは[0..126)に制限されるため1で終了する
+    __wasi_proc_exit(1);
+}
+
+__attribute__((noreturn)) void __cm_panic(const char* message) {
+    panic(message);
+}
+
 // strlen - 標準ライブラリ互換のシグネチャ
 size_t strlen(const char* s) {
     if (!s)

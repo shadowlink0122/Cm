@@ -712,6 +712,61 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             return ast::make_void();
         }
 
+        // 組み込みenum型（Result<T,E>/Option<T>）のメソッド
+        // type_methods_はベース名（"Result"）で登録されているため、
+        // インスタンス化名（"Result<int, string>" / "Result__int__string"）から
+        // ベース名で引き、戻り値・引数のジェネリックパラメータを型引数で置換する
+        std::string enum_base = obj_type->name;
+        {
+            auto lt = enum_base.find('<');
+            if (lt != std::string::npos) {
+                enum_base = enum_base.substr(0, lt);
+            }
+            auto us = enum_base.find("__");
+            if (us != std::string::npos && us > 0) {
+                enum_base = enum_base.substr(0, us);
+            }
+        }
+        if (obj_type->kind == ast::TypeKind::Struct && enum_names_.count(enum_base) > 0) {
+            auto em_it = type_methods_.find(enum_base);
+            auto ge_it = generic_enums_.find(enum_base);
+            if (em_it != type_methods_.end()) {
+                auto method_it = em_it->second.find(member.member);
+                if (method_it != em_it->second.end()) {
+                    const auto& method_info = method_it->second;
+                    auto substitute = [&](ast::TypePtr t) -> ast::TypePtr {
+                        if (t && ge_it != generic_enums_.end() && !obj_type->type_args.empty()) {
+                            return substitute_generic_type(t, ge_it->second, obj_type->type_args);
+                        }
+                        return t;
+                    };
+                    if (member.args.size() != method_info.param_types.size()) {
+                        error(current_span_, "Method '" + member.member + "' expects " +
+                                                 std::to_string(method_info.param_types.size()) +
+                                                 " arguments, got " +
+                                                 std::to_string(member.args.size()));
+                    } else {
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            auto arg_type = infer_type(*member.args[i]);
+                            auto expected_type = substitute(method_info.param_types[i]);
+                            if (!types_compatible(expected_type, arg_type)) {
+                                error(current_span_, "Argument type mismatch in method call '" +
+                                                         member.member + "': expected " +
+                                                         ast::type_to_string(*expected_type) +
+                                                         ", got " + ast::type_to_string(*arg_type));
+                            }
+                        }
+                    }
+                    auto return_type = substitute(method_info.return_type);
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Enum method: " + type_name + "." + member.member +
+                                       "() : " + ast::type_to_string(*return_type),
+                                   debug::Level::Debug);
+                    return return_type;
+                }
+            }
+        }
+
         error(current_span_, "Unknown method '" + member.member + "' for type '" + type_name + "'");
         return ast::make_error();
     }

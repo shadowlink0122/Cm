@@ -1,0 +1,7 @@
+ok: 5
+err: division by zero
+is_ok: true is_err: true
+unwrap: 5 unwrap_or: -1 unwrap_err: division by zero
+some: 5
+is_some: true is_none: true unwrap: 5 unwrap_or: 0
+direct: 7

@@ -1203,7 +1203,8 @@ int main(int argc, char* argv[]) {
             for (const auto& diag : checker.diagnostics()) {
                 if (!preprocess_result.source_map.empty()) {
                     std::cerr << loc_mgr.format_error_with_source_map(
-                        diag.span, diag.message, preprocess_result.source_map, file_contents);
+                        diag.span, diag.message, preprocess_result.source_map, file_contents,
+                        diag.severity == DiagKind::Error ? "error" : "warning");
                 } else {
                     std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                     std::cerr << loc_mgr.format_error_location(diag.span,

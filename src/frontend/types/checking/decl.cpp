@@ -17,6 +17,52 @@ TypeChecker::TypeChecker() {
 bool TypeChecker::check(ast::Program& program) {
     debug::tc::log(debug::tc::Id::Start);
 
+    // 組み込みprelude: Result<T, E> / Option<T> を実enum宣言としてプログラム先頭に
+    // 注入する（TypeChecker内だけの疑似登録ではHIR/MIR/コード生成にenum定義が
+    // 届かず、関数返却でのペイロード喪失や型IDの分裂を起こしていた）。
+    // ユーザーが同名を定義している場合は注入しない
+    {
+        bool has_result = false;
+        bool has_option = false;
+        for (const auto& decl : program.declarations) {
+            if (const auto* en = decl->as<ast::EnumDecl>()) {
+                if (en->name == "Result") {
+                    has_result = true;
+                }
+                if (en->name == "Option") {
+                    has_option = true;
+                }
+            }
+        }
+        auto make_prelude_enum = [](const std::string& name, std::vector<std::string> params,
+                                    std::vector<ast::EnumMember> members) {
+            auto en = std::make_unique<ast::EnumDecl>(name, std::move(members));
+            en->generic_params = std::move(params);
+            // preludeマーカー: register_enumの組み込みメソッド消去
+            // （ユーザー再定義向け）を抑止する
+            en->attributes.emplace_back("__prelude");
+            return std::make_unique<ast::Decl>(std::move(en), Span{});
+        };
+        if (!has_option) {
+            std::vector<ast::EnumMember> members;
+            members.emplace_back("Some", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                             {"value", ast::make_named("T")}});
+            members.emplace_back("None");
+            program.declarations.insert(program.declarations.begin(),
+                                        make_prelude_enum("Option", {"T"}, std::move(members)));
+        }
+        if (!has_result) {
+            std::vector<ast::EnumMember> members;
+            members.emplace_back("Ok", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                           {"value", ast::make_named("T")}});
+            members.emplace_back("Err", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                            {"error", ast::make_named("E")}});
+            program.declarations.insert(
+                program.declarations.begin(),
+                make_prelude_enum("Result", {"T", "E"}, std::move(members)));
+        }
+    }
+
     // Pass 1: 関数シグネチャを登録
     for (auto& decl : program.declarations) {
         register_declaration(*decl);
@@ -811,9 +857,19 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     enum_defs_[en.name] = &en;
 
     // ユーザー定義のResult/Optionは組み込み型を上書きするため
-    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）
+    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）。
+    // prelude注入された組み込み宣言（__prelude属性）は対象外
     if (en.name == "Result" || en.name == "Option") {
-        type_methods_.erase(en.name);
+        bool is_prelude = false;
+        for (const auto& attr : en.attributes) {
+            if (attr.name == "__prelude") {
+                is_prelude = true;
+                break;
+            }
+        }
+        if (!is_prelude) {
+            type_methods_.erase(en.name);
+        }
     }
 
     int64_t variant_index = 0;

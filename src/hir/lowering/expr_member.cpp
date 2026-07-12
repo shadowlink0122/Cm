@@ -70,6 +70,100 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         // obj_typeがnullの場合はデバッグログのみ
         // （フォールバックは使用せず、型チェッカーの設定に依存）
 
+        // 組み込みResult<T,E>/Option<T>のメソッドをタグ比較・ペイロード取り出しへ脱糖する
+        // （is_ok/is_err/is_some/is_none/unwrap/unwrap_or/unwrap_err/expect）
+        if (obj_type && obj_type->kind == ast::TypeKind::Struct &&
+            (obj_type->name == "Result" || obj_type->name == "Option") &&
+            enum_defs_.count(obj_type->name) > 0) {
+            const std::string& en = obj_type->name;
+            const bool is_result = (en == "Result");
+            const std::string ok_variant = is_result ? "Ok" : "Some";
+            const std::string err_variant = is_result ? "Err" : "None";
+            auto tag_of = [&](const std::string& v) -> int64_t {
+                auto it = enum_values_.find(en + "::" + v);
+                return (it != enum_values_.end()) ? it->second : 0;
+            };
+            TypePtr ok_type = (!obj_type->type_args.empty() && obj_type->type_args[0])
+                                  ? obj_type->type_args[0]
+                                  : ast::make_int();
+            TypePtr err_type =
+                (is_result && obj_type->type_args.size() > 1 && obj_type->type_args[1])
+                    ? obj_type->type_args[1]
+                    : ast::make_int();
+            auto make_tag_cmp = [&](int64_t tag_value) -> HirExprPtr {
+                auto tag_access = std::make_unique<HirMember>();
+                tag_access->object = clone_hir_expr(obj_hir);
+                tag_access->member = "__tag";
+                auto tag_expr = std::make_unique<HirExpr>(std::move(tag_access), ast::make_int());
+                auto lit = std::make_unique<HirLiteral>();
+                lit->value = tag_value;
+                auto lit_expr = std::make_unique<HirExpr>(std::move(lit), ast::make_int());
+                auto cmp = std::make_unique<HirBinary>();
+                cmp->op = HirBinaryOp::Eq;
+                cmp->lhs = std::move(tag_expr);
+                cmp->rhs = std::move(lit_expr);
+                return std::make_unique<HirExpr>(std::move(cmp), ast::make_bool());
+            };
+            auto make_payload = [&](const std::string& variant,
+                                    const TypePtr& payload_type) -> HirExprPtr {
+                auto payload = std::make_unique<HirEnumPayload>();
+                payload->scrutinee = clone_hir_expr(obj_hir);
+                payload->variant_name = en + "::" + variant;
+                payload->payload_type = payload_type;
+                return std::make_unique<HirExpr>(std::move(payload), payload_type);
+            };
+            auto make_panic = [&](const std::string& msg, const TypePtr& t) -> HirExprPtr {
+                auto call = std::make_unique<HirCall>();
+                call->func_name = "panic";
+                auto msg_lit = std::make_unique<HirLiteral>();
+                msg_lit->value = msg;
+                call->args.push_back(
+                    std::make_unique<HirExpr>(std::move(msg_lit), ast::make_string()));
+                return std::make_unique<HirExpr>(std::move(call), t);
+            };
+            auto make_guarded = [&](int64_t good_tag, HirExprPtr value, HirExprPtr fallback,
+                                    const TypePtr& t) -> HirExprPtr {
+                auto tern = std::make_unique<HirTernary>();
+                tern->condition = make_tag_cmp(good_tag);
+                tern->then_expr = std::move(value);
+                tern->else_expr = std::move(fallback);
+                return std::make_unique<HirExpr>(std::move(tern), t);
+            };
+
+            if (mem.member == "is_ok" || mem.member == "is_some") {
+                return make_tag_cmp(tag_of(ok_variant));
+            }
+            if (mem.member == "is_err" || mem.member == "is_none") {
+                return make_tag_cmp(tag_of(err_variant));
+            }
+            if (mem.member == "unwrap") {
+                std::string msg =
+                    is_result ? "called unwrap on an Err value" : "called unwrap on a None value";
+                return make_guarded(tag_of(ok_variant), make_payload(ok_variant, ok_type),
+                                    make_panic(msg, ok_type), ok_type);
+            }
+            if (mem.member == "expect" && !mem.args.empty()) {
+                // メッセージ引数（文字列リテラル）をそのままpanicへ渡す
+                auto msg_expr = lower_expr(*mem.args[0]);
+                auto call = std::make_unique<HirCall>();
+                call->func_name = "panic";
+                call->args.push_back(std::move(msg_expr));
+                auto panic_expr = std::make_unique<HirExpr>(std::move(call), ok_type);
+                return make_guarded(tag_of(ok_variant), make_payload(ok_variant, ok_type),
+                                    std::move(panic_expr), ok_type);
+            }
+            if (mem.member == "unwrap_or" && !mem.args.empty()) {
+                auto fallback = lower_expr(*mem.args[0]);
+                return make_guarded(tag_of(ok_variant), make_payload(ok_variant, ok_type),
+                                    std::move(fallback), ok_type);
+            }
+            if (mem.member == "unwrap_err" && is_result) {
+                return make_guarded(tag_of(err_variant), make_payload(err_variant, err_type),
+                                    make_panic("called unwrap_err on an Ok value", err_type),
+                                    err_type);
+            }
+        }
+
         // 配列のビルトインメソッド処理
         if (obj_type && obj_type->kind == ast::TypeKind::Array) {
             // dim() - 配列の次元数を返す

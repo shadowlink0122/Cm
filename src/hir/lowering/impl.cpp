@@ -320,6 +320,8 @@ HirUnaryOp HirLowering::convert_unary_op(ast::UnaryOp op) {
             return HirUnaryOp::PostInc;
         case ast::UnaryOp::PostDec:
             return HirUnaryOp::PostDec;
+        case ast::UnaryOp::Try:
+            return HirUnaryOp::Try;
         default:
             return HirUnaryOp::Neg;
     }

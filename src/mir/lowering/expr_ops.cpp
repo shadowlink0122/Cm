@@ -914,6 +914,46 @@ static bool build_place_for_incdec(ExprLowering& lowering, const hir::HirExpr& e
 
 // 単項演算のlowering
 LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& ctx) {
+    // ?演算子（Result/Optionのエラー伝播）:
+    //   tag == 0（Ok/Some）ならペイロードを返し、
+    //   それ以外（Err/None）ならユニオン値を丸ごと関数の戻り値へコピーして早期returnする
+    //   （Result<T,E>とResult<U,E>は同一のタグ付きユニオン表現のため直接コピーできる）
+    if (unary.op == hir::HirUnaryOp::Try) {
+        LocalId operand = lower_expression(*unary.operand, ctx);
+
+        // タグ（field 0）を読み出す
+        LocalId tag = ctx.new_temp(hir::make_int());
+        MirPlace tag_place{operand};
+        tag_place.projections.push_back(PlaceProjection::field(0));
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{tag}, MirRvalue::use(MirOperand::copy(tag_place))));
+
+        BlockId cont_block = ctx.new_block();
+        BlockId propagate_block = ctx.new_block();
+        ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{tag}),
+                                                     {{0, cont_block}}, propagate_block));
+
+        // Err/None: 戻り値ローカルへユニオン値をコピーして早期return
+        ctx.switch_to_block(propagate_block);
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{ctx.func->return_local}, MirRvalue::use(MirOperand::copy(MirPlace{operand}))));
+        ctx.set_terminator(MirTerminator::return_value());
+
+        // Ok/Some: ペイロード（field 1）を取り出して継続
+        ctx.switch_to_block(cont_block);
+        hir::TypePtr payload_type = hir::make_int();
+        if (unary.operand->type && !unary.operand->type->type_args.empty() &&
+            unary.operand->type->type_args[0]) {
+            payload_type = unary.operand->type->type_args[0];
+        }
+        LocalId result = ctx.new_temp(payload_type);
+        MirPlace payload_place{operand};
+        payload_place.projections.push_back(PlaceProjection::field(1));
+        ctx.push_statement(MirStatement::assign(MirPlace{result},
+                                                MirRvalue::use(MirOperand::copy(payload_place))));
+        return result;
+    }
+
     // インクリメント/デクリメント演算子の処理
     if (unary.op == hir::HirUnaryOp::PreInc || unary.op == hir::HirUnaryOp::PostInc ||
         unary.op == hir::HirUnaryOp::PreDec || unary.op == hir::HirUnaryOp::PostDec) {

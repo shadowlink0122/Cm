@@ -601,6 +601,41 @@ ast::ExprPtr Parser::parse_postfix() {
             continue;
         }
 
+        // ?演算子（Result/Optionのエラー伝播）: expr?
+        // 三項演算子（cond ? a : b）と区別するため、? の次のトークンが
+        // 式を開始し得る場合は三項演算子として上位に委ねる
+        if (check(TokenKind::Question)) {
+            bool next_starts_expr = false;
+            if (pos_ + 1 < tokens_.size()) {
+                switch (tokens_[pos_ + 1].kind) {
+                    case TokenKind::Ident:
+                    case TokenKind::IntLiteral:
+                    case TokenKind::FloatLiteral:
+                    case TokenKind::StringLiteral:
+                    case TokenKind::CharLiteral:
+                    case TokenKind::KwTrue:
+                    case TokenKind::KwFalse:
+                    case TokenKind::KwNull:
+                    case TokenKind::LParen:
+                    case TokenKind::Bang:
+                    case TokenKind::Minus:
+                    case TokenKind::Tilde:
+                    case TokenKind::KwMatch:
+                        next_starts_expr = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            if (!next_starts_expr) {
+                advance();  // ?
+                debug::par::log(debug::par::Id::PostfixStart, "Detected try operator (?)",
+                                debug::Level::Debug);
+                expr = ast::make_unary(ast::UnaryOp::Try, std::move(expr));
+                continue;
+            }
+        }
+
         // キャスト式はparse_cast_expr()で処理（&x as ulongを(&x) as ulongとして解釈するため）
 
         break;

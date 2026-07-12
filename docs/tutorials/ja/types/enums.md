@@ -204,11 +204,11 @@ int main() {
 
 ---
 
-## Result/Optionパターン
+## Result/Option（組み込みエラーハンドリング型）
 
-**v0.13.0以降**
+**v0.16.0以降は言語組み込み**
 
-Cmでは、エラーハンドリングや値の有無を表現するために、`Result<T, E>`と`Option<T>`パターンを使用できます。これらは言語組み込みではなく、ユーザーが明示的にenum定義します。
+エラーハンドリングは `Result<T, E>`、値の有無は `Option<T>` で表現します。v0.16.0からRust同様の**組み込み型**になり、enum定義なしでそのまま使えます（同名のenumを自分で定義した場合はそちらが優先されます）。
 
 ### Result型
 
@@ -216,11 +216,6 @@ Cmでは、エラーハンドリングや値の有無を表現するために、
 
 ```cm
 import std::io::println;
-
-enum Result<T, E> {
-    Ok(T),
-    Err(E)
-}
 
 Result<int, string> safe_divide(int a, int b) {
     if (b == 0) {
@@ -246,11 +241,6 @@ int main() {
 ```cm
 import std::io::println;
 
-enum Option<T> {
-    Some(T),
-    None
-}
-
 Option<int> find_value(int[] arr, int target) {
     for (int i = 0; i < arr.len(); i++) {
         if (arr[i] == target) {
@@ -271,13 +261,44 @@ int main() {
 }
 ```
 
-### なぜユーザー定義か？
+### メソッド（Rust準拠）
 
-`Result`と`Option`はユーザーが明示的にenum定義する必要があります。これにより：
+matchを書かずに判別・取り出しができます。`unwrap()` はErr/Noneのとき「panic: <メッセージ>」を出力して異常終了します（Rustのpanic!相当）。
 
-- **明示性**: コードで使用している型が明確
-- **カスタマイズ可能**: `impl`ブロックでメソッドを追加可能
-- **一貫性**: 他のenumと同じ扱い
+```cm
+Result<int, string> r = safe_divide(10, 2);
+bool ok = r.is_ok();          // 成功か
+bool err = r.is_err();        // 失敗か
+int v = r.unwrap();           // 成功値（Errならパニック）
+int v2 = r.unwrap_or(-1);     // 成功値またはデフォルト
+int v3 = r.expect("must divide");  // 成功値（Errならメッセージ付きパニック）
+// string e = r.unwrap_err(); // エラー値（Okならパニック）
+
+Option<int> o = find_value([1, 2, 3], 2);
+bool s = o.is_some();
+bool n = o.is_none();
+int i = o.unwrap_or(0);
+```
+
+### ?演算子（エラー伝播）
+
+`expr?` はOk/Someならペイロードを返し、Err/Noneなら**現在の関数からそのまま早期return**します。Resultの`?`はResultを返す関数の中で、Optionの`?`はOptionを返す関数の中でのみ使用できます。
+
+```cm
+Result<int, string> calc(int a, int b) {
+    int q = safe_divide(a, b)?;   // Errならここで呼び出し元へ伝播
+    int q2 = safe_divide(q, 2)?;
+    return Result::Ok(q2 * 10);
+}
+```
+
+### must_use（未使用Resultの静的チェック）
+
+Result型の値を使わずに文として捨てると、コンパイル時に `[must_use]` 警告が出ます。エラーの取りこぼしを防ぐため、matchやis_ok()等で必ず処理してください。
+
+```cm
+safe_divide(1, 0);   // warning: 未使用のResult値です [must_use]
+```
 
 ---
 

@@ -453,6 +453,13 @@ void TypeChecker::register_builtin_types() {
         unwrap_err.name = "unwrap_err";
         unwrap_err.return_type = ast::make_generic_param("E");
         type_methods_["Result"]["unwrap_err"] = unwrap_err;
+
+        // expect(msg: string) -> T（Errならmsgでパニック）
+        MethodInfo expect;
+        expect.name = "expect";
+        expect.return_type = ast::make_generic_param("T");
+        expect.param_types.push_back(ast::make_string());
+        type_methods_["Result"]["expect"] = expect;
     }
 
     // ============================================================
@@ -492,6 +499,13 @@ void TypeChecker::register_builtin_types() {
         unwrap_or.return_type = ast::make_generic_param("T");
         unwrap_or.param_types.push_back(ast::make_generic_param("T"));
         type_methods_["Option"]["unwrap_or"] = unwrap_or;
+
+        // expect(msg: string) -> T（Noneならmsgでパニック）
+        MethodInfo expect;
+        expect.name = "expect";
+        expect.return_type = ast::make_generic_param("T");
+        expect.param_types.push_back(ast::make_string());
+        type_methods_["Option"]["expect"] = expect;
     }
 
     debug::tc::log(debug::tc::Id::Resolved, "Registered builtin types: Result<T, E>, Option<T>",

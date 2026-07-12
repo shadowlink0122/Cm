@@ -118,6 +118,25 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
             }
 
+            // panic(msg): void __cm_panic(const char*) へ正規化して呼び出す
+            // （呼び出し式の型（T等）から誤ったシグネチャで宣言されると
+            // wasmでsignature mismatchになる。panicは戻らないため戻り値は使われない）
+            if (funcName == "panic") {
+                auto panicType = llvm::FunctionType::get(
+                    ctx.getVoidType(), {llvm::PointerType::get(ctx.getContext(), 0)}, false);
+                auto panicFunc = module->getOrInsertFunction("__cm_panic", panicType);
+                llvm::Value* msgArg = nullptr;
+                if (!callData.args.empty() && callData.args[0]) {
+                    msgArg = convertOperand(*callData.args[0]);
+                }
+                if (!msgArg) {
+                    msgArg = builder->CreateGlobalStringPtr("panic", "panic_msg");
+                }
+                builder->CreateCall(panicFunc, {msgArg});
+                builder->CreateUnreachable();
+                break;
+            }
+
             // Print/Format系の特別処理（ヘルパー関数を使用）
             // ============================================================
             if (funcName == "cm_println_format" || funcName == "cm_print_format") {

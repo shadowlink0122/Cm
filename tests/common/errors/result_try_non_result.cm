@@ -1,0 +1,9 @@
+// 非Result/Option値への?演算子はコンパイルエラー
+import std::io::println;
+
+int main() {
+    int x = 42;
+    int y = x?;
+    println("{y}");
+    return 0;
+}

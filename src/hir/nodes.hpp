@@ -86,6 +86,7 @@ enum class HirUnaryOp {
     PreDec,   // --x
     PostInc,  // x++
     PostDec,  // x--
+    Try,      // expr? （Result/Optionのエラー伝播）
 };
 
 struct HirUnary {

@@ -10,6 +10,7 @@ bool isBuiltinFunction(const std::string& name) {
     static const std::unordered_set<std::string> builtins = {
         "println",
         "print",
+        "panic",
         "cm_println_string",
         "cm_println_int",
         "cm_println_long",
@@ -191,6 +192,15 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         std::string code = argStrs.empty() ? "0" : argStrs[0];
         return "((typeof process !== \"undefined\") ? process.exit(" + code +
                ") : (() => { throw new Error(\"exit(\" + (" + code + ") + \")\"); })())";
+    }
+
+    // panic(msg): "panic: <msg>" を出力して異常終了する（Result/Optionのunwrap等で使用。
+    // ネイティブランタイムの__cm_panicと同じ形式・終了コード134）
+    if (name == "panic") {
+        std::string msg = argStrs.empty() ? "\"panic\"" : argStrs[0];
+        return "((m) => { console.log(\"panic: \" + m); ((typeof process !== \"undefined\") ? "
+               "process.exit(134) : (() => { throw new Error(\"panic: \" + m); })()); })(" +
+               msg + ")";
     }
 
     // println系
