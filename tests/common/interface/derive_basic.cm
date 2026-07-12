@@ -1,9 +1,6 @@
 import std::io::println;
 // derive_basic.cm - #[derive]属性による自動実装の統合テスト（with構文と等価）
-
-interface Eq<T> {
-    operator bool ==(T other);
-}
+// Eq/Cloneは組み込みinterfaceのため宣言不要（暗黙的に利用可能）
 
 // 1. 基本的な #[derive(Eq)]
 #[derive(Eq)]

@@ -1556,6 +1556,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                             } else if (elemKind == hir::TypeKind::Short ||
                                        elemKind == hir::TypeKind::UShort) {
                                 elemSize = 2;
+                            } else if (elemKind == hir::TypeKind::Union ||
+                                       elemKind == hir::TypeKind::Struct) {
+                                // ユニオン・構造体: blob格納のため実サイズを
+                                // DataLayoutから取得（MIR側の計算と一致させる）
+                                auto* elemTy = convertType(local.type->element_type);
+                                elemSize = static_cast<int64_t>(
+                                    module->getDataLayout().getTypeAllocSize(elemTy));
                             }
                         }
 
@@ -1676,9 +1683,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                                             } else if (elemKind == hir::TypeKind::Short ||
                                                        elemKind == hir::TypeKind::UShort) {
                                                 elemSize = 2;
-                                            } else if (elemKind == hir::TypeKind::Struct) {
-                                                // 構造体のサイズはポインタサイズ（簡略化）
-                                                elemSize = 8;
+                                            } else if (elemKind == hir::TypeKind::Struct ||
+                                                       elemKind == hir::TypeKind::Union) {
+                                                // 構造体・ユニオン: blob格納のため実サイズを使用
+                                                auto* elemTy =
+                                                    convertType(field.type->element_type);
+                                                elemSize = static_cast<int64_t>(
+                                                    module->getDataLayout().getTypeAllocSize(
+                                                        elemTy));
                                             }
                                         }
 

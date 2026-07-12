@@ -608,9 +608,12 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                             } else if (elem_kind == hir::TypeKind::Float) {
                                                 get_func = "cm_slice_get_f32";
                                             } else if (elem_kind == hir::TypeKind::Pointer ||
-                                                       elem_kind == hir::TypeKind::String ||
-                                                       elem_kind == hir::TypeKind::Struct) {
+                                                       elem_kind == hir::TypeKind::String) {
                                                 get_func = "cm_slice_get_ptr";
+                                            } else if (elem_kind == hir::TypeKind::Struct ||
+                                                       elem_kind == hir::TypeKind::Union) {
+                                                // blob格納: 要素ポインタ経由でロードする
+                                                get_func = "cm_slice_get_element_ptr";
                                             }
 
                                             LocalId result = ctx.new_temp(elem_type);
@@ -643,12 +646,21 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                             call_args.push_back(
                                                 MirOperand::copy(MirPlace{idx_local}));
 
+                                            // blob要素は要素ポインタを受けてデリファレンスする
+                                            bool deref_result =
+                                                (get_func == "cm_slice_get_element_ptr");
+                                            LocalId call_dest = result;
+                                            if (deref_result) {
+                                                call_dest =
+                                                    ctx.new_temp(hir::make_pointer(elem_type));
+                                            }
+
                                             auto call_term = std::make_unique<MirTerminator>();
                                             call_term->kind = MirTerminator::Call;
                                             call_term->data = MirTerminator::CallData{
                                                 MirOperand::function_ref(get_func),
                                                 std::move(call_args),
-                                                MirPlace{result},
+                                                MirPlace{call_dest},
                                                 success_block,
                                                 std::nullopt,
                                                 "",
@@ -656,6 +668,13 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 false};
                                             ctx.set_terminator(std::move(call_term));
                                             ctx.switch_to_block(success_block);
+
+                                            if (deref_result) {
+                                                ctx.push_statement(MirStatement::assign(
+                                                    MirPlace{result},
+                                                    MirRvalue::use(MirOperand::copy(MirPlace{
+                                                        call_dest, {PlaceProjection::deref()}}))));
+                                            }
 
                                             arg_locals.push_back(result);
                                         } else {
@@ -676,14 +695,53 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                     MirRvalue::use(
                                                         MirOperand::constant(idx_const))));
 
-                                                place.projections.push_back(
-                                                    PlaceProjection::index(idx_local));
+                                                if (is_slice) {
+                                                    // スライス: CmSlice*への直接indexは不正のため
+                                                    // 要素ポインタを取得してデリファレンス基点にする
+                                                    hir::TypePtr slice_elem =
+                                                        arr_type->element_type
+                                                            ? arr_type->element_type
+                                                            : hir::make_int();
+                                                    LocalId elem_ptr =
+                                                        ctx.new_temp(hir::make_pointer(slice_elem));
+                                                    BlockId elem_block = ctx.new_block();
 
-                                                // 配列の要素型に更新
-                                                if (current_type &&
-                                                    current_type->kind == hir::TypeKind::Array &&
-                                                    current_type->element_type) {
-                                                    current_type = current_type->element_type;
+                                                    std::vector<MirOperandPtr> ep_args;
+                                                    ep_args.push_back(
+                                                        MirOperand::copy(MirPlace{*arr_id}));
+                                                    ep_args.push_back(
+                                                        MirOperand::copy(MirPlace{idx_local}));
+                                                    auto ep_term =
+                                                        std::make_unique<MirTerminator>();
+                                                    ep_term->kind = MirTerminator::Call;
+                                                    ep_term->data = MirTerminator::CallData{
+                                                        MirOperand::function_ref(
+                                                            "cm_slice_get_element_ptr"),
+                                                        std::move(ep_args),
+                                                        MirPlace{elem_ptr},
+                                                        elem_block,
+                                                        std::nullopt,
+                                                        "",
+                                                        "",
+                                                        false};
+                                                    ctx.set_terminator(std::move(ep_term));
+                                                    ctx.switch_to_block(elem_block);
+
+                                                    place = MirPlace{elem_ptr};
+                                                    place.projections.push_back(
+                                                        PlaceProjection::deref());
+                                                    current_type = slice_elem;
+                                                } else {
+                                                    place.projections.push_back(
+                                                        PlaceProjection::index(idx_local));
+
+                                                    // 配列の要素型に更新
+                                                    if (current_type &&
+                                                        current_type->kind ==
+                                                            hir::TypeKind::Array &&
+                                                        current_type->element_type) {
+                                                        current_type = current_type->element_type;
+                                                    }
                                                 }
                                             } catch (...) {
                                                 valid = false;

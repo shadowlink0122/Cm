@@ -49,7 +49,32 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         }
 
         // 右辺を先に評価
-        LocalId rhs_value = lower_expression(*bin.rhs, ctx);
+        // 配列リテラルRHSは代入先の型を期待型として渡す
+        // （`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
+        hir::TypePtr assign_target_type = bin.lhs ? bin.lhs->type : nullptr;
+        if ((!assign_target_type || assign_target_type->kind != hir::TypeKind::Array) && bin.lhs) {
+            if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&bin.lhs->kind)) {
+                const auto& obj = (*mem)->object;
+                if (obj && obj->type && obj->type->kind == hir::TypeKind::Struct &&
+                    ctx.struct_defs && ctx.struct_defs->count(obj->type->name)) {
+                    const auto* struct_def = ctx.struct_defs->at(obj->type->name);
+                    for (const auto& f : struct_def->fields) {
+                        if (f.name == (*mem)->member) {
+                            assign_target_type = f.type;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        LocalId rhs_value;
+        if (auto* rhs_arr_lit = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&bin.rhs->kind);
+            rhs_arr_lit && assign_target_type && assign_target_type->kind == hir::TypeKind::Array) {
+            rhs_value = lower_array_literal(**rhs_arr_lit, assign_target_type, ctx);
+        } else {
+            rhs_value = lower_expression(*bin.rhs, ctx);
+        }
 
         // 左辺値のMirPlaceを構築するヘルパー関数
         // 複雑な左辺値（c.values[0], points[0].x など）を再帰的に処理
@@ -191,6 +216,73 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         hir::TypePtr current_type;
 
         if (build_lvalue_place(bin.lhs.get(), place, current_type)) {
+            // スライスへのインデックス書き込みはCmSlice*への直接GEPになり不正
+            // （SIGBUS）なため、要素ポインタ経由のデリファレンス格納へ正規化する
+            hir::TypePtr walk_type = nullptr;
+            if (place.local < ctx.func->locals.size()) {
+                walk_type = ctx.func->locals[place.local].type;
+            }
+            for (size_t pi = 0; pi < place.projections.size(); ++pi) {
+                const auto& proj = place.projections[pi];
+                bool is_slice_base = walk_type && walk_type->kind == hir::TypeKind::Array &&
+                                     !walk_type->array_size.has_value();
+                if (proj.kind == ProjectionKind::Index && is_slice_base) {
+                    // スライス値（CmSlice*）を一時変数へロード
+                    MirPlace slice_place = place;
+                    slice_place.projections.resize(pi);
+                    LocalId slice_local = ctx.new_temp(walk_type);
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{slice_local}, MirRvalue::use(MirOperand::copy(slice_place))));
+
+                    // 要素ポインタを取得
+                    hir::TypePtr elem_type =
+                        walk_type->element_type ? walk_type->element_type : hir::make_int();
+                    LocalId elem_ptr = ctx.new_temp(hir::make_pointer(elem_type));
+                    BlockId next_block = ctx.new_block();
+                    std::vector<MirOperandPtr> ep_args;
+                    ep_args.push_back(MirOperand::copy(MirPlace{slice_local}));
+                    ep_args.push_back(MirOperand::copy(MirPlace{proj.index_local}));
+                    auto ep_term = std::make_unique<MirTerminator>();
+                    ep_term->kind = MirTerminator::Call;
+                    ep_term->data = MirTerminator::CallData{
+                        MirOperand::function_ref("cm_slice_get_element_ptr"),
+                        std::move(ep_args),
+                        MirPlace{elem_ptr},
+                        next_block,
+                        std::nullopt,
+                        "",
+                        "",
+                        false};
+                    ctx.set_terminator(std::move(ep_term));
+                    ctx.switch_to_block(next_block);
+
+                    // 残りのプロジェクションをデリファレンス基点へ付け替える
+                    MirPlace new_place{elem_ptr};
+                    new_place.projections.push_back(PlaceProjection::deref());
+                    for (size_t rest = pi + 1; rest < place.projections.size(); ++rest) {
+                        new_place.projections.push_back(place.projections[rest]);
+                    }
+                    place = new_place;
+                    walk_type = elem_type;
+                    pi = 0;  // 新しいplaceの先頭（deref）から再走査
+                    continue;
+                }
+                // 型を追跡
+                if (proj.kind == ProjectionKind::Index || proj.kind == ProjectionKind::Deref) {
+                    walk_type = walk_type ? walk_type->element_type : nullptr;
+                } else if (proj.kind == ProjectionKind::Field) {
+                    if (walk_type && walk_type->kind == hir::TypeKind::Struct && ctx.struct_defs &&
+                        ctx.struct_defs->count(walk_type->name)) {
+                        const auto* sd = ctx.struct_defs->at(walk_type->name);
+                        walk_type = proj.field_id < sd->fields.size()
+                                        ? sd->fields[proj.field_id].type
+                                        : nullptr;
+                    } else {
+                        walk_type = nullptr;
+                    }
+                }
+            }
+
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             return rhs_value;

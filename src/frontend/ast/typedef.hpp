@@ -96,6 +96,26 @@ inline TypePtr make_union(std::vector<UnionVariant> variants) {
     return type;
 }
 
+// ユニオン型のバリアント型一覧を取得（type_args形式とUnionType::variants形式の両対応）
+inline std::vector<TypePtr> union_variant_types(const TypePtr& type) {
+    if (!type) {
+        return {};
+    }
+    if (!type->type_args.empty()) {
+        return type->type_args;
+    }
+    std::vector<TypePtr> result;
+    if (type->kind == TypeKind::Union) {
+        const auto* u = static_cast<const UnionType*>(type.get());
+        for (const auto& v : u->variants) {
+            if (!v.fields.empty() && v.fields[0]) {
+                result.push_back(v.fields[0]);
+            }
+        }
+    }
+    return result;
+}
+
 // Result<T, E> 型を作成
 inline TypePtr make_result_type(TypePtr ok_type, TypePtr err_type) {
     std::vector<UnionVariant> variants;

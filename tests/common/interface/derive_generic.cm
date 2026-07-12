@@ -1,9 +1,6 @@
 import std::io::println;
 // derive_generic.cm - ジェネリック構造体への#[derive]（モノモーフィゼーション経由）
-
-interface Eq<T> {
-    operator bool ==(T other);
-}
+// Eqは組み込みinterfaceのため宣言不要（暗黙的に利用可能）
 
 #[derive(Eq)]
 struct Pair<T, U> {

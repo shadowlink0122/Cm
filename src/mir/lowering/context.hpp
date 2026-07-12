@@ -196,6 +196,11 @@ class LoweringContext {
 
     // typedefとenumを解決（必要に応じて再帰的に）
     hir::TypePtr resolve_typedef(const hir::TypePtr& type);
+
+    // LLVMのDataLayout（自然アライメント）と一致する型サイズ/アライメントを計算する
+    // スライスのblob要素サイズ算出用（calculate_type_sizeは見積もりでありレイアウト非互換）
+    int64_t layout_size(const hir::TypePtr& type) const;
+    int64_t layout_align(const hir::TypePtr& type) const;
 };
 
 }  // namespace cm::mir

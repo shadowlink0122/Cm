@@ -1,0 +1,18 @@
+import std::io::println;
+// typedef_alias_slice.cm - typedefエイリアス要素のスライス（要素サイズの解決）
+
+typedef MyInt = int;
+typedef Name = string;
+
+int main() {
+    MyInt[] xs = [];
+    xs.push(10);
+    xs.push(20);
+    println("len={xs.len()} x0={xs[0]} x1={xs[1]}");
+
+    Name[] ns = [];
+    ns.push("abc");
+    ns.push("def");
+    println("n0={ns[0]} n1={ns[1]}");
+    return 0;
+}

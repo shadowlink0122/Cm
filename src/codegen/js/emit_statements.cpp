@@ -124,6 +124,26 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                 }
             }
 
+            // 構造体/ユニオンポインタへの丸ごとDeref代入（*p = v）:
+            // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ）は要素を置換し、
+            // オブジェクト直接参照はフィールドコピーで表現する（IIFEは代入左辺にできないため）
+            if (data.place.projections.size() == 1 &&
+                data.place.projections[0].kind == mir::ProjectionKind::Deref &&
+                target_local < func.locals.size()) {
+                const auto& lt = func.locals[target_local].type;
+                if (lt && lt->kind == TypeKind::Pointer && lt->element_type &&
+                    (lt->element_type->kind == TypeKind::Struct ||
+                     lt->element_type->kind == TypeKind::Union)) {
+                    std::string base = getLocalVarName(func, target_local);
+                    std::string rv = emitRvalue(*data.rvalue, func);
+                    emitter_.emitLine(
+                        "((p, v) => { if (p && p.__arr !== undefined) { "
+                        "p.__arr[p.__idx] = v; } else { Object.assign(p, v); } })(" +
+                        base + ", " + rv + ");");
+                    break;
+                }
+            }
+
             std::string rvalue = emitRvalue(*data.rvalue, func);
             // 狭い整数型（tiny/utiny/short/ushort）への代入は型幅にラップする
             if (data.place.projections.empty() && target_local < func.locals.size()) {

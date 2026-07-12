@@ -98,15 +98,19 @@ bool all_even = nums.every((x) => { return x % 2 == 0; });
 
 ## チェーン呼び出し
 
-高階関数は連続して呼び出せます：
+高階関数は連続して呼び出せます（ラムダの引数には型注釈が必要です。`reduce` の引数順は `reduce(関数, 初期値)` です）：
 
 ```cm
+int[10] numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    .filter((x) => { return x % 2 == 0; })  // [2, 4, 6, 8, 10]
-    .map((x) => { return x * x; })           // [4, 16, 36, 64, 100]
-    .reduce(0, (acc, x) => { return acc + x; });
+int total = numbers
+    .filter((int x) => { return x % 2 == 0; })  // [2, 4, 6, 8, 10]
+    .map((int x) => { return x * x; })          // [4, 16, 36, 64, 100]
+    .reduce((int acc, int x) => { return acc + x; }, 0);
 // 220
 ```
+
+注意（v0.16.0時点）: `map`/`filter`/`reduce` 等の高階関数は固定長配列（`int[10]` 等）で動作します。可変長スライス（`int[]`）への対応は既知の問題として記録されています（バックエンド対応マトリクス参照）。
 
 ---
 
@@ -122,8 +126,9 @@ Person[] people = [
 ];
 
 // 30歳以上の名前を取得
-    .filter((p) => { return p.age >= 30; })
-    .map((p) => { return p.name; });
+string[] names = people
+    .filter((Person p) => { return p.age >= 30; })
+    .map((Person p) => { return p.name; });
 // ["Alice", "Carol"]
 ```
 

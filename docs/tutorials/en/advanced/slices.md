@@ -96,17 +96,21 @@ bool all_even = nums.every((x) => { return x % 2 == 0; });
 
 ---
 
-## チェーン呼び出し
+## Method Chaining
 
-高階関数は連続して呼び出せます：
+Higher-order functions can be chained (lambda parameters require type annotations, and the `reduce` argument order is `reduce(function, initial)`):
 
 ```cm
+int[10] numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    .filter((x) => { return x % 2 == 0; })  // [2, 4, 6, 8, 10]
-    .map((x) => { return x * x; })           // [4, 16, 36, 64, 100]
-    .reduce(0, (acc, x) => { return acc + x; });
+int total = numbers
+    .filter((int x) => { return x % 2 == 0; })  // [2, 4, 6, 8, 10]
+    .map((int x) => { return x * x; })          // [4, 16, 36, 64, 100]
+    .reduce((int acc, int x) => { return acc + x; }, 0);
 // 220
 ```
+
+Note (as of v0.16.0): higher-order functions such as `map`/`filter`/`reduce` work on fixed-size arrays (`int[10]` etc.). Support for growable slices (`int[]`) is recorded as a known issue (see the backend support matrix).
 
 ---
 
@@ -121,9 +125,10 @@ Person[] people = [
     Person { name: "Carol", age: 35 }
 ];
 
-// 30歳以上の名前を取得
-    .filter((p) => { return p.age >= 30; })
-    .map((p) => { return p.name; });
+// Collect names of people aged 30 or older
+string[] names = people
+    .filter((Person p) => { return p.age >= 30; })
+    .map((Person p) => { return p.name; });
 // ["Alice", "Carol"]
 ```
 

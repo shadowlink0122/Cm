@@ -493,7 +493,11 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                     }
                 } else if (currentType && currentType->element_type &&
                            currentType->element_type->kind == ast::TypeKind::Struct) {
-                    // 構造体ポインタ: JSオブジェクトは参照型なのでDerefはno-op
+                    // 構造体ポインタ: オブジェクト直接参照ならno-op、
+                    // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
+                    // 指し先を取り出す（実行時判定の両対応）
+                    result = "((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" +
+                             result + ")";
                 } else {
                     // その他: ボックス配列の[0]でアクセス
                     result += "[0]";

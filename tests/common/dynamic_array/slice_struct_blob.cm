@@ -1,0 +1,28 @@
+import std::io::println;
+// slice_struct_blob.cm - 構造体スライスのblob格納（値セマンティクス・補間直接参照）
+// 従来はポインタ格納で、push後の元変数変更が波及し補間はゴミ値だった（v0.16.0で修正）
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point[] ps = [];
+    Point a;
+    a.x = 1;
+    a.y = 10;
+    Point b;
+    b.x = 2;
+    b.y = 20;
+    ps.push(a);
+    ps.push(b);
+
+    // push後の元変数変更はスライスへ波及しない（値セマンティクス）
+    a.x = 999;
+
+    Point q = ps[0];
+    println("q=({q.x},{q.y}) len={ps.len()}");
+    println("interp=({ps[1].x},{ps[1].y})");
+    return 0;
+}

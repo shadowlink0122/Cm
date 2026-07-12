@@ -1,0 +1,12 @@
+// ユニオンの誤った型でのas取り出しは実行時パニック（従来はタグ検査なしでSIGSEGV）
+import std::io::println;
+
+typedef Value = int | string;
+
+int main() {
+    Value v = 42 as Value;
+    println("before cast");
+    string s = v as string;
+    println("unreachable: {s}");
+    return 0;
+}

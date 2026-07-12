@@ -897,11 +897,10 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 get_func = "cm_slice_get_f64";
             } else if (elem_kind == hir::TypeKind::Float) {
                 get_func = "cm_slice_get_f32";
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 get_func = "cm_slice_get_ptr";
-            } else if (elem_kind == hir::TypeKind::Union) {
-                // ユニオン型要素: blob格納のため要素先頭へのポインタを取得する
+            } else if (elem_kind == hir::TypeKind::Union || elem_kind == hir::TypeKind::Struct) {
+                // ユニオン・構造体要素: blob格納のため要素先頭へのポインタを取得する
                 get_func = "cm_slice_get_element_ptr";
             }
         }
@@ -1078,12 +1077,11 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
                 elem_size = 8;
             } else if (elem_kind == hir::TypeKind::Float) {
                 elem_size = 4;
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 elem_size = 8;
-            } else if (elem_kind == hir::TypeKind::Union) {
-                // ユニオン型はtag+最大ペイロードのblobとして格納する
-                elem_size = union_slice_elem_size(elem_type);
+            } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
+                // 構造体・ユニオンはblob（値のインラインコピー）として格納する
+                elem_size = ctx.layout_size(elem_type);
             }
 
             // スライス用の一時変数を作成

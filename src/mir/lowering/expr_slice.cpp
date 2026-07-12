@@ -95,9 +95,12 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                 LocalId value_local = lower_expression(*call.args[1], ctx);
 
                 // 要素型に基づいてランタイム関数を選択
+                // メンバ経由のslice_typeはtypedefエイリアス未解決のことがあるため解決してから判定
                 std::string push_func = "cm_slice_push_i32";
                 if (slice_type && slice_type->element_type) {
-                    auto elem_kind = slice_type->element_type->kind;
+                    auto resolved_elem = ctx.resolve_typedef(slice_type->element_type);
+                    auto elem_kind =
+                        resolved_elem ? resolved_elem->kind : slice_type->element_type->kind;
                     if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
                         elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
                         push_func = "cm_slice_push_i8";
@@ -111,12 +114,12 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元スライス: 内側スライスはポインタとしてpush
                         push_func = "cm_slice_push_slice";
-                    } else if (elem_kind == hir::TypeKind::Union) {
-                        // ユニオン型: blobとしてメモリコピー
+                    } else if (elem_kind == hir::TypeKind::Union ||
+                               elem_kind == hir::TypeKind::Struct) {
+                        // ユニオン・構造体: blobとして値をインラインコピー
                         push_func = "cm_slice_push_blob";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String ||
-                               elem_kind == hir::TypeKind::Struct) {
+                               elem_kind == hir::TypeKind::String) {
                         push_func = "cm_slice_push_ptr";
                     }
                 }

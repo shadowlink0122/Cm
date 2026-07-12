@@ -126,6 +126,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_pop_i32",
         "cm_slice_pop_i64",
         "cm_slice_pop_f32",
+        "cm_slice_pop_f64",
         "cm_slice_pop_ptr",
         "cm_slice_delete",
         "cm_slice_clear",
@@ -426,17 +427,18 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
     }
     if (name == "cm_slice_push_blob" && argStrs.size() >= 2) {
-        // blob push: ポインタオブジェクト（{__arr,
-        // __idx}）が指す値をコピーしてpush（ユニオン型要素）
-        return "__cm_unwrap(" + argStrs[0] + ").push((" + argStrs[1] + ").__arr[(" + argStrs[1] +
-               ").__idx])";
+        // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、
+        // オブジェクト直接参照（構造体ローカルの&）ならそのままpushする
+        return "__cm_unwrap(" + argStrs[0] +
+               ").push(((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" + argStrs[1] +
+               "))";
     }
     if (name == "cm_slice_get_element_ptr" && argStrs.size() >= 2) {
         // 要素へのポインタオブジェクトを返す（デリファレンス構文 __arr[__idx] で要素を読む）
         return "({__arr: __cm_unwrap(" + argStrs[0] + "), __idx: " + argStrs[1] + "})";
     }
     if ((name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
-         name == "cm_slice_pop_ptr") &&
+         name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") &&
         argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ").pop()";
     }

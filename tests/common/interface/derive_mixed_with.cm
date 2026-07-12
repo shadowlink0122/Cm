@@ -1,13 +1,6 @@
 import std::io::println;
 // derive_mixed_with.cm - with構文と#[derive]属性の併用（unionされる）
-
-interface Eq<T> {
-    operator bool ==(T other);
-}
-
-interface Ord<T> {
-    operator bool <(T other);
-}
+// Eq/Ordは組み込みinterfaceのため宣言不要（暗黙的に利用可能）
 
 // with と derive の併用: リストはマージされる
 #[derive(Ord)]

@@ -1,6 +1,7 @@
 /// @file llvm_types.cpp
 /// @brief 型変換・定数変換処理
 
+#include "../../../frontend/ast/typedef.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -516,10 +517,11 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             // 最大ペイロードサイズを計算（UnionVariantsから）
             uint32_t maxPayloadSize = 8;  // デフォルト8バイト（int/long等）
 
-            // type_argsに含まれる型からサイズを計算
-            if (!type->type_args.empty()) {
+            // バリアント型からサイズを計算（type_args形式とUnionType::variants形式の両対応）
+            auto unionVariants = ast::union_variant_types(type);
+            if (!unionVariants.empty()) {
                 maxPayloadSize = 0;
-                for (const auto& variantType : type->type_args) {
+                for (const auto& variantType : unionVariants) {
                     if (variantType) {
                         uint32_t variantSize = 0;
                         switch (variantType->kind) {
