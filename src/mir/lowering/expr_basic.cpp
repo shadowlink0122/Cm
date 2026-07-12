@@ -416,6 +416,17 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             return temp;
         }
 
+        // 既知の関数名なら関数参照として解決する
+        // （補間ミニパイプライン経由ではis_function_refが立たないため）
+        if (ctx.hir_func_defs && ctx.hir_func_defs->count(var.name)) {
+            hir::TypePtr func_ptr_type =
+                expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
+            LocalId temp = ctx.new_temp(func_ptr_type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{temp}, MirRvalue::use(MirOperand::function_ref(var.name))));
+            return temp;
+        }
+
         // 変数が見つからない場合は仮の値を返す
         LocalId temp = ctx.new_temp(hir::make_int());
         MirConstant zero_const;

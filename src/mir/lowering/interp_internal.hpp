@@ -106,6 +106,23 @@ inline bool interp_content_is_expression(const std::string& s) {
     return false;
 }
 
+// 補間内のメソッド/関数呼び出しを本物の式パーサ経路で降下すべきか判定する。
+// 自動実装メソッド（debug/toString/css系）は旧経路がネスト展開込みで
+// 正しく整形できるため除外する（式パーサ経路では文字列ポインタが
+// 数値表示になることを実測確認済み。with_debug系テストが検出する）
+inline bool interp_content_is_call(const std::string& s) {
+    if (s.find('(') == std::string::npos) {
+        return false;
+    }
+    static const char* legacy_methods[] = {".debug(", ".toString(", ".css(", ".to_css("};
+    for (const auto* m : legacy_methods) {
+        if (s.find(m) != std::string::npos) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // 補間内の関数呼び出し引数文字列をMIRオペランドへ変換するヘルパー
 // 整数リテラル・boolリテラル・ローカル変数名をサポートする
 // （それ以外の複雑な式は従来どおりダミーの0を返す）

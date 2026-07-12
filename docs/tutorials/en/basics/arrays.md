@@ -122,7 +122,7 @@ int main() {
 }
 ```
 
-Note (as of v0.16.0): using method calls with function arguments directly inside string interpolation (`{numbers.some(fn)}`) has a known limitation — assign the result to a variable first.
+Method calls with function arguments can also be used directly inside string interpolation (e.g. `println("{numbers.some(is_even)}")`).
 
 ## Sorting and First/Last
 

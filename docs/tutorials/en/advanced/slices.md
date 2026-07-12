@@ -134,7 +134,7 @@ int total = numbers
 // 220
 ```
 
-Note (as of v0.16.0): calling methods with function arguments inside string interpolation (such as `{xs.some(fn)}`) has a known limitation — assign the result to a variable first (see the backend support matrix).
+Method calls with function arguments (such as `{xs.some(fn)}`) also work directly inside string interpolation.
 
 ---
 

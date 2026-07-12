@@ -108,10 +108,12 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
 
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
-                        // 演算子を含む一般式（{a + b} 等）は本物の式パーサで降下する。
-                        // 従来は未対応パターンとして未初期化テンポラリが渡され
-                        // ゴミ値が表示されていた
-                        if (interp_content_is_expression(var_name)) {
+                        // 演算子を含む一般式（{a + b} 等）とメソッド/関数呼び出し
+                        // （{xs.first()} {xs.some(fn)} 等）は本物の式パーサで降下する。
+                        // 従来は未対応パターンとして未初期化テンポラリが渡されゴミ値が
+                        // 表示されていた（失敗時は従来経路へフォールバック）
+                        if (interp_content_is_expression(var_name) ||
+                            interp_content_is_call(var_name)) {
                             if (auto expr_local = lower_interp_expression(var_name, ctx)) {
                                 arg_locals.push_back(*expr_local);
                                 continue;

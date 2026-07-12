@@ -284,10 +284,21 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                                 if (ctx.hir_func_defs) {
                                     auto fit = ctx.hir_func_defs->find(callee);
                                     if (fit == ctx.hir_func_defs->end()) {
+                                        // メソッドはマングル名（Type__method / ns::method）で
+                                        // 登録されているため境界つき末尾一致で探索する
+                                        // （budget が get に誤マッチする類を防ぐ）
                                         for (const auto& [fn_name, fn] : *ctx.hir_func_defs) {
-                                            if (fn && fn_name.size() > callee.size() &&
+                                            if (!fn || fn_name.size() <= callee.size() + 1 ||
                                                 fn_name.compare(fn_name.size() - callee.size(),
-                                                                callee.size(), callee) == 0) {
+                                                                callee.size(), callee) != 0) {
+                                                continue;
+                                            }
+                                            size_t sep = fn_name.size() - callee.size();
+                                            bool at_boundary =
+                                                (sep >= 2 &&
+                                                 (fn_name.compare(sep - 2, 2, "__") == 0 ||
+                                                  fn_name.compare(sep - 2, 2, "::") == 0));
+                                            if (at_boundary) {
                                                 ret_expr.type = fn->return_type;
                                                 break;
                                             }

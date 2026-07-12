@@ -358,13 +358,14 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 mir_func->name = type_name + "__" + method->name;
             }
 
-            // ジェネリックパラメータがある場合、hir_functionsに登録（モノモーフィゼーション用）
-            // メソッド自体のジェネリックパラメータ、impl自体のジェネリックパラメータ、
-            // またはtype_nameがジェネリック型（<を含む）の場合に登録
+            // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、
+            // 非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。
+            // モノモーフィゼーション側はgeneric_paramsと名前の'<'で判別するので
+            // 非ジェネリックの登録は無害）
+            hir_functions[mir_func->name] = method.get();
             bool has_generic = !method->generic_params.empty() || !impl.generic_params.empty() ||
                                type_name.find('<') != std::string::npos;
             if (has_generic) {
-                hir_functions[mir_func->name] = method.get();
                 debug_msg("MIR",
                           "Registered generic impl method: " + mir_func->name +
                               " (method params: " + std::to_string(method->generic_params.size()) +

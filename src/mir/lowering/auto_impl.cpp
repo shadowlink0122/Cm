@@ -893,6 +893,21 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
             for (const auto& func : (*eb)->functions) {
                 hir_functions[func->name] = func.get();
             }
+        } else if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
+            // implメソッドもマングル名（type__method）で登録する。
+            // 補間ミニパイプラインの戻り型解決が関数本体のlowering中に
+            // 参照するため、Pass 3を待たずここで登録する必要がある
+            if (!(*impl)->target_type.empty()) {
+                for (const auto& method : (*impl)->methods) {
+                    if (!method) {
+                        continue;
+                    }
+                    std::string mangled = (method->is_constructor || method->is_destructor)
+                                              ? method->name
+                                              : (*impl)->target_type + "__" + method->name;
+                    hir_functions[mangled] = method.get();
+                }
+            }
         }
     }
 

@@ -1,0 +1,41 @@
+// 文字列補間内のメソッド/関数呼び出しのテスト:
+// 回帰1: {xs.some(fn)} 等の関数引数付きメソッド呼び出しが未対応パターン扱いになり、
+// 未初期化テンポラリのゴミ値が表示されるバグの検証
+// 回帰2: 文字列/float返却メソッドの戻り型が解決されずint扱いになり、
+// 文字列ポインタやfloatビットパターンが数値表示されるバグの検証
+import std::io::println;
+
+bool is_even(int x) { return x % 2 == 0; }
+int add(int a, int b) { return a + b; }
+string greet(string name) { return "hello " + name; }
+
+struct Rect {
+    int w;
+    int h;
+}
+
+impl Rect {
+    string label(string prefix) { return prefix + ": rect"; }
+    float ratio(int scale) { return (self.w * scale) as float / self.h as float; }
+}
+
+int main() {
+    int[] xs = [1, 2, 3, 4, 5];
+    println("some = {xs.some(is_even)}");
+    println("every = {xs.every(is_even)}");
+    println("find = {xs.find(is_even)}");
+
+    int[3] arr = [10, 21, 30];
+    println("arr some = {arr.some(is_even)}");
+
+    println("free = {add(1, 2)}");
+    println("nested = {add(add(1, 2), 3)}");
+
+    string n = "cm";
+    println("str = {greet(n)}");
+
+    Rect r = {w: 4, h: 2};
+    println("method str = {r.label(n)}");
+    println("method float = {r.ratio(3)}");
+    return 0;
+}
