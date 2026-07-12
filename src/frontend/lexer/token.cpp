@@ -18,6 +18,8 @@ const char* token_kind_to_string(TokenKind kind) {
         // キーワード
         case TokenKind::KwAs:
             return "as";
+        case TokenKind::KwIs:
+            return "is";
         case TokenKind::KwAsync:
             return "async";
         case TokenKind::KwAwait:

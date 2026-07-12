@@ -1,0 +1,34 @@
+// ユニオン型のmatch型パターンのテスト:
+// `Type binder` パターンで実行時タグを判別しペイロードを束縛する
+import std::io::println;
+
+typedef Value = int | string | bool;
+
+void describe(Value v) {
+    match (v) {
+        int i => println("int: {i}"),
+        string s => println("str: {s}"),
+        bool b => println("bool: {b}"),
+        _ => println("other"),
+    }
+}
+
+int main() {
+    Value a = 42;
+    describe(a);
+    a = "hello";
+    describe(a);
+    Value c = true;
+    describe(c);
+
+    // ブロック形式アーム
+    Value d = 7;
+    match (d) {
+        int i => {
+            int doubled = i * 2;
+            println("block int: {doubled}");
+        }
+        _ => println("other"),
+    }
+    return 0;
+}

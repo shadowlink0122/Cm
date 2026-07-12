@@ -397,6 +397,7 @@ enum class MatchPatternKind {
     Range,                   // 範囲パターン (1...10)
     Or,                      // ORパターン (1 | 2 | 3)
     Masked,  // don't careビット付きリテラル（0b1?00。matchパターン専用）
+    Type,  // ユニオンの型パターン (int i, string s)。実行時タグで判別し束縛する
 };
 
 struct MatchPattern {
@@ -409,6 +410,7 @@ struct MatchPattern {
     ExprPtr range_end;         // Range用（終了値）
     int64_t masked_value = 0;  // Masked用: 比較値（?は0）
     int64_t masked_mask = 0;   // Masked用: 有効ビットマスク（?は0）
+    TypePtr type_pattern;      // Type用: 判別する型
     std::vector<std::unique_ptr<MatchPattern>> or_patterns;  // Or用
 
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
@@ -437,6 +439,15 @@ struct MatchPattern {
     static std::unique_ptr<MatchPattern> make_wildcard() {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::Wildcard;
+        return p;
+    }
+
+    // ユニオンの型パターン (int i)
+    static std::unique_ptr<MatchPattern> make_type(TypePtr type, std::string binding) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Type;
+        p->type_pattern = std::move(type);
+        p->binding_name = std::move(binding);
         return p;
     }
 
@@ -522,6 +533,9 @@ struct MatchExpr {
 struct CastExpr {
     ExprPtr operand;      // キャスト対象の式
     TypePtr target_type;  // キャスト先の型
+    // ユニオン型の実行時型判別 (expr is Type)。trueなら値の取り出しではなく
+    // アクティブな変種が target_type かどうかの bool を返す
+    bool type_check = false;
 
     CastExpr(ExprPtr e, TypePtr t) : operand(std::move(e)), target_type(std::move(t)) {}
 };

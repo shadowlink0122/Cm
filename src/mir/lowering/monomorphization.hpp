@@ -113,8 +113,11 @@ class Monomorphization : public MirLoweringBase {
         const std::unordered_map<
             std::string, std::vector<std::tuple<std::string, size_t, std::string>>>& needed);
 
-    // 特殊化された型のサイズを計算
+    // 特殊化された型のサイズを計算（自然アライメントのCレイアウト）
     int64_t calculate_specialized_type_size(const hir::TypePtr& type) const;
+
+    // 特殊化された型のアライメントを計算
+    int64_t calculate_specialized_type_align(const hir::TypePtr& type) const;
 };
 
 }  // namespace cm::mir

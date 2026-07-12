@@ -329,6 +329,45 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 builder->SetInsertPoint(contBB);
             };
 
+            // === ユニオン型の実行時型判別 (expr is Type) ===
+            // タグを比較したboolを返す（ペイロードの取り出しは行わない）
+            if (castData.check_only) {
+                int32_t expectedTag = computeExpectedUnionTag();
+                auto* expected =
+                    llvm::ConstantInt::get(ctx.getI32Type(), expectedTag < 0 ? -1 : expectedTag);
+                // ソースがタグ付きユニオン構造体（値渡し {i32, [N x i8]}）
+                if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
+                    if (structTy->getNumElements() == 2 &&
+                        structTy->getElementType(0)->isIntegerTy(32) &&
+                        structTy->getElementType(1)->isArrayTy()) {
+                        auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_is_temp");
+                        builder->CreateStore(value, alloca);
+                        auto* tagPtr = builder->CreateStructGEP(structTy, alloca, 0, "is_tag_ptr");
+                        auto* tagVal = builder->CreateLoad(ctx.getI32Type(), tagPtr, "is_tag");
+                        return builder->CreateICmpEQ(tagVal, expected, "union_is");
+                    }
+                }
+                // ソースがユニオンalloca（ポインタで届いた場合）
+                if (sourceType->isPointerTy()) {
+                    if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                        if (auto* sTy =
+                                llvm::dyn_cast<llvm::StructType>(allocaInst->getAllocatedType())) {
+                            if (sTy->getNumElements() == 2 &&
+                                sTy->getElementType(0)->isIntegerTy(32) &&
+                                sTy->getElementType(1)->isArrayTy()) {
+                                auto* tagPtr =
+                                    builder->CreateStructGEP(sTy, value, 0, "is_tag_ptr");
+                                auto* tagVal =
+                                    builder->CreateLoad(ctx.getI32Type(), tagPtr, "is_tag");
+                                return builder->CreateICmpEQ(tagVal, expected, "union_is");
+                            }
+                        }
+                    }
+                }
+                // 判定不能（型チェッカーがユニオン以外を拒否するため通常到達しない）
+                return llvm::ConstantInt::getFalse(ctx.getContext());
+            }
+
             // === タグ付きユニオン型からの変換（Union -> int/long/bool/string/struct等） ===
             // sourceTypeがStructType {i32, i8[N]}の場合
             if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {

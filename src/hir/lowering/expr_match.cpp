@@ -224,6 +224,15 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
     HirExprPtr scrutinee_copy = clone_hir_expr(scrutinee);
 
     switch (pattern.kind) {
+        case ast::MatchPatternKind::Type: {
+            // ユニオンの型パターン: expr is Type と同じ check_only cast を生成
+            auto is_cast = std::make_unique<HirCast>();
+            is_cast->operand = std::move(scrutinee_copy);
+            is_cast->target_type = pattern.type_pattern;
+            is_cast->check_only = true;
+            return std::make_unique<HirExpr>(std::move(is_cast), ast::make_bool());
+        }
+
         case ast::MatchPatternKind::Literal: {
             auto pattern_value = lower_expr(*pattern.value);
             // bit[N] スクルティニは比較型をuintへ正規化（ICmp型不一致防止）

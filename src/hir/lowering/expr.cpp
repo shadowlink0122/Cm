@@ -2,7 +2,8 @@
 #include "expr_internal.hpp"
 #include "fwd.hpp"
 
-#include <algorithm>  // std::reverse用
+#include <algorithm>   // std::reverse用
+#include <functional>  // sizeof複合ジェネリック判定の再帰ラムダ用
 
 namespace cm::hir {
 
@@ -207,6 +208,56 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             return std::make_unique<HirExpr>(std::move(lit), marker_type);
         }
 
+        // 型引数にジェネリックパラメータを含む複合型（QueueNode<T> 等）も
+        // マーカー化してモノモーフィゼーション時に実サイズへ置換する。
+        // HIR時点の推定サイズはT=longや構造体Tで実レイアウトを下回り、
+        // mallocの下回り確保による隣接ヒープ破壊の原因になっていた
+        if (target_type_ptr && !target_type_ptr->type_args.empty()) {
+            std::function<bool(const ast::TypePtr&)> has_generic_param =
+                [&](const ast::TypePtr& t) -> bool {
+                if (!t) {
+                    return false;
+                }
+                const std::string& n = t->name;
+                bool param_like =
+                    (n.length() == 1 && std::isupper(static_cast<unsigned char>(n[0]))) ||
+                    (n.length() == 2 && std::isupper(static_cast<unsigned char>(n[0])) &&
+                     std::isdigit(static_cast<unsigned char>(n[1])));
+                if ((t->kind == ast::TypeKind::Generic || t->kind == ast::TypeKind::Struct) &&
+                    param_like) {
+                    return true;
+                }
+                for (const auto& a : t->type_args) {
+                    if (has_generic_param(a)) {
+                        return true;
+                    }
+                }
+                if (t->element_type) {
+                    return has_generic_param(t->element_type);
+                }
+                return false;
+            };
+            if (has_generic_param(target_type_ptr)) {
+                auto marker_type = std::make_shared<ast::Type>(ast::TypeKind::Generic);
+                std::string composite = target_type_ptr->name + "<";
+                for (size_t i = 0; i < target_type_ptr->type_args.size(); ++i) {
+                    if (i > 0) {
+                        composite += ", ";
+                    }
+                    const auto& a = target_type_ptr->type_args[i];
+                    composite +=
+                        (a && !a->name.empty()) ? a->name : (a ? ast::type_to_string(*a) : "?");
+                }
+                composite += ">";
+                marker_type->name = "sizeof_for_" + composite;
+                debug::hir::log(debug::hir::Id::LiteralLower,
+                                "sizeof for generic composite: " + composite +
+                                    " (marker: " + marker_type->name + ")",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(lit), marker_type);
+            }
+        }
+
         return std::make_unique<HirExpr>(std::move(lit), ast::make_uint());
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
         // typeof(expr) - 式の型を返すが、値としては0を返す（型コンテキストで使用）
@@ -259,7 +310,10 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         auto hir_cast = std::make_unique<HirCast>();
         hir_cast->operand = std::move(operand);
         hir_cast->target_type = cast_expr->target_type;
-        return std::make_unique<HirExpr>(std::move(hir_cast), cast_expr->target_type);
+        // is（型判別）はboolを返す
+        hir_cast->check_only = cast_expr->type_check;
+        auto result_type = cast_expr->type_check ? ast::make_bool() : cast_expr->target_type;
+        return std::make_unique<HirExpr>(std::move(hir_cast), result_type);
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: move x は x そのものを返す（所有権移動、ゼロコスト）
         debug::hir::log(debug::hir::Id::ExprLower, "Lowering move expression", debug::Level::Debug);
@@ -785,16 +839,17 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
 
         // 静的メソッド呼び出し(Type::method)をType__method形式に変換
         // モジュールパス(std::io::println)は変換しない
-        // 判定: ::が1つのみで、左側が大文字始まり（型名）の場合のみ変換
+        // 判定: ::が1つのみで、左側が既知の構造体/enum名の場合のみ変換
+        // （大文字始まりだけで判定すると大文字の名前空間エイリアス
+        // `import ./mod as M; M::f()` が誤変換されシンボル不一致になる）
         size_t first_colon = func_name.find("::");
         if (first_colon != std::string::npos) {
             size_t second_colon = func_name.find("::", first_colon + 2);
             // ::が1つだけ存在する場合
             if (second_colon == std::string::npos) {
                 std::string type_part = func_name.substr(0, first_colon);
-                // 型名は大文字で始まる（Counter::create など）
-                // モジュール名は小文字で始まる（std::io など）
-                if (!type_part.empty() && std::isupper(static_cast<unsigned char>(type_part[0]))) {
+                if (!type_part.empty() && std::isupper(static_cast<unsigned char>(type_part[0])) &&
+                    (struct_defs_.count(type_part) > 0 || enum_defs_.count(type_part) > 0)) {
                     func_name.replace(first_colon, 2, "__");
                 }
             }

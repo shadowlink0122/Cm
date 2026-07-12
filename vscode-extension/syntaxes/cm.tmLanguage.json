@@ -517,7 +517,7 @@
         },
         {
           "name": "storage.type.primitive.cm",
-          "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|from|where|auto)\\b"
+          "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|is|from|where|auto)\\b"
         },
         {
           "name": "keyword.operator.new.cm",

@@ -1,0 +1,11 @@
+// ユニオンの変種にない型への is はコンパイルエラー
+import std::io::println;
+
+typedef Value = int | string;
+
+int main() {
+    Value v = 42;
+    bool b = v is bool;
+    println("{b}");
+    return 0;
+}

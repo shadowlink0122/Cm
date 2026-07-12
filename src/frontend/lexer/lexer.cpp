@@ -92,6 +92,7 @@ void Lexer::init_keywords() {
         {"in", TokenKind::KwIn},
         {"inline", TokenKind::KwInline},
         {"interface", TokenKind::KwInterface},
+        {"is", TokenKind::KwIs},
         {"macro", TokenKind::KwMacro},
         {"match", TokenKind::KwMatch},
         {"module", TokenKind::KwModule},

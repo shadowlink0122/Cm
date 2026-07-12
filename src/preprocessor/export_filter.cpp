@@ -18,8 +18,9 @@ namespace cm::preprocessor {
 std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                                                const std::vector<std::string>& import_items) {
     // 選択的インポート：指定されたアイテムのみを抽出
+    // （行単位解析のため複数行 export { ... } は先に1行へ正規化する）
     std::stringstream result;
-    std::stringstream input(module_source);
+    std::stringstream input(normalize_export_blocks(module_source));
     std::string line;
     bool in_wanted_block = false;    // 欲しいエクスポートブロック内
     bool in_unwanted_block = false;  // 不要なエクスポートブロック内
@@ -288,8 +289,9 @@ std::string ImportPreprocessor::remove_export_keywords(const std::string& source
 }
 
 std::string ImportPreprocessor::process_export_syntax(const std::string& source) {
+    // 行単位解析のため複数行 export { ... } は先に1行へ正規化する
     std::stringstream result;
-    std::stringstream input(source);
+    std::stringstream input(normalize_export_blocks(source));
     std::string line;
     std::vector<std::string> lines;
 
@@ -434,7 +436,17 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                 size_t brace_pos = cur_line.find('{', after_struct);
                 if (brace_pos != std::string::npos) {
                     std::string def = cur_line;
-                    int brace_count = 1;
+                    // 宣言行自身の括弧も数える（1行で閉じる構造体に対応）
+                    int brace_count = 0;
+                    for (size_t k = brace_pos; k < cur_line.size(); ++k) {
+                        if (cur_line[k] == '{')
+                            brace_count++;
+                        else if (cur_line[k] == '}')
+                            brace_count--;
+                    }
+                    // 開始行を記録する（終了行を記録するとPhase 3の
+                    // 処理済みマークが本体行とずれ、重複・欠落出力になる）
+                    size_t start_i = i;
 
                     // 構造体本体を収集
                     for (size_t j = i + 1; j < lines.size() && brace_count > 0; ++j) {
@@ -451,7 +463,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                         }
                     }
 
-                    definitions[name] = {static_cast<int>(i), def};
+                    definitions[name] = {static_cast<int>(start_i), def};
                 }
             }
         }
@@ -532,10 +544,23 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                 int line_num = definitions[name].first;
                 // 同じ行番号の定義は一度だけ出力
                 if (output_lines.count(line_num) == 0) {
-                    result << definitions[name].second << "\n";
+                    // export リストに載った定義は export キーワード付きで出力する
+                    // （名前空間内の非export関数は外部から参照できないため）
+                    const std::string& def_text = definitions[name].second;
+                    size_t def_pos = skip_ws(def_text);
+                    if (!starts_with_keyword(def_text, def_pos, "export")) {
+                        result << "export ";
+                    }
+                    result << def_text << "\n";
                     output_lines.insert(line_num);
                 }
-                processed_lines.insert(line_num);
+                // 定義の全行を処理済みにする（開始行だけを記録すると
+                // 複数行定義の本体が「その他の行」として重複出力される）
+                const std::string& def = definitions[name].second;
+                int def_line_count = 1 + static_cast<int>(std::count(def.begin(), def.end(), '\n'));
+                for (int k = 0; k < def_line_count; ++k) {
+                    processed_lines.insert(line_num + k);
+                }
             }
         }
 
@@ -655,7 +680,8 @@ std::vector<std::string> ImportPreprocessor::extract_reexports(const std::string
     // export { M }; または export { M, N, ... }; 形式を検出
     std::vector<std::string> reexports;
     std::regex export_regex(R"(^\s*export\s*\{([^}]+)\}\s*;)");
-    std::istringstream input(module_source);
+    // 行単位解析のため複数行 export { ... } は先に1行へ正規化する
+    std::istringstream input(normalize_export_blocks(module_source));
     std::string line;
 
     while (std::getline(input, line)) {
@@ -878,9 +904,10 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
 // namespace外にも出力して、名前空間修飾なしで呼び出し可能にする
 std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     const std::string& module_source) {
+    // 行単位解析のため複数行 export { ... } は先に1行へ正規化する
     std::stringstream result;
     std::stringstream non_export_result;  // 非export定義を格納
-    std::stringstream input(module_source);
+    std::stringstream input(normalize_export_blocks(module_source));
     std::string line;
     bool in_export_block = false;
     bool in_sub_exported_section = false;

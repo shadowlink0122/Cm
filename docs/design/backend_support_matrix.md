@@ -96,13 +96,10 @@
 | 問題 | 影響 | 状態 |
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
-| WASMでネストVec（Vec<Vec<T>>）の2行目push後に既存行のlen()が破壊される | common/collections/nested_vector_lifecycle_test をskip（理由記録済み） | 実バグとして設計09 G2で記録。修正は別課題 |
-| 改行を含む選択的import構文 `import mod::{A,\n B}` がパーサ未対応 | common/advanced_modules/import_features をskip | 全バックエンド共通の構文ギャップ |
-| WASMのO3で配列ポインタキャスト後の読み出しが0になる | common/memory/array_ptr_cast をO3のみskip（O0・ネイティブは正常） | 実バグとして設計09 G2で記録。修正は別課題 |
+| 名前空間内で定義した構造体を同namespace関数の引数/戻り値型・非修飾呼び出しで参照できない | common/advanced_modules/import_features をskip（複数行export・大文字エイリアスの旧skip理由は2026-07-12修正済み。回帰: multiline_export） | exportリスト型モジュールの選択的import抽出の未対応とあわせてモジュール系の残ギャップとして記録 |
 | std::fs が未実装 | common/fs・common/file_io の2テストをskip | 実装時に有効化 |
 | JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
-| ユニオン型の実行時型判別手段（match型パターン・`is`）が未実装 | `as` はタグ検査つき（LLVM系はタグ・JSはtypeof。失敗時パニック）だが、事前に安全に判別する構文がない | 設計11の可変長引数（ユニオンスライス糖衣）の前提機能として要設計 |
-| JSバックエンドのユニオンはタグを持たないboxed値表現 | `as` の検査はtypeofベースのため、構造体同士など同typeofの変種は判別できない（プリミティブ×stringの誤castは検出される） | タグ付き表現への移行は別課題 |
+| JSバックエンドのユニオンはタグを持たないboxed値表現 | `as` の検査と `is` 判定はtypeofベースのため、構造体同士など同typeofの変種は判別できない（プリミティブ×stringの誤castは検出される） | タグ付き表現への移行は別課題 |
 
 ## 更新規則
 

@@ -737,10 +737,15 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                     place.projections.push_back(
                                                         PlaceProjection::index(idx_local));
 
-                                                    // 配列の要素型に更新
+                                                    // 配列/ポインタの要素型に更新
+                                                    // （ポインタを辿らないと ptr[i] の補間temp
+                                                    // がポインタ型になり、wasm32では4バイト
+                                                    // allocaへの8バイトstoreというUBになる）
                                                     if (current_type &&
-                                                        current_type->kind ==
-                                                            hir::TypeKind::Array &&
+                                                        (current_type->kind ==
+                                                             hir::TypeKind::Array ||
+                                                         current_type->kind ==
+                                                             hir::TypeKind::Pointer) &&
                                                         current_type->element_type) {
                                                         current_type = current_type->element_type;
                                                     }

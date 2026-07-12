@@ -2,6 +2,8 @@
 
 #include "context.hpp"
 
+#include "../../common/target.hpp"
+
 namespace cm::mir {
 
 // 新しいブロックを作成
@@ -231,7 +233,8 @@ int64_t LoweringContext::calculate_type_size(const hir::TypePtr& type) const {
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference:
         case hir::TypeKind::String:
-            return 8;
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
         case hir::TypeKind::Struct: {
             // 構造体定義を探してサイズを計算
             if (struct_defs && struct_defs->count(type->name)) {
@@ -446,8 +449,12 @@ int64_t LoweringContext::layout_align(const hir::TypePtr& type) const {
         case hir::TypeKind::Union:
             // tagged union {i32 tag, [N x i8]} のアライメントは4
             return 4;
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
         default:
-            return 8;  // long/double/ポインタ/string等
+            return 8;  // long/double等
     }
 }
 
@@ -513,8 +520,12 @@ int64_t LoweringContext::layout_size(const hir::TypePtr& type) const {
             }
             return align_to(4 + payload, 4);
         }
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
         default:
-            return 8;  // long/double/ポインタ/string等
+            return 8;  // long/double等
     }
 }
 

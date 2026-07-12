@@ -44,6 +44,7 @@ enum class TokenKind {
     KwIn,  // for-in loop
     KwInline,
     KwInterface,
+    KwIs,         // ユニオン型の実行時型判別 (expr is Type)
     KwMacro,      // macro definition
     KwConstexpr,  // constexpr keyword
     KwMatch,

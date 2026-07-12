@@ -1344,6 +1344,15 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // オペランドをlowering
     LocalId operand = lower_expression(*cast.operand, ctx);
 
+    // ユニオン型の実行時型判別 (expr is Type): タグ比較のboolを返す
+    if (cast.check_only) {
+        LocalId result = ctx.new_temp(hir::make_bool());
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type,
+                                              /*check_only=*/true)));
+        return result;
+    }
+
     // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入
     // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
     // b as void* で配列全体がコピーされるのを防ぐため、

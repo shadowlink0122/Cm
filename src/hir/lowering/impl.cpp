@@ -1,4 +1,5 @@
 // lowering.cpp - メインエントリポイントとヘルパー関数
+#include "../../common/target.hpp"
 #include "../../frontend/ast/typedef.hpp"
 #include "fwd.hpp"
 
@@ -430,7 +431,7 @@ int64_t HirLowering::calculate_type_align(const TypePtr& type) {
         case ast::TypeKind::Pointer:
         case ast::TypeKind::Reference:
         case ast::TypeKind::String:
-            return 8;  // 64-bit pointer
+            return cm::target_pointer_size();  // ポインタ幅はターゲット依存
 
         case ast::TypeKind::Array:
             if (type->element_type) {
@@ -549,13 +550,13 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
 
         case ast::TypeKind::Pointer:
         case ast::TypeKind::Reference:
-            return 8;  // 64-bit pointer
+            return cm::target_pointer_size();  // ポインタ幅はターゲット依存
 
         case ast::TypeKind::Array:
             if (type->element_type && type->array_size.has_value()) {
                 return calculate_type_size(type->element_type) * type->array_size.value();
             }
-            return 8;  // 動的配列はポインタサイズ
+            return cm::target_pointer_size();  // 動的配列はポインタサイズ
 
         case ast::TypeKind::Struct: {
             // まずtypedefとして解決を試みる
@@ -569,7 +570,7 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
                 auto [size, align] = calculate_struct_layout(it->second->fields);
                 return size;
             }
-            return 8;  // 不明な構造体はポインタサイズと仮定
+            return cm::target_pointer_size();  // 不明な構造体はポインタサイズと仮定
         }
 
         case ast::TypeKind::Union: {
@@ -625,7 +626,7 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
             return 8;
 
         case ast::TypeKind::String:
-            return 8;  // 文字列はポインタサイズ
+            return cm::target_pointer_size();  // 文字列はポインタサイズ
 
         case ast::TypeKind::Void:
             return 0;

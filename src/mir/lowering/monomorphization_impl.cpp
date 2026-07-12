@@ -1,4 +1,5 @@
 #include "../../common/debug.hpp"
+#include "../../common/target.hpp"
 #include "mono_internal.hpp"
 #include "monomorphization.hpp"
 #include "monomorphization_utils.hpp"
@@ -710,6 +711,46 @@ void Monomorphization::generate_generic_specializations(
                         // 定数オペランドの値を更新
                         const_data->value = actual_size;
                         const_data->type = hir::make_long();
+                    } else if (type_param_name.find('<') != std::string::npos) {
+                        // 複合ジェネリック型（sizeof_for_QueueNode<T> 等）:
+                        // 型引数をtype_substで置換し、置換後フィールドの
+                        // 自然アライメントレイアウトでサイズを再計算する
+                        std::string base = type_param_name.substr(0, type_param_name.find('<'));
+                        std::string args_str = type_param_name.substr(base.size() + 1);
+                        if (!args_str.empty() && args_str.back() == '>') {
+                            args_str.pop_back();
+                        }
+                        const hir::HirStruct* base_struct = nullptr;
+                        if (hir_struct_defs && hir_struct_defs->count(base)) {
+                            base_struct = hir_struct_defs->at(base);
+                        }
+                        if (base_struct) {
+                            auto arg_names = split_type_args(args_str);
+                            std::unordered_map<std::string, hir::TypePtr> field_subst;
+                            for (size_t ai = 0;
+                                 ai < base_struct->generic_params.size() && ai < arg_names.size();
+                                 ++ai) {
+                                auto sit = type_subst.find(arg_names[ai]);
+                                field_subst[base_struct->generic_params[ai].name] =
+                                    (sit != type_subst.end()) ? sit->second
+                                                              : make_type_from_name(arg_names[ai]);
+                            }
+                            auto align_to = [](int64_t offset, int64_t align) {
+                                return (offset + align - 1) / align * align;
+                            };
+                            int64_t offset = 0;
+                            int64_t max_align = 1;
+                            for (const auto& f : base_struct->fields) {
+                                auto ft = substitute_type_in_type(f.type, field_subst, this);
+                                int64_t fa = calculate_specialized_type_align(ft);
+                                int64_t fs = calculate_specialized_type_size(ft);
+                                max_align = std::max(max_align, fa);
+                                offset = align_to(offset, fa) + fs;
+                            }
+                            int64_t total = align_to(offset, max_align);
+                            const_data->value = total > 0 ? total : 8;
+                            const_data->type = hir::make_long();
+                        }
                     }
                     // 型を通常の整数型に変更（マーカーは不要に）
                     op->type = hir::make_long();
@@ -1552,9 +1593,57 @@ bool Monomorphization::is_interface_type(const std::string& type_name) const {
 }
 
 // 特殊化された型のサイズを計算
+// フィールドのアライメントを計算する（calculate_specialized_type_size と対で使用）
+int64_t Monomorphization::calculate_specialized_type_align(const hir::TypePtr& type) const {
+    if (!type)
+        return 8;
+    switch (type->kind) {
+        case hir::TypeKind::Bool:
+        case hir::TypeKind::Tiny:
+        case hir::TypeKind::UTiny:
+        case hir::TypeKind::Char:
+            return 1;
+        case hir::TypeKind::Short:
+        case hir::TypeKind::UShort:
+            return 2;
+        case hir::TypeKind::Int:
+        case hir::TypeKind::UInt:
+        case hir::TypeKind::Float:
+        case hir::TypeKind::UFloat:
+            return 4;
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::Reference:
+        case hir::TypeKind::String:
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
+        case hir::TypeKind::Struct: {
+            const hir::HirStruct* st = nullptr;
+            if (hir_struct_defs && hir_struct_defs->count(type->name)) {
+                st = hir_struct_defs->at(type->name);
+            }
+            if (st) {
+                int64_t max_align = 1;
+                for (const auto& f : st->fields) {
+                    max_align = std::max(max_align, calculate_specialized_type_align(f.type));
+                }
+                return max_align;
+            }
+            return 8;
+        }
+        case hir::TypeKind::Array:
+            return calculate_specialized_type_align(type->element_type);
+        default:
+            return 8;
+    }
+}
+
 int64_t Monomorphization::calculate_specialized_type_size(const hir::TypePtr& type) const {
     if (!type)
         return 8;
+
+    auto align_to = [](int64_t offset, int64_t align) {
+        return (offset + align - 1) / align * align;
+    };
 
     switch (type->kind) {
         case hir::TypeKind::Bool:
@@ -1578,20 +1667,31 @@ int64_t Monomorphization::calculate_specialized_type_size(const hir::TypePtr& ty
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference:
         case hir::TypeKind::String:
-            return 8;
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
         case hir::TypeKind::Struct: {
+            // 自然アライメントのCレイアウトで計算する
+            // （従来のフィールド数×8はcodegenの実レイアウトとずれ、
+            // memcpyサイズ・要素ストライドの不一致で隣接データを破壊していた）
+            const hir::HirStruct* st = nullptr;
             if (hir_struct_defs && hir_struct_defs->count(type->name)) {
-                const auto* st = hir_struct_defs->at(type->name);
-                int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
-                return size > 0 ? size : 8;
-            }
-            if (type->name.find("__") != std::string::npos) {
+                st = hir_struct_defs->at(type->name);
+            } else if (type->name.find("__") != std::string::npos) {
                 std::string base = type->name.substr(0, type->name.find("__"));
                 if (hir_struct_defs && hir_struct_defs->count(base)) {
-                    const auto* st = hir_struct_defs->at(base);
-                    int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
-                    return size > 0 ? size : 8;
+                    st = hir_struct_defs->at(base);
                 }
+            }
+            if (st) {
+                int64_t offset = 0;
+                int64_t max_align = 1;
+                for (const auto& f : st->fields) {
+                    int64_t fa = calculate_specialized_type_align(f.type);
+                    max_align = std::max(max_align, fa);
+                    offset = align_to(offset, fa) + calculate_specialized_type_size(f.type);
+                }
+                int64_t size = align_to(offset, max_align);
+                return size > 0 ? size : 8;
             }
             return 8;
         }

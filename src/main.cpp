@@ -341,6 +341,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // ターゲットのポインタ幅を設定（HIR/MIRの型サイズ計算が参照する）
+    // runコマンドはJIT（ホストネイティブ）実行のため既定の8のまま
+    if (opts.command != Command::Run) {
+        set_target_pointer_size(opts.target);
+    }
+
     // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
     cache::CacheManager::set_compiler_path(argv[0]);
 

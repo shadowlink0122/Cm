@@ -265,6 +265,26 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
             std::string operand = emitOperand(*data.operand, func);
 
+            // ユニオン型の実行時型判別 (expr is Type): typeofでboolを返す
+            // （JSユニオンはboxed値のため、LLVM系のタグ比較の代わりにtypeof判定。
+            // 構造体同士など同typeofの変種は判別できない既知の制限がある）
+            if (data.check_only) {
+                if (data.target_type) {
+                    if (data.target_type->kind == TypeKind::String) {
+                        return "(typeof " + operand + " === \"string\")";
+                    }
+                    if (data.target_type->is_integer() || data.target_type->is_floating()) {
+                        return "(typeof " + operand + " === \"number\")";
+                    }
+                    if (data.target_type->kind == TypeKind::Bool) {
+                        return "(typeof " + operand + " === \"boolean\")";
+                    }
+                    // 構造体変種: object判定（同typeofの変種同士は判別不能）
+                    return "(typeof " + operand + " === \"object\" && " + operand + " !== null)";
+                }
+                return "false";
+            }
+
             // ユニオンからの取り出し（Union as T）はtypeofで実変種を検査する
             // （LLVM系バックエンドのタグ検査と同等の失敗動作。従来は String(42) のように
             // 黙って型強制され「誤った型でのas」が成功扱いになっていた）

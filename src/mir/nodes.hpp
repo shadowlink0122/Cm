@@ -310,6 +310,8 @@ struct MirRvalue {
     struct CastData {
         MirOperandPtr operand;
         hir::TypePtr target_type;
+        // ユニオン型の実行時型判別 (expr is Type)。trueならタグ比較のboolを返す
+        bool check_only = false;
     };
 
     struct FormatConvertData {
@@ -357,10 +359,11 @@ struct MirRvalue {
         return rv;
     }
 
-    static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type) {
+    static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type,
+                             bool check_only = false) {
         auto rv = std::make_unique<MirRvalue>();
         rv->kind = Cast;
-        rv->data = CastData{std::move(operand), target_type};
+        rv->data = CastData{std::move(operand), target_type, check_only};
         return rv;
     }
 };

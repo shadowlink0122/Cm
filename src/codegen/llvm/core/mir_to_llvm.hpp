@@ -88,6 +88,9 @@ class MIRToLLVM {
     /// 型変換（公開：関数シグネチャ生成で使用）
     llvm::Type* convertType(const hir::TypePtr& type);
 
+    /// ポインタ演算の要素サイズをDataLayoutから計算する
+    int64_t getElementAllocSize(const hir::TypePtr& type);
+
    private:
     /// 関数のユニークIDを生成（オーバーロード対応）
     std::string generateFunctionId(const mir::MirFunction& func);

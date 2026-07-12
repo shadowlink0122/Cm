@@ -752,6 +752,23 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
             }
         }
 
+        // Typeパターンの場合、ペイロードを as で取り出して束縛
+        // （条件側の is でタグ確認済みのため as のタグ検査は成功する）
+        if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::Type) {
+            if (!arm.pattern->binding_name.empty() && arm.pattern->binding_name != "_") {
+                auto as_cast = std::make_unique<HirCast>();
+                as_cast->operand = clone_hir_expr(scrutinee);
+                as_cast->target_type = arm.pattern->type_pattern;
+                auto var_decl = std::make_unique<HirLet>();
+                var_decl->name = arm.pattern->binding_name;
+                var_decl->type = arm.pattern->type_pattern;
+                var_decl->init =
+                    std::make_unique<HirExpr>(std::move(as_cast), arm.pattern->type_pattern);
+                var_decl->is_const = false;
+                body_stmts.push_back(std::make_unique<HirStmt>(std::move(var_decl)));
+            }
+        }
+
         // Variableパターンの場合もバインディング変数に代入
         if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::Variable) {
             if (!arm.pattern->var_name.empty()) {

@@ -68,7 +68,54 @@ int main() {
 }
 ```
 
-> **ポイント:** 値をユニオン型に格納するには `as Value`、取り出すには `as string` のようにキャストします。
+> **ポイント:** 値をユニオン型に格納するには `as Value`、取り出すには `as string` のようにキャストします。取り出し時はタグ検査が行われ、アクティブな変種と異なる型で取り出すと実行時パニックになります。
+
+### 実行時型判別: `is` 演算子とmatch型パターン（v0.16.0）
+
+`is` 演算子で、ユニオン値のアクティブな変種を実行時に安全に判別できます。判別してから `as` で取り出せばパニックしません。
+
+```cm
+import std::io::println;
+
+typedef Value = int | string;
+
+int main() {
+    Value v = 42;
+
+    if (v is int) {
+        int n = v as int;
+        println("int: {n}");
+    }
+
+    v = "hello";
+    bool s = v is string;
+    println("is string: {s}");
+    // 出力: int: 42 / is string: true
+    return 0;
+}
+```
+
+matchの**型パターン**（`型名 束縛名`）を使うと、判別と取り出しを一度に書けます。
+
+```cm
+import std::io::println;
+
+typedef Value = int | string | bool;
+
+int main() {
+    Value v = 42;
+    match (v) {
+        int i => println("int: {i}"),
+        string s => println("str: {s}"),
+        bool b => println("bool: {b}"),
+        _ => println("other"),
+    }
+    // 出力: int: 42
+    return 0;
+}
+```
+
+> **ポイント:** `is` の対象型はユニオンの変種のいずれかである必要があります（変種にない型はコンパイルエラー）。非ユニオン値への `is` もコンパイルエラーです。
 
 ### インラインユニオン型（v0.14.0）
 

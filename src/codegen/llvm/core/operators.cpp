@@ -66,64 +66,25 @@ static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm
     }
 }
 
-// 型から要素サイズを計算するヘルパー関数
-static int64_t getElementSize(const hir::TypePtr& type) {
+// ポインタ演算の要素サイズをDataLayoutから計算する。
+// 従来は構造体名パターン（Vector→16等）のハードコード推定で、
+// wasm32等のポインタ幅が異なるターゲットや未知の構造体で
+// 実レイアウトとずれ、隣接要素の読み書き破壊を起こしていた
+int64_t MIRToLLVM::getElementAllocSize(const hir::TypePtr& type) {
     if (!type)
         return 1;
 
     // ポインタ型の場合、要素型のサイズを返す
     if (type->kind == ast::TypeKind::Pointer && type->element_type) {
-        return getElementSize(type->element_type);
+        return getElementAllocSize(type->element_type);
     }
 
-    switch (type->kind) {
-        case ast::TypeKind::Bool:
-        case ast::TypeKind::Tiny:
-        case ast::TypeKind::UTiny:
-        case ast::TypeKind::Char:
-            return 1;
-        case ast::TypeKind::Short:
-        case ast::TypeKind::UShort:
-            return 2;
-        case ast::TypeKind::Int:
-        case ast::TypeKind::UInt:
-        case ast::TypeKind::Float:
-        case ast::TypeKind::UFloat:
-            return 4;
-        case ast::TypeKind::Long:
-        case ast::TypeKind::ULong:
-        case ast::TypeKind::Double:
-        case ast::TypeKind::UDouble:
-        case ast::TypeKind::Pointer:
-        case ast::TypeKind::Reference:
-            return 8;
-        case ast::TypeKind::Struct: {
-            // 構造体型の場合、型名からサイズを推定
-            // Vector<T>は { T* data, int size, int cap } = 8 + 4 + 4 = 16バイト
-            // Queue<T>は { T* data, int front, int rear, int cap } = 24バイト
-            // 一般的なジェネリック構造体のサイズを推定
-            const std::string& name = type->name;
-            if (!name.empty()) {
-                // Vector<T>のパターンを検出
-                if (name.find("Vector") == 0 || name.find("Vector__") != std::string::npos) {
-                    return 16;  // { T* data (8), int size (4), int cap (4) }
-                }
-                // Queue<T>のパターンを検出
-                if (name.find("Queue") == 0 || name.find("Queue__") != std::string::npos) {
-                    return 24;  // { T* data (8), int front (4), int rear (4), int cap (4), int size
-                                // (4) } 注: 実際のQueueの定義に依存
-                }
-                // HashMap<K,V>のパターンを検出
-                if (name.find("HashMap") == 0 || name.find("HashMap__") != std::string::npos) {
-                    return 24;  // 推定値
-                }
-            }
-            // その他の構造体: 最小サイズとして8バイトを仮定（ポインタサイズ）
-            return 8;
-        }
-        default:
-            return 1;
+    llvm::Type* llvm_type = convertType(type);
+    if (llvm_type && llvm_type->isSized()) {
+        return static_cast<int64_t>(module->getDataLayout().getTypeAllocSize(llvm_type));
     }
+    // void等のサイズ不定型はバイト単位（void*演算互換）
+    return 1;
 }
 
 // 二項演算変換
@@ -147,7 +108,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 int64_t elem_size = 1;
                 if (result_type && result_type->kind == ast::TypeKind::Pointer &&
                     result_type->element_type) {
-                    elem_size = getElementSize(result_type->element_type);
+                    elem_size = getElementAllocSize(result_type->element_type);
                 }
 
                 auto idx = rhs;
@@ -169,7 +130,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 int64_t elem_size = 1;
                 if (result_type && result_type->kind == ast::TypeKind::Pointer &&
                     result_type->element_type) {
-                    elem_size = getElementSize(result_type->element_type);
+                    elem_size = getElementAllocSize(result_type->element_type);
                 }
 
                 auto idx = lhs;
@@ -323,7 +284,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 int64_t elem_size = 1;
                 if (result_type && result_type->kind == ast::TypeKind::Pointer &&
                     result_type->element_type) {
-                    elem_size = getElementSize(result_type->element_type);
+                    elem_size = getElementAllocSize(result_type->element_type);
                 }
 
                 auto idx = rhs;

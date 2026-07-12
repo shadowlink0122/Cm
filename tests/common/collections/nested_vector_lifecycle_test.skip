@@ -1,2 +1,0 @@
-# WASMでネストVec（Vec<Vec<T>>）の2行目push後にrow1.len()が破壊される既知バグ（ネイティブは正常）。設計09 G2で記録、修正は別途
-llvm-wasm

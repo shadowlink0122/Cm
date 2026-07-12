@@ -744,8 +744,24 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                           std::to_string(block->statements.size()) + " statements");
                         }
                     }
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を
+                    // 経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、
+                    // O0での `as` タグ検査パニックや `is` の誤判定になる）
+                    hir::TypePtr resolved_let_type = ctx.resolve_typedef(let.type);
+                    hir::TypePtr init_type =
+                        (init_value < ctx.func->locals.size())
+                            ? ctx.resolve_typedef(ctx.func->locals[init_value].type)
+                            : nullptr;
+                    if (resolved_let_type && resolved_let_type->kind == hir::TypeKind::Union &&
+                        (!init_type || init_type->kind != hir::TypeKind::Union)) {
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{local}, MirRvalue::cast(MirOperand::copy(MirPlace{init_value}),
+                                                             resolved_let_type)));
+                    } else {
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{local},
+                            MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+                    }
                     if (let.name == "result") {
                         auto* block = ctx.get_current_block();
                         if (block) {
@@ -1078,8 +1094,30 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         // 単純な変数代入
         auto lhs_opt = ctx.resolve_variable((*var_ref)->name);
         if (lhs_opt) {
-            ctx.push_statement(MirStatement::assign(
-                MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+            // ユニオン型変数への変種値の再代入はCast（ユニオン構築）を経由して
+            // タグ+ペイロードを書き込む（letの初期化と同じ扱い）
+            hir::TypePtr lhs_type = (*lhs_opt < ctx.func->locals.size())
+                                        ? ctx.resolve_typedef(ctx.func->locals[*lhs_opt].type)
+                                        : nullptr;
+            hir::TypePtr rhs_type = (rhs_value < ctx.func->locals.size())
+                                        ? ctx.resolve_typedef(ctx.func->locals[rhs_value].type)
+                                        : nullptr;
+            debug_msg("mir_union_assign",
+                      "[MIR] assign lhs kind=" +
+                          (lhs_type ? std::to_string(static_cast<int>(lhs_type->kind))
+                                    : std::string("null")) +
+                          " rhs kind=" +
+                          (rhs_type ? std::to_string(static_cast<int>(rhs_type->kind))
+                                    : std::string("null")));
+            if (lhs_type && lhs_type->kind == hir::TypeKind::Union &&
+                (!rhs_type || rhs_type->kind != hir::TypeKind::Union)) {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{*lhs_opt},
+                    MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_type)));
+            } else {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+            }
         }
     } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
                std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind) ||

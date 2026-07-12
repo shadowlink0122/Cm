@@ -283,6 +283,24 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 }
             }
 
+            // ユニオン型の左辺への変種値の代入はCast（ユニオン構築）を経由して
+            // タグ+ペイロードを書き込む（直接storeするとタグ未設定になり、
+            // `as` のタグ検査パニックや `is` の誤判定になる）
+            hir::TypePtr lhs_resolved = ctx.resolve_typedef(
+                current_type ? current_type
+                             : (place.projections.empty() && place.local < ctx.func->locals.size()
+                                    ? ctx.func->locals[place.local].type
+                                    : nullptr));
+            hir::TypePtr rhs_resolved = (rhs_value < ctx.func->locals.size())
+                                            ? ctx.resolve_typedef(ctx.func->locals[rhs_value].type)
+                                            : nullptr;
+            if (lhs_resolved && lhs_resolved->kind == hir::TypeKind::Union &&
+                (!rhs_resolved || rhs_resolved->kind != hir::TypeKind::Union)) {
+                ctx.push_statement(MirStatement::assign(
+                    place, MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_resolved)));
+                return rhs_value;
+            }
+
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             return rhs_value;

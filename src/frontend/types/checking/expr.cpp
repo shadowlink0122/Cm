@@ -94,13 +94,40 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         }
         inferred_type = ast::make_string();
     } else if (auto* cast_expr = expr.as<ast::CastExpr>()) {
-        // キャスト式: expr as Type
+        // キャスト式: expr as Type / 型判別式: expr is Type
         // オペランドの型を推論
+        ast::TypePtr operand_type;
         if (cast_expr->operand) {
-            infer_type(*cast_expr->operand);
+            operand_type = infer_type(*cast_expr->operand);
         }
-        // ターゲット型を返す
-        inferred_type = cast_expr->target_type;
+        if (cast_expr->type_check) {
+            // is はユニオン型の値にのみ使用できる。対象型は変種のいずれかであること
+            auto resolved = resolve_typedef(operand_type);
+            auto variants = ast::union_variant_types(resolved);
+            if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
+                error(expr.span, "'is' はユニオン型の値にのみ使用できます（左辺の型: " +
+                                     (operand_type ? ast::type_to_string(*operand_type)
+                                                   : std::string("不明")) +
+                                     "）");
+            } else if (cast_expr->target_type) {
+                std::string target_name = ast::type_to_string(*cast_expr->target_type);
+                bool found = false;
+                for (const auto& v : variants) {
+                    if (v && ast::type_to_string(*v) == target_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    error(expr.span,
+                          "'is' の対象型 '" + target_name + "' はユニオンの変種に含まれていません");
+                }
+            }
+            inferred_type = ast::make_bool();
+        } else {
+            // ターゲット型を返す
+            inferred_type = cast_expr->target_type;
+        }
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: オペランドの型を推論し、変数をmoved状態にマーク
         if (move_expr->operand) {
@@ -1103,6 +1130,40 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             for (const auto& sub_pattern : pattern->or_patterns) {
                 check_match_pattern(sub_pattern.get(), expected_type);
             }
+            break;
+
+        case ast::MatchPatternKind::Type: {
+            // ユニオンの型パターン: scrutineeがユニオン型で、
+            // パターン型が変種のいずれかであること
+            auto resolved = resolve_typedef(expected_type);
+            auto variants = ast::union_variant_types(resolved);
+            if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
+                error(current_span_, "型パターンはユニオン型のmatchでのみ使用できます（対象の型: " +
+                                         (expected_type ? ast::type_to_string(*expected_type)
+                                                        : std::string("不明")) +
+                                         "）");
+            } else if (pattern->type_pattern) {
+                std::string target_name = ast::type_to_string(*pattern->type_pattern);
+                bool found = false;
+                for (const auto& v : variants) {
+                    if (v && ast::type_to_string(*v) == target_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    error(current_span_,
+                          "型パターン '" + target_name + "' はユニオンの変種に含まれていません");
+                }
+            }
+            // 束縛変数をパターン型で登録
+            if (!pattern->binding_name.empty() && pattern->binding_name != "_") {
+                scopes_.current().define(pattern->binding_name, pattern->type_pattern);
+            }
+            break;
+        }
+
+        default:
             break;
     }
 }
