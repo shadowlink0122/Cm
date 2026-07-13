@@ -297,6 +297,19 @@ Discarding a Result value as a bare statement produces a `[must_use]` compile-ti
 safe_divide(1, 0);   // warning: unused Result value [must_use]
 ```
 
+### Runtime Errors and Their Safe APIs
+
+Operations that panic (abnormal termination at runtime) have safe counterparts that can be handled with Result/Option. As in Rust, panics are unrecoverable (cannot be caught), so use the safe API when you need to recover.
+
+| Panicking operation | Safe handling |
+|------|------|
+| `a / b`, `a % b` (zero divisor) | `std::math::checked_div(a, b)` / `checked_mod(a, b)` → `Option<int>` |
+| `arr[i]` (out of bounds: fixed array = undefined value, slice = 0) | `arr.get(i)` → `Option<T>` |
+| `v as T` (wrong union variant) | check with `v is T` first, or use match type patterns |
+| `r.unwrap()` / `o.unwrap()` | `unwrap_or(default)`, `is_ok()`/`is_some()`, match |
+| File I/O failures | `std::fs` Result API (`read_to_string`, etc.) |
+| `panic(msg)` / `assert` | intentionally unrecoverable (no handling) |
+
 ---
 
 ## Control Flow Integration

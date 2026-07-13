@@ -106,6 +106,8 @@ int pw = pow(2, 10);        // 1024
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
+| `checked_div(a, b)` | `Option<int>` | チェック付き除算（除数0はNone。v0.16.0） |
+| `checked_mod(a, b)` | `Option<int>` | チェック付き剰余（除数0はNone。v0.16.0） |
 | `gcd(a, b)` | `int` | 最大公約数 |
 | `lcm(a, b)` | `int` | 最小公倍数 |
 | `factorial(n)` | `long` | 階乗 |

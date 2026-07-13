@@ -1,0 +1,50 @@
+// ランタイムエラーのResult/Optionハンドリングのテスト:
+// ゼロ除算（checked_div/checked_mod）・範囲外アクセス（get）・
+// ユニオンcast不一致（is）を、パニックさせずにOption/boolで安全に扱えることを検証
+import std::io::println;
+import std::math::{checked_div, checked_mod};
+
+typedef Value = int | string;
+
+int main() {
+    // 1. ゼロ除算: a / b は除数0でランタイムパニックだが、checked_divはNoneを返す
+    match (checked_div(10, 2)) {
+        Option::Some(v) => println("div: {v}"),
+        Option::None => println("div: none"),
+    }
+    match (checked_div(1, 0)) {
+        Option::Some(v) => println("div: {v}"),
+        Option::None => println("div: none"),
+    }
+    Option<int> m = checked_mod(7, 0);
+    int safe_mod = m.unwrap_or(-1);
+    println("mod unwrap_or: {safe_mod}");
+
+    // 2. 範囲外アクセス: arr[i] は未検査だが、get(i)はOptionを返す
+    int[3] arr = [1, 2, 3];
+    match (arr.get(1)) {
+        Option::Some(v) => println("fixed in: {v}"),
+        Option::None => println("fixed in: none"),
+    }
+    match (arr.get(5)) {
+        Option::Some(v) => println("fixed oob: {v}"),
+        Option::None => println("fixed oob: none"),
+    }
+    int[] xs = [10, 20, 30];
+    Option<int> o = xs.get(9);
+    int safe_elem = o.unwrap_or(-1);
+    println("slice oob unwrap_or: {safe_elem}");
+    Option<int> o2 = xs.get(2);
+    int in_elem = o2.unwrap_or(-1);
+    println("slice in unwrap_or: {in_elem}");
+
+    // 3. ユニオンcast不一致: uv as string は不一致でパニックだが、isで事前判別できる
+    Value uv = 42;
+    if (uv is string) {
+        string s = uv as string;
+        println("union: {s}");
+    } else {
+        println("union: not a string (checked safely)");
+    }
+    return 0;
+}

@@ -300,6 +300,19 @@ Result型の値を使わずに文として捨てると、コンパイル時に `
 safe_divide(1, 0);   // warning: 未使用のResult値です [must_use]
 ```
 
+### ランタイムエラーと安全APIの対応表
+
+パニック（実行時異常終了）する操作には、Result/Optionで事前にハンドリングできる安全APIが用意されています。パニックはRust同様に回復不能（catchできない）ため、回復したい場合は安全API側を使ってください。
+
+| パニックする操作 | 安全なハンドリング |
+|------|------|
+| `a / b`・`a % b`（除数0） | `std::math::checked_div(a, b)` / `checked_mod(a, b)` → `Option<int>` |
+| `arr[i]`（範囲外。固定長=未定義値・スライス=0） | `arr.get(i)` → `Option<T>` |
+| `v as T`（ユニオンの変種不一致） | `v is T` で事前判別、またはmatch型パターン |
+| `r.unwrap()` / `o.unwrap()` | `unwrap_or(default)`・`is_ok()`/`is_some()`・match |
+| ファイルI/O失敗 | `std::fs` のResult API（`read_to_string` 等） |
+| `panic(msg)` / `assert` | 意図的な回復不能エラー（対応不要） |
+
 ---
 
 ## 制御構文での利用

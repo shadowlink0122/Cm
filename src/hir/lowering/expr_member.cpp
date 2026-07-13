@@ -183,6 +183,81 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 return std::make_unique<HirExpr>(std::move(lit), ast::make_int());
             }
 
+            // get(i): チェック付き要素アクセス（Rustのslice::get相当）。
+            // 範囲内なら Option::Some(arr[i])、範囲外なら Option::None へ脱糖する。
+            // arr[i] の範囲外アクセス（固定長=未定義値・スライス=0）を
+            // Option型で安全にハンドリングするためのAPI
+            if (mem.member == "get" && mem.args.size() == 1) {
+                TypePtr elem_type =
+                    obj_type->element_type ? obj_type->element_type : ast::make_int();
+                auto idx_hir = lower_expr(*mem.args[0]);
+
+                // 長さ式: 固定長は定数リテラル、スライスは__builtin_slice_len
+                HirExprPtr len_expr;
+                if (obj_type->array_size.has_value()) {
+                    auto len_lit = std::make_unique<HirLiteral>();
+                    len_lit->value = static_cast<int64_t>(obj_type->array_size.value());
+                    len_expr = std::make_unique<HirExpr>(std::move(len_lit), ast::make_int());
+                } else {
+                    auto len_call = std::make_unique<HirCall>();
+                    len_call->func_name = "__builtin_slice_len";
+                    len_call->args.push_back(clone_hir_expr(obj_hir));
+                    len_expr = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
+                }
+
+                // 条件: (i >= 0) && (i < len)
+                auto make_int_lit = [](int64_t v) {
+                    auto lit = std::make_unique<HirLiteral>();
+                    lit->value = v;
+                    return std::make_unique<HirExpr>(std::move(lit), ast::make_int());
+                };
+                auto ge_zero = std::make_unique<HirBinary>();
+                ge_zero->op = HirBinaryOp::Ge;
+                ge_zero->lhs = clone_hir_expr(idx_hir);
+                ge_zero->rhs = make_int_lit(0);
+                auto ge_expr = std::make_unique<HirExpr>(std::move(ge_zero), ast::make_bool());
+                auto lt_len = std::make_unique<HirBinary>();
+                lt_len->op = HirBinaryOp::Lt;
+                lt_len->lhs = clone_hir_expr(idx_hir);
+                lt_len->rhs = std::move(len_expr);
+                auto lt_expr = std::make_unique<HirExpr>(std::move(lt_len), ast::make_bool());
+                auto both = std::make_unique<HirBinary>();
+                both->op = HirBinaryOp::And;
+                both->lhs = std::move(ge_expr);
+                both->rhs = std::move(lt_expr);
+                auto cond = std::make_unique<HirExpr>(std::move(both), ast::make_bool());
+
+                // Option<elem>型
+                auto opt_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+                opt_type->name = "Option";
+                opt_type->type_args.push_back(elem_type);
+
+                // Some(arr[i])
+                auto index_access = std::make_unique<HirIndex>();
+                index_access->object = clone_hir_expr(obj_hir);
+                index_access->index = std::move(idx_hir);
+                auto elem_expr = std::make_unique<HirExpr>(std::move(index_access), elem_type);
+                auto some_construct = std::make_unique<HirEnumConstruct>();
+                some_construct->enum_name = "Option";
+                some_construct->variant_name = "Some";
+                some_construct->tag_value = 0;
+                some_construct->payload = std::move(elem_expr);
+                auto some_expr = std::make_unique<HirExpr>(std::move(some_construct), opt_type);
+
+                // None
+                auto none_construct = std::make_unique<HirEnumConstruct>();
+                none_construct->enum_name = "Option";
+                none_construct->variant_name = "None";
+                none_construct->tag_value = 1;
+                auto none_expr = std::make_unique<HirExpr>(std::move(none_construct), opt_type);
+
+                auto tern = std::make_unique<HirTernary>();
+                tern->condition = std::move(cond);
+                tern->then_expr = std::move(some_expr);
+                tern->else_expr = std::move(none_expr);
+                return std::make_unique<HirExpr>(std::move(tern), opt_type);
+            }
+
             // 動的配列（スライス）の場合はlenを関数呼び出しで処理
             if (!obj_type->array_size.has_value()) {
                 if (mem.member == "size" || mem.member == "len" || mem.member == "length") {

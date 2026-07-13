@@ -13,6 +13,27 @@ module std.math;
 // ユーティリティ関数
 // ============================================================
 
+// ============================================================
+// チェック付き演算（Rustのchecked_div/checked_mod相当）
+// ゼロ除算をランタイムパニックではなくOptionで扱える
+// ============================================================
+
+// チェック付き除算: 除数が0ならNone
+export Option<int> checked_div(int a, int b) {
+    if (b == 0) {
+        return Option::None;
+    }
+    return Option::Some(a / b);
+}
+
+// チェック付き剰余: 除数が0ならNone
+export Option<int> checked_mod(int a, int b) {
+    if (b == 0) {
+        return Option::None;
+    }
+    return Option::Some(a % b);
+}
+
 // 絶対値
 export int abs(int x) {
     if (x < 0) {

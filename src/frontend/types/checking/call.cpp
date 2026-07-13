@@ -980,6 +980,22 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         // ソート済み配列を返す（同じ型）
         return ast::make_array(obj_type->element_type, obj_type->array_size);
     }
+    if (member.member == "get") {
+        // チェック付き要素アクセス: 範囲内ならOption::Some(要素)、範囲外ならOption::None
+        // （Rustのslice::get相当。arr[i]の範囲外アクセスを避けるための安全API）
+        if (member.args.size() != 1) {
+            error(current_span_, "Array get() takes 1 index argument");
+        } else {
+            auto idx_type = infer_type(*member.args[0]);
+            if (idx_type && !idx_type->is_integer()) {
+                error(current_span_, "Array get() index must be an integer");
+            }
+        }
+        auto opt = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+        opt->name = "Option";
+        opt->type_args.push_back(obj_type->element_type ? obj_type->element_type : ast::make_int());
+        return opt;
+    }
     if (member.member == "first") {
         if (!member.args.empty()) {
             error(current_span_, "Array first() takes no arguments");
