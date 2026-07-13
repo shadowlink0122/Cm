@@ -1,0 +1,34 @@
+// 構造体同士のユニオン変種の実行時判別テスト:
+// JSバックエンドはタグ付き表現（{field0, field1}）でCircle/Rectを判別できる
+// （旧typeofベースでは同typeofの構造体同士は判別不能だった）
+import std::io::println;
+
+struct Circle {
+    int radius;
+}
+
+struct Rect {
+    int w;
+    int h;
+}
+
+typedef Shape = Circle | Rect;
+
+int main() {
+    Shape s = Circle { radius: 5 } as Shape;
+    bool ic = s is Circle;
+    bool ir = s is Rect;
+    println("circle: is Circle={ic} is Rect={ir}");
+    if (s is Circle) {
+        Circle c = s as Circle;
+        println("radius: {c.radius}");
+    }
+
+    s = Rect { w: 3, h: 4 } as Shape;
+    match (s) {
+        Circle c => println("circle r={c.radius}"),
+        Rect r => println("rect {r.w}x{r.h}"),
+        _ => println("other"),
+    }
+    return 0;
+}

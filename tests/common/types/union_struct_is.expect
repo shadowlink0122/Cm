@@ -1,0 +1,3 @@
+circle: is Circle=true is Rect=false
+radius: 5
+rect 3x4

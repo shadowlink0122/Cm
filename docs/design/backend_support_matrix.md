@@ -100,7 +100,6 @@
 | std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
-| JSバックエンドのユニオンはタグを持たないboxed値表現 | `as` の検査と `is` 判定はtypeofベースのため、構造体同士など同typeofの変種は判別できない（プリミティブ×stringの誤castは検出される） | タグ付き表現への移行は別課題 |
 
 ## 更新規則
 

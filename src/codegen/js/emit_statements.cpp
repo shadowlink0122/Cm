@@ -546,6 +546,17 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                         if (isCharArg) {
                             argStr = "String.fromCharCode(" + argStr + ")";
                         }
+
+                        // ユニオン型（タグ付き {field0, field1}）はペイロードへアンラップ
+                        {
+                            hir::TypePtr argType = getOperandType(*arg, func);
+                            if (argType && argType->kind == ast::TypeKind::Union) {
+                                argStr =
+                                    "((u) => (u !== null && typeof u === \"object\" && "
+                                    "u.field0 !== undefined) ? u.field1 : u)(" +
+                                    argStr + ")";
+                            }
+                        }
                     }
 
                     args.push_back(argStr);

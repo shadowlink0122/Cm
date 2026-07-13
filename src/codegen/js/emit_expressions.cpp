@@ -1,3 +1,4 @@
+#include "../../frontend/ast/typedef.hpp"
 #include "codegen.hpp"
 #include "types.hpp"
 
@@ -10,6 +11,36 @@
 namespace cm::codegen::js {
 
 using ast::TypeKind;
+
+namespace {
+
+// ユニオン型の変種一覧から、指定した型に対応するタグ（変種インデックス）を返す。
+// 判定できない場合は-1（LLVMバックエンドのcomputeExpectedUnionTagと同じ判定基準）
+int computeUnionTag(const hir::TypePtr& union_type, const hir::TypePtr& value_type) {
+    if (!union_type || !value_type) {
+        return -1;
+    }
+    auto variants = ast::union_variant_types(union_type);
+    for (size_t vi = 0; vi < variants.size(); ++vi) {
+        const auto& v = variants[vi];
+        if (!v) {
+            continue;
+        }
+        if (v->kind == value_type->kind &&
+            (v->kind != TypeKind::Struct || v->name == value_type->name)) {
+            return static_cast<int>(vi);
+        }
+    }
+    return -1;
+}
+
+// boxedタグ付きユニオン（{field0: tag, field1: value}）かどうかのJS実行時判定式
+std::string unionBoxedCheck(const std::string& v) {
+    return "(" + v + " !== null && typeof " + v + " === \"object\" && " + v +
+           ".field0 !== undefined)";
+}
+
+}  // namespace
 
 std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func) {
     switch (rvalue.kind) {
@@ -265,55 +296,82 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
             std::string operand = emitOperand(*data.operand, func);
 
-            // ユニオン型の実行時型判別 (expr is Type): typeofでboolを返す
-            // （JSユニオンはboxed値のため、LLVM系のタグ比較の代わりにtypeof判定。
-            // 構造体同士など同typeofの変種は判別できない既知の制限がある）
+            // ユニオン型の実行時型判別 (expr is Type):
+            // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する
+            // （構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
             if (data.check_only) {
                 if (data.target_type) {
+                    hir::TypePtr srcUnion = getOperandType(*data.operand, func);
+                    int expected_tag = computeUnionTag(srcUnion, data.target_type);
+                    std::string typeof_check;
                     if (data.target_type->kind == TypeKind::String) {
-                        return "(typeof " + operand + " === \"string\")";
+                        typeof_check = "(typeof u === \"string\")";
+                    } else if (data.target_type->is_integer() || data.target_type->is_floating()) {
+                        typeof_check = "(typeof u === \"number\")";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_check = "(typeof u === \"boolean\")";
+                    } else {
+                        typeof_check = "(typeof u === \"object\" && u !== null)";
                     }
-                    if (data.target_type->is_integer() || data.target_type->is_floating()) {
-                        return "(typeof " + operand + " === \"number\")";
-                    }
-                    if (data.target_type->kind == TypeKind::Bool) {
-                        return "(typeof " + operand + " === \"boolean\")";
-                    }
-                    // 構造体変種: object判定（同typeofの変種同士は判別不能）
-                    return "(typeof " + operand + " === \"object\" && " + operand + " !== null)";
+                    return "((u) => " + unionBoxedCheck("u") +
+                           " ? (u.field0 === " + std::to_string(expected_tag) +
+                           ") : " + typeof_check + ")(" + operand + ")";
                 }
                 return "false";
             }
 
-            // ユニオンからの取り出し（Union as T）はtypeofで実変種を検査する
-            // （LLVM系バックエンドのタグ検査と同等の失敗動作。従来は String(42) のように
-            // 黙って型強制され「誤った型でのas」が成功扱いになっていた）
+            // ユニオン変換:
+            //   構築（T → Union）: タグ付き表現 {field0: tag, field1: value} で包む
+            //   取り出し（Union as T）: タグ検査 + field1参照（生値はtypeofフォールバック）
             {
                 hir::TypePtr srcType = getOperandType(*data.operand, func);
-                if (srcType && srcType->kind == TypeKind::Union && data.target_type) {
-                    auto guard_cast = [&](const std::string& expected_typeof,
-                                          const std::string& conv_prefix,
-                                          const std::string& conv_suffix) {
-                        return "((v) => { if (typeof v !== \"" + expected_typeof +
-                               "\") { console.log(\"invalid union cast: active variant does "
-                               "not match target type\"); ((typeof process !== \"undefined\") ? "
-                               "process.exit(1) : (() => { throw new Error(\"invalid union "
-                               "cast\"); })()); } return " +
-                               conv_prefix + "v" + conv_suffix + "; })(" + operand + ")";
-                    };
+                hir::TypePtr tgtResolved = data.target_type;
+                if (tgtResolved && tgtResolved->kind == TypeKind::Union &&
+                    (!srcType || srcType->kind != TypeKind::Union)) {
+                    // ユニオン構築: 変種タグを付けてbox化
+                    int tag = computeUnionTag(tgtResolved, srcType);
+                    if (tag >= 0) {
+                        return "{ field0: " + std::to_string(tag) + ", field1: " + operand + " }";
+                    }
+                    // タグ不明（型情報欠落）は従来どおり生値
+                    return operand;
+                }
+                if (srcType && srcType->kind == TypeKind::Union && data.target_type &&
+                    data.target_type->kind != TypeKind::Union) {
+                    int expected_tag = computeUnionTag(srcType, data.target_type);
+                    std::string typeof_name;
+                    std::string conv_prefix;
+                    std::string conv_suffix;
                     if (data.target_type->kind == TypeKind::String) {
-                        return guard_cast("string", "", "");
+                        typeof_name = "string";
+                    } else if (data.target_type->is_integer()) {
+                        typeof_name = "number";
+                        conv_prefix = "Math.trunc(";
+                        conv_suffix = ")";
+                    } else if (data.target_type->is_floating()) {
+                        typeof_name = "number";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_name = "boolean";
+                        conv_prefix = "Boolean(";
+                        conv_suffix = ")";
                     }
-                    if (data.target_type->is_integer()) {
-                        return guard_cast("number", "Math.trunc(", ")");
+                    const std::string fail =
+                        "{ console.log(\"invalid union cast: active variant does not match "
+                        "target type\"); ((typeof process !== \"undefined\") ? process.exit(1) "
+                        ": (() => { throw new Error(\"invalid union cast\"); })()); }";
+                    std::string boxed_branch =
+                        "(() => { if (v.field0 !== " + std::to_string(expected_tag) + ") " + fail +
+                        " return " + conv_prefix + "v.field1" + conv_suffix + "; })()";
+                    std::string raw_branch;
+                    if (!typeof_name.empty()) {
+                        raw_branch = "(() => { if (typeof v !== \"" + typeof_name + "\") " + fail +
+                                     " return " + conv_prefix + "v" + conv_suffix + "; })()";
+                    } else {
+                        // 構造体変種等: 生値はtypeofで判別できないため無検査で通す
+                        raw_branch = "v";
                     }
-                    if (data.target_type->is_floating()) {
-                        return guard_cast("number", "", "");
-                    }
-                    if (data.target_type->kind == TypeKind::Bool) {
-                        return guard_cast("boolean", "Boolean(", ")");
-                    }
-                    // 構造体バリアント等はtypeofで判別できないため無検査で通す
+                    return "((v) => " + unionBoxedCheck("v") + " ? " + boxed_branch + " : " +
+                           raw_branch + ")(" + operand + ")";
                 }
             }
 

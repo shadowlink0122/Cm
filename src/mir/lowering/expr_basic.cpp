@@ -1344,11 +1344,18 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // オペランドをlowering
     LocalId operand = lower_expression(*cast.operand, ctx);
 
+    // typedefエイリアス（Shape = Circle | Rect 等）を解決してからCastを発行する。
+    // 未解決のままだとバックエンドがユニオン構築/タグ検査を認識できない
+    hir::TypePtr target_type = ctx.resolve_typedef(cast.target_type);
+    if (!target_type) {
+        target_type = cast.target_type;
+    }
+
     // ユニオン型の実行時型判別 (expr is Type): タグ比較のboolを返す
     if (cast.check_only) {
         LocalId result = ctx.new_temp(hir::make_bool());
         ctx.push_statement(MirStatement::assign(
-            MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type,
+            MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), target_type,
                                               /*check_only=*/true)));
         return result;
     }
@@ -1357,9 +1364,9 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
     // b as void* で配列全体がコピーされるのを防ぐため、
     // 配列のアドレスを取得してからポインタキャストを行う
-    if (cast.target_type &&
-        (cast.target_type->kind == hir::TypeKind::Pointer ||
-         cast.target_type->kind == hir::TypeKind::Reference) &&
+    if (target_type &&
+        (target_type->kind == hir::TypeKind::Pointer ||
+         target_type->kind == hir::TypeKind::Reference) &&
         operand < ctx.func->locals.size()) {
         auto& operand_local = ctx.func->locals[operand];
         if (operand_local.type && operand_local.type->kind == hir::TypeKind::Array &&
@@ -1375,21 +1382,21 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
             ctx.push_statement(MirStatement::assign(MirPlace{ref_temp}, std::move(ref_rvalue)));
 
             // Ref結果をポインタキャスト
-            LocalId result = ctx.new_temp(cast.target_type);
+            LocalId result = ctx.new_temp(target_type);
             ctx.push_statement(MirStatement::assign(
                 MirPlace{result},
-                MirRvalue::cast(MirOperand::copy(MirPlace{ref_temp}), cast.target_type)));
+                MirRvalue::cast(MirOperand::copy(MirPlace{ref_temp}), target_type)));
 
             return result;
         }
     }
 
     // ターゲット型で結果変数を作成
-    LocalId result = ctx.new_temp(cast.target_type);
+    LocalId result = ctx.new_temp(target_type);
 
     // キャスト命令を生成
     ctx.push_statement(MirStatement::assign(
-        MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type)));
+        MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), target_type)));
 
     return result;
 }
