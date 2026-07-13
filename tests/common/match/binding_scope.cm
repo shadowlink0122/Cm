@@ -1,0 +1,23 @@
+// matchパターン束縛のスコープ閉じ込めの回帰テスト:
+// 旧: Option::Some(v) の v が型チェッカで関数スコープへ漏れ、
+// match後の同名変数宣言の型が誤解決されていた（別型でシャドウできなかった）
+import std::io::println;
+
+int main() {
+    Option<int> o = Option::Some(5);
+    match (o) {
+        Option::Some(v) => println("some: {v}"),
+        Option::None => println("none"),
+    }
+    // match後に同名vを別の型で宣言できる（束縛がアームに閉じている証拠）
+    string v = "shadowed";
+    println("after: {v}");
+
+    // 2つのアームで同名bindingを使っても衝突しない
+    Result<int, string> r = Result::Err("boom");
+    match (r) {
+        Result::Ok(x) => println("ok: {x}"),
+        Result::Err(x) => println("err: {x}"),
+    }
+    return 0;
+}

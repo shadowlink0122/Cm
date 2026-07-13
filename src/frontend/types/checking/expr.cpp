@@ -829,6 +829,10 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     size_t arm_index = 0;
 
     for (auto& arm : match.arms) {
+        // パターン束縛（Option::Some(v) の v 等）はアームのスコープに閉じる。
+        // 従来はスコープpush前に定義され関数スコープへ漏れていた（既知の問題を修正）
+        scopes_.push();
+
         check_match_pattern(arm.pattern.get(), scrutinee_type);
 
         if (arm.guard) {
@@ -838,6 +842,9 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
             }
         }
 
+        // 内側スコープ: EnumVariantWithBindingのペイロード精密型が
+        // check_match_patternの粗い定義をシャドウできるようにする
+        // （同一スコープでの再定義は無効のためネストが必要）
         scopes_.push();
 
         // EnumVariantWithBindingの場合、バインディング変数をスコープに追加
@@ -919,6 +926,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
             }
         }
 
+        scopes_.pop();
         scopes_.pop();
         arm_index++;
     }
