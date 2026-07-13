@@ -66,17 +66,29 @@ int main() {
 }
 ```
 
-### 戻り値を返す（将来実装予定）
+### 戻り値を返す（式形式）
+
+全アームが式本体（`パターン => 式`）のmatchは値を返す式として使える。
 
 ```cm
-// 将来の構文
-// string name = match (value) {
-//     0 => "zero",
-//     1 => "one",
-//     2 => "two",
-//     _ => "other",
-// };
+string name = match (value) {
+    0 => "zero",
+    1 => "one",
+    2 => "two",
+    _ => "other",
+};
 ```
+
+scrutineeに関数呼び出しを直接書いても1回だけ評価される。
+
+```cm
+int x = match (getv(21)) {
+    Result::Ok(v) => v,
+    Result::Err(e) => -1,
+};
+```
+
+注意: アームの式本体の中にさらに式形式matchをネストして、そのscrutineeに関数呼び出しを書くことはできない（アーム本体をブロック形式にして変数へ受けてからmatchする）。
 
 ---
 

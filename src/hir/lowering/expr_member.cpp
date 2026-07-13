@@ -72,10 +72,28 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
         // 組み込みResult<T,E>/Option<T>のメソッドをタグ比較・ペイロード取り出しへ脱糖する
         // （is_ok/is_err/is_some/is_none/unwrap/unwrap_or/unwrap_err/expect）
-        if (obj_type && obj_type->kind == ast::TypeKind::Struct &&
-            (obj_type->name == "Result" || obj_type->name == "Option") &&
-            enum_defs_.count(obj_type->name) > 0) {
-            const std::string& en = obj_type->name;
+        // 補間ミニパイプライン経由ではMIRローカル型名（__TaggedUnion_Option等）で渡るため、
+        // 基底enum名へ正規化してから判定する
+        std::string enum_base = obj_type ? obj_type->name : "";
+        {
+            static const std::string kTaggedPrefix = "__TaggedUnion_";
+            if (enum_base.rfind(kTaggedPrefix, 0) == 0) {
+                enum_base = enum_base.substr(kTaggedPrefix.size());
+            }
+            // モノモーフィズド名（Result__int__string等）は基底名へ切り詰める
+            auto dunder = enum_base.find("__");
+            if (dunder != std::string::npos && dunder > 0) {
+                enum_base = enum_base.substr(0, dunder);
+            }
+        }
+        // enum_defs_はミニパイプライン（補間式）ではprelude宣言が無く空になるため、
+        // ビルトイン登録・seedで必ず入るenum_values_のタグキーで判定する
+        // （ユーザーが同名structを定義した場合はタグキーが無いので誤脱糖しない）
+        const bool is_builtin_sum_type =
+            (enum_base == "Result" && enum_values_.count("Result::Ok") > 0) ||
+            (enum_base == "Option" && enum_values_.count("Option::Some") > 0);
+        if (obj_type && obj_type->kind == ast::TypeKind::Struct && is_builtin_sum_type) {
+            const std::string& en = enum_base;
             const bool is_result = (en == "Result");
             const std::string ok_variant = is_result ? "Ok" : "Some";
             const std::string err_variant = is_result ? "Err" : "None";
@@ -154,6 +172,11 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             }
             if (mem.member == "unwrap_or" && !mem.args.empty()) {
                 auto fallback = lower_expr(*mem.args[0]);
+                // 型引数が失われている場合（補間ミニパイプライン等）は
+                // フォールバック引数の型からペイロード型を復元する
+                if (obj_type->type_args.empty() && fallback->type) {
+                    ok_type = fallback->type;
+                }
                 return make_guarded(tag_of(ok_variant), make_payload(ok_variant, ok_type),
                                     std::move(fallback), ok_type);
             }

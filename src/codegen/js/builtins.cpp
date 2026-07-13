@@ -64,16 +64,9 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_string_concat",
         "__builtin_string_first",
         "__builtin_string_last",
-        // 配列メソッド (JS Native Wrappers)
-        "every",
-        "some",
-        "find",
-        "findIndex",
-        "reduce",
-        "filter",
-        "map",
-        "sort",
-        "sortBy",
+        // 配列メソッドは__builtin_array_*名でのみ扱う。
+        // 裸名（find/map等）を登録するとemitBuiltinCallに発行ケースが無く
+        // 常にundefinedになる上、同名のユーザー定義関数を飲み込むため登録しない
         "__builtin_array_indexOf_i32",
         "__builtin_array_indexOf_i64",
         "__builtin_array_includes_i32",

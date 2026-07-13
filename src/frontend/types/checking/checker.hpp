@@ -129,6 +129,10 @@ class TypeChecker {
     bool types_compatible(ast::TypePtr expected, ast::TypePtr actual);
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
+
+    // 補間プレースホルダ内の式を現在のスコープで検査する
+    // （従来は素通りし、スコープ外変数の参照がゴミ値になっていた）
+    void check_interpolation_scope(const std::string& format_str);
     void error(Span span, const std::string& msg);
     void warning(Span span, const std::string& msg);
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);

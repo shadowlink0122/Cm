@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "../type_checker.hpp"
+#include "match_hoist.hpp"
 
 #include <algorithm>
 #include <set>
@@ -62,6 +63,10 @@ bool TypeChecker::check(ast::Program& program) {
                 make_prelude_enum("Result", {"T", "E"}, std::move(members)));
         }
     }
+
+    // 式形式matchの呼び出しscrutineeを一時変数へ退避するASTプリパス
+    // （HIRの三項演算子脱糖でのクローン多重評価を避け、単一評価を保証する）
+    hoist_match_call_scrutinees(program);
 
     // Pass 1: 関数シグネチャを登録
     for (auto& decl : program.declarations) {

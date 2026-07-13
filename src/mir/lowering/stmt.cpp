@@ -229,6 +229,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         ctx.enum_defs->count(let.type->name)) {
         auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
         tagged_union_type->name = "__TaggedUnion_" + let.type->name;
+        // 元の型引数を保持（補間ミニパイプラインでのペイロード型復元に使用）
+        tagged_union_type->type_args = let.type->type_args;
         actual_type = tagged_union_type;
     }
 

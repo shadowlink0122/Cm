@@ -48,6 +48,16 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 infer_type(*arg);
             }
 
+            // 補間プレースホルダ内の変数参照をスコープ検査する
+            // （従来は素通りし、ブロック外に出た変数の参照がゴミ値になっていた）
+            if (!call.args.empty() && call.args[0]) {
+                if (const auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
+                    if (lit->is_string()) {
+                        check_interpolation_scope(std::get<std::string>(lit->value));
+                    }
+                }
+            }
+
             return ast::make_void();
         }
 

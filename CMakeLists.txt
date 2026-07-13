@@ -295,6 +295,7 @@ set(CM_SOURCES
     src/frontend/types/checking/generic.cpp
     src/frontend/types/checking/auto_impl.cpp
     src/frontend/types/checking/utils.cpp
+    src/frontend/types/checking/match_hoist.cpp
     src/preprocessor/import.cpp
     src/preprocessor/export_filter.cpp
     src/preprocessor/module_resolve.cpp
