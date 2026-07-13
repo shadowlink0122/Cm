@@ -822,7 +822,8 @@ EOJS
 
         js)
             # JavaScriptバックエンドでコンパイルして実行
-            local js_file="$TEMP_DIR/js_${test_name}.js"
+            # （カテゴリ・PID修飾: 同名テストや同時に走る別のrunner実行との衝突を防ぐ）
+            local js_file="$TEMP_DIR/js_${category//\//_}_${test_name}_$$.js"
             rm -f "$js_file"
 
             # テストファイルのディレクトリに移動してコンパイル
@@ -1468,10 +1469,19 @@ PY
             fi
             ;;
         js)
-            local js_file="$TEMP_DIR/js_${test_name}_$$.js"
+            # カテゴリ・ワーカーPIDで修飾する（basenameのみだと同名テスト（basic等）が
+            # 並列実行時に同じファイルを取り合い、他テストのコードを実行してしまう。
+            # $$は全ワーカー共通の親PIDのため一意にならない。llvm/wasm/svと同じ方式）
+            local js_file="$TEMP_DIR/js_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.js"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ] && [ ! -f "$js_file" ]; then
+                # コンパイル成功なのに生成物が無い場合を「空出力のOutput mismatch」と
+                # 混同しないよう明示的に失敗として区別する
+                echo "FAIL:JS file missing after successful compile" > "$result_file"
+                return
+            fi
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
@@ -1487,7 +1497,7 @@ PY
             ;;
         llvm-uefi)
             # UEFI ターゲットへのコンパイルのみ検証
-            local uefi_obj="$TEMP_DIR/uefi_${test_name}_$$.efi"
+            local uefi_obj="$TEMP_DIR/uefi_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.efi"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
@@ -1500,7 +1510,7 @@ PY
             ;;
         llvm-baremetal)
             # ベアメタルターゲットへのコンパイルのみ検証
-            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}_$$.o"
+            local baremetal_obj="$TEMP_DIR/baremetal_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.o"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
@@ -1630,6 +1640,8 @@ PY
                 echo "PASS" > "$result_file"
             else
                 echo "FAIL:Error output mismatch" > "$result_file"
+                # 差分を保存（集計時に表示され、CIログから原因を特定できるようにする）
+                diff -u "$expect_file" "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         else
             echo "FAIL:Expected error but succeeded" > "$result_file"
@@ -1647,6 +1659,8 @@ PY
                 echo "PASS" > "$result_file"
             else
                 echo "FAIL:Output mismatch" > "$result_file"
+                # 差分を保存（集計時に表示され、CIログから原因を特定できるようにする）
+                diff -u "$expect_file" "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         fi
     fi

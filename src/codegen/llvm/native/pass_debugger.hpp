@@ -14,7 +14,10 @@
 #include <llvm/Transforms/Scalar/Reassociate.h>
 #include <llvm/Transforms/Scalar/SimplifyCFG.h>
 #include <llvm/Transforms/Utils.h>
+// LLVM 18で包括ヘッダ Vectorize.h が削除された（パス名参照のみで直接は不要）
+#if __has_include(<llvm/Transforms/Vectorize.h>)
 #include <llvm/Transforms/Vectorize.h>
+#endif
 #include <string>
 #include <thread>
 #include <vector>
