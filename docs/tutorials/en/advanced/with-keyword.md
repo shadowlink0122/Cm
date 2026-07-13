@@ -144,7 +144,7 @@ Unused auto implementations are removed by dead-code elimination, so an unused d
 - [Interfaces](../types/interfaces.html)
 - [Operator Overloading](../advanced/operators.html)
 - [Canonical Spec](../../../design/CANONICAL_SPEC.html)
-- [Design 10: #[derive] attribute](../../../design/v0.16.0/10_derive_attribute.html)
+- [Design 10: #[derive] attribute](../../../archive/v0.16.0/10_derive_attribute.html)
 
 ---
 

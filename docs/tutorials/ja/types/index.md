@@ -18,8 +18,8 @@ Cm言語の高度な型機能を学ぶチュートリアル集です。推定学
 | タイトル | 難易度 | 内容 |
 |---------|--------|------|
 | [構造体](structs.html) | 🟡 中級 | 定義・コンストラクタ・ネスト |
-| [Enum型](enums.html) | 🟡 中級 | 列挙型・Tagged Union・match分解 |
-| [typedef](typedef.html) | 🟡 中級 | 型エイリアス・リテラル型 |
+| [Enum型](enums.html) | 🟡 中級 | 列挙型・Tagged Union・match分解・Result/Option・?演算子 |
+| [typedef](typedef.html) | 🟡 中級 | 型エイリアス・ユニオン型・is演算子/match型パターン・リテラル型 |
 | [ジェネリクス](generics.html) | 🔴 上級 | 型パラメータ・推論・モノモーフィゼーション |
 | [インターフェース](interfaces.html) | 🟡 中級 | interface/impl/self |
 | [型制約](constraints.html) | 🔴 上級 | AND/OR境界・where句 |

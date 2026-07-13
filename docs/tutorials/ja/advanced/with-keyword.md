@@ -262,7 +262,7 @@ enum Color { Red }    // エラー: enumへのderiveは未対応
 - [インターフェース](../types/interfaces.html) - interface/impl構文
 - [演算子オーバーロード](../advanced/operators.html) - operator実装
 - [正式言語仕様](../../../design/CANONICAL_SPEC.html) - 構文仕様
-- [設計10: #[derive]属性](../../../design/v0.16.0/10_derive_attribute.html) - 設計文書
+- [設計10: #[derive]属性](../../../archive/v0.16.0/10_derive_attribute.html) - 設計文書
 
 ---
 

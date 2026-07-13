@@ -18,8 +18,8 @@ Tutorials covering Cm's advanced type features. Estimated time: 4-5 hours.
 | Title | Level | Contents |
 |-------|-------|----------|
 | [Structs](structs.html) | 🟡 Intermediate | Definitions, constructors, nesting |
-| [Enums](enums.html) | 🟡 Intermediate | Enums, tagged unions, match destructuring |
-| [typedef](typedef.html) | 🟡 Intermediate | Type aliases, literal types |
+| [Enums](enums.html) | 🟡 Intermediate | Enums, tagged unions, match destructuring, Result/Option, the ? operator |
+| [typedef](typedef.html) | 🟡 Intermediate | Type aliases, union types, the is operator / match type patterns, literal types |
 | [Generics](generics.html) | 🔴 Advanced | Type parameters, inference, monomorphization |
 | [Interfaces](interfaces.html) | 🟡 Intermediate | interface/impl/self |
 | [Type constraints](constraints.html) | 🔴 Advanced | AND/OR bounds, where clauses |

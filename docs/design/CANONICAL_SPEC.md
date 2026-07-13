@@ -249,12 +249,16 @@ struct Point3D with Debug, Clone {
     double z;
 }
 
-// 間違い
-#[derive(Debug, Clone)]  // ❌ Rust風アトリビュート
-struct Point3D { }
+// #[derive(...)] 属性でも同じ自動実装を指定できる（withと等価な別記法）
+#[derive(Debug, Clone)]
+struct Point3D2 {
+    double x;
+    double y;
+    double z;
+}
 ```
 
-**計画（v0.16.0設計10）**: `#[derive(...)]` 属性を `with` と等価な自動実装記法として追加予定（`with` は破壊的変更なしでそのまま有効。上記の「間違い」例は実装完了時に削除する）。詳細は [設計10](v0.16.0/10_derive_attribute.html) を参照。なお `with` を構造体メンバ埋め込みへ転用する案は見送りとした（[経緯](../archive/unimplemented/with_struct_embedding.html)）。
+**v0.16.0で実装済み**: `#[derive(...)]` 属性は `with` と完全に等価な自動実装記法である（`with` は破壊的変更なしでそのまま有効）。詳細は [設計10](../archive/v0.16.0/10_derive_attribute.html) を参照。なお `with` を構造体メンバ埋め込みへ転用する案は見送りとした（[経緯](../archive/unimplemented/with_struct_embedding.html)）。
 
 ### 6.1 メンバ修飾子
 
