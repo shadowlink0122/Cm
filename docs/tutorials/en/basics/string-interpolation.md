@@ -66,9 +66,33 @@ int main() {
 }
 ```
 
-> **Note (known limitation):** Nested calls like `{f(g(x))}` and
-> binary expressions like `{a + b}` are not yet supported.
-> Assign to a local variable first, then embed the variable.
+**Extended in v0.16.0**: Nested calls like `{f(g(x))}`, expressions like `{a + b}` or `{xs[1] * 10}`, and method calls (including Result/Option methods such as `{xs.some(fn)}` and `{o.unwrap_or(-1)}`) can now be embedded.
+
+```cm
+int main() {
+    Option<int> o = Option::Some(5);
+    int a = 3;
+    int b = 4;
+    println("sum: {a + b}");             // → sum: 7
+    println("value: {o.unwrap_or(-1)}"); // → value: 5
+    return 0;
+}
+```
+
+## Scope Checking (v0.16.0)
+
+Variable references inside placeholders are scope-checked at compile time just like expressions in statements. Referencing an out-of-scope or undefined variable is a compile error (previously it was unchecked and printed an undefined value).
+
+```cm
+int main() {
+    {
+        int b = 42;
+        println("in: {b}");   // OK
+    }
+    println("out: {b}");      // error: Undefined variable 'b' in interpolation placeholder '{b}'
+    return 0;
+}
+```
 
 ## Format Specifiers
 

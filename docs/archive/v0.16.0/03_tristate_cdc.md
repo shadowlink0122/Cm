@@ -1,6 +1,6 @@
 # v0.16.0 実装設計 3: トライステート（'z）とCDC同期化プリミティブ
 
-優先度: 3関連: [roadmap.md](roadmap.html) A3/B1（旧 missing_features 項目8）
+優先度: 3関連: [roadmap.md](../../design/v0.16.0/roadmap.html) A3/B1（旧 missing_features 項目8）
 
 > **✅ 2026-07-07 実装済み（属性方式に洗練）**: 言語コア（型修飾 `tri` /
 > `z` リテラル）の追加を避け、既存の属性系だけで表現する方式で実装した。

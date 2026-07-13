@@ -10,7 +10,7 @@ has_children: true
 # Cm言語チュートリアル v0.16.0
 
 **対象バージョン:** v0.16.0  
-**最終更新:** v0.16.0 (2026-07-07)
+**最終更新:** v0.16.0 (2026-07-14)
 
 Cm言語の全機能を段階的に学べる包括的なチュートリアル集です。
 
@@ -149,6 +149,8 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | モジュール | ✅ | ✅ | ✅ | ✅ [modules](basics/modules.html) |
 | **データ** | 構造体 | ✅ | ✅ | ✅ | ✅ [structs](types/structs.html) |
 | | Enum/Tagged Union | ✅ | ✅ | ✅ | ✅ [enums](types/enums.html) |
+| | Result/Option・`?` 演算子 | ✅ | ✅ | ✅ | ✅ [enums](types/enums.html) |
+| | ユニオン実行時型判別（`is`・match型パターン） | ✅ | ✅ | ✅ | ✅ [typedef](types/typedef.html) |
 | | 配列 | ✅ | ✅ | ✅ | ✅ [arrays](basics/arrays.html) |
 | | ポインタ | ✅ | ✅ | ❌ | ✅ [pointers](basics/pointers.html) |
 | **型** | ジェネリクス | ✅ | ✅ | ✅ | ✅ [generics](types/generics.html) |
@@ -161,7 +163,8 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | インラインASM | ✅ | ❌ | ❌ | ✅ [inline-asm](advanced/inline-asm.html) |
 | | extern宣言 | ✅ | ✅ | ❌ | ✅ [extern](advanced/extern.html) |
 | | FFI | ✅ | ❌ | ❌ | ✅ [ffi](advanced/ffi.html) |
-| **std** | HTTP/HTTPS | ✅ | ❌ | ❌ | ✅ [http](stdlib/http.html) |
+| **std** | std::fs（ファイル操作） | ✅ | ❌ | ❌ | ✅ [io](stdlib/io.html) |
+| | HTTP/HTTPS | ✅ | ❌ | ❌ | ✅ [http](stdlib/http.html) |
 | | TCP/UDP/DNS | ✅ | ❌ | ❌ | ✅ [tcp](stdlib/network/tcp.html) |
 | | スレッド | ✅ | ❌ | ❌ | ✅ [thread](stdlib/concurrency/thread.html) |
 | | Mutex/RwLock | ✅ | ❌ | ❌ | ✅ [mutex](stdlib/concurrency/mutex.html) |
@@ -169,6 +172,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 | | Atomic | ✅ | ❌ | ❌ | ✅ [atomic](stdlib/concurrency/atomic.html) |
 | | GPU (Metal) | ✅ | ❌ | ❌ | ✅ [gpu](stdlib/gpu.html) |
 | **ツール** | Linter | ✅ | - | - | ✅ [linter](compiler/common/linter.html) |
+| | cm test / `#[test]` | ✅ | - | - | ✅ [state-sim](compiler/sv/state-sim.html) |
 | | Formatter | ✅ | - | - | ✅ [formatter](compiler/common/formatter.html) |
 | | プリプロセッサ | ✅ | ✅ | ❌ | ✅ [preprocessor](compiler/common/preprocessor.html) |
 | **バックエンド** | JSコンパイル | - | - | ✅ | ✅ [js-compilation](compiler/js/index.html) |
@@ -210,7 +214,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 ---
 
-**最終更新:** v0.16.0 (2026-07-07)  
+**最終更新:** v0.16.0 (2026-07-14)  
 **著者:** Cm Language Development Team
 
 

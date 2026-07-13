@@ -70,14 +70,14 @@ struct Color with Eq {
 | `Display` | `toString()` |
 | `Css` | `css()` / `to_css()` / `isCss()` |
 
-導出可能セットをユーザー定義interfaceへ拡張する構想（フィールドイントロスペクション等の前提機能を含む）は [設計11](11_user_defined_derive.html) で前方検討する。
+導出可能セットをユーザー定義interfaceへ拡張する構想（フィールドイントロスペクション等の前提機能を含む）は [設計11](../../design/v0.16.0/11_user_defined_derive.html) で前方検討する。
 
 ### 導出可能セットの十分性評価（2026-07-11）
 
 - Rust標準のderive（Clone / Copy / Debug / Default / Eq / PartialEq / Hash / Ord / PartialOrd）との比較で、Cmに未提供なのは **Default のみ**（Eq/PartialEq等の区別はCmの型系に存在しないため対象外）。
 - Default導出は「インスタンスなしで呼ぶメソッド」＝静的メソッド呼び出し構文（`Point::default()` 相当）が前提となるため、v0.16.0では追加しない。宣言時のゼロ値初期化（`Point p;`）が既定値を提供しており実用上の穴は小さい。静的メソッド構文の設計とセットで v0.18.0（仕様凍結）までに導入可否を判断する。
 - Serialize（JSON等）は組み込み追加せず、設計11のユーザー定義derive（`fields(T)` 反復）の主要ユースケースとして扱う。
-- バックエンド別の利用可否は [バックエンド対応マトリクス](../backend_support_matrix.html) に記載する（バックエンドごとに利用可能なセットが異なることを許容する）。
+- バックエンド別の利用可否は [バックエンド対応マトリクス](../../design/backend_support_matrix.html) に記載する（バックエンドごとに利用可能なセットが異なることを許容する）。
 
 ### フィールド型ごとの対応（v0.16.0実装時点）
 

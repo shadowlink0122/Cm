@@ -202,21 +202,22 @@ docker compose run --rm test
 | [言語仕様](design/CANONICAL_SPEC.html) | 完全な言語仕様 |
 | [リリースノート](releases/) | バージョン履歴 |
 
-## ✅ 実装済み機能（v0.14.0）
+## ✅ 実装済み機能（v0.16.0）
 
 - **型システム**: int, uint, float, double, bool, char, string, ポインタ, 配列
-- **ユニオン型**: インラインユニオン (`int | null`)、typedefユニオン、null型
+- **ユニオン型**: インラインユニオン (`int | null`)、typedefユニオン、null型、実行時型判別（`is` / match型パターン）
+- **エラーハンドリング**: 組み込み `Result<T, E>` / `Option<T>`、`?` 演算子、`unwrap`/`unwrap_or` 等のメソッド、checked_div・配列 `get(i)` の安全API
 - **構造体**: コンストラクタ (`self()`)、デストラクタ (`~self()`)、ネスト
-- **インターフェース**: interface/impl、with自動実装（Eq, Ord, Clone, Hash）
+- **インターフェース**: interface/impl、with / `#[derive(...)]` 自動実装（Eq, Ord, Copy, Clone, Hash, Debug, Display, Css）
 - **ジェネリクス**: 関数・構造体・ジェネリックコンストラクタ・複数型パラメータ
-- **Enum/Tagged Union**: Associated Data、match分解、Option, Result
-- **パターンマッチ**: match式、パターンガード、網羅性チェック
+- **Enum/Tagged Union**: Associated Data、match分解
+- **パターンマッチ**: match式（値を返す式形式含む）、型パターン、パターンガード、網羅性チェック、don't careビットマッチ
 - **所有権**: 移動セマンティクス、借用チェック
 - **モジュール**: import/export、名前空間
-- **標準ライブラリ**: Vector\<T\>, Queue\<T\>, HashMap\<K,V\>, HTTP/HTTPS, Thread, Mutex, GPU
-- **バックエンド**: JIT, LLVM Native (x86_64/ARM64), WASM, JavaScript, UEFI
-- **ツール**: cm lint, cm fmt, cm check, プリプロセッサ (#ifdef)
+- **標準ライブラリ**: Vector\<T\>, Queue\<T\>, HashMap\<K,V\>, std::fs, HTTP/HTTPS, Thread, Mutex, GPU
+- **バックエンド**: JIT, LLVM Native (x86_64/ARM64), WASM, JavaScript, SystemVerilog, UEFI, baremetal
+- **ツール**: cm lint, cm fmt, cm test (`#[test]`), cm check, プリプロセッサ (#ifdef)
 
 ---
 
-**最終更新:** 2026-02-14
+**最終更新:** 2026-07-14

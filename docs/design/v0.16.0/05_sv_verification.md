@@ -6,7 +6,7 @@
 > 本設計の `#[sv::testbench]` 属性は設計06でバックエンド中立の `#[test]` へ
 > 再設計された（テストビルド限定コンパイル + `cm test` コマンド）。
 > 本文書のTB生成機構（step/assert/println変換）はそのまま `#[test]` が引き継ぐ。
-> 詳細は [06_test_attribute.md](06_test_attribute.md) を参照。
+> 詳細は [06_test_attribute.md](../../archive/v0.16.0/06_test_attribute.html) を参照（実装済み・archive移動済み）。
 
 ## 現状の検証手段と限界
 
