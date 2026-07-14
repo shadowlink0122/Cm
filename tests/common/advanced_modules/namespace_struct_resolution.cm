@@ -1,0 +1,32 @@
+// namespace内の非修飾名解決の回帰テスト:
+// 旧: namespace内で定義した構造体を同namespace関数の引数/戻り値型・
+// 構造体リテラル・非修飾関数呼び出しで参照できなかった（既知の問題を修正）
+import std::io::println;
+
+namespace M {
+    export struct V {
+        double x;
+        double y;
+    }
+
+    // 非公開ヘルパー（非修飾呼び出しの解決対象）
+    double dot(V a, V b) {
+        return a.x * b.x + a.y * b.y;
+    }
+
+    export V make(double x, double y) {
+        V r = V { x: x, y: y };
+        return r;
+    }
+
+    export double len2(V v) {
+        return dot(v, v);
+    }
+}
+
+int main() {
+    M::V v = M::make(3.0, 4.0);
+    println("x: {v.x}");
+    println("len2: {M::len2(v)}");
+    return 0;
+}

@@ -214,6 +214,27 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
+        if (!sym && !current_namespace_.empty() && ident->name.find("::") == std::string::npos) {
+            // 名前空間内の非修飾呼び出しは「現在の名前空間::名前」として解決する
+            // （内側から外側へ探索。解決できた場合は呼び出し名を修飾名へ書き換え、
+            // HIR/コード生成が一貫した名前を見るようにする）
+            std::string ns = current_namespace_;
+            while (!ns.empty()) {
+                std::string qualified = ns + "::" + ident->name;
+                if (auto ns_sym = scopes_.current().lookup(qualified)) {
+                    if (ns_sym->is_function) {
+                        ident->name = qualified;
+                        sym = ns_sym;
+                        break;
+                    }
+                }
+                auto pos = ns.rfind("::");
+                if (pos == std::string::npos) {
+                    break;
+                }
+                ns = ns.substr(0, pos);
+            }
+        }
         if (!sym) {
             // 静的メソッド呼び出しの可能性をチェック: Type::method
             size_t last_colon = ident->name.rfind("::");

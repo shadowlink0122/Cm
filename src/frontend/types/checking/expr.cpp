@@ -244,6 +244,14 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
 
     auto struct_it = struct_defs_.find(lit.type_name);
     if (struct_it == struct_defs_.end()) {
+        // 名前空間内の非修飾名は「現在の名前空間::名前」として解決し、
+        // リテラルの型名を修飾名へ書き換える（HIR/コード生成へ伝播）
+        if (auto qualified = resolve_in_namespace(lit.type_name)) {
+            lit.type_name = *qualified;
+            struct_it = struct_defs_.find(lit.type_name);
+        }
+    }
+    if (struct_it == struct_defs_.end()) {
         error(current_span_, "Unknown struct type: " + lit.type_name);
         return ast::make_error();
     }

@@ -100,6 +100,14 @@ const ast::StructDecl* TypeChecker::get_struct(const std::string& name) const {
         return it->second;
     }
 
+    // 名前空間内の非修飾名は「現在の名前空間::名前」として解決する
+    if (auto qualified = resolve_in_namespace(name)) {
+        auto ns_it = struct_defs_.find(*qualified);
+        if (ns_it != struct_defs_.end()) {
+            return ns_it->second;
+        }
+    }
+
     auto td_it = typedef_defs_.find(name);
     if (td_it != typedef_defs_.end() && td_it->second) {
         std::string actual_name = td_it->second->name;
@@ -156,6 +164,10 @@ void TypeChecker::register_namespace(ast::ModuleDecl& mod, const std::string& pa
     debug::tc::log(debug::tc::Id::Resolved, "Processing namespace: " + full_namespace,
                    debug::Level::Debug);
 
+    // 名前空間内の非修飾型名解決のため現在の名前空間を設定（ネストは再帰で退避/復元）
+    std::string saved_namespace = current_namespace_;
+    current_namespace_ = full_namespace;
+
     for (auto& inner_decl : mod.declarations) {
         if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
             register_namespace(*nested_mod, full_namespace);
@@ -173,6 +185,8 @@ void TypeChecker::register_namespace(ast::ModuleDecl& mod, const std::string& pa
             register_declaration(*inner_decl);
         }
     }
+
+    current_namespace_ = saved_namespace;
 }
 
 void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& parent_namespace) {
@@ -182,6 +196,10 @@ void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& paren
 
     debug::tc::log(debug::tc::Id::Resolved, "Checking namespace: " + full_namespace,
                    debug::Level::Debug);
+
+    // 名前空間内の非修飾型名解決のため現在の名前空間を設定（ネストは再帰で退避/復元）
+    std::string saved_namespace = current_namespace_;
+    current_namespace_ = full_namespace;
 
     for (auto& inner_decl : mod.declarations) {
         if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
@@ -200,6 +218,8 @@ void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& paren
             check_declaration(*inner_decl);
         }
     }
+
+    current_namespace_ = saved_namespace;
 }
 
 void TypeChecker::register_declaration(ast::Decl& decl) {

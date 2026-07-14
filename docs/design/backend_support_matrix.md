@@ -37,7 +37,7 @@
 | bool / char | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | float / double | ✅ | ✅ | ✅ | ✅ | ❌ SV004 | ✅ | ✅ |
 | string | ✅ | ✅ | ✅ | ✅ | ⚠️ const 3文字までは24bit定数、超過・非constは ❌ SV005 | ⚠️ 専用テキストAPI | ⚠️ 出力手段なし |
-| ポインタ `T*` | ✅ | ✅ | ✅ | ⚠️ 基本のみ（`void*` はエラー） | ❌ SV002 | ✅ | ✅ |
+| ポインタ `T*` | ✅ | ✅ | ✅ | ⚠️ 基本・フィールド・二重ポインタ対応（`void*`・ptr⇔intキャストはエラー） | ❌ SV002 | ✅ | ✅ |
 | 固定長配列 `T[N]` | ✅ | ✅ | ✅ | ✅ | ✅ RAM/ROM推論 | ✅ | ✅ |
 | 動的配列 / スライス | ✅ | ✅ | ✅ | ⚠️ 一部skip | ❌ SV006 | ⚠️ 自前アロケータ必須 | ⚠️ 自前アロケータ必須 |
 | `bit[N]` / ビットスライス | ―（SV専用） | ― | ― | ― | ✅ | ― | ― |
@@ -86,7 +86,7 @@
 | JIT | common + llvm + jit | |
 | LLVM Native | common + llvm | O0/O3 |
 | WASM | common + wasm | wasmtime実行 |
-| JS | common + js | 既知のskip 23カテゴリ（ポインタ/メモリ/std系） |
+| JS | common + js | 理由付き個別skipのみ（void*/malloc系・53bit・ptr⇔intキャスト。2026-07-15にカテゴリ一括skipを棚卸し） |
 | SV | sv のみ | **commonは実行しない（2026-07-11 方針決定）**。合成可能サブセットの検証は tests/sv と実機回路（CmCPU）で行う |
 | UEFI | uefi のみ | **commonは実行しない（同上）**。コンパイル検証中心 |
 | baremetal | baremetal のみ | **commonは実行しない（同上）**。no_std検査のエラーテスト含む |
@@ -96,7 +96,7 @@
 | 問題 | 影響 | 状態 |
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
-| 名前空間内で定義した構造体を同namespace関数の引数/戻り値型・非修飾呼び出しで参照できない | common/advanced_modules/import_features をskip（複数行export・大文字エイリアスの旧skip理由は2026-07-12修正済み。回帰: multiline_export） | exportリスト型モジュールの選択的import抽出の未対応とあわせてモジュール系の残ギャップとして記録 |
+| exportリスト型モジュールの選択的import抽出（`import ./mod::{A, f}` のトップレベルエイリアス生成・export選択コピー時の非公開依存関数の同伴）が未対応 | common/advanced_modules/import_features をskip | namespace内の構造体型・非修飾呼び出しの解決は2026-07-15修正済み（回帰: namespace_struct_resolution）。残りはプリプロセッサのモジュール機能として次バージョン以降 |
 | std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの `void*` 非対応（明示エラー）・53bit精度・ポインタ⇔整数キャスト不可 | libc malloc/free系（collections/std::mem/allocator等）と64bit大値・ptr⇔intキャストのテストを理由付きで個別skip（2026-07-15にカテゴリ一括skipを棚卸しし、動作する26テスト［基本/フィールド/二重ポインタ・impl経由書き戻し等］を有効化） | ポインタはオブジェクト参照で基本対応。void*はJSで表現不能のため明示エラーを維持 |

@@ -1,0 +1,26 @@
+// floatパラメータへのリテラル渡しの回帰テスト:
+// 旧: doubleリテラル→floatパラメータが変換されず
+// LLVM検証エラー（Call parameter type does not match）になっていた
+import std::io::println;
+
+float half(float v) {
+    return v / 2.0;
+}
+
+double twice(double v) {
+    return v * 2.0;
+}
+
+float add_f(float a, float b) {
+    return a + b;
+}
+
+int main() {
+    float h = half(3.0);
+    println("half: {h}");
+    double t = twice(2.5);
+    println("twice: {t}");
+    float s = add_f(1.5, 2);
+    println("add: {s}");
+    return 0;
+}

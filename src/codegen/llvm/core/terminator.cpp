@@ -1075,6 +1075,23 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                 args[i] = builder->CreateTrunc(args[i], expectedType, "trunc");
                             }
                         }
+                        // 浮動小数点幅の不一致（doubleリテラル → floatパラメータ等）
+                        // 従来は変換されず "Call parameter type does not match" の
+                        // LLVM検証エラーになっていた
+                        else if (expectedType->isFloatingPointTy() &&
+                                 actualType->isFloatingPointTy()) {
+                            if (expectedType->getPrimitiveSizeInBits() <
+                                actualType->getPrimitiveSizeInBits()) {
+                                args[i] =
+                                    builder->CreateFPTrunc(args[i], expectedType, "fptrunc_arg");
+                            } else {
+                                args[i] = builder->CreateFPExt(args[i], expectedType, "fpext_arg");
+                            }
+                        }
+                        // 整数 → 浮動小数点（float f = half(3) 等のリテラル渡し）
+                        else if (expectedType->isFloatingPointTy() && actualType->isIntegerTy()) {
+                            args[i] = builder->CreateSIToFP(args[i], expectedType, "sitofp_arg");
+                        }
                     }
                 }
 

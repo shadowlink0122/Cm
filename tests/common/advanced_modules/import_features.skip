@@ -1,2 +1,5 @@
-# 名前空間内の構造体型解決（namespace内で定義した構造体を同namespace関数の引数/戻り値型・非修飾呼び出しで参照）と、exportリスト型モジュールの選択的import抽出が未対応のためスキップ
-# 複数行exportリスト・大文字エイリアスのパーサ/プリプロセッサ問題は修正済み（回帰: multiline_export）
+# exportリスト型モジュールの選択的import抽出が未対応のためスキップ
+# （import ./math::{Vector3, dot} のトップレベルエイリアス生成と、
+# export選択コピー時の非公開依存関数の同伴が必要）
+# namespace内の構造体型・非修飾呼び出しの解決は2026-07-15修正済み
+# （回帰: namespace_struct_resolution）

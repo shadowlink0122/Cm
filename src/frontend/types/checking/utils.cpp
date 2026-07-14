@@ -18,6 +18,17 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
     // 名前付き型（Struct/Interface/Generic）の場合
     if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Interface ||
         type->kind == ast::TypeKind::Generic) {
+        // 名前空間内の非修飾名は「現在の名前空間::名前」へ書き換える
+        // （全ての型がここを通るため、宣言型・戻り値型・リテラル型の
+        // 修飾が一貫し、HIR/コード生成も同じ名前を見る）
+        if (!type->name.empty() && struct_defs_.count(type->name) == 0 &&
+            enum_names_.count(type->name) == 0 && typedef_defs_.count(type->name) == 0 &&
+            interface_names_.count(type->name) == 0 &&
+            !generic_context_.has_type_param(type->name)) {
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
+            }
+        }
         // enum名の場合はint型として解決
         // ただしtype_argsを持つTagged Union enum（Result<int,string>等）は除外
         if (enum_names_.count(type->name)) {
@@ -993,6 +1004,27 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
     }
 }
 
+std::optional<std::string> TypeChecker::resolve_in_namespace(const std::string& name) const {
+    if (current_namespace_.empty() || name.find("::") != std::string::npos) {
+        return std::nullopt;
+    }
+    // 内側の名前空間から外側へ向かって探索する（M::N内なら M::N::name → M::name）
+    std::string ns = current_namespace_;
+    while (!ns.empty()) {
+        std::string qualified = ns + "::" + name;
+        if (struct_defs_.count(qualified) > 0 || interface_names_.count(qualified) > 0 ||
+            enum_names_.count(qualified) > 0 || typedef_defs_.count(qualified) > 0) {
+            return qualified;
+        }
+        auto pos = ns.rfind("::");
+        if (pos == std::string::npos) {
+            break;
+        }
+        ns = ns.substr(0, pos);
+    }
+    return std::nullopt;
+}
+
 bool TypeChecker::is_valid_type(ast::TypePtr type) {
     if (!type)
         return true;
@@ -1019,6 +1051,13 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
             if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
                 enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
                 generic_context_.has_type_param(type->name)) {
+                return true;
+            }
+            // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する
+            // （外側の名前空間へ向かって順に探索）。解決できた場合は型名を
+            // 修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
                 return true;
             }
             return false;
