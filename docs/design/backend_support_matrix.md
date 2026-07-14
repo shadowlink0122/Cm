@@ -85,7 +85,7 @@
 | interpreter | common | |
 | JIT | common + llvm + jit | |
 | LLVM Native | common + llvm | O0/O3 |
-| WASM | common + wasm | wasmtime実行 |
+| WASM | common + wasm | wasmtime実行（無い環境はnodeのWASIラッパーへフォールバック。両者とも欠落時はスイートが明示エラーで失敗） |
 | JS | common + js | 理由付き個別skipのみ（void*/malloc系・53bit・ptr⇔intキャスト。2026-07-15にカテゴリ一括skipを棚卸し） |
 | SV | sv のみ | **commonは実行しない（2026-07-11 方針決定）**。合成可能サブセットの検証は tests/sv と実機回路（CmCPU）で行う |
 | UEFI | uefi のみ | **commonは実行しない（同上）**。コンパイル検証中心 |

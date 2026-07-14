@@ -342,6 +342,15 @@ jobs:
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
+      - name: Verify wasmtime
+        if: matrix.config.backend == 'llvm-wasm'
+        run: |
+          # インストール失敗の静かな素通りを防ぐ（2026-07-15にmacosで
+          # wasmtime欠落により391テストが無検証スキップになった事故の再発防止。
+          # ランナー側もnodeフォールバック+欠落時FAIL化済みだが、原因を
+          # ここで可視化する）
+          "$HOME/.wasmtime/bin/wasmtime" --version || wasmtime --version
+
       - name: Install SV tools (for SV backend tests)
         if: matrix.config.backend == 'sv'
         id: sv_tools

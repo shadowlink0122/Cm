@@ -250,6 +250,69 @@ if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-
     exit 1
 fi
 
+# WASM実行用の共有nodeラッパーを生成する（wasmtimeが無い環境のフォールバック。
+# 並列ワーカーからも参照するため起動時に一度だけ書き出す）
+WASM_NODE_WRAPPER=""
+setup_wasm_node_wrapper() {
+    WASM_NODE_WRAPPER="$TEMP_DIR/wasm_node_wrapper.js"
+    mkdir -p "$TEMP_DIR"
+    cat > "$WASM_NODE_WRAPPER" << 'EOWRAP'
+const fs = require('fs');
+const wasmBuffer = fs.readFileSync(process.argv[2]);
+const decoder = new TextDecoder();
+let outputBuffer = '';
+let result;
+WebAssembly.instantiate(wasmBuffer, {
+    wasi_snapshot_preview1: {
+        proc_exit: (code) => {
+            if (outputBuffer) process.stdout.write(outputBuffer);
+            process.exit(code);
+        },
+        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
+            const memory = result.instance.exports.memory;
+            const dataView = new DataView(memory.buffer);
+            if (fd === 1) {
+                let totalWritten = 0;
+                for (let i = 0; i < iovs_len; i++) {
+                    const iov_offset = iovs_ptr + (i * 8);
+                    const buf_ptr = dataView.getUint32(iov_offset, true);
+                    const buf_len = dataView.getUint32(iov_offset + 4, true);
+                    const bytes = new Uint8Array(memory.buffer, buf_ptr, buf_len);
+                    outputBuffer += decoder.decode(bytes);
+                    totalWritten += buf_len;
+                }
+                const lines = outputBuffer.split('\n');
+                if (lines.length > 1) {
+                    for (let i = 0; i < lines.length - 1; i++) console.log(lines[i]);
+                    outputBuffer = lines[lines.length - 1];
+                }
+                dataView.setUint32(nwritten_ptr, totalWritten, true);
+                return 0;
+            }
+            return -1;
+        },
+        fd_close: () => 0, fd_seek: () => 0, fd_read: () => 0,
+        environ_sizes_get: () => 0, environ_get: () => 0,
+        args_sizes_get: () => 0, args_get: () => 0,
+        random_get: () => 0, clock_time_get: () => 0, proc_raise: () => 0
+    }
+}).then(res => {
+    result = res;
+    if (result.instance.exports._start) {
+        result.instance.exports._start();
+        if (outputBuffer) process.stdout.write(outputBuffer);
+    } else if (result.instance.exports.main) {
+        const ret = result.instance.exports.main();
+        if (outputBuffer) process.stdout.write(outputBuffer);
+        process.exit(ret);
+    }
+}).catch(err => {
+    console.error('WASM Error:', err);
+    process.exit(1);
+});
+EOWRAP
+}
+
 # 実行ランタイムの事前チェック
 # （欠落時に全テストが「No WASM runtime」等で静かにスキップされ、
 # スイートが緑のまま素通りする事故を防ぐ）
@@ -257,6 +320,10 @@ if [ "$BACKEND" = "llvm-wasm" ] && ! command -v wasmtime >/dev/null 2>&1 && \
    ! command -v node >/dev/null 2>&1 && ! command -v wasmer >/dev/null 2>&1; then
     echo "Error: WASMランタイムが見つかりません（wasmtime / node / wasmer のいずれかが必要）"
     exit 1
+fi
+if [ "$BACKEND" = "llvm-wasm" ] && ! command -v wasmtime >/dev/null 2>&1; then
+    echo "警告: wasmtimeが見つからないため node のWASIラッパーで実行します"
+    setup_wasm_node_wrapper
 fi
 if [ "$BACKEND" = "js" ] && ! command -v node >/dev/null 2>&1; then
     echo "Error: Node.js が見つかりません（jsバックエンドのテストに必要）"
@@ -733,101 +800,18 @@ PY
                     # wasmtimeを使用
                     run_with_timeout wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 elif command -v node >/dev/null 2>&1; then
-                    # nodeを使用（WASMラッパースクリプトを生成）
-                    local wrapper_js="$TEMP_DIR/wasm_wrapper_${test_name}.js"
-                    cat > "$wrapper_js" << 'EOJS'
-const fs = require('fs');
-const wasmBuffer = fs.readFileSync(process.argv[2]);
-
-// テキストデコーダ
-const decoder = new TextDecoder();
-let outputBuffer = '';
-
-WebAssembly.instantiate(wasmBuffer, {
-    wasi_snapshot_preview1: {
-        proc_exit: (code) => {
-            // バッファに残っている出力を吐き出す
-            if (outputBuffer) {
-                process.stdout.write(outputBuffer);
-            }
-            process.exit(code);
-        },
-        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
-            const memory = result.instance.exports.memory;
-            const dataView = new DataView(memory.buffer);
-
-            // fd=1 は標準出力
-            if (fd === 1) {
-                let totalWritten = 0;
-
-                // 各IOVを処理
-                for (let i = 0; i < iovs_len; i++) {
-                    const iov_offset = iovs_ptr + (i * 8);
-                    const buf_ptr = dataView.getUint32(iov_offset, true);
-                    const buf_len = dataView.getUint32(iov_offset + 4, true);
-
-                    // バッファからデータを読み取る
-                    const bytes = new Uint8Array(memory.buffer, buf_ptr, buf_len);
-                    const str = decoder.decode(bytes);
-
-                    // 出力バッファに追加
-                    outputBuffer += str;
-                    totalWritten += buf_len;
-                }
-
-                // 改行があったら出力
-                const lines = outputBuffer.split('\n');
-                if (lines.length > 1) {
-                    for (let i = 0; i < lines.length - 1; i++) {
-                        console.log(lines[i]);
-                    }
-                    outputBuffer = lines[lines.length - 1];
-                }
-
-                // 書き込んだバイト数を設定
-                dataView.setUint32(nwritten_ptr, totalWritten, true);
-                return 0; // 成功
-            }
-            return -1; // エラー
-        },
-        // その他のWASI関数のスタブ
-        fd_close: () => 0,
-        fd_seek: () => 0,
-        fd_read: () => 0,
-        environ_sizes_get: () => 0,
-        environ_get: () => 0,
-        args_sizes_get: () => 0,
-        args_get: () => 0,
-        random_get: () => 0,
-        clock_time_get: () => 0,
-        proc_raise: () => 0
-    }
-}).then(res => {
-    result = res;
-    // _startまたはmain関数を呼び出し
-    if (result.instance.exports._start) {
-        result.instance.exports._start();
-    } else if (result.instance.exports.main) {
-        const ret = result.instance.exports.main();
-        // バッファに残っている出力を吐き出す
-        if (outputBuffer) {
-            process.stdout.write(outputBuffer);
-        }
-        process.exit(ret);
-    }
-}).catch(err => {
-    console.error('WASM Error:', err);
-    process.exit(1);
-});
-EOJS
-                    run_with_timeout node "$wrapper_js" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
-                    rm -f "$wrapper_js"
+                    # nodeを使用（共有WASIラッパー。未生成なら生成する）
+                    if [ -z "$WASM_NODE_WRAPPER" ] || [ ! -f "$WASM_NODE_WRAPPER" ]; then
+                        setup_wasm_node_wrapper
+                    fi
+                    run_with_timeout node "$WASM_NODE_WRAPPER" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 elif command -v wasmer >/dev/null 2>&1; then
                     # wasmerを使用
                     run_with_timeout wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No WASM runtime found (install wasmtime, node, or wasmer)"
-                    ((SKIPPED++))
+                    # 起動時チェック通過後にランタイムが消えた異常事態はSKIPせず失敗させる
+                    echo -e "${RED}[FAIL]${NC} $category/$test_name - No WASM runtime available (wasmtime/node/wasmer)"
+                    ((FAILED++))
                     return
                 fi
             fi
@@ -851,8 +835,9 @@ EOJS
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Node.js not found"
-                    ((SKIPPED++))
+                    # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
+                    echo -e "${RED}[FAIL]${NC} $category/$test_name - Node.js not found"
+                    ((FAILED++))
                     return
                 fi
             fi
@@ -1473,8 +1458,16 @@ PY
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
                     run_with_timeout_silent wasmtime run --dir=. "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                elif [ -n "$WASM_NODE_WRAPPER" ] && [ -f "$WASM_NODE_WRAPPER" ] && command -v node >/dev/null 2>&1; then
+                    # wasmtimeが無い環境: 共有nodeラッパーで実行（旧: 静かにSKIPされ
+                    # スイートが緑のまま素通りしていた）
+                    run_with_timeout_silent node "$WASM_NODE_WRAPPER" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                elif command -v wasmer >/dev/null 2>&1; then
+                    run_with_timeout_silent wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo "SKIP:No WASM runtime" > "$result_file"
+                    # 起動時チェックを通過した後にランタイムが消えた異常事態。
+                    # SKIPにすると無検証で緑になるため明示的に失敗させる
+                    echo "FAIL:No WASM runtime available (wasmtime/node/wasmer)" > "$result_file"
                     rm -f "$wasm_file"
                     return
                 fi
@@ -1501,7 +1494,8 @@ PY
                     # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
                     kill %% 2>/dev/null || true
                 else
-                    echo "SKIP:Node.js not found" > "$result_file"
+                    # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
+                    echo "FAIL:Node.js not found" > "$result_file"
                     rm -f "$js_file"
                     return
                 fi
