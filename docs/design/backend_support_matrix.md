@@ -104,7 +104,7 @@
 | matchアームの式本体内にネストした式形式match（`Ok(v) => match (f(v)) {...}` 等）は関数呼び出しscrutineeを単一評価へ退避できない | アーム本体をブロック形式にして変数へ受けてからmatchする | scrutinee退避プリパスは条件評価される位置（アーム式本体・ガード・短絡右辺・三項分岐・while条件）からは持ち出せないため |
 | UEFIターゲットはLLVM最適化パスをスキップする（MIR最適化のみ適用） | O1〜O3指定でもLLVMレベルの最適化は行われない | v0.14.1 Bug#13の回避策（O2のインライン展開+DCEがefi_mainの制御フローを破壊）。再有効化は制御フロー保護の設計が必要 |
 | SVターゲットはDCE/CopyProp等の文除去系MIR最適化を実行しない（O1以上で定数畳み込み・恒等式簡約のみ適用） | 未使用の一時変数代入等は生成SVに残る（合成ツール側で除去される） | 文除去系パスはHWロジック（出力代入・always内の中間信号）を消すため。文数・CFG形状を保存する書き換えのみ許可 |
-| MIRのインライン化パスが休眠状態（呼び出し先の旧形式Constant表現のみ認識し、現行のFunctionRefを認識しない） | MIRレベルのインライン展開は行われない（native/JIT/WASMはLLVM側のインライナが担うため最終コードへの影響は限定的。LLVMを通らないSV/JS/インタプリタはインライン展開なし） | 有効化実験でperform_inliningの潜在バグ（デストラクタ順序破壊・SIGSEGV）が露出したため休眠を維持。再設計とセットで有効化する（tests/integration/cases/mir_optimization/README.md参照） |
+| MIRのインライン化パスが休眠状態（呼び出し先の旧形式Constant表現のみ認識し、現行のFunctionRefを認識しない） | MIRレベルのインライン展開は行われない（native/JIT/WASMはLLVM側のインライナが担うため最終コードへの影響は限定的。LLVMを通らないSV/JS/インタプリタはインライン展開なし） | 有効化実験でperform_inliningの潜在バグ（デストラクタ順序破壊・SIGSEGV）が露出したため休眠を維持。再設計とセットで有効化する（tests/regression/cases/mir_optimization/README.md参照） |
 
 ## 更新規則
 

@@ -94,7 +94,7 @@ help:
 	@echo "Test Commands (Unit Tests):"
 	@echo "  make test           - 全テスト実行（unit + integration）"
 	@echo "  make test-unit      - C++ユニットテストのみ"
-	@echo "  make test-integration - C++統合テストのみ"
+	@echo "  make test-regression  - C++回帰テスト（パイプライン段階のgtest）のみ"
 	@echo "  make test-lexer     - Lexerテストのみ"
 	@echo "  make test-hir       - HIR Loweringテストのみ"
 	@echo "  make test-mir       - MIR Loweringテストのみ"
@@ -151,7 +151,7 @@ help:
 	@echo "  make b   - build"
 	@echo "  make t   - test (unit + integration)"
 	@echo "  make tu  - test-unit (C++ unit tests only)"
-	@echo "  make ti  - test-integration (C++ integration tests)"
+	@echo "  make tr  - test-regression (C++ regression tests)"
 	@echo "  make tuf - test-uefi"
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
@@ -468,18 +468,24 @@ dx: debug-x86
 .PHONY: test-unit
 test-unit:
 	@echo "Running C++ unit tests..."
-	@ctest --test-dir $(BUILD_DIR) -L unit --output-on-failure
+	@ctest --test-dir $(BUILD_DIR) -L unit --no-tests=error --output-on-failure
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
-# C++統合テスト（コンパイルパイプラインを通すgtest。
-# Cmプログラムは tests/integration/cases/ の .cm ファイルから読み込む）
-.PHONY: test-integration
-test-integration:
-	@echo "Running C++ integration tests..."
-	@ctest --test-dir $(BUILD_DIR) -L integration --output-on-failure
+# C++回帰テスト（プロセス内でコンパイルパイプラインの段階を通すgtest。
+# Cmプログラムは tests/regression/cases/ の .cm ファイルから読み込む。
+# 「integration」はリリースビルドのcmバイナリに対する機能テスト
+# （test-interpreter/-llvm/-js/-sv等のバックエンドスイート）を指す）
+.PHONY: test-regression
+test-regression:
+	@echo "Running C++ regression tests..."
+	@ctest --test-dir $(BUILD_DIR) -L regression --no-tests=error --output-on-failure
 	@echo ""
-	@echo "✅ All integration tests passed!"
+	@echo "✅ All regression tests passed!"
+
+# 旧名エイリアス（削除予定）
+.PHONY: test-integration
+test-integration: test-regression
 
 # cm test コマンドのE2Eテスト（JIT/SVディスパッチ）
 .PHONY: test-cm-test
@@ -489,7 +495,7 @@ test-cm-test:
 
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-integration test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
@@ -769,7 +775,8 @@ t: test
 tu: test-unit
 
 .PHONY: ti
-ti: test-integration
+tr: test-regression
+ti: test-regression
 
 .PHONY: ta
 ta: test-all

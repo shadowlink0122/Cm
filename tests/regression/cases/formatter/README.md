@@ -1,6 +1,6 @@
 # formatter — フォーマッタ統合テストの入力ソース
 
-`tests/integration/formatter_test.cpp` が読み込むケースファイル。テーマ別のサブフォルダ（ifdef/ continuation/ literal/ style/）に配置し、テストからは `ifdef/top_level` のようにフォルダつきの名前で参照する。
+`tests/regression/formatter_test.cpp` が読み込むケースファイル。テーマ別のサブフォルダ（ifdef/ continuation/ literal/ style/）に配置し、テストからは `ifdef/top_level` のようにフォルダつきの名前で参照する。
 
 ## ファイル規約
 

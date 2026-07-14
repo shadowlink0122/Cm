@@ -13,7 +13,7 @@ using namespace cm;
 // ============================================================
 // MIR lowering 統合テスト
 // ============================================================
-// Cmソースは tests/integration/cases/mir_lowering/ の .cm ファイルに分割
+// Cmソースは tests/regression/cases/mir_lowering/ の .cm ファイルに分割
 class MirLoweringTest : public ::testing::Test {
    protected:
     std::string load_case(const std::string& name) {

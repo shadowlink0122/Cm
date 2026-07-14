@@ -1,6 +1,0 @@
-// 浮動小数点の恒等式（x+0.0 / x*1.0）はNaN・-0.0の意味論があるため簡約対象外
-double f(double a) {
-    double y = a + 0.0;
-    double z = a * 1.0;
-    return y + z;
-}

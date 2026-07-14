@@ -1,7 +1,0 @@
-// TCE: 自己再帰の末尾呼び出しが is_tail_call としてマークされる
-int count_down(int n) {
-    if (n <= 0) {
-        return 0;
-    }
-    return count_down(n - 1);
-}

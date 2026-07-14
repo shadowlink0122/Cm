@@ -175,8 +175,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-15]
-        # コンパイラ単体機能のテスト（tests/unit/）
-        test_bin: [lexer_test, error_test]
+        # コンパイラ単体機能のテスト（tests/unit/。単一ビルドオブジェクト単位）
+        test_bin: [lexer_test, error_test, mir_pass_test]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -216,17 +216,17 @@ jobs:
         run: ./build/bin/${{ matrix.test_bin }} --gtest_output=xml:test-results.xml
 
   # ========================================
-  # C++ Integration Tests（コンパイルパイプラインを通すgtest。
-  # Cmプログラムは tests/integration/cases/ から読み込む）
+  # C++ Regression Tests（プロセス内でコンパイルパイプラインの段階を通すgtest。
+  # Cmプログラムは tests/regression/cases/ から読み込む）
   # ========================================
-  cpp-integration-test:
-    name: C++統合テスト ${{ matrix.test_bin }} (${{ matrix.os }})
+  cpp-regression-test:
+    name: C++回帰テスト ${{ matrix.test_bin }} (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-15]
-        # tests/integration/ のgtest（ケースファイルはcheckoutから読む）
+        # tests/regression/ のgtest（ケースファイルはcheckoutから読む）
         test_bin:
           - hir_lowering_test
           - mir_lowering_test

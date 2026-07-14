@@ -9,7 +9,7 @@ using namespace cm::fmt;
 // ============================================================
 // フォーマッタ統合テスト
 // ============================================================
-// Cmソースは tests/integration/cases/formatter/ の .cm ファイルに分割。
+// Cmソースは tests/regression/cases/formatter/ の .cm ファイルに分割。
 // - <name>.input.cm + <name>.expected.cm: 整形結果がexpectedに一致すること
 // - <name>.cm: 既に整形済みで、fmtを適用しても変化しないこと（安定ケース）
 // いずれも冪等性（expected/安定ファイルへの再適用で変化なし）を検証する。

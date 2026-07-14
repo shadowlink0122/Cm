@@ -12,7 +12,7 @@ using namespace cm;
 // ============================================================
 // HIR lowering 統合テスト
 // ============================================================
-// Cmソースは tests/integration/cases/hir_lowering/ の .cm ファイルに分割
+// Cmソースは tests/regression/cases/hir_lowering/ の .cm ファイルに分割
 class HirLoweringTest : public ::testing::Test {
    protected:
     std::string load_case(const std::string& name) {
