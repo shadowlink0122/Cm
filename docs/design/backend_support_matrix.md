@@ -99,7 +99,7 @@
 | 名前空間内で定義した構造体を同namespace関数の引数/戻り値型・非修飾呼び出しで参照できない | common/advanced_modules/import_features をskip（複数行export・大文字エイリアスの旧skip理由は2026-07-12修正済み。回帰: multiline_export） | exportリスト型モジュールの選択的import抽出の未対応とあわせてモジュール系の残ギャップとして記録 |
 | std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
-| JSの53bit精度・狭整数ラップ・ポインタ制限 | common 23カテゴリskip | 本マトリクスの対象外（JSギャップは別途） |
+| JSの `void*` 非対応（明示エラー）・53bit精度・ポインタ⇔整数キャスト不可 | libc malloc/free系（collections/std::mem/allocator等）と64bit大値・ptr⇔intキャストのテストを理由付きで個別skip（2026-07-15にカテゴリ一括skipを棚卸しし、動作する26テスト［基本/フィールド/二重ポインタ・impl経由書き戻し等］を有効化） | ポインタはオブジェクト参照で基本対応。void*はJSで表現不能のため明示エラーを維持 |
 | `arr[i]` の範囲外アクセスが未検査（固定長=未定義値、スライス=0を黙って返す） | 安全にハンドリングする場合は `arr.get(i)` → `Option<T>` を使用する（v0.16.0追加） | Rust同様の範囲外パニック化は意味論変更のため別途検討 |
 | matchアームの式本体内にネストした式形式match（`Ok(v) => match (f(v)) {...}` 等）は関数呼び出しscrutineeを単一評価へ退避できない | アーム本体をブロック形式にして変数へ受けてからmatchする | scrutinee退避プリパスは条件評価される位置（アーム式本体・ガード・短絡右辺・三項分岐・while条件）からは持ち出せないため |
 | UEFIターゲットはLLVM最適化パスをスキップする（MIR最適化のみ適用） | O1〜O3指定でもLLVMレベルの最適化は行われない | v0.14.1 Bug#13の回避策（O2のインライン展開+DCEがefi_mainの制御フローを破壊）。再有効化は制御フロー保護の設計が必要 |

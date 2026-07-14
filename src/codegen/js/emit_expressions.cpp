@@ -284,6 +284,53 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     return "{__arr: " + base + ", __idx: " + idxStr + "}";
                 }
             }
+            // 構造体フィールドへのRef（&p.x）→ {__arr: 親オブジェクト, __idx: "フィールド名"}
+            // 文字列キーでも obj[key] で読み書きできるため、配列要素ポインタと
+            // 同一のデリファレンス経路（.__arr[.__idx]）がそのまま機能する
+            if (!data.place.projections.empty() &&
+                data.place.projections.back().kind == mir::ProjectionKind::Field) {
+                std::string base = getLocalVarName(func, data.place.local);
+                if (boxed_locals_.count(data.place.local)) {
+                    base += "[0]";
+                }
+                hir::TypePtr currentType = nullptr;
+                if (data.place.local < func.locals.size()) {
+                    currentType = func.locals[data.place.local].type;
+                }
+                // 最後のFieldの手前までを辿る（ネストフィールド・ポインタ経由に対応）
+                for (size_t i = 0; i + 1 < data.place.projections.size(); ++i) {
+                    const auto& proj = data.place.projections[i];
+                    if (proj.kind == mir::ProjectionKind::Deref) {
+                        // JSでは構造体ポインタはオブジェクト参照そのものなのでno-op
+                        if (currentType && (currentType->kind == TypeKind::Pointer ||
+                                            currentType->kind == TypeKind::Reference)) {
+                            currentType = currentType->element_type;
+                        }
+                        continue;
+                    }
+                    if (proj.kind == mir::ProjectionKind::Field && currentType &&
+                        currentType->kind == TypeKind::Struct) {
+                        auto it = struct_map_.find(currentType->name);
+                        if (it != struct_map_.end() && it->second &&
+                            proj.field_id < it->second->fields.size()) {
+                            base +=
+                                "." + sanitizeIdentifier(it->second->fields[proj.field_id].name);
+                            currentType = it->second->fields[proj.field_id].type;
+                        }
+                    }
+                }
+                // 最後のFieldはキーとして返す
+                const auto& lastProj = data.place.projections.back();
+                if (currentType && currentType->kind == TypeKind::Struct) {
+                    auto it = struct_map_.find(currentType->name);
+                    if (it != struct_map_.end() && it->second &&
+                        lastProj.field_id < it->second->fields.size()) {
+                        return "{__arr: " + base + ", __idx: \"" +
+                               sanitizeIdentifier(it->second->fields[lastProj.field_id].name) +
+                               "\"}";
+                    }
+                }
+            }
             if (boxed_locals_.count(data.place.local)) {
                 // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0}
                 // boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
@@ -576,11 +623,14 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 
             case mir::ProjectionKind::Deref: {
                 // ポインタ参照外し:
-                if (boxed_locals_.count(place.local)) {
-                    // ボックス化変数: emitPlaceの先頭で既に[0]が追加されているため追加不要
-                } else if (currentType && currentType->kind == TypeKind::Pointer &&
-                           currentType->element_type &&
-                           currentType->element_type->kind != ast::TypeKind::Struct) {
+                // 注意: boxed変数の[0]はボックス解除（ポインタ値の取り出し）であって
+                // デリファレンスではない。旧実装はboxedポインタのDerefをno-opにして
+                // いたため、int** 経由で付け替えた後の *p がポインタオブジェクトの
+                // まま読まれていた（ptr_double回帰）。boxed/非boxedとも同じ
+                // ポインタ解決を適用する（resultは既にポインタ値になっている）
+                if (currentType && currentType->kind == TypeKind::Pointer &&
+                    currentType->element_type &&
+                    currentType->element_type->kind != ast::TypeKind::Struct) {
                     // ポインタオブジェクト{__arr, __idx}のデリファレンス
                     std::string ptrExpr = result;
                     // 先読み: 次のプロジェクションがIndexの場合、複合変換

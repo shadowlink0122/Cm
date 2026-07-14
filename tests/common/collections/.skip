@@ -1,1 +1,4 @@
+# std::collections（Vector/HashMap/Queue）はlibcのmalloc/free/memcpy（void*）に
+# 依存しており、JSターゲットはvoid*を明示エラーにするため全テストをスキップする
+# （バックエンド対応マトリクス「std::collections ❌ 動的メモリ」参照）
 js

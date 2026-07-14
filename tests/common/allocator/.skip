@@ -1,1 +1,3 @@
+# アロケータinterfaceはvoid*ベース（malloc/free委譲）で、JSターゲットは
+# void*を明示エラーにするためスキップする
 js

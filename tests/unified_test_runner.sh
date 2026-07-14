@@ -250,6 +250,19 @@ if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-
     exit 1
 fi
 
+# 実行ランタイムの事前チェック
+# （欠落時に全テストが「No WASM runtime」等で静かにスキップされ、
+# スイートが緑のまま素通りする事故を防ぐ）
+if [ "$BACKEND" = "llvm-wasm" ] && ! command -v wasmtime >/dev/null 2>&1 && \
+   ! command -v node >/dev/null 2>&1 && ! command -v wasmer >/dev/null 2>&1; then
+    echo "Error: WASMランタイムが見つかりません（wasmtime / node / wasmer のいずれかが必要）"
+    exit 1
+fi
+if [ "$BACKEND" = "js" ] && ! command -v node >/dev/null 2>&1; then
+    echo "Error: Node.js が見つかりません（jsバックエンドのテストに必要）"
+    exit 1
+fi
+
 # キャッシュオプションの構築
 CACHE_OPTS=""
 if [ "$NO_CACHE" = true ]; then
