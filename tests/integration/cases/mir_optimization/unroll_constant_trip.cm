@@ -1,0 +1,10 @@
+// 定数ループ展開: トリップ回数4の定数ループが展開され、バックエッジが消える
+int f() {
+    int acc = 0;
+    int i = 0;
+    while (i < 4) {
+        acc = acc + i;
+        i = i + 1;
+    }
+    return acc;
+}

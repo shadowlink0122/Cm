@@ -1,0 +1,6 @@
+// DSE: 使用前に上書きされる最初の代入はデッドストアとしてNop化される
+int f(int a) {
+    int x = a + 1;
+    x = a + 2;
+    return x;
+}

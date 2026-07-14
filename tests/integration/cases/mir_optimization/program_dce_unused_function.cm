@@ -1,0 +1,12 @@
+// ProgramDCE: mainから到達しない関数が削除される
+int used() {
+    return 1;
+}
+
+int unused_fn() {
+    return 2;
+}
+
+int main() {
+    return used();
+}

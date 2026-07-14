@@ -1,0 +1,10 @@
+// インライン化: 小さな呼び出し先が呼び出し元へ展開され、Call終端子が消える
+int add(int a, int b) {
+    return a + b;
+}
+
+int caller(int x) {
+    int s = add(x, 1);
+    int t = add(x, 2);
+    return s + t;
+}
