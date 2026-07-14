@@ -32,6 +32,7 @@
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
 #include "mir/passes/loop/const_unroll.hpp"
+#include "mir/passes/scalar/folding.hpp"
 #include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
@@ -1353,6 +1354,13 @@ int main(int argc, char* argv[]) {
         // （generate/genvar相当。合成ツールは動的whileを展開できないため）
         if (is_sv) {
             mir::opt::unroll_constant_loops(mir);
+            // 合成前の定数畳み込み・恒等式簡約（2*3+4→10、x*1→x 等）。
+            // 文数・CFG形状を変えない書き換えのみで、DCE/CopyProp等の
+            // 文除去系パスはHWロジックを消すため引き続き実行しない
+            if (opts.optimization_level > 0) {
+                mir::opt::ConstantFolding sv_folding(/*fold_terminators=*/false);
+                sv_folding.run_on_program(mir);
+            }
         }
         auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::steady_clock::now() - phase_opt_start)

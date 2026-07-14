@@ -290,3 +290,98 @@ TEST_F(MirOptimizationTest, IntegrationTest_ComplexOptimization) {
     }
     EXPECT_FALSE(has_unreachable);
 }
+
+// ============================================================
+// 代数的恒等式の簡約テスト（v0.16.0）
+// ============================================================
+namespace {
+
+// BinaryOp rvalueを持つ代入文の数をカウント
+int count_binary_op_statements(const mir::MirFunction& func) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (!block)
+            continue;
+        for (const auto& stmt : block->statements) {
+            if (stmt->kind == mir::MirStatement::Assign) {
+                auto& data = std::get<mir::MirStatement::AssignData>(stmt->data);
+                if (data.rvalue && data.rvalue->kind == mir::MirRvalue::BinaryOp) {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+// 全ブロックの文数合計
+int count_total_statements(const mir::MirFunction& func) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (block) {
+            count += static_cast<int>(block->statements.size());
+        }
+    }
+    return count;
+}
+
+// 終端命令の種類列（CFG形状の指紋）
+std::vector<int> terminator_kinds(const mir::MirFunction& func) {
+    std::vector<int> kinds;
+    for (const auto& block : func.basic_blocks) {
+        if (block && block->terminator) {
+            kinds.push_back(static_cast<int>(block->terminator->kind));
+        }
+    }
+    return kinds;
+}
+
+}  // namespace
+
+TEST_F(MirOptimizationTest, ConstantFolding_AlgebraicIdentity) {
+    auto mir = compile_case("algebraic_identity");
+    auto& func = *mir->functions[0];
+
+    int binops_before = count_binary_op_statements(func);
+
+    mir::opt::ConstantFolding folding;
+    bool changed = folding.run(func);
+
+    EXPECT_TRUE(changed);
+
+    // 恒等式13件（x*1, 1*x, x+0, 0+x, x-0, x/1, x%1, x*0,
+    // x>>0, x<<0, x|0, x^0, x&0）が全てUse/定数へ簡約される
+    int binops_after = count_binary_op_statements(func);
+    EXPECT_LE(binops_after, binops_before - 13)
+        << "before=" << binops_before << " after=" << binops_after;
+}
+
+TEST_F(MirOptimizationTest, ConstantFolding_StatementPreserving) {
+    // SVバックエンドが依存する契約:
+    // fold_terminators=false のConstantFoldingは文数・CFG形状を変えない
+    auto mir = compile_case("statement_preserving");
+    auto& func = *mir->functions[0];
+
+    int stmts_before = count_total_statements(func);
+    size_t blocks_before = func.basic_blocks.size();
+    auto terms_before = terminator_kinds(func);
+
+    mir::opt::ConstantFolding folding(/*fold_terminators=*/false);
+    bool changed = folding.run(func);
+
+    EXPECT_TRUE(changed);  // 定数畳み込み・恒等式簡約は行われる
+    EXPECT_EQ(count_total_statements(func), stmts_before);
+    EXPECT_EQ(func.basic_blocks.size(), blocks_before);
+    EXPECT_EQ(terminator_kinds(func), terms_before);
+}
+
+TEST_F(MirOptimizationTest, ConstantFolding_FloatIdentityNotSimplified) {
+    // 浮動小数点の x+0.0 / x*1.0 はNaN・-0.0の意味論があるため簡約しない
+    auto mir = compile_case("float_identity");
+    auto& func = *mir->functions[0];
+
+    int binops_before = count_binary_op_statements(func);
+    mir::opt::ConstantFolding folding;
+    folding.run(func);
+    EXPECT_EQ(count_binary_op_statements(func), binops_before);
+}

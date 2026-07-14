@@ -13,6 +13,7 @@
 #include "../../src/hir/lowering/lowering.hpp"
 #include "../../src/mir/lowering/lowering.hpp"
 #include "../../src/mir/passes/loop/const_unroll.hpp"
+#include "../../src/mir/passes/scalar/folding.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -40,7 +41,8 @@ class SVCodegenTest : public ::testing::Test {
 
     // Cmソース → 生成SV文字列
     std::string compile_to_sv(const std::string& code, bool emit_memfile = false,
-                              bool unroll_loops = false, bool strict_lint = false) {
+                              bool unroll_loops = false, bool strict_lint = false,
+                              bool fold_constants = false) {
         Lexer lex(code, LexerPlatform::SV);
         std::vector<Token> tokens = lex.tokenize();
         Parser p(tokens);
@@ -58,6 +60,12 @@ class SVCodegenTest : public ::testing::Test {
         // SVターゲットの本番パイプラインと同じ定数ループ展開（オプトイン）
         if (unroll_loops) {
             mir::opt::unroll_constant_loops(mir);
+        }
+        // SVターゲットの本番パイプライン（O1以上）と同じ定数畳み込み・恒等式簡約
+        // （文数・CFG形状を保存するモード）
+        if (fold_constants) {
+            mir::opt::ConstantFolding folding(/*fold_terminators=*/false);
+            folding.run_on_program(mir);
         }
 
         codegen::sv::SVCodeGenOptions options;
@@ -403,4 +411,25 @@ TEST_F(SVCodegenTest, ArrayPortDimension) {
     const std::string code = load_case("memory/array_port_dimension");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "data [0:3]");
+}
+
+// 定数畳み込み・恒等式簡約（O1以上のSVパイプライン相当）:
+// 2*3+4 → 10、x*1/x+0/<<0 は除去され、素の変数参照になる
+TEST_F(SVCodegenTest, ConstantFoldingApplied) {
+    const std::string code = load_case("expr/const_fold");
+    std::string sv = compile_to_sv(code, /*emit_memfile=*/false, /*unroll_loops=*/false,
+                                   /*strict_lint=*/false, /*fold_constants=*/true);
+    expect_contains(sv, "32'd10");               // c = 2*3+4 が畳み込まれる
+    expect_not_contains(sv, "32'sd2 * 32'sd3");  // 元の定数式が残らない
+    expect_not_contains(sv, "* 32'sd1");         // x*1 が残らない
+    expect_not_contains(sv, "+ 32'sd0");         // x+0 が残らない
+    expect_not_contains(sv, "<< 32'sd0");        // x<<0 が残らない
+    expect_contains(sv, "z = a;");               // (a+0)<<0 → a
+}
+
+// O0相当（畳み込みなし）では従来どおり式がそのまま出力される（後方互換）
+TEST_F(SVCodegenTest, ConstantFoldingNotAppliedByDefault) {
+    const std::string code = load_case("expr/const_fold");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "32'sd2 * 32'sd3 + 32'sd4");
 }
