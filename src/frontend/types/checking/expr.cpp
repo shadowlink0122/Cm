@@ -1023,6 +1023,14 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 // ORパターンは各サブパターンをカバーとみなす
                 // TODO: 再帰的にサブパターンをチェック
                 break;
+            case ast::MatchPatternKind::Masked:
+                // don't careビットマッチ（0b1?00）は複数値をカバーするが、
+                // 網羅性の強制はbool/enumのみが対象のため個別値は追跡しない
+                break;
+            case ast::MatchPatternKind::Type:
+                // ユニオン型パターン（int i => ...）。網羅性の強制は
+                // bool/enumのみが対象のためカバー値は追跡しない
+                break;
         }
     }
     if (has_wildcard || has_variable_binding) {

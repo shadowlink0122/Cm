@@ -386,13 +386,17 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
 
                 if (is_input) {
                     default_mod.ports.push_back({SVPort::Input, var_name, mapType(gv->type),
-                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type),
+                                                 ""});
                 } else if (is_inout) {
                     default_mod.ports.push_back({SVPort::InOut, var_name, mapType(gv->type),
-                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type),
+                                                 ""});
                 } else if (is_output) {
+                    // assign駆動の出力ポートは連続代入されるため初期化子を付けない
                     default_mod.ports.push_back({SVPort::Output, var_name, mapType(gv->type),
-                                                 getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                                 getBitWidth(gv->type), getArraySuffix(gv->type),
+                                                 ""});
                 } else {
                     // wire宣言を追加（連続代入の左辺はnet型が必要）
                     default_mod.wire_declarations.push_back("wire " + mapType(gv->type) + " " +
@@ -447,7 +451,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             if (emitted_var_names.count(var_name) == 0) {
                 // 配列型ポートはアンパックド次元も保持する
                 default_mod.ports.push_back({SVPort::Input, var_name, mapType(gv->type),
-                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                             getBitWidth(gv->type), getArraySuffix(gv->type), ""});
                 emitted_var_names.insert(var_name);
             }
             if (var_name == "clk")
@@ -465,7 +469,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 }
                 std::string port_type = has_tri ? "tri" : mapType(gv->type);
                 default_mod.ports.push_back({SVPort::InOut, var_name, port_type,
-                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                             getBitWidth(gv->type), getArraySuffix(gv->type), ""});
                 emitted_var_names.insert(var_name);
 
                 // #[sv::tri(oe: "...", out: "...")]: トライステート駆動を生成。
@@ -613,7 +617,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
         for (auto it = missing_clocks.rbegin(); it != missing_clocks.rend(); ++it) {
             default_mod.ports.insert(default_mod.ports.begin(),
-                                     SVPort{SVPort::Input, *it, "logic", 1, ""});
+                                     SVPort{SVPort::Input, *it, "logic", 1, "", ""});
         }
     }
 
@@ -668,7 +672,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
     if (has_async && !has_clk && !global_signal_exists("clk")) {
         default_mod.ports.insert(default_mod.ports.begin(),
-                                 SVPort{SVPort::Input, "clk", "logic", 1, ""});
+                                 SVPort{SVPort::Input, "clk", "logic", 1, "", ""});
     }
     if (has_async && !has_rst && !global_signal_exists("rst")) {
         // clkの実際の位置を検索して直後に挿入
@@ -680,7 +684,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
         }
         default_mod.ports.insert(default_mod.ports.begin() + static_cast<ptrdiff_t>(insert_pos),
-                                 SVPort{SVPort::Input, "rst", "logic", 1, ""});
+                                 SVPort{SVPort::Input, "rst", "logic", 1, "", ""});
     }
 
     // 各関数を解析（import/export時の重複排除）

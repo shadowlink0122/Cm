@@ -204,6 +204,8 @@ inline const char* unary_op_str(UnaryOp op) {
             return "++";
         case UnaryOp::PostDec:
             return "--";
+        case UnaryOp::Try:
+            return "?";
     }
     return "?";
 }

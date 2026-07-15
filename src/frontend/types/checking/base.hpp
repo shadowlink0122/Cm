@@ -12,6 +12,7 @@
 #include "../generic_context.hpp"
 #include "../scope.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <regex>
 #include <set>
@@ -25,6 +26,8 @@ struct MethodInfo {
     ast::TypePtr return_type;
     ast::Visibility visibility = ast::Visibility::Export;  // デフォルトは公開
     bool is_static = false;                                // 静的メソッドかどうか
+    // 必須引数の数（デフォルト値のない引数）。SIZE_MAXは全引数必須
+    size_t required_params = SIZE_MAX;
 };
 
 // TypeCheckerの前方宣言
