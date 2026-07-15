@@ -186,6 +186,14 @@ TEST_F(SVCodegenTest, RegisterInitialValue) {
     expect_contains(sv, "counter = 32'd42;");
 }
 
+// 出力ポートの宣言初期値が電源投入時初期値として出力される
+// （従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
+TEST_F(SVCodegenTest, OutputPortInitialValue) {
+    const std::string code = load_case("module/output_port_initial_value");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "output logic [31:0] max_seen = 32'd7");
+}
+
 // `module NAME;` ヘッダ宣言がSVトップモジュール名に反映される
 // （従来はファイル名由来の名前になり宣言が無視されていた）
 TEST_F(SVCodegenTest, ModuleTopName) {

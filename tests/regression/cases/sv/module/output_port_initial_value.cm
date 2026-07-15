@@ -1,0 +1,13 @@
+#[input] bool clk = false;
+#[output] uint max_seen = 7;
+
+module port_init_top;
+
+uint counter = 0;
+
+void tick(posedge clk) {
+    counter = counter + 1;
+    if (counter > max_seen) {
+        max_seen = counter;
+    }
+}

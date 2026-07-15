@@ -483,8 +483,17 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
         } else if (is_output) {
             if (emitted_var_names.count(var_name) == 0) {
+                std::string array_suffix = getArraySuffix(gv->type);
+                // 内部レジスタと同様に宣言初期値を電源投入時初期値として出力する。
+                // 出力しないと条件付き代入のみの出力ポートがシミュレーションでXのまま残る。
+                // インスタンス出力に接続されたポートは連続駆動されるため初期値を付けない
+                std::string init_value;
+                if (gv->init_value && array_suffix.empty() &&
+                    instance_driven_signals.count(var_name) == 0) {
+                    init_value = emitConstant(*gv->init_value, gv->type, getBitWidth(gv->type));
+                }
                 default_mod.ports.push_back({SVPort::Output, var_name, mapType(gv->type),
-                                             getBitWidth(gv->type), getArraySuffix(gv->type)});
+                                             getBitWidth(gv->type), array_suffix, init_value});
                 emitted_var_names.insert(var_name);
             }
         } else {
