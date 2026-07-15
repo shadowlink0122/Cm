@@ -7,13 +7,13 @@ import std::io::println;
 int add_asm(int a, int b) {
     int result = 0;
     #ifdef __x86_64__
-    // x86_64: 加算
-    __asm__("movl ${r:a}, ${=r:result}");
-    __asm__("addl ${r:b}, ${+r:result}");
+        // x86_64: 加算
+        __asm__("movl ${r:a}, ${=r:result}");
+        __asm__("addl ${r:b}, ${+r:result}");
     #else
-    // ARM64: 加算
-    __asm__("mov ${=r:result}, ${r:a}");
-    __asm__("add ${+r:result}, ${+r:result}, ${r:b}");
+        // ARM64: 加算
+        __asm__("mov ${=r:result}, ${r:a}");
+        __asm__("add ${+r:result}, ${+r:result}, ${r:b}");
     #end
     return result;
 }
@@ -24,9 +24,9 @@ int compute(int x, int y) {
     int mid = x + y;  // これはASMで参照されない → volatile不要
     int result = 0;
     #ifdef __x86_64__
-    __asm__("movl ${r:mid}, ${=r:result}");
+        __asm__("movl ${r:mid}, ${=r:result}");
     #else
-    __asm__("mov ${=r:result}, ${r:mid}");
+        __asm__("mov ${=r:result}, ${r:mid}");
     #end
     return result;
 }

@@ -1,0 +1,23 @@
+//! platform: sv
+//! sv: hierarchy
+//! test: din_w=257, cycles=3 -> dout_w=257
+
+// モジュールパラメータの階層伝搬テスト（v0.16.0 設計01 P3）:
+// サブモジュールの #[sv::parameter] が extern struct の #[sv::param] に写され、
+// インスタンスのstructリテラルで WIDTH: 16 に上書きされて
+// shifter #(.WIDTH(16)) が生成される。
+// 257 (>255) が通ることで幅16が効いていることを確認する。
+
+import ./param_shifter;
+
+#[input] posedge clk;
+#[input] bit[16] din_w;
+#[output] bit[16] dout_w = 0;
+
+bit[16] inner = 0;
+
+param_shifter sh0 = param_shifter { WIDTH: 16, clk: clk, din: din_w, dout: inner };
+
+async void pass(posedge clk) {
+    dout_w = inner;
+}

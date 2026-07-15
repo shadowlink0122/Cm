@@ -600,8 +600,29 @@ ast::AttributeNode Parser::parse_directive() {
             } else if (check(TokenKind::StringLiteral)) {
                 args.push_back(std::string(current().get_string()));
                 advance();
+            } else if (check(TokenKind::IntLiteral)) {
+                args.push_back(std::to_string(current().get_int()));
+                advance();
             } else {
-                args.push_back(expect_ident());
+                // 識別子 または 名前付き引数（key: value）
+                std::string ident = expect_ident();
+                if (consume_if(TokenKind::Colon)) {
+                    // #[sv::pin("U12", io_type: "LVCMOS33", drive: 8)] 形式。
+                    // "key:value" の1引数として保持する
+                    std::string value;
+                    if (check(TokenKind::StringLiteral)) {
+                        value = std::string(current().get_string());
+                        advance();
+                    } else if (check(TokenKind::IntLiteral)) {
+                        value = std::to_string(current().get_int());
+                        advance();
+                    } else {
+                        value = expect_ident();
+                    }
+                    args.push_back(ident + ":" + value);
+                } else {
+                    args.push_back(ident);
+                }
             }
         } while (consume_if(TokenKind::Comma));
 
@@ -643,8 +664,29 @@ ast::AttributeNode Parser::parse_attribute() {
             } else if (check(TokenKind::StringLiteral)) {
                 args.push_back(std::string(current().get_string()));
                 advance();
+            } else if (check(TokenKind::IntLiteral)) {
+                args.push_back(std::to_string(current().get_int()));
+                advance();
             } else {
-                args.push_back(expect_ident());
+                // 識別子 または 名前付き引数（key: value）
+                std::string ident = expect_ident();
+                if (consume_if(TokenKind::Colon)) {
+                    // #[sv::pin("U12", io_type: "LVCMOS33", drive: 8)] 形式。
+                    // "key:value" の1引数として保持する
+                    std::string value;
+                    if (check(TokenKind::StringLiteral)) {
+                        value = std::string(current().get_string());
+                        advance();
+                    } else if (check(TokenKind::IntLiteral)) {
+                        value = std::to_string(current().get_int());
+                        advance();
+                    } else {
+                        value = expect_ident();
+                    }
+                    args.push_back(ident + ":" + value);
+                } else {
+                    args.push_back(ident);
+                }
             }
         } while (consume_if(TokenKind::Comma));
 
@@ -930,6 +972,13 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     }
 
     expect(TokenKind::RBrace);
+
+    // #[derive] は enum 未対応（将来拡張の余地として明示エラー）
+    for (const auto& attr : attributes) {
+        if (attr.name == "derive") {
+            error("#[derive] is not supported on enums yet");
+        }
+    }
 
     auto enum_decl = std::make_unique<ast::EnumDecl>(std::move(name), std::move(members));
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;

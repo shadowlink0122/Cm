@@ -111,6 +111,7 @@ class TypeChecker {
     // 自動実装 (auto_impl.cpp)
     // ============================================================
     void register_auto_impl(const ast::StructDecl& st, const std::string& iface_name);
+    bool validate_derive_field_types(const ast::StructDecl& st, const std::string& iface_name);
     void register_auto_eq_impl(const ast::StructDecl& st);
     void register_auto_ord_impl(const ast::StructDecl& st);
     void register_auto_clone_impl(const ast::StructDecl& st);
@@ -128,6 +129,14 @@ class TypeChecker {
     bool types_compatible(ast::TypePtr expected, ast::TypePtr actual);
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
+
+    // 補間プレースホルダ内の式を現在のスコープで検査する
+    // （従来は素通りし、スコープ外変数の参照がゴミ値になっていた）
+    void check_interpolation_scope(const std::string& format_str);
+
+    // 名前空間内の非修飾型名を「現在の名前空間::名前」として解決する
+    // （内側から外側へ探索。解決できた場合は修飾名を返す）
+    std::optional<std::string> resolve_in_namespace(const std::string& name) const;
     void error(Span span, const std::string& msg);
     void warning(Span span, const std::string& msg);
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);
@@ -181,6 +190,9 @@ class TypeChecker {
 
     // 現在チェック中のimplのターゲット型（privateメソッド呼び出しチェック用）
     std::string current_impl_target_type_;
+
+    // 現在処理中の名前空間（namespace内の非修飾型名・関数名の解決用。空=トップレベル）
+    std::string current_namespace_;
 
     // インターフェース実装情報 (型名 → 実装しているインターフェース名のセット)
     std::unordered_map<std::string, std::unordered_set<std::string>> impl_interfaces_;

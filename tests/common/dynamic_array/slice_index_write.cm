@@ -1,0 +1,17 @@
+import std::io::println;
+// slice_index_write.cm - スライス要素へのインデックス書き込み
+// 従来はCmSlice*への直接GEPでSIGBUSしていた（v0.16.0で修正）
+
+int main() {
+    int[] xs = [1, 2, 3];
+    xs[1] = 99;
+    println("x0={xs[0]}");
+    println("x1={xs[1]}");
+    println("x2={xs[2]}");
+
+    string[] ss = ["a", "b"];
+    ss[0] = "z";
+    println("s0={ss[0]}");
+    println("s1={ss[1]}");
+    return 0;
+}

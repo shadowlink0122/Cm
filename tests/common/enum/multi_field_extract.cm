@@ -1,5 +1,7 @@
 // 構造体フィールドを持つenum match抽出テスト
 // 設計: 複数値は構造体で包む、matchはステートメント形式
+// 旧: ペイロード付きenumがint型へ誤解決され「Field access on non-struct type」
+// エラーになっていた（v0.16.0のTagged Union型保持で解消し正常系テストへ変換）
 import std::io::println;
 
 // 座標構造体

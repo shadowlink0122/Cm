@@ -1,0 +1,72 @@
+import std::io::println;
+// array_methods_matrix.cm - 固定長配列の全メソッド網羅テスト
+// （補間内のメソッド直接呼び出しは既知の制限のため、変数に受けてから出力する）
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+int add(int acc, int x) {
+    return acc + x;
+}
+
+int desc(int a, int b) {
+    return b - a;
+}
+
+void show(int x) {
+    println("each={x}");
+}
+
+int main() {
+    int[5] nums = [3, 1, 4, 1, 5];
+
+    int sz = nums.size();
+    int ln = nums.len();
+    int lg = nums.length();
+    println("size={sz} len={ln} length={lg}");
+
+    int idx4 = nums.indexOf(4);
+    int idx9 = nums.indexOf(9);
+    println("indexOf={idx4} missing={idx9}");
+
+    bool inc = nums.includes(4);
+    bool con = nums.contains(5);
+    bool miss = nums.includes(9);
+    println("includes={inc} contains={con} missing={miss}");
+
+    int found = nums.find(is_even);
+    int fidx = nums.findIndex(is_even);
+    bool some_v = nums.some(is_even);
+    bool every_v = nums.every(is_even);
+    println("find={found} findIndex={fidx} some={some_v} every={every_v}");
+
+    int[] mapped = nums.map((int x) => { return x * 10; });
+    println("map={mapped[0]} {mapped[4]} len={mapped.len()}");
+
+    int[] evens = nums.filter(is_even);
+    println("filter len={evens.len()} e0={evens[0]}");
+
+    int total = nums.reduce(add, 0);
+    println("reduce={total}");
+
+    int[] sorted = nums.sort();
+    println("sort={sorted[0]} {sorted[4]}");
+
+    int[] descs = nums.sortBy(desc);
+    println("sortBy={descs[0]} {descs[4]}");
+
+    int[] rev = nums.reverse();
+    println("reverse={rev[0]} {rev[4]}");
+
+    int f = nums.first();
+    int l = nums.last();
+    println("first={f} last={l}");
+
+    int[2][3] m;
+    int d = m.dim();
+    println("dim={d}");
+
+    nums.forEach(show);
+    return 0;
+}

@@ -1,0 +1,9 @@
+some = true
+every = false
+find = 2
+arr some = true
+free = 3
+nested = 6
+str = hello cm
+method str = cm: rect
+method float = 6

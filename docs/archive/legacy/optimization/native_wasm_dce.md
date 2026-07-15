@@ -14,8 +14,7 @@
   - ConstantFolding: `src/mir/optimizations/constant_folding.hpp`
   - DeadCodeElimination（関数単位）: `src/mir/optimizations/dead_code_elimination.hpp`
   - SimplifyControlFlow: `src/mir/optimizations/all_passes.hpp`
-  - ProgramDeadCodeElimination（プログラム単位 / compileのみ）:
-    `src/mir/optimizations/program_dce.hpp`
+  - ProgramDeadCodeElimination（プログラム単位 / compileのみ）: `src/mir/optimizations/program_dce.hpp`
 - LLVM IR生成（native/wasm共通）: `src/codegen/llvm/core/mir_to_llvm.cpp`
 - LLVM最適化（native/wasm共通）: `src/codegen/llvm/native/codegen.hpp`
 

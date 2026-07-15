@@ -47,9 +47,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ### 非合成型 (コンパイルエラー)
 
-ポインタ型 (`*T`) はSVバックエンドで **コンパイルエラー** (`error[SV002]`) になります。
-`float`/`double` は警告 (`warning[SV004]`、IPコアが必要) が出力されます。
-`string` は const 定数としてのみ実用的です（[データ構造](data.html#文字列) 参照）。
+ポインタ型 (`*T`) はSVバックエンドで **コンパイルエラー** (`error[SV002]`) になります。`float`/`double` も **コンパイルエラー** (`error[SV004]`、v0.16.0で警告からエラーに変更。合成にはIPコアが必要) になります。`string` は const 定数としてのみ実用的です（3文字超・非constは `error[SV005]`。[データ構造](data.html#文字列) 参照）。
 
 ---
 
@@ -97,8 +95,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ### 符号付き定数は `'sd` で出力される
 
-SVでは比較の片方が unsigned だと **比較全体が unsigned** になります。
-Cmは定数を型に従って符号付き（`'sd`）で出力するため、`s < 0` のような負数判定が正しく動作します:
+SVでは比較の片方が unsigned だと **比較全体が unsigned** になります。Cmは定数を型に従って符号付き（`'sd`）で出力するため、`s < 0` のような負数判定が正しく動作します:
 
 ```cm
 int s;
@@ -126,8 +123,9 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
 > **注意:** `const` は常に `localparam` にマッピングされます。
-> `parameter` は生成されません（モジュール自体のパラメータ化は未対応。
-> [実装提案](../../../../design/sv_backend_missing_features.html) 参照）。
+> モジュールパラメータは `#[sv::parameter] const` で宣言します
+> （v0.16.0で対応。[モジュール階層](hierarchy.html)参照）。
+> 通常の `const` は従来どおり `localparam` になります。
 
 ---
 

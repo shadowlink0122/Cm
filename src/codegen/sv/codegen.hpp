@@ -12,16 +12,36 @@
 #include <unordered_set>
 #include <vector>
 
+namespace cm::ast {
+struct Program;
+}
+
 namespace cm::codegen::sv {
+
+/// `module NAME;` ヘッダ宣言からトップモジュール名を取得する。
+/// トップレベルの本体なしModuleDecl（最初のもの）を採用し、無ければ空文字を返す
+std::string extract_top_module_name(const ast::Program& program);
+
+/// SystemVerilog（IEEE 1800-2017）の予約語かどうかを判定する
+bool is_sv_reserved_word(const std::string& name);
 
 // SystemVerilog コード生成オプション
 struct SVCodeGenOptions {
     std::string outputFile = "output.sv";
-    std::string sourceFile;    // 入力ソースファイル（テストベンチ生成用）
+    std::string sourceFile;  // 入力ソースファイル（テストベンチ生成用）
+    std::string
+        topModule;  // `module NAME;` 宣言由来のトップモジュール名（空ならファイル名から推定）
     bool verbose = false;      // 詳細出力
     int indentSpaces = 4;      // インデント幅
     bool emitMemfile = false;  // 配列リテラル初期値を.hexファイルとして書き出す
     bool strictLint = false;   // lint_off抑止を一切出力しない（--sv-strict-lint）
+    bool keepAlwaysFF = false;  // always_ff/always_comb等を保持（--sv-always-ff。
+                                // 既定はGowin EDA互換のためalways @へ置換する）
+    bool warnNba = false;  // posedge関数内で代入済み状態変数の参照を警告（--sv-warn-nba）
+    bool emitConstraints = false;  // #[sv::pin]属性から.cst/.tclを生成（--emit-constraints）
+    std::string devicePN;          // //! sv: device: の型番（.tcl生成に使用）
+    std::string deviceVersion;     // //! sv: device: の版（例: C）
+    std::vector<std::string> toolOptions;  // //! sv: option: の列（set_option -<name> 1）
 };
 
 // モジュールポート情報
@@ -38,7 +58,8 @@ struct SVPort {
 struct SVModule {
     std::string name;
     std::vector<SVPort> ports;
-    std::vector<std::string> parameters;           // parameter宣言
+    std::vector<std::string> parameters;           // localparam宣言
+    std::vector<std::string> header_parameters;    // module #(parameter ...) 宣言
     std::vector<std::string> type_declarations;    // typedef enum/struct packed 宣言
     std::vector<std::string> always_ff_blocks;     // always_ff ブロック
     std::vector<std::string> always_comb_blocks;   // always_comb ブロック
@@ -59,12 +80,32 @@ class SVCodeGen : public BufferedCodeGenerator {
     // MIRプログラムからSystemVerilogを生成
     void compile(const mir::MirProgram& program);
 
+    // SV予約語と衝突する識別子を検査し、衝突があれば例外で停止する
+    void validateReservedIdentifiers(const mir::MirProgram& program) const;
+    // --sv-warn-nba: posedge関数内で代入済み状態変数の参照を警告する
+    void warnNbaReadback(const mir::MirProgram& program) const;
+
     // 生成されたSVコードを取得
     std::string getGeneratedCode() const { return generated_code_; }
 
    private:
     SVCodeGenOptions options_;
     std::string generated_code_;
+    // #[sv::parameter] 付きconstの名前（幅の記号出力用）
+    std::set<std::string> sv_param_names_;
+    // #[test] 関数（テストベンチ生成で使用、宣言順）
+    std::vector<const mir::MirFunction*> testbench_fns_;
+    // プロセスのクロック信号名（テストベンチのクロック検出用）
+    std::set<std::string> process_clock_names_;
+    // テストベンチで使用するクロックポート名（generateTestbenchで決定）
+    std::string tb_clk_name_;
+    // テストベンチ生成中フラグ（#[test] からのDUT内部信号参照を dut. 階層参照へ解決）
+    bool emitting_testbench_ = false;
+    // テストベンチ対象モジュールのポート名 / 入力ポート名
+    std::set<std::string> tb_port_names_;
+    std::set<std::string> tb_input_names_;
+    // モジュールスコープ信号名（内部レジスタ含む。dut. 階層参照の判定用）
+    std::set<std::string> module_signal_names_;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
 
@@ -185,9 +226,23 @@ class SVCodeGen : public BufferedCodeGenerator {
 
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);
+    std::string emitTestbenchStmt(const hir::HirStmt& stmt);
+    // #[test] からの代入先を検証（入力ポート以外への代入をエラーにする）
+    void validateTestbenchAssignTarget(const hir::HirExpr& lhs);
 
     // === XDC制約ファイル出力 ===
     std::string generateXDC(const mir::MirProgram& program);
+
+    // 物理制約生成（constraints.cpp）
+    struct CollectedPin {
+        std::string port_name;
+        std::string pin_loc;
+        std::vector<std::pair<std::string, std::string>> params;
+    };
+    std::vector<CollectedPin> collectPins(const mir::MirProgram& program);
+    std::string generateCST(const mir::MirProgram& program);
+    std::string generateProjectTCL(const std::string& module_name, const std::string& sv_path,
+                                   const std::string& cst_path);
 
     // === 非合成型チェック ===
     bool validateSynthesizableTypes(const mir::MirProgram& program);
@@ -195,5 +250,13 @@ class SVCodeGen : public BufferedCodeGenerator {
     // === ファイル出力 ===
     void writeToFile(const std::string& content, const std::string& path);
 };
+
+// //! sv: device: / //! sv: option: ディレクティブの抽出結果
+struct SvProjectDirectives {
+    std::string device_pn;
+    std::string device_version;
+    std::vector<std::string> tool_options;
+};
+SvProjectDirectives parse_sv_project_directives(const std::string& source);
 
 }  // namespace cm::codegen::sv

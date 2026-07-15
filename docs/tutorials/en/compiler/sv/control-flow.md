@@ -96,10 +96,7 @@ How it works internally:
 
 ### break (disable idiom)
 
-Loop exits are emitted as `disable` on a named block (Verilog-1995
-compatible). The SV-2005 `break` keyword is not used because older
-Icarus Verilog (v11 and earlier) and some synthesis tools do not
-support it:
+Loop exits are emitted as `disable` on a named block (Verilog-1995 compatible). The SV-2005 `break` keyword is not used because older Icarus Verilog (v11 and earlier) and some synthesis tools do not support it:
 
 ```systemverilog
 begin : __loop0
@@ -115,13 +112,7 @@ end
 
 ### Static unrolling of constant loops (generate equivalent)
 
-Loops whose initial value, bound, and step are all constants are
-statically unrolled at compile time for the SV target, so no `while`
-remains in the generated SV (synthesis tools cannot unroll dynamic
-while loops). Limits: 1024 iterations / 50,000 statements after
-unrolling. `while (true) + break` and dynamically-bounded loops are
-still emitted as while + disable.
-Regression test: `tests/sv/control/const_loop_unroll`.
+Loops whose initial value, bound, and step are all constants are statically unrolled at compile time for the SV target, so no `while` remains in the generated SV (synthesis tools cannot unroll dynamic while loops). Limits: 1024 iterations / 50,000 statements after unrolling. `while (true) + break` and dynamically-bounded loops are still emitted as while + disable. Regression test: `tests/sv/control/const_loop_unroll`.
 
 ### Nested Loops
 
@@ -131,7 +122,7 @@ Nested loops are also reconstructed correctly (an inner loop is identified by it
 
 - If the loop count is **statically known**, synthesis tools (Gowin/Vivado, etc.) unroll the loop during synthesis
 - If the loop count depends on inputs, most synthesis tools report an error (simulation still works). For work that does not have to complete within one clock cycle, we recommend writing an FSM that advances one step per clock
-- Loops with an **unconditional header**, such as `while (true)` + `break`, are not yet supported (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html))
+- Loops with an unconditional header such as `while (true)` + `break` are also reconstructed via named blocks + `disable` (supported since v0.15.1)
 
 ---
 
@@ -150,14 +141,29 @@ Nested loops are also reconstructed correctly (an inner loop is identified by it
 
 ### Precedence Guarantee
 
-The structure of expressions in Cm source (parentheses, evaluation order) is preserved in the generated SV.
-In SV, `==` binds tighter than `&`, so losing parentheses would change the meaning —
-the compiler always emits the necessary parentheses:
+The structure of expressions in Cm source (parentheses, evaluation order) is preserved in the generated SV. In SV, `==` binds tighter than `&`, so losing parentheses would change the meaning —the compiler always emits the necessary parentheses:
 
 ```cm
 if ((r_qm & 256) == 0) { ... }
 // → if (((r_qm & 32'd256) == 32'd0))
 ```
+
+## Don't-care bit matching (v0.16.0)
+
+`?` in a binary literal means "don't compare this bit" — ideal for instruction decoders:
+
+```cm
+match (op) {
+    0b1?00 => { kind = 1; }   // matches 1x00 (bit2 ignored)
+    0b0?1? => { kind = 2; }
+    _ => { kind = 0; }
+}
+```
+
+- Desugared to `(op & mask) == value` if-else chains, identical on all backends
+- `?` literals are match-pattern only (not usable in expressions)
+- Plain match/switch now emits `unique case` in SV, enabling duplicate-hit detection in simulation
+
 
 ---
 

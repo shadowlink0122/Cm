@@ -156,9 +156,8 @@ ctest --test-dir build
 
 ---
 
-**最終更新:** v0.15.1 (2026-07-06)
+**最終更新:** v0.16.0 (2026-07-14)
 
 © 2025-2026 Cm Language Project
 
----
-[English Version here](en/index.html)
+--- [English Version here](en/index.html)

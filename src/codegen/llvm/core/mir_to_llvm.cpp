@@ -876,13 +876,21 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         // BFS: エントリポイントから到達可能な関数を収集
         std::queue<std::string> worklist;
 
-        // エントリポイント: export関数、main、extern関数
+        // エントリポイント: export関数、main、extern関数、#[test]関数
         for (const auto& func : program.functions) {
             if (!func)
                 continue;
+            // #[test] 関数はJITテストランナーが直接呼び出すため到達可能扱いにする
+            bool is_test_fn = false;
+            for (const auto& attr : func->attributes) {
+                if (attr == "test") {
+                    is_test_fn = true;
+                    break;
+                }
+            }
             if (func->is_export || func->is_extern || func->name == "main" ||
                 func->name == "_start" || func->name == "start_kernel" ||
-                func->name.find("__lambda_") == 0) {
+                func->name.find("__lambda_") == 0 || is_test_fn) {
                 if (reachableFunctions.insert(func->name).second) {
                     worklist.push(func->name);
                 }
@@ -1548,6 +1556,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                             } else if (elemKind == hir::TypeKind::Short ||
                                        elemKind == hir::TypeKind::UShort) {
                                 elemSize = 2;
+                            } else if (elemKind == hir::TypeKind::Union ||
+                                       elemKind == hir::TypeKind::Struct) {
+                                // ユニオン・構造体: blob格納のため実サイズを
+                                // DataLayoutから取得（MIR側の計算と一致させる）
+                                auto* elemTy = convertType(local.type->element_type);
+                                elemSize = static_cast<int64_t>(
+                                    module->getDataLayout().getTypeAllocSize(elemTy));
                             }
                         }
 
@@ -1668,9 +1683,14 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                                             } else if (elemKind == hir::TypeKind::Short ||
                                                        elemKind == hir::TypeKind::UShort) {
                                                 elemSize = 2;
-                                            } else if (elemKind == hir::TypeKind::Struct) {
-                                                // 構造体のサイズはポインタサイズ（簡略化）
-                                                elemSize = 8;
+                                            } else if (elemKind == hir::TypeKind::Struct ||
+                                                       elemKind == hir::TypeKind::Union) {
+                                                // 構造体・ユニオン: blob格納のため実サイズを使用
+                                                auto* elemTy =
+                                                    convertType(field.type->element_type);
+                                                elemSize = static_cast<int64_t>(
+                                                    module->getDataLayout().getTypeAllocSize(
+                                                        elemTy));
                                             }
                                         }
 

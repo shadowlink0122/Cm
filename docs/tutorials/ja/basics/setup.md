@@ -66,8 +66,7 @@ Cmコンパイラ自体がC++20で書かれているため、C++20対応のコ�
 
 ### 6. Objective-C++ (macOS のみ)
 
-macOSでGPU計算 (Apple Metal) を使用する場合、Objective-C++コンパイラが必要です。
-Xcodeをインストールすると自動的に利用可能になります。
+macOSでGPU計算 (Apple Metal) を使用する場合、Objective-C++コンパイラが必要です。Xcodeをインストールすると自動的に利用可能になります。
 
 ```bash
 # Xcodeコマンドラインツールをインストール（まだの場合）

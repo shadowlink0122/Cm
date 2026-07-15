@@ -11,10 +11,11 @@ namespace cm {
 /// トークンの種類
 enum class TokenKind {
     // リテラル
-    IntLiteral,     // 123
-    FloatLiteral,   // 1.23
-    StringLiteral,  // "hello"
-    CharLiteral,    // 'a'
+    IntLiteral,        // 123
+    MaskedBinLiteral,  // 0b1?00（don't care付き2進。matchパターン専用）
+    FloatLiteral,      // 1.23
+    StringLiteral,     // "hello"
+    CharLiteral,       // 'a'
 
     // 識別子
     Ident,  // foo, bar
@@ -43,6 +44,7 @@ enum class TokenKind {
     KwIn,  // for-in loop
     KwInline,
     KwInterface,
+    KwIs,         // ユニオン型の実行時型判別 (expr is Type)
     KwMacro,      // macro definition
     KwConstexpr,  // constexpr keyword
     KwMatch,
@@ -146,6 +148,7 @@ enum class TokenKind {
     LtLtEq,
     GtGtEq,
     PlusPlus,
+    PlusColon,  // +: （ビットスライスのインデックスドパートセレクト）
     MinusMinus,
     Question,
     Colon,

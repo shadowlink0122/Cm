@@ -174,8 +174,7 @@ int main() {
 
 ### Inherent Impl
 
-You can define methods directly on a struct without an interface.
-`self` is treated as a pointer to the struct, allowing modification of fields.
+You can define methods directly on a struct without an interface. `self` is treated as a pointer to the struct, allowing modification of fields.
 
 ```cm
 struct Point {

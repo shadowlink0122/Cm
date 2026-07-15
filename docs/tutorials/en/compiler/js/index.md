@@ -5,8 +5,7 @@ parent: Compiler
 
 # Compiling Cm to JavaScript
 
-The Cm compiler provides a backend that converts Cm source code to JavaScript.
-Generated JS code can be executed with Node.js or in browsers.
+The Cm compiler provides a backend that converts Cm source code to JavaScript. Generated JS code can be executed with Node.js or in browsers.
 
 ## Basic Usage
 
@@ -50,7 +49,8 @@ The following features are not supported in the JS target (they are skipped):
 
 | Category | Reason |
 |---------|------|
-| Pointers (`int*`, `void*`) | No pointer concept in JS |
+| `void*` pointers / pointer-integer casts | Not representable with the JS object-reference pointer model (explicit error). Basic pointers (`int*`, `T*`, `&p.x`, `int**`) are supported via object references |
+| libc malloc/free family (std::collections etc.) | Depends on `void*`, so unsupported per the above |
 | Inline assembly (`__asm__`) | Cannot run in JS |
 | Threads (`spawn`, `join`) | Single-threaded model |
 | Mutex / Channel / Atomic | Same as above |
@@ -158,7 +158,7 @@ make tjp
 node output.js
 ```
 
-### v0.15.1 Test Results
+### v0.16.0 Test Results
 
 | Item | Value |
 |------|-------|

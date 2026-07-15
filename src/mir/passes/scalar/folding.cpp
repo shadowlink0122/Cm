@@ -135,7 +135,17 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
             }
 
             // Rvalueを評価して定数化できるかチェック
-            if (auto constant = evaluate_rvalue(*assign_data.rvalue, constants)) {
+            auto folded = evaluate_rvalue(*assign_data.rvalue, constants);
+            if (!folded) {
+                // 完全畳み込みできない場合は代数的恒等式の簡約を試みる
+                // （x*1→x, x+0→x, x*0→0 等。文数・制御フローは変えない）
+                if (simplify_identity(assign_data, constants)) {
+                    changed = true;
+                    // x*0→0 等、簡約結果が定数になったケースを追跡へ乗せる
+                    folded = evaluate_rvalue(*assign_data.rvalue, constants);
+                }
+            }
+            if (auto constant = folded) {
                 // 代入先ローカルの型幅に正規化（狭い型への代入はラップ）
                 if (target < func.locals.size()) {
                     const auto& local_type = func.locals[target].type;
@@ -161,8 +171,9 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
         }
     }
 
-    // 終端命令の定数畳み込み
-    if (block.terminator && block.terminator->kind == MirTerminator::SwitchInt) {
+    // 終端命令の定数畳み込み（fold_terminators_=falseの場合はCFG形状を保持）
+    if (fold_terminators_ && block.terminator &&
+        block.terminator->kind == MirTerminator::SwitchInt) {
         auto& switch_data = std::get<MirTerminator::SwitchIntData>(block.terminator->data);
 
         // discriminantが定数の場合、無条件ジャンプに変換
@@ -542,6 +553,125 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
     }
 
     return std::nullopt;
+}
+
+bool ConstantFolding::simplify_identity(MirStatement::AssignData& assign_data,
+                                        const std::unordered_map<LocalId, MirConstant>& constants) {
+    if (!assign_data.rvalue || assign_data.rvalue->kind != MirRvalue::BinaryOp) {
+        return false;
+    }
+    auto& bin = std::get<MirRvalue::BinaryOpData>(assign_data.rvalue->data);
+    if (!bin.lhs || !bin.rhs) {
+        return false;
+    }
+    // 整数型のみ対象（浮動小数点はNaN・-0.0の意味論があるため対象外）
+    if (const_eval::integer_bit_width(bin.result_type) <= 0) {
+        return false;
+    }
+
+    auto lhs_const = evaluate_operand(*bin.lhs, constants);
+    auto rhs_const = evaluate_operand(*bin.rhs, constants);
+    auto int_of = [](const std::optional<MirConstant>& c) -> std::optional<int64_t> {
+        if (!c) {
+            return std::nullopt;
+        }
+        if (const auto* v = std::get_if<int64_t>(&c->value)) {
+            return *v;
+        }
+        return std::nullopt;
+    };
+    auto lv = int_of(lhs_const);
+    auto rv = int_of(rhs_const);
+    if (!lv && !rv) {
+        return false;
+    }
+
+    // rvalue全体を「もう一方のオペランド」に置き換える
+    auto replace_with_operand = [&](MirOperandPtr& keep) {
+        assign_data.rvalue = MirRvalue::use(std::move(keep));
+    };
+    // rvalue全体を整数定数に置き換える
+    auto replace_with_const = [&](int64_t value) {
+        MirConstant c;
+        c.value = value;
+        c.type = bin.result_type;
+        assign_data.rvalue = MirRvalue::use(MirOperand::constant(std::move(c)));
+    };
+
+    switch (bin.op) {
+        case MirBinaryOp::Add:
+            if (rv && *rv == 0) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            if (lv && *lv == 0) {
+                replace_with_operand(bin.rhs);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::Sub:
+            // x - 0 → x（0 - x は否定になるため対象外）
+            if (rv && *rv == 0) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::Mul:
+            if ((rv && *rv == 1)) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            if (lv && *lv == 1) {
+                replace_with_operand(bin.rhs);
+                return true;
+            }
+            // オペランドはCopy/Constantのみで副作用が無いため x*0→0 は安全
+            if ((rv && *rv == 0) || (lv && *lv == 0)) {
+                replace_with_const(0);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::Div:
+            // x / 1 → x（0 / x はxのゼロ検査を消すため対象外）
+            if (rv && *rv == 1) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::Mod:
+            // x % 1 → 0（除数1は常に非ゼロで安全）
+            if (rv && *rv == 1) {
+                replace_with_const(0);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::Shl:
+        case MirBinaryOp::Shr:
+            if (rv && *rv == 0) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::BitOr:
+        case MirBinaryOp::BitXor:
+            if (rv && *rv == 0) {
+                replace_with_operand(bin.lhs);
+                return true;
+            }
+            if (lv && *lv == 0) {
+                replace_with_operand(bin.rhs);
+                return true;
+            }
+            return false;
+        case MirBinaryOp::BitAnd:
+            if ((rv && *rv == 0) || (lv && *lv == 0)) {
+                replace_with_const(0);
+                return true;
+            }
+            return false;
+        default:
+            return false;
+    }
 }
 
 }  // namespace cm::mir::opt

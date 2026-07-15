@@ -1,0 +1,62 @@
+import std::io::println;
+// derive_basic.cm - #[derive]属性による自動実装の統合テスト（with構文と等価）
+// Eq/Cloneは組み込みinterfaceのため宣言不要（暗黙的に利用可能）
+
+// 1. 基本的な #[derive(Eq)]
+#[derive(Eq)]
+struct Point {
+    int x;
+    int y;
+}
+
+// 2. 複数derive属性のマージ + 複数インターフェース
+#[derive(Eq)]
+#[derive(Clone)]
+struct Color {
+    int r;
+    int g;
+    int b;
+}
+
+int main() {
+    // 1. Point の等価性テスト
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+
+    Point p2;
+    p2.x = 10;
+    p2.y = 20;
+
+    Point p3;
+    p3.x = 5;
+    p3.y = 20;
+
+    if (p1 == p2) {
+        println("p1 == p2: true");
+    } else {
+        println("p1 == p2: false");
+    }
+
+    if (p1 == p3) {
+        println("p1 == p3: true");
+    } else {
+        println("p1 == p3: false");
+    }
+
+    // 2. Color の clone + 等価性テスト
+    Color c1;
+    c1.r = 255;
+    c1.g = 128;
+    c1.b = 64;
+
+    Color c2 = c1.clone();
+
+    if (c1 == c2) {
+        println("c1 == clone: true");
+    } else {
+        println("c1 == clone: false");
+    }
+
+    return 0;
+}

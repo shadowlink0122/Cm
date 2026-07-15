@@ -5,8 +5,6 @@ nav_order: 3
 has_children: true
 ---
 
-[English](README.en.html)
-
 # リリースノート
 
 このディレクトリにはCm言語の各バージョンのリリースノートが含まれます。

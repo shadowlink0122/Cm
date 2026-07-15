@@ -1,0 +1,9 @@
+// Debug導出は配列フィールド未対応（明示エラー）
+#[derive(Debug)]
+struct S {
+    int[3] xs;
+}
+
+int main() {
+    return 0;
+}

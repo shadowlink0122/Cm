@@ -3,6 +3,7 @@
 /// terminator.cppから分離したprint/println/format処理
 
 #include "../../../common/debug.hpp"
+#include "../../../frontend/ast/typedef.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -132,6 +133,84 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
             llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false));
         auto result = builder->CreateCall(replaceFunc, {currentStr, ptrAsInt});
         return result;
+    }
+
+    // タグ付きユニオン値: 実行時タグで分岐し、有効なバリアントの値として整形する
+    // （従来は未対応型として素通りし、プレースホルダが空になっていた）
+    // 値は集約（{i32, [N x i8]}）またはそのポインタの両形式で届く
+    {
+        auto resolvedU = resolveTypeAlias(hirType);
+        if (resolvedU && resolvedU->kind == hir::TypeKind::Union) {
+            auto variants = ast::union_variant_types(resolvedU);
+            auto* unionTy = llvm::dyn_cast<llvm::StructType>(convertType(resolvedU));
+            if (!variants.empty() && unionTy &&
+                (valueType->isPointerTy() || valueType == unionTy)) {
+                llvm::Value* alloca = nullptr;
+                if (valueType->isPointerTy()) {
+                    alloca = value;
+                } else {
+                    alloca = builder->CreateAlloca(unionTy, nullptr, "union_fmt_tmp");
+                    builder->CreateStore(value, alloca);
+                }
+                auto* tagPtr = builder->CreateStructGEP(unionTy, alloca, 0, "ufmt_tag_ptr");
+                auto* tagVal = builder->CreateLoad(ctx.getI32Type(), tagPtr, "ufmt_tag");
+                auto* payloadGEP = builder->CreateStructGEP(unionTy, alloca, 1, "ufmt_payload");
+
+                auto* func = builder->GetInsertBlock()->getParent();
+                auto* mergeBB = llvm::BasicBlock::Create(ctx.getContext(), "ufmt.merge", func);
+                std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> incoming;
+
+                for (size_t vi = 0; vi < variants.size(); ++vi) {
+                    auto& vt = variants[vi];
+                    auto* matchBB = llvm::BasicBlock::Create(ctx.getContext(), "ufmt.case", func);
+                    auto* nextBB = llvm::BasicBlock::Create(ctx.getContext(), "ufmt.next", func);
+                    auto* isMatch = builder->CreateICmpEQ(
+                        tagVal, llvm::ConstantInt::get(ctx.getI32Type(), static_cast<int32_t>(vi)),
+                        "ufmt.is_case");
+                    builder->CreateCondBr(isMatch, matchBB, nextBB);
+
+                    builder->SetInsertPoint(matchBB);
+                    llvm::Value* branchStr = nullptr;
+                    auto* vLLVM = vt ? convertType(vt) : nullptr;
+                    if (vLLVM && !vLLVM->isStructTy() && !vLLVM->isArrayTy()) {
+                        auto* payloadAsType = builder->CreateBitCast(
+                            payloadGEP, llvm::PointerType::get(vLLVM, 0), "ufmt_payload_as");
+                        auto* vVal = builder->CreateLoad(vLLVM, payloadAsType, "ufmt_val");
+                        branchStr = generateFormatReplace(currentStr, vVal, vt);
+                    } else {
+                        // 構造体バリアント等の詳細表示は未対応（プレースホルダのみ消費）
+                        auto* structStr = builder->CreateGlobalStringPtr("<struct>");
+                        auto replaceFunc = module->getOrInsertFunction(
+                            "cm_format_replace",
+                            llvm::FunctionType::get(ctx.getPtrType(),
+                                                    {ctx.getPtrType(), ctx.getPtrType()}, false));
+                        branchStr = builder->CreateCall(replaceFunc, {currentStr, structStr});
+                    }
+                    incoming.push_back({branchStr, builder->GetInsertBlock()});
+                    builder->CreateBr(mergeBB);
+
+                    builder->SetInsertPoint(nextBB);
+                }
+
+                // どのタグにも一致しない場合（不正なタグ）は "<?>" で置換する
+                auto* unknownStr = builder->CreateGlobalStringPtr("<?>");
+                auto replaceFunc = module->getOrInsertFunction(
+                    "cm_format_replace",
+                    llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto* defaultStr = builder->CreateCall(replaceFunc, {currentStr, unknownStr});
+                incoming.push_back({defaultStr, builder->GetInsertBlock()});
+                builder->CreateBr(mergeBB);
+
+                builder->SetInsertPoint(mergeBB);
+                auto* phi = builder->CreatePHI(
+                    ctx.getPtrType(), static_cast<unsigned>(incoming.size()), "ufmt.result");
+                for (auto& [v, bb] : incoming) {
+                    phi->addIncoming(v, bb);
+                }
+                return phi;
+            }
+        }
     }
 
     if (valueType->isPointerTy()) {

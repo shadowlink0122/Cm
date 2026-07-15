@@ -4,43 +4,43 @@
 
 int main() {
     #ifdef __x86_64__
-    println("=== Pure LLVM Knapsack DP (2D Array) ===");
-    println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
-    println("Capacity: 7");
+        println("=== Pure LLVM Knapsack DP (2D Array) ===");
+        println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
+        println("Capacity: 7");
 
-    // 2次元DP配列: dp[n_items+1][capacity+1] = dp[4][8]
-    // 行優先レイアウト: dp[i][w] = base + (i * 8 + w) * 4
-    int[32] dp = [
-        0, 0, 0, 0, 0, 0, 0, 0,  // dp[0][0..7] - アイテムなし
-        0, 0, 0, 0, 0, 0, 0, 0,  // dp[1][0..7] - アイテム0まで
-        0, 0, 0, 0, 0, 0, 0, 0,  // dp[2][0..7] - アイテム1まで
-        0, 0, 0, 0, 0, 0, 0, 0   // dp[3][0..7] - アイテム2まで
-    ];
+        // 2次元DP配列: dp[n_items+1][capacity+1] = dp[4][8]
+        // 行優先レイアウト: dp[i][w] = base + (i * 8 + w) * 4
+        int[32] dp = [
+            0, 0, 0, 0, 0, 0, 0, 0,  // dp[0][0..7] - アイテムなし
+            0, 0, 0, 0, 0, 0, 0, 0,  // dp[1][0..7] - アイテム0まで
+            0, 0, 0, 0, 0, 0, 0, 0,  // dp[2][0..7] - アイテム1まで
+            0, 0, 0, 0, 0, 0, 0, 0   // dp[3][0..7] - アイテム2まで
+        ];
 
-    // アイテムの重さと価値
-    int[3] weights = [2, 3, 4];
-    int[3] values = [3, 4, 5];
+        // アイテムの重さと価値
+        int[3] weights = [2, 3, 4];
+        int[3] values = [3, 4, 5];
 
-    // ポインタを取得
-    int* dp_ptr = &dp[0];
-    int* w_ptr = &weights[0];
-    int* v_ptr = &values[0];
+        // ポインタを取得
+        int* dp_ptr = &dp[0];
+        int* w_ptr = &weights[0];
+        int* v_ptr = &values[0];
 
-    // ループ変数（Cm側で管理）
-    int i = 0;
-    int w = 0;
+        // ループ変数（Cm側で管理）
+        int i = 0;
+        int w = 0;
 
-    // 一時変数（全てLLVMにレジスタ割り当てを委譲）
-    int wi = 0;       // weights[i-1]
-    int vi = 0;       // values[i-1]
-    int dp_prev = 0;  // dp[i-1][w]
-    int cand = 0;     // 候補値
-    long idx = 0;     // 64bitインデックス（メモリアクセス用）
-    int tmp2 = 0;     // スクラッチ2
+        // 一時変数（全てLLVMにレジスタ割り当てを委譲）
+        int wi = 0;       // weights[i-1]
+        int vi = 0;       // values[i-1]
+        int dp_prev = 0;  // dp[i-1][w]
+        int cand = 0;     // 候補値
+        long idx = 0;     // 64bitインデックス（メモリアクセス用）
+        int tmp2 = 0;     // スクラッチ2
 
-    // 2次元DP更新
-    // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
-    __asm__(`
+        // 2次元DP更新
+        // 全レジスタをLLVMオペランド制約で管理（ハードコードレジスタなし）
+        __asm__(`
         # 外側ループ: i = 1
         movl $$1, ${+r:i}
 
@@ -119,61 +119,61 @@ int main() {
         5:  # done
     `);
 
-    // =========================================
-    // 最終結果表示
-    // =========================================
-    println("\n=== 2D DP Table (last row) ===");
-    // dp[3][w] = dp[3 * 8 + w] = dp[24 + w]
-    for (int k = 2; k <= 7; k++) {
-        print("dp[3][");
-        print(k);
-        print("]=");
-        println(dp[24 + k]);
-    }
+        // =========================================
+        // 最終結果表示
+        // =========================================
+        println("\n=== 2D DP Table (last row) ===");
+        // dp[3][w] = dp[3 * 8 + w] = dp[24 + w]
+        for (int k = 2; k <= 7; k++) {
+            print("dp[3][");
+            print(k);
+            print("]=");
+            println(dp[24 + k]);
+        }
 
-    println("\n=== Verification ===");
-    if (dp[31] == 9) {
-        println("Knapsack DP: PASS (optimal = 9)");
-    } else {
-        print("Expected 9, got ");
-        println(dp[31]);
-    }
+        println("\n=== Verification ===");
+        if (dp[31] == 9) {
+            println("Knapsack DP: PASS (optimal = 9)");
+        } else {
+            print("Expected 9, got ");
+            println(dp[31]);
+        }
 
     #else
-    // ARM64版
-    println("=== Pure LLVM Knapsack DP (2D Array) ===");
-    println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
-    println("Capacity: 7");
+        // ARM64版
+        println("=== Pure LLVM Knapsack DP (2D Array) ===");
+        println("Items: [(w=2,v=3), (w=3,v=4), (w=4,v=5)]");
+        println("Capacity: 7");
 
-    int[32] dp = [
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0
-    ];
+        int[32] dp = [
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0
+        ];
 
-    int[3] weights = [2, 3, 4];
-    int[3] values = [3, 4, 5];
+        int[3] weights = [2, 3, 4];
+        int[3] values = [3, 4, 5];
 
-    int* dp_ptr = &dp[0];
-    int* w_ptr = &weights[0];
-    int* v_ptr = &values[0];
+        int* dp_ptr = &dp[0];
+        int* w_ptr = &weights[0];
+        int* v_ptr = &values[0];
 
-    // ループ変数と一時変数は全てint(32bit)で統一
-    // AArch64での:w修飾子により全オペランドがwレジスタ(32bit)に
-    // ldr/strではsxtwで符号拡張してアドレス計算する
-    int i = 0;
-    int w = 0;
-    int wi = 0;       // weights[i-1]
-    int vi = 0;       // values[i-1]
-    int dp_prev = 0;  // dp[i-1][w]
-    int cand = 0;     // 候補値
-    int tmp = 0;      // スクラッチ
+        // ループ変数と一時変数は全てint(32bit)で統一
+        // AArch64での:w修飾子により全オペランドがwレジスタ(32bit)に
+        // ldr/strではsxtwで符号拡張してアドレス計算する
+        int i = 0;
+        int w = 0;
+        int wi = 0;       // weights[i-1]
+        int vi = 0;       // values[i-1]
+        int dp_prev = 0;  // dp[i-1][w]
+        int cand = 0;     // 候補値
+        int tmp = 0;      // スクラッチ
 
-    // ARM64版 ナップサックDP
-    // :w修飾子で全変数がwレジスタになるため、
-    // ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
-    __asm__(`
+        // ARM64版 ナップサックDP
+        // :w修飾子で全変数がwレジスタになるため、
+        // ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
+        __asm__(`
         // 外側ループ: i = 1
         mov ${+r:i}, #1
 
@@ -242,21 +242,21 @@ int main() {
         5:  // done
     `);
 
-    println("\n=== 2D DP Table (last row) ===");
-    for (int k = 2; k <= 7; k++) {
-        print("dp[3][");
-        print(k);
-        print("]=");
-        println(dp[24 + k]);
-    }
+        println("\n=== 2D DP Table (last row) ===");
+        for (int k = 2; k <= 7; k++) {
+            print("dp[3][");
+            print(k);
+            print("]=");
+            println(dp[24 + k]);
+        }
 
-    println("\n=== Verification ===");
-    if (dp[31] == 9) {
-        println("Knapsack DP: PASS (optimal = 9)");
-    } else {
-        print("Expected 9, got ");
-        println(dp[31]);
-    }
+        println("\n=== Verification ===");
+        if (dp[31] == 9) {
+            println("Knapsack DP: PASS (optimal = 9)");
+        } else {
+            print("Expected 9, got ");
+            println(dp[31]);
+        }
 
     #end
     return 0;

@@ -1,0 +1,3 @@
+some: 5
+after: shadowed
+err: boom

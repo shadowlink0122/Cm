@@ -5,7 +5,9 @@
 *.vsix
 node_modules/**
 scripts/**
-out/**
+src/**
+out/scripts/**
+pnpm-lock.yaml
 tsconfig.json
 eslint.config.mjs
 .prettierrc

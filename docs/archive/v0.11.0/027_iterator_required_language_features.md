@@ -1,7 +1,6 @@
 # イテレータシステム実装に必要な言語機能追加
 
-作成日: 2026-01-11
-関連文書: 025_iterator_explicit_interface_design.md, 026_iterator_stdlib_implementation.md
+作成日: 2026-01-11関連文書: 025_iterator_explicit_interface_design.md, 026_iterator_stdlib_implementation.md
 
 ## 現在のCm言語の実装状況
 
@@ -292,5 +291,4 @@ T max(T a, T b) { ... }
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 要件定義完了
+**作成者:** Claude Code **ステータス:** 要件定義完了

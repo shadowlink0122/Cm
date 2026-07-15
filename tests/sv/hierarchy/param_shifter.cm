@@ -1,0 +1,13 @@
+//! platform: sv
+//! test: din=5, cycles=2 -> dout=5
+
+// パラメタライズドサブモジュール（#[sv::parameter]）
+#[sv::parameter] const uint WIDTH = 8;
+
+#[input] posedge clk;
+#[input] bit[WIDTH] din;
+#[output] bit[WIDTH] dout = 0;
+
+async void shift(posedge clk) {
+    dout = din;
+}

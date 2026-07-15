@@ -50,8 +50,7 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ## Enums (FSM)
 
-Cm's `enum` is converted to SV's `typedef enum logic`.
-The bit width is automatically computed from the **maximum tag value** (explicit tag values are supported):
+Cm's `enum` is converted to SV's `typedef enum logic`. The bit width is automatically computed from the **maximum tag value** (explicit tag values are supported):
 
 ```cm
 enum State { IDLE, RUN, DONE, ERROR }
@@ -96,9 +95,9 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 #[output] uint[4] data;   // → output logic [31:0] data [0:3]
 ```
 
-> Array **initial values** (e.g. `$readmemh`) are not yet supported. Write font ROMs and
-> similar as const functions (lookup tables)
-> (see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
+> Array **initial values** are emitted as initial blocks, and `#[sv::memfile]` /
+> `--emit-memfile` provide `$readmemh` support (since v0.15.1).
+> See [Memory initialization](memory.html).
 
 ---
 
@@ -106,8 +105,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 ### const Strings (Recommended)
 
-A const string becomes a packed vector constant (`localparam`),
-and index access is converted to a part select:
+A const string becomes a packed vector constant (`localparam`), and index access is converted to a part select:
 
 ```cm
 export const string TITLE = "HELLO CM";
@@ -119,9 +117,25 @@ utiny ch = TITLE[i] as utiny;
 
 ### Limitations
 
-- **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**.
-  Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants
-  (an extension is being considered in the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
+- **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**. Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants (typed string lengths are being considered in the [v0.16.0 roadmap](../../../../design/v0.16.0/roadmap.html)).
+
+## Bit slices (v0.16.0)
+
+Read and write sub-ranges of `bit[N]` / integer values using SV-style descending, inclusive ranges:
+
+```cm
+bit[16] word = 0xABCD;
+bit[8] hi = word[15:8];      // 0xAB (constant range)
+word[11:4] = 0xFF;           // partial assignment (read-modify-write)
+
+uint i = 1;
+bit[4] nib = word[i*4 +: 4]; // variable base + constant width
+```
+
+- Range/width must be **integer literals** (v0.16.0 restriction); the base of `+:` may be any integer expression
+- Desugared to shifts+masks shared by all backends, so execution backends (JIT/native/WASM/JS) produce identical results
+- Max width 64; the result type is `bit[w]` (interchangeable with integers)
+
 
 ---
 

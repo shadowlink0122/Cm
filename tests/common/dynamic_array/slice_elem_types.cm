@@ -1,0 +1,30 @@
+import std::io::println;
+// slice_elem_types.cm - 各要素型スライスのpush/pop/読み出し
+
+int main() {
+    double[] ds = [];
+    ds.push(1.5);
+    ds.push(2.5);
+    double dp = ds.pop();
+    println("d0={ds[0]} pop={dp} len={ds.len()}");
+
+    string[] ss = [];
+    ss.push("aa");
+    ss.push("bb");
+    string sp = ss.pop();
+    println("s0={ss[0]} pop={sp}");
+
+    long[] ls = [];
+    ls.push(10000000000);
+    println("l0={ls[0]}");
+
+    bool[] bs = [];
+    bs.push(true);
+    bs.push(false);
+    println("b0={bs[0]} b1={bs[1]}");
+
+    char[] cs = [];
+    cs.push('A');
+    println("c0={cs[0]}");
+    return 0;
+}

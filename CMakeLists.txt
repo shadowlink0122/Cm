@@ -228,6 +228,8 @@ set(CM_HIR_LOWERING_SOURCES
     src/hir/lowering/decl.cpp
     src/hir/lowering/stmt.cpp
     src/hir/lowering/expr.cpp
+    src/hir/lowering/expr_member.cpp
+    src/hir/lowering/expr_match.cpp
 )
 # MIRコア（lowering + 最適化パス + 解析）
 set(CM_MIR_SOURCES
@@ -237,8 +239,12 @@ set(CM_MIR_SOURCES
     src/mir/lowering/base.cpp
     src/mir/lowering/lowering.cpp
     src/mir/lowering/auto_impl.cpp
+    src/mir/lowering/auto_impl_compare.cpp
+    src/mir/lowering/auto_impl_css.cpp
+    src/mir/lowering/auto_impl_debug.cpp
     src/mir/lowering/impl.cpp
     src/mir/lowering/monomorphization_impl.cpp
+    src/mir/lowering/mono_structs.cpp
     src/mir/lowering/monomorphization_utils.cpp
     # src/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/mir/lowering/stmt.cpp
@@ -246,6 +252,9 @@ set(CM_MIR_SOURCES
     src/mir/lowering/expr_basic.cpp
     src/mir/lowering/expr_ops.cpp
     src/mir/lowering/expr_call.cpp
+    src/mir/lowering/expr_interp.cpp
+    src/mir/lowering/expr_println.cpp
+    src/mir/lowering/expr_slice.cpp
     # MIR passes (最適化パス実装)
     src/mir/passes/scalar/sccp.cpp
     src/mir/passes/scalar/folding.cpp
@@ -286,7 +295,10 @@ set(CM_SOURCES
     src/frontend/types/checking/generic.cpp
     src/frontend/types/checking/auto_impl.cpp
     src/frontend/types/checking/utils.cpp
+    src/frontend/types/checking/match_hoist.cpp
     src/preprocessor/import.cpp
+    src/preprocessor/export_filter.cpp
+    src/preprocessor/module_resolve.cpp
     src/preprocessor/conditional.cpp
     src/module/resolver.cpp
     # Lint configuration
@@ -339,8 +351,13 @@ list(APPEND CM_SOURCES
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/codegen/sv/codegen.cpp
+    src/codegen/sv/analyze.cpp
+    src/codegen/sv/emit_control.cpp
+    src/codegen/sv/validation.cpp
+    src/codegen/sv/testbench.cpp
     src/codegen/sv/expr_tree.cpp
     src/codegen/sv/hierarchy.cpp
+    src/codegen/sv/constraints.cpp
 )
 
 # Add LLVM sources if enabled
@@ -502,6 +519,14 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
+                ${CMAKE_SOURCE_DIR}/src/codegen/common/runtime_alloc.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/common/runtime_file.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_asm.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_format.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_io.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_platform.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_print.c
+                ${CMAKE_SOURCE_DIR}/src/codegen/llvm/native/runtime_slice.c
             COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
@@ -619,62 +644,90 @@ if(BUILD_TESTING)
         target_link_libraries(lexer_test gtest_main cm_frontend)
         gtest_discover_tests(lexer_test PROPERTIES LABELS "unit")
 
-        # Unit tests - HIR Lowering
+        # Integration tests - HIR Lowering
+        # （Cmプログラムを tests/regression/cases/hir_lowering/ から読み込む）
         add_executable(hir_lowering_test
-            tests/unit/hir_lowering_test.cpp
+            tests/regression/hir_lowering_test.cpp
             ${CM_LEXER_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(hir_lowering_test PRIVATE
+            CM_HIR_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/hir_lowering")
         target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(hir_lowering_test gtest_main cm_frontend)
-        gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "unit")
+        gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "regression")
 
-        # Unit tests - MIR Lowering
+        # Integration tests - MIR Lowering
+        # （Cmプログラムを tests/regression/cases/mir_lowering/ から読み込む）
         add_executable(mir_lowering_test
-            tests/unit/mir_lowering_test.cpp
+            tests/regression/mir_lowering_test.cpp
             ${CM_LEXER_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(mir_lowering_test PRIVATE
+            CM_MIR_LOWERING_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/mir_lowering")
         target_include_directories(mir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(mir_lowering_test gtest_main cm_frontend)
-        gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "unit")
+        gtest_discover_tests(mir_lowering_test PROPERTIES LABELS "regression")
 
-        # Unit tests - MIR Optimization
+        # Integration tests - MIR Optimization
+        # （Cmプログラムを tests/regression/cases/mir_optimization/ から読み込む）
         add_executable(mir_optimization_test
-            tests/unit/mir_optimization_test.cpp
+            tests/regression/mir_optimization_test.cpp
             ${CM_LEXER_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(mir_optimization_test PRIVATE
+            CM_MIR_OPT_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/mir_optimization")
         target_include_directories(mir_optimization_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(mir_optimization_test gtest_main cm_frontend)
-        gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "unit")
+        gtest_discover_tests(mir_optimization_test PROPERTIES LABELS "regression")
 
-        # Unit tests - SV Codegen
+        # Integration tests - SV Codegen
         add_executable(sv_codegen_test
-            tests/unit/sv_codegen_test.cpp
+            tests/regression/sv_codegen_test.cpp
             ${CM_LEXER_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             src/codegen/buffered_codegen.cpp
             src/codegen/sv/codegen.cpp
+            src/codegen/sv/analyze.cpp
+            src/codegen/sv/emit_control.cpp
+            src/codegen/sv/validation.cpp
+            src/codegen/sv/testbench.cpp
+            src/codegen/sv/constraints.cpp
             src/codegen/sv/expr_tree.cpp
         )
         set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         # ゴールデンテスト入力のCmソース断片ディレクトリ
         target_compile_definitions(sv_codegen_test PRIVATE
-            CM_SV_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/unit/sv_cases")
+            CM_SV_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/sv")
         target_include_directories(sv_codegen_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(sv_codegen_test gtest_main cm_frontend)
-        gtest_discover_tests(sv_codegen_test PROPERTIES LABELS "unit")
+        gtest_discover_tests(sv_codegen_test PROPERTIES LABELS "regression")
+
+        # Integration tests - Formatter
+        # （Cmプログラムを tests/regression/cases/formatter/ から読み込む）
+        add_executable(formatter_test
+            tests/regression/formatter_test.cpp
+            src/fmt/formatter.cpp
+        )
+        set_target_properties(formatter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(formatter_test PRIVATE
+            CM_FORMATTER_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/formatter")
+        target_include_directories(formatter_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_include_directories(formatter_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(formatter_test gtest_main)
+        gtest_discover_tests(formatter_test PROPERTIES LABELS "regression")
 
         # Unit tests - Error handling
         add_executable(error_test
@@ -685,9 +738,40 @@ if(BUILD_TESTING)
         target_link_libraries(error_test gtest_main)
         gtest_discover_tests(error_test PROPERTIES LABELS "unit")
 
-        # Unit tests - MIR Interpreter (disabled until MirBuilder is implemented)
+        # Unit tests - MIR最適化パス
+        # （手組みMIRに対して各パスの.cppを単体で検証。
+        # フロントエンド・lowering非依存のため、パス実装+ノード+解析のみをリンクする）
+        set(CM_MIR_PASS_SOURCES
+            src/mir/nodes.cpp
+            src/mir/analysis/dominators.cpp
+            src/mir/analysis/loop_analysis.cpp
+            src/mir/passes/core/base.cpp
+            src/mir/passes/convergence/manager.cpp
+            src/mir/passes/scalar/sccp.cpp
+            src/mir/passes/scalar/folding.cpp
+            src/mir/passes/scalar/propagation.cpp
+            src/mir/passes/cleanup/dce.cpp
+            src/mir/passes/cleanup/dse.cpp
+            src/mir/passes/cleanup/simplify_cfg.cpp
+            src/mir/passes/cleanup/program_dce.cpp
+            src/mir/passes/interprocedural/inlining.cpp
+            src/mir/passes/interprocedural/tail_call_elimination.cpp
+            src/mir/passes/loop/licm.cpp
+            src/mir/passes/loop/const_unroll.cpp
+            src/mir/passes/redundancy/gvn.cpp
+        )
+        add_executable(mir_pass_test
+            tests/unit/mir_pass_test.cpp
+            ${CM_MIR_PASS_SOURCES}
+        )
+        set_target_properties(mir_pass_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(mir_pass_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(mir_pass_test gtest_main cm_frontend)
+        gtest_discover_tests(mir_pass_test PROPERTIES LABELS "unit")
+
+        # Integration tests - MIR Interpreter (disabled until MirBuilder is implemented)
         # add_executable(mir_interpreter_test
-        #     tests/unit/mir_interpreter_test.cpp
+        #     tests/regression/mir_interpreter_test.cpp
         #     src/frontend/lexer/token.cpp
         #     src/frontend/parser/parser_stmt.cpp
         #     src/frontend/parser/parser_expr.cpp
@@ -699,4 +783,3 @@ endif()
 
 # Installation
 # install(TARGETS cm RUNTIME DESTINATION bin)
-

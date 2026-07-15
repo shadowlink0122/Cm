@@ -6,25 +6,17 @@ nav_order: 9
 
 # UEFI Bare-Metal Development Tutorial
 
-**Target version:** v0.15.1
-**Level:** 🔴 Advanced
-**Prerequisites:** Inline assembly, pointer operations
+**Target version:** v0.16.0 **Level:** 🔴 Advanced **Prerequisites:** Inline assembly, pointer operations
 
 ---
 
 ## Overview
 
-With `--target=uefi`, the Cm compiler produces applications that run in a
-bare-metal (UEFI) environment without an OS. They run in **no_std** mode —
-no standard library — and talk to hardware directly through UEFI Boot
-Services.
+With `--target=uefi`, the Cm compiler produces applications that run in a bare-metal (UEFI) environment without an OS. They run in **no_std** mode —no standard library — and talk to hardware directly through UEFI Boot Services.
 
 ### What no_std means
 
-Ordinary Cm programs use standard library functions such as `println`
-and `malloc`, which depend on OS system calls. UEFI applications run
-before any OS boots, so the standard library is unavailable. Instead you
-call:
+Ordinary Cm programs use standard library functions such as `println` and `malloc`, which depend on OS system calls. UEFI applications run before any OS boots, so the standard library is unavailable. Instead you call:
 
 - **Screen output**: UEFI `ConOut->OutputString`
 - **Memory management**: `AllocatePool` from UEFI Boot Services
@@ -63,8 +55,7 @@ tests/uefi/
 
 ### Entry point
 
-The entry point of a UEFI application is `efi_main`. Unlike an OS
-`main`, it is called directly by the UEFI firmware.
+The entry point of a UEFI application is `efi_main`. Unlike an OS `main`, it is called directly by the UEFI firmware.
 
 ```cm
 // hello_world.cm - UEFI Hello World
@@ -90,10 +81,8 @@ ulong efi_main(void* image_handle, void* system_table) {
 
 **Key points:**
 
-- **`efi_main(void* image_handle, void* system_table)`**: the standard
-  UEFI entry point; `system_table` gives access to all UEFI services
-- **`string` cast to `void*`**: Cm strings have their own internal
-  representation, so pass them as pointers with `as void*`
+- **`efi_main(void* image_handle, void* system_table)`**: the standard UEFI entry point; `system_table` gives access to all UEFI services
+- **`string` cast to `void*`**: Cm strings have their own internal representation, so pass them as pointers with `as void*`
 - **`__asm__("hlt")`**: halts the CPU while keeping the display
 
 ### Accessing UEFI services
@@ -120,10 +109,7 @@ export void* efi_get_boot_services(void* system_table) {
 
 ### Text output (ASM implementation)
 
-UEFI's `OutputString` requires UCS-2 encoding, so the ASCII→UCS-2
-conversion is done in inline assembly (see the Japanese page for the
-full listing; the pattern pushes arguments with `pushq`/`popq`, builds a
-UCS-2 buffer on the stack, and calls `OutputString` with the Win64 ABI).
+UEFI's `OutputString` requires UCS-2 encoding, so the ASCII→UCS-2 conversion is done in inline assembly (see the Japanese page for the full listing; the pattern pushes arguments with `pushq`/`popq`, builds a UCS-2 buffer on the stack, and calls `OutputString` with the Win64 ABI).
 
 ---
 
@@ -170,8 +156,7 @@ qemu-system-x86_64 \
 
 ### Win64 ABI (Microsoft x64 calling convention)
 
-UEFI uses the **Win64 ABI** on x86_64. Arguments go in `RCX`, `RDX`,
-`R8`, `R9`, and a 32-byte shadow space is required.
+UEFI uses the **Win64 ABI** on x86_64. Arguments go in `RCX`, `RDX`, `R8`, `R9`, and a 32-byte shadow space is required.
 
 ```
 arg1: RCX
@@ -184,9 +169,7 @@ shadow space: RSP-32 (reserve before the call)
 
 ### The pushq/popq pattern
 
-When moving values into hard-coded registers in inline ASM, always use
-`pushq`/`popq` — otherwise you may clash with LLVM's register
-allocation.
+When moving values into hard-coded registers in inline ASM, always use `pushq`/`popq` — otherwise you may clash with LLVM's register allocation.
 
 ```cm
 // ❌ Dangerous: LLVM may be using the same register
@@ -201,9 +184,7 @@ __asm__(`
 
 ### Automatic clobber detection
 
-Since v0.14.0 the compiler detects hard-coded registers inside inline
-ASM and adds them to LLVM's clobber list automatically, preventing
-incorrect register reuse during inlining.
+Since v0.14.0 the compiler detects hard-coded registers inside inline ASM and adds them to LLVM's clobber list automatically, preventing incorrect register reuse during inlining.
 
 ---
 

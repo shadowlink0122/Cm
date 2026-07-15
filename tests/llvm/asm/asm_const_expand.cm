@@ -20,121 +20,121 @@ macro int MACRO_VALUE_10 = 10;
 
 int main() {
     #ifdef __x86_64__
-    println("=== ASM Const Expand Test ===");
+        println("=== ASM Const Expand Test ===");
 
-    // === テスト1: const値の即値展開 (movl ${CONST} → movl $$0x2a) ===
-    int result1 = 0;
-    // ${CONST_VALUE_42} は $$0x2a に展開される
-    // $$0x2a → LLVM → $42 (GAS即値)
-    // 変数埋め込み ${=r:result1} との混在テスト
-    __asm__("movl ${CONST_VALUE_42}, ${=r:result1}");
+        // === テスト1: const値の即値展開 (movl ${CONST} → movl $$0x2a) ===
+        int result1 = 0;
+        // ${CONST_VALUE_42} は $$0x2a に展開される
+        // $$0x2a → LLVM → $42 (GAS即値)
+        // 変数埋め込み ${=r:result1} との混在テスト
+        __asm__("movl ${CONST_VALUE_42}, ${=r:result1}");
 
-    if (result1 == 42) {
-        println("const expand (42): PASS");
-    } else {
-        println("const expand (42): FAIL");
-    }
+        if (result1 == 42) {
+            println("const expand (42): PASS");
+        } else {
+            println("const expand (42): FAIL");
+        }
 
-    // === テスト2: 16進数const値の展開 ===
-    int result2 = 0;
-    __asm__("movl ${CONST_VALUE_255}, ${=r:result2}");
+        // === テスト2: 16進数const値の展開 ===
+        int result2 = 0;
+        __asm__("movl ${CONST_VALUE_255}, ${=r:result2}");
 
-    if (result2 == 255) {
-        println("const expand (0xFF): PASS");
-    } else {
-        println("const expand (0xFF): FAIL");
-    }
+        if (result2 == 255) {
+            println("const expand (0xFF): PASS");
+        } else {
+            println("const expand (0xFF): FAIL");
+        }
 
-    // === テスト3: macro定数の展開 ===
-    int result3 = 0;
-    __asm__("movl ${MACRO_VALUE_10}, ${=r:result3}");
+        // === テスト3: macro定数の展開 ===
+        int result3 = 0;
+        __asm__("movl ${MACRO_VALUE_10}, ${=r:result3}");
 
-    if (result3 == 10) {
-        println("const expand (macro 10): PASS");
-    } else {
-        println("const expand (macro 10): FAIL");
-    }
+        if (result3 == 10) {
+            println("const expand (macro 10): PASS");
+        } else {
+            println("const expand (macro 10): FAIL");
+        }
 
-    // === テスト4: ローカルconst定数の展開 ===
-    const int LOCAL_CONST = 99;
-    int result4 = 0;
-    __asm__("movl ${LOCAL_CONST}, ${=r:result4}");
+        // === テスト4: ローカルconst定数の展開 ===
+        const int LOCAL_CONST = 99;
+        int result4 = 0;
+        __asm__("movl ${LOCAL_CONST}, ${=r:result4}");
 
-    if (result4 == 99) {
-        println("const expand (local 99): PASS");
-    } else {
-        println("const expand (local 99): FAIL");
-    }
+        if (result4 == 99) {
+            println("const expand (local 99): PASS");
+        } else {
+            println("const expand (local 99): FAIL");
+        }
 
-    // === テスト5: ${i:CONST} (既存i制約) との比較 ===
-    // ${i:CONST} は LLVMオペランドとして渡す方式
-    // ${CONST}   は asm文字列に即値リテラルとして埋め込む方式
-    // 両者は同じ結果を生むべき
-    int result5a = 0;
-    int result5b = 0;
-    __asm__("movl ${i:CONST_VALUE_42}, ${=r:result5a}");
-    __asm__("movl ${CONST_VALUE_42}, ${=r:result5b}");
+        // === テスト5: ${i:CONST} (既存i制約) との比較 ===
+        // ${i:CONST} は LLVMオペランドとして渡す方式
+        // ${CONST}   は asm文字列に即値リテラルとして埋め込む方式
+        // 両者は同じ結果を生むべき
+        int result5a = 0;
+        int result5b = 0;
+        __asm__("movl ${i:CONST_VALUE_42}, ${=r:result5a}");
+        __asm__("movl ${CONST_VALUE_42}, ${=r:result5b}");
 
-    if (result5a == result5b) {
-        println("const expand vs i constraint: PASS");
-    } else {
-        println("const expand vs i constraint: FAIL");
-    }
+        if (result5a == result5b) {
+            println("const expand vs i constraint: PASS");
+        } else {
+            println("const expand vs i constraint: FAIL");
+        }
 
-    println("=== All Tests Passed ===");
+        println("=== All Tests Passed ===");
     #else
-    // ARM64版
-    println("=== ASM Const Expand Test ===");
+        // ARM64版
+        println("=== ASM Const Expand Test ===");
 
-    int result1 = 0;
-    __asm__("mov ${=r:result1}, ${i:CONST_VALUE_42}");
+        int result1 = 0;
+        __asm__("mov ${=r:result1}, ${i:CONST_VALUE_42}");
 
-    if (result1 == 42) {
-        println("const expand (42): PASS");
-    } else {
-        println("const expand (42): FAIL");
-    }
+        if (result1 == 42) {
+            println("const expand (42): PASS");
+        } else {
+            println("const expand (42): FAIL");
+        }
 
-    int result2 = 0;
-    __asm__("mov ${=r:result2}, ${i:CONST_VALUE_255}");
+        int result2 = 0;
+        __asm__("mov ${=r:result2}, ${i:CONST_VALUE_255}");
 
-    if (result2 == 255) {
-        println("const expand (0xFF): PASS");
-    } else {
-        println("const expand (0xFF): FAIL");
-    }
+        if (result2 == 255) {
+            println("const expand (0xFF): PASS");
+        } else {
+            println("const expand (0xFF): FAIL");
+        }
 
-    int result3 = 0;
-    __asm__("mov ${=r:result3}, ${i:MACRO_VALUE_10}");
+        int result3 = 0;
+        __asm__("mov ${=r:result3}, ${i:MACRO_VALUE_10}");
 
-    if (result3 == 10) {
-        println("const expand (macro 10): PASS");
-    } else {
-        println("const expand (macro 10): FAIL");
-    }
+        if (result3 == 10) {
+            println("const expand (macro 10): PASS");
+        } else {
+            println("const expand (macro 10): FAIL");
+        }
 
-    const int LOCAL_CONST = 99;
-    int result4 = 0;
-    __asm__("mov ${=r:result4}, ${i:LOCAL_CONST}");
+        const int LOCAL_CONST = 99;
+        int result4 = 0;
+        __asm__("mov ${=r:result4}, ${i:LOCAL_CONST}");
 
-    if (result4 == 99) {
-        println("const expand (local 99): PASS");
-    } else {
-        println("const expand (local 99): FAIL");
-    }
+        if (result4 == 99) {
+            println("const expand (local 99): PASS");
+        } else {
+            println("const expand (local 99): FAIL");
+        }
 
-    int result5a = 0;
-    int result5b = 0;
-    __asm__("mov ${=r:result5a}, ${i:CONST_VALUE_42}");
-    __asm__("mov ${=r:result5b}, ${i:CONST_VALUE_42}");
+        int result5a = 0;
+        int result5b = 0;
+        __asm__("mov ${=r:result5a}, ${i:CONST_VALUE_42}");
+        __asm__("mov ${=r:result5b}, ${i:CONST_VALUE_42}");
 
-    if (result5a == result5b) {
-        println("const expand vs i constraint: PASS");
-    } else {
-        println("const expand vs i constraint: FAIL");
-    }
+        if (result5a == result5b) {
+            println("const expand vs i constraint: PASS");
+        } else {
+            println("const expand vs i constraint: FAIL");
+        }
 
-    println("=== All Tests Passed ===");
+        println("=== All Tests Passed ===");
     #end
     return 0;
 }

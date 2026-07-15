@@ -1,0 +1,21 @@
+import std::io::println;
+// union_println_interp.cm - ユニオン値のprintln補間（タグで実バリアントを整形）
+// 従来は未対応型として空文字が出ていた（v0.16.0で修正）
+
+typedef Value = int | string;
+
+struct Box {
+    Value v;
+}
+
+int main() {
+    Value v = 42 as Value;
+    println("v={v}");
+    v = "hello" as Value;
+    println("v={v}");
+
+    Box b;
+    b.v = 7 as Value;
+    println("member={b.v}");
+    return 0;
+}

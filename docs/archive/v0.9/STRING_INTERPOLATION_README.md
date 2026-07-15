@@ -359,8 +359,7 @@ When modifying string interpolation handling:
 | STRING_INTERPOLATION_EXAMPLES.md | 16KB | 7 | Code examples |
 | **Total** | **50KB** | **25** | **Complete** |
 
-Generated: 2025-12-10
-Last Updated: 2025-12-10
+Generated: 2025-12-10 Last Updated: 2025-12-10
 
 ---
 

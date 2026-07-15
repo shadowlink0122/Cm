@@ -1,0 +1,11 @@
+#[input] posedge clk;
+#[input] bool async_btn;
+
+#[sv::sync(clk: "clk", src: "async_btn", stages: 2)]
+bool btn_sync;
+
+#[output] bool out = false;
+
+async void f(posedge clk) {
+    out = btn_sync;
+}

@@ -2,6 +2,7 @@
 /// @brief MIR右辺値（BinaryOp/Cast/Aggregate等）→ LLVM IR 変換
 
 #include "../../../common/debug/codegen.hpp"
+#include "../../../frontend/ast/typedef.hpp"
 #include "../monitoring/compilation_guard.hpp"
 #include "mir_to_llvm.hpp"
 
@@ -168,19 +169,61 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         // 1. 一時allocaを作成
                         auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_temp");
 
+                        // ソースのHIR型を取得（構造体バリアントの判別に必要。
+                        // 構造体値はLLVMレベルではポインタで届くためLLVM型では判別できない）
+                        hir::TypePtr sourceHirType = nullptr;
+                        if (castData.operand && (castData.operand->kind == mir::MirOperand::Copy ||
+                                                 castData.operand->kind == mir::MirOperand::Move)) {
+                            if (auto* place = std::get_if<mir::MirPlace>(&castData.operand->data)) {
+                                if (place->projections.empty() && currentMIRFunction &&
+                                    place->local < currentMIRFunction->locals.size()) {
+                                    sourceHirType = currentMIRFunction->locals[place->local].type;
+                                }
+                            }
+                        }
+                        if (!sourceHirType && castData.operand) {
+                            sourceHirType = castData.operand->type;
+                        }
+
                         // 2.
-                        // タグを設定（castData.target_type->type_argsからバリアントインデックスを計算）
+                        // タグを設定（バリアントインデックスを計算）
+                        // target_typeがtypedefエイリアスの場合はUnion本体へ解決してから参照する
+                        hir::TypePtr resolvedTarget = resolveTypeAlias(castData.target_type);
+                        if (!resolvedTarget) {
+                            resolvedTarget = castData.target_type;
+                        }
+                        // typedefユニオンはUnionType::variantsに変種を保持するため両対応で取得
+                        auto variantTypes = ast::union_variant_types(resolvedTarget);
                         int32_t tagValue = 0;
-                        if (castData.target_type && !castData.target_type->type_args.empty()) {
-                            // ソース型のLLVM型とtype_argsのHIR型を照合してタグ値を決定
-                            for (size_t vi = 0; vi < castData.target_type->type_args.size(); ++vi) {
-                                auto& varType = castData.target_type->type_args[vi];
-                                if (!varType)
-                                    continue;
-                                auto* varLLVMType = convertType(varType);
-                                if (varLLVMType == sourceType) {
-                                    tagValue = static_cast<int32_t>(vi);
-                                    break;
+                        hir::TypePtr matchedVariant = nullptr;
+                        if (!variantTypes.empty()) {
+                            // まずHIR型（kind + 構造体名）で照合する
+                            if (sourceHirType) {
+                                for (size_t vi = 0; vi < variantTypes.size(); ++vi) {
+                                    auto& varType = variantTypes[vi];
+                                    if (!varType)
+                                        continue;
+                                    if (varType->kind == sourceHirType->kind &&
+                                        (varType->kind != hir::TypeKind::Struct ||
+                                         varType->name == sourceHirType->name)) {
+                                        tagValue = static_cast<int32_t>(vi);
+                                        matchedVariant = varType;
+                                        break;
+                                    }
+                                }
+                            }
+                            // フォールバック: LLVM型で照合する
+                            if (!matchedVariant) {
+                                for (size_t vi = 0; vi < variantTypes.size(); ++vi) {
+                                    auto& varType = variantTypes[vi];
+                                    if (!varType)
+                                        continue;
+                                    auto* varLLVMType = convertType(varType);
+                                    if (varLLVMType == sourceType) {
+                                        tagValue = static_cast<int32_t>(vi);
+                                        matchedVariant = varType;
+                                        break;
+                                    }
                                 }
                             }
                         } else if (sourceType->isIntegerTy(64)) {
@@ -194,14 +237,23 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         auto* payloadGEP =
                             builder->CreateStructGEP(structTy, alloca, 1, "payload_ptr");
 
+                        bool structVariant =
+                            matchedVariant && matchedVariant->kind == hir::TypeKind::Struct;
                         if (sourceType->isStructTy()) {
-                            // 構造体型: memcpyでペイロードにコピー
+                            // 構造体型（値で届いた場合）: memcpyでペイロードにコピー
                             auto& dataLayout = module->getDataLayout();
                             auto payloadSize = dataLayout.getTypeAllocSize(sourceType);
                             auto* srcAlloca =
                                 builder->CreateAlloca(sourceType, nullptr, "struct_tmp");
                             builder->CreateStore(value, srcAlloca);
                             builder->CreateMemCpy(payloadGEP, llvm::MaybeAlign(), srcAlloca,
+                                                  llvm::MaybeAlign(), payloadSize);
+                        } else if (structVariant && sourceType->isPointerTy()) {
+                            // 構造体型（ポインタで届いた場合）: 指し先の構造体をコピー
+                            auto& dataLayout = module->getDataLayout();
+                            auto* variantTy = convertType(matchedVariant);
+                            auto payloadSize = dataLayout.getTypeAllocSize(variantTy);
+                            builder->CreateMemCpy(payloadGEP, llvm::MaybeAlign(), value,
                                                   llvm::MaybeAlign(), payloadSize);
                         } else {
                             // プリミティブ型（int/long/bool/float/double/ptr等）:
@@ -218,6 +270,104 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 }
             }
 
+            // ユニオン取り出し時の期待タグを計算する（判定できない場合は-1）
+            // オペランドのユニオン型のバリアント一覧とターゲット型をHIRレベルで照合する
+            auto computeExpectedUnionTag = [&]() -> int32_t {
+                hir::TypePtr unionHir = nullptr;
+                if (castData.operand) {
+                    if (auto* place = std::get_if<mir::MirPlace>(&castData.operand->data)) {
+                        if (place->projections.empty() && currentMIRFunction &&
+                            place->local < currentMIRFunction->locals.size()) {
+                            unionHir = currentMIRFunction->locals[place->local].type;
+                        }
+                    }
+                    if (!unionHir) {
+                        unionHir = castData.operand->type;
+                    }
+                }
+                auto resolvedUnion = resolveTypeAlias(unionHir);
+                auto variants = ast::union_variant_types(resolvedUnion ? resolvedUnion : unionHir);
+                if (variants.empty()) {
+                    return -1;
+                }
+                auto target = resolveTypeAlias(castData.target_type);
+                if (!target) {
+                    target = castData.target_type;
+                }
+                if (!target) {
+                    return -1;
+                }
+                for (size_t vi = 0; vi < variants.size(); ++vi) {
+                    auto& v = variants[vi];
+                    if (!v) {
+                        continue;
+                    }
+                    if (v->kind == target->kind &&
+                        (v->kind != hir::TypeKind::Struct || v->name == target->name)) {
+                        return static_cast<int32_t>(vi);
+                    }
+                }
+                return -1;
+            };
+
+            // タグ検査を挿入する（不一致なら実行時パニック。従来は無検査でクラッシュしていた）
+            auto emitUnionTagCheck = [&](llvm::StructType* unionTy, llvm::Value* unionPtr) {
+                int32_t expectedTag = computeExpectedUnionTag();
+                if (expectedTag < 0) {
+                    return;
+                }
+                auto* tagPtr = builder->CreateStructGEP(unionTy, unionPtr, 0, "tag_check_ptr");
+                auto* tagVal = builder->CreateLoad(ctx.getI32Type(), tagPtr, "tag_val");
+                auto* expected = llvm::ConstantInt::get(ctx.getI32Type(), expectedTag);
+                auto* mismatch = builder->CreateICmpNE(tagVal, expected, "union_tag.check");
+                auto* func = builder->GetInsertBlock()->getParent();
+                auto* failBB = llvm::BasicBlock::Create(ctx.getContext(), "union_tag.fail", func);
+                auto* contBB = llvm::BasicBlock::Create(ctx.getContext(), "union_tag.cont", func);
+                builder->CreateCondBr(mismatch, failBB, contBB);
+                builder->SetInsertPoint(failBB);
+                generatePanic("invalid union cast: active variant does not match target type");
+                builder->SetInsertPoint(contBB);
+            };
+
+            // === ユニオン型の実行時型判別 (expr is Type) ===
+            // タグを比較したboolを返す（ペイロードの取り出しは行わない）
+            if (castData.check_only) {
+                int32_t expectedTag = computeExpectedUnionTag();
+                auto* expected =
+                    llvm::ConstantInt::get(ctx.getI32Type(), expectedTag < 0 ? -1 : expectedTag);
+                // ソースがタグ付きユニオン構造体（値渡し {i32, [N x i8]}）
+                if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
+                    if (structTy->getNumElements() == 2 &&
+                        structTy->getElementType(0)->isIntegerTy(32) &&
+                        structTy->getElementType(1)->isArrayTy()) {
+                        auto* alloca = builder->CreateAlloca(structTy, nullptr, "union_is_temp");
+                        builder->CreateStore(value, alloca);
+                        auto* tagPtr = builder->CreateStructGEP(structTy, alloca, 0, "is_tag_ptr");
+                        auto* tagVal = builder->CreateLoad(ctx.getI32Type(), tagPtr, "is_tag");
+                        return builder->CreateICmpEQ(tagVal, expected, "union_is");
+                    }
+                }
+                // ソースがユニオンalloca（ポインタで届いた場合）
+                if (sourceType->isPointerTy()) {
+                    if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+                        if (auto* sTy =
+                                llvm::dyn_cast<llvm::StructType>(allocaInst->getAllocatedType())) {
+                            if (sTy->getNumElements() == 2 &&
+                                sTy->getElementType(0)->isIntegerTy(32) &&
+                                sTy->getElementType(1)->isArrayTy()) {
+                                auto* tagPtr =
+                                    builder->CreateStructGEP(sTy, value, 0, "is_tag_ptr");
+                                auto* tagVal =
+                                    builder->CreateLoad(ctx.getI32Type(), tagPtr, "is_tag");
+                                return builder->CreateICmpEQ(tagVal, expected, "union_is");
+                            }
+                        }
+                    }
+                }
+                // 判定不能（型チェッカーがユニオン以外を拒否するため通常到達しない）
+                return llvm::ConstantInt::getFalse(ctx.getContext());
+            }
+
             // === タグ付きユニオン型からの変換（Union -> int/long/bool/string/struct等） ===
             // sourceTypeがStructType {i32, i8[N]}の場合
             if (auto* structTy = llvm::dyn_cast<llvm::StructType>(sourceType)) {
@@ -231,6 +381,9 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         auto* alloca =
                             builder->CreateAlloca(structTy, nullptr, "union_extract_temp");
                         builder->CreateStore(value, alloca);
+
+                        // タグ検査（不一致は実行時パニック）
+                        emitUnionTagCheck(structTy, alloca);
 
                         // ペイロードポインタを取得
                         auto* payloadGEP =
@@ -291,6 +444,9 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                             auto* elem1 = structTy->getElementType(1);
                             if (elem0->isIntegerTy(32) && elem1->isArrayTy()) {
                                 // タグ付きユニオン構造体からの抽出（全型対応）
+                                // タグ検査（不一致は実行時パニック）
+                                emitUnionTagCheck(structTy, value);
+
                                 auto* payloadGEP = builder->CreateStructGEP(structTy, value, 1,
                                                                             "union_payload_ptr");
                                 if (targetType->isStructTy()) {

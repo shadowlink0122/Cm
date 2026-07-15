@@ -1,304 +1,154 @@
 ---
-title: with Keyword
+title: Auto Implementation (with / #[derive])
 parent: Tutorials
 ---
 
 [日本語](../../ja/advanced/with-keyword.html)
 
-# Advanced - with Keyword (Auto Implementation)
+# Auto Implementation (with / #[derive])
 
-The `with` keyword is a feature redesigned from Rust's `#[derive(...)]` to be more C++-like, providing automatic implementation of interfaces.
+Automatic interface implementation (auto-derive) for structs is specified with either the `with` keyword or the `#[derive(...)]` attribute.
+They are **exactly the same feature** — the only difference is the spelling (the Rust-style `#[derive]` is recommended for new code).
 
 ## 📋 Table of Contents
 
 - [Basic Usage](#basic-usage)
-- [Supported Traits](#supported-traits)
-- [Eq - Equality](#eq---equality)
-- [Ord - Ordering](#ord---ordering)
-- [Clone - Cloning](#clone---cloning)
-- [Hash - Hashing](#hash---hashing)
-- [Multiple Traits](#multiple-traits)
+- [Derivable Interfaces](#derivable-interfaces)
+- [Multiple Interfaces](#multiple-interfaces)
 - [Generic Structs](#generic-structs)
+- [Supported Field Types](#supported-field-types)
+- [Invalid Usages](#invalid-usages)
 - [How it Works](#how-it-works)
-
----
 
 ## Basic Usage
 
 ```cm
-// Automatic Eq implementation
-struct Point with Eq {
+// Recommended: #[derive(...)] attribute
+#[derive(Eq)]
+struct Point {
     int x;
     int y;
 }
 
-int main() {
-    Point p1 = Point(10, 20);
-    Point p2 = Point(10, 20);
+// The classic with syntax remains valid (same meaning)
+struct Color with Eq {
+    int r;
+    int g;
+    int b;
+}
 
-    if (p1 == p2) {  // Automatically generated == operator
+int main() {
+    Point p1;
+    p1.x = 10;
+    p1.y = 20;
+    Point p2;
+    p2.x = 10;
+    p2.y = 20;
+
+    if (p1 == p2) {  // auto-generated == operator
         println("Equal!");
     }
     return 0;
 }
 ```
 
-## Supported Traits
+## Derivable Interfaces
 
-| Trait | Description | Generated Method/Operator | Status |
-|-------|-------------|---------------------------|--------|
-| **Eq** | Equality | `==`, `!=` | ✅ Complete |
-| **Ord** | Ordering | `<`, `>`, `<=`, `>=` | ✅ Complete |
-| **Clone** | Deep Copy | `.clone()` | ✅ Complete |
-| **Hash** | Hashing | `.hash()` | ✅ Complete |
-| **Copy** | Bitwise Copy | (Implicit copy) | ✅ Marker |
-| **Debug** | Debug Output | `.debug()` | ⬜ Future |
-| **Display** | Stringify | `.toString()` | ⬜ Future |
+Only the 8 compiler built-ins are derivable (implement user-defined interfaces with `impl <type> for <interface>`).
 
----
+| Interface | Description | Generated members |
+|---------|------|-------------------------|
+| **Eq** | Equality | `==`, `!=` |
+| **Ord** | Ordering | `<`, `>`, `<=`, `>=` |
+| **Copy** | Bitwise copy | (marker only) |
+| **Clone** | Deep copy | `.clone()` |
+| **Hash** | Hashing | `.hash()` |
+| **Debug** | Debug output | `.debug()` |
+| **Display** | Stringify | `.toString()` |
+| **Css** | CSS generation (js/web only) | `.css()`, `.to_css()`, `.isCss()` |
 
-## Eq - Equality
+Nested struct fields are handled recursively (comparison, hashing, and formatting descend into the nested struct).
 
-### Usage
+## Multiple Interfaces
+
+Interfaces are comma-separated.
+Multiple `#[derive]` attributes are merged, and mixing with `with` is allowed (specifying the same interface twice is an error).
 
 ```cm
-struct Point with Eq {
+#[derive(Eq, Ord, Clone)]
+struct Point {
     int x;
     int y;
 }
 
-int main() {
-    Point a = Point(1, 2);
-    Point b = Point(1, 2);
-    Point c = Point(3, 4);
-
-    bool same = (a == b);      // true
-    bool different = (a != c);  // true
-    return 0;
-}
-```
-
-### Generated Code
-
-```cm
-// Equivalent to manual implementation:
-impl Point for Eq {
-    operator bool ==(Point other) {
-        return self.x == other.x && self.y == other.y;
-    }
-}
-
-// != is automatically derived:
-// a != b  ->  !(a == b)
-```
-
----
-
-## Ord - Ordering
-
-### Usage
-
-```cm
-struct Person with Ord {
-    int age;
-    string name;
-}
-
-int main() {
-    Person p1 = Person(25, "Alice");
-    Person p2 = Person(30, "Bob");
-
-    if (p1 < p2) {  // Lexicographical comparison (age then name)
-        println("p1 is younger");
-    }
-    return 0;
-}
-```
-
-### Derived Operators
-
-```cm
-// If < is implemented, others are derived:
-// a > b   ->  b < a
-// a <= b  ->  !(b < a)
-// a >= b  ->  !(a < b)
-
-struct Number with Ord {
+// Multiple derive attributes are merged
+#[derive(Eq)]
+#[derive(Clone, Hash)]
+struct Entry {
+    int key;
     int value;
 }
 
-int main() {
-    Number a = Number(10);
-    Number b = Number(20);
-
-    bool lt = (a < b);   // true
-    bool gt = (a > b);   // false
-    bool le = (a <= b);  // true
-    bool ge = (a >= b);  // false
-    return 0;
+// Mixing with `with` (the lists are unioned)
+#[derive(Ord)]
+struct Item with Eq {
+    int priority;
 }
 ```
-
----
-
-## Clone - Cloning
-
-### Usage
-
-```cm
-struct Point with Clone {
-    int x;
-    int y;
-}
-
-int main() {
-    Point p1 = Point(10, 20);
-    Point p2 = p1.clone();  // Deep copy
-
-    p2.x = 30;  // p1 is unchanged
-    return 0;
-}
-```
-
----
-
-## Hash - Hashing
-
-```cm
-struct Point with Hash {
-    int x;
-    int y;
-}
-
-int main() {
-    Point p = Point(10, 20);
-    uint hash_value = p.hash();  // Combines field hashes
-    return 0;
-}
-```
-
----
-
-## Multiple Traits
-
-### Combining with `+`
-
-```cm
-struct Point with Eq + Ord + Clone {
-    int x;
-    int y;
-}
-
-// Automatically implements:
-// - operator ==
-// - operator <
-// - clone() method
-```
-
----
 
 ## Generic Structs
 
 ```cm
-struct Pair<T> with Eq + Clone {
+#[derive(Eq)]
+struct Pair<T, U> {
     T first;
-    T second;
+    U second;
 }
-
-// Generated impl:
-// impl<T> Pair<T> for Eq {
-//     operator bool ==(Pair<T> other) {
-//         return self.first == other.first 
-//             && self.second == other.second;
-//     }
-// }
 ```
 
----
+Auto implementations for generic structs are generated per instantiation after monomorphization.
+
+## Supported Field Types
+
+| Field type | Eq | Ord | Hash | Debug/Display | Clone/Copy |
+|---|---|---|---|---|---|
+| integers / bool / char | ✅ | ✅ | ✅ | ✅ | ✅ |
+| float / double | ✅ | ✅ | ❌ | ✅ | ✅ |
+| string | ✅ | ✅ | ❌ | ✅ | ✅ |
+| nested struct | ✅ | ✅ | ✅ | ✅ | ✅ |
+| fixed-size 1-D array | ✅ | ❌ | ✅ integer elements only | ❌ | ✅ |
+| multi-dim array / slice / union | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+Combinations marked ❌ produce a compile error (never invalid code generation).
+
+## Invalid Usages
+
+```cm
+#[derive(Foo)]        // error: unknown interface
+#[derive(Greet)]      // error: not derivable (use impl P for Greet)
+#[derive(Eq, Eq)]     // error: duplicate
+#[derive]             // error: interface name required
+struct P { int x; }
+
+#[derive(Eq)]
+enum Color { Red }    // error: derive on enums is not supported yet
+```
 
 ## How it Works
 
-### MIR Level Generation
+`with` and `#[derive]` merge into the same auto-implementation list in the parser, and implementation functions (such as `Point__op_eq`) are generated during MIR lowering.
+Unused auto implementations are removed by dead-code elimination, so an unused derive costs nothing.
 
-The `with` keyword generates implementation functions during MIR lowering.
-
-```cm
-struct Point with Eq { ... }
-
-// -> Generates:
-// Point__op_eq(Point& self, Point& other) -> bool
-//   tmp0 = self.x == other.x
-//   tmp1 = self.y == other.y
-//   return tmp0 && tmp1
-```
-
-### Dead Code Elimination
-
-Unused auto-implementations are removed by dead code elimination.
-
----
-
-## Comparison with Manual Implementation
-
-### Using `with`
-
-```cm
-struct Point with Eq {
-    int x;
-    int y;
-}
-// Compares all fields
-```
-
-### Manual Implementation
-
-```cm
-struct Person {
-    int id;
-    string name;
-}
-
-// Compare only by ID
-impl Person for Eq {
-    operator bool ==(Person other) {
-        return self.id == other.id;  // Ignore name
-    }
-}
-```
-
----
-
-## Implementation Status
-
-| Trait | JIT | LLVM | WASM | JS |
-|-------|-----|------|------|-----|
-| Eq | ✅ | ✅ | ✅ | ✅ |
-| Ord | ✅ | ✅ | ✅ | ✅ |
-| Clone | ✅ | ✅ | ✅ | ✅ |
-| Hash | ✅ | ✅ | ✅ | ✅ |
-| Debug | ⬜ | ⬜ | ⬜ | ⬜ |
-| Display | ⬜ | ⬜ | ⬜ | ⬜ |
-
----
-
-## Next Steps
-
-✅ Learned how to use `with`  
-✅ Understood supported traits  
-⏭️ Next, learn about [Operator Overloading](operators.html)
-
-## Related Links
+## Related
 
 - [Interfaces](../types/interfaces.html)
-- [Operator Overloading](operators.html)
+- [Operator Overloading](../advanced/operators.html)
+- [Canonical Spec](../../../design/CANONICAL_SPEC.html)
+- [Design 10: #[derive] attribute](../../../archive/v0.16.0/10_derive_attribute.html)
 
 ---
 
-**Previous:** [match Expression](match.html)  
-
----
-
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-07-11
 
 ---
 

@@ -1,0 +1,57 @@
+// 組み込みResult<T,E>/Option<T>の基本テスト:
+// 構築・関数返却・match・メソッド（is_ok/is_err/is_some/is_none/unwrap/unwrap_or/unwrap_err）
+import std::io::println;
+
+Result<int, string> divide(int a, int b) {
+    if (b == 0) {
+        return Result::Err("division by zero");
+    }
+    return Result::Ok(a / b);
+}
+
+Option<int> find_positive(int x) {
+    if (x > 0) {
+        return Option::Some(x);
+    }
+    return Option::None;
+}
+
+int main() {
+    Result<int, string> r1 = divide(10, 2);
+    match (r1) {
+        Result::Ok(v) => println("ok: {v}"),
+        Result::Err(e) => println("err: {e}"),
+    }
+    Result<int, string> r2 = divide(1, 0);
+    match (r2) {
+        Result::Ok(v) => println("ok: {v}"),
+        Result::Err(e) => println("err: {e}"),
+    }
+
+    bool ok1 = r1.is_ok();
+    bool err2 = r2.is_err();
+    println("is_ok: {ok1} is_err: {err2}");
+    int v1 = r1.unwrap();
+    int v2 = r2.unwrap_or(-1);
+    string e2 = r2.unwrap_err();
+    println("unwrap: {v1} unwrap_or: {v2} unwrap_err: {e2}");
+
+    Option<int> o1 = find_positive(5);
+    Option<int> o2 = find_positive(-5);
+    match (o1) {
+        Option::Some(v) => println("some: {v}"),
+        Option::None => println("none"),
+    }
+    bool s = o1.is_some();
+    bool n = o2.is_none();
+    int u = o1.unwrap();
+    int d = o2.unwrap_or(0);
+    println("is_some: {s} is_none: {n} unwrap: {u} unwrap_or: {d}");
+
+    // 関数呼び出しを直接matchする（scrutineeの一時変数束縛）
+    match (find_positive(7)) {
+        Option::Some(v) => println("direct: {v}"),
+        Option::None => println("direct: none"),
+    }
+    return 0;
+}

@@ -1,1 +1,2 @@
-llvm-wasm
+# use libc { void* malloc/free } を使用し、JSターゲットはvoid*を明示エラーにするためスキップ
+js

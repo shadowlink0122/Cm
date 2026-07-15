@@ -1,0 +1,10 @@
+// scale.cm - 大文字エイリアスimportのテスト用モジュール
+module scale;
+
+export {
+    triple
+};
+
+int triple(int x) {
+    return x * 3;
+}

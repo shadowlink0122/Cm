@@ -18,7 +18,8 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
-| `std::io` | 入出力 (println, input, ファイルI/O) | [入出力](io.html) |
+| `std::io` | 入出力 (println, input) | [入出力](io.html) |
+| `std::fs` | ファイルシステム操作 (read_file/write_file・Result API) | [入出力](io.html) |
 | `std::mem` | メモリ管理 (alloc, size_of, Allocator) | [メモリ管理](mem.html) |
 | `std::math` | 数学関数 (sin, sqrt, PI, gcd等) | [数学関数](math.html) |
 | `std::core` | ユーティリティ (min, max, clamp, 型エイリアス) | [コア](core-utils.html) |

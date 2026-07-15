@@ -1,0 +1,13 @@
+//! platform: sv
+
+// 定数式・恒等式を含む組み合わせ回路（O1以上での畳み込み検証用）
+
+#[input]  uint a = 0;
+#[output] uint y = 0;
+#[output] uint z = 0;
+
+void calc() {
+    uint c = 2 * 3 + 4;
+    y = a * 1 + 0 + c;
+    z = (a + 0) << 0;
+}

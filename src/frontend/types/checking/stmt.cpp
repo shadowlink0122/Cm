@@ -28,7 +28,29 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
         check_return(*ret);
     } else if (auto* expr_stmt = stmt.as<ast::ExprStmt>()) {
         if (expr_stmt->expr) {
-            infer_type(*expr_stmt->expr);
+            auto expr_type = infer_type(*expr_stmt->expr);
+            // must_use検査: Result型の値を使わずに捨てる文は警告する
+            // （Rustのunused_must_use相当。エラーの取りこぼしを静的に検出する）
+            // matchは文として使われるため対象外
+            if (expr_type && expr_type->kind == ast::TypeKind::Struct &&
+                !expr_stmt->expr->as<ast::MatchExpr>()) {
+                std::string base = expr_type->name;
+                auto lt = base.find('<');
+                if (lt != std::string::npos) {
+                    base = base.substr(0, lt);
+                }
+                if (base == "Result") {
+                    // 式ノードのSpanが未設定（start=0）の場合は直近の推論位置を使う
+                    Span warn_span = expr_stmt->expr->span;
+                    if (warn_span.start == 0) {
+                        warn_span = current_span_;
+                    }
+                    warning(warn_span,
+                            "未使用のResult値です。エラーが無視されています。match・is_ok()・"
+                            "unwrap()等で処理するか、変数に受けて明示的に扱ってください "
+                            "[must_use]");
+                }
+            }
         }
     } else if (auto* if_stmt = stmt.as<ast::IfStmt>()) {
         check_if(*if_stmt);

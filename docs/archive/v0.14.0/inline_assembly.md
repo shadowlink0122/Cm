@@ -4,8 +4,7 @@
 
 ## 概要
 
-Cm言語のインラインアセンブリは、低レベルのハードウェア操作を可能にする機能です。
-本設計書では、完全なインラインアセンブリ実装のアーキテクチャを定義します。
+Cm言語のインラインアセンブリは、低レベルのハードウェア操作を可能にする機能です。本設計書では、完全なインラインアセンブリ実装のアーキテクチャを定義します。
 
 ## アーキテクチャ
 
@@ -55,8 +54,7 @@ class Result {
 - 変数補間の検出
 - Intel/AT&T構文の判定
 
-**入力:** `std::string` (アセンブリコード)
-**出力:** `Result<ParsedAsm, AsmError>`
+**入力:** `std::string` (アセンブリコード) **出力:** `Result<ParsedAsm, AsmError>`
 
 ### 3. LLVMConstraintBuilder（LLVM制約生成器）
 
@@ -65,8 +63,7 @@ class Result {
 - 制約文字列の生成（"=r", "+m" など）
 - クロバーリストの推定
 
-**入力:** `ParsedAsm`
-**出力:** `Result<LLVMAsm, AsmError>`
+**入力:** `ParsedAsm` **出力:** `Result<LLVMAsm, AsmError>`
 
 ### 4. バックエンド実装
 

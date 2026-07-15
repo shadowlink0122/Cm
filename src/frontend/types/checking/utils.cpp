@@ -2,6 +2,7 @@
 // TypeChecker 実装 - ユーティリティ関数
 // ============================================================
 
+#include "../../lexer/lexer.hpp"
 #include "../type_checker.hpp"
 
 #include <algorithm>
@@ -17,6 +18,17 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
     // 名前付き型（Struct/Interface/Generic）の場合
     if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Interface ||
         type->kind == ast::TypeKind::Generic) {
+        // 名前空間内の非修飾名は「現在の名前空間::名前」へ書き換える
+        // （全ての型がここを通るため、宣言型・戻り値型・リテラル型の
+        // 修飾が一貫し、HIR/コード生成も同じ名前を見る）
+        if (!type->name.empty() && struct_defs_.count(type->name) == 0 &&
+            enum_names_.count(type->name) == 0 && typedef_defs_.count(type->name) == 0 &&
+            interface_names_.count(type->name) == 0 &&
+            !generic_context_.has_type_param(type->name)) {
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
+            }
+        }
         // enum名の場合はint型として解決
         // ただしtype_argsを持つTagged Union enum（Result<int,string>等）は除外
         if (enum_names_.count(type->name)) {
@@ -40,8 +52,22 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     return ast::make_int();
                 }
             } else {
-                // type_argsなし: 従来通りint型に変換
-                return ast::make_int();
+                // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）は
+                // Tagged Unionとして保持し、値enum（従来型）のみintへ解決する
+                // （一律int化すると関数返却・match束縛でペイロードが失われる）
+                bool is_tagged_union = false;
+                auto def_it = enum_defs_.find(type->name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    for (const auto& member : def_it->second->members) {
+                        if (member.has_data()) {
+                            is_tagged_union = true;
+                            break;
+                        }
+                    }
+                }
+                if (!is_tagged_union) {
+                    return ast::make_int();
+                }
             }
         }
 
@@ -56,6 +82,18 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
 }
 
 bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
+    // ビットベクタと整数の互換（v0.16.0 ビットスライス）:
+    // bit[N] への整数代入・整数文脈での bit[N] 使用を許可する
+    {
+        auto is_bit_vec = [](const ast::TypePtr& t) {
+            return t && t->kind == ast::TypeKind::Array && t->element_type &&
+                   t->element_type->kind == ast::TypeKind::Bit;
+        };
+        if ((is_bit_vec(a) && b && b->is_integer()) || (is_bit_vec(b) && a && a->is_integer())) {
+            return true;
+        }
+    }
+
     if (!a || !b)
         return false;
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
@@ -436,6 +474,183 @@ std::vector<std::string> TypeChecker::extract_format_variables(const std::string
     return variables;
 }
 
+namespace {
+
+// 補間プレースホルダの式文字列を抽出する（MIRのexpr_interpと同じ規則:
+// {{/}}エスケープ、::はパス区切り、[]/()外の単独コロンはフォーマット指定子の開始）
+std::vector<std::string> extract_placeholder_exprs(const std::string& format_str) {
+    std::vector<std::string> contents;
+    size_t pos = 0;
+    while (pos < format_str.length()) {
+        if (pos + 1 < format_str.length() && format_str[pos] == '{' && format_str[pos + 1] == '{') {
+            pos += 2;
+            continue;
+        }
+        if (pos + 1 < format_str.length() && format_str[pos] == '}' && format_str[pos + 1] == '}') {
+            pos += 2;
+            continue;
+        }
+        if (format_str[pos] != '{') {
+            pos++;
+            continue;
+        }
+        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する
+        size_t end = pos + 1;
+        size_t colon_pos = std::string::npos;
+        int depth = 0;
+        while (end < format_str.length() && format_str[end] != '}') {
+            char c = format_str[end];
+            if (c == '[' || c == '(') {
+                depth++;
+            }
+            if (c == ']' || c == ')') {
+                depth--;
+            }
+            if (c == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
+                end += 2;  // ::はパス区切りとしてスキップ
+                continue;
+            }
+            if (c == ':' && depth == 0 && colon_pos == std::string::npos) {
+                colon_pos = end;
+            }
+            end++;
+        }
+        if (end >= format_str.length()) {
+            break;  // 閉じ } がない
+        }
+        size_t content_end = (colon_pos != std::string::npos) ? colon_pos : end;
+        std::string content = format_str.substr(pos + 1, content_end - pos - 1);
+        if (!content.empty()) {
+            contents.push_back(content);
+        }
+        pos = end + 1;
+    }
+    return contents;
+}
+
+// 式ツリー内の識別子参照を収集する（メンバ名・enumパスは対象外）
+void collect_ident_refs(const ast::Expr& e, std::vector<std::string>& out) {
+    if (const auto* id = e.as<ast::IdentExpr>()) {
+        out.push_back(id->name);
+        return;
+    }
+    if (const auto* mem = e.as<ast::MemberExpr>()) {
+        if (mem->object) {
+            collect_ident_refs(*mem->object, out);
+        }
+        for (const auto& arg : mem->args) {
+            if (arg) {
+                collect_ident_refs(*arg, out);
+            }
+        }
+        return;
+    }
+    if (const auto* bin = e.as<ast::BinaryExpr>()) {
+        if (bin->left) {
+            collect_ident_refs(*bin->left, out);
+        }
+        if (bin->right) {
+            collect_ident_refs(*bin->right, out);
+        }
+        return;
+    }
+    if (const auto* un = e.as<ast::UnaryExpr>()) {
+        if (un->operand) {
+            collect_ident_refs(*un->operand, out);
+        }
+        return;
+    }
+    if (const auto* call = e.as<ast::CallExpr>()) {
+        if (call->callee) {
+            collect_ident_refs(*call->callee, out);
+        }
+        for (const auto& arg : call->args) {
+            if (arg) {
+                collect_ident_refs(*arg, out);
+            }
+        }
+        return;
+    }
+    if (const auto* idx = e.as<ast::IndexExpr>()) {
+        if (idx->object) {
+            collect_ident_refs(*idx->object, out);
+        }
+        if (idx->index) {
+            collect_ident_refs(*idx->index, out);
+        }
+        return;
+    }
+    if (const auto* sl = e.as<ast::SliceExpr>()) {
+        if (sl->object) {
+            collect_ident_refs(*sl->object, out);
+        }
+        // ビットスライスの範囲は定数式なので対象外
+        return;
+    }
+    if (const auto* cast = e.as<ast::CastExpr>()) {
+        if (cast->operand) {
+            collect_ident_refs(*cast->operand, out);
+        }
+        return;
+    }
+    if (const auto* tern = e.as<ast::TernaryExpr>()) {
+        if (tern->condition) {
+            collect_ident_refs(*tern->condition, out);
+        }
+        if (tern->then_expr) {
+            collect_ident_refs(*tern->then_expr, out);
+        }
+        if (tern->else_expr) {
+            collect_ident_refs(*tern->else_expr, out);
+        }
+        return;
+    }
+}
+
+}  // namespace
+
+void TypeChecker::check_interpolation_scope(const std::string& format_str) {
+    for (const auto& content : extract_placeholder_exprs(format_str)) {
+        // プレースホルダ内容を式としてパースする（MIRの補間ミニパイプラインと同じ手法）
+        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            continue;  // パース不能な内容はMIR側の処理に委ねる
+        }
+        for (auto& decl : program.declarations) {
+            const auto* func = decl->as<ast::FunctionDecl>();
+            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
+                continue;
+            }
+            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
+            if (!ret || !ret->value) {
+                continue;
+            }
+            std::vector<std::string> names;
+            collect_ident_refs(*ret->value, names);
+            for (const auto& name : names) {
+                if (name.find("::") != std::string::npos || name == "null" || name == "true" ||
+                    name == "false") {
+                    continue;
+                }
+                if (scopes_.current().lookup(name)) {
+                    continue;
+                }
+                if (enum_names_.count(name) || struct_defs_.count(name) ||
+                    typedef_defs_.count(name) || generic_functions_.count(name) ||
+                    interface_names_.count(name)) {
+                    continue;
+                }
+                error(current_span_, "Undefined variable '" + name +
+                                         "' in interpolation placeholder '{" + content + "}'");
+            }
+        }
+    }
+}
+
 void TypeChecker::error(Span span, const std::string& msg) {
     debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Error);
     diagnostics_.emplace_back(DiagKind::Error, span, msg);
@@ -759,7 +974,9 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
             int64_t size = *sym->const_int_value;
             if (size > 0 && size <= INT32_MAX) {
                 type->array_size = static_cast<uint32_t>(size);
-                type->size_param_name.clear();  // 解決済みなのでクリア
+                // 注: size_param_name は解決後も保持する。
+                // SVバックエンドが #[sv::parameter] の幅を記号のまま
+                // （[WIDTH-1:0]）出力するために使用する（v0.16.0 設計01）
 
                 debug::tc::log(debug::tc::Id::TypeInfer,
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),
@@ -785,6 +1002,27 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
     if (type->element_type) {
         resolve_array_size(type->element_type);
     }
+}
+
+std::optional<std::string> TypeChecker::resolve_in_namespace(const std::string& name) const {
+    if (current_namespace_.empty() || name.find("::") != std::string::npos) {
+        return std::nullopt;
+    }
+    // 内側の名前空間から外側へ向かって探索する（M::N内なら M::N::name → M::name）
+    std::string ns = current_namespace_;
+    while (!ns.empty()) {
+        std::string qualified = ns + "::" + name;
+        if (struct_defs_.count(qualified) > 0 || interface_names_.count(qualified) > 0 ||
+            enum_names_.count(qualified) > 0 || typedef_defs_.count(qualified) > 0) {
+            return qualified;
+        }
+        auto pos = ns.rfind("::");
+        if (pos == std::string::npos) {
+            break;
+        }
+        ns = ns.substr(0, pos);
+    }
+    return std::nullopt;
 }
 
 bool TypeChecker::is_valid_type(ast::TypePtr type) {
@@ -813,6 +1051,13 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
             if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
                 enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
                 generic_context_.has_type_param(type->name)) {
+                return true;
+            }
+            // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する
+            // （外側の名前空間へ向かって順に探索）。解決できた場合は型名を
+            // 修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
                 return true;
             }
             return false;

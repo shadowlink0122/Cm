@@ -5,30 +5,30 @@ import std::io::println;
 
 int main() {
     #ifdef __x86_64__
-    println("=== builtin_asm test ===");
+        println("=== builtin_asm test ===");
 
-    // 直接__asm__を使用
-    __asm__("nop");
-    println("__asm__(nop): ok");
+        // 直接__asm__を使用
+        __asm__("nop");
+        println("__asm__(nop): ok");
 
-    // 複数回
-    __asm__("nop");
-    __asm__("nop");
-    println("multiple: ok");
+        // 複数回
+        __asm__("nop");
+        __asm__("nop");
+        println("multiple: ok");
 
-    println("=== complete ===");
+        println("=== complete ===");
     #else
-    // ARM64版
-    println("=== builtin_asm test ===");
+        // ARM64版
+        println("=== builtin_asm test ===");
 
-    __asm__("nop");
-    println("__asm__(nop): ok");
+        __asm__("nop");
+        println("__asm__(nop): ok");
 
-    __asm__("nop");
-    __asm__("nop");
-    println("multiple: ok");
+        __asm__("nop");
+        __asm__("nop");
+        println("multiple: ok");
 
-    println("=== complete ===");
+        println("=== complete ===");
     #end
     return 0;
 }

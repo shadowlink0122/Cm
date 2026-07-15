@@ -7,7 +7,7 @@
 ### ✅ 完了した作業
 
 #### 1. パーサーの拡張
-**ファイル**: 
+**ファイル**:
 - `src/frontend/parser/parser_expr.cpp`
 - `src/frontend/parser/parser_module.cpp`
 
@@ -61,7 +61,7 @@ result << "} // namespace " << import_info.module_name << "\n";
 ### 🔄 部分実装（動作未完成）
 
 #### namespace の HIR/MIR lowering
-**問題**: 
+**問題**:
 - パースは成功するが、HIRへの変換でnamespaceを処理できない
 - 型チェック時に`math::add`のような名前空間付き関数が解決できない
 

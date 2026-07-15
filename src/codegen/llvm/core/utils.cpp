@@ -220,7 +220,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     } else if (name == "cm_slice_push_i8" || name == "cm_slice_push_i32" ||
                name == "cm_slice_push_i64" || name == "cm_slice_push_f32" ||
                name == "cm_slice_push_f64" || name == "cm_slice_push_ptr" ||
-               name == "cm_slice_push_slice") {
+               name == "cm_slice_push_slice" || name == "cm_slice_push_blob") {
         // void cm_slice_push_*(i8* slice, value)
         llvm::Type* valType = ctx.getI32Type();
         if (name == "cm_slice_push_i8")

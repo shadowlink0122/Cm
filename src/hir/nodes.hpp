@@ -86,6 +86,7 @@ enum class HirUnaryOp {
     PreDec,   // --x
     PostInc,  // x++
     PostDec,  // x--
+    Try,      // expr? （Result/Optionのエラー伝播）
 };
 
 struct HirUnary {
@@ -159,6 +160,9 @@ struct HirLambda {
 struct HirCast {
     HirExprPtr operand;
     TypePtr target_type;
+    // ユニオン型の実行時型判別 (expr is Type)。trueなら値の取り出しではなく
+    // アクティブな変種が target_type かどうかの bool を返す
+    bool check_only = false;
 };
 
 // enumバリアントコンストラクタ（Tagged Union用）

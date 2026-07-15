@@ -1,0 +1,35 @@
+// 補間プレースホルダ内でのResult/Optionメソッド呼び出しの回帰テスト:
+// 旧: 補間ミニパイプラインの型名（__TaggedUnion_Option等）がHIRメソッド脱糖の
+// 判定と不一致で未解決シンボル（__TaggedUnion_Option__unwrap_or）になっていた
+import std::io::println;
+
+Option<int> find(int k) {
+    if (k > 0) {
+        return Option::Some(k);
+    }
+    return Option::None;
+}
+
+Result<string, int> name(bool ok) {
+    if (ok) {
+        return Result::Ok("alice");
+    }
+    return Result::Err(404);
+}
+
+int main() {
+    Option<int> o = find(5);
+    println("some: {o.unwrap_or(-1)} {o.is_some()}");
+
+    Option<int> n = find(0);
+    println("none: {n.unwrap_or(-1)} {n.is_none()}");
+
+    // stringペイロード（フォールバック引数の型からペイロード型を復元）
+    string fb = "bob";
+    Result<string, int> r = name(true);
+    println("ok: {r.unwrap_or(fb)} {r.is_ok()}");
+
+    Result<string, int> e = name(false);
+    println("err: {e.unwrap_or(fb)} {e.is_err()}");
+    return 0;
+}

@@ -181,6 +181,7 @@ enum class UnaryOp {
     PreDec,   // --x
     PostInc,  // x++
     PostDec,  // x--
+    Try,      // expr? （Result/Optionのエラー伝播）
 };
 
 inline const char* unary_op_str(UnaryOp op) {
@@ -245,9 +246,11 @@ struct IndexExpr {
 // ============================================================
 struct SliceExpr {
     ExprPtr object;
-    ExprPtr start;  // nullなら最初から
-    ExprPtr end;    // nullなら最後まで
+    ExprPtr start;  // nullなら最初から / パートセレクトでは基点
+    ExprPtr end;    // nullなら最後まで / パートセレクトでは幅
     ExprPtr step;   // nullならstep=1
+    // x[base +: width] 形式（SVのインデックスドパートセレクト）
+    bool is_part_select = false;
 
     SliceExpr(ExprPtr o, ExprPtr s, ExprPtr e, ExprPtr st = nullptr)
         : object(std::move(o)), start(std::move(s)), end(std::move(e)), step(std::move(st)) {}
@@ -393,7 +396,9 @@ enum class MatchPatternKind {
     EnumVariant,             // enum値 (Option::Some, Color::Red)
     EnumVariantWithBinding,  // enum値 + バインディング (Option::Some(value))
     Range,                   // 範囲パターン (1...10)
-    Or                       // ORパターン (1 | 2 | 3)
+    Or,                      // ORパターン (1 | 2 | 3)
+    Masked,  // don't careビット付きリテラル（0b1?00。matchパターン専用）
+    Type,  // ユニオンの型パターン (int i, string s)。実行時タグで判別し束縛する
 };
 
 struct MatchPattern {
@@ -404,6 +409,9 @@ struct MatchPattern {
     std::string binding_name;  // EnumVariantWithBinding用（束縛変数名）
     ExprPtr range_start;       // Range用（開始値）
     ExprPtr range_end;         // Range用（終了値）
+    int64_t masked_value = 0;  // Masked用: 比較値（?は0）
+    int64_t masked_mask = 0;   // Masked用: 有効ビットマスク（?は0）
+    TypePtr type_pattern;      // Type用: 判別する型
     std::vector<std::unique_ptr<MatchPattern>> or_patterns;  // Or用
 
     static std::unique_ptr<MatchPattern> make_literal(ExprPtr val) {
@@ -420,9 +428,27 @@ struct MatchPattern {
         return p;
     }
 
+    // don't careビット付きリテラル（0b1?00）
+    static std::unique_ptr<MatchPattern> make_masked(int64_t value, int64_t mask) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Masked;
+        p->masked_value = value;
+        p->masked_mask = mask;
+        return p;
+    }
+
     static std::unique_ptr<MatchPattern> make_wildcard() {
         auto p = std::make_unique<MatchPattern>();
         p->kind = MatchPatternKind::Wildcard;
+        return p;
+    }
+
+    // ユニオンの型パターン (int i)
+    static std::unique_ptr<MatchPattern> make_type(TypePtr type, std::string binding) {
+        auto p = std::make_unique<MatchPattern>();
+        p->kind = MatchPatternKind::Type;
+        p->type_pattern = std::move(type);
+        p->binding_name = std::move(binding);
         return p;
     }
 
@@ -508,6 +534,9 @@ struct MatchExpr {
 struct CastExpr {
     ExprPtr operand;      // キャスト対象の式
     TypePtr target_type;  // キャスト先の型
+    // ユニオン型の実行時型判別 (expr is Type)。trueなら値の取り出しではなく
+    // アクティブな変種が target_type かどうかの bool を返す
+    bool type_check = false;
 
     CastExpr(ExprPtr e, TypePtr t) : operand(std::move(e)), target_type(std::move(t)) {}
 };

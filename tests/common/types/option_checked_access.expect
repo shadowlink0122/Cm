@@ -1,0 +1,8 @@
+div: 5
+div: none
+mod unwrap_or: -1
+fixed in: 2
+fixed oob: none
+slice oob unwrap_or: -1
+slice in unwrap_or: 30
+union: not a string (checked safely)

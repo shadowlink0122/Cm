@@ -50,8 +50,7 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ## 列挙型 (FSM)
 
-Cmの `enum` はSVの `typedef enum logic` に変換されます。
-ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:
+Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:
 
 ```cm
 enum State { IDLE, RUN, DONE, ERROR }
@@ -96,9 +95,9 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 #[output] uint[4] data;   // → output logic [31:0] data [0:3]
 ```
 
-> 配列の**初期値**（`$readmemh` 等）は未対応です。フォントROM等は
-> const 関数（lookupテーブル）として記述してください
-> （[実装提案](../../../../design/sv_backend_missing_features.html)参照）。
+> 配列の**初期値**は initial ブロックとして出力され、`#[sv::memfile]` /
+> `--emit-memfile` による `$readmemh` にも対応しています（v0.15.1）。
+> 詳細は[メモリ初期化](memory.html)を参照してください。
 
 ---
 
@@ -106,8 +105,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 ### const文字列（推奨）
 
-const の string はパックドベクトル定数（`localparam`）になり、
-インデックスアクセスはパートセレクトに変換されます:
+const の string はパックドベクトル定数（`localparam`）になり、インデックスアクセスはパートセレクトに変換されます:
 
 ```cm
 export const string TITLE = "HELLO CM";
@@ -119,9 +117,25 @@ utiny ch = TITLE[i] as utiny;
 
 ### 制限
 
-- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。
-  3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください
-  （[実装提案](../../../../design/sv_backend_missing_features.html)で拡張を検討中）。
+- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください（[v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html)で長さの型化を検討中）。
+
+## ビットスライス（v0.16.0）
+
+`bit[N]`・整数値の部分ビットを、SVと同じ降順・両端含みの範囲で読み書きできます:
+
+```cm
+bit[16] word = 0xABCD;
+bit[8] hi = word[15:8];      // 0xAB（定数範囲）
+word[11:4] = 0xFF;           // 部分代入（read-modify-write）
+
+uint i = 1;
+bit[4] nib = word[i*4 +: 4]; // 可変基点+定数幅（インデックスドパートセレクト）
+```
+
+- 範囲・幅は**整数リテラル**で指定します（v0.16.0時点の制限）。基点（`+:` の左）は任意の整数式が使えます
+- 全バックエンド共通のシフト+マスクに脱糖されるため、実行系（JIT/native/WASM/JS）でも同じ結果になります
+- 幅は最大64ビット、結果型は `bit[w]`（整数との相互代入可）
+
 
 ---
 

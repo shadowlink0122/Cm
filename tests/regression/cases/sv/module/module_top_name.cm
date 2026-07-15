@@ -1,0 +1,11 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+module my_top;
+
+uint counter = 0;
+
+void tick(posedge clk) {
+    counter = counter + 1;
+    out = counter;
+}

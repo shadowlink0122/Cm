@@ -1,0 +1,8 @@
+// Hash導出はstringフィールド未対応（明示エラー）
+struct S with Hash {
+    string name;
+}
+
+int main() {
+    return 0;
+}

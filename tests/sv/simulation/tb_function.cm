@@ -1,0 +1,22 @@
+//! platform: sv
+import std::debug::assert;
+import std::io::println;
+
+#[input] posedge clk;
+#[input] uint din;
+#[output] uint dout = 0;
+
+async void ff(posedge clk) {
+    dout = din;
+}
+
+#[test]
+void tb() {
+    din = 5;
+    step(1);
+    assert(dout == 5, "first value latched");
+    din = 7;
+    step(2);
+    assert(dout == 7, "second value latched");
+    println("sequence done");
+}

@@ -10,6 +10,7 @@ bool isBuiltinFunction(const std::string& name) {
     static const std::unordered_set<std::string> builtins = {
         "println",
         "print",
+        "panic",
         "cm_println_string",
         "cm_println_int",
         "cm_println_long",
@@ -63,16 +64,9 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_string_concat",
         "__builtin_string_first",
         "__builtin_string_last",
-        // 配列メソッド (JS Native Wrappers)
-        "every",
-        "some",
-        "find",
-        "findIndex",
-        "reduce",
-        "filter",
-        "map",
-        "sort",
-        "sortBy",
+        // 配列メソッドは__builtin_array_*名でのみ扱う。
+        // 裸名（find/map等）を登録するとemitBuiltinCallに発行ケースが無く
+        // 常にundefinedになる上、同名のユーザー定義関数を飲み込むため登録しない
         "__builtin_array_indexOf_i32",
         "__builtin_array_indexOf_i64",
         "__builtin_array_includes_i32",
@@ -102,6 +96,8 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_sortBy_i32",
         "__builtin_array_sortBy_i64",
         "__builtin_array_sortBy",
+        "__builtin_array_forEach_i32",
+        "__builtin_array_forEach_i64",
         // クロージャー版
         "__builtin_array_map_closure",
         "__builtin_array_filter_closure",
@@ -121,9 +117,12 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_push_f32",
         "cm_slice_push_f64",
         "cm_slice_push_ptr",
+        "cm_slice_push_blob",
+        "cm_slice_get_element_ptr",
         "cm_slice_pop_i32",
         "cm_slice_pop_i64",
         "cm_slice_pop_f32",
+        "cm_slice_pop_f64",
         "cm_slice_pop_ptr",
         "cm_slice_delete",
         "cm_slice_clear",
@@ -186,6 +185,15 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         std::string code = argStrs.empty() ? "0" : argStrs[0];
         return "((typeof process !== \"undefined\") ? process.exit(" + code +
                ") : (() => { throw new Error(\"exit(\" + (" + code + ") + \")\"); })())";
+    }
+
+    // panic(msg): "panic: <msg>" を出力して異常終了する（Result/Optionのunwrap等で使用。
+    // ネイティブランタイムの__cm_panicと同じ形式・終了コード134）
+    if (name == "panic") {
+        std::string msg = argStrs.empty() ? "\"panic\"" : argStrs[0];
+        return "((m) => { console.log(\"panic: \" + m); ((typeof process !== \"undefined\") ? "
+               "process.exit(134) : (() => { throw new Error(\"panic: \" + m); })()); })(" +
+               msg + ")";
     }
 
     // println系
@@ -423,8 +431,24 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
     }
+    if ((name == "__builtin_array_forEach_i32" || name == "__builtin_array_forEach_i64") &&
+        argStrs.size() >= 3) {
+        // forEach: 第2引数（サイズ）はJSでは不要（配列自身が長さを持つ）
+        return "__cm_unwrap(" + argStrs[0] + ").forEach((x) => " + argStrs[2] + "(x))";
+    }
+    if (name == "cm_slice_push_blob" && argStrs.size() >= 2) {
+        // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、
+        // オブジェクト直接参照（構造体ローカルの&）ならそのままpushする
+        return "__cm_unwrap(" + argStrs[0] +
+               ").push(((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" + argStrs[1] +
+               "))";
+    }
+    if (name == "cm_slice_get_element_ptr" && argStrs.size() >= 2) {
+        // 要素へのポインタオブジェクトを返す（デリファレンス構文 __arr[__idx] で要素を読む）
+        return "({__arr: __cm_unwrap(" + argStrs[0] + "), __idx: " + argStrs[1] + "})";
+    }
     if ((name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
-         name == "cm_slice_pop_ptr") &&
+         name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") &&
         argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ").pop()";
     }

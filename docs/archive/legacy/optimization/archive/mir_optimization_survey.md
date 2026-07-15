@@ -3,8 +3,7 @@
 # MIR最適化の調査メモ（共通最適化の前提）
 
 ## 目的
-- MIRは全バックエンド（インタプリタ/LLVM/wasm/JS）共通のため、
-  **安全で再現性のある最適化**をMIR段階で行う方針を整理する。
+- MIRは全バックエンド（インタプリタ/LLVM/wasm/JS）共通のため、**安全で再現性のある最適化**をMIR段階で行う方針を整理する。
 - 現状実装の挙動と制約を確認し、追加すべきMIR専用最適化を選定する。
 
 ## MIRの特徴（最適化観点）
@@ -18,12 +17,7 @@
 ## 現在のMIR最適化パイプライン
 実装: `src/mir/optimizations/all_passes.hpp`, `src/main.cpp`
 
-共通固定レベル（現在2）で fixpoint まで実行:
-1) SparseConditionalConstantPropagation (SCCP)
-2) ConstantFolding
-3) CopyPropagation
-4) DeadCodeElimination
-5) SimplifyControlFlow
+共通固定レベル（現在2）で fixpoint まで実行: 1) SparseConditionalConstantPropagation (SCCP) 2) ConstantFolding 3) CopyPropagation 4) DeadCodeElimination 5) SimplifyControlFlow
 
 ## 各パスの挙動と制約
 
@@ -90,8 +84,7 @@
 実装: `src/mir/optimizations/program_dce.hpp`
 
 対象:
-- 使用されない関数/構造体を削除
-制約:
+- 使用されない関数/構造体を削除制約:
 - 組み込み関数リストは固定
 - 間接呼び出しは静的解析できないため保守的
 
@@ -135,8 +128,7 @@
 ### E. CFG簡約の拡張
 目的: if/switch が同じ行き先になる場合の縮約。  
 効果: ブロック数削減、後続DCEの効果拡大。  
-適用範囲: 全バックエンドで安全。
-補足: `SwitchInt` の同一遷移はSCCPで簡約済み。
+適用範囲: 全バックエンドで安全。補足: `SwitchInt` の同一遷移はSCCPで簡約済み。
 
 ## 追加候補（中期）
 - Loop-Invariant Code Motion（LICM）
@@ -150,6 +142,4 @@
 - MIRの定義/使用解析（def-use, dominator）を追加する必要がある。
 
 ## 次の検討ステップ（提案）
-1) GVN/CSE（副作用なし式限定）
-2) DSE（projectionなしのstore限定から拡張）
-3) Cast/FormatConvertの定数畳み込み
+1) GVN/CSE（副作用なし式限定）2) DSE（projectionなしのstore限定から拡張）3) Cast/FormatConvertの定数畳み込み

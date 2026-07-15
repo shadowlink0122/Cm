@@ -2,6 +2,8 @@
 
 #include "context.hpp"
 
+#include "../../common/target.hpp"
+
 namespace cm::mir {
 
 // 新しいブロックを作成
@@ -231,7 +233,8 @@ int64_t LoweringContext::calculate_type_size(const hir::TypePtr& type) const {
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference:
         case hir::TypeKind::String:
-            return 8;
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
         case hir::TypeKind::Struct: {
             // 構造体定義を探してサイズを計算
             if (struct_defs && struct_defs->count(type->name)) {
@@ -404,6 +407,126 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
     }
 
     return type;
+}
+
+// LLVMのDataLayout（自然アライメント・パッキングなし）と一致するアライメントを計算する
+int64_t LoweringContext::layout_align(const hir::TypePtr& type) const {
+    if (!type) {
+        return 8;
+    }
+    auto t = const_cast<LoweringContext*>(this)->resolve_typedef(type);
+    if (!t) {
+        return 8;
+    }
+    switch (t->kind) {
+        case hir::TypeKind::Bool:
+        case hir::TypeKind::Tiny:
+        case hir::TypeKind::UTiny:
+        case hir::TypeKind::Char:
+            return 1;
+        case hir::TypeKind::Short:
+        case hir::TypeKind::UShort:
+            return 2;
+        case hir::TypeKind::Int:
+        case hir::TypeKind::UInt:
+        case hir::TypeKind::Float:
+        case hir::TypeKind::UFloat:
+            return 4;
+        case hir::TypeKind::Struct: {
+            // 構造体のアライメント = フィールドの最大アライメント
+            if (struct_defs && struct_defs->count(t->name)) {
+                const auto* st = struct_defs->at(t->name);
+                int64_t max_align = 1;
+                for (const auto& f : st->fields) {
+                    max_align = std::max(max_align, layout_align(f.type));
+                }
+                return max_align;
+            }
+            return 8;
+        }
+        case hir::TypeKind::Array:
+            return layout_align(t->element_type);
+        case hir::TypeKind::Union:
+            // tagged union {i32 tag, [N x i8]} のアライメントは4
+            return 4;
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
+        default:
+            return 8;  // long/double等
+    }
+}
+
+// LLVMのDataLayout（自然アライメント・パッキングなし）と一致する型サイズを計算する
+// スライスのblob要素サイズ算出用。codegenの実レイアウトと一致することが前提
+int64_t LoweringContext::layout_size(const hir::TypePtr& type) const {
+    if (!type) {
+        return 8;
+    }
+    auto t = const_cast<LoweringContext*>(this)->resolve_typedef(type);
+    if (!t) {
+        return 8;
+    }
+    auto align_to = [](int64_t offset, int64_t align) {
+        return (offset + align - 1) / align * align;
+    };
+    switch (t->kind) {
+        case hir::TypeKind::Bool:
+        case hir::TypeKind::Tiny:
+        case hir::TypeKind::UTiny:
+        case hir::TypeKind::Char:
+            return 1;
+        case hir::TypeKind::Short:
+        case hir::TypeKind::UShort:
+            return 2;
+        case hir::TypeKind::Int:
+        case hir::TypeKind::UInt:
+        case hir::TypeKind::Float:
+        case hir::TypeKind::UFloat:
+            return 4;
+        case hir::TypeKind::Struct: {
+            // フィールドを自然アライメントで並べたCレイアウトのサイズ
+            if (struct_defs && struct_defs->count(t->name)) {
+                const auto* st = struct_defs->at(t->name);
+                int64_t offset = 0;
+                int64_t max_align = 1;
+                for (const auto& f : st->fields) {
+                    int64_t fa = layout_align(f.type);
+                    max_align = std::max(max_align, fa);
+                    offset = align_to(offset, fa) + layout_size(f.type);
+                }
+                int64_t size = align_to(offset, max_align);
+                return size > 0 ? size : 8;
+            }
+            return 8;
+        }
+        case hir::TypeKind::Array:
+            if (t->element_type && t->array_size.has_value()) {
+                return layout_size(t->element_type) * static_cast<int64_t>(t->array_size.value());
+            }
+            return 8;
+        case hir::TypeKind::Union: {
+            // tagged union {i32 tag, [N x i8] payload} のallocサイズと一致させる
+            // ペイロード = 最大バリアントサイズ（構造体バリアント含む・最低8バイト）
+            int64_t payload = 8;
+            auto variants = ast::union_variant_types(t);
+            if (!variants.empty()) {
+                payload = 0;
+                for (const auto& variant : variants) {
+                    payload = std::max(payload, layout_size(variant));
+                }
+                payload = std::max<int64_t>(payload, 8);
+            }
+            return align_to(4 + payload, 4);
+        }
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
+            return cm::target_pointer_size();
+        default:
+            return 8;  // long/double等
+    }
 }
 
 }  // namespace cm::mir

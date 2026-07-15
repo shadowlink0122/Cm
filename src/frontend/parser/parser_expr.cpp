@@ -313,16 +313,29 @@ ast::ExprPtr Parser::parse_multiplicative() {
     return left;
 }
 
-// キャスト式: expr as Type
+// キャスト式: expr as Type / 型判別式: expr is Type
 // 単項演算子より低い優先度で処理することで、&x as ulong が (&x) as ulong として解釈される
 ast::ExprPtr Parser::parse_cast_expr() {
     auto expr = parse_unary();
 
-    while (consume_if(TokenKind::KwAs)) {
-        debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
-                        debug::Level::Debug);
-        auto target_type = parse_type();
-        expr = ast::make_cast(std::move(expr), std::move(target_type));
+    while (true) {
+        if (consume_if(TokenKind::KwAs)) {
+            debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
+                            debug::Level::Debug);
+            auto target_type = parse_type();
+            expr = ast::make_cast(std::move(expr), std::move(target_type));
+        } else if (consume_if(TokenKind::KwIs)) {
+            // ユニオン型の実行時型判別: expr is Type → bool
+            debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'is' type check expression",
+                            debug::Level::Debug);
+            auto target_type = parse_type();
+            auto span = Span{expr->span.start, previous().end};
+            auto cast = std::make_unique<ast::CastExpr>(std::move(expr), std::move(target_type));
+            cast->type_check = true;
+            expr = std::make_unique<ast::Expr>(std::move(cast), span);
+        } else {
+            break;
+        }
     }
 
     return expr;
@@ -477,6 +490,17 @@ ast::ExprPtr Parser::parse_postfix() {
                 start_expr = parse_expr();
             }
 
+            // インデックスドパートセレクト: x[base +: width]（ビットスライス）
+            if (start_expr && consume_if(TokenKind::PlusColon)) {
+                auto width_expr = parse_expr();
+                expect(TokenKind::RBracket);
+                auto slice = std::make_unique<ast::SliceExpr>(
+                    std::move(expr), std::move(start_expr), std::move(width_expr));
+                slice->is_part_select = true;
+                expr = std::make_unique<ast::Expr>(std::move(slice));
+                continue;
+            }
+
             // コロンがあればスライス
             if (consume_if(TokenKind::Colon)) {
                 is_slice = true;
@@ -575,6 +599,41 @@ ast::ExprPtr Parser::parse_postfix() {
                             debug::Level::Debug);
             expr = ast::make_unary(ast::UnaryOp::PostDec, std::move(expr));
             continue;
+        }
+
+        // ?演算子（Result/Optionのエラー伝播）: expr?
+        // 三項演算子（cond ? a : b）と区別するため、? の次のトークンが
+        // 式を開始し得る場合は三項演算子として上位に委ねる
+        if (check(TokenKind::Question)) {
+            bool next_starts_expr = false;
+            if (pos_ + 1 < tokens_.size()) {
+                switch (tokens_[pos_ + 1].kind) {
+                    case TokenKind::Ident:
+                    case TokenKind::IntLiteral:
+                    case TokenKind::FloatLiteral:
+                    case TokenKind::StringLiteral:
+                    case TokenKind::CharLiteral:
+                    case TokenKind::KwTrue:
+                    case TokenKind::KwFalse:
+                    case TokenKind::KwNull:
+                    case TokenKind::LParen:
+                    case TokenKind::Bang:
+                    case TokenKind::Minus:
+                    case TokenKind::Tilde:
+                    case TokenKind::KwMatch:
+                        next_starts_expr = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            if (!next_starts_expr) {
+                advance();  // ?
+                debug::par::log(debug::par::Id::PostfixStart, "Detected try operator (?)",
+                                debug::Level::Debug);
+                expr = ast::make_unary(ast::UnaryOp::Try, std::move(expr));
+                continue;
+            }
         }
 
         // キャスト式はparse_cast_expr()で処理（&x as ulongを(&x) as ulongとして解釈するため）
@@ -1468,6 +1527,26 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
 
 // matchパターン要素の解析（単一パターン）
 std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
+    // don't careビット付き2進リテラル（0b1?00）→ マスク付きパターン
+    if (check(TokenKind::MaskedBinLiteral)) {
+        std::string bits(current().get_string());
+        advance();
+        int64_t value = 0;
+        int64_t mask = 0;
+        for (char c : bits) {
+            value <<= 1;
+            mask <<= 1;
+            if (c == '1') {
+                value |= 1;
+                mask |= 1;
+            } else if (c == '0') {
+                mask |= 1;
+            }
+            // '?' は value=0, mask=0（don't care）
+        }
+        return ast::MatchPattern::make_masked(value, mask);
+    }
+
     uint32_t start_pos = current().start;
 
     // ワイルドカード (_)
@@ -1476,6 +1555,20 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
         debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: wildcard",
                         debug::Level::Debug);
         return ast::MatchPattern::make_wildcard();
+    }
+
+    // ユニオンの型パターン: 型キーワード + 束縛名（int i, string s 等）
+    // 実行時タグで変種を判別し、束縛名にペイロードを束縛する
+    if (is_type_start() && !check(TokenKind::Ident)) {
+        auto pattern_type = parse_type();
+        std::string binding = "_";
+        if (check(TokenKind::Ident)) {
+            binding = std::string(current().get_string());
+            advance();
+        }
+        debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: type with binding " + binding,
+                        debug::Level::Debug);
+        return ast::MatchPattern::make_type(std::move(pattern_type), std::move(binding));
     }
 
     // リテラルパターン (数値、文字列、真偽値)
@@ -1535,6 +1628,19 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
             debug::par::log(debug::par::Id::PrimaryExpr,
                             "Match pattern: qualified name " + qualified_name, debug::Level::Debug);
             return ast::MatchPattern::make_enum_variant(std::move(enum_expr));
+        }
+
+        // 名前付き型の型パターン: TypeName binder（Circle c 等）
+        // 識別子が2つ連続する場合は型パターンとして解釈する
+        if (check(TokenKind::Ident)) {
+            std::string binding = std::string(current().get_string());
+            advance();
+            auto pattern_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+            pattern_type->name = name;
+            debug::par::log(debug::par::Id::PrimaryExpr,
+                            "Match pattern: named type " + name + " with binding " + binding,
+                            debug::Level::Debug);
+            return ast::MatchPattern::make_type(std::move(pattern_type), std::move(binding));
         }
 
         // 変数束縛パターン

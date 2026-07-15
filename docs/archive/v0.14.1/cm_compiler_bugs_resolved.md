@@ -8,8 +8,7 @@
 
 **状態**: ✅ 修正済み
 
-Win64呼出規約（RCX, RDX, R8, R9）が`efi_main`のみに設定され、
-他の関数はSystem V ABI（RDI, RSI, RDX, RCX）のまま。3引数以上でレジスタ齟齬が発生。
+Win64呼出規約（RCX, RDX, R8, R9）が`efi_main`のみに設定され、他の関数はSystem V ABI（RDI, RSI, RDX, RCX）のまま。3引数以上でレジスタ齟齬が発生。
 
 **修正**: `mir_to_llvm.cpp`: UEFIターゲット時に全関数にWin64呼出規約を設定。
 
@@ -19,8 +18,7 @@ Win64呼出規約（RCX, RDX, R8, R9）が`efi_main`のみに設定され、
 
 **状態**: ✅ 解決済み（仕様通りの動作）
 
-`*ptr as ulong` は演算子優先順位により `*(ptr as ulong)` と解釈される。
-`(*ptr) as ulong` と括弧を付ければ正常動作。
+`*ptr as ulong` は演算子優先順位により `*(ptr as ulong)` と解釈される。`(*ptr) as ulong` と括弧を付ければ正常動作。
 
 ---
 
@@ -28,8 +26,7 @@ Win64呼出規約（RCX, RDX, R8, R9）が`efi_main`のみに設定され、
 
 **状態**: ✅ 修正済み
 
-SCCP（疎条件定数伝播）最適化がASM出力変数を定数として扱い、
-while条件を定数trueに置換していた。
+SCCP（疎条件定数伝播）最適化がASM出力変数を定数として扱い、while条件を定数trueに置換していた。
 
 **修正**: `sccp.cpp` でASM文処理時に出力変数を定数テーブルから除外。  
 **テスト**: `common/loops/while_sccp_regression`
@@ -51,11 +48,9 @@ while条件を定数trueに置換していた。
 
 **状態**: ✅ 修正済み
 
-`must { }` ブロックで `__asm__` をラップすると、ASMの`hasSideEffects`フラグが
-不十分で、LLVMがASM周辺の制御フローを不正に最適化していた。
+`must { }` ブロックで `__asm__` をラップすると、ASMの`hasSideEffects`フラグが不十分で、LLVMがASM周辺の制御フローを不正に最適化していた。
 
-**修正**: `mir_to_llvm.cpp`: 全ASMに`hasSideEffects=true`と
-`~{memory},~{dirflag},~{fpsr},~{flags}`クロバーを設定。
+**修正**: `mir_to_llvm.cpp`: 全ASMに`hasSideEffects=true`と`~{memory},~{dirflag},~{fpsr},~{flags}`クロバーを設定。
 
 ---
 
@@ -74,8 +69,7 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 
 **状態**: ✅ 修正済み
 
-`&arr as void*` で配列アドレスを取得すると、パーサー優先順位により
-`&(arr as void*)` と解析され、配列全体がコピーされてバッファオーバーフロー。
+`&arr as void*` で配列アドレスを取得すると、パーサー優先順位により`&(arr as void*)` と解析され、配列全体がコピーされてバッファオーバーフロー。
 
 **修正**:
 - `mir_to_llvm.cpp`: `Pointer<Array>`型のalloca skipルール削除
@@ -89,8 +83,7 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 
 **状態**: ✅ 修正済み（JIT/LLVM/UEFI全環境）
 
-`impl`メソッドが`self.method()`で別メソッドを呼ぶと、
-呼び出し先での`self`フィールド変更が反映されなかった。
+`impl`メソッドが`self.method()`で別メソッドを呼ぶと、呼び出し先での`self`フィールド変更が反映されなかった。
 
 **修正**:
 - `expr_call.cpp`: impl self書き戻しロジックの修正
@@ -104,11 +97,9 @@ const変数同士の加算式が関数引数で正しく評価されなかった
 
 **状態**: ✅ 修正済み
 
-`__asm__`内で`%rdi`や`%rsi`を直接参照する関数がインライン展開されると、
-パラメータが別レジスタに配置され不正動作。
+`__asm__`内で`%rdi`や`%rsi`を直接参照する関数がインライン展開されると、パラメータが別レジスタに配置され不正動作。
 
-**修正**: `mir_to_llvm.cpp`: ASM文を含む関数にLLVM `NoInline`属性を付与。
-MIRレベルの`should_inline`抑制と合わせて二重の防御。
+**修正**: `mir_to_llvm.cpp`: ASM文を含む関数にLLVM `NoInline`属性を付与。MIRレベルの`should_inline`抑制と合わせて二重の防御。
 
 ---
 
@@ -116,8 +107,7 @@ MIRレベルの`should_inline`抑制と合わせて二重の防御。
 
 **状態**: ✅ 修正済み
 
-`__asm__`内で`ret`命令を使う関数がインライン展開されると、
-`call`命令が省略されスタック上にreturn addressが不在。
+`__asm__`内で`ret`命令を使う関数がインライン展開されると、`call`命令が省略されスタック上にreturn addressが不在。
 
 **修正**: Bug #11と同じ（ASM含む関数のNoInline属性付与）。
 
@@ -127,11 +117,8 @@ MIRレベルの`should_inline`抑制と合わせて二重の防御。
 
 **状態**: ✅ 修正済み
 
-`impl`メソッド/コンストラクタがLLVM O2パイプラインでインライン展開されると、
-`efi_main`の引数レジスタ（rcx=image_handle, rdx=system_table）がインライン展開された
-コードのself/引数として上書きされ、UEFIデータ構造が破壊されて`#UD`例外が発生していた。
+`impl`メソッド/コンストラクタがLLVM O2パイプラインでインライン展開されると、`efi_main`の引数レジスタ（rcx=image_handle, rdx=system_table）がインライン展開されたコードのself/引数として上書きされ、UEFIデータ構造が破壊されて`#UD`例外が発生していた。
 
-**修正**: `mir_to_llvm.cpp`: UEFIターゲットの全関数に`NoInline`属性を付与。
-`efi_main`にはさらに`OptimizeNone`属性を追加し、DCE（デッドコード削除）も防止。
+**修正**: `mir_to_llvm.cpp`: UEFIターゲットの全関数に`NoInline`属性を付与。`efi_main`にはさらに`OptimizeNone`属性を追加し、DCE（デッドコード削除）も防止。
 
 **テスト**: `uefi/uefi_compile/uefi_impl_inline`

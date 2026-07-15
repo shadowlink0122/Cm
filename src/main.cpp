@@ -32,6 +32,7 @@
 #include "mir/passes/cleanup/program_dce.hpp"
 #include "mir/passes/core/manager.hpp"
 #include "mir/passes/loop/const_unroll.hpp"
+#include "mir/passes/scalar/folding.hpp"
 #include "mir/passes/validation/no_std_checker.hpp"
 #include "mir/printer.hpp"
 #include "module/resolver.hpp"
@@ -155,6 +156,55 @@ bool is_baremetal_platform(const std::string& directive) {
     // directiveに "baremetal" や "uefi" が含まれるか
     return directive.find("baremetal") != std::string::npos ||
            directive.find("uefi") != std::string::npos;
+}
+
+// cm test (SVフロー): 生成済みSV+テストベンチを iverilog + vvp でシミュレーション実行する。
+// $readmemh の相対パスを解決するため、生成物ディレクトリをCWDにして実行する。
+// 戻り値: 終了コード（テストベンチの $fatal で非0 = テスト失敗）
+int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
+#if defined(_WIN32)
+    (void)sv_path;
+    (void)quiet;
+    std::cerr << "エラー: SVテストのシミュレーション実行はWindowsでは未対応です\n";
+    return 1;
+#else
+    // 子プロセス（iverilog/vvp）の出力と順序が入れ替わらないようフラッシュする
+    std::cout.flush();
+    namespace fs = std::filesystem;
+    fs::path sv(sv_path);
+    fs::path dir = sv.parent_path();
+    if (dir.empty()) {
+        dir = ".";
+    }
+    std::string stem = sv.stem().string();
+    fs::path tb = dir / (stem + "_tb.sv");
+    fs::path sim = dir / (stem + "_sim");
+
+    if (std::system("command -v iverilog >/dev/null 2>&1") != 0 ||
+        std::system("command -v vvp >/dev/null 2>&1") != 0) {
+        std::cerr << "エラー: iverilog / vvp が見つかりません（SVテストの実行に必要）\n";
+        std::cerr << "ヒント: macOS: brew install icarus-verilog / "
+                     "Ubuntu: sudo apt-get install iverilog\n";
+        return 1;
+    }
+    if (!fs::exists(tb)) {
+        std::cerr << "エラー: テストベンチが生成されていません: " << tb.string() << "\n";
+        return 1;
+    }
+    std::string compile_cmd =
+        "iverilog -g2012 -o '" + sim.string() + "' '" + sv.string() + "' '" + tb.string() + "'";
+    if (std::system(compile_cmd.c_str()) != 0) {
+        std::cerr << "エラー: iverilog コンパイルに失敗しました\n";
+        return 1;
+    }
+    std::string run_cmd = "cd '" + dir.string() + "' && vvp '" + fs::absolute(sim).string() + "'";
+    int rc = std::system(run_cmd.c_str());
+    int exit_code = WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
+    if (exit_code == 0 && !quiet) {
+        std::cout << "✓ SVテスト成功\n";
+    }
+    return exit_code;
+#endif
 }
 
 // 除外パターンにマッチするか判定
@@ -292,6 +342,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // ターゲットのポインタ幅を設定（HIR/MIRの型サイズ計算が参照する）
+    // runコマンドはJIT（ホストネイティブ）実行のため既定の8のまま
+    if (opts.command != Command::Run) {
+        set_target_pointer_size(opts.target);
+    }
+
     // コンパイラバイナリのパスを設定（インクリメンタルビルド用）
     cache::CacheManager::set_compiler_path(argv[0]);
 
@@ -370,6 +426,13 @@ int main(int argc, char* argv[]) {
 
                 // 条件付きコンパイル
                 preprocessor::ConditionalPreprocessor conditional;
+                for (const auto& def : opts.defines) {
+                    conditional.define(def);
+                }
+                // テストモード（--test）: TEST を自動定義
+                if (opts.test_mode) {
+                    conditional.define("TEST");
+                }
                 code = conditional.process(code);
 
                 // パース
@@ -403,13 +466,20 @@ int main(int argc, char* argv[]) {
                 config.parse_disable_comments(code);
 
                 for (const auto& diag : checker.diagnostics()) {
-                    // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)
+                    // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)。
+                    // 誤爆防止のため「メッセージ末尾」かつ「英字1-3字+数字2-4桁」の
+                    // 形式に限定する（[0:0] や int[3] 等の型表記はルールIDではない）
                     std::string rule_id;
                     auto bracket_pos = diag.message.rfind('[');
                     auto close_pos = diag.message.rfind(']');
                     if (bracket_pos != std::string::npos && close_pos != std::string::npos &&
-                        close_pos > bracket_pos) {
-                        rule_id = diag.message.substr(bracket_pos + 1, close_pos - bracket_pos - 1);
+                        close_pos > bracket_pos && close_pos == diag.message.size() - 1) {
+                        std::string candidate =
+                            diag.message.substr(bracket_pos + 1, close_pos - bracket_pos - 1);
+                        static const std::regex rule_pattern("^[A-Za-z]{1,3}[0-9]{2,4}$");
+                        if (std::regex_match(candidate, rule_pattern)) {
+                            rule_id = candidate;
+                        }
                     }
 
                     // 設定で無効化されているルールはスキップ
@@ -557,20 +627,28 @@ int main(int argc, char* argv[]) {
                 // フォーマット実行
                 auto result = formatter.format(code);
 
-                // 変更があればファイルを上書き
                 if (result.modified) {
-                    std::ofstream ofs(file);
-                    if (ofs) {
-                        ofs << result.formatted_code;
+                    if (opts.fmt_check) {
+                        // --check: 書き込まず要整形ファイルとして報告
+                        std::cout << file << ": 要整形（" << result.changes_applied << " 箇所）\n";
                         files_modified++;
                         total_changes += result.changes_applied;
-
-                        if (opts.verbose) {
-                            std::cout << file << ": " << result.changes_applied << " 箇所の整形\n";
-                        }
                     } else {
-                        std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
-                        files_failed++;
+                        // 変更があればファイルを上書き
+                        std::ofstream ofs(file);
+                        if (ofs) {
+                            ofs << result.formatted_code;
+                            files_modified++;
+                            total_changes += result.changes_applied;
+
+                            if (opts.verbose) {
+                                std::cout << file << ": " << result.changes_applied
+                                          << " 箇所の整形\n";
+                            }
+                        } else {
+                            std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
+                            files_failed++;
+                        }
                     }
                 }
 
@@ -582,14 +660,25 @@ int main(int argc, char* argv[]) {
 
         // サマリー表示（quietモードでは抑制）
         if (!opts.quiet) {
-            std::cout << "\n=== フォーマット完了 ===\n";
-            std::cout << "ファイル数: " << files_modified << "/" << cm_files.size() << " 修正\n";
-            std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            if (opts.fmt_check) {
+                std::cout << "\n=== フォーマットチェック完了 ===\n";
+                std::cout << "要整形: " << files_modified << "/" << cm_files.size()
+                          << " ファイル\n";
+            } else {
+                std::cout << "\n=== フォーマット完了 ===\n";
+                std::cout << "ファイル数: " << files_modified << "/" << cm_files.size()
+                          << " 修正\n";
+                std::cout << "整形箇所: " << total_changes << " 箇所\n";
+            }
             if (files_failed > 0) {
                 std::cout << "失敗: " << files_failed << " ファイル\n";
             }
         }
 
+        // --check では要整形ファイルの存在も失敗として扱う（CIゲート用）
+        if (opts.fmt_check && files_modified > 0) {
+            return 1;
+        }
         return files_failed > 0 ? 1 : 0;
     }
 
@@ -656,6 +745,45 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     std::string code = std::move(file_result.content);
+
+    // ========== cm test: プラットフォームディレクティブでバックエンドを振り分け ==========
+    // //! platform: sv → SVテストベンチ生成 + iverilog/vvpシミュレーション
+    // それ以外        → JITで各 #[test] 関数を実行
+    bool run_sv_sim = false;  // SVフローで生成後にシミュレーションを実行する
+    if (opts.command == Command::Test) {
+        std::string directive = parse_platform_directive(code);
+        bool sv_platform = false;
+        {
+            std::istringstream ss(directive);
+            std::string token;
+            while (std::getline(ss, token, '|')) {
+                if (token == "sv" || token == "verilog" || token == "systemverilog") {
+                    sv_platform = true;
+                }
+            }
+        }
+        if (sv_platform) {
+            // SVフロー: compileと同じ経路でSV+TBを生成し、後段でシミュレーションを実行
+            opts.command = Command::Compile;
+            opts.target = "sv";
+            run_sv_sim = true;
+            if (opts.output_file.empty()) {
+                std::filesystem::create_directories(".tmp/test");
+                std::string stem = std::filesystem::path(opts.input_file).stem().string();
+                opts.output_file = ".tmp/test/" + stem + ".sv";
+            }
+        } else {
+            // JITフロー: Runと同じ経路で #[test] 関数を実行
+            if (!match_platform_directive(directive, "native") &&
+                !match_platform_directive(directive, "jit")) {
+                std::cerr << "エラー: platform '" << directive
+                          << "' のテスト実行は未対応です（sv または native/JIT のみ）\n";
+                std::cerr << "  ファイル: " << opts.input_file << "\n";
+                return 1;
+            }
+            opts.command = Command::Run;
+        }
+    }
 
     // //! platform: ディレクティブチェック
     {
@@ -910,6 +1038,15 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "=== Conditional Preprocessor ===\n";
         preprocessor::ConditionalPreprocessor conditional;
+        // -D オプションのユーザ定義を追加
+        for (const auto& def : opts.defines) {
+            conditional.define(def);
+        }
+        // テストモード（cm test / --test）: TEST を自動定義
+        // （#[test] と連動するテスト補助コードを #ifdef TEST で書けるようにする）
+        if (opts.test_mode) {
+            conditional.define("TEST");
+        }
         // ターゲットに応じたプリプロセッサ定数を追加
         if (opts.target == "baremetal-arm" || opts.target == "bm" ||
             opts.target == "baremetal-x86" || opts.target == "bm-x86") {
@@ -975,6 +1112,10 @@ int main(int argc, char* argv[]) {
         if (opts.debug)
             std::cout << "宣言数: " << program.declarations.size() << "\n\n";
 
+        // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得
+        // （lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
+        const std::string sv_top_module = codegen::sv::extract_top_module_name(program);
+
         // ========== Target Filtering ==========
         {
             Target active_target = Target::Native;
@@ -988,7 +1129,8 @@ int main(int argc, char* argv[]) {
 
             debug::ast::log(debug::ast::Id::Validate, "target=" + target_to_string(active_target),
                             debug::Level::Info);
-            ast::TargetFilteringVisitor target_filter(active_target);
+            // テストモード以外では #[test] 宣言も除去される
+            ast::TargetFilteringVisitor target_filter(active_target, opts.test_mode);
             target_filter.visit(program);
         }
 
@@ -1062,7 +1204,8 @@ int main(int argc, char* argv[]) {
             for (const auto& diag : checker.diagnostics()) {
                 if (!preprocess_result.source_map.empty()) {
                     std::cerr << loc_mgr.format_error_with_source_map(
-                        diag.span, diag.message, preprocess_result.source_map, file_contents);
+                        diag.span, diag.message, preprocess_result.source_map, file_contents,
+                        diag.severity == DiagKind::Error ? "error" : "warning");
                 } else {
                     std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
                     std::cerr << loc_mgr.format_error_location(diag.span,
@@ -1211,6 +1354,13 @@ int main(int argc, char* argv[]) {
         // （generate/genvar相当。合成ツールは動的whileを展開できないため）
         if (is_sv) {
             mir::opt::unroll_constant_loops(mir);
+            // 合成前の定数畳み込み・恒等式簡約（2*3+4→10、x*1→x 等）。
+            // 文数・CFG形状を変えない書き換えのみで、DCE/CopyProp等の
+            // 文除去系パスはHWロジックを消すため引き続き実行しない
+            if (opts.optimization_level > 0) {
+                mir::opt::ConstantFolding sv_folding(/*fold_terminators=*/false);
+                sv_folding.run_on_program(mir);
+            }
         }
         auto phase_opt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::steady_clock::now() - phase_opt_start)
@@ -1298,7 +1448,109 @@ int main(int argc, char* argv[]) {
 
         // ========== Backend ==========
         if (opts.command == Command::Run) {
+            // ========== --target指定時のディスパッチ ==========
+            // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で
+            // 実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
+            if (opts.target == "js" || opts.target == "web") {
+                // JS生成 → Node.jsで実行
+                cm::codegen::js::JSCodeGenOptions js_opts;
+                js_opts.outputFile =
+                    opts.output_file.empty()
+                        ? (std::filesystem::temp_directory_path() / "cm_run_output.js").string()
+                        : opts.output_file;
+                js_opts.generateHTML = false;
+                js_opts.verbose = opts.verbose || opts.debug;
+                try {
+                    cm::codegen::js::JSCodeGen codegen(js_opts);
+                    codegen.compile(mir);
+                } catch (const std::exception& e) {
+                    std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
+                    return 1;
+                }
+                if (std::system("command -v node > /dev/null 2>&1") != 0) {
+                    std::cerr << "エラー: node が見つかりません（--target=js の実行に必要です）\n";
+                    std::cerr << "ヒント: cm compile --target=js で生成した .js を任意の"
+                                 "JS実行系で実行してください\n";
+                    return 1;
+                }
+                std::string cmd = "node " + js_opts.outputFile;
+                int exec_result = std::system(cmd.c_str());
+#if defined(_WIN32)
+                return exec_result;
+#else
+                return WEXITSTATUS(exec_result);
+#endif
+            }
+            if (opts.target == "wasm") {
+                std::cerr << "エラー: cm run は --target=wasm の直接実行に未対応です\n";
+                std::cerr << "ヒント: cm compile --emit-llvm --target=wasm -o out.wasm の後、"
+                             "wasmtime out.wasm 等で実行してください\n";
+                return 1;
+            }
+            if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
+                std::cerr << "エラー: cm run は --target=sv の直接実行に未対応です\n";
+                std::cerr << "ヒント: シミュレーション実行は cm test（//! platform: sv）を"
+                             "使用してください\n";
+                return 1;
+            }
+
 #ifdef CM_LLVM_ENABLED
+            // ========== ネイティブテストランナー（cm test / run --test）==========
+            // #[test] 関数を宣言順に、関数ごとに独立したJITで実行する（状態隔離）。
+            // 成功 = 関数が正常リターン。assert失敗は exit(1) で即時停止する。
+            if (opts.test_mode) {
+                std::vector<const mir::MirFunction*> test_fns;
+                for (const auto& func : mir.functions) {
+                    if (!func) {
+                        continue;
+                    }
+                    for (const auto& attr : func->attributes) {
+                        if (attr == "test") {
+                            test_fns.push_back(func.get());
+                            break;
+                        }
+                    }
+                }
+                if (test_fns.empty()) {
+                    std::cerr << "エラー: #[test] 関数が見つかりません: " << opts.input_file
+                              << "\n";
+                    return 1;
+                }
+                // step() はSVプラットフォーム専用（クロック概念が実行系に存在しない）
+                for (const auto* fn : test_fns) {
+                    for (const auto& block : fn->basic_blocks) {
+                        if (!block || !block->terminator ||
+                            block->terminator->kind != mir::MirTerminator::Call) {
+                            continue;
+                        }
+                        const auto& data =
+                            std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                        if (data.func && data.func->kind == mir::MirOperand::FunctionRef &&
+                            std::get<std::string>(data.func->data) == "step") {
+                            std::cerr << "エラー: step() は //! platform: sv のテストでのみ"
+                                         "使用できます（テスト関数: "
+                                      << fn->name << "）\n";
+                            std::cerr << "ヒント: クロック駆動のテストはファイル先頭に "
+                                         "//! platform: sv を指定してください\n";
+                            return 1;
+                        }
+                    }
+                }
+                std::setvbuf(stdout, nullptr, _IONBF, 0);
+                for (const auto* fn : test_fns) {
+                    cm::codegen::jit::JITEngine jit;
+                    auto result = jit.execute(mir, fn->name, opts.optimization_level);
+                    if (!result.success) {
+                        std::cerr << "JIT実行エラー (" << fn->name << "): " << result.errorMessage
+                                  << "\n";
+                        return 1;
+                    }
+                    std::cout << "[PASS] " << fn->name << "\n";
+                }
+                std::cout << "✓ " << test_fns.size() << " 件のテストが成功\n";
+                return 0;
+            }
+
             // JITキャッシュ: ソースが変更されていない場合、キャッシュされたバイナリを直接実行
             if (opts.incremental && !cache_fingerprint.empty()) {
                 cache::CacheManager cache_mgr(cache_config);
@@ -1382,8 +1634,19 @@ int main(int argc, char* argv[]) {
 
                 sv_opts.verbose = opts.verbose || opts.debug;
                 sv_opts.sourceFile = opts.input_file;
+                sv_opts.topModule = sv_top_module;
                 sv_opts.emitMemfile = opts.emit_memfile;
                 sv_opts.strictLint = opts.sv_strict_lint;
+                sv_opts.keepAlwaysFF = opts.sv_always_ff;
+                sv_opts.warnNba = opts.sv_warn_nba;
+                sv_opts.emitConstraints = opts.emit_constraints;
+                {
+                    // //! sv: device: / option: ディレクティブを反映
+                    auto dirs = codegen::sv::parse_sv_project_directives(code);
+                    sv_opts.devicePN = dirs.device_pn;
+                    sv_opts.deviceVersion = dirs.device_version;
+                    sv_opts.toolOptions = dirs.tool_options;
+                }
 
                 // SystemVerilog コード生成
                 try {
@@ -1413,6 +1676,11 @@ int main(int argc, char* argv[]) {
                                               .count();
                         std::cout << "✓ SystemVerilog 生成完了: " << sv_opts.outputFile << " ("
                                   << compile_ms << "ms)\n";
+                    }
+
+                    // cm test (SVフロー): 生成物をiverilog+vvpでシミュレーション実行
+                    if (run_sv_sim) {
+                        return run_sv_test_simulation(sv_opts.outputFile, opts.quiet);
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "SystemVerilog コード生成エラー: " << e.what() << "\n";

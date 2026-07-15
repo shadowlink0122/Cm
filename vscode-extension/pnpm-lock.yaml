@@ -14,6 +14,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.33
+      '@types/vscode':
+        specifier: ^1.80.0
+        version: 1.80.0
       '@vscode/vsce':
         specifier: ^3.7.1
         version: 3.7.1
@@ -249,6 +252,9 @@ packages:
 
   '@types/sarif@2.1.7':
     resolution: {integrity: sha512-kRz0VEkJqWLf1LLVN4pT1cg1Z9wAuvI6L97V3m2f5B76Tg8d413ddvLBPTEHAZJlnn4XSvu0FkZtViCQGVyrXQ==}
+
+  '@types/vscode@1.80.0':
+    resolution: {integrity: sha512-qK/CmOdS2o7ry3k6YqU4zD3R2AYlJfbwBoSbKpBoP+GpXNE+0NEgJOli4n0bm0diK5kfBnchgCEj4igQz/44Hg==}
 
   '@typescript-eslint/eslint-plugin@8.55.0':
     resolution: {integrity: sha512-1y/MVSz0NglV1ijHC8OT49mPJ4qhPYjiK08YUQVbIOyu+5k862LKUHFkpKHWu//zmr7hDR2rhwUm6gnCGNmGBQ==}
@@ -1812,6 +1818,8 @@ snapshots:
   '@types/normalize-package-data@2.4.4': {}
 
   '@types/sarif@2.1.7': {}
+
+  '@types/vscode@1.80.0': {}
 
   '@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint@9.39.2)(typescript@5.9.3)':
     dependencies:

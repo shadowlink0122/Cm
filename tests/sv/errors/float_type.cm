@@ -1,0 +1,8 @@
+//! platform: sv
+// 浮動小数点型はSVターゲット非対応（SV004エラー）
+#[input] posedge clk;
+#[output] double val = 0.0;
+
+async void f(posedge clk) {
+    val = val;
+}

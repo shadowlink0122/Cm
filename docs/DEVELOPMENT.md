@@ -3,11 +3,23 @@ layout: default
 title: Development
 ---
 
-[English](DEVELOPMENT.en.html)
-
 # 開発環境ガイド
 
 *最終更新: 2026年2月*
+
+## 開発フロー（必須5ステップ）
+
+すべての機能開発は以下の5ステップを順に実行し、全て完了してからPRを出します:
+
+| ステップ | 内容 | 場所 |
+|---|---|---|
+| 1. 実装計画 | 設計文書の作成（構文例・出力例・設計方針・段階分割・テスト計画） | `docs/design/v<バージョン>/` |
+| 2. 実装 | テスト込み（ユニット+バックエンドスイート+回帰テスト）。`make format && make lint && make test` | `src/` `tests/` |
+| 3. チュートリアル | 該当ページの更新・新設（日英両方、index掲載・前後ナビ整合） | `docs/tutorials/{ja,en}/` |
+| 4. VSCode拡張 | 新構文・キーワード・属性・組み込み関数のハイライト反映 | `vscode-extension/syntaxes/` |
+| 5. リリースノート | 変更履歴への追記 | `docs/releases/v<バージョン>.md` |
+
+一部ステップが該当しない場合（純リファクタリング等）は、理由をコミットメッセージに明記します。実装完了した設計文書は `docs/archive/v<対応バージョン>/` へ、破棄した提案は `docs/archive/unimplemented/` へ移動します。
 
 ## 必要環境
 

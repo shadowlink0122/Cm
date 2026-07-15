@@ -22,6 +22,13 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_unary(const hir::HirUnary& un, LoweringContext& ctx);
     LocalId lower_call(const hir::HirCall& call, const hir::TypePtr& result_type,
                        LoweringContext& ctx);
+
+    // builtin別のlowering（該当しなければnullopt）
+    std::optional<LocalId> try_lower_println(const hir::HirCall& call,
+                                             const hir::TypePtr& result_type, LoweringContext& ctx);
+    std::optional<LocalId> try_lower_slice_builtin(const hir::HirCall& call,
+                                                   const hir::TypePtr& result_type,
+                                                   LoweringContext& ctx);
     LocalId lower_index(const hir::HirIndex& idx, LoweringContext& ctx);
     LocalId lower_member(const hir::HirMember& mem, LoweringContext& ctx);
     LocalId lower_ternary(const hir::HirTernary& ternary, LoweringContext& ctx);
@@ -52,6 +59,9 @@ class ExprLowering : public MirLoweringBase {
     //  パースに失敗した場合は std::nullopt を返す）
     std::optional<LocalId> lower_interp_expression(const std::string& content,
                                                    LoweringContext& ctx);
+
+    // 補間プレースホルダを値ローカルへ解決（識別子直接参照 or 式パーサ経由）
+    LocalId resolve_interp_placeholder(const std::string& content, LoweringContext& ctx);
 
    protected:
     // HIR二項演算子をMIRに変換

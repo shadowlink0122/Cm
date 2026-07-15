@@ -32,4 +32,4 @@ Tutorials covering the fundamentals of the Cm language. Estimated time: 3-4 hour
 ---
 
 <!-- nav -->
-← Prev: [Cm Language Tutorials v0.15.1](../index.html) | [Contents](../index.html) | Next: [Basics - Introduction](introduction.html) →
+← Prev: [Cm Language Tutorials v0.16.0](../index.html) | [Contents](../index.html) | Next: [Basics - Introduction](introduction.html) →

@@ -1,0 +1,21 @@
+//! platform: sv
+//! test: op=8, cycles=2 -> kind=1
+//! test: op=7, cycles=2 -> kind=2
+//! test: op=0, cycles=2 -> kind=3
+//! test: op=15, cycles=2 -> kind=0
+
+// don't careビット付きmatch（0b1?00等）のSV検証（v0.16.0 設計04-4.2）。
+// (op & mask) == value のif-elseチェーンに脱糖される
+
+#[input] posedge clk;
+#[input] uint op;
+#[output] uint kind = 0;
+
+async void decode(posedge clk) {
+    match (op) {
+        0b1?00 => { kind = 1; }
+        0b0?1? => { kind = 2; }
+        0b0000 => { kind = 3; }
+        _ => { kind = 0; }
+    }
+}

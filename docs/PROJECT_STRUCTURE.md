@@ -3,8 +3,6 @@ layout: default
 title: Project Structure
 ---
 
-[English](PROJECT_STRUCTURE.en.html)
-
 # Cm言語 プロジェクト構造
 
 *最終更新: 2026年2月*

@@ -1,0 +1,6 @@
+is int: true
+is string: false
+payload int: 42
+payload str: hello
+after reassign is int: false
+is bool: true

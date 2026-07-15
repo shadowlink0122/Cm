@@ -1,0 +1,34 @@
+// ユニオン型の実行時型判別 `is` 演算子のテスト:
+// タグ比較によるbool判定、if条件・bool変数・再代入後の判定、as との併用
+import std::io::println;
+
+typedef Value = int | string | bool;
+
+int main() {
+    Value v = 42;
+    bool bi = v is int;
+    bool bs = v is string;
+    println("is int: {bi}");
+    println("is string: {bs}");
+
+    if (v is int) {
+        int n = v as int;
+        println("payload int: {n}");
+    }
+
+    // 再代入後のタグ更新（ユニオン構築を経由する）
+    v = "hello";
+    if (v is string) {
+        string s = v as string;
+        println("payload str: {s}");
+    } else {
+        println("NG: reassign tag");
+    }
+    bool wi = v is int;
+    println("after reassign is int: {wi}");
+
+    Value w = true;
+    bool wb = w is bool;
+    println("is bool: {wb}");
+    return 0;
+}

@@ -334,11 +334,12 @@ bool Parser::is_global_var_start() {
 
     advance();
 
-    // 配列サフィックス [N] をスキップ（bit[4], utiny[1024] 等）
+    // 配列サフィックス [N] をスキップ（bit[4], utiny[1024], bit[WIDTH] 等。
+    // サイズはリテラルまたはconst/パラメータ参照の識別子）
     while (!is_at_end() && check(TokenKind::LBracket)) {
         advance();  // [
-        if (!is_at_end() && check(TokenKind::IntLiteral)) {
-            advance();  // N
+        if (!is_at_end() && (check(TokenKind::IntLiteral) || check(TokenKind::Ident))) {
+            advance();  // N or NAME
         }
         if (!is_at_end() && check(TokenKind::RBracket)) {
             advance();  // ]
@@ -465,6 +466,18 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         do {
             auto_impls.push_back(expect_ident());
         } while (consume_if(TokenKind::Comma));
+    }
+
+    // #[derive(...)] 属性は with と同一の自動実装機構へ合流する
+    for (const auto& attr : attributes) {
+        if (attr.name == "derive") {
+            if (attr.args.empty()) {
+                error("#[derive] requires at least one interface name");
+            }
+            for (const auto& arg : attr.args) {
+                auto_impls.push_back(arg);
+            }
+        }
     }
 
     // where句をパース

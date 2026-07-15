@@ -1,0 +1,21 @@
+int main() {
+    int sum = 0;
+    int i = 0;
+
+    // 定数条件
+    if (10 > 5) {
+        sum = 100;
+    } else {
+        sum = 200;  // 到達不可能
+    }
+
+    // 定数演算
+    int x = 2 * 3 + 4;
+    int y = x;
+
+    // 未使用変数
+    int unused1 = 999;
+    int unused2 = unused1 + 1;
+
+    return sum + y;
+}

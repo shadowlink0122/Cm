@@ -1,0 +1,9 @@
+#[sv::parameter] const uint WIDTH = 8;
+
+#[input] posedge clk;
+#[input] bit[WIDTH] din;
+#[output] bit[WIDTH] dout = 0;
+
+async void f(posedge clk) {
+    dout = din;
+}

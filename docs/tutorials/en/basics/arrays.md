@@ -5,48 +5,35 @@ parent: Tutorials
 
 [日本語](../../ja/basics/arrays.html)
 
-# Basics - Arrays
+# Arrays
 
-**Difficulty:** 🟡 Intermediate  
-**Time:** 25 minutes
+Cm supports C++-style fixed-size arrays.
+For the growable slice type `T[]`, see [Slices](../advanced/slices.html).
 
-## 📚 What you'll learn
+## 📋 Table of Contents
 
-- Array declaration and initialization
-- Element access
-- Array methods
-- Arrays of structs
-- Pointer conversion (Array Decay)
-- `for-in` loop
-
----
+- [Basic Usage](#basic-usage)
+- [Element Access](#element-access)
+- [Method Reference](#method-reference)
+- [Search Methods](#search-methods)
+- [Higher-Order Methods](#higher-order-methods)
+- [Sorting and First/Last](#sorting-and-firstlast)
+- [Arrays of Structs](#arrays-of-structs)
+- [Pointer Decay](#pointer-decay)
+- [for-in Loops](#for-in-loops)
+- [Multidimensional Arrays](#multidimensional-arrays)
 
 ## Basic Usage
 
-### Array Declaration
-
 ```cm
-// Basic array declaration
+// Basic declaration (zero-initialized)
 int[5] numbers;
 
-// Declaration and initialization
+// Declaration with initialization
 int[3] values = [1, 2, 3];
 
-// Size inference
-int[] auto_size = {10, 20, 30};  // Inferred size: 3
-```
-
-## Initialization
-
-```cm
-// Zero initialization
-int[10] zeros;  // All 0
-
-// Literal initialization
-int[5] primes = {2, 3, 5, 7, 11};
-
-// Partial initialization
-int[5] partial = [1, 2];  // {1, 2, 0, 0, 0}
+// Partial initialization (rest are 0)
+int[5] partial = [1, 2];  // [1, 2, 0, 0, 0]
 ```
 
 ## Element Access
@@ -60,55 +47,98 @@ int main() {
 }
 ```
 
-> **Note (v0.11.0):** Bounds checking has been introduced. Accessing out-of-bounds indices will cause the program to panic safely.
+> **Since v0.11.0**: bounds checking is enabled. Out-of-range access stops the program safely (panic).
 
----
+## Method Reference
 
-## Array Methods
+Methods available on fixed-size arrays `T[N]` (all of them also work on slices `T[]`).
 
-### Getting Size
+| Method | Returns | Description |
+|---|---|---|
+| `.size()` / `.len()` / `.length()` | `int` | Number of elements |
+| `.dim()` | `int` | Number of dimensions (for multidimensional arrays) |
+| `.indexOf(v)` | `int` | Position of first match (-1 if none) |
+| `.includes(v)` / `.contains(v)` | `bool` | Whether the value is present |
+| `.find(fn)` | `T` | First element matching the predicate |
+| `.findIndex(fn)` | `int` | Index of first match (-1 if none) |
+| `.some(fn)` | `bool` | Whether any element matches |
+| `.every(fn)` | `bool` | Whether all elements match |
+| `.map(fn)` | `T[]` | New slice with transformed elements |
+| `.filter(fn)` | `T[]` | New slice with matching elements |
+| `.reduce(fn, init)` | `T` | Fold (argument order: function, initial) |
+| `.forEach(fn)` | `void` | Apply a function to each element |
+| `.sort()` | `T[]` | New slice sorted ascending |
+| `.sortBy(cmp)` | `T[]` | New slice sorted by comparator |
+| `.reverse()` | `T[]` | New slice in reverse order |
+| `.first()` / `.last()` | `T` | First / last element |
+| `arr[a:b]` | `T[]` | Subslice (see [Slices](../advanced/slices.html)) |
 
-```cm
-int[5] arr;
+Methods taking a function accept named functions or lambdas (parameter type annotations required).
 
-int size1 = arr.size();     // 5
-int size2 = arr.len();      // 5
-int size3 = arr.length();   // 5 (All equivalent)
-```
-
-### Searching Elements
-
-```cm
-int[5] numbers = [1, 2, 3, 4, 5];
-
-// indexOf - Find element position
-int pos = numbers.indexOf(3);  // 2
-int not_found = numbers.indexOf(10);  // -1
-
-// includes - Check existence
-bool has_3 = numbers.includes(3);  // true
-bool has_10 = numbers.includes(10);  // false
-
-// contains (Alias for includes)
-bool has_5 = numbers.contains(5);  // true
-```
-
-### Higher-Order Methods
+## Search Methods
 
 ```cm
-int[5] numbers = [1, 2, 3, 4, 5];
+int main() {
+    int[5] numbers = [1, 2, 3, 4, 5];
 
-// some - Check if any element matches condition
-bool has_even = numbers.some(|x| x % 2 == 0);  // true
+    int pos = numbers.indexOf(3);        // 2
+    int not_found = numbers.indexOf(10); // -1
 
-// every - Check if all elements match condition
-bool all_positive = numbers.every(|x| x > 0);  // true
-
-// findIndex - Find index of first matching element
-int idx = numbers.findIndex(|x| x > 3);  // 3 (index of value 4)
+    bool has_3 = numbers.includes(3);    // true
+    bool has_5 = numbers.contains(5);    // true (alias of includes)
+    return 0;
+}
 ```
 
----
+## Higher-Order Methods
+
+```cm
+import std::io::println;
+
+bool is_even(int x) {
+    return x % 2 == 0;
+}
+
+int add(int acc, int x) {
+    return acc + x;
+}
+
+int main() {
+    int[5] numbers = [1, 2, 3, 4, 5];
+
+    // Lambdas require parameter type annotations
+    bool has_even = numbers.some((int x) => { return x % 2 == 0; });  // true
+    bool all_positive = numbers.every((int x) => { return x > 0; });  // true
+    int idx = numbers.findIndex((int x) => { return x > 3; });        // 3 (index of 4)
+
+    // Named functions also work
+    int[] evens = numbers.filter(is_even);   // [2, 4]
+    int[] doubled = numbers.map((int x) => { return x * 2; });  // [2, 4, 6, 8, 10]
+    int total = numbers.reduce(add, 0);      // 15 (argument order: function, initial)
+
+    bool s = numbers.some(is_even);
+    println("some={s} total={total}");
+    return 0;
+}
+```
+
+Method calls with function arguments can also be used directly inside string interpolation (e.g. `println("{numbers.some(is_even)}")`).
+
+## Sorting and First/Last
+
+```cm
+int main() {
+    int[5] nums = [3, 1, 4, 1, 5];
+
+    int[] sorted = nums.sort();       // [1, 1, 3, 4, 5] (original unchanged)
+    int[] rev = nums.reverse();       // [5, 1, 4, 1, 3]
+    int[] desc = nums.sortBy((int a, int b) => { return b - a; });  // descending
+
+    int f = nums.first();  // 3
+    int l = nums.last();   // 5
+    return 0;
+}
+```
 
 ## Arrays of Structs
 
@@ -122,148 +152,99 @@ int main() {
     // Declaration
     Point[3] points;
 
-    // Initialization
+    // Field assignment
     points[0].x = 10;
     points[0].y = 20;
 
-    // Initialization List
-    Point[2] pts = {
-        Point(1, 2),
-        Point(3, 4)
-    };
+    // Struct literal initialization
+    Point[2] pts = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 }
+    ];
     return 0;
 }
 ```
 
----
+## Pointer Decay
 
-## Array Decay (Pointer Conversion)
-
-Arrays automatically convert to pointers when passed to functions or assigned to pointers.
+Arrays convert to pointers automatically.
 
 ```cm
 int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
-    // Array to Pointer conversion
-    int* p = arr;  // Address of arr[0]
+    // Array-to-pointer conversion
+    int* p = arr;  // address of arr[0]
 
-    // Access via pointer
-    int first = *p;         // 1
-    int second = *(p + 1);  // 2
+    int first = *p;  // 1
     return 0;
 }
 ```
 
-### Passing Arrays to Functions
+## for-in Loops
 
 ```cm
-void print_array(int* data, int size) {
-    for (int i = 0; i < size; i++) {
-        println("{}", data[i]);
-    }
-}
-
-int main() {
-    int[5] numbers = [1, 2, 3, 4, 5];
-    print_array(numbers, 5);  // Decays to pointer
-    return 0;
-}
-```
-
----
-
-## for-in Loop
-
-Iterate over arrays easily with range-based for loops.
-
-```cm
-struct Point { int x; int y; }
+import std::io::println;
 
 int main() {
     int[5] numbers = [1, 2, 3, 4, 5];
 
-    // With type
+    // With explicit type
     for (int n in numbers) {
-        println("{}", n);
+        println("{n}");
     }
 
-    // Type inference
+    // With type inference
     for (n in numbers) {
-        println("{}", n);
-    }
-
-    // Struct array
-    Point[3] points = {Point(1, 2), Point(3, 4), Point(5, 6)};
-
-    for (Point p in points) {
-        println("({}, {})", p.x, p.y);
+        println("{n}");
     }
     return 0;
 }
 ```
-
----
 
 ## Multidimensional Arrays
 
 ```cm
-// 2D Array
-int[3][4] matrix;
+int main() {
+    // 2D array
+    int[3][4] matrix;
 
-// Initialization
-matrix[0][0] = 1;
-matrix[0][1] = 2;
+    matrix[0][0] = 1;
+    matrix[0][1] = 2;
 
-// Access via loop
-for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 4; j++) {
-        matrix[i][j] = i * 4 + j;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            matrix[i][j] = i * 4 + j;
+        }
     }
+
+    int d = matrix.dim();  // 2 (number of dimensions)
+    return 0;
 }
 ```
 
-### Performance Optimization (v0.11.0+)
+### Performance (since v0.11.0)
 
-**Automatic Array Flattening:** Cm v0.11.0 automatically optimizes multidimensional arrays for better cache performance.
+Multidimensional arrays are automatically flattened internally for cache locality (transparent to user code; 200-250x speedups on large matrices).
 
-```cm
-// Your code (unchanged)
-int[500][500] matrix;
-matrix[i][j] = value;
+## Backend Support
 
-// Internal optimization (automatic):
-// - Converts to flat 1D array for better cache locality
-// - Up to 250x faster for large matrices
-// - Completely transparent to the user
-```
+| Backend | Status |
+|------------|------|
+| JIT / LLVM Native | ✅ Full support |
+| WASM | ✅ Full support |
+| JS | ✅ Full support |
+| SV | ⚠️ Fixed arrays map to RAM/ROM inference (methods within the synthesizable subset) |
 
-This optimization provides:
-- **200-250x speedup** for matrix operations
-- **90% reduction** in cache misses
-- No code changes required
+## Related
 
----
-
-## Next Steps
-
-✅ Can declare and initialize arrays  
-✅ Know how to use array methods  
-✅ Understand array-pointer relationship  
-⏭️ Next, learn about [Pointers](pointers.html)
-
-## Related Links
-
+- [Slices](../advanced/slices.html) - growable slices, push/pop, etc.
 - [Pointers](pointers.html)
-- [Control Flow](control-flow.html)
+- [for-in](control-flow.html)
 
 ---
 
-**Previous:** [Functions](functions.html)  
-
----
-
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-07-12
 
 ---
 

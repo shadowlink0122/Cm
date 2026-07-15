@@ -94,6 +94,7 @@ help:
 	@echo "Test Commands (Unit Tests):"
 	@echo "  make test           - 全テスト実行（unit + integration）"
 	@echo "  make test-unit      - C++ユニットテストのみ"
+	@echo "  make test-regression  - C++回帰テスト（パイプライン段階のgtest）のみ"
 	@echo "  make test-lexer     - Lexerテストのみ"
 	@echo "  make test-hir       - HIR Loweringテストのみ"
 	@echo "  make test-mir       - MIR Loweringテストのみ"
@@ -150,6 +151,8 @@ help:
 	@echo "  make b   - build"
 	@echo "  make t   - test (unit + integration)"
 	@echo "  make tu  - test-unit (C++ unit tests only)"
+	@echo "  make tr  - test-regression (C++ regression tests)"
+	@echo "  make tuf - test-uefi"
 	@echo "  make ta  - test-all"
 	@echo "  make tao - test-all-opts (全最適化レベルテスト)"
 	@echo "  make tl  - test-llvm"
@@ -252,6 +255,34 @@ check-docs-version:
 
 # 配布物ビルド（tar.gz作成）
 # 含まれるもの: コンパイラ, stdランタイム, VSCode拡張, チュートリアル, examples, README
+# ============================================================
+# VSCode拡張: ビルド (.vsix生成) / ローカルインストール
+# ============================================================
+# pnpm run package は prepackage(verify-version) で package.json と
+# VERSION ファイルの整合を検証してから .vsix を生成する
+.PHONY: vscode-extension
+vscode-extension:
+	@echo "VSCode拡張をビルド中..."
+	@cd vscode-extension && pnpm install --silent && pnpm run package
+	@echo "✅ VSCode拡張ビルド完了:"
+	@ls -lh vscode-extension/cm-language-*.vsix | awk '{print "  " $$9 " (" $$5 ")"}'
+
+.PHONY: vscode-extension-install
+vscode-extension-install: vscode-extension
+	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
+	CODE_BIN=$$(command -v code || true); \
+	if [ -z "$$CODE_BIN" ] && [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]; then \
+		CODE_BIN="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"; \
+	fi; \
+	if [ -z "$$CODE_BIN" ]; then \
+		echo "エラー: code コマンドが見つかりません。"; \
+		echo "VSCodeのコマンドパレット（Cmd+Shift+P）で 'Shell Command: Install code command in PATH' を実行するか、"; \
+		echo "次を手動で実行してください: <VSCodeのcodeバイナリ> --install-extension vscode-extension/cm-language-$$VERSION.vsix"; \
+		exit 1; \
+	fi; \
+	"$$CODE_BIN" --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
+	echo "✅ VSCode拡張をインストールしました (cm-language-$$VERSION)"
+
 .PHONY: dist
 dist: release
 	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
@@ -436,23 +467,46 @@ dx: debug-x86
 
 .PHONY: test-unit
 test-unit:
-	@echo "Running all C++ unit tests..."
-	@ctest --test-dir $(BUILD_DIR) --output-on-failure
+	@echo "Running C++ unit tests..."
+	@ctest --test-dir $(BUILD_DIR) -L unit --no-tests=error --output-on-failure
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
+# C++回帰テスト（プロセス内でコンパイルパイプラインの段階を通すgtest。
+# Cmプログラムは tests/regression/cases/ の .cm ファイルから読み込む。
+# 「integration」はリリースビルドのcmバイナリに対する機能テスト
+# （test-interpreter/-llvm/-js/-sv等のバックエンドスイート）を指す）
+.PHONY: test-regression
+test-regression:
+	@echo "Running C++ regression tests..."
+	@ctest --test-dir $(BUILD_DIR) -L regression --no-tests=error --output-on-failure
+	@echo ""
+	@echo "✅ All regression tests passed!"
+
+# 旧名エイリアス（削除予定）
+.PHONY: test-integration
+test-integration: test-regression
+
+# cm test コマンドのE2Eテスト（JIT/SVディスパッチ）
+.PHONY: test-cm-test
+test-cm-test:
+	@echo "Running cm test command E2E tests..."
+	@tests/test_cm_test.sh
+
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
 	@echo "  - Unit tests (C++)"
+	@echo "  - Integration tests (C++)"
 	@echo "  - Interpreter tests (parallel)"
 	@echo "  - LLVM Native tests (parallel)"
 	@echo "  - LLVM WASM tests (parallel)"
 	@echo "  - JavaScript tests (parallel)"
 	@echo "  - SystemVerilog tests (parallel)"
+	@echo "  - cm test command E2E"
 	@echo "=========================================="
 
 .PHONY: test-lexer
@@ -696,8 +750,12 @@ format-check:
 	@echo "Checking code formatting..."
 	@find src tests -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
 		-exec clang-format -style=file -dry-run -Werror {} \; 2>&1 && \
-		echo "✅ Format check passed!" || \
-		(echo "❌ Format check failed! Run 'make format' to fix." && exit 1)
+		echo "✅ C++ format check passed!" || \
+		(echo "❌ C++ format check failed! Run 'make format' to fix." && exit 1)
+	@echo "Checking Cm code formatting..."
+	@find tests/common libs -type f -name "*.cm" | xargs ./cm fmt --check -q && \
+		echo "✅ Cm format check passed!" || \
+		(echo "❌ Cm format check failed! Run 'make format' to fix." && exit 1)
 
 .PHONY: lint
 lint: format-check
@@ -715,6 +773,10 @@ t: test
 
 .PHONY: tu
 tu: test-unit
+
+.PHONY: ti
+tr: test-regression
+ti: test-regression
 
 .PHONY: ta
 ta: test-all
@@ -778,8 +840,9 @@ tla: test-llvm-all
 .PHONY: tb
 tb: test-baremetal
 
-.PHONY: tu
-tu: test-uefi
+# （tu は test-unit のショートカットのため、UEFIは tuf を使う）
+.PHONY: tuf
+tuf: test-uefi
 
 .PHONY: tbu
 tbu: test-baremetal test-uefi

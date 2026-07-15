@@ -1058,8 +1058,27 @@ int32_t* __builtin_array_slice_i32(int32_t* arr, int64_t arr_len, int64_t start,
 // Array Higher-Order Functions
 // ============================================================
 
+// スライス対応: サイズが負の場合、データ引数はCmSlice*であり展開する
+// （HIRは可変長スライスのHOF呼び出しでサイズ-1を渡す）
+typedef struct {
+    void* data;
+    int64_t len;
+    int64_t cap;
+    int64_t elem_size;
+} CmHofSlice;
+
+#define CM_HOF_UNWRAP(a, s)                    \
+    do {                                       \
+        if ((s) < 0) {                         \
+            CmHofSlice* __cm_s = (CmHofSlice*)(a); \
+            (a) = (void*)__cm_s->data;         \
+            (s) = __cm_s->len;                 \
+        }                                      \
+    } while (0)
+
 // forEach: 各要素に対して関数を実行
 void __builtin_array_forEach_i64(int64_t* arr, int64_t size, void (*callback)(int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !callback)
         return;
     for (int64_t i = 0; i < size; i++) {
@@ -1068,6 +1087,7 @@ void __builtin_array_forEach_i64(int64_t* arr, int64_t size, void (*callback)(in
 }
 
 void __builtin_array_forEach_i32(int32_t* arr, int64_t size, void (*callback)(int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !callback)
         return;
     for (int64_t i = 0; i < size; i++) {
@@ -1078,6 +1098,7 @@ void __builtin_array_forEach_i32(int32_t* arr, int64_t size, void (*callback)(in
 // reduce: 要素を畳み込み
 int64_t __builtin_array_reduce_i64(int64_t* arr, int64_t size,
                                    int64_t (*callback)(int64_t, int64_t), int64_t init) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !callback)
         return init;
     int64_t acc = init;
@@ -1089,6 +1110,7 @@ int64_t __builtin_array_reduce_i64(int64_t* arr, int64_t size,
 
 int32_t __builtin_array_reduce_i32(int32_t* arr, int64_t size,
                                    int32_t (*callback)(int32_t, int32_t), int32_t init) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !callback)
         return init;
     int32_t acc = init;
@@ -1100,6 +1122,7 @@ int32_t __builtin_array_reduce_i32(int32_t* arr, int64_t size,
 
 // some: いずれかの要素が条件を満たすか
 bool __builtin_array_some_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return false;
     for (int64_t i = 0; i < size; i++) {
@@ -1110,6 +1133,7 @@ bool __builtin_array_some_i64(int64_t* arr, int64_t size, bool (*predicate)(int6
 }
 
 bool __builtin_array_some_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return false;
     for (int64_t i = 0; i < size; i++) {
@@ -1121,6 +1145,7 @@ bool __builtin_array_some_i32(int32_t* arr, int64_t size, bool (*predicate)(int3
 
 // every: すべての要素が条件を満たすか
 bool __builtin_array_every_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return true;
     for (int64_t i = 0; i < size; i++) {
@@ -1131,6 +1156,7 @@ bool __builtin_array_every_i64(int64_t* arr, int64_t size, bool (*predicate)(int
 }
 
 bool __builtin_array_every_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return true;
     for (int64_t i = 0; i < size; i++) {
@@ -1142,6 +1168,7 @@ bool __builtin_array_every_i32(int32_t* arr, int64_t size, bool (*predicate)(int
 
 // findIndex: 条件を満たす最初の要素のインデックス
 int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return -1;
     for (int64_t i = 0; i < size; i++) {
@@ -1152,6 +1179,7 @@ int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, bool (*predica
 }
 
 int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return -1;
     for (int64_t i = 0; i < size; i++) {
@@ -1163,12 +1191,14 @@ int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predica
 
 // first: 配列の最初の要素を返す
 int32_t __builtin_array_first_i32(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || size <= 0)
         return 0;
     return arr[0];
 }
 
 int64_t __builtin_array_first_i64(int64_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || size <= 0)
         return 0;
     return arr[0];
@@ -1176,12 +1206,14 @@ int64_t __builtin_array_first_i64(int64_t* arr, int64_t size) {
 
 // last: 配列の最後の要素を返す
 int32_t __builtin_array_last_i32(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || size <= 0)
         return 0;
     return arr[size - 1];
 }
 
 int64_t __builtin_array_last_i64(int64_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || size <= 0)
         return 0;
     return arr[size - 1];
@@ -1189,6 +1221,7 @@ int64_t __builtin_array_last_i64(int64_t* arr, int64_t size) {
 
 // find: 条件に合う最初の要素を返す（見つからなければデフォルト値）
 int32_t __builtin_array_find_i32(int32_t* arr, int64_t size, bool (*predicate)(int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return 0;
     for (int64_t i = 0; i < size; i++) {
@@ -1199,6 +1232,7 @@ int32_t __builtin_array_find_i32(int32_t* arr, int64_t size, bool (*predicate)(i
 }
 
 int64_t __builtin_array_find_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return 0;
     for (int64_t i = 0; i < size; i++) {
@@ -1218,6 +1252,7 @@ typedef struct {
 
 // sortBy: カスタム比較関数でソートしたコピーを返す
 void* __builtin_array_sortBy_i32(int32_t* arr, int64_t size, int (*comparator)(int32_t, int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1260,6 +1295,7 @@ void* __builtin_array_sortBy_i32(int32_t* arr, int64_t size, int (*comparator)(i
 }
 
 void* __builtin_array_sortBy_i64(int64_t* arr, int64_t size, int (*comparator)(int64_t, int64_t)) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1303,10 +1339,12 @@ void* __builtin_array_sortBy_i64(int64_t* arr, int64_t size, int (*comparator)(i
 
 // 汎用sortBy（エイリアス）
 void* __builtin_array_sortBy(int32_t* arr, int64_t size, int (*comparator)(int32_t, int32_t)) {
+    CM_HOF_UNWRAP(arr, size);
     return __builtin_array_sortBy_i32(arr, size, comparator);
 }
 
 void* __builtin_array_reverse_i32(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1336,6 +1374,7 @@ void* __builtin_array_reverse_i32(int32_t* arr, int64_t size) {
 }
 
 void* __builtin_array_reverse_i64(int64_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1366,6 +1405,7 @@ void* __builtin_array_reverse_i64(int64_t* arr, int64_t size) {
 
 // デフォルト版（i32と同じ）
 void* __builtin_array_reverse(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     return __builtin_array_reverse_i32(arr, size);
 }
 
@@ -1383,6 +1423,7 @@ static int compare_i64(const void* a, const void* b) {
 }
 
 void* __builtin_array_sort_i32(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1411,6 +1452,7 @@ void* __builtin_array_sort_i32(int32_t* arr, int64_t size) {
 }
 
 void* __builtin_array_sort_i64(int64_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     CmSlice_fmt* slice = (CmSlice_fmt*)cm_alloc(sizeof(CmSlice_fmt));
     if (!slice)
         return NULL;
@@ -1440,11 +1482,13 @@ void* __builtin_array_sort_i64(int64_t* arr, int64_t size) {
 
 // デフォルト版（i32と同じ）
 void* __builtin_array_sort(int32_t* arr, int64_t size) {
+    CM_HOF_UNWRAP(arr, size);
     return __builtin_array_sort_i32(arr, size);
 }
 
 // indexOf: 要素の位置を検索
 int32_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr)
         return -1;
     for (int64_t i = 0; i < size; i++) {
@@ -1455,6 +1499,7 @@ int32_t __builtin_array_indexOf_i64(int64_t* arr, int64_t size, int64_t value) {
 }
 
 int32_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
+    CM_HOF_UNWRAP(arr, size);
     if (!arr)
         return -1;
     for (int64_t i = 0; i < size; i++) {
@@ -1466,10 +1511,12 @@ int32_t __builtin_array_indexOf_i32(int32_t* arr, int64_t size, int32_t value) {
 
 // includes: 要素が含まれているか
 bool __builtin_array_includes_i64(int64_t* arr, int64_t size, int64_t value) {
+    CM_HOF_UNWRAP(arr, size);
     return __builtin_array_indexOf_i64(arr, size, value) >= 0;
 }
 
 bool __builtin_array_includes_i32(int32_t* arr, int64_t size, int32_t value) {
+    CM_HOF_UNWRAP(arr, size);
     return __builtin_array_indexOf_i32(arr, size, value) >= 0;
 }
 

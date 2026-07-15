@@ -418,6 +418,17 @@ int main() {
 
 **Last Updated:** 2026-02-10
 
+## Bit slices (v0.16.0)
+
+Read/write bit ranges of integers and `bit[N]` values (see [SV Backend - Data structures](../compiler/sv/data.html)):
+
+```cm
+uint x = 0xABCD;
+uint hi = (x[15:8]) as uint;  // 0xAB
+x[3:0] = 0;                   // clear low nibble
+```
+
+
 ---
 
 <!-- nav -->

@@ -1,0 +1,7 @@
+int main() {
+    int x = 2 + 3;     // 定数畳み込み
+    int y = x;         // コピー伝播
+    int z = y * 2;     // 定数畳み込み（伝播後）
+    int unused = 100;  // デッドコード除去
+    return z;
+}

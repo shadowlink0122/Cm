@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 式の型推論
 // ============================================================
 
+#include "../../../common/text_utils.hpp"
 #include "../type_checker.hpp"
 
 #include <functional>
@@ -93,13 +94,40 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         }
         inferred_type = ast::make_string();
     } else if (auto* cast_expr = expr.as<ast::CastExpr>()) {
-        // キャスト式: expr as Type
+        // キャスト式: expr as Type / 型判別式: expr is Type
         // オペランドの型を推論
+        ast::TypePtr operand_type;
         if (cast_expr->operand) {
-            infer_type(*cast_expr->operand);
+            operand_type = infer_type(*cast_expr->operand);
         }
-        // ターゲット型を返す
-        inferred_type = cast_expr->target_type;
+        if (cast_expr->type_check) {
+            // is はユニオン型の値にのみ使用できる。対象型は変種のいずれかであること
+            auto resolved = resolve_typedef(operand_type);
+            auto variants = ast::union_variant_types(resolved);
+            if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
+                error(expr.span, "'is' はユニオン型の値にのみ使用できます（左辺の型: " +
+                                     (operand_type ? ast::type_to_string(*operand_type)
+                                                   : std::string("不明")) +
+                                     "）");
+            } else if (cast_expr->target_type) {
+                std::string target_name = ast::type_to_string(*cast_expr->target_type);
+                bool found = false;
+                for (const auto& v : variants) {
+                    if (v && ast::type_to_string(*v) == target_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    error(expr.span,
+                          "'is' の対象型 '" + target_name + "' はユニオンの変種に含まれていません");
+                }
+            }
+            inferred_type = ast::make_bool();
+        } else {
+            // ターゲット型を返す
+            inferred_type = cast_expr->target_type;
+        }
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: オペランドの型を推論し、変数をmoved状態にマーク
         if (move_expr->operand) {
@@ -215,6 +243,14 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
     }
 
     auto struct_it = struct_defs_.find(lit.type_name);
+    if (struct_it == struct_defs_.end()) {
+        // 名前空間内の非修飾名は「現在の名前空間::名前」として解決し、
+        // リテラルの型名を修飾名へ書き換える（HIR/コード生成へ伝播）
+        if (auto qualified = resolve_in_namespace(lit.type_name)) {
+            lit.type_name = *qualified;
+            struct_it = struct_defs_.find(lit.type_name);
+        }
+    }
     if (struct_it == struct_defs_.end()) {
         error(current_span_, "Unknown struct type: " + lit.type_name);
         return ast::make_error();
@@ -515,6 +551,45 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
     otype = resolve_typedef(otype);
 
     switch (unary.op) {
+        case ast::UnaryOp::Try: {
+            // ?演算子: Result<T,E>/Option<T> のエラー伝播。
+            // OkならT、Err/Noneなら現在の関数からそのまま早期returnする
+            std::string base = otype->name;
+            auto lt = base.find('<');
+            if (lt != std::string::npos) {
+                base = base.substr(0, lt);
+            }
+            bool is_result_like =
+                (otype->kind == ast::TypeKind::Struct && (base == "Result" || base == "Option"));
+            if (!is_result_like) {
+                error(current_span_, "'?' はResult/Option型の値にのみ使用できます（対象の型: " +
+                                         ast::type_to_string(*otype) + "）");
+                return ast::make_error();
+            }
+            // 現在の関数の戻り値型も同じ種別（Result?はResult返却関数、Option?はOption返却関数）
+            std::string ret_base;
+            if (current_return_type_) {
+                ret_base = current_return_type_->name;
+                auto rlt = ret_base.find('<');
+                if (rlt != std::string::npos) {
+                    ret_base = ret_base.substr(0, rlt);
+                }
+            }
+            if (ret_base != base) {
+                error(current_span_,
+                      "'?' は" + base +
+                          "を返す関数の中でのみ使用できます"
+                          "（現在の関数の戻り値型: " +
+                          (current_return_type_ ? ast::type_to_string(*current_return_type_)
+                                                : std::string("なし")) +
+                          "）");
+            }
+            // Ok/Someのペイロード型を返す
+            if (!otype->type_args.empty() && otype->type_args[0]) {
+                return otype->type_args[0];
+            }
+            return ast::make_int();
+        }
         case ast::UnaryOp::Neg:
             if (!otype->is_numeric()) {
                 error(current_span_, "Negation requires numeric operand");
@@ -629,6 +704,72 @@ ast::TypePtr TypeChecker::infer_index(ast::IndexExpr& idx) {
 ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
     auto obj_type = infer_type(*slice.object);
 
+    // ビットスライス（v0.16.0）: オブジェクトが bit[N] または整数型のとき、
+    // x[hi:lo]（定数範囲・SVと同じ降順・両端含む）と x[base +: width] を
+    // ビット選択として解釈する。結果型は bit[w]
+    {
+        bool obj_is_bits =
+            obj_type && ((obj_type->kind == ast::TypeKind::Array && obj_type->element_type &&
+                          obj_type->element_type->kind == ast::TypeKind::Bit) ||
+                         obj_type->is_integer() || obj_type->kind == ast::TypeKind::Bit);
+        auto lit_value = [](const ast::ExprPtr& e) -> std::optional<int64_t> {
+            if (!e) {
+                return std::nullopt;
+            }
+            if (auto* lit = e->as<ast::LiteralExpr>()) {
+                if (auto* iv = std::get_if<int64_t>(&lit->value)) {
+                    return *iv;
+                }
+            }
+            return std::nullopt;
+        };
+        if (obj_is_bits && slice.is_part_select) {
+            // base は任意の整数式、width は正の整数リテラル
+            auto base_type = infer_type(*slice.start);
+            if (!base_type || !base_type->is_integer()) {
+                error(current_span_, "パートセレクトの基点は整数型である必要があります");
+            }
+            auto w = lit_value(slice.end);
+            if (!w || *w <= 0 || *w > 64) {
+                error(current_span_,
+                      "パートセレクトの幅は1〜64の整数リテラルで指定してください"
+                      "（v0.16.0時点の制限）");
+                return ast::make_error();
+            }
+            // スカラーbit（幅1）に幅2以上のパートセレクトは不可
+            if (obj_type->kind == ast::TypeKind::Bit && *w != 1) {
+                error(current_span_, "スカラーbit（幅1）へのパートセレクト幅は1のみ有効です");
+                return ast::make_error();
+            }
+            return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*w));
+        }
+        if (obj_is_bits && slice.start && slice.end && !slice.step) {
+            auto hi = lit_value(slice.start);
+            auto lo = lit_value(slice.end);
+            if (!hi || !lo) {
+                error(current_span_,
+                      "ビットスライスの範囲は整数リテラルで指定してください"
+                      "（v0.16.0時点の制限。例: x[7:4]）");
+                return ast::make_error();
+            }
+            if (*lo < 0 || *hi < *lo || *hi - *lo + 1 > 64) {
+                error(current_span_, "ビットスライス範囲が不正です（hi >= lo >= 0、幅は64以下）");
+                return ast::make_error();
+            }
+            if (obj_type->kind == ast::TypeKind::Array && obj_type->array_size &&
+                *hi >= static_cast<int64_t>(*obj_type->array_size)) {
+                error(current_span_, "ビットスライスの上位ビットが型の幅を超えています");
+                return ast::make_error();
+            }
+            // スカラーbitは幅1として扱い、[0:0] 以外の範囲はエラー
+            if (obj_type->kind == ast::TypeKind::Bit && (*hi != 0 || *lo != 0)) {
+                error(current_span_, "スカラーbit（幅1）へのビットスライスは [0:0] のみ有効です");
+                return ast::make_error();
+            }
+            return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*hi - *lo + 1));
+        }
+    }
+
     if (slice.start) {
         auto start_type = infer_type(*slice.start);
         if (!start_type || !start_type->is_integer()) {
@@ -696,6 +837,10 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     size_t arm_index = 0;
 
     for (auto& arm : match.arms) {
+        // パターン束縛（Option::Some(v) の v 等）はアームのスコープに閉じる。
+        // 従来はスコープpush前に定義され関数スコープへ漏れていた（既知の問題を修正）
+        scopes_.push();
+
         check_match_pattern(arm.pattern.get(), scrutinee_type);
 
         if (arm.guard) {
@@ -705,6 +850,9 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
             }
         }
 
+        // 内側スコープ: EnumVariantWithBindingのペイロード精密型が
+        // check_match_patternの粗い定義をシャドウできるようにする
+        // （同一スコープでの再定義は無効のためネストが必要）
         scopes_.push();
 
         // EnumVariantWithBindingの場合、バインディング変数をスコープに追加
@@ -719,10 +867,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                     if (enum_it != enum_defs_.end() && enum_it->second) {
                         // バリアント名を取得（Type::Variant形式からVariantを抽出）
                         std::string variant_name = arm.pattern->enum_variant;
-                        auto sep = variant_name.rfind("::");
-                        if (sep != std::string::npos) {
-                            variant_name = variant_name.substr(sep + 2);
-                        }
+                        variant_name = cm::text::strip_namespace(variant_name);
                         // enum定義からフィールド型を取得
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == variant_name && !member.fields.empty()) {
@@ -789,6 +934,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
             }
         }
 
+        scopes_.pop();
         scopes_.pop();
         arm_index++;
     }
@@ -1039,6 +1185,40 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             for (const auto& sub_pattern : pattern->or_patterns) {
                 check_match_pattern(sub_pattern.get(), expected_type);
             }
+            break;
+
+        case ast::MatchPatternKind::Type: {
+            // ユニオンの型パターン: scrutineeがユニオン型で、
+            // パターン型が変種のいずれかであること
+            auto resolved = resolve_typedef(expected_type);
+            auto variants = ast::union_variant_types(resolved);
+            if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
+                error(current_span_, "型パターンはユニオン型のmatchでのみ使用できます（対象の型: " +
+                                         (expected_type ? ast::type_to_string(*expected_type)
+                                                        : std::string("不明")) +
+                                         "）");
+            } else if (pattern->type_pattern) {
+                std::string target_name = ast::type_to_string(*pattern->type_pattern);
+                bool found = false;
+                for (const auto& v : variants) {
+                    if (v && ast::type_to_string(*v) == target_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    error(current_span_,
+                          "型パターン '" + target_name + "' はユニオンの変種に含まれていません");
+                }
+            }
+            // 束縛変数をパターン型で登録
+            if (!pattern->binding_name.empty() && pattern->binding_name != "_") {
+                scopes_.current().define(pattern->binding_name, pattern->type_pattern);
+            }
+            break;
+        }
+
+        default:
             break;
     }
 }

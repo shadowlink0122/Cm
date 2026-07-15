@@ -59,6 +59,30 @@ match (value) {
 }
 ```
 
+### Returning a Value (Expression Form)
+
+A match whose arms are all expression bodies (`Pattern => expr`) can be used as a value-producing expression.
+
+```cm
+string name = match (value) {
+    0 => "zero",
+    1 => "one",
+    2 => "two",
+    _ => "other",
+};
+```
+
+A function call written directly as the scrutinee is evaluated exactly once.
+
+```cm
+int x = match (getv(21)) {
+    Result::Ok(v) => v,
+    Result::Err(e) => -1,
+};
+```
+
+Note: an expression-form match nested inside an arm's expression body cannot use a function call as its scrutinee (use a block-form arm and bind the call result to a variable first).
+
 ---
 
 ## Enum Patterns

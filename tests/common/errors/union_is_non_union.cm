@@ -1,0 +1,9 @@
+// 非ユニオン値への is はコンパイルエラー
+import std::io::println;
+
+int main() {
+    int x = 42;
+    bool b = x is int;
+    println("{b}");
+    return 0;
+}

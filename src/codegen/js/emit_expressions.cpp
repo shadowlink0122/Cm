@@ -1,3 +1,4 @@
+#include "../../frontend/ast/typedef.hpp"
 #include "codegen.hpp"
 #include "types.hpp"
 
@@ -10,6 +11,36 @@
 namespace cm::codegen::js {
 
 using ast::TypeKind;
+
+namespace {
+
+// ユニオン型の変種一覧から、指定した型に対応するタグ（変種インデックス）を返す。
+// 判定できない場合は-1（LLVMバックエンドのcomputeExpectedUnionTagと同じ判定基準）
+int computeUnionTag(const hir::TypePtr& union_type, const hir::TypePtr& value_type) {
+    if (!union_type || !value_type) {
+        return -1;
+    }
+    auto variants = ast::union_variant_types(union_type);
+    for (size_t vi = 0; vi < variants.size(); ++vi) {
+        const auto& v = variants[vi];
+        if (!v) {
+            continue;
+        }
+        if (v->kind == value_type->kind &&
+            (v->kind != TypeKind::Struct || v->name == value_type->name)) {
+            return static_cast<int>(vi);
+        }
+    }
+    return -1;
+}
+
+// boxedタグ付きユニオン（{field0: tag, field1: value}）かどうかのJS実行時判定式
+std::string unionBoxedCheck(const std::string& v) {
+    return "(" + v + " !== null && typeof " + v + " === \"object\" && " + v +
+           ".field0 !== undefined)";
+}
+
+}  // namespace
 
 std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func) {
     switch (rvalue.kind) {
@@ -97,6 +128,36 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             };
             const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
                              is_unsigned_int(rhsType);
+
+            // 64ビット整数のビット演算はBigIntで行う。
+            // JSのビット演算子（>> >>> << & | ^）は32ビット固定のため、
+            // long/ulongではシフト量>=32やbit32以上のマスクが壊れる
+            // （精度はNumberの53bitに制限される点は従来どおり）
+            auto is_64bit_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::Long || t->kind == TypeKind::ULong;
+            };
+            const bool wide64 = is_64bit_int(data.result_type) || is_64bit_int(lhsType);
+            if (wide64) {
+                const std::string reinterpret = uns ? "BigInt.asUintN" : "BigInt.asIntN";
+                const std::string blhs = "BigInt(Math.trunc(" + lhs + "))";
+                const std::string brhs = "BigInt(Math.trunc(" + rhs + "))";
+                switch (data.op) {
+                    case mir::MirBinaryOp::Shr:
+                        return "Number(" + reinterpret + "(64, " + blhs + ") >> " + brhs + ")";
+                    case mir::MirBinaryOp::Shl:
+                        return "Number(" + reinterpret + "(64, " + blhs + " << " + brhs + "))";
+                    case mir::MirBinaryOp::BitAnd:
+                        return "Number(" + reinterpret + "(64, " + blhs + " & " + brhs + "))";
+                    case mir::MirBinaryOp::BitOr:
+                        return "Number(" + reinterpret + "(64, " + blhs + " | " + brhs + "))";
+                    case mir::MirBinaryOp::BitXor:
+                        return "Number(" + reinterpret + "(64, " + blhs + " ^ " + brhs + "))";
+                    default:
+                        break;
+                }
+            }
 
             // 右シフト: JSの >> はint32の算術シフトのため、符号なし型は >>> を使う
             if (data.op == mir::MirBinaryOp::Shr && uns) {
@@ -223,6 +284,53 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     return "{__arr: " + base + ", __idx: " + idxStr + "}";
                 }
             }
+            // 構造体フィールドへのRef（&p.x）→ {__arr: 親オブジェクト, __idx: "フィールド名"}
+            // 文字列キーでも obj[key] で読み書きできるため、配列要素ポインタと
+            // 同一のデリファレンス経路（.__arr[.__idx]）がそのまま機能する
+            if (!data.place.projections.empty() &&
+                data.place.projections.back().kind == mir::ProjectionKind::Field) {
+                std::string base = getLocalVarName(func, data.place.local);
+                if (boxed_locals_.count(data.place.local)) {
+                    base += "[0]";
+                }
+                hir::TypePtr currentType = nullptr;
+                if (data.place.local < func.locals.size()) {
+                    currentType = func.locals[data.place.local].type;
+                }
+                // 最後のFieldの手前までを辿る（ネストフィールド・ポインタ経由に対応）
+                for (size_t i = 0; i + 1 < data.place.projections.size(); ++i) {
+                    const auto& proj = data.place.projections[i];
+                    if (proj.kind == mir::ProjectionKind::Deref) {
+                        // JSでは構造体ポインタはオブジェクト参照そのものなのでno-op
+                        if (currentType && (currentType->kind == TypeKind::Pointer ||
+                                            currentType->kind == TypeKind::Reference)) {
+                            currentType = currentType->element_type;
+                        }
+                        continue;
+                    }
+                    if (proj.kind == mir::ProjectionKind::Field && currentType &&
+                        currentType->kind == TypeKind::Struct) {
+                        auto it = struct_map_.find(currentType->name);
+                        if (it != struct_map_.end() && it->second &&
+                            proj.field_id < it->second->fields.size()) {
+                            base +=
+                                "." + sanitizeIdentifier(it->second->fields[proj.field_id].name);
+                            currentType = it->second->fields[proj.field_id].type;
+                        }
+                    }
+                }
+                // 最後のFieldはキーとして返す
+                const auto& lastProj = data.place.projections.back();
+                if (currentType && currentType->kind == TypeKind::Struct) {
+                    auto it = struct_map_.find(currentType->name);
+                    if (it != struct_map_.end() && it->second &&
+                        lastProj.field_id < it->second->fields.size()) {
+                        return "{__arr: " + base + ", __idx: \"" +
+                               sanitizeIdentifier(it->second->fields[lastProj.field_id].name) +
+                               "\"}";
+                    }
+                }
+            }
             if (boxed_locals_.count(data.place.local)) {
                 // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0}
                 // boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
@@ -234,6 +342,85 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
         case mir::MirRvalue::Cast: {
             const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
             std::string operand = emitOperand(*data.operand, func);
+
+            // ユニオン型の実行時型判別 (expr is Type):
+            // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する
+            // （構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
+            if (data.check_only) {
+                if (data.target_type) {
+                    hir::TypePtr srcUnion = getOperandType(*data.operand, func);
+                    int expected_tag = computeUnionTag(srcUnion, data.target_type);
+                    std::string typeof_check;
+                    if (data.target_type->kind == TypeKind::String) {
+                        typeof_check = "(typeof u === \"string\")";
+                    } else if (data.target_type->is_integer() || data.target_type->is_floating()) {
+                        typeof_check = "(typeof u === \"number\")";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_check = "(typeof u === \"boolean\")";
+                    } else {
+                        typeof_check = "(typeof u === \"object\" && u !== null)";
+                    }
+                    return "((u) => " + unionBoxedCheck("u") +
+                           " ? (u.field0 === " + std::to_string(expected_tag) +
+                           ") : " + typeof_check + ")(" + operand + ")";
+                }
+                return "false";
+            }
+
+            // ユニオン変換:
+            //   構築（T → Union）: タグ付き表現 {field0: tag, field1: value} で包む
+            //   取り出し（Union as T）: タグ検査 + field1参照（生値はtypeofフォールバック）
+            {
+                hir::TypePtr srcType = getOperandType(*data.operand, func);
+                hir::TypePtr tgtResolved = data.target_type;
+                if (tgtResolved && tgtResolved->kind == TypeKind::Union &&
+                    (!srcType || srcType->kind != TypeKind::Union)) {
+                    // ユニオン構築: 変種タグを付けてbox化
+                    int tag = computeUnionTag(tgtResolved, srcType);
+                    if (tag >= 0) {
+                        return "{ field0: " + std::to_string(tag) + ", field1: " + operand + " }";
+                    }
+                    // タグ不明（型情報欠落）は従来どおり生値
+                    return operand;
+                }
+                if (srcType && srcType->kind == TypeKind::Union && data.target_type &&
+                    data.target_type->kind != TypeKind::Union) {
+                    int expected_tag = computeUnionTag(srcType, data.target_type);
+                    std::string typeof_name;
+                    std::string conv_prefix;
+                    std::string conv_suffix;
+                    if (data.target_type->kind == TypeKind::String) {
+                        typeof_name = "string";
+                    } else if (data.target_type->is_integer()) {
+                        typeof_name = "number";
+                        conv_prefix = "Math.trunc(";
+                        conv_suffix = ")";
+                    } else if (data.target_type->is_floating()) {
+                        typeof_name = "number";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_name = "boolean";
+                        conv_prefix = "Boolean(";
+                        conv_suffix = ")";
+                    }
+                    const std::string fail =
+                        "{ console.log(\"invalid union cast: active variant does not match "
+                        "target type\"); ((typeof process !== \"undefined\") ? process.exit(1) "
+                        ": (() => { throw new Error(\"invalid union cast\"); })()); }";
+                    std::string boxed_branch =
+                        "(() => { if (v.field0 !== " + std::to_string(expected_tag) + ") " + fail +
+                        " return " + conv_prefix + "v.field1" + conv_suffix + "; })()";
+                    std::string raw_branch;
+                    if (!typeof_name.empty()) {
+                        raw_branch = "(() => { if (typeof v !== \"" + typeof_name + "\") " + fail +
+                                     " return " + conv_prefix + "v" + conv_suffix + "; })()";
+                    } else {
+                        // 構造体変種等: 生値はtypeofで判別できないため無検査で通す
+                        raw_branch = "v";
+                    }
+                    return "((v) => " + unionBoxedCheck("v") + " ? " + boxed_branch + " : " +
+                           raw_branch + ")(" + operand + ")";
+                }
+            }
 
             // 型変換
             if (data.target_type) {
@@ -436,11 +623,14 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
 
             case mir::ProjectionKind::Deref: {
                 // ポインタ参照外し:
-                if (boxed_locals_.count(place.local)) {
-                    // ボックス化変数: emitPlaceの先頭で既に[0]が追加されているため追加不要
-                } else if (currentType && currentType->kind == TypeKind::Pointer &&
-                           currentType->element_type &&
-                           currentType->element_type->kind != ast::TypeKind::Struct) {
+                // 注意: boxed変数の[0]はボックス解除（ポインタ値の取り出し）であって
+                // デリファレンスではない。旧実装はboxedポインタのDerefをno-opにして
+                // いたため、int** 経由で付け替えた後の *p がポインタオブジェクトの
+                // まま読まれていた（ptr_double回帰）。boxed/非boxedとも同じ
+                // ポインタ解決を適用する（resultは既にポインタ値になっている）
+                if (currentType && currentType->kind == TypeKind::Pointer &&
+                    currentType->element_type &&
+                    currentType->element_type->kind != ast::TypeKind::Struct) {
                     // ポインタオブジェクト{__arr, __idx}のデリファレンス
                     std::string ptrExpr = result;
                     // 先読み: 次のプロジェクションがIndexの場合、複合変換
@@ -463,7 +653,11 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                     }
                 } else if (currentType && currentType->element_type &&
                            currentType->element_type->kind == ast::TypeKind::Struct) {
-                    // 構造体ポインタ: JSオブジェクトは参照型なのでDerefはno-op
+                    // 構造体ポインタ: オブジェクト直接参照ならno-op、
+                    // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
+                    // 指し先を取り出す（実行時判定の両対応）
+                    result = "((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" +
+                             result + ")";
                 } else {
                     // その他: ボックス配列の[0]でアクセス
                     result += "[0]";

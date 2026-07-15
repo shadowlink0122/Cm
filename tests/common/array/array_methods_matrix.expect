@@ -1,0 +1,17 @@
+size=5 len=5 length=5
+indexOf=2 missing=-1
+includes=true contains=true missing=false
+find=4 findIndex=2 some=true every=false
+map=30 50 len=5
+filter len=1 e0=4
+reduce=14
+sort=1 5
+sortBy=5 1
+reverse=5 3
+first=3 last=5
+dim=2
+each=3
+each=1
+each=4
+each=1
+each=5

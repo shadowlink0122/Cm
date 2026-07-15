@@ -1,6 +1,7 @@
 /// @file llvm_types.cpp
 /// @brief 型変換・定数変換処理
 
+#include "../../../frontend/ast/typedef.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -382,6 +383,27 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 return structType;
             }
 
+            // モノモーフィズされたenum名（Result__int__string / Result<int, string>）は
+            // ベースenumの__TaggedUnion_型へ正規化する。正規化しないと未知名フォール
+            // バックが同レイアウト別IDの構造体を生成し、関数シグネチャと本体で型が
+            // 分裂して返却値のペイロードが失われる
+            {
+                std::string base = lookupName;
+                auto lt = base.find('<');
+                if (lt != std::string::npos) {
+                    base = base.substr(0, lt);
+                }
+                auto us = base.find("__");
+                if (us != std::string::npos && us > 0) {
+                    base = base.substr(0, us);
+                }
+                if (!base.empty() && base != lookupName && enumDefs.count(base) > 0) {
+                    auto tagged = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                    tagged->name = "__TaggedUnion_" + base;
+                    return convertType(tagged);
+                }
+            }
+
             // Tagged Union構造体の動的生成
             // 型名が__TaggedUnion_で始まる場合、{i32, i8[N]}構造体を生成
             // Nはenumの最大ペイロードサイズ
@@ -516,10 +538,11 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             // 最大ペイロードサイズを計算（UnionVariantsから）
             uint32_t maxPayloadSize = 8;  // デフォルト8バイト（int/long等）
 
-            // type_argsに含まれる型からサイズを計算
-            if (!type->type_args.empty()) {
+            // バリアント型からサイズを計算（type_args形式とUnionType::variants形式の両対応）
+            auto unionVariants = ast::union_variant_types(type);
+            if (!unionVariants.empty()) {
                 maxPayloadSize = 0;
-                for (const auto& variantType : type->type_args) {
+                for (const auto& variantType : unionVariants) {
                     if (variantType) {
                         uint32_t variantSize = 0;
                         switch (variantType->kind) {

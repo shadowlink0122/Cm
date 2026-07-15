@@ -1,0 +1,35 @@
+import std::io::println;
+// slice_union_push.cm - ユニオン型スライスへのpushと読み出し
+// push_blob宣言欠落・elem_size誤り・読み出し経路のバグ回帰テスト（v0.16.0で修正）
+
+typedef Value = int | string;
+
+Value[] make_slice() {
+    Value[] xs = [];
+    xs.push(1 as Value);
+    xs.push("two" as Value);
+    xs.push(3 as Value);
+    return xs;
+}
+
+int main() {
+    // push構築
+    Value[] xs = make_slice();
+    println("len={xs.len()}");
+
+    int a = xs[0] as int;
+    string b = xs[1] as string;
+    int c = xs[2] as int;
+    println("a={a}");
+    println("b={b}");
+    println("c={c}");
+
+    // リテラル構築（push構築と同一の格納表現であること）
+    Value[] ys = [10 as Value, "twenty" as Value];
+    int y0 = ys[0] as int;
+    string y1 = ys[1] as string;
+    println("y0={y0}");
+    println("y1={y1}");
+
+    return 0;
+}

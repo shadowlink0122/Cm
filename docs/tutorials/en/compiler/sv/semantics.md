@@ -16,8 +16,7 @@ For basic usage, see the [SystemVerilog Backend](index.html).
 
 ## 1. Operator Precedence Follows the Cm Source Structure
 
-In SystemVerilog, `==` binds tighter than `&`, so `a & 256 == 0` without parentheses is
-interpreted as `a & (256 == 0)`. The Cm compiler preserves the expression structure and always emits the necessary parentheses.
+In SystemVerilog, `==` binds tighter than `&`, so `a & 256 == 0` without parentheses is interpreted as `a & (256 == 0)`. The Cm compiler preserves the expression structure and always emits the necessary parentheses.
 
 ```cm
 if ((r_qm & 256) == 0) { ... }
@@ -34,8 +33,7 @@ Evaluation order matches exactly what you wrote, so even bit-manipulation-heavy 
 
 ### Arithmetic Right Shift
 
-Cm's `>>` is an arithmetic shift for signed types (same as the LLVM backend's `ashr`).
-SV's `>>` is always a logical shift, so `>>>` is emitted for signed operands.
+Cm's `>>` is an arithmetic shift for signed types (same as the LLVM backend's `ashr`). SV's `>>` is always a logical shift, so `>>>` is emitted for signed operands.
 
 ```cm
 int s = -8;
@@ -48,8 +46,7 @@ shifted <= s >>> 32'sd2;  // arithmetic shift
 
 ### Signed Constants
 
-In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**.
-Cm emits constants according to their type, so negative checks like `s < 0` work correctly.
+In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**. Cm emits constants according to their type, so negative checks like `s < 0` work correctly.
 
 ```cm
 if (s < 0) { neg = 1; }   // int s
@@ -61,8 +58,7 @@ if ((s < 32'sd0)) begin ... end  // 'sd = signed decimal
 
 ## 3. `as` Casts Are Emitted as Size Casts
 
-A narrowing cast in the middle of an expression is emitted explicitly as an SV size cast `N'(expr)`.
-When the sign changes, `$signed()` / `$unsigned()` is used as well.
+A narrowing cast in the middle of an expression is emitted explicitly as an SV size cast `N'(expr)`. When the sign changes, `$signed()` / `$unsigned()` is used as well.
 
 ```cm
 wide = ((a + 300) as utiny) + 1000;  // truncate to 8 bits, then add
@@ -74,8 +70,7 @@ wide <= 8'((a + 32'd300)) + 32'd1000;  // if a=0, then 44 + 1000 = 1044
 
 ## 4. Variable Initial Values Become Power-On Initial Values
 
-The declared initial values of module-level variables are emitted as SV register declaration initial values.
-FPGA synthesis treats them as initial values, and in simulation they prevent X propagation.
+The declared initial values of module-level variables are emitted as SV register declaration initial values. FPGA synthesis treats them as initial values, and in simulation they prevent X propagation.
 
 ```cm
 uint state = 0;
@@ -134,8 +129,7 @@ output logic [31:0] data [0:3]  // dimensions are preserved
 
 ## Guaranteed by Tests
 
-These semantics are continuously verified by simulation-backed regression tests in `tests/sv/`
-(value verification with iverilog + vvp):
+These semantics are continuously verified by simulation-backed regression tests in `tests/sv/` (value verification with iverilog + vvp):
 
 - `basic/precedence_mask` — precedence parentheses preservation
 - `basic/cast_truncate` — narrowing casts in expressions
@@ -143,6 +137,20 @@ These semantics are continuously verified by simulation-backed regression tests 
 - `control/for_loop` / `control/loop_break` / `control/nested_loop` — while-loop reconstruction, break, nesting
 - `advanced/enum_explicit` / `advanced/reg_init` — explicit enum values and initial values
 - `memory/array_port` — array ports
+
+## Unsupported features (explicit errors / no syntax)
+
+Features that produce **explicit errors** on the SV target (execution-backend-only features):
+
+| Feature | Error | Alternative |
+|---|---|---|
+| Pointer types | SV002 | design with signals/arrays |
+| Non-const string > 3 chars | SV005 | const strings (localparam) |
+| Floating point (float/double) | SV004 | fixed point, or vendor IP via extern struct |
+| Dynamic arrays (slices) | SV006 | fixed-size arrays `T[N]` |
+
+SV constructs with **no Cm syntax** (no support planned): `force/release`, `specify`, UDPs, drive strengths, `fork/join`, events, DPI-C, SV interface/modport (different from Cm interfaces; use hierarchy + structs), delays `#10` (used only inside generated testbenches).
+
 
 ---
 

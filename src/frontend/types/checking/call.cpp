@@ -48,6 +48,16 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 infer_type(*arg);
             }
 
+            // 補間プレースホルダ内の変数参照をスコープ検査する
+            // （従来は素通りし、ブロック外に出た変数の参照がゴミ値になっていた）
+            if (!call.args.empty() && call.args[0]) {
+                if (const auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
+                    if (lit->is_string()) {
+                        check_interpolation_scope(std::get<std::string>(lit->value));
+                    }
+                }
+            }
+
             return ast::make_void();
         }
 
@@ -116,6 +126,20 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             auto code_type = infer_type(*call.args[0]);
             if (code_type && code_type->kind != ast::TypeKind::Bool && !code_type->is_integer()) {
                 error(current_span_, "exit の終了コードは整数型である必要があります");
+            }
+            return ast::make_void();
+        }
+
+        // step(n): テスト関数（#[test]、SVプラットフォーム）専用の組み込み。
+        // nクロック進める（SVでは repeat(n) @(posedge clk) に変換される）
+        if (ident->name == "step") {
+            if (call.args.size() != 1) {
+                error(current_span_, "step は step(クロック数) の形式で使用します");
+                return ast::make_void();
+            }
+            auto step_arg = infer_type(*call.args[0]);
+            if (!step_arg || !step_arg->is_integer()) {
+                error(current_span_, "step の引数は整数型（クロック数）である必要があります");
             }
             return ast::make_void();
         }
@@ -190,6 +214,27 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
+        if (!sym && !current_namespace_.empty() && ident->name.find("::") == std::string::npos) {
+            // 名前空間内の非修飾呼び出しは「現在の名前空間::名前」として解決する
+            // （内側から外側へ探索。解決できた場合は呼び出し名を修飾名へ書き換え、
+            // HIR/コード生成が一貫した名前を見るようにする）
+            std::string ns = current_namespace_;
+            while (!ns.empty()) {
+                std::string qualified = ns + "::" + ident->name;
+                if (auto ns_sym = scopes_.current().lookup(qualified)) {
+                    if (ns_sym->is_function) {
+                        ident->name = qualified;
+                        sym = ns_sym;
+                        break;
+                    }
+                }
+                auto pos = ns.rfind("::");
+                if (pos == std::string::npos) {
+                    break;
+                }
+                ns = ns.substr(0, pos);
+            }
+        }
         if (!sym) {
             // 静的メソッド呼び出しの可能性をチェック: Type::method
             size_t last_colon = ident->name.rfind("::");
@@ -698,6 +743,61 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             return ast::make_void();
         }
 
+        // 組み込みenum型（Result<T,E>/Option<T>）のメソッド
+        // type_methods_はベース名（"Result"）で登録されているため、
+        // インスタンス化名（"Result<int, string>" / "Result__int__string"）から
+        // ベース名で引き、戻り値・引数のジェネリックパラメータを型引数で置換する
+        std::string enum_base = obj_type->name;
+        {
+            auto lt = enum_base.find('<');
+            if (lt != std::string::npos) {
+                enum_base = enum_base.substr(0, lt);
+            }
+            auto us = enum_base.find("__");
+            if (us != std::string::npos && us > 0) {
+                enum_base = enum_base.substr(0, us);
+            }
+        }
+        if (obj_type->kind == ast::TypeKind::Struct && enum_names_.count(enum_base) > 0) {
+            auto em_it = type_methods_.find(enum_base);
+            auto ge_it = generic_enums_.find(enum_base);
+            if (em_it != type_methods_.end()) {
+                auto method_it = em_it->second.find(member.member);
+                if (method_it != em_it->second.end()) {
+                    const auto& method_info = method_it->second;
+                    auto substitute = [&](ast::TypePtr t) -> ast::TypePtr {
+                        if (t && ge_it != generic_enums_.end() && !obj_type->type_args.empty()) {
+                            return substitute_generic_type(t, ge_it->second, obj_type->type_args);
+                        }
+                        return t;
+                    };
+                    if (member.args.size() != method_info.param_types.size()) {
+                        error(current_span_, "Method '" + member.member + "' expects " +
+                                                 std::to_string(method_info.param_types.size()) +
+                                                 " arguments, got " +
+                                                 std::to_string(member.args.size()));
+                    } else {
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            auto arg_type = infer_type(*member.args[i]);
+                            auto expected_type = substitute(method_info.param_types[i]);
+                            if (!types_compatible(expected_type, arg_type)) {
+                                error(current_span_, "Argument type mismatch in method call '" +
+                                                         member.member + "': expected " +
+                                                         ast::type_to_string(*expected_type) +
+                                                         ", got " + ast::type_to_string(*arg_type));
+                            }
+                        }
+                    }
+                    auto return_type = substitute(method_info.return_type);
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Enum method: " + type_name + "." + member.member +
+                                       "() : " + ast::type_to_string(*return_type),
+                                   debug::Level::Debug);
+                    return return_type;
+                }
+            }
+        }
+
         error(current_span_, "Unknown method '" + member.member + "' for type '" + type_name + "'");
         return ast::make_error();
     }
@@ -910,6 +1010,22 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         }
         // ソート済み配列を返す（同じ型）
         return ast::make_array(obj_type->element_type, obj_type->array_size);
+    }
+    if (member.member == "get") {
+        // チェック付き要素アクセス: 範囲内ならOption::Some(要素)、範囲外ならOption::None
+        // （Rustのslice::get相当。arr[i]の範囲外アクセスを避けるための安全API）
+        if (member.args.size() != 1) {
+            error(current_span_, "Array get() takes 1 index argument");
+        } else {
+            auto idx_type = infer_type(*member.args[0]);
+            if (idx_type && !idx_type->is_integer()) {
+                error(current_span_, "Array get() index must be an integer");
+            }
+        }
+        auto opt = std::make_shared<ast::Type>(ast::TypeKind::Struct);
+        opt->name = "Option";
+        opt->type_args.push_back(obj_type->element_type ? obj_type->element_type : ast::make_int());
+        return opt;
     }
     if (member.member == "first") {
         if (!member.args.empty()) {

@@ -1,0 +1,13 @@
+// 導出可能セット外のユーザー定義インターフェースはエラー（impl を促す）
+interface Greet {
+    string hello();
+}
+
+#[derive(Greet)]
+struct P {
+    int x;
+}
+
+int main() {
+    return 0;
+}

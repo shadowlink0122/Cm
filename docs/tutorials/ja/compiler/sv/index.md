@@ -9,8 +9,7 @@ has_children: false
 
 # コンパイラ編 - SystemVerilogバックエンド
 
-**難易度:** 🟡 中級  
-**所要時間:** 45分（全ページ通読の場合 2時間）
+**難易度:** 🟡 中級**所要時間:** 45分（全ページ通読の場合 2時間）
 
 CmからSystemVerilog (SV) を生成し、FPGA上でハードウェアとして動作させることができます。Tang Console（Gowin）、Xilinx、Intel等のFPGAに対応しています。
 
@@ -29,6 +28,7 @@ SVバックエンドの詳細はトピック別のページに分かれていま
 | [状態初期化とシミュレーション](state-sim.html) | レジスタ初期値、initialブロック、テストベンチ自動生成、アサーション、テスト実行 |
 | [メモリ初期化](memory.html) | 配列初期値、#[sv::memfile]/$readmemh、--emit-memfile |
 | [モジュール階層](hierarchy.html) | //! sv: hierarchy によるサブモジュールのインスタンス化 |
+| [実機I/O](board-io.html) | ピン制約生成・トライステート・CDC同期（v0.16.0） |
 | [意味論保証](semantics.html) | Cm↔SVの意味論対応の保証事項まとめ（キャスト・符号付き演算等） |
 
 ---
@@ -94,6 +94,42 @@ endmodule
 > **ポイント:** Cmの `=` は自動的にSVの `<=` (ノンブロッキング代入) に変換されます。
 > `!led` もSVの `~led` (ビット反転) に変換されます。
 > 変数の宣言初期値（`uint counter = 0;`）は電源投入時初期値として出力されます。
+
+### 状態変数の代入は次サイクル反映（重要）
+
+posedge関数内でのモジュールレベル状態変数への代入は、SVのノンブロッキング代入（`<=`）に変換されます。つまり**関数内のすべての参照は前サイクルの値を読み、代入は次サイクルの先頭で反映**されます。ソフトウェアの逐次実行とは異なるため注意してください:
+
+```cm
+void count(posedge clk) {
+    btn_prev = btn_state;             // 次サイクル反映の「予約」
+    if (btn_prev && !btn_state) {     // ここは前サイクルの btn_prev を読む
+        presses = presses + 1;        // → エッジ検出として正しく動く
+    }
+}
+```
+
+逐次実行なら上の条件は恒偽ですが、ハードウェアでは意図どおりに動きます。逆に「代入した新しい値を同じサイクル内で使う」つもりのコードは意図と異なる回路になります。同一サイクル内で使う値は**ローカル変数**（即時代入）を使ってください。`--sv-warn-nba` を付けてコンパイルすると、代入済み状態変数の参照箇所を警告として列挙できます。
+
+なお、同じ状態変数への複数回の代入は最後に実行されたものが勝ちます（SVのノンブロッキング代入と同じ規則）。
+
+### 生成コードの検査オプション（v0.16.0）
+
+| オプション | 効果 |
+|---|---|
+| `--sv-warn-nba` | 代入済み状態変数の参照（前サイクル値の読み取り）を警告 |
+| `--sv-strict-lint` | `lint_off` 抑止を出力せず、Verilatorの幅警告等を可視化 |
+| `--sv-always-ff` | `always_ff`/`always_comb` を保持（既定はGowin EDA互換の `always @`） |
+
+### トップモジュール名（v0.16.0）
+
+`module NAME;` 宣言があるとSVのトップモジュール名に使われます。宣言がなければソースファイル名から推定されます:
+
+```cm
+//! platform: sv
+module hdmi_colorbar;  // → module hdmi_colorbar ( ... );
+```
+
+また、SystemVerilogの予約語（`program`・`priority`・`bind` 等）と衝突する変数・関数名はコンパイルエラーになります。生成SVが不正な構文になるのを防ぐためなので、別の名前に変更してください。
 
 ---
 
@@ -211,8 +247,7 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**前の章:** [WASMバックエンド](../wasm/index.html)  
-**次の章:** [型とポート](types.html)
+**前の章:** [WASMバックエンド](../wasm/index.html) **次の章:** [型とポート](types.html)
 
 ---
 
@@ -220,5 +255,4 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-<!-- nav -->
-← 前: [CmからJavaScriptへのコンパイル](../js/index.html) ｜ [目次](../index.html) ｜ 次: [SVバックエンド - 型とポート](types.html) →
+<!-- nav -->← 前: [CmからJavaScriptへのコンパイル](../js/index.html) ｜ [目次](../index.html) ｜ 次: [SVバックエンド - 型とポート](types.html) →

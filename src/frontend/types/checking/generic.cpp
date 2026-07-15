@@ -204,9 +204,10 @@ ast::TypePtr TypeChecker::substitute_generic_type(ast::TypePtr type,
         return type;
 
     // 型パラメータ名に一致するか確認
+    // （Generic kindの型はtype_to_stringが "<T>" 形式になるため名前でも比較する）
     std::string type_name = ast::type_to_string(*type);
     for (size_t i = 0; i < generic_params.size() && i < type_args.size(); ++i) {
-        if (type_name == generic_params[i]) {
+        if (type_name == generic_params[i] || type->name == generic_params[i]) {
             return type_args[i];
         }
     }

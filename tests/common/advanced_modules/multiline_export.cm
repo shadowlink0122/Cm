@@ -1,0 +1,23 @@
+// 複数行にまたがるexportリスト・選択的import・大文字エイリアスのテスト:
+// 回帰1: 複数行 export { A,\n B } がプリプロセッサ未対応で生のexportがパーサに届き構文エラー
+// 回帰2: exportリストで移動した複数行定義の本体が重複出力される
+// 回帰3: 大文字エイリアス（as M）の M::f() が構造体静的メソッドと誤判定されシンボル不一致
+import std::io::println;
+
+// 複数行の選択的import
+import ./multiline_export/util::{
+    twice,
+    combine
+};
+
+// 大文字エイリアス
+import ./multiline_export/scale as M;
+
+int main() {
+    println("twice = {twice(21)}");
+    int c = combine(4, 2);
+    println("combine = {c}");
+    int t = M::triple(5);
+    println("alias triple = {t}");
+    return 0;
+}

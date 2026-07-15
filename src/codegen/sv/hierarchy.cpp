@@ -109,6 +109,70 @@ std::vector<PortDecl> extract_ports(const std::string& source) {
     return ports;
 }
 
+// サブモジュールの #[sv::parameter] const 宣言を抽出する。
+// 対象: `#[sv::parameter] const uint WIDTH = 8;` 形式。
+// 生成するextern structに #[sv::param] フィールドとして写し、
+// インスタンス側から #(.WIDTH(値)) で上書き可能にする（v0.16.0 設計01 P3）
+struct ParamDecl {
+    std::string type;
+    std::string name;
+    std::string default_value;
+};
+
+std::vector<ParamDecl> extract_parameters(const std::string& source) {
+    std::vector<ParamDecl> params;
+    std::istringstream ss(source);
+    std::string line;
+    while (std::getline(ss, line)) {
+        std::string t = trim(line);
+        if (t.rfind("#[", 0) != 0) {
+            continue;
+        }
+        bool is_param = false;
+        while (t.rfind("#[", 0) == 0) {
+            size_t close = t.find(']');
+            if (close == std::string::npos) {
+                break;
+            }
+            std::string attr = trim(t.substr(2, close - 2));
+            if (attr == "sv::parameter" || attr == "verilog::parameter") {
+                is_param = true;
+            }
+            t = trim(t.substr(close + 1));
+        }
+        if (!is_param) {
+            continue;
+        }
+        if (t.rfind("const ", 0) != 0) {
+            continue;
+        }
+        t = trim(t.substr(6));
+        std::istringstream toks(t);
+        ParamDecl p;
+        if (!(toks >> p.type) || !(toks >> p.name)) {
+            continue;
+        }
+        auto eq = t.find('=');
+        if (eq != std::string::npos) {
+            std::string val = trim(t.substr(eq + 1));
+            auto semi = val.find(';');
+            if (semi != std::string::npos) {
+                val = trim(val.substr(0, semi));
+            }
+            p.default_value = val;
+        }
+        // 名前末尾の記号除去
+        auto cut = p.name.find_first_of("=;");
+        if (cut != std::string::npos) {
+            p.name = trim(p.name.substr(0, cut));
+        }
+        if (!p.name.empty()) {
+            params.push_back(p);
+        }
+    }
+    return params;
+}
+
 // import文から相対モジュール指定子を取り出す（対象外なら空文字列）。
 // 対象: `import ./name;` / `import ../dir/name;`（選択import等は対象外）
 std::string parse_relative_import(const std::string& line) {
@@ -194,8 +258,18 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
         // モジュール名 = ファイル名のstem
         std::string module_name = sub_path.stem().string();
 
-        // 1行のextern struct宣言に置換する（行番号を保存するため）
+        // 1行のextern struct宣言に置換する（行番号を保存するため）。
+        // #[sv::parameter] は #[sv::param] フィールドとして写し、
+        // インスタンス側からstructリテラルで上書き可能にする
+        auto sub_params = extract_parameters(sub_src.str());
         std::string decl = "extern struct " + module_name + " { ";
+        for (const auto& pr : sub_params) {
+            decl += "#[sv::param] " + pr.type + " " + pr.name;
+            if (!pr.default_value.empty()) {
+                decl += " = " + pr.default_value;
+            }
+            decl += "; ";
+        }
         for (const auto& p : ports) {
             decl += "#[" + p.direction + "] " + p.type + " " + p.name + "; ";
         }

@@ -1,0 +1,12 @@
+#[input] posedge clk;
+
+#[inout]
+#[sv::tri(oe: "sda_oe", out: "sda_out")]
+bool sda;
+
+bool sda_oe = false;
+bool sda_out = false;
+
+async void drive(posedge clk) {
+    sda_oe = !sda_oe;
+}

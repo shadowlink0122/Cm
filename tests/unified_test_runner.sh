@@ -250,6 +250,86 @@ if [[ ! "$BACKEND" =~ ^(interpreter|jit|typescript|rust|cpp|llvm|llvm-wasm|llvm-
     exit 1
 fi
 
+# WASM実行用の共有nodeラッパーを生成する（wasmtimeが無い環境のフォールバック。
+# 並列ワーカーからも参照するため起動時に一度だけ書き出す）
+WASM_NODE_WRAPPER=""
+setup_wasm_node_wrapper() {
+    WASM_NODE_WRAPPER="$TEMP_DIR/wasm_node_wrapper.js"
+    mkdir -p "$TEMP_DIR"
+    cat > "$WASM_NODE_WRAPPER" << 'EOWRAP'
+const fs = require('fs');
+const wasmBuffer = fs.readFileSync(process.argv[2]);
+const decoder = new TextDecoder();
+let outputBuffer = '';
+let result;
+WebAssembly.instantiate(wasmBuffer, {
+    wasi_snapshot_preview1: {
+        proc_exit: (code) => {
+            if (outputBuffer) process.stdout.write(outputBuffer);
+            process.exit(code);
+        },
+        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
+            const memory = result.instance.exports.memory;
+            const dataView = new DataView(memory.buffer);
+            if (fd === 1) {
+                let totalWritten = 0;
+                for (let i = 0; i < iovs_len; i++) {
+                    const iov_offset = iovs_ptr + (i * 8);
+                    const buf_ptr = dataView.getUint32(iov_offset, true);
+                    const buf_len = dataView.getUint32(iov_offset + 4, true);
+                    const bytes = new Uint8Array(memory.buffer, buf_ptr, buf_len);
+                    outputBuffer += decoder.decode(bytes);
+                    totalWritten += buf_len;
+                }
+                const lines = outputBuffer.split('\n');
+                if (lines.length > 1) {
+                    for (let i = 0; i < lines.length - 1; i++) console.log(lines[i]);
+                    outputBuffer = lines[lines.length - 1];
+                }
+                dataView.setUint32(nwritten_ptr, totalWritten, true);
+                return 0;
+            }
+            return -1;
+        },
+        fd_close: () => 0, fd_seek: () => 0, fd_read: () => 0,
+        environ_sizes_get: () => 0, environ_get: () => 0,
+        args_sizes_get: () => 0, args_get: () => 0,
+        random_get: () => 0, clock_time_get: () => 0, proc_raise: () => 0
+    }
+}).then(res => {
+    result = res;
+    if (result.instance.exports._start) {
+        result.instance.exports._start();
+        if (outputBuffer) process.stdout.write(outputBuffer);
+    } else if (result.instance.exports.main) {
+        const ret = result.instance.exports.main();
+        if (outputBuffer) process.stdout.write(outputBuffer);
+        process.exit(ret);
+    }
+}).catch(err => {
+    console.error('WASM Error:', err);
+    process.exit(1);
+});
+EOWRAP
+}
+
+# 実行ランタイムの事前チェック
+# （欠落時に全テストが「No WASM runtime」等で静かにスキップされ、
+# スイートが緑のまま素通りする事故を防ぐ）
+if [ "$BACKEND" = "llvm-wasm" ] && ! command -v wasmtime >/dev/null 2>&1 && \
+   ! command -v node >/dev/null 2>&1 && ! command -v wasmer >/dev/null 2>&1; then
+    echo "Error: WASMランタイムが見つかりません（wasmtime / node / wasmer のいずれかが必要）"
+    exit 1
+fi
+if [ "$BACKEND" = "llvm-wasm" ] && ! command -v wasmtime >/dev/null 2>&1; then
+    echo "警告: wasmtimeが見つからないため node のWASIラッパーで実行します"
+    setup_wasm_node_wrapper
+fi
+if [ "$BACKEND" = "js" ] && ! command -v node >/dev/null 2>&1; then
+    echo "Error: Node.js が見つかりません（jsバックエンドのテストに必要）"
+    exit 1
+fi
+
 # キャッシュオプションの構築
 CACHE_OPTS=""
 if [ "$NO_CACHE" = true ]; then
@@ -471,12 +551,14 @@ run_single_test() {
     if [ -f "$skip_file" ]; then
         # .skipファイルの内容を読んで、現在のバックエンドがスキップ対象か確認
         if [ -s "$skip_file" ]; then
+            local has_pattern=0
             while IFS= read -r line || [[ -n "$line" ]]; do
                 # コメントと空行をスキップ
                 [[ "$line" =~ ^[[:space:]]*# ]] && continue
                 [[ -z "${line// }" ]] && continue
                 line="${line%%#*}"  # インラインコメント除去
                 line="${line// /}"  # 空白除去
+                has_pattern=1
 
                 if match_skip_pattern "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
                     echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skipped for $line"
@@ -484,9 +566,17 @@ run_single_test() {
                     return
                 fi
             done < "$skip_file"
+            # パターン行がなくコメント（理由）のみの場合、全バックエンドでスキップ
+            if [ "$has_pattern" -eq 0 ]; then
+                local skip_reason=$(grep -m1 '^[[:space:]]*#' "$skip_file" | sed 's/^[[:space:]]*#[[:space:]]*//')
+                echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - ${skip_reason:-理由未記載}"
+                ((SKIPPED++))
+                return
+            fi
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
-            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists"
+            # （skipファイルには理由をコメントで記録すること）
+            echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Skip file exists (理由未記載: ${skip_file} にコメントで理由を記録してください)"
             ((SKIPPED++))
             return
         fi
@@ -710,101 +800,18 @@ PY
                     # wasmtimeを使用
                     run_with_timeout wasmtime "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 elif command -v node >/dev/null 2>&1; then
-                    # nodeを使用（WASMラッパースクリプトを生成）
-                    local wrapper_js="$TEMP_DIR/wasm_wrapper_${test_name}.js"
-                    cat > "$wrapper_js" << 'EOJS'
-const fs = require('fs');
-const wasmBuffer = fs.readFileSync(process.argv[2]);
-
-// テキストデコーダ
-const decoder = new TextDecoder();
-let outputBuffer = '';
-
-WebAssembly.instantiate(wasmBuffer, {
-    wasi_snapshot_preview1: {
-        proc_exit: (code) => {
-            // バッファに残っている出力を吐き出す
-            if (outputBuffer) {
-                process.stdout.write(outputBuffer);
-            }
-            process.exit(code);
-        },
-        fd_write: (fd, iovs_ptr, iovs_len, nwritten_ptr) => {
-            const memory = result.instance.exports.memory;
-            const dataView = new DataView(memory.buffer);
-
-            // fd=1 は標準出力
-            if (fd === 1) {
-                let totalWritten = 0;
-
-                // 各IOVを処理
-                for (let i = 0; i < iovs_len; i++) {
-                    const iov_offset = iovs_ptr + (i * 8);
-                    const buf_ptr = dataView.getUint32(iov_offset, true);
-                    const buf_len = dataView.getUint32(iov_offset + 4, true);
-
-                    // バッファからデータを読み取る
-                    const bytes = new Uint8Array(memory.buffer, buf_ptr, buf_len);
-                    const str = decoder.decode(bytes);
-
-                    // 出力バッファに追加
-                    outputBuffer += str;
-                    totalWritten += buf_len;
-                }
-
-                // 改行があったら出力
-                const lines = outputBuffer.split('\n');
-                if (lines.length > 1) {
-                    for (let i = 0; i < lines.length - 1; i++) {
-                        console.log(lines[i]);
-                    }
-                    outputBuffer = lines[lines.length - 1];
-                }
-
-                // 書き込んだバイト数を設定
-                dataView.setUint32(nwritten_ptr, totalWritten, true);
-                return 0; // 成功
-            }
-            return -1; // エラー
-        },
-        // その他のWASI関数のスタブ
-        fd_close: () => 0,
-        fd_seek: () => 0,
-        fd_read: () => 0,
-        environ_sizes_get: () => 0,
-        environ_get: () => 0,
-        args_sizes_get: () => 0,
-        args_get: () => 0,
-        random_get: () => 0,
-        clock_time_get: () => 0,
-        proc_raise: () => 0
-    }
-}).then(res => {
-    result = res;
-    // _startまたはmain関数を呼び出し
-    if (result.instance.exports._start) {
-        result.instance.exports._start();
-    } else if (result.instance.exports.main) {
-        const ret = result.instance.exports.main();
-        // バッファに残っている出力を吐き出す
-        if (outputBuffer) {
-            process.stdout.write(outputBuffer);
-        }
-        process.exit(ret);
-    }
-}).catch(err => {
-    console.error('WASM Error:', err);
-    process.exit(1);
-});
-EOJS
-                    run_with_timeout node "$wrapper_js" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
-                    rm -f "$wrapper_js"
+                    # nodeを使用（共有WASIラッパー。未生成なら生成する）
+                    if [ -z "$WASM_NODE_WRAPPER" ] || [ ! -f "$WASM_NODE_WRAPPER" ]; then
+                        setup_wasm_node_wrapper
+                    fi
+                    run_with_timeout node "$WASM_NODE_WRAPPER" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 elif command -v wasmer >/dev/null 2>&1; then
                     # wasmerを使用
                     run_with_timeout wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - No WASM runtime found (install wasmtime, node, or wasmer)"
-                    ((SKIPPED++))
+                    # 起動時チェック通過後にランタイムが消えた異常事態はSKIPせず失敗させる
+                    echo -e "${RED}[FAIL]${NC} $category/$test_name - No WASM runtime available (wasmtime/node/wasmer)"
+                    ((FAILED++))
                     return
                 fi
             fi
@@ -812,7 +819,8 @@ EOJS
 
         js)
             # JavaScriptバックエンドでコンパイルして実行
-            local js_file="$TEMP_DIR/js_${test_name}.js"
+            # （カテゴリ・PID修飾: 同名テストや同時に走る別のrunner実行との衝突を防ぐ）
+            local js_file="$TEMP_DIR/js_${category//\//_}_${test_name}_$$.js"
             rm -f "$js_file"
 
             # テストファイルのディレクトリに移動してコンパイル
@@ -827,8 +835,9 @@ EOJS
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo -e "${YELLOW}[SKIP]${NC} $category/$test_name - Node.js not found"
-                    ((SKIPPED++))
+                    # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
+                    echo -e "${RED}[FAIL]${NC} $category/$test_name - Node.js not found"
+                    ((FAILED++))
                     return
                 fi
             fi
@@ -885,7 +894,7 @@ EOJS
 
             # Stage 1: Cm → SV コンパイル
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile \
-                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+                --target=sv --test "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
                 # Stage 2: SVビルド検証 (Verilator or iverilog)
@@ -905,7 +914,7 @@ EOJS
                     echo -e "${YELLOW}[WARN]${NC} verilator/iverilog not found, skip build verification"
                 fi
 
-                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST |SIM_FAIL_EXPECTED)" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
                     # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
@@ -918,7 +927,16 @@ EOJS
                             # vvpでシミュレーション実行
                             vvp "$sim_binary" > "$sim_output" 2>&1
                             local sim_exit=$?
-                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                            if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
+                                # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）
+                                if [ $sim_exit -ne 0 ]; then
+                                    echo "SIM_FAIL_EXPECTED" > "$output_file"
+                                    exit_code=0
+                                else
+                                    echo "SIM_UNEXPECTED_PASS" > "$output_file"
+                                    exit_code=1
+                                fi
+                            elif [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
                                 # シミュレーション成功: TEST行の検証
                                 local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
                                 local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
@@ -1306,20 +1324,28 @@ run_parallel_test() {
     # ファイル固有の.skipファイルがある場合
     if [ -f "$skip_file" ]; then
         if [ -s "$skip_file" ]; then
+            local has_pattern=0
             while IFS= read -r line || [[ -n "$line" ]]; do
                 [[ "$line" =~ ^[[:space:]]*# ]] && continue
                 [[ -z "${line// }" ]] && continue
                 line="${line%%#*}"
                 line="${line// /}"
+                has_pattern=1
 
                 if match_skip_pattern_parallel "$line" "$BACKEND" "$current_opt" "$current_os" "$current_arch"; then
                     echo "SKIP:Skipped for $line" > "$result_file"
                     return
                 fi
             done < "$skip_file"
+            # パターン行がなくコメント（理由）のみの場合、全バックエンドでスキップ
+            if [ "$has_pattern" -eq 0 ]; then
+                local skip_reason=$(grep -m1 '^[[:space:]]*#' "$skip_file" | sed 's/^[[:space:]]*#[[:space:]]*//')
+                echo "SKIP:${skip_reason:-理由未記載}" > "$result_file"
+                return
+            fi
         else
             # ファイルが空の場合、すべてのバックエンドでスキップ
-            echo "SKIP:Skip file exists" > "$result_file"
+            echo "SKIP:Skip file exists (理由未記載)" > "$result_file"
             return
         fi
     fi
@@ -1432,8 +1458,16 @@ PY
             if [ $exit_code -eq 0 ] && [ -f "$wasm_file" ]; then
                 if command -v wasmtime >/dev/null 2>&1; then
                     run_with_timeout_silent wasmtime run --dir=. "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                elif [ -n "$WASM_NODE_WRAPPER" ] && [ -f "$WASM_NODE_WRAPPER" ] && command -v node >/dev/null 2>&1; then
+                    # wasmtimeが無い環境: 共有nodeラッパーで実行（旧: 静かにSKIPされ
+                    # スイートが緑のまま素通りしていた）
+                    run_with_timeout_silent node "$WASM_NODE_WRAPPER" "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
+                elif command -v wasmer >/dev/null 2>&1; then
+                    run_with_timeout_silent wasmer run "$wasm_file" > "$output_file" 2>&1 || exit_code=$?
                 else
-                    echo "SKIP:No WASM runtime" > "$result_file"
+                    # 起動時チェックを通過した後にランタイムが消えた異常事態。
+                    # SKIPにすると無検証で緑になるため明示的に失敗させる
+                    echo "FAIL:No WASM runtime available (wasmtime/node/wasmer)" > "$result_file"
                     rm -f "$wasm_file"
                     return
                 fi
@@ -1441,17 +1475,27 @@ PY
             fi
             ;;
         js)
-            local js_file="$TEMP_DIR/js_${test_name}_$$.js"
+            # カテゴリ・ワーカーPIDで修飾する（basenameのみだと同名テスト（basic等）が
+            # 並列実行時に同じファイルを取り合い、他テストのコードを実行してしまう。
+            # $$は全ワーカー共通の親PIDのため一意にならない。llvm/wasm/svと同じ方式）
+            local js_file="$TEMP_DIR/js_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.js"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --target=js -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$js_file" > "$output_file" 2>&1) || exit_code=$?
+            if [ $exit_code -eq 0 ] && [ ! -f "$js_file" ]; then
+                # コンパイル成功なのに生成物が無い場合を「空出力のOutput mismatch」と
+                # 混同しないよう明示的に失敗として区別する
+                echo "FAIL:JS file missing after successful compile" > "$result_file"
+                return
+            fi
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
                     run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                     # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
                     kill %% 2>/dev/null || true
                 else
-                    echo "SKIP:Node.js not found" > "$result_file"
+                    # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
+                    echo "FAIL:Node.js not found" > "$result_file"
                     rm -f "$js_file"
                     return
                 fi
@@ -1460,7 +1504,7 @@ PY
             ;;
         llvm-uefi)
             # UEFI ターゲットへのコンパイルのみ検証
-            local uefi_obj="$TEMP_DIR/uefi_${test_name}_$$.efi"
+            local uefi_obj="$TEMP_DIR/uefi_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.efi"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=uefi -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$uefi_obj" > "$output_file" 2>&1) || exit_code=$?
@@ -1473,7 +1517,7 @@ PY
             ;;
         llvm-baremetal)
             # ベアメタルターゲットへのコンパイルのみ検証
-            local baremetal_obj="$TEMP_DIR/baremetal_${test_name}_$$.o"
+            local baremetal_obj="$TEMP_DIR/baremetal_${category//\//_}_${test_name}_${BASHPID}_${RANDOM}.o"
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
@@ -1494,7 +1538,7 @@ PY
 
             # Stage 1: Cm → SV コンパイル
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile \
-                --target=sv "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
+                --target=sv --test "$test_basename" -o "$sv_file" -O$OPT_LEVEL > "$output_file" 2>&1) || exit_code=$?
 
             if [ $exit_code -eq 0 ] && [ -f "$sv_file" ]; then
                 # Stage 2: SVビルド検証 (Verilator or iverilog)
@@ -1506,7 +1550,7 @@ PY
                     exit_code=$?
                 fi
 
-                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST )" "$expect_file" 2>/dev/null; then
+                if [ $exit_code -eq 0 ] && grep -qE "^(SIM_OK|TEST |SIM_FAIL_EXPECTED)" "$expect_file" 2>/dev/null; then
                     # Stage 3: シミュレーション実行 (iverilog + vvp)
                     # expectファイルにSIM_OKまたはTEST行がある場合のみ実行
                     local tb_file="${sv_file%.sv}_tb.sv"
@@ -1517,7 +1561,16 @@ PY
                         if [ $? -eq 0 ]; then
                             vvp "$sim_binary" > "$sim_output" 2>&1
                             local sim_exit=$?
-                            if [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
+                            if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
+                                # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）
+                                if [ $sim_exit -ne 0 ]; then
+                                    echo "SIM_FAIL_EXPECTED" > "$output_file"
+                                    exit_code=0
+                                else
+                                    echo "SIM_UNEXPECTED_PASS" > "$output_file"
+                                    exit_code=1
+                                fi
+                            elif [ $sim_exit -eq 0 ] && grep -q "Test Complete" "$sim_output" 2>/dev/null; then
                                 local sim_test_lines=$(grep "^TEST " "$sim_output" 2>/dev/null)
                                 local expect_test_lines=$(grep "^TEST " "$expect_file" 2>/dev/null)
                                 if [ -n "$expect_test_lines" ]; then
@@ -1594,6 +1647,8 @@ PY
                 echo "PASS" > "$result_file"
             else
                 echo "FAIL:Error output mismatch" > "$result_file"
+                # 差分を保存（集計時に表示され、CIログから原因を特定できるようにする）
+                diff -u "$expect_file" "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         else
             echo "FAIL:Expected error but succeeded" > "$result_file"
@@ -1611,6 +1666,8 @@ PY
                 echo "PASS" > "$result_file"
             else
                 echo "FAIL:Output mismatch" > "$result_file"
+                # 差分を保存（集計時に表示され、CIログから原因を特定できるようにする）
+                diff -u "$expect_file" "$output_file" > "${result_file}.error" 2>/dev/null || true
             fi
         fi
     fi

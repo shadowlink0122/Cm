@@ -37,7 +37,8 @@ class SourceLocationManager {
     template <typename SourceMapEntry>
     std::string format_error_with_source_map(
         const Span& span, const std::string& message, const std::vector<SourceMapEntry>& source_map,
-        const std::unordered_map<std::string, std::string>& file_contents) const {
+        const std::unordered_map<std::string, std::string>& file_contents,
+        const std::string& label = "error") const {
         auto loc = get_line_column(span.start);
 
         std::string result;
@@ -68,7 +69,7 @@ class SourceLocationManager {
         std::string padding(line_width, ' ');
 
         // エラー位置を表示（Rustスタイル）
-        result += "error: " + message + "\n";
+        result += label + ": " + message + "\n";
         result += padding + " --> " + original_file + ":" + std::to_string(original_line) + ":" +
                   std::to_string(loc.column) + "\n";
         result += padding + " |\n";

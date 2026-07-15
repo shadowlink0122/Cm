@@ -1,0 +1,4 @@
+void f() {
+    char c = '(';
+    int x = 1;
+}

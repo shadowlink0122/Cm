@@ -1,0 +1,38 @@
+import std::io::println;
+// derive_mixed_with.cm - with構文と#[derive]属性の併用（unionされる）
+// Eq/Ordは組み込みinterfaceのため宣言不要（暗黙的に利用可能）
+
+// with と derive の併用: リストはマージされる
+#[derive(Ord)]
+struct Item with Eq {
+    int priority;
+    int id;
+}
+
+int main() {
+    Item a;
+    a.priority = 1;
+    a.id = 100;
+
+    Item b;
+    b.priority = 1;
+    b.id = 100;
+
+    Item c;
+    c.priority = 2;
+    c.id = 100;
+
+    if (a == b) {
+        println("a == b: true");
+    } else {
+        println("a == b: false");
+    }
+
+    if (a < c) {
+        println("a < c: true");
+    } else {
+        println("a < c: false");
+    }
+
+    return 0;
+}

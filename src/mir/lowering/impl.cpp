@@ -163,6 +163,18 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         static_cast<MirFunction::AlwaysKind>(static_cast<int>(func.always_kind));
     mir_func->attributes = func.attributes;  // SV属性を伝搬（sv::latch等）
 
+    // #[test] 関数はSVテストベンチ生成でHIR文を直接変換するため保持する
+    for (const auto& attr : func.attributes) {
+        if (attr == "test") {
+            for (const auto& stmt : func.body) {
+                if (stmt) {
+                    mir_func->hir_stmts.push_back(stmt.get());
+                }
+            }
+            break;
+        }
+    }
+
     // 戻り値用のローカル変数（typedefを解決）
     mir_func->return_local = 0;
     auto resolved_return_type = resolve_typedef(func.return_type);
@@ -346,13 +358,14 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 mir_func->name = type_name + "__" + method->name;
             }
 
-            // ジェネリックパラメータがある場合、hir_functionsに登録（モノモーフィゼーション用）
-            // メソッド自体のジェネリックパラメータ、impl自体のジェネリックパラメータ、
-            // またはtype_nameがジェネリック型（<を含む）の場合に登録
+            // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、
+            // 非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。
+            // モノモーフィゼーション側はgeneric_paramsと名前の'<'で判別するので
+            // 非ジェネリックの登録は無害）
+            hir_functions[mir_func->name] = method.get();
             bool has_generic = !method->generic_params.empty() || !impl.generic_params.empty() ||
                                type_name.find('<') != std::string::npos;
             if (has_generic) {
-                hir_functions[mir_func->name] = method.get();
                 debug_msg("MIR",
                           "Registered generic impl method: " + mir_func->name +
                               " (method params: " + std::to_string(method->generic_params.size()) +

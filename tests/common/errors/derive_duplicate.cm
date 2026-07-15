@@ -1,0 +1,9 @@
+// with と #[derive] で同一インターフェースを重複指定するとエラー
+#[derive(Eq)]
+struct P with Eq {
+    int x;
+}
+
+int main() {
+    return 0;
+}

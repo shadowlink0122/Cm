@@ -1,8 +1,6 @@
 # イテレータシステム 明示的インターフェース設計
 
-作成日: 2026-01-11
-対象バージョン: v0.11.0
-関連文書: 023_iterator_system_complete_implementation.md
+作成日: 2026-01-11対象バージョン: v0.11.0関連文書: 023_iterator_system_complete_implementation.md
 
 ## 設計原則
 
@@ -548,5 +546,4 @@ impl<I: ExactSizeIterator<T>, T, U> MapIterator<I, T, U> for ExactSizeIterator<U
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 設計改良版
+**作成者:** Claude Code **ステータス:** 設計改良版

@@ -229,6 +229,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         ctx.enum_defs->count(let.type->name)) {
         auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
         tagged_union_type->name = "__TaggedUnion_" + let.type->name;
+        // 元の型引数を保持（補間ミニパイプラインでのペイロード型復元に使用）
+        tagged_union_type->type_args = let.type->type_args;
         actual_type = tagged_union_type;
     }
 
@@ -266,7 +268,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     if (!let.init && let.type && let.type->kind == hir::TypeKind::Array &&
         !let.type->array_size.has_value()) {
         // 動的配列（スライス）の初期化
-        hir::TypePtr elem_type = let.type->element_type ? let.type->element_type : hir::make_int();
+        // typedefエイリアス（例: Value = int | string）を解決してから要素サイズを決める
+        hir::TypePtr elem_type =
+            ctx.resolve_typedef(let.type->element_type ? let.type->element_type : hir::make_int());
 
         // 要素サイズを取得
         int64_t elem_size = 4;  // デフォルトはint
@@ -281,9 +285,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             elem_size = 8;
         } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
             elem_size = 8;
-        } else if (elem_kind == hir::TypeKind::Struct) {
-            // TODO: 構造体のサイズを計算
-            elem_size = 8;
+        } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
+            // 構造体・ユニオンはblob（値のインラインコピー）として格納する
+            elem_size = ctx.layout_size(elem_type);
         } else if (elem_kind == hir::TypeKind::Array) {
             // 多次元配列の場合、内側の配列サイズを計算
             // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
@@ -388,8 +392,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                 if (auto* arr_lit =
                         std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&let.init->kind)) {
                     const auto& elements = (*arr_lit)->elements;
-                    hir::TypePtr elem_type =
-                        let.type->element_type ? let.type->element_type : hir::make_int();
+                    // typedefエイリアスを解決してから要素サイズ・push関数を決める
+                    hir::TypePtr elem_type = ctx.resolve_typedef(
+                        let.type->element_type ? let.type->element_type : hir::make_int());
 
                     // 要素サイズを取得
                     int64_t elem_size = 4;  // デフォルトはint
@@ -405,9 +410,12 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                elem_kind == hir::TypeKind::Double) {
                         elem_size = 8;
                     } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String ||
-                               elem_kind == hir::TypeKind::Struct) {
+                               elem_kind == hir::TypeKind::String) {
                         elem_size = 8;
+                    } else if (elem_kind == hir::TypeKind::Struct ||
+                               elem_kind == hir::TypeKind::Union) {
+                        // 構造体・ユニオンはblob（値のインラインコピー）として格納する
+                        elem_size = ctx.layout_size(elem_type);
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 多次元配列の場合、内側の配列サイズを計算
                         // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
@@ -464,9 +472,12 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     } else if (elem_kind == hir::TypeKind::Float) {
                         push_func = "cm_slice_push_f32";
                     } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String ||
-                               elem_kind == hir::TypeKind::Struct) {
+                               elem_kind == hir::TypeKind::String) {
                         push_func = "cm_slice_push_ptr";
+                    } else if (elem_kind == hir::TypeKind::Union ||
+                               elem_kind == hir::TypeKind::Struct) {
+                        // ユニオン・構造体要素はblobとしてメモリコピー（push側と統一）
+                        push_func = "cm_slice_push_blob";
                     } else if (elem_kind == hir::TypeKind::Array) {
                         // 配列要素（多次元スライス）はスライス構造体をコピー
                         push_func = "cm_slice_push_slice";
@@ -577,7 +588,20 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                         BlockId success_block = ctx.new_block();
                         std::vector<MirOperandPtr> args;
                         args.push_back(MirOperand::copy(MirPlace{local}));
-                        args.push_back(MirOperand::copy(MirPlace{elem_value}));
+                        if (push_func == "cm_slice_push_blob") {
+                            // blob pushはデータ先頭へのポインタを受け取る
+                            hir::TypePtr value_type = nullptr;
+                            if (elem_value < ctx.func->locals.size()) {
+                                value_type = ctx.func->locals[elem_value].type;
+                            }
+                            LocalId addr_local = ctx.new_temp(
+                                hir::make_pointer(value_type ? value_type : hir::make_int()));
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{addr_local}, MirRvalue::ref(MirPlace{elem_value}, false)));
+                            args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                        } else {
+                            args.push_back(MirOperand::copy(MirPlace{elem_value}));
+                        }
 
                         auto call_term = std::make_unique<MirTerminator>();
                         call_term->kind = MirTerminator::Call;
@@ -602,7 +626,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     int64_t array_size = let.init->type->array_size.value_or(0);
                     int64_t elem_size = 4;  // デフォルトはint32
                     if (let.init->type->element_type) {
-                        auto ek = let.init->type->element_type->kind;
+                        auto resolved_ek = ctx.resolve_typedef(let.init->type->element_type);
+                        auto ek =
+                            resolved_ek ? resolved_ek->kind : let.init->type->element_type->kind;
                         if (ek == hir::TypeKind::Char || ek == hir::TypeKind::Bool ||
                             ek == hir::TypeKind::Tiny || ek == hir::TypeKind::UTiny) {
                             elem_size = 1;
@@ -611,6 +637,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             elem_size = 8;
                         } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
                             elem_size = 8;
+                        } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
+                            // 構造体・ユニオンはblob要素としてインラインコピーされる
+                            elem_size = ctx.layout_size(let.init->type->element_type);
                         }
                     }
 
@@ -717,8 +746,24 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                           std::to_string(block->statements.size()) + " statements");
                         }
                     }
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を
+                    // 経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、
+                    // O0での `as` タグ検査パニックや `is` の誤判定になる）
+                    hir::TypePtr resolved_let_type = ctx.resolve_typedef(let.type);
+                    hir::TypePtr init_type =
+                        (init_value < ctx.func->locals.size())
+                            ? ctx.resolve_typedef(ctx.func->locals[init_value].type)
+                            : nullptr;
+                    if (resolved_let_type && resolved_let_type->kind == hir::TypeKind::Union &&
+                        (!init_type || init_type->kind != hir::TypeKind::Union)) {
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{local}, MirRvalue::cast(MirOperand::copy(MirPlace{init_value}),
+                                                             resolved_let_type)));
+                    } else {
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{local},
+                            MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+                    }
                     if (let.name == "result") {
                         auto* block = ctx.get_current_block();
                         if (block) {
@@ -877,7 +922,34 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
     }
 
     // 右辺値をlowering
-    LocalId rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
+    // 配列リテラルRHSは代入先の型を期待型として渡す
+    // （`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
+    hir::TypePtr assign_target_type = assign.target ? assign.target->type : nullptr;
+    if ((!assign_target_type || assign_target_type->kind != hir::TypeKind::Array) &&
+        assign.target) {
+        // メンバ代入で式型が未設定の場合、struct定義からフィールド型を引く
+        if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind)) {
+            const auto& obj = (*mem)->object;
+            if (obj && obj->type && obj->type->kind == hir::TypeKind::Struct && ctx.struct_defs &&
+                ctx.struct_defs->count(obj->type->name)) {
+                const auto* struct_def = ctx.struct_defs->at(obj->type->name);
+                for (const auto& f : struct_def->fields) {
+                    if (f.name == (*mem)->member) {
+                        assign_target_type = f.type;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    LocalId rhs_value;
+    if (auto* rhs_arr_lit = std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&assign.value->kind);
+        rhs_arr_lit && assign_target_type && assign_target_type->kind == hir::TypeKind::Array) {
+        rhs_value = expr_lowering->lower_array_literal(**rhs_arr_lit, assign_target_type, ctx);
+    } else {
+        rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
+    }
 
     // 左辺値のMirPlaceを構築するヘルパー関数
     // 複雑な左辺値（c.values[0], points[0].x など）を再帰的に処理
@@ -1024,8 +1096,30 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         // 単純な変数代入
         auto lhs_opt = ctx.resolve_variable((*var_ref)->name);
         if (lhs_opt) {
-            ctx.push_statement(MirStatement::assign(
-                MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+            // ユニオン型変数への変種値の再代入はCast（ユニオン構築）を経由して
+            // タグ+ペイロードを書き込む（letの初期化と同じ扱い）
+            hir::TypePtr lhs_type = (*lhs_opt < ctx.func->locals.size())
+                                        ? ctx.resolve_typedef(ctx.func->locals[*lhs_opt].type)
+                                        : nullptr;
+            hir::TypePtr rhs_type = (rhs_value < ctx.func->locals.size())
+                                        ? ctx.resolve_typedef(ctx.func->locals[rhs_value].type)
+                                        : nullptr;
+            debug_msg("mir_union_assign",
+                      "[MIR] assign lhs kind=" +
+                          (lhs_type ? std::to_string(static_cast<int>(lhs_type->kind))
+                                    : std::string("null")) +
+                          " rhs kind=" +
+                          (rhs_type ? std::to_string(static_cast<int>(rhs_type->kind))
+                                    : std::string("null")));
+            if (lhs_type && lhs_type->kind == hir::TypeKind::Union &&
+                (!rhs_type || rhs_type->kind != hir::TypeKind::Union)) {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{*lhs_opt},
+                    MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_type)));
+            } else {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
+            }
         }
     } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
                std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind) ||

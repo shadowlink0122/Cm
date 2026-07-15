@@ -1,4 +1,5 @@
 // lowering_stmt.cpp - 文のlowering
+#include "../../common/text_utils.hpp"
 #include "fwd.hpp"
 
 namespace cm::hir {
@@ -657,6 +658,24 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
         return std::make_unique<HirStmt>(std::make_unique<HirBlock>());
     }
 
+    // scrutineeが変数参照以外（関数呼び出し等）の場合、一時変数へ束縛する。
+    // 各アームの条件・ペイロード抽出はscrutineeをクローンして複数回参照するが、
+    // クローンできない式はダミー値に落ちて誤マッチ・副作用の重複実行になる
+    HirStmtPtr scrutinee_binding;
+    if (!std::get_if<std::unique_ptr<HirVarRef>>(&scrutinee->kind)) {
+        static int match_tmp_counter = 0;
+        std::string tmp_name = "__match_scrutinee_" + std::to_string(match_tmp_counter++);
+        auto tmp_let = std::make_unique<HirLet>();
+        tmp_let->name = tmp_name;
+        tmp_let->type = scrutinee_type;
+        tmp_let->init = std::move(scrutinee);
+        tmp_let->is_const = false;
+        scrutinee_binding = std::make_unique<HirStmt>(std::move(tmp_let));
+        auto tmp_ref = std::make_unique<HirVarRef>();
+        tmp_ref->name = tmp_name;
+        scrutinee = std::make_unique<HirExpr>(std::move(tmp_ref), scrutinee_type);
+    }
+
     // matchをif-elseチェーンに変換
     // 逆順にarmsを処理し、ネストしたif-else構造を構築
     HirStmtPtr result = nullptr;
@@ -709,10 +728,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                     auto enum_it = enum_defs_.find(original_enum_name);
                     if (enum_it != enum_defs_.end() && enum_it->second) {
                         // バリアント名を取得（Type::Variant形式からVariantを抽出）
-                        auto sep = variant_name.rfind("::");
-                        std::string short_variant = (sep != std::string::npos)
-                                                        ? variant_name.substr(sep + 2)
-                                                        : variant_name;
+                        std::string short_variant = cm::text::strip_namespace(variant_name);
                         // enum定義からフィールド型を取得
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == short_variant && !member.fields.empty()) {
@@ -749,6 +765,23 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                 var_decl->type = payload_type;
                 var_decl->init =
                     std::make_unique<HirExpr>(std::move(payload_extract), payload_type);
+                var_decl->is_const = false;
+                body_stmts.push_back(std::make_unique<HirStmt>(std::move(var_decl)));
+            }
+        }
+
+        // Typeパターンの場合、ペイロードを as で取り出して束縛
+        // （条件側の is でタグ確認済みのため as のタグ検査は成功する）
+        if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::Type) {
+            if (!arm.pattern->binding_name.empty() && arm.pattern->binding_name != "_") {
+                auto as_cast = std::make_unique<HirCast>();
+                as_cast->operand = clone_hir_expr(scrutinee);
+                as_cast->target_type = arm.pattern->type_pattern;
+                auto var_decl = std::make_unique<HirLet>();
+                var_decl->name = arm.pattern->binding_name;
+                var_decl->type = arm.pattern->type_pattern;
+                var_decl->init =
+                    std::make_unique<HirExpr>(std::move(as_cast), arm.pattern->type_pattern);
                 var_decl->is_const = false;
                 body_stmts.push_back(std::make_unique<HirStmt>(std::move(var_decl)));
             }
@@ -796,10 +829,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
                 if (!original_enum_name.empty()) {
                     auto enum_it = enum_defs_.find(original_enum_name);
                     if (enum_it != enum_defs_.end() && enum_it->second) {
-                        auto sep = variant_name.rfind("::");
-                        std::string short_variant = (sep != std::string::npos)
-                                                        ? variant_name.substr(sep + 2)
-                                                        : variant_name;
+                        std::string short_variant = cm::text::strip_namespace(variant_name);
                         for (const auto& member : enum_it->second->members) {
                             if (member.name == short_variant && !member.fields.empty()) {
                                 payload_type = member.fields[0].second;
@@ -861,13 +891,26 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
     // resultがない場合（ワイルドカードのみの場合）
     if (!result && !else_stmts.empty()) {
         auto block = std::make_unique<HirBlock>();
-        block->stmts = std::move(else_stmts);
+        if (scrutinee_binding) {
+            block->stmts.push_back(std::move(scrutinee_binding));
+        }
+        for (auto& st : else_stmts) {
+            block->stmts.push_back(std::move(st));
+        }
         return std::make_unique<HirStmt>(std::move(block));
     }
 
     if (!result) {
         // 空のブロックを返す
         return std::make_unique<HirStmt>(std::make_unique<HirBlock>());
+    }
+
+    // scrutineeの一時変数束縛がある場合はブロックで包む
+    if (scrutinee_binding) {
+        auto block = std::make_unique<HirBlock>();
+        block->stmts.push_back(std::move(scrutinee_binding));
+        block->stmts.push_back(std::move(result));
+        return std::make_unique<HirStmt>(std::move(block));
     }
 
     return result;

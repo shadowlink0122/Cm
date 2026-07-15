@@ -47,9 +47,7 @@ bit[26] counter;              // → logic [25:0] counter
 
 ### Non-Synthesizable Types (Compile Errors)
 
-Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend.
-`float`/`double` emit a warning (`warning[SV004]`, an IP core is required).
-`string` is only practical as a const constant (see [Data Structures](data.html#strings)).
+Pointer types (`*T`) cause a **compile error** (`error[SV002]`) in the SV backend. `float`/`double` also cause a **compile error** (`error[SV004]`, changed from a warning in v0.16.0; an IP core is required for synthesis). `string` is only practical as a const constant (non-const strings longer than 3 characters raise `error[SV005]`; see [Data Structures](data.html#strings)).
 
 ---
 
@@ -97,8 +95,7 @@ Literals are **automatically annotated with a bit width** based on the type from
 
 ### Signed Constants Are Emitted with `'sd`
 
-In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**.
-Cm emits constants as signed (`'sd`) according to their type, so negative checks like `s < 0` work correctly:
+In SV, if one side of a comparison is unsigned, the **entire comparison becomes unsigned**. Cm emits constants as signed (`'sd`) according to their type, so negative checks like `s < 0` work correctly:
 
 ```cm
 int s;
@@ -125,9 +122,9 @@ localparam logic [31:0] CLK_FREQ = 32'd27000000;
 localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 ```
 
-> **Note:** `const` always maps to `localparam`.
-> `parameter` is never generated (parameterizing the module itself is not yet supported;
-> see the [implementation proposals](../../../../design/sv_backend_missing_features_en.html)).
+> **Note:** A plain `const` always maps to `localparam`.
+> To generate a module parameter (`module name #(parameter ...)`),
+> declare it with `#[sv::parameter] const` (since v0.16.0; see [Module hierarchy](hierarchy.html)).
 
 ---
 

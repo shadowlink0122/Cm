@@ -9,7 +9,7 @@
 namespace cm::cli {
 
 // サブコマンド
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache, Test };
 
 // コマンドラインオプション
 struct Options {
@@ -41,7 +41,15 @@ struct Options {
     std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
     std::string cache_subcommand;         // cache サブコマンド（clear/stats）
     // SVターゲットオプション
-    bool sv_strict_lint = false;  // --sv-strict-lint: lint_off抑止を出力しない
+    bool sv_strict_lint = false;       // --sv-strict-lint: lint_off抑止を出力しない
+    bool sv_always_ff = false;         // --sv-always-ff: always_ff/always_comb等を保持
+    bool sv_warn_nba = false;          // --sv-warn-nba: 代入済み状態変数の参照を警告
+    bool emit_constraints = false;     // --emit-constraints: .cst/.tcl制約ファイルを生成
+    std::vector<std::string> defines;  // -D NAME: 条件付きコンパイル定義
+    // テストモード（cm test / --test）: #[test]関数を含めてコンパイルし、TESTを自動定義
+    bool test_mode = false;
+    // fmt --check: 整形せず、要整形ファイルがあれば非0終了（CIゲート用）
+    bool fmt_check = false;
     // ユーザ指定のMIR最適化オプション
     bool unroll_loops = false;  // --funroll-loops: 定数ループの静的展開
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数

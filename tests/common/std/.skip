@@ -1,1 +1,3 @@
+# std::mem（malloc/free）はvoid*ベースのlibc APIで、JSターゲットは
+# void*を明示エラーにするためスキップする
 js

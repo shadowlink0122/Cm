@@ -1,0 +1,5 @@
+calc ok: 50
+calc err: division by zero
+quarter: 2
+quarter: none
+ternary: 100

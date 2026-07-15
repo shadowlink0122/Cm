@@ -4,12 +4,33 @@
 
 #include "formatter.hpp"
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace cm {
 namespace fmt {
+
+namespace {
+
+// SV幅付きリテラル（8'd170, 4'b1010, 16'hFFFF）の ' かどうかを判定する。
+// 文字リテラルの開始と誤認すると括弧カウントが狂うため、
+// lexerの規則（数字 + ' + 基数文字 + 値）に合わせて除外する
+bool is_sized_literal_quote(const std::string& s, size_t i) {
+    if (i >= s.size() || s[i] != '\'')
+        return false;
+    if (i == 0 || !std::isdigit(static_cast<unsigned char>(s[i - 1])))
+        return false;
+    if (i + 2 >= s.size())
+        return false;
+    char base = s[i + 1];
+    if (base != 'd' && base != 'D' && base != 'b' && base != 'B' && base != 'h' && base != 'H')
+        return false;
+    return std::isalnum(static_cast<unsigned char>(s[i + 2])) != 0;
+}
+
+}  // namespace
 
 FormatResult Formatter::format(const std::string& original_code) {
     FormatResult result;
@@ -182,19 +203,24 @@ std::string Formatter::enforce_kr_braces(const std::string& code, size_t& change
                 next_trimmed = next_trimmed.substr(start);
             }
 
-            // 次の行が "{" のみで、現在行が空でない場合
+            // 次の行が "{" のみで、現在行が宣言・制御ヘッダの場合のみ結合する。
+            // 現在行が `)` または識別子で終わるとき（関数・if/for・struct名等）に限り、
+            // 裸ブロックの `{`（前の行が `;`/`{`/`}` 等で終わる）や
+            // 行末コメント付きの行への結合を防ぐ
             if (next_trimmed == "{") {
-                // 現在行の末尾の空白を削除
                 size_t end = curr.find_last_not_of(" \t\r");
-                if (end != std::string::npos) {
+                bool has_comment = (curr.find("//") != std::string::npos);
+                char last = (end != std::string::npos) ? curr[end] : 0;
+                bool joinable = !has_comment && (last == ')' || last == '>' || last == '_' ||
+                                                 std::isalnum(static_cast<unsigned char>(last)));
+                if (joinable) {
+                    // 現在行の末尾の空白を削除し " {" を追加
                     curr = curr.substr(0, end + 1);
+                    result << curr << " {\n";
+                    changes++;
+                    i++;  // 次の行をスキップ
+                    continue;
                 }
-
-                // 現在行に " {" を追加
-                result << curr << " {\n";
-                changes++;
-                i++;  // 次の行をスキップ
-                continue;
             }
         }
 
@@ -218,6 +244,23 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     int paren_depth = 0;          // 現在の丸括弧深さ（関数引数等）
     bool in_backtick = false;     // バッククォート文字列内かどうか
     int backtick_base_depth = 0;  // バッククォート開始時の深さ
+
+    // 条件付きコンパイルブロック（#ifdef/#ifndef〜#end）をブロック扱いするためのスタック。
+    // #else/#end を対応する #ifdef と同列に揃え、#else では分岐開始時点の
+    // 括弧カウンタを復元する（分岐ごとに波括弧が不均衡でも崩れない）
+    struct CondState {
+        int brace;            // #ifdef 時点のブレース深さ
+        int bracket;          // #ifdef 時点のブラケット深さ
+        int paren;            // #ifdef 時点の丸括弧深さ
+        int directive_depth;  // #ifdef 行を出力した深さ
+    };
+    std::vector<CondState> cond_stack;
+
+    // 文の継続行（長い式の折り返し）のインデント状態。
+    // 文の開始行と同じ括弧深さの継続行は1段深くする（1回目で+1し、
+    // 2回目以降も同じ深さ）。開き括弧が未閉の継続行は括弧深さに従う
+    bool stmt_open = false;    // 直前のコード行が文の途中で終わっているか
+    int stmt_group_depth = 0;  // 文の開始行時点の bracket+paren 深さ
 
     while (std::getline(stream, line)) {
         if (!first)
@@ -273,7 +316,8 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                     char prev = (i > 0) ? content[i - 1] : 0;
                     if (!in_char && c == '"' && prev != '\\')
                         in_string = !in_string;
-                    if (!in_string && c == '\'' && prev != '\\')
+                    if (!in_string && c == '\'' && prev != '\\' &&
+                        !is_sized_literal_quote(content, i))
                         in_char = !in_char;
                     if (!in_string && !in_char) {
                         if (c == '{')
@@ -290,6 +334,9 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                             paren_depth--;
                     }
                 }
+
+                // 閉じ行（`); 等）でasm文は完結する
+                stmt_open = false;
             } else {
                 // バッククォート内の通常行：1段インデント追加
                 size_t indent = static_cast<size_t>(backtick_base_depth + 1) * indent_width_;
@@ -316,8 +363,54 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             paren_depth--;
         }
 
-        // インデントを計算（ブレース深さ + ブラケット深さ + 丸括弧深さ）
-        int total_depth = brace_depth + bracket_depth + paren_depth;
+        // 条件付きコンパイルディレクティブの判定
+        // （ブロック内容を1段インデントする。#ifdef/#else/#end自体は外側の深さで出力）
+        bool is_cond_open = (content.rfind("#ifdef", 0) == 0 || content.rfind("#ifndef", 0) == 0);
+        bool is_cond_else = (content.rfind("#else", 0) == 0);
+        bool is_cond_end = (content.rfind("#end", 0) == 0);
+
+        // 文の継続行判定（コメント行・#ディレクティブ/属性行・閉じ括弧行は対象外）
+        bool is_comment_line = (content.rfind("//", 0) == 0);
+        bool is_directive_line = (!content.empty() && content[0] == '#');
+        bool starts_with_any_close =
+            starts_with_close || starts_with_bracket_close || starts_with_paren_close;
+        int group_now = bracket_depth + paren_depth;
+        bool is_continuation = false;
+        if (!is_comment_line && !is_directive_line) {
+            if (!stmt_open) {
+                // 文の開始行: この時点の括弧深さを記録
+                stmt_group_depth = group_now;
+            } else if (group_now == stmt_group_depth && !starts_with_any_close) {
+                // 開き括弧で深くなっていない継続行のみ+1段
+                // （未閉括弧のある継続行は括弧深さのインデントに従う。
+                // 末尾カンマなしの最終要素直後の閉じ括弧は継続行ではない）
+                is_continuation = true;
+            }
+        }
+
+        // インデントを計算（ブレース + ブラケット + 丸括弧 + 条件ブロックのネスト数）
+        int total_depth;
+        if ((is_cond_else || is_cond_end) && !cond_stack.empty()) {
+            // #else/#end は対応する #ifdef と同じ深さに揃える
+            const CondState& top = cond_stack.back();
+            total_depth = top.directive_depth;
+            if (is_cond_else) {
+                // 次の分岐は #ifdef 直後と同じ状態から数え直す
+                // （前の分岐内で開いた波括弧等の影響を持ち越さない）
+                brace_depth = top.brace;
+                bracket_depth = top.bracket;
+                paren_depth = top.paren;
+            } else {
+                // #end: 最後の分岐の括弧状態を持ち越してブロックを閉じる
+                cond_stack.pop_back();
+            }
+        } else {
+            total_depth =
+                brace_depth + bracket_depth + paren_depth + static_cast<int>(cond_stack.size());
+            if (is_continuation) {
+                total_depth++;  // 継続行は1段深く（2回目以降も同じ深さになる）
+            }
+        }
         size_t indent = static_cast<size_t>(total_depth) * indent_width_;
 
         // 正規化されたインデントで出力
@@ -327,10 +420,16 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
         }
         result << new_line;
 
+        // #ifdef/#ifndef の次行からブロック内容を1段深くする
+        if (is_cond_open) {
+            cond_stack.push_back({brace_depth, bracket_depth, paren_depth, total_depth});
+        }
+
         // 行内のブレース・ブラケットを数える（文字列やコメント内は除外）
         bool in_string = false;
         bool in_char = false;
         bool in_comment = false;
+        size_t comment_pos = std::string::npos;  // 行末コメントの開始位置
         for (size_t i = 0; i < content.size(); ++i) {
             char c = content[i];
             char prev = (i > 0) ? content[i - 1] : 0;
@@ -339,6 +438,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             if (!in_string && !in_char && c == '/' && i + 1 < content.size() &&
                 content[i + 1] == '/') {
                 in_comment = true;
+                comment_pos = i;
                 break;  // 行コメント以降は無視
             }
 
@@ -375,8 +475,9 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             if (!in_char && !in_comment && c == '"' && prev != '\\') {
                 in_string = !in_string;
             }
-            // 文字リテラル
-            if (!in_string && !in_comment && c == '\'' && prev != '\\') {
+            // 文字リテラル（SV幅付きリテラルの ' は除外）
+            if (!in_string && !in_comment && c == '\'' && prev != '\\' &&
+                !is_sized_literal_quote(content, i)) {
                 in_char = !in_char;
             }
 
@@ -404,6 +505,21 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                         paren_depth--;
                     }
                 }
+            }
+        }
+
+        // 文状態の更新: 行末コメントを除いたコード末尾で文の完結を判定する
+        if (in_backtick) {
+            // 複数行バッククォート中は閉じ行の処理で確定する
+        } else if (is_directive_line) {
+            stmt_open = false;
+        } else if (!is_comment_line) {
+            std::string code_part =
+                (comment_pos != std::string::npos) ? content.substr(0, comment_pos) : content;
+            size_t code_end = code_part.find_last_not_of(" \t\r");
+            if (code_end != std::string::npos) {
+                char last = code_part[code_end];
+                stmt_open = (last != ';' && last != '{' && last != '}' && last != ',');
             }
         }
     }
@@ -436,9 +552,9 @@ std::string Formatter::normalize_operator_spacing(const std::string& code, size_
             prev_char != '\\') {
             in_string = !in_string;
         }
-        // 文字リテラルの検出
+        // 文字リテラルの検出（SV幅付きリテラルの ' は除外）
         if (!in_line_comment && !in_block_comment && !in_string && !in_backtick && c == '\'' &&
-            prev_char != '\\') {
+            prev_char != '\\' && !is_sized_literal_quote(code, i)) {
             in_char = !in_char;
         }
         // 行コメントの検出
@@ -529,8 +645,9 @@ std::string Formatter::enforce_semicolon_newline(const std::string& code, size_t
         if (!in_line_comment && !in_char && !in_backtick && c == '"' && prev_char != '\\') {
             in_string = !in_string;
         }
-        // 文字リテラルの検出
-        if (!in_line_comment && !in_string && !in_backtick && c == '\'' && prev_char != '\\') {
+        // 文字リテラルの検出（SV幅付きリテラルの ' は除外）
+        if (!in_line_comment && !in_string && !in_backtick && c == '\'' && prev_char != '\\' &&
+            !is_sized_literal_quote(code, i)) {
             in_char = !in_char;
         }
         // 行コメントの検出
@@ -643,119 +760,59 @@ std::string Formatter::ensure_trailing_newline(const std::string& code, size_t& 
 }
 
 std::string Formatter::align_inline_comments(const std::string& code, size_t& changes) {
+    // 行末コメントの位置は手動調整を尊重する。
+    // コードとコメントの間隔が2スペース未満の場合のみ2スペースへ広げる
     std::istringstream stream(code);
-    std::vector<std::string> lines;
+    std::ostringstream result;
     std::string line;
+    bool first = true;
 
-    // 全行を読み込み
     while (std::getline(stream, line)) {
-        lines.push_back(line);
-    }
-
-    // 行末コメントの情報を収集
-    struct LineInfo {
-        size_t code_end;       // コード部分の終わり（空白除く）
-        size_t comment_start;  // コメントの開始位置
-        bool has_comment;
-    };
-
-    std::vector<LineInfo> line_infos(lines.size());
-
-    for (size_t i = 0; i < lines.size(); ++i) {
-        const std::string& l = lines[i];
-        line_infos[i].has_comment = false;
+        if (!first)
+            result << '\n';
+        first = false;
 
         // 文字列リテラル外での // を探す
+        size_t comment_start = std::string::npos;
         bool in_string = false;
         bool in_char = false;
 
-        for (size_t j = 0; j < l.size(); ++j) {
-            char c = l[j];
-            char prev = (j > 0) ? l[j - 1] : 0;
+        for (size_t j = 0; j < line.size(); ++j) {
+            char c = line[j];
+            char prev = (j > 0) ? line[j - 1] : 0;
 
             if (!in_char && c == '"' && prev != '\\') {
                 in_string = !in_string;
             }
-            if (!in_string && c == '\'' && prev != '\\') {
+            if (!in_string && c == '\'' && prev != '\\' && !is_sized_literal_quote(line, j)) {
                 in_char = !in_char;
             }
 
-            if (!in_string && !in_char && j + 1 < l.size() && l[j] == '/' && l[j + 1] == '/') {
-                // コメント発見
-                line_infos[i].comment_start = j;
-
-                // コード部分の終わり（コメント前の空白を除く）
-                size_t code_end = j;
-                while (code_end > 0 && l[code_end - 1] == ' ') {
-                    code_end--;
-                }
-                line_infos[i].code_end = code_end;
-
-                // インラインコメントのみ対象（行全体がコメントの場合は除外）
-                // code_end == 0 は行頭からコメントなので対象外
-                line_infos[i].has_comment = (code_end > 0);
+            if (!in_string && !in_char && j + 1 < line.size() && line[j] == '/' &&
+                line[j + 1] == '/') {
+                comment_start = j;
                 break;
             }
         }
-    }
 
-    // 連続するコメント付き行をグループ化して揃える
-    std::ostringstream result;
-    size_t i = 0;
-
-    while (i < lines.size()) {
-        // コメントがない行はそのまま出力
-        if (!line_infos[i].has_comment) {
-            result << lines[i];
-            if (i + 1 < lines.size())
-                result << '\n';
-            i++;
+        if (comment_start == std::string::npos) {
+            result << line;
             continue;
         }
 
-        // コメント付き行のグループを見つける
-        size_t group_start = i;
-        size_t group_end = i;
-        size_t max_code_end = line_infos[i].code_end;
-
-        // 連続するコメント付き行を探す（空行や非コメント行で区切る）
-        while (group_end + 1 < lines.size() && line_infos[group_end + 1].has_comment) {
-            group_end++;
-            max_code_end = std::max(max_code_end, line_infos[group_end].code_end);
+        // コード部分の終わり（コメント前の空白を除く）
+        size_t code_end = comment_start;
+        while (code_end > 0 && line[code_end - 1] == ' ') {
+            code_end--;
         }
 
-        // コメントを揃える位置（コード部分+2スペース）
-        size_t align_col = max_code_end + 2;
-
-        // グループ内の各行を出力
-        for (size_t j = group_start; j <= group_end; ++j) {
-            const std::string& l = lines[j];
-            std::string code_part = l.substr(0, line_infos[j].code_end);
-            std::string comment_part = l.substr(line_infos[j].comment_start);
-
-            // コード部分を出力
-            result << code_part;
-
-            // パディングを追加
-            size_t current_col = code_part.size();
-            if (current_col < align_col) {
-                result << std::string(align_col - current_col, ' ');
-                if (line_infos[j].comment_start != line_infos[j].code_end + 2 ||
-                    align_col != line_infos[j].code_end + 2) {
-                    changes++;
-                }
-            } else {
-                result << "  ";  // 最低2スペース
-            }
-
-            // コメント部分を出力
-            result << comment_part;
-
-            if (j + 1 < lines.size())
-                result << '\n';
+        // 行全体がコメント（code_end == 0）は対象外
+        if (code_end > 0 && comment_start - code_end < 2) {
+            result << line.substr(0, code_end) << "  " << line.substr(comment_start);
+            changes++;
+        } else {
+            result << line;
         }
-
-        i = group_end + 1;
     }
 
     return result.str();

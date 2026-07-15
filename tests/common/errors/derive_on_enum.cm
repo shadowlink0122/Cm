@@ -1,0 +1,10 @@
+// enumへの#[derive]は未対応（明示エラー）
+#[derive(Eq)]
+enum Color {
+    Red,
+    Green
+}
+
+int main() {
+    return 0;
+}

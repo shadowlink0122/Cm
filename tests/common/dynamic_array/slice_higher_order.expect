@@ -1,0 +1,5 @@
+map: 2 10 len=5
+filter: len=2 e0=2
+reduce: 15
+some=true every=false find=2 findIndex=1 indexOf=3 includes=true
+long find=20

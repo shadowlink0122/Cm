@@ -1,0 +1,8 @@
+void check() {
+    if ((val & 16'd256) == 16'd0) {
+        out = 16'd10;
+    } else {
+        out = 16'd20;
+    }
+    result = (val >> 16'd8) & 16'd1;
+}

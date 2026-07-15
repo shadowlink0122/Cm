@@ -1,12 +1,10 @@
 # ビルトイン型への impl 構文設計
 
-作成日: 2026-01-11
-関連文書: 027_iterator_required_language_features.md, 028_const_generics_design.md
+作成日: 2026-01-11関連文書: 027_iterator_required_language_features.md, 028_const_generics_design.md
 
 ## 概要
 
-ビルトイン型（配列、スライス、プリミティブ型）に対してインターフェースを
-実装できるようにする構文拡張です。イテレータシステムの完全実装に必須です。
+ビルトイン型（配列、スライス、プリミティブ型）に対してインターフェースを実装できるようにする構文拡張です。イテレータシステムの完全実装に必須です。
 
 ## 対象型
 

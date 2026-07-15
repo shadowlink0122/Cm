@@ -92,9 +92,7 @@ int main() {
 
 ## Function Overloading (not supported)
 
-**Free-function overloading is currently not supported.** Defining two
-functions with the same name and different signatures is a compile
-error:
+**Free-function overloading is currently not supported.** Defining two functions with the same name and different signatures is a compile error:
 
 ```cm
 int process(int x) { return x; }
@@ -104,9 +102,7 @@ double process(double x) { return x; }
 
 Use distinct names per type (e.g. `max_int` / `max_double`).
 
-Note that **constructor overloading** IS supported via the
-`overload self(...)` syntax (see [Structs](../types/structs.html)).
-Free-function overloading may be considered in a future version.
+Note that **constructor overloading** IS supported via the `overload self(...)` syntax (see [Structs](../types/structs.html)). Free-function overloading may be considered in a future version.
 
 ---
 

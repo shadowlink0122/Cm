@@ -416,6 +416,17 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             return temp;
         }
 
+        // 既知の関数名なら関数参照として解決する
+        // （補間ミニパイプライン経由ではis_function_refが立たないため）
+        if (ctx.hir_func_defs && ctx.hir_func_defs->count(var.name)) {
+            hir::TypePtr func_ptr_type =
+                expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
+            LocalId temp = ctx.new_temp(func_ptr_type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{temp}, MirRvalue::use(MirOperand::function_ref(var.name))));
+            return temp;
+        }
+
         // 変数が見つからない場合は仮の値を返す
         LocalId temp = ctx.new_temp(hir::make_int());
         MirConstant zero_const;
@@ -866,6 +877,16 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         }
     }
 
+    // スライスの場合、HIR型はtypedefエイリアス未解決のことがあるため、
+    // 解決済みのMIRローカル型がユニオンならそちらを優先する
+    if (is_slice && array < ctx.func->locals.size()) {
+        hir::TypePtr array_type = ctx.func->locals[array].type;
+        if (array_type && array_type->kind == hir::TypeKind::Array && array_type->element_type &&
+            array_type->element_type->kind == hir::TypeKind::Union) {
+            elem_type = array_type->element_type;
+        }
+    }
+
     LocalId result = ctx.new_temp(elem_type);
 
     // スライスの場合は関数呼び出しを生成（多次元は非対応）
@@ -887,9 +908,11 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 get_func = "cm_slice_get_f64";
             } else if (elem_kind == hir::TypeKind::Float) {
                 get_func = "cm_slice_get_f32";
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 get_func = "cm_slice_get_ptr";
+            } else if (elem_kind == hir::TypeKind::Union || elem_kind == hir::TypeKind::Struct) {
+                // ユニオン・構造体要素: blob格納のため要素先頭へのポインタを取得する
+                get_func = "cm_slice_get_element_ptr";
             }
         }
 
@@ -898,11 +921,18 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         args.push_back(MirOperand::copy(MirPlace{array}));
         args.push_back(MirOperand::copy(MirPlace{index_locals[0]}));
 
+        // ユニオン型要素は要素ポインタを受けてからデリファレンスでロードする
+        bool deref_result = (get_func == "cm_slice_get_element_ptr");
+        LocalId call_dest = result;
+        if (deref_result) {
+            call_dest = ctx.new_temp(hir::make_pointer(elem_type));
+        }
+
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
         call_term->data = MirTerminator::CallData{MirOperand::function_ref(get_func),
                                                   std::move(args),
-                                                  MirPlace{result},
+                                                  MirPlace{call_dest},
                                                   success_block,
                                                   std::nullopt,
                                                   "",
@@ -910,6 +940,12 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                                                   false};
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(success_block);
+
+        if (deref_result) {
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{result},
+                MirRvalue::use(MirOperand::copy(MirPlace{call_dest, {PlaceProjection::deref()}}))));
+        }
 
         return result;
     }
@@ -1035,9 +1071,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
         LocalId field_value;
 
         if (is_slice_field && is_array_literal && arr_lit) {
-            // 配列リテラルからスライスを作成
-            hir::TypePtr elem_type =
-                field_type->element_type ? field_type->element_type : hir::make_int();
+            // 配列リテラルからスライスを作成（typedefエイリアスは解決してから判定）
+            hir::TypePtr elem_type = ctx.resolve_typedef(
+                field_type->element_type ? field_type->element_type : hir::make_int());
 
             // 要素サイズを取得
             int64_t elem_size = 4;  // デフォルトはint
@@ -1052,9 +1088,11 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
                 elem_size = 8;
             } else if (elem_kind == hir::TypeKind::Float) {
                 elem_size = 4;
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 elem_size = 8;
+            } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
+                // 構造体・ユニオンはblob（値のインラインコピー）として格納する
+                elem_size = ctx.layout_size(elem_type);
             }
 
             // スライス用の一時変数を作成
@@ -1306,13 +1344,29 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
     // オペランドをlowering
     LocalId operand = lower_expression(*cast.operand, ctx);
 
+    // typedefエイリアス（Shape = Circle | Rect 等）を解決してからCastを発行する。
+    // 未解決のままだとバックエンドがユニオン構築/タグ検査を認識できない
+    hir::TypePtr target_type = ctx.resolve_typedef(cast.target_type);
+    if (!target_type) {
+        target_type = cast.target_type;
+    }
+
+    // ユニオン型の実行時型判別 (expr is Type): タグ比較のboolを返す
+    if (cast.check_only) {
+        LocalId result = ctx.new_temp(hir::make_bool());
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), target_type,
+                                              /*check_only=*/true)));
+        return result;
+    }
+
     // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入
     // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
     // b as void* で配列全体がコピーされるのを防ぐため、
     // 配列のアドレスを取得してからポインタキャストを行う
-    if (cast.target_type &&
-        (cast.target_type->kind == hir::TypeKind::Pointer ||
-         cast.target_type->kind == hir::TypeKind::Reference) &&
+    if (target_type &&
+        (target_type->kind == hir::TypeKind::Pointer ||
+         target_type->kind == hir::TypeKind::Reference) &&
         operand < ctx.func->locals.size()) {
         auto& operand_local = ctx.func->locals[operand];
         if (operand_local.type && operand_local.type->kind == hir::TypeKind::Array &&
@@ -1328,21 +1382,21 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
             ctx.push_statement(MirStatement::assign(MirPlace{ref_temp}, std::move(ref_rvalue)));
 
             // Ref結果をポインタキャスト
-            LocalId result = ctx.new_temp(cast.target_type);
+            LocalId result = ctx.new_temp(target_type);
             ctx.push_statement(MirStatement::assign(
                 MirPlace{result},
-                MirRvalue::cast(MirOperand::copy(MirPlace{ref_temp}), cast.target_type)));
+                MirRvalue::cast(MirOperand::copy(MirPlace{ref_temp}), target_type)));
 
             return result;
         }
     }
 
     // ターゲット型で結果変数を作成
-    LocalId result = ctx.new_temp(cast.target_type);
+    LocalId result = ctx.new_temp(target_type);
 
     // キャスト命令を生成
     ctx.push_statement(MirStatement::assign(
-        MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), cast.target_type)));
+        MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), target_type)));
 
     return result;
 }

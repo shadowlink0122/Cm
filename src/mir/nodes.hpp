@@ -310,6 +310,8 @@ struct MirRvalue {
     struct CastData {
         MirOperandPtr operand;
         hir::TypePtr target_type;
+        // ユニオン型の実行時型判別 (expr is Type)。trueならタグ比較のboolを返す
+        bool check_only = false;
     };
 
     struct FormatConvertData {
@@ -357,10 +359,11 @@ struct MirRvalue {
         return rv;
     }
 
-    static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type) {
+    static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type,
+                             bool check_only = false) {
         auto rv = std::make_unique<MirRvalue>();
         rv->kind = Cast;
-        rv->data = CastData{std::move(operand), target_type};
+        rv->data = CastData{std::move(operand), target_type, check_only};
         return rv;
     }
 };
@@ -613,9 +616,12 @@ struct MirFunction {
     // SVバックエンド: always ブロックの種別
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
     std::vector<std::string> attributes;  // SV属性（clock_domain, pipeline等）
-    std::vector<LocalDecl> locals;        // ローカル変数（引数も含む）
-    std::vector<LocalId> arg_locals;      // 引数に対応するローカルID
-    LocalId return_local;                 // 戻り値用のローカル（_0）
+    // #[test] 関数用: HIR文への参照（SVテストベンチ生成で使用。
+    // MirInitialBlock::hir_stmts と同じ寿命モデル＝HIRプログラム存命中のみ有効）
+    std::vector<const hir::HirStmt*> hir_stmts;
+    std::vector<LocalDecl> locals;    // ローカル変数（引数も含む）
+    std::vector<LocalId> arg_locals;  // 引数に対応するローカルID
+    LocalId return_local;             // 戻り値用のローカル（_0）
     std::vector<BasicBlockPtr> basic_blocks;
     BlockId entry_block = ENTRY_BLOCK;
 

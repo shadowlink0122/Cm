@@ -1,0 +1,40 @@
+import std::io::println;
+// slice_member_types.cm - 構造体メンバのスライス（int/ユニオン/構造体要素）
+// メンバ経由のユニオンスライスは格納表現不一致で壊れていた（v0.16.0で修正）
+
+typedef Value = int | string;
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Holder {
+    int[] xs;
+    Value[] vs;
+    Point[] ps;
+}
+
+int main() {
+    Holder h;
+    h.xs = [];
+    h.xs.push(1);
+    h.xs.push(2);
+    println("xs len={h.xs.len()} x1={h.xs[1]}");
+
+    h.vs = [];
+    h.vs.push(7 as Value);
+    h.vs.push("hi" as Value);
+    int a = h.vs[0] as int;
+    string b = h.vs[1] as string;
+    println("vs len={h.vs.len()} a={a} b={b}");
+
+    h.ps = [];
+    Point p;
+    p.x = 3;
+    p.y = 4;
+    h.ps.push(p);
+    Point q = h.ps[0];
+    println("ps len={h.ps.len()} q=({q.x},{q.y})");
+    return 0;
+}

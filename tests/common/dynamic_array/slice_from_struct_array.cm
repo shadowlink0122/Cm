@@ -1,0 +1,22 @@
+import std::io::println;
+// slice_from_struct_array.cm - 固定長構造体配列からスライスへの変換
+// 従来は格納表現の不一致でSIGBUSしていた（v0.16.0で修正）
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point[4] arr;
+    for (int i = 0; i < 4; i++) {
+        arr[i].x = i;
+        arr[i].y = i * 10;
+    }
+    Point[] s = arr;
+    println("len={s.len()}");
+    Point p1 = s[1];
+    println("p1=({p1.x},{p1.y})");
+    println("direct=({s[2].x},{s[2].y})");
+    return 0;
+}

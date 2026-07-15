@@ -13,8 +13,7 @@ JSはオーバーロードをサポートしないため、Cmのオーバーロ�
 *   **エクスポート**: `export` された関数は、マングリングされた名前でエクスポートし、必要に応じて元の名前でエイリアスを提供します（オーバーロードがない場合）。
 
 ### 1.2 メソッド
-構造体に関連付けられたメソッドは、JSクラスのメソッドとして定義します。
-`impl Struct` ブロック内の関数は、`Struct.prototype` に追加します。
+構造体に関連付けられたメソッドは、JSクラスのメソッドとして定義します。`impl Struct` ブロック内の関数は、`Struct.prototype` に追加します。
 
 ## 2. モジュールシステム (Modules)
 
@@ -32,8 +31,7 @@ import { println } from "./std/io.mjs";
 ## 3. 制御構文 (Control Flow)
 
 ### 3.1 If / While / For
-これらはJSの構文とほぼ1:1で対応します。
-ただし、Cmの `if` は式（値を返す）ですが、JSの `if` は文です。
+これらはJSの構文とほぼ1:1で対応します。ただし、Cmの `if` は式（値を返す）ですが、JSの `if` は文です。
 
 **式としてのif変換:**
 ```rust
@@ -52,8 +50,7 @@ let x = (() => {
 ### 3.2 Pattern Matching (Match)
 JSには `match` がないため、`switch` 文または `if-else` チェーンに展開します。
 
-**Enumのマッチ:**
-Tagged Unionとして実装されたEnum（`002`参照）の `tag` プロパティを見て分岐します。
+**Enumのマッチ:** Tagged Unionとして実装されたEnum（`002`参照）の `tag` プロパティを見て分岐します。
 
 ```javascript
 // match val { Option::Some(x) => ... }
@@ -67,8 +64,7 @@ switch (val.tag) {
 ```
 
 ### 3.3 ループ制御
-`break`, `continue` はそのままJSにマッピングします。
-`break value;` （値を返すbreak）はJSには存在しないため、変数への代入と `break` に変換します。
+`break`, `continue` はそのままJSにマッピングします。`break value;` （値を返すbreak）はJSには存在しないため、変数への代入と `break` に変換します。
 
 ```javascript
 // Cm: let x = loop { break 10; };

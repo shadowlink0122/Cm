@@ -1,0 +1,11 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+uint acc = 0;
+
+void tick(posedge clk) {
+    uint doubled = acc * 2;
+    uint shifted = doubled >> 1;
+    acc = acc + 1;
+    out = shifted;
+}

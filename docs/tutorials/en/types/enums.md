@@ -201,11 +201,11 @@ int main() {
 
 ---
 
-## Result/Option Pattern
+## Result/Option (Built-in Error Handling Types)
 
-**Since v0.13.0**
+**Built-in since v0.16.0**
 
-Cm supports the Result/Option pattern for error handling and optional values. These are user-defined enums rather than built-in types.
+Error handling uses `Result<T, E>` and optional values use `Option<T>`. Since v0.16.0 they are **built-in types** just like in Rust — no enum definition needed (a user-defined enum with the same name takes precedence).
 
 ### Result Type
 
@@ -213,11 +213,6 @@ Represents success or failure with a value or error.
 
 ```cm
 import std::io::println;
-
-enum Result<T, E> {
-    Ok(T),
-    Err(E)
-}
 
 Result<int, string> safe_divide(int a, int b) {
     if (b == 0) {
@@ -243,11 +238,6 @@ Represents the presence or absence of a value.
 ```cm
 import std::io::println;
 
-enum Option<T> {
-    Some(T),
-    None
-}
-
 Option<int> find_value(int[] arr, int target) {
     for (int i = 0; i < arr.len(); i++) {
         if (arr[i] == target) {
@@ -268,13 +258,57 @@ int main() {
 }
 ```
 
-### Why User-Defined?
+### Methods (Rust-aligned)
 
-`Result` and `Option` must be explicitly defined by the user. This provides:
+Discriminate and extract without writing match. `unwrap()` panics with "panic: <message>" on Err/None (like Rust's panic!).
 
-- **Explicitness**: Clear what types are being used
-- **Customization**: Add methods via `impl` blocks
-- **Consistency**: Same treatment as other enums
+```cm
+Result<int, string> r = safe_divide(10, 2);
+bool ok = r.is_ok();
+bool err = r.is_err();
+int v = r.unwrap();               // panics on Err
+int v2 = r.unwrap_or(-1);
+int v3 = r.expect("must divide"); // panics with the message on Err
+// string e = r.unwrap_err();     // panics on Ok
+
+Option<int> o = find_value([1, 2, 3], 2);
+bool s = o.is_some();
+bool n = o.is_none();
+int i = o.unwrap_or(0);
+```
+
+### The ? Operator (Error Propagation)
+
+`expr?` yields the payload on Ok/Some, and **early-returns from the current function** on Err/None. `?` on a Result requires the enclosing function to return Result; `?` on an Option requires it to return Option.
+
+```cm
+Result<int, string> calc(int a, int b) {
+    int q = safe_divide(a, b)?;   // propagates Err to the caller
+    int q2 = safe_divide(q, 2)?;
+    return Result::Ok(q2 * 10);
+}
+```
+
+### must_use (Static Check for Unused Results)
+
+Discarding a Result value as a bare statement produces a `[must_use]` compile-time warning (like Rust's unused_must_use). Always handle it with match, is_ok(), etc.
+
+```cm
+safe_divide(1, 0);   // warning: unused Result value [must_use]
+```
+
+### Runtime Errors and Their Safe APIs
+
+Operations that panic (abnormal termination at runtime) have safe counterparts that can be handled with Result/Option. As in Rust, panics are unrecoverable (cannot be caught), so use the safe API when you need to recover.
+
+| Panicking operation | Safe handling |
+|------|------|
+| `a / b`, `a % b` (zero divisor) | `std::math::checked_div(a, b)` / `checked_mod(a, b)` → `Option<int>` |
+| `arr[i]` (out of bounds: fixed array = undefined value, slice = 0) | `arr.get(i)` → `Option<T>` |
+| `v as T` (wrong union variant) | check with `v is T` first, or use match type patterns |
+| `r.unwrap()` / `o.unwrap()` | `unwrap_or(default)`, `is_ok()`/`is_some()`, match |
+| File I/O failures | `std::fs` Result API (`read_to_string`, etc.) |
+| `panic(msg)` / `assert` | intentionally unrecoverable (no handling) |
 
 ---
 

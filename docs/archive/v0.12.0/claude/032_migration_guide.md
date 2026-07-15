@@ -1,8 +1,6 @@
 # cm_* から標準ライブラリへの移行ガイド
 
-作成日: 2026-01-11
-対象バージョン: v0.11.0
-関連文書: 030_runtime_to_stdlib_migration.md, 031_stdlib_implementation_details.md
+作成日: 2026-01-11対象バージョン: v0.11.0関連文書: 030_runtime_to_stdlib_migration.md, 031_stdlib_implementation_details.md
 
 ## 概要
 
@@ -424,6 +422,4 @@ int main() {
 
 ---
 
-**作成者:** Claude Code
-**ステータス:** 移行ガイド
-**サポート:** 質問は GitHub Issues まで
+**作成者:** Claude Code **ステータス:** 移行ガイド**サポート:** 質問は GitHub Issues まで

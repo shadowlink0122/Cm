@@ -1,0 +1,21 @@
+// #[test] 関数が通常ビルドで除去されることを検証する。
+// helper() は #ifdef TEST 配下でのみ定義されるため、
+// #[test] 関数が型チェック前に除去されていなければコンパイルエラーになる。
+import std::io::println;
+
+#ifdef TEST
+    int helper() {
+        return 1;
+    }
+#end
+
+#[test]
+void uses_test_only_symbol() {
+    int x = helper();
+    exit(x);
+}
+
+int main() {
+    println("ok");
+    return 0;
+}

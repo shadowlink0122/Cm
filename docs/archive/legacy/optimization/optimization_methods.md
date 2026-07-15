@@ -3,8 +3,7 @@
 # Cm向け最適化手法の調査メモ
 
 ## 目的
-- Cmの言語特性（interface, generic, slice, string interpolation, FFI）を踏まえ、
-  どの最適化が有益かを整理する。
+- Cmの言語特性（interface, generic, slice, string interpolation, FFI）を踏まえ、どの最適化が有益かを整理する。
 - native/wasmの両方に効く手法と、実装レイヤー（HIR/MIR/LLVM）を区別する。
 
 ## 現在の最適化（実装済み）
@@ -96,8 +95,4 @@
 - `noalias`/`restrict` 相当の情報が付与できるとLLVMが最適化しやすい。
 
 ## 推奨ロードマップ（短期）
-1) MIR GVN/CSE
-2) 簡易インライン化（小関数/組み込み）
-3) interface呼び出しの静的化
-4) bounds check elimination（配列/スライス）
-5) 文字列フォーマットの簡約
+1) MIR GVN/CSE 2) 簡易インライン化（小関数/組み込み）3) interface呼び出しの静的化4) bounds check elimination（配列/スライス）5) 文字列フォーマットの簡約

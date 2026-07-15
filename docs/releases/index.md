@@ -5,7 +5,6 @@ nav_order: 3
 has_children: true
 ---
 
-[English](index.en.html)
 
 # リリースノート
 
@@ -15,6 +14,8 @@ has_children: true
 
 | バージョン | リリース日 | 状態 | 主要機能 |
 |-----------|-----------|------|---------|
+| [v0.16.0](v0.16.0.html) | - | 🚧 開発中 | SVバックエンド拡充（パラメータ・制約生成・ビットスライス・#[test]）、組み込みResult/Option・`?` 演算子、ユニオン実行時型判別、std::fs |
+| [v0.15.1](v0.15.1.html) | 2026-04-29 | ✅ リリース済み | SVバックエンド式ツリー化、interface動的ディスパッチ、最適化オプション |
 | [v0.15.0](v0.15.0.html) | 2026-03-09 | ✅ リリース済み | SystemVerilogバックエンド、SV幅付きリテラル、VSCode拡張SV対応 |
 | [v0.14.2](v0.14.2.html) | 2026-03-07 | ✅ リリース済み | Tagged Union重大バグ修正、ASM volatile修正、DFE、enum文字リテラル |
 | [v0.14.1](v0.14.1.html) | 2026-02-19 | ✅ リリース済み | UEFIバグ17件修正、typedef算術演算、GCC/Linux CI修正 |

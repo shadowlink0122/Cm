@@ -3,8 +3,10 @@
 // ============================================================
 
 #include "../type_checker.hpp"
+#include "match_hoist.hpp"
 
 #include <algorithm>
+#include <set>
 
 namespace cm {
 
@@ -15,6 +17,56 @@ TypeChecker::TypeChecker() {
 
 bool TypeChecker::check(ast::Program& program) {
     debug::tc::log(debug::tc::Id::Start);
+
+    // 組み込みprelude: Result<T, E> / Option<T> を実enum宣言としてプログラム先頭に
+    // 注入する（TypeChecker内だけの疑似登録ではHIR/MIR/コード生成にenum定義が
+    // 届かず、関数返却でのペイロード喪失や型IDの分裂を起こしていた）。
+    // ユーザーが同名を定義している場合は注入しない
+    {
+        bool has_result = false;
+        bool has_option = false;
+        for (const auto& decl : program.declarations) {
+            if (const auto* en = decl->as<ast::EnumDecl>()) {
+                if (en->name == "Result") {
+                    has_result = true;
+                }
+                if (en->name == "Option") {
+                    has_option = true;
+                }
+            }
+        }
+        auto make_prelude_enum = [](const std::string& name, std::vector<std::string> params,
+                                    std::vector<ast::EnumMember> members) {
+            auto en = std::make_unique<ast::EnumDecl>(name, std::move(members));
+            en->generic_params = std::move(params);
+            // preludeマーカー: register_enumの組み込みメソッド消去
+            // （ユーザー再定義向け）を抑止する
+            en->attributes.emplace_back("__prelude");
+            return std::make_unique<ast::Decl>(std::move(en), Span{});
+        };
+        if (!has_option) {
+            std::vector<ast::EnumMember> members;
+            members.emplace_back("Some", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                             {"value", ast::make_named("T")}});
+            members.emplace_back("None");
+            program.declarations.insert(program.declarations.begin(),
+                                        make_prelude_enum("Option", {"T"}, std::move(members)));
+        }
+        if (!has_result) {
+            std::vector<ast::EnumMember> members;
+            members.emplace_back("Ok", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                           {"value", ast::make_named("T")}});
+            members.emplace_back("Err", std::vector<std::pair<std::string, ast::TypePtr>>{
+                                            {"error", ast::make_named("E")}});
+            program.declarations.insert(
+                program.declarations.begin(),
+                make_prelude_enum("Result", {"T", "E"}, std::move(members)));
+        }
+    }
+
+    // 式形式matchの呼び出しscrutineeを一時変数へ退避するASTプリパス
+    // （HIRの三項演算子脱糖でのクローン多重評価を避け、単一評価を保証する）
+    hoist_match_call_scrutinees(program);
 
     // Pass 1: 関数シグネチャを登録
     for (auto& decl : program.declarations) {
@@ -46,6 +98,14 @@ const ast::StructDecl* TypeChecker::get_struct(const std::string& name) const {
     auto it = struct_defs_.find(name);
     if (it != struct_defs_.end()) {
         return it->second;
+    }
+
+    // 名前空間内の非修飾名は「現在の名前空間::名前」として解決する
+    if (auto qualified = resolve_in_namespace(name)) {
+        auto ns_it = struct_defs_.find(*qualified);
+        if (ns_it != struct_defs_.end()) {
+            return ns_it->second;
+        }
     }
 
     auto td_it = typedef_defs_.find(name);
@@ -104,6 +164,10 @@ void TypeChecker::register_namespace(ast::ModuleDecl& mod, const std::string& pa
     debug::tc::log(debug::tc::Id::Resolved, "Processing namespace: " + full_namespace,
                    debug::Level::Debug);
 
+    // 名前空間内の非修飾型名解決のため現在の名前空間を設定（ネストは再帰で退避/復元）
+    std::string saved_namespace = current_namespace_;
+    current_namespace_ = full_namespace;
+
     for (auto& inner_decl : mod.declarations) {
         if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
             register_namespace(*nested_mod, full_namespace);
@@ -121,6 +185,8 @@ void TypeChecker::register_namespace(ast::ModuleDecl& mod, const std::string& pa
             register_declaration(*inner_decl);
         }
     }
+
+    current_namespace_ = saved_namespace;
 }
 
 void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& parent_namespace) {
@@ -130,6 +196,10 @@ void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& paren
 
     debug::tc::log(debug::tc::Id::Resolved, "Checking namespace: " + full_namespace,
                    debug::Level::Debug);
+
+    // 名前空間内の非修飾型名解決のため現在の名前空間を設定（ネストは再帰で退避/復元）
+    std::string saved_namespace = current_namespace_;
+    current_namespace_ = full_namespace;
 
     for (auto& inner_decl : mod.declarations) {
         if (auto* nested_mod = inner_decl->as<ast::ModuleDecl>()) {
@@ -148,6 +218,8 @@ void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& paren
             check_declaration(*inner_decl);
         }
     }
+
+    current_namespace_ = saved_namespace;
 }
 
 void TypeChecker::register_declaration(ast::Decl& decl) {
@@ -235,7 +307,17 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
         }
 
+        // with / #[derive] を合わせた同一interfaceの重複指定はエラー（記述ミス検出）
+        std::set<std::string> seen_auto_impls;
         for (const auto& iface_name : st->auto_impls) {
+            if (!seen_auto_impls.insert(iface_name).second) {
+                Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
+                error(name_pos, "Interface '" + iface_name +
+                                    "' is specified more than once in 'with' / #[derive] for "
+                                    "struct '" +
+                                    st->name + "'");
+                continue;
+            }
             register_auto_impl(*st, iface_name);
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
@@ -800,9 +882,19 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
     enum_defs_[en.name] = &en;
 
     // ユーザー定義のResult/Optionは組み込み型を上書きするため
-    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）
+    // type_methods_をクリアする（組み込みメソッドをユーザー実装で上書き可能に）。
+    // prelude注入された組み込み宣言（__prelude属性）は対象外
     if (en.name == "Result" || en.name == "Option") {
-        type_methods_.erase(en.name);
+        bool is_prelude = false;
+        for (const auto& attr : en.attributes) {
+            if (attr.name == "__prelude") {
+                is_prelude = true;
+                break;
+            }
+        }
+        if (!is_prelude) {
+            type_methods_.erase(en.name);
+        }
     }
 
     int64_t variant_index = 0;
@@ -893,6 +985,21 @@ void TypeChecker::register_print() {
 }
 
 void TypeChecker::check_function(ast::FunctionDecl& func) {
+    // #[test] 関数は「引数なし・戻り値void」に限定する
+    // （SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
+    for (const auto& attr : func.attributes) {
+        if (attr.name == "test") {
+            if (!func.params.empty()) {
+                error(func.name_span, "#[test] 関数 '" + func.name + "' は引数を取れません");
+            }
+            if (!func.return_type || func.return_type->kind != ast::TypeKind::Void) {
+                error(func.name_span,
+                      "#[test] 関数 '" + func.name + "' の戻り値は void である必要があります");
+            }
+            break;
+        }
+    }
+
     scopes_.push();
 
     generic_context_.clear();

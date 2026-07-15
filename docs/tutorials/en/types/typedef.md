@@ -68,7 +68,54 @@ int main() {
 }
 ```
 
-> **Note:** Use `as Value` to store a value into the union, and `as string` to extract it back to its original type.
+> **Note:** Use `as Value` to store a value into the union, and `as string` to extract it back to its original type. Extraction is tag-checked: extracting with a type that does not match the active variant panics at runtime.
+
+### Runtime Type Discrimination: the `is` Operator and Match Type Patterns (v0.16.0)
+
+The `is` operator safely discriminates the active variant of a union value at runtime. Check with `is` first, then extract with `as` without panicking.
+
+```cm
+import std::io::println;
+
+typedef Value = int | string;
+
+int main() {
+    Value v = 42;
+
+    if (v is int) {
+        int n = v as int;
+        println("int: {n}");
+    }
+
+    v = "hello";
+    bool s = v is string;
+    println("is string: {s}");
+    // Output: int: 42 / is string: true
+    return 0;
+}
+```
+
+Match **type patterns** (`TypeName binder`) combine discrimination and extraction in one step.
+
+```cm
+import std::io::println;
+
+typedef Value = int | string | bool;
+
+int main() {
+    Value v = 42;
+    match (v) {
+        int i => println("int: {i}"),
+        string s => println("str: {s}"),
+        bool b => println("bool: {b}"),
+        _ => println("other"),
+    }
+    // Output: int: 42
+    return 0;
+}
+```
+
+> **Note:** The target type of `is` must be one of the union's variants (a type outside the variants is a compile error), and applying `is` to a non-union value is also a compile error.
 
 ### Union Arrays (Tuple-like Usage)
 

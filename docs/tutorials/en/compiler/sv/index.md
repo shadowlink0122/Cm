@@ -9,8 +9,7 @@ has_children: false
 
 # Compiler - SystemVerilog Backend
 
-**Difficulty:** 🟡 Intermediate  
-**Time:** 45 minutes (about 2 hours to read all pages)
+**Difficulty:** 🟡 Intermediate **Time:** 45 minutes (about 2 hours to read all pages)
 
 Cm can generate SystemVerilog (SV) and run as hardware on FPGAs. Tang Console (Gowin), Xilinx, Intel, and other FPGAs are supported.
 
@@ -29,6 +28,7 @@ The SV backend documentation is split into topic-specific pages:
 | [State Initialization and Simulation](state-sim.html) | Register initial values, initial blocks, automatic testbench generation, running tests |
 | [Memory initialization](memory.html) | Array initializers, #[sv::memfile]/$readmemh, --emit-memfile |
 | [Module hierarchy](hierarchy.html) | Submodule instantiation via //! sv: hierarchy |
+| [Board I/O](board-io.html) | Pin constraint emission, tristate, CDC sync (v0.16.0) |
 | [Semantic Guarantees](semantics.html) | Summary of guaranteed Cm↔SV semantic correspondence (casts, signed arithmetic, etc.) |
 
 ---
@@ -94,6 +94,42 @@ endmodule
 > **Key points:** Cm's `=` is automatically converted to SV's `<=` (non-blocking assignment).
 > `!led` is also converted to SV's `~led` (bitwise negation).
 > A variable's declared initial value (`uint counter = 0;`) is emitted as its power-on initial value.
+
+### State-variable assignments take effect next cycle (important)
+
+Assignments to module-level state variables inside a posedge function are converted to SV non-blocking assignments (`<=`). This means **every read inside the function sees the previous cycle's value, and the assignment takes effect at the start of the next cycle** — unlike sequential software execution:
+
+```cm
+void count(posedge clk) {
+    btn_prev = btn_state;             // "scheduled" for the next cycle
+    if (btn_prev && !btn_state) {     // reads the PREVIOUS btn_prev
+        presses = presses + 1;        // → works as edge detection
+    }
+}
+```
+
+Under sequential semantics the condition above would always be false, but in hardware it works as intended. Conversely, code that expects to use the newly assigned value within the same cycle produces a different circuit than intended — use **local variables** (immediate assignment) for same-cycle values. Compile with `--sv-warn-nba` to list every read of an already-assigned state variable.
+
+When a state variable is assigned multiple times, the last executed assignment wins (same rule as SV non-blocking assignment).
+
+### Generated-code inspection options (v0.16.0)
+
+| Option | Effect |
+|---|---|
+| `--sv-warn-nba` | Warn on reads of already-assigned state variables (previous-cycle values) |
+| `--sv-strict-lint` | Do not emit `lint_off` suppressions; expose Verilator width warnings |
+| `--sv-always-ff` | Keep `always_ff`/`always_comb` (default converts to Gowin-compatible `always @`) |
+
+### Top module name (v0.16.0)
+
+A `module NAME;` declaration determines the SV top module name. Without it, the name is inferred from the source file name:
+
+```cm
+//! platform: sv
+module hdmi_colorbar;  // → module hdmi_colorbar ( ... );
+```
+
+Variable and function names that collide with SystemVerilog reserved words (`program`, `priority`, `bind`, etc.) are rejected with a compile error, since they would produce invalid SV. Rename the identifier.
 
 ---
 
@@ -211,7 +247,7 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-**Previous:** [WASM Backend](../wasm/index.html)  
+**Previous:** [WASM Backend](../wasm/index.html)
 
 ---
 
@@ -219,5 +255,4 @@ always void blink(posedge clk, negedge rst_n) {
 
 ---
 
-<!-- nav -->
-← Prev: [Compiling Cm to JavaScript](../js/index.html) | [Contents](../index.html) | Next: [SV Backend - Types and Ports](types.html) →
+<!-- nav -->← Prev: [Compiling Cm to JavaScript](../js/index.html) | [Contents](../index.html) | Next: [SV Backend - Types and Ports](types.html) →

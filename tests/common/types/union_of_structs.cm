@@ -1,0 +1,31 @@
+import std::io::println;
+// union_of_structs.cm - 構造体型同士のユニオン
+// 従来はポインタが格納されゴミ値が出ていた（v0.16.0で修正）
+
+struct Circle {
+    int radius;
+}
+
+struct Rect {
+    int w;
+    int h;
+}
+
+typedef Shape = Circle | Rect;
+
+int main() {
+    Circle c;
+    c.radius = 5;
+    Rect r;
+    r.w = 3;
+    r.h = 4;
+
+    Shape s1 = c as Shape;
+    Shape s2 = r as Shape;
+
+    Circle c2 = s1 as Circle;
+    Rect r2 = s2 as Rect;
+    println("circle radius={c2.radius}");
+    println("rect {r2.w}x{r2.h}");
+    return 0;
+}

@@ -127,8 +127,7 @@ The SV backend performs a number of implicit conversions to automatically genera
 
 ### Inline Expansion of MIR Temporaries
 
-MIR `_tXXXX` temporaries are inlined back into their original expressions.
-During expansion, **parentheses are inserted with operator precedence taken into account**:
+MIR `_tXXXX` temporaries are inlined back into their original expressions. During expansion, **parentheses are inserted with operator precedence taken into account**:
 
 ```
 MIR:  _t1000 = a & 256; _t1001 = _t1000 == 0;

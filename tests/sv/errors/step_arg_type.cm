@@ -1,0 +1,17 @@
+//! platform: sv
+// step の引数は整数型でなければ型エラー（レビュー指摘対応）
+import std::debug::assert;
+
+#[input] posedge clk;
+#[input] uint din;
+#[output] uint dout = 0;
+
+async void ff(posedge clk) {
+    dout = din;
+}
+
+#[test]
+void tb() {
+    step("x");
+    assert(dout == 0, "never reached");
+}

@@ -7,8 +7,7 @@ parent: Tutorials
 
 # 基本編 - 文字列補間
 
-Cm の文字列リテラルは `{}` による補間（interpolation）をサポートします。
-このページでは変数・式・関数呼び出しの埋め込みと、フォーマット指定子を解説します。
+Cm の文字列リテラルは `{}` による補間（interpolation）をサポートします。このページでは変数・式・関数呼び出しの埋め込みと、フォーマット指定子を解説します。
 
 ---
 
@@ -67,9 +66,33 @@ int main() {
 }
 ```
 
-> **注意（既知の制限）**: `{f(g(x))}` のようなネストした呼び出しや、
-> `{a + b}` のような二項演算式の埋め込みは未対応です。
-> 一度ローカル変数に代入してから埋め込んでください。
+**v0.16.0での拡張**: `{f(g(x))}` のようなネストした呼び出し、`{a + b}` や `{xs[1] * 10}` のような式、メソッド呼び出し（`{xs.some(fn)}` や `{o.unwrap_or(-1)}` 等のResult/Optionメソッドを含む）も埋め込めるようになりました。
+
+```cm
+int main() {
+    Option<int> o = Option::Some(5);
+    int a = 3;
+    int b = 4;
+    println("sum: {a + b}");             // → sum: 7
+    println("value: {o.unwrap_or(-1)}"); // → value: 5
+    return 0;
+}
+```
+
+## スコープ検査（v0.16.0）
+
+プレースホルダ内の変数参照は文中の式と同様にコンパイル時にスコープ検査されます。スコープ外・未定義の変数を参照するとコンパイルエラーになります（従来は検査されず、未定義値が出力されていました）。
+
+```cm
+int main() {
+    {
+        int b = 42;
+        println("in: {b}");   // OK
+    }
+    println("out: {b}");      // エラー: Undefined variable 'b' in interpolation placeholder '{b}'
+    return 0;
+}
+```
 
 ## フォーマット指定子
 
@@ -99,9 +122,7 @@ println("JSON: {{\"key\": {value}}}");
 
 ## SVバックエンドでの補間
 
-SystemVerilog ターゲットでは、文字列は packed ベクトル定数として扱われるため、
-`println` 系の補間はシミュレーション用 `initial` ブロック等の限定された文脈でのみ使用できます。
-詳細は [SVバックエンドの意味論保証](../compiler/sv/semantics.html) を参照してください。
+SystemVerilog ターゲットでは、文字列は packed ベクトル定数として扱われるため、`println` 系の補間はシミュレーション用 `initial` ブロック等の限定された文脈でのみ使用できます。詳細は [SVバックエンドの意味論保証](../compiler/sv/semantics.html) を参照してください。
 
 ---
 

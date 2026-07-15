@@ -1,0 +1,26 @@
+// util.cm - 複数行exportリストのテスト用モジュール
+module util;
+
+// 複数行のexportリスト（コメント・末尾カンマなし項目を含む）
+export {
+    // 定数
+    BASE,
+    // 関数
+    twice,
+    combine
+    // hidden は公開しない
+};
+
+const int BASE = 10;
+
+int twice(int x) {
+    return x * 2;
+}
+
+int combine(int a, int b) {
+    return a * BASE + b;
+}
+
+int hidden() {
+    return -1;
+}
