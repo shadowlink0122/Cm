@@ -11,17 +11,19 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 ### 特徴
 
 - ⚡ **LLVMバックエンド**: LLVM IRによる高速なネイティブバイナリ生成
-- 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript / UEFI
+- 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript / UEFI / SystemVerilog (FPGA)
 - 🕸️ **WebAssembly対応**: `--target=wasm`で直接WASMバイナリ生成
 - 🎸 **JavaScriptバックエンド**: `--target=js`でJSコード生成、Node.jsで実行可能
+- 🔌 **SystemVerilogバックエンド**: `--target=sv`でFPGA向けRTL生成（モジュールパラメータ・実機I/O属性・ピン制約生成・`#[test]`サイクル精度テストベンチ）
 - 🖥️ **ベアメタル/UEFI対応**: `--target=uefi`でOS不要のUEFIアプリケーション生成
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
 - ☄️ **インラインユニオン型**: `int | null` のように型を直接結合、null許容型を簡潔に記述
+- 🧯 **Rust準拠エラーハンドリング**: 組み込み `Result<T, E>` / `Option<T>`・`?` 演算子・`[must_use]` 静的チェック
 - 🎼 **演算子オーバーロード**: `impl T { operator ... }` でカスタム演算子定義、複合代入(`+=`等)自動対応
 - 📝 **Rustスタイルフォーマット**: `{}`プレースホルダーによる柔軟な文字列フォーマット
 - 🧬 **ジェネリクス**: 型パラメータによる汎用プログラミング
 
-> **Note**: 2025年12月より、LLVMバックエンドを唯一のコード生成方式として採用しています。
+> **Note**: コード生成はLLVM IR・JS CodeGen・SV CodeGenの3系統です。
 > 以前検討されていたRust/TypeScript/C++へのトランスパイルは今後行いません。
 
 ## コード例
@@ -120,24 +122,24 @@ Cm Source (.cm)
     │
     ▼
 Lexer → Parser → AST → TypeCheck → HIR → MIR
-                                         │
-                             ┌───────────┴──────────┐
-                             ▼                      ▼
-                       ┌───────────┐         ┌────────────┐
-                       │  LLVM IR  │         │ JS CodeGen │
-                       └─────┬─────┘         └─────┬──────┘
-                             │                     │
-     ┌──────────┬────────┬───┼──────────┐          │
-     ▼          ▼        ▼   ▼          ▼          ▼
-┌─────────┐ ┌───────┐ ┌──────┐ ┌──────┐ ┌──────────┐
-│ x86_64  │ │ ARM64 │ │ WASM │ │ UEFI │ │output.js │
-└────┬────┘ └───┬───┘ └──┬───┘ └──┬───┘ └────┬─────┘
-     ▼          ▼        ▼        ▼           ▼
-Linux/macOS   macOS   Browser  Firmware    Node.js
+                                    │
+                 ┌──────────────────┼──────────────────┐
+                 ▼                  ▼                  ▼
+           ┌───────────┐     ┌────────────┐     ┌────────────┐
+           │  LLVM IR  │     │ JS CodeGen │     │ SV CodeGen │
+           └─────┬─────┘     └─────┬──────┘     └─────┬──────┘
+                 │                 │                  │
+     ┌───────┬───┼───┬─────────┐   │                  │
+     ▼       ▼   ▼   ▼         ▼   ▼                  ▼
+┌─────────┐ ┌───────┐ ┌──────┐ ┌──────┐ ┌──────────┐ ┌───────────┐
+│ x86_64  │ │ ARM64 │ │ WASM │ │ UEFI │ │output.js │ │ output.sv │
+└────┬────┘ └───┬───┘ └──┬───┘ └──┬───┘ └────┬─────┘ └─────┬─────┘
+     ▼          ▼        ▼        ▼          ▼             ▼
+Linux/macOS   macOS   Browser  Firmware   Node.js   FPGA / Verilator
 ```
 
 > **Note**: Rust/TypeScript/C++へのトランスパイル機能は廃止されました。
-> すべてのコード生成はLLVM IRまたはJS CodeGenを経由して行われます。
+> すべてのコード生成はLLVM IR・JS CodeGen・SV CodeGenのいずれかを経由して行われます。
 
 ## エコシステム: gen (弦) — 将来構想
 
@@ -161,6 +163,17 @@ cm compile example.cm --emit=llvm-ir   # LLVM IR出力
 cm compile example.cm --target=wasm    # WebAssembly出力
 cm compile example.cm --target=js      # JavaScript出力
 cm compile example.cm --target=uefi    # UEFIアプリケーション出力
+
+# SystemVerilog出力（FPGA向けRTL）
+cm compile circuit.cm --target=sv                     # SVコード生成
+cm compile circuit.cm --target=sv --emit-constraints  # ピン制約(.cst/.tcl)も生成
+
+# テスト実行（#[test]関数。//! platform: sv はiverilogシミュレーション、それ以外はJIT実行）
+cm test example.cm
+
+# フォーマット
+cm fmt example.cm          # 整形
+cm fmt --check example.cm  # 整形検証のみ
 
 # 構文チェック
 cm check example.cm        # 型チェックのみ
@@ -222,41 +235,36 @@ int main() {
 
 ## CI/CD テストマトリクス
 
-GitHub Actionsで全バックエンドの自動テストを実行しています：
+GitHub Actionsで全バックエンドの自動テストを実行しています（macOS ARM64 / Ubuntu x86_64）。
 
-### テスト構成 (2 OS × 4 Backends × O0/O3 = 16 configurations)
+### テスト構成（3層 + 全バックエンドスイート）
 
-| OS | Arch | JIT | LLVM Native | LLVM WASM | JavaScript |
-|----|------|-----|-------------|-----------|------------|
-| **macOS 14** | ARM64 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 |
-| **Ubuntu 22.04** | x86_64 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 | ✅ O0/O3 |
-
-### テスト内容
-- **単体テスト**: GoogleTestによるC++単体テスト（Lexer, HIR, MIR, 最適化）
-- **JIT テスト**: 347個のCmプログラムをJIT実行（347 PASS / 0 FAIL）
-- **LLVM Native テスト**: ネイティブバイナリにコンパイル・実行（380 PASS / 0 FAIL）
-- **LLVM WASM テスト**: WASMにコンパイル・Wasmtimeで実行（346 PASS / 0 FAIL）
-- **JS テスト**: JavaScriptにコンパイル・Node.jsで実行（306 PASS / 0 FAIL）
+- **unitテスト**: 単一ビルドオブジェクトのC++単体検証（lexer・エラー型・MIR最適化パス等）
+- **regressionテスト**: コンパイルパイプラインの段階を通すgtest回帰（HIR/MIR lowering・コード生成・フォーマッタ等）
+- **integrationテスト（バックエンドスイート）**: cmバイナリによるCmプログラムの実行検証 — JIT / LLVM Native / LLVM WASM (Wasmtime) / JavaScript (Node.js) / SystemVerilog (iverilogシミュレーション)
+- **cm test E2E**: `#[test]` 関数のJIT/SVシミュレーション自動ディスパッチ検証
 
 ### ローカルテスト実行
 
 ```bash
-# すべてのテスト
+# すべてのテスト（unit・regression・全バックエンドスイート・E2E）
 make test
 
-# バックエンド別（並列実行）
-make tip    # JITテスト（= test-jit-parallel）
-make tlp    # LLVMネイティブテスト
-make twp   # LLVM WASMテスト
-make tjp    # JSテスト
+# 層別
+make test-unit         # C++単体テスト
+make test-regression   # C++回帰テスト
 
-# 最適化レベル指定
-make tjitp0   # JIT O0 parallel
-make tjitp3   # JIT O3 parallel
+# バックエンドスイート別
+make test-interpreter  # JIT
+make test-llvm         # LLVMネイティブ
+make test-llvm-wasm    # LLVM WASM
+make test-js           # JavaScript
+make test-sv           # SystemVerilog（iverilogシミュレーション）
 
 # 個別カテゴリ
 ./tests/unified_test_runner.sh -b jit -c basic
 ./tests/unified_test_runner.sh -b llvm -c generics
+./tests/unified_test_runner.sh -b sv -c basic
 ```
 
 ## ドキュメント
@@ -268,6 +276,7 @@ make tjitp3   # JIT O3 parallel
 - [アーキテクチャ](docs/design/archive/architecture.md) - システム設計
 - [HIR設計](docs/design/hir.md)
 - [バックエンド](docs/design/backends.md)
+- [SystemVerilogバックエンド](docs/tutorials/ja/compiler/sv/index.md) - FPGA向けRTL生成チュートリアル（実機I/O・回路検証フレームワーク含む）
 - [LLVMバックエンド実装](docs/llvm_backend_implementation.md)
 - [LLVMランタイムライブラリ](docs/LLVM_RUNTIME_LIBRARY.md)
 - [LLVM最適化パイプライン](docs/LLVM_OPTIMIZATION.md)
@@ -289,4 +298,4 @@ make tjitp3   # JIT O3 parallel
 
 © 2025-2026 Cm言語プロジェクト
 
-**最終更新:** 2026-02-21
+**最終更新:** 2026-07-16

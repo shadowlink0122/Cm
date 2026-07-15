@@ -232,6 +232,9 @@ void SVCodeGen::emitPortList(const std::vector<SVPort>& ports) {
                 break;
         }
         std::string line = dir + port.sv_type + " " + port.name + port.array_suffix;
+        if (!port.init_value.empty()) {
+            line += " = " + port.init_value;
+        }
         if (i < ports.size() - 1) {
             line += ",";
         }

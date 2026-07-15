@@ -52,6 +52,7 @@ struct SVPort {
     std::string sv_type;  // "logic", "logic [7:0]" 等
     int bit_width = 1;
     std::string array_suffix;  // アンパックド次元 " [0:N-1]"（配列型ポート用）
+    std::string init_value;  // 出力ポートの電源投入時初期値（空なら初期化子なし）
 };
 
 // SVモジュール情報

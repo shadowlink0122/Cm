@@ -6,7 +6,7 @@ nav_order: 9
 
 # UEFI Bare-Metal Development Tutorial
 
-**Target version:** v0.16.0 **Level:** 🔴 Advanced **Prerequisites:** Inline assembly, pointer operations
+**Target version:** v0.16.1 **Level:** 🔴 Advanced **Prerequisites:** Inline assembly, pointer operations
 
 ---
 

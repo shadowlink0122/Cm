@@ -1,0 +1,28 @@
+// implメソッドのデフォルト引数の回帰テスト:
+// 旧: HIR loweringがメソッドパラメータのdefault_valueを落とし、
+// 省略した引数が型のデフォルト値(0)で補完されて誤った計算結果になっていた
+import std::io::println;
+
+struct Counter { int base; }
+
+impl Counter {
+    int add(int x, int step = 10) { return self.base + x + step; }
+    int scale(int a, int b = 2, int c = 3) { return a * 100 + b * 10 + c; }
+}
+
+int main() {
+    Counter c;
+    c.base = 100;
+
+    // 文として（HIR loweringが補完）
+    int r1 = c.add(5);
+    int r2 = c.add(5, 1);
+    println("stmt: {r1} {r2}");
+
+    // 補間内（MIR loweringが補完）
+    println("interp: {c.add(7)} {c.add(7, 2)}");
+
+    // 複数デフォルトの部分省略
+    println("multi: {c.scale(1)} {c.scale(1, 9)} {c.scale(1, 9, 8)}");
+    return 0;
+}

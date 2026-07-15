@@ -12,6 +12,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "string literal";
         case TokenKind::CharLiteral:
             return "char literal";
+        case TokenKind::MaskedBinLiteral:
+            return "masked binary literal";
         case TokenKind::Ident:
             return "identifier";
 
@@ -270,6 +272,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return "?";
         case TokenKind::Colon:
             return ":";
+        case TokenKind::PlusColon:
+            return "+:";
         case TokenKind::ColonColon:
             return "::";
         case TokenKind::Arrow:

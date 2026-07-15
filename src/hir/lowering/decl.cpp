@@ -46,7 +46,8 @@ HirDeclPtr HirLowering::lower_extern_block(ast::ExternBlockDecl& extern_block) {
         hir_func->return_type = func->return_type;
         hir_func->is_extern = true;
         for (const auto& p : func->params) {
-            hir_func->params.push_back({p.name, p.type});
+            hir_func->params.push_back(
+                {p.name, p.type, p.default_value ? lower_expr(*p.default_value) : nullptr});
         }
         hir_extern->functions.push_back(std::move(hir_func));
     }
@@ -216,7 +217,9 @@ HirDeclPtr HirLowering::lower_interface(ast::InterfaceDecl& iface) {
         sig.name = method.name;
         sig.return_type = method.return_type;
         for (const auto& param : method.params) {
-            sig.params.push_back({param.name, param.type});
+            sig.params.push_back(
+                {param.name, param.type,
+                 param.default_value ? lower_expr(*param.default_value) : nullptr});
         }
         hir_iface->methods.push_back(std::move(sig));
     }
@@ -227,7 +230,9 @@ HirDeclPtr HirLowering::lower_interface(ast::InterfaceDecl& iface) {
         sig.op = convert_operator_kind(op.op);
         sig.return_type = op.return_type;
         for (const auto& param : op.params) {
-            sig.params.push_back({param.name, param.type});
+            sig.params.push_back(
+                {param.name, param.type,
+                 param.default_value ? lower_expr(*param.default_value) : nullptr});
         }
         hir_iface->operators.push_back(std::move(sig));
     }
@@ -272,9 +277,11 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
             hir_func->is_constructor = true;
 
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
-            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type), nullptr});
             for (const auto& param : ctor->params) {
-                hir_func->params.push_back({param.name, param.type});
+                hir_func->params.push_back(
+                    {param.name, param.type,
+                     param.default_value ? lower_expr(*param.default_value) : nullptr});
             }
 
             for (auto& stmt : ctor->body) {
@@ -294,7 +301,7 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
             hir_func->is_destructor = true;
 
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
-            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type), nullptr});
 
             for (auto& stmt : impl.destructor->body) {
                 if (auto hir_stmt = lower_stmt(*stmt)) {
@@ -343,11 +350,13 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         // staticメソッドではselfパラメータを追加しない
         if (impl.target_type && !method->is_static) {
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
-            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type)});
+            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type), nullptr});
         }
 
         for (const auto& param : method->params) {
-            hir_func->params.push_back({param.name, param.type});
+            hir_func->params.push_back(
+                {param.name, param.type,
+                 param.default_value ? lower_expr(*param.default_value) : nullptr});
         }
 
         for (auto& stmt : method->body) {
@@ -366,7 +375,9 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         hir_op->return_type = op->return_type;
 
         for (const auto& param : op->params) {
-            hir_op->params.push_back({param.name, param.type});
+            hir_op->params.push_back(
+                {param.name, param.type,
+                 param.default_value ? lower_expr(*param.default_value) : nullptr});
         }
 
         for (auto& stmt : op->body) {
@@ -429,7 +440,8 @@ HirDeclPtr HirLowering::lower_use(ast::UseDecl& use) {
             hir_func->is_variadic = ffi_func.is_variadic;  // 可変長引数フラグを伝播
 
             for (const auto& [param_name, param_type] : ffi_func.params) {
-                hir_func->params.push_back({param_name, param_type});
+                // FFI宣言（名前と型のペアのみ）はデフォルト引数を持たない
+                hir_func->params.push_back({param_name, param_type, nullptr});
             }
 
             // 名前空間エイリアスの場合、呼び出し時の名前をマップ

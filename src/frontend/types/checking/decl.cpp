@@ -712,8 +712,13 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
         info.return_type = method->return_type;
         info.visibility = method->visibility;
         info.is_static = method->is_static;  // 静的メソッドフラグを設定
+        info.required_params = 0;
         for (const auto& param : method->params) {
             info.param_types.push_back(param.type);
+            // デフォルト値のない引数のみ必須として数える（デフォルト引数の省略を許可）
+            if (!param.default_value) {
+                info.required_params++;
+            }
         }
         type_methods_[type_name][method->name] = std::move(info);
 

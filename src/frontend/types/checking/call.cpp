@@ -4,9 +4,30 @@
 
 #include "../type_checker.hpp"
 
+#include <algorithm>
 #include <sstream>
 
 namespace cm {
+
+namespace {
+
+// メソッド呼び出しの引数個数を検査する（デフォルト引数による省略を考慮）。
+// 不適合ならエラーメッセージを、適合なら空文字列を返す
+std::string method_arity_error(const std::string& method_name, size_t arg_count,
+                               const MethodInfo& method_info) {
+    size_t param_count = method_info.param_types.size();
+    size_t required = std::min(method_info.required_params, param_count);
+    if (arg_count >= required && arg_count <= param_count) {
+        return "";
+    }
+    std::string expected = (required == param_count)
+                               ? std::to_string(param_count)
+                               : std::to_string(required) + " to " + std::to_string(param_count);
+    return "Method '" + method_name + "' expects " + expected + " arguments, got " +
+           std::to_string(arg_count);
+}
+
+}  // namespace
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
@@ -639,12 +660,11 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         }
                     }
 
-                    // 引数の型チェック
-                    if (member.args.size() != method_info.param_types.size()) {
-                        error(current_span_, "Method '" + member.member + "' expects " +
-                                                 std::to_string(method_info.param_types.size()) +
-                                                 " arguments, got " +
-                                                 std::to_string(member.args.size()));
+                    // 引数の個数チェック（デフォルト引数による省略を考慮）
+                    std::string arity_err =
+                        method_arity_error(member.member, member.args.size(), method_info);
+                    if (!arity_err.empty()) {
+                        error(current_span_, arity_err);
                     } else {
                         for (size_t i = 0; i < member.args.size(); ++i) {
                             auto arg_type = infer_type(*member.args[i]);
@@ -708,11 +728,10 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             if (method_it != iface_it->second.end()) {
                 const auto& method_info = method_it->second;
 
-                if (member.args.size() != method_info.param_types.size()) {
-                    error(current_span_, "Method '" + member.member + "' expects " +
-                                             std::to_string(method_info.param_types.size()) +
-                                             " arguments, got " +
-                                             std::to_string(member.args.size()));
+                std::string arity_err =
+                    method_arity_error(member.member, member.args.size(), method_info);
+                if (!arity_err.empty()) {
+                    error(current_span_, arity_err);
                 } else {
                     for (size_t i = 0; i < member.args.size(); ++i) {
                         auto arg_type = infer_type(*member.args[i]);
@@ -771,11 +790,10 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         }
                         return t;
                     };
-                    if (member.args.size() != method_info.param_types.size()) {
-                        error(current_span_, "Method '" + member.member + "' expects " +
-                                                 std::to_string(method_info.param_types.size()) +
-                                                 " arguments, got " +
-                                                 std::to_string(member.args.size()));
+                    std::string arity_err =
+                        method_arity_error(member.member, member.args.size(), method_info);
+                    if (!arity_err.empty()) {
+                        error(current_span_, arity_err);
                     } else {
                         for (size_t i = 0; i < member.args.size(); ++i) {
                             auto arg_type = infer_type(*member.args[i]);
@@ -1066,11 +1084,11 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         auto method_it = impl_it->second.find(member.member);
         if (method_it != impl_it->second.end()) {
             const auto& method_info = method_it->second;
-            // 引数の型チェック
-            if (member.args.size() != method_info.param_types.size()) {
-                error(current_span_, "Method '" + member.member + "' expects " +
-                                         std::to_string(method_info.param_types.size()) +
-                                         " arguments, got " + std::to_string(member.args.size()));
+            // 引数の個数チェック（デフォルト引数による省略を考慮）
+            std::string arity_err =
+                method_arity_error(member.member, member.args.size(), method_info);
+            if (!arity_err.empty()) {
+                error(current_span_, arity_err);
             } else {
                 for (size_t i = 0; i < member.args.size(); ++i) {
                     auto arg_type = infer_type(*member.args[i]);
@@ -1099,12 +1117,11 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
             auto method_it = slice_impl_it->second.find(member.member);
             if (method_it != slice_impl_it->second.end()) {
                 const auto& method_info = method_it->second;
-                // 引数の型チェック
-                if (member.args.size() != method_info.param_types.size()) {
-                    error(current_span_, "Method '" + member.member + "' expects " +
-                                             std::to_string(method_info.param_types.size()) +
-                                             " arguments, got " +
-                                             std::to_string(member.args.size()));
+                // 引数の個数チェック（デフォルト引数による省略を考慮）
+                std::string arity_err =
+                    method_arity_error(member.member, member.args.size(), method_info);
+                if (!arity_err.empty()) {
+                    error(current_span_, arity_err);
                 } else {
                     for (size_t i = 0; i < member.args.size(); ++i) {
                         auto arg_type = infer_type(*member.args[i]);
