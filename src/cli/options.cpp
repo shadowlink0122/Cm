@@ -47,6 +47,7 @@ void print_help(const char* program_name) {
     std::cout << "                        baremetal-arm: ベアメタル ARM Cortex-M\n";
     std::cout << "                        baremetal-x86: ベアメタル x86_64\n";
     std::cout << "                        uefi:          UEFI Application\n";
+    std::cout << "                        sv:            SystemVerilog (FPGA向けRTL)\n";
     std::cout << "                        bm:            baremetal-arm の短縮形\n";
     std::cout << "  --emit-llvm           LLVM IRを生成\n";
     std::cout << "  --emit-js             JavaScriptを生成\n";
