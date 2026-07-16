@@ -988,8 +988,11 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 brace_depth = 0;
                 found_opening_brace = false;
 
-                // 開き括弧をチェック
-                for (char c : line) {
+                // 開き括弧をチェック（コメント・文字列リテラル内は除外。
+                // 除外しないと複数行の配列初期化子がコメント内の ; や { で
+                // 途中終了し、export再宣言が先頭行のみに切り詰められる）
+                std::string code_line = code_portion(line);
+                for (char c : code_line) {
                     if (c == '{') {
                         found_opening_brace = true;
                         brace_depth++;
@@ -999,7 +1002,7 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 }
 
                 // 1行で完結する場合（セミコロンで終わる宣言、括弧なし）
-                if (!found_opening_brace && line.find(';') != std::string::npos) {
+                if (!found_opening_brace && code_line.find(';') != std::string::npos) {
                     for (auto& bl : block_lines) {
                         std::regex rm_export(R"(\bexport\s+)");
                         result << std::regex_replace(bl, rm_export, "") << "\n";
@@ -1024,11 +1027,13 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
         if (in_export_block) {
             block_lines.push_back(line);
 
-            if (!found_opening_brace && line.find('{') != std::string::npos) {
+            // コメント・文字列リテラル内の ; や括弧で誤終了しないようコード部のみ走査する
+            std::string code_line = code_portion(line);
+            if (!found_opening_brace && code_line.find('{') != std::string::npos) {
                 found_opening_brace = true;
             }
 
-            if (!found_opening_brace && line.find(';') != std::string::npos) {
+            if (!found_opening_brace && code_line.find(';') != std::string::npos) {
                 // exportキーワードを除去して出力
                 for (auto& bl : block_lines) {
                     std::regex rm_export(R"(\bexport\s+)");
@@ -1037,7 +1042,7 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                 in_export_block = false;
                 block_lines.clear();
             } else if (found_opening_brace) {
-                for (char c : line) {
+                for (char c : code_line) {
                     if (c == '{')
                         brace_depth++;
                     else if (c == '}')

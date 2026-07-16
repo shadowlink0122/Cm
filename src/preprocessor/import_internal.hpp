@@ -5,6 +5,7 @@
 // module_resolve で共有する行解析ユーティリティ）
 // ============================================================
 
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -17,6 +18,44 @@ inline size_t skip_ws(const std::string& s, size_t pos = 0) {
     while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t'))
         pos++;
     return pos;
+}
+
+// 行のコード部分（//コメントを除いた部分）を返す。
+// 文字列/文字リテラル内の // は無視し、SV幅付きリテラル（16'd256等）の
+// クォートは文字リテラル開始として扱わない
+inline std::string code_portion(const std::string& line) {
+    bool in_string = false;
+    bool in_char = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+        if (in_string) {
+            if (c == '\\') {
+                ++i;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (in_char) {
+            if (c == '\\') {
+                ++i;
+            } else if (c == '\'') {
+                in_char = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+        } else if (c == '\'') {
+            bool sized_literal = (i > 0 && std::isalnum(static_cast<unsigned char>(line[i - 1])));
+            if (!sized_literal) {
+                in_char = true;
+            }
+        } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '/') {
+            return line.substr(0, i);
+        }
+    }
+    return line;
 }
 
 // 指定位置からキーワードが始まるか（キーワード後に非英数字 or 行末）

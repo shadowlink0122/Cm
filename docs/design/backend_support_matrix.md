@@ -97,7 +97,8 @@
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
 | exportリスト型モジュールの選択的import抽出（`import ./mod::{A, f}` のトップレベルエイリアス生成・export選択コピー時の非公開依存関数の同伴）が未対応 | common/advanced_modules/import_features をskip | namespace内の構造体型・非修飾呼び出しの解決は2026-07-15修正済み（回帰: namespace_struct_resolution）。残りはプリプロセッサのモジュール機能として次バージョン以降 |
-| exportされた配列の複数行初期化子が、プリプロセッサのexport再宣言（推移的import時のシンボル再掲）で先頭行のみに切り詰められ、以降の構文が壊れる。あわせて推移的importでexport再宣言が重複する | exportする配列の初期化子は1行で書いて回避（実例: CmCPUリポジトリ src/cpu/program/demo_program.cm の prog_rom） | プリプロセッサのモジュール機能として次バージョン以降（import_featuresの残課題と同系統） |
+| グローバル配列の初期化子（`const uint[4] T = [5, 6, 7, 8];` 等のトップレベル宣言）がソフトウェア系バックエンド（JITで確認）で反映されず、要素の読み出しが0になる | SVターゲットではinitialブロックとして機能する（CmCPUのprog_rom等）。ソフトウェア系で必要な場合は関数内ローカル配列を使う | 全バックエンド共通のグローバル初期化経路の実装が必要。既存テストにトップレベル配列初期化子のケースはなく未検出だった |
+| 推移的importでexport再宣言が重複して出力される（同一シンボルの宣言が複数回現れる） | コンパイラ側の重複許容・名前デデュープで実害は出ていない | export再宣言の複数行初期化子切り詰め（コメント内の `;` 誤検出）は修正済み（回帰: tests/sv/import/multiline_export_array） |
 | std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの `void*` 非対応（明示エラー）・53bit精度・ポインタ⇔整数キャスト不可 | libc malloc/free系（collections/std::mem/allocator等）と64bit大値・ptr⇔intキャストのテストを理由付きで個別skip（2026-07-15にカテゴリ一括skipを棚卸しし、動作する26テスト［基本/フィールド/二重ポインタ・impl経由書き戻し等］を有効化） | ポインタはオブジェクト参照で基本対応。void*はJSで表現不能のため明示エラーを維持 |

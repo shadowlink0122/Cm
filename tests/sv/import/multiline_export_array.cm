@@ -1,0 +1,16 @@
+//! platform: sv
+//! test: cycles=4 -> sum=100
+
+// exportされた配列の複数行初期化子のimport回帰テスト
+// （table_rom.cmの行末コメントに ; や { があっても切り詰められない）
+import table_rom;
+
+#[input] posedge clk;
+#[output] uint sum = 0;
+
+uint idx = 0;
+
+async void acc(posedge clk) {
+    sum = sum + TABLE[idx & 3];
+    idx = idx + 1;
+}
