@@ -58,6 +58,12 @@ TEST_F(FormatterIntegrationTest, WrapLongExpression) {
     expect_format_case("wrap/long_expr");
 }
 
+// {} 内の要素で折り返す場合は全要素を1行ずつに展開する
+// （開き{で改行・1要素1行・閉じ}を独立行に。中途半端な貪欲詰めにしない）
+TEST_F(FormatterIntegrationTest, WrapExplodesBraceList) {
+    expect_format_case("wrap/brace_list");
+}
+
 // コードが短く行末コメントだけで幅超過する行は折り返さない
 TEST_F(FormatterIntegrationTest, WrapSkipsCommentOverflow) {
     expect_stable_case("wrap/comment_overflow");

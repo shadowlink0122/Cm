@@ -7,6 +7,7 @@
 #include <cctype>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 
 namespace cm {
@@ -880,13 +881,17 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
             size_t pos;     // 次の行がこの位置から始まる
             int depth;      // 候補時点の括弧深さ
             bool is_comma;  // カンマ直後の候補か
+            char group;     // カンマを直接囲む括弧の種類（トップレベルは0）
+            size_t group_open;  // その括弧の開き位置（トップレベルはnpos）
         };
         std::vector<Candidate> cands;
+        std::map<size_t, size_t> close_of;  // 開き括弧位置 → 対応する閉じ括弧位置
         size_t comment_start = std::string::npos;
         {
             bool in_string = false;
             bool in_char = false;
             int depth = 0;
+            std::vector<std::pair<char, size_t>> bracket_stack;  // (種類, 開き位置)
             for (size_t i = content_start; i < line.size(); ++i) {
                 char c = line[i];
                 if (in_string) {
@@ -914,17 +919,25 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
                     break;
                 } else if (c == '(' || c == '[' || c == '{') {
                     depth++;
+                    bracket_stack.push_back({c, i});
                 } else if (c == ')' || c == ']' || c == '}') {
                     depth--;
+                    if (!bracket_stack.empty()) {
+                        close_of[bracket_stack.back().second] = i;
+                        bracket_stack.pop_back();
+                    }
                 } else if (c == ',') {
-                    cands.push_back({i + 1, depth, true});
+                    char group = bracket_stack.empty() ? '\0' : bracket_stack.back().first;
+                    size_t group_open =
+                        bracket_stack.empty() ? std::string::npos : bracket_stack.back().second;
+                    cands.push_back({i + 1, depth, true, group, group_open});
                 } else if (c == ' ' && i + 1 < line.size()) {
                     // " op " の形の二項演算子: 演算子の直前で折り返す
                     for (const char* op : kWrapOps) {
                         size_t op_len = std::char_traits<char>::length(op);
                         if (line.compare(i + 1, op_len, op) == 0 && i + 1 + op_len < line.size() &&
                             line[i + 1 + op_len] == ' ') {
-                            cands.push_back({i + 1, depth, false});
+                            cands.push_back({i + 1, depth, false, '\0', std::string::npos});
                             break;
                         }
                     }
@@ -968,6 +981,58 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
         if (breaks.empty()) {
             result << line;
             continue;
+        }
+
+        // {} 内の要素で折り返す場合は全要素を1行ずつに展開する
+        // （中途半端な貪欲詰めにせず、開き{で改行・1要素1行・閉じ}を独立行にする）
+        if (use_comma) {
+            bool explode_brace = true;
+            size_t group_open = std::string::npos;
+            for (const auto& cand : cands) {
+                if (cand.pos < code_end && cand.is_comma && cand.depth == min_depth) {
+                    if (cand.group != '{' ||
+                        (group_open != std::string::npos && cand.group_open != group_open)) {
+                        explode_brace = false;
+                        break;
+                    }
+                    group_open = cand.group_open;
+                }
+            }
+            if (explode_brace && group_open != std::string::npos &&
+                close_of.count(group_open) != 0 && close_of[group_open] < code_end) {
+                size_t group_close = close_of[group_open];
+                size_t cont_indent = content_start + static_cast<size_t>(indent_width_);
+                std::vector<std::string> out_lines;
+                out_lines.push_back(line.substr(0, group_open + 1));
+                size_t elem_start = group_open + 1;
+                for (size_t bp : breaks) {
+                    std::string elem = line.substr(elem_start, bp - elem_start);
+                    while (!elem.empty() && elem.front() == ' ')
+                        elem.erase(elem.begin());
+                    while (!elem.empty() && elem.back() == ' ')
+                        elem.pop_back();
+                    out_lines.push_back(std::string(cont_indent, ' ') + elem);
+                    elem_start = bp;
+                }
+                std::string last_elem = line.substr(elem_start, group_close - elem_start);
+                while (!last_elem.empty() && last_elem.front() == ' ')
+                    last_elem.erase(last_elem.begin());
+                while (!last_elem.empty() && last_elem.back() == ' ')
+                    last_elem.pop_back();
+                out_lines.push_back(std::string(cont_indent, ' ') + last_elem);
+                std::string closing = line.substr(group_close, code_end - group_close);
+                if (comment_start != std::string::npos) {
+                    closing += "  " + line.substr(comment_start);
+                }
+                out_lines.push_back(std::string(content_start, ' ') + closing);
+                for (size_t li = 0; li < out_lines.size(); ++li) {
+                    if (li > 0)
+                        result << '\n';
+                    result << out_lines[li];
+                }
+                changes++;
+                continue;
+            }
         }
 
         // 貪欲パック: 各行が最大幅に収まる最遠の候補で折り返す
