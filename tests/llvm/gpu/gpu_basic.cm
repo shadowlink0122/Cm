@@ -89,7 +89,12 @@ int main() {
 
     // float値をbit patternに変換して配列リテラルで定義
     long[4] fa = [float_to_bits(1.5), float_to_bits(2.5), float_to_bits(3.5), float_to_bits(4.5)];
-    long[4] fb = [float_to_bits(10.0), float_to_bits(20.0), float_to_bits(30.0), float_to_bits(40.0)];
+    long[4] fb = [
+        float_to_bits(10.0),
+        float_to_bits(20.0),
+        float_to_bits(30.0),
+        float_to_bits(40.0)
+    ];
     long[4] fresult = [0, 0, 0, 0];
 
     // float用バッファ作成 (4個のfloat = 16bytes)

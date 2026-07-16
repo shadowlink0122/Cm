@@ -72,7 +72,8 @@ AVLNode<Task>* ins(AVLNode<Task>* n, Task v) {
     if (b > 1 && n->left != null && v < n->left->value) { return rr(n); }
     if (b < -1 && n->right != null && !(v < n->right->value)) { return rl(n); }
     if (b > 1 && n->left != null && !(v < n->left->value)) { n->left = rl(n->left); return rr(n); }
-    if (b < -1 && n->right != null && v < n->right->value) { n->right = rr(n->right); return rl(n); }
+    if (b < -1 && n->right != null
+        && v < n->right->value) { n->right = rr(n->right); return rl(n); }
     return n;
 }
 

@@ -32,7 +32,15 @@ export ulong make_color(ulong r, ulong g, ulong b) {
 // ============================================================
 
 /// 1ピクセルを描画
-export void draw_pixel(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong color) {
+export void draw_pixel(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong color
+) {
     // 範囲外チェック
     if (x >= width) { return; }
     if (y >= height) { return; }
@@ -45,7 +53,16 @@ export void draw_pixel(ulong fb, ulong width, ulong height, ulong stride, ulong 
 }
 
 /// 水平線を描画
-export void draw_hline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+export void draw_hline(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong length,
+    ulong color
+) {
     if (y >= height) { return; }
 
     ulong i = 0;
@@ -60,7 +77,16 @@ export void draw_hline(ulong fb, ulong width, ulong height, ulong stride, ulong 
 }
 
 /// 垂直線を描画
-export void draw_vline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+export void draw_vline(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong length,
+    ulong color
+) {
     if (x >= width) { return; }
 
     ulong i = 0;
@@ -75,7 +101,17 @@ export void draw_vline(ulong fb, ulong width, ulong height, ulong stride, ulong 
 }
 
 /// 任意の直線を描画（Bresenhamアルゴリズム）
-export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x0, ulong y0, ulong x1, ulong y1, ulong color) {
+export void draw_line(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x0,
+    ulong y0,
+    ulong x1,
+    ulong y1,
+    ulong color
+) {
     // 水平・垂直の特殊ケース
     if (y0 == y1) {
         if (x0 <= x1) {
@@ -144,7 +180,17 @@ export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x
 // ============================================================
 
 /// 矩形の枠を描画
-export void draw_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+export void draw_rect(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong w,
+    ulong h,
+    ulong color
+) {
     draw_hline(fb, width, height, stride, x, y, w, color);
     draw_hline(fb, width, height, stride, x, y + h - 1, w, color);
     draw_vline(fb, width, height, stride, x, y, h, color);
@@ -152,7 +198,17 @@ export void draw_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x
 }
 
 /// 矩形を塗りつぶし
-export void fill_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+export void fill_rect(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong w,
+    ulong h,
+    ulong color
+) {
     ulong j = 0;
     while (j < h) {
         draw_hline(fb, width, height, stride, x, y + j, w, color);

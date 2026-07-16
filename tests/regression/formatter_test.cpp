@@ -64,6 +64,16 @@ TEST_F(FormatterIntegrationTest, WrapExplodesBraceList) {
     expect_format_case("wrap/brace_list");
 }
 
+// 長い関数宣言のパラメータリストも全要素を1行ずつに展開する（閉じ行は ") {"）
+TEST_F(FormatterIntegrationTest, WrapExplodesLongParams) {
+    expect_format_case("wrap/long_params");
+}
+
+// 長い関数呼び出しの引数リストも全要素を1行ずつに展開する（閉じ行は ");"）
+TEST_F(FormatterIntegrationTest, WrapExplodesLongArgs) {
+    expect_format_case("wrap/long_args");
+}
+
 // コードが短く行末コメントだけで幅超過する行は折り返さない
 TEST_F(FormatterIntegrationTest, WrapSkipsCommentOverflow) {
     expect_stable_case("wrap/comment_overflow");

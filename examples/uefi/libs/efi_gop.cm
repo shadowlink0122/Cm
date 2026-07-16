@@ -18,7 +18,13 @@ import ./efi_text;
 /// out_height: 垂直解像度格納先
 /// out_stride: スキャンラインあたりのピクセル数格納先
 /// 戻り値: 0=成功, その他=エラー
-export ulong gop_init(void* system_table, ulong* out_fb, ulong* out_width, ulong* out_height, ulong* out_stride) {
+export ulong gop_init(
+    void* system_table,
+    ulong* out_fb,
+    ulong* out_width,
+    ulong* out_height,
+    ulong* out_stride
+) {
     ulong* st = system_table as ulong*;
     ulong bs_addr = *(st + 12);  // offset 0x60 = BootServices
     ulong* bs = bs_addr as ulong*;

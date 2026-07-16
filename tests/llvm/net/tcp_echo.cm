@@ -87,7 +87,8 @@ int main() {
         sleep_ms(20);
         long rbuf1 = buf_create(256);
         int n1 = tcp_read(fd1, rbuf1, 255);
-        if (n1 == 3 && buf_get(rbuf1, 0) == 72 && buf_get(rbuf1, 1) == 105 && buf_get(rbuf1, 2) == 33) {
+        if (n1 == 3 && buf_get(rbuf1, 0) == 72 && buf_get(rbuf1, 1) == 105 && buf_get(rbuf1, 2)
+            == 33) {
             println("CLIENT1: echo OK");
         } else {
             println("CLIENT1: echo FAIL (n={n1})");
@@ -110,7 +111,8 @@ int main() {
         sleep_ms(20);
         long rbuf2 = buf_create(256);
         int n2 = tcp_read(fd2, rbuf2, 255);
-        if (n2 == 3 && buf_get(rbuf2, 0) == 65 && buf_get(rbuf2, 1) == 66 && buf_get(rbuf2, 2) == 67) {
+        if (n2 == 3 && buf_get(rbuf2, 0) == 65 && buf_get(rbuf2, 1) == 66 && buf_get(rbuf2, 2)
+            == 67) {
             println("CLIENT2: echo OK");
         } else {
             println("CLIENT2: echo FAIL (n={n2})");

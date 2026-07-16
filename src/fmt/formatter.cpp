@@ -954,23 +954,30 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
             continue;
         }
 
-        // カンマ候補を優先し、最浅の括弧深さのものだけ使う
-        bool use_comma = false;
+        // 折り返し位置の選択: より浅い括弧深さの候補を優先し、同深さならカンマを優先する
+        // （深い位置のカンマで呼び出しの途中を折るより、浅い演算子で折るほうが読みやすい）
+        bool has_comma = false;
+        bool has_op = false;
+        int min_comma_depth = 0;
+        int min_op_depth = 0;
         for (const auto& cand : cands) {
-            if (cand.pos < code_end && cand.is_comma) {
-                use_comma = true;
-                break;
+            if (cand.pos >= code_end)
+                continue;
+            if (cand.is_comma) {
+                if (!has_comma || cand.depth < min_comma_depth)
+                    min_comma_depth = cand.depth;
+                has_comma = true;
+            } else {
+                if (!has_op || cand.depth < min_op_depth)
+                    min_op_depth = cand.depth;
+                has_op = true;
             }
         }
-        int min_depth = 0;
-        bool has_candidate = false;
-        for (const auto& cand : cands) {
-            if (cand.pos < code_end && cand.is_comma == use_comma) {
-                if (!has_candidate || cand.depth < min_depth) {
-                    min_depth = cand.depth;
-                    has_candidate = true;
-                }
-            }
+        bool use_comma = has_comma && (!has_op || min_comma_depth <= min_op_depth);
+        int min_depth = use_comma ? min_comma_depth : min_op_depth;
+        if (!has_comma && !has_op) {
+            result << line;
+            continue;
         }
         std::vector<size_t> breaks;
         for (const auto& cand : cands) {
@@ -983,14 +990,15 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
             continue;
         }
 
-        // {} 内の要素で折り返す場合は全要素を1行ずつに展開する
-        // （中途半端な貪欲詰めにせず、開き{で改行・1要素1行・閉じ}を独立行にする）
+        // 括弧グループ（{} / [] / 関数引数の () ）内の要素で折り返す場合は
+        // 全要素を1行ずつに展開する（中途半端な貪欲詰めにせず、
+        // 開き括弧で改行・1要素1行・閉じ括弧を独立行にする）
         if (use_comma) {
             bool explode_brace = true;
             size_t group_open = std::string::npos;
             for (const auto& cand : cands) {
                 if (cand.pos < code_end && cand.is_comma && cand.depth == min_depth) {
-                    if (cand.group != '{' ||
+                    if (cand.group == '\0' ||
                         (group_open != std::string::npos && cand.group_open != group_open)) {
                         explode_brace = false;
                         break;
