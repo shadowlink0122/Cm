@@ -1,0 +1,14 @@
+//! platform: sv
+
+// 文字列リテラルに ; や { } を含む複数行export配列のimport回帰テスト
+// （旧: export再宣言の終端検出が文字列内の ; を誤検出し、初期化子が途中で切り詰められた）
+// 注意: 要素長が不揃いの文字列配列の文字インデックスは既知の問題があるため、
+// ここではコンパイル成功のみを検証する（バックエンド対応マトリクス参照）
+import str_rom;
+
+#[input] posedge clk;
+#[output] uint total_len = 0;
+
+async void pick(posedge clk) {
+    total_len = 3;
+}

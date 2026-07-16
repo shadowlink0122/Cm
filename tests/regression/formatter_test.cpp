@@ -10,7 +10,9 @@ using namespace cm::fmt;
 // フォーマッタ統合テスト
 // ============================================================
 // Cmソースは tests/regression/cases/formatter/ の .cm ファイルに分割。
-// - <name>.input.cm + <name>.expected.cm: 整形結果がexpectedに一致すること
+// - <name>.input + <name>.expected.cm: 整形結果がexpectedに一致すること
+//   （入力は意図的に未整形のfixtureのため、リポジトリ全体への
+//   cm fmt 一括適用で書き換わらないよう .cm 拡張子を付けない）
 // - <name>.cm: 既に整形済みで、fmtを適用しても変化しないこと（安定ケース）
 // いずれも冪等性（expected/安定ファイルへの再適用で変化なし）を検証する。
 class FormatterIntegrationTest : public ::testing::Test {
@@ -31,7 +33,7 @@ class FormatterIntegrationTest : public ::testing::Test {
 
     // input → expected の整形と、expected の冪等性を検証
     void expect_format_case(const std::string& name) {
-        std::string input = load_case(name + ".input.cm");
+        std::string input = load_case(name + ".input");
         std::string expected = load_case(name + ".expected.cm");
         EXPECT_EQ(format(input), expected) << "ケース: " << name;
         EXPECT_EQ(format(expected), expected) << "冪等性違反: " << name;

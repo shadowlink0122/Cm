@@ -1,8 +1,0 @@
-export import std.io.console.input::{
-    input,
-    input_int,
-    input_long,
-    input_double,
-    input_bool,
-    input_string
-};

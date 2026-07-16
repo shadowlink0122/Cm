@@ -20,42 +20,53 @@ inline size_t skip_ws(const std::string& s, size_t pos = 0) {
     return pos;
 }
 
-// 行のコード部分（//コメントを除いた部分）を返す。
-// 文字列/文字リテラル内の // は無視し、SV幅付きリテラル（16'd256等）の
-// クォートは文字リテラル開始として扱わない
+// 行のコード部分を返す: //コメント以降を除去し、文字列/文字リテラルの
+// 中身は空白にマスクする（; や括弧の走査でリテラル内の文字を誤検出しないため）。
+// SV幅付きリテラル（16'd256等）のクォートは文字リテラル開始として扱わない
 inline std::string code_portion(const std::string& line) {
+    std::string out;
+    out.reserve(line.size());
     bool in_string = false;
     bool in_char = false;
     for (size_t i = 0; i < line.size(); ++i) {
         char c = line[i];
-        if (in_string) {
+        if (in_string || in_char) {
             if (c == '\\') {
-                ++i;
-            } else if (c == '"') {
-                in_string = false;
+                // エスケープシーケンスは次の文字ごとマスクする
+                out += ' ';
+                if (i + 1 < line.size()) {
+                    out += ' ';
+                    ++i;
+                }
+                continue;
             }
-            continue;
-        }
-        if (in_char) {
-            if (c == '\\') {
-                ++i;
-            } else if (c == '\'') {
+            if (in_string && c == '"') {
+                in_string = false;
+                out += '"';
+            } else if (in_char && c == '\'') {
                 in_char = false;
+                out += '\'';
+            } else {
+                out += ' ';
             }
             continue;
         }
         if (c == '"') {
             in_string = true;
+            out += '"';
         } else if (c == '\'') {
             bool sized_literal = (i > 0 && std::isalnum(static_cast<unsigned char>(line[i - 1])));
             if (!sized_literal) {
                 in_char = true;
             }
+            out += '\'';
         } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '/') {
-            return line.substr(0, i);
+            break;
+        } else {
+            out += c;
         }
     }
-    return line;
+    return out;
 }
 
 // 指定位置からキーワードが始まるか（キーワード後に非英数字 or 行末）
