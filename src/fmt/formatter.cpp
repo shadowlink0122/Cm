@@ -58,10 +58,18 @@ FormatResult Formatter::format(const std::string& original_code) {
     // 7. 演算子周りの空白
     code = normalize_operator_spacing(code, changes);
 
-    // 8. 行末コメントの位置揃え
+    // 8. 最大行幅を超える宣言・式の折り返し
+    //    （空白正規化で行長が確定した後に実行し、折り返した継続行の
+    //    インデントは次のインデント正規化の再実行で整える）
+    code = wrap_long_lines(code, changes);
+
+    // 9. インデント正規化の再実行（折り返しで生じた継続行を整える）
+    code = normalize_indentation(code, changes);
+
+    // 10. 行末コメントの位置揃え
     code = align_inline_comments(code, changes);
 
-    // 9. ファイル末尾に1つの改行を保証
+    // 11. ファイル末尾に1つの改行を保証
     code = ensure_trailing_newline(code, changes);
 
     result.formatted_code = code;
@@ -813,6 +821,211 @@ std::string Formatter::align_inline_comments(const std::string& code, size_t& ch
         } else {
             result << line;
         }
+    }
+
+    return result.str();
+}
+
+std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes) {
+    // 最大行幅を超える行を、カンマ直後（優先）または二項演算子の直前で折り返す。
+    // 折り返し位置はコード部（コメント・文字列リテラルの外）のみから選ぶ。
+    // 継続行のインデントはこの後のインデント正規化の再実行で整うため、
+    // ここでは継続1段（最浅括弧深さぶん）を仮置きして幅の判定に使う
+    const size_t max_width = static_cast<size_t>(max_line_width_);
+
+    // 折り返し候補となる二項演算子（長い順に照合する）
+    static const char* const kWrapOps[] = {
+        "<<", ">>", "&&", "||", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "&", "|", "^"};
+
+    std::istringstream stream(code);
+    std::ostringstream result;
+    std::string line;
+    bool first = true;
+    bool in_backtick = false;
+
+    while (std::getline(stream, line)) {
+        if (!first)
+            result << '\n';
+        first = false;
+
+        // 複数行文字列（バッククォート）はそのまま通す
+        bool line_has_backtick = line.find('`') != std::string::npos;
+        if (in_backtick || line_has_backtick) {
+            for (size_t i = 0; i < line.size(); ++i) {
+                if (line[i] == '`')
+                    in_backtick = !in_backtick;
+            }
+            result << line;
+            continue;
+        }
+
+        if (line.size() <= max_width) {
+            result << line;
+            continue;
+        }
+
+        size_t content_start = line.find_first_not_of(' ');
+        if (content_start == std::string::npos) {
+            result << line;
+            continue;
+        }
+        // コメント行・ディレクティブ/属性行は折り返さない
+        if (line.compare(content_start, 2, "//") == 0 || line[content_start] == '#') {
+            result << line;
+            continue;
+        }
+
+        // コード部を走査して、コメント開始位置と折り返し候補を収集する
+        struct Candidate {
+            size_t pos;     // 次の行がこの位置から始まる
+            int depth;      // 候補時点の括弧深さ
+            bool is_comma;  // カンマ直後の候補か
+        };
+        std::vector<Candidate> cands;
+        size_t comment_start = std::string::npos;
+        {
+            bool in_string = false;
+            bool in_char = false;
+            int depth = 0;
+            for (size_t i = content_start; i < line.size(); ++i) {
+                char c = line[i];
+                if (in_string) {
+                    if (c == '\\') {
+                        ++i;
+                    } else if (c == '"') {
+                        in_string = false;
+                    }
+                    continue;
+                }
+                if (in_char) {
+                    if (c == '\\') {
+                        ++i;
+                    } else if (c == '\'') {
+                        in_char = false;
+                    }
+                    continue;
+                }
+                if (c == '"') {
+                    in_string = true;
+                } else if (c == '\'' && !is_sized_literal_quote(line, i)) {
+                    in_char = true;
+                } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '/') {
+                    comment_start = i;
+                    break;
+                } else if (c == '(' || c == '[' || c == '{') {
+                    depth++;
+                } else if (c == ')' || c == ']' || c == '}') {
+                    depth--;
+                } else if (c == ',') {
+                    cands.push_back({i + 1, depth, true});
+                } else if (c == ' ' && i + 1 < line.size()) {
+                    // " op " の形の二項演算子: 演算子の直前で折り返す
+                    for (const char* op : kWrapOps) {
+                        size_t op_len = std::char_traits<char>::length(op);
+                        if (line.compare(i + 1, op_len, op) == 0 && i + 1 + op_len < line.size() &&
+                            line[i + 1 + op_len] == ' ') {
+                            cands.push_back({i + 1, depth, false});
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // コード部の終端（行末コメントは除外し、コメントだけで超過する行は対象外）
+        size_t code_end = (comment_start != std::string::npos) ? comment_start : line.size();
+        while (code_end > 0 && line[code_end - 1] == ' ')
+            code_end--;
+        if (code_end <= max_width) {
+            result << line;
+            continue;
+        }
+
+        // カンマ候補を優先し、最浅の括弧深さのものだけ使う
+        bool use_comma = false;
+        for (const auto& cand : cands) {
+            if (cand.pos < code_end && cand.is_comma) {
+                use_comma = true;
+                break;
+            }
+        }
+        int min_depth = 0;
+        bool has_candidate = false;
+        for (const auto& cand : cands) {
+            if (cand.pos < code_end && cand.is_comma == use_comma) {
+                if (!has_candidate || cand.depth < min_depth) {
+                    min_depth = cand.depth;
+                    has_candidate = true;
+                }
+            }
+        }
+        std::vector<size_t> breaks;
+        for (const auto& cand : cands) {
+            if (cand.pos < code_end && cand.is_comma == use_comma && cand.depth == min_depth) {
+                breaks.push_back(cand.pos);
+            }
+        }
+        if (breaks.empty()) {
+            result << line;
+            continue;
+        }
+
+        // 貪欲パック: 各行が最大幅に収まる最遠の候補で折り返す
+        size_t cont_indent =
+            content_start + static_cast<size_t>(std::max(1, min_depth)) * indent_width_;
+        std::vector<std::string> out_lines;
+        size_t seg_start = 0;  // 現在のセグメント開始（行内絶対位置）
+        size_t break_idx = 0;  // 次に検討する候補
+        bool is_first_seg = true;
+        while (break_idx < breaks.size()) {
+            size_t seg_indent = is_first_seg ? 0 : cont_indent;
+            size_t seg_budget = (max_width > seg_indent) ? max_width - seg_indent : 0;
+            // このセグメントに収まる最遠の候補を選ぶ（1つも収まらなければ最初の候補で折る）
+            size_t chosen = std::string::npos;
+            for (size_t bi = break_idx; bi < breaks.size(); ++bi) {
+                size_t len = breaks[bi] - seg_start;
+                if (len <= seg_budget) {
+                    chosen = bi;
+                } else {
+                    break;
+                }
+            }
+            if (chosen == std::string::npos) {
+                chosen = break_idx;
+            }
+            // 残り全体が収まるなら折り返し不要
+            if (code_end - seg_start <= seg_budget) {
+                break;
+            }
+            size_t bp = breaks[chosen];
+            std::string seg = line.substr(seg_start, bp - seg_start);
+            while (!seg.empty() && seg.back() == ' ')
+                seg.pop_back();
+            out_lines.push_back(std::string(seg_indent, ' ') + seg);
+            // 次セグメントの開始（先頭の空白は除く）
+            seg_start = bp;
+            while (seg_start < code_end && line[seg_start] == ' ')
+                seg_start++;
+            break_idx = chosen + 1;
+            is_first_seg = false;
+        }
+        if (out_lines.empty()) {
+            result << line;
+            continue;
+        }
+        // 最終セグメント（行末コメントがあれば同じ行に残す）
+        std::string tail = line.substr(seg_start, code_end - seg_start);
+        if (comment_start != std::string::npos) {
+            tail += "  " + line.substr(comment_start);
+        }
+        out_lines.push_back(std::string(cont_indent, ' ') + tail);
+
+        for (size_t li = 0; li < out_lines.size(); ++li) {
+            if (li > 0)
+                result << '\n';
+            result << out_lines[li];
+        }
+        changes++;
     }
 
     return result.str();

@@ -15,4 +15,5 @@ export import std.io.console.output::{print, println, eprint, eprintln};
 // コンソール入力
 // ============================================================
 
-export import std.io.console.input::{input, input_int, input_long, input_double, input_bool, input_string};
+export import std.io.console.input::{input, input_int, input_long, input_double, input_bool,
+    input_string};

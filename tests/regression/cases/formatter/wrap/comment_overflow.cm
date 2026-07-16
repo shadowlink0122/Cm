@@ -1,0 +1,3 @@
+module wrap_comment;
+
+uint x = 1;  // 長いコメントはコードが短ければ折り返さない xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

@@ -45,6 +45,30 @@ class FormatterIntegrationTest : public ::testing::Test {
 };
 
 // ============================================================
+// 最大行幅（100桁）を超える宣言・式の折り返し
+// ============================================================
+
+// 長い配列リテラルはカンマ位置で折り返す（継続行は1段深いインデント）
+TEST_F(FormatterIntegrationTest, WrapLongArrayLiteral) {
+    expect_format_case("wrap/long_array");
+}
+
+// 長い式は二項演算子の直前で折り返す（継続行が演算子で始まる既存スタイルに一致）
+TEST_F(FormatterIntegrationTest, WrapLongExpression) {
+    expect_format_case("wrap/long_expr");
+}
+
+// コードが短く行末コメントだけで幅超過する行は折り返さない
+TEST_F(FormatterIntegrationTest, WrapSkipsCommentOverflow) {
+    expect_stable_case("wrap/comment_overflow");
+}
+
+// 文字列リテラル内に折り返し候補相当の文字があっても分割しない（候補なし→無変更）
+TEST_F(FormatterIntegrationTest, WrapSkipsLongStringLiteral) {
+    expect_stable_case("wrap/long_string");
+}
+
+// ============================================================
 // 条件付きコンパイルブロック（#ifdef〜#end）のインデント
 // ============================================================
 

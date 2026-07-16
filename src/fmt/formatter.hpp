@@ -27,6 +27,9 @@ class Formatter {
     /// インデント幅を設定
     void set_indent_width(int width) { indent_width_ = width; }
 
+    /// 最大行幅を設定（超過する宣言・式はカンマ/演算子位置で折り返す）
+    void set_max_line_width(int width) { max_line_width_ = width; }
+
     /// コードをフォーマット
     FormatResult format(const std::string& original_code);
 
@@ -38,6 +41,7 @@ class Formatter {
 
    private:
     int indent_width_ = 4;
+    int max_line_width_ = 100;  // C++側の.clang-format（ColumnLimit: 100）と揃える
 
     /// 行末の空白を削除
     std::string trim_trailing_whitespace(const std::string& code, size_t& changes);
@@ -68,6 +72,9 @@ class Formatter {
 
     /// 行末コメントの最小間隔を保証（位置は手動調整を尊重）
     std::string align_inline_comments(const std::string& code, size_t& changes);
+
+    /// 最大行幅を超える宣言・式をカンマ/演算子位置で折り返す
+    std::string wrap_long_lines(const std::string& code, size_t& changes);
 };
 
 }  // namespace fmt

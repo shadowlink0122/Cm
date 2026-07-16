@@ -158,7 +158,8 @@ extern "C" long gpu_device_max_threads(long device);
 extern "C" long gpu_device_memory_size(long device);
 
 // グリッドdispatch
-extern "C" void gpu_dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x);
+extern "C" void gpu_dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x,
+    long group_x);
 
 // 非同期dispatch
 extern "C" long gpu_dispatch_async(long kernel, long buf_a, long buf_b, long buf_out, long count);
@@ -215,7 +216,8 @@ export long device_memory_size(long device) {
 
 // スレッドグループサイズを明示指定してdispatch
 // group_x=0の場合はカーネル最大値を自動使用
-export void dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x, long group_x) {
+export void dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x,
+    long group_x) {
     gpu_dispatch_grid(kernel, buf_a, buf_b, buf_out, grid_x, group_x);
 }
 

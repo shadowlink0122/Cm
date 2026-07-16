@@ -1,0 +1,7 @@
+module wrap_expr;
+
+uint popcount8(uint v) {
+    uint n = (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1) + ((v >> 4) & 1)
+        + ((v >> 5) & 1) + ((v >> 6) & 1) + ((v >> 7) & 1);
+    return n;
+}
