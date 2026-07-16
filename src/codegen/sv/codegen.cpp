@@ -449,10 +449,19 @@ void SVCodeGen::emitModule(const SVModule& mod) {
         }
     }
 
-    // initial ブロック（シミュレーション用）
+    // initial ブロック（シミュレーション用）。
+    // ビルダーは無インデントで生成し、ここでモジュールインデントを一律付与する
     for (const auto& init : mod.initial_blocks) {
         append_line("");
-        emit(init);
+        std::istringstream init_stream(init);
+        std::string init_line;
+        while (std::getline(init_stream, init_line)) {
+            if (init_line.empty()) {
+                append_line("");
+            } else {
+                emitLine(init_line);
+            }
+        }
     }
 
     // function/task ブロック

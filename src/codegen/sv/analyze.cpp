@@ -343,14 +343,15 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                         std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&gv->init_expr->kind)) {
                     default_mod.parameters.push_back(type_str + " " + param_name + arr_suffix +
                                                      ";");
+                    // 無インデントで生成する（モジュールインデントは出力時に一律付与）
                     std::stringstream arr_init;
-                    arr_init << "    // const配列 " << param_name << " の初期化\n";
-                    arr_init << "    initial begin\n";
+                    arr_init << "// const配列 " << param_name << " の初期化\n";
+                    arr_init << "initial begin\n";
                     for (size_t ei = 0; ei < (*arr)->elements.size(); ++ei) {
-                        arr_init << "        " << param_name << "[" << ei
+                        arr_init << "    " << param_name << "[" << ei
                                  << "] = " << emitHirExpr(*(*arr)->elements[ei]) << ";\n";
                     }
-                    arr_init << "    end\n";
+                    arr_init << "end\n";
                     default_mod.initial_blocks.push_back(arr_init.str());
                     emitted_var_names.insert(var_name);
                     continue;
@@ -1275,9 +1276,15 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 if (next_trim != std::string::npos &&
                     elif_lines[i + 1].substr(next_trim, 4) == "if (") {
                     // 結合: "end else if (...) begin"
+                    // ネストされた結合（2段目以降）では自身も調整対象のため、
+                    // 現在のindent_adjustを適用して1段浅くする
+                    std::string merged_indent = indent_str;
+                    if (indent_adjust > 0 && static_cast<int>(trim_start) > indent_adjust) {
+                        merged_indent = indent_str.substr(static_cast<size_t>(indent_adjust));
+                    }
                     if (!first)
                         elif_ss << "\n";
-                    elif_ss << indent_str << "end else " << elif_lines[i + 1].substr(next_trim);
+                    elif_ss << merged_indent << "end else " << elif_lines[i + 1].substr(next_trim);
                     first = false;
                     ++i;  // if行をスキップ
                     // 次行以降のインデントを4スペース浅く調整

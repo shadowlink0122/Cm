@@ -186,6 +186,34 @@ TEST_F(SVCodegenTest, RegisterInitialValue) {
     expect_contains(sv, "counter = 32'd42;");
 }
 
+// else if チェーンの全行が先頭のifと同じインデントで出力される
+// （従来はelse if正規化がネスト2段目以降の "end else if" 行に
+// インデント調整を適用せず、1段深くずれてSVの見た目が崩れていた）
+TEST_F(SVCodegenTest, ElseIfChainIndent) {
+    const std::string code = load_case("control/else_if_chain_indent");
+    std::string sv = compile_to_sv(code);
+
+    std::istringstream stream(sv);
+    std::string line;
+    size_t if_indent = std::string::npos;
+    size_t elif_count = 0;
+    while (std::getline(stream, line)) {
+        size_t indent = line.find_first_not_of(' ');
+        if (indent == std::string::npos) {
+            continue;
+        }
+        std::string trimmed = line.substr(indent);
+        if (if_indent == std::string::npos && trimmed.rfind("if (sel", 0) == 0) {
+            if_indent = indent;
+        }
+        if (trimmed.rfind("end else if (", 0) == 0) {
+            ++elif_count;
+            EXPECT_EQ(indent, if_indent) << "misindented: " << line;
+        }
+    }
+    EXPECT_GE(elif_count, 3u) << "else if チェーンが生成されていません";
+}
+
 // 出力ポートの宣言初期値が電源投入時初期値として出力される
 // （従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
 TEST_F(SVCodegenTest, OutputPortInitialValue) {
