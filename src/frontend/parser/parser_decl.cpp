@@ -545,8 +545,15 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
 
         field.name = expect_ident();
 
-        // フィールドのデフォルト値（= expr）: extern struct のみ
-        if (is_extern && consume_if(TokenKind::Eq)) {
+        // フィールドのデフォルト値（= expr）: extern struct と
+        // IOフィールド（#[input]/#[output]/#[inout] 属性付き）で許可する
+        bool has_dir_attr = false;
+        for (const auto& a : field.attributes) {
+            if (a.name == "input" || a.name == "output" || a.name == "inout") {
+                has_dir_attr = true;
+            }
+        }
+        if ((is_extern || has_dir_attr) && consume_if(TokenKind::Eq)) {
             field.default_value = parse_expr();
         }
 
@@ -555,6 +562,8 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     }
 
     expect(TokenKind::RBrace);
+    // C/C++スタイルの末尾セミコロン（struct X { ... };）を許容する
+    consume_if(TokenKind::Semicolon);
 
     auto decl = std::make_unique<ast::StructDecl>(std::move(name), std::move(fields));
     decl->name_span = Span{name_start, name_end};

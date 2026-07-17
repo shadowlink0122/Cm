@@ -49,9 +49,35 @@ async void update(posedge clk) {
 
 The generated `.sv` contains both modules, with a named port connection instance in `top`.
 
+## Explicit struct declaration for module IO (IO instance, recommended)
+
+A module's IO can be defined with a C/C++-style struct declaration and an instance of it.
+
+```cm
+// alu.cm
+struct alu_io {
+    #[input] uint a;
+    #[input] uint b;
+    #[output] uint result = 0;
+};
+
+alu_io io;
+
+void alu_comb() {
+    io.result = io.a + io.b;
+}
+```
+
+- A global variable of a struct with `#[input]`/`#[output]` fields (an IO instance) expands its fields into module ports (port name = field name; individual port declarations become unnecessary)
+- Module code accesses ports as `io.field`, which is flattened to the port names in the generated SV
+- A default value on an `#[output]` field (`= 0`) becomes the port's power-on initial value
+- A trailing semicolon after the struct declaration (`};`) is accepted (C/C++ compatible)
+- Direct port declarations such as `#[input] posedge clk;` can be mixed with an IO instance
+- The IO struct itself is not emitted as a data type (`typedef struct packed`)
+
 ## Mechanics and constraints
 
-- An extern struct is auto-generated from the imported file's port declarations (`#[input]`/`#[output]`/`#[inout]`); the instance type name is the file stem (`alu.cm` → `alu`)
+- An extern struct is generated from the imported file's IO instance (struct fields) and direct port declarations (`#[input]`/`#[output]`/`#[inout]`); the instance type name is the file stem (`alu.cm` → `alu`)
 - Imported files are compiled to SV individually and concatenated into the top-level `.sv`. Nested hierarchy imports and circular-import detection are supported
 - Signals connected to instance outputs do not get declaration initializers (the instance drives them)
 - Only simple relative imports (`import ./name;`) participate; selective imports (`::{...}`) and aliases are still flattened

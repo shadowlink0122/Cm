@@ -34,6 +34,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
 
     global_string_lengths_.clear();
+    io_instance_fields_.clear();
     for (const auto& gv : program.global_vars) {
         if (gv && gv->is_const && gv->type && gv->type->kind == hir::TypeKind::String) {
             int L = 0;
@@ -151,6 +152,69 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         // 変数名のフラット化 (namespace:: を除去)
         std::string var_name = gv->name;
         var_name = strip_namespace(var_name);
+
+        // IOインスタンスの検出: #[input]/#[output]/#[inout] フィールドを持つ
+        // 構造体のグローバル変数は、フィールドをモジュールポートへ展開する
+        // （個別のポート宣言は不要。io.field アクセスはポート名へ写像される）
+        if (gv->type) {
+            const mir::MirStruct* io_st = nullptr;
+            std::string io_type_name = strip_namespace(gv->type->name);
+            for (const auto& st : program.structs) {
+                if (!st || st->is_extern || strip_namespace(st->name) != io_type_name) {
+                    continue;
+                }
+                for (const auto& f : st->fields) {
+                    for (const auto& a : f.attributes) {
+                        if (a == "input" || a == "output" || a == "inout") {
+                            io_st = st.get();
+                            break;
+                        }
+                    }
+                    if (io_st)
+                        break;
+                }
+                break;
+            }
+            if (io_st) {
+                if (emitted_var_names.count(var_name) == 0) {
+                    std::vector<std::string> field_names;
+                    for (const auto& f : io_st->fields) {
+                        field_names.push_back(f.name);
+                        std::string dir;
+                        for (const auto& a : f.attributes) {
+                            if (a == "input" || a == "output" || a == "inout") {
+                                dir = a;
+                            }
+                        }
+                        if (dir.empty()) {
+                            continue;  // 方向属性のないフィールドはポートにしない
+                        }
+                        std::string array_suffix = getArraySuffix(f.type);
+                        std::string init_value;
+                        if (dir == "output" && array_suffix.empty() &&
+                            !f.default_value_str.empty()) {
+                            init_value = f.default_value_str;
+                        }
+                        SVPort::Direction pdir = SVPort::Input;
+                        if (dir == "output") {
+                            pdir = SVPort::Output;
+                        } else if (dir == "inout") {
+                            pdir = SVPort::InOut;
+                        }
+                        default_mod.ports.push_back({pdir, f.name, mapType(f.type),
+                                                     getBitWidth(f.type), array_suffix,
+                                                     init_value});
+                        if (pdir == SVPort::Input && f.name == "clk")
+                            has_clk = true;
+                        if (pdir == SVPort::Input && f.name == "rst")
+                            has_rst = true;
+                    }
+                    io_instance_fields_[var_name] = std::move(field_names);
+                    emitted_var_names.insert(var_name);
+                }
+                continue;
+            }
+        }
 
         // extern struct インスタンスの検出（型名ベース）。
         // importされたモジュール内の宣言は名前空間修飾付きになるため、
@@ -757,6 +821,21 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
         if (st->is_extern)
             continue;  // extern struct はtypedef出力しない
+        // IO契約構造体（#[input]/#[output]/#[inout] フィールドを持つ）は
+        // モジュールのインターフェース宣言なのでデータ型として出力しない
+        bool is_io_contract = false;
+        for (const auto& f : st->fields) {
+            for (const auto& a : f.attributes) {
+                if (a == "input" || a == "output" || a == "inout") {
+                    is_io_contract = true;
+                    break;
+                }
+            }
+            if (is_io_contract)
+                break;
+        }
+        if (is_io_contract)
+            continue;
         // TODO: sv::packed属性チェック（現状は全structをpacked出力）
         std::ostringstream ss;
         ss << "typedef struct packed {\n";

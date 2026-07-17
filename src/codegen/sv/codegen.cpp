@@ -664,9 +664,17 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
     // フィールド/インデックスアクセスの投影を適用
     hir::TypePtr current_type =
         (place.local < func.locals.size()) ? func.locals[place.local].type : nullptr;
+    bool first_projection = true;
     for (const auto& proj : place.projections) {
         if (proj.kind == mir::ProjectionKind::Field) {
-            name += "[" + std::to_string(proj.field_id) + "]";
+            // IOインスタンスのフィールドアクセス（io.field）はポート名へ写像する
+            auto io_it = io_instance_fields_.find(name);
+            if (first_projection && io_it != io_instance_fields_.end() &&
+                proj.field_id < io_it->second.size()) {
+                name = io_it->second[proj.field_id];
+            } else {
+                name += "[" + std::to_string(proj.field_id) + "]";
+            }
         } else if (proj.kind == mir::ProjectionKind::Index) {
             // 配列インデックス: index_localの変数名で添字アクセス
             if (proj.index_local < func.locals.size()) {
@@ -724,6 +732,7 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                 current_type = nullptr;
             }
         }
+        first_projection = false;
     }
 
     return name;

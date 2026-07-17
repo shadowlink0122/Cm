@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 
 namespace cm::codegen::sv {
@@ -46,65 +47,186 @@ struct PortDecl {
     std::string name;
 };
 
+// 1行のポート宣言/IO契約フィールド（`#[input] uint a;` 等）をパースする。
+// ポートでなければfalseを返す
+bool parse_port_line(const std::string& raw, PortDecl& out) {
+    std::string t = trim(raw);
+    if (t.rfind("#[", 0) != 0) {
+        return false;
+    }
+    // 先頭の属性群を消費し、方向属性を探す
+    std::string direction;
+    while (t.rfind("#[", 0) == 0) {
+        size_t close = t.find(']');
+        if (close == std::string::npos) {
+            break;
+        }
+        std::string attr = trim(t.substr(2, close - 2));
+        if (attr == "input" || attr == "output" || attr == "inout") {
+            direction = attr;
+        }
+        t = trim(t.substr(close + 1));
+    }
+    if (direction.empty() || t.empty()) {
+        return false;
+    }
+
+    // `assign` 形式（連続代入）はポートとして扱う（型が続く）
+    if (t.rfind("assign ", 0) == 0) {
+        t = trim(t.substr(7));
+    }
+
+    // 型トークン
+    std::istringstream toks(t);
+    std::string type_tok;
+    std::string name_tok;
+    if (!(toks >> type_tok)) {
+        return false;
+    }
+    // クロックエッジ型は1bit信号として接続する
+    if (type_tok == "posedge" || type_tok == "negedge") {
+        type_tok = "bool";
+    }
+    if (!(toks >> name_tok)) {
+        return false;
+    }
+    // 名前から `= 初期値` / `;` を除去
+    for (const char* sep : {"=", ";"}) {
+        size_t pos = name_tok.find(sep);
+        if (pos != std::string::npos) {
+            name_tok = name_tok.substr(0, pos);
+        }
+    }
+    name_tok = trim(name_tok);
+    if (name_tok.empty()) {
+        return false;
+    }
+    out = {direction, type_tok, name_tok};
+    return true;
+}
+
 // サブモジュールのソースからポート宣言を抽出する（行単位の軽量スキャン）。
-// 対象: `#[input] uint a;` / `#[output] utiny out = 0;` / `#[input] posedge clk;` 等
+// 対象: `#[input] uint a;` / `#[output] utiny out = 0;` / `#[input] posedge clk;` 等。
+// struct本体内のフィールド（IO契約構造体等）はポートではないためスキップする
 std::vector<PortDecl> extract_ports(const std::string& source) {
     std::vector<PortDecl> ports;
     std::istringstream ss(source);
     std::string line;
+    int struct_depth = 0;
     while (std::getline(ss, line)) {
         std::string t = trim(line);
-        if (t.rfind("#[", 0) != 0) {
+        if (struct_depth > 0) {
+            for (char c : t) {
+                if (c == '{')
+                    struct_depth++;
+                else if (c == '}')
+                    struct_depth--;
+            }
             continue;
         }
-        // 先頭の属性群を消費し、方向属性を探す
-        std::string direction;
-        while (t.rfind("#[", 0) == 0) {
-            size_t close = t.find(']');
-            if (close == std::string::npos) {
-                break;
-            }
-            std::string attr = trim(t.substr(2, close - 2));
-            if (attr == "input" || attr == "output" || attr == "inout") {
-                direction = attr;
-            }
-            t = trim(t.substr(close + 1));
+        std::string decl_check = t;
+        if (decl_check.rfind("export ", 0) == 0) {
+            decl_check = trim(decl_check.substr(7));
         }
-        if (direction.empty() || t.empty()) {
+        if (decl_check.rfind("struct ", 0) == 0 || decl_check.rfind("extern struct ", 0) == 0) {
+            for (char c : t) {
+                if (c == '{')
+                    struct_depth++;
+                else if (c == '}')
+                    struct_depth--;
+            }
             continue;
         }
-
-        // `assign` 形式（連続代入）はポートとして扱う（型が続く）
-        if (t.rfind("assign ", 0) == 0) {
-            t = trim(t.substr(7));
+        PortDecl p;
+        if (parse_port_line(t, p)) {
+            ports.push_back(p);
         }
+    }
+    return ports;
+}
 
-        // 型トークン
+// IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の
+// フィールドをポートとして抽出する。
+// 例: `struct alu_io { #[input] uint a; ... }; alu_io io;` → a等がモジュールポート
+std::vector<PortDecl> extract_io_instance_ports(const std::string& source) {
+    // 1パス目: 構造体定義（名前 → IOフィールド列）を収集する
+    std::map<std::string, std::vector<PortDecl>> io_structs;
+    {
+        std::istringstream ss(source);
+        std::string line;
+        std::string current_struct;
+        while (std::getline(ss, line)) {
+            std::string t = trim(line);
+            if (current_struct.empty()) {
+                if (t.rfind("export ", 0) == 0) {
+                    t = trim(t.substr(7));
+                }
+                if (t.rfind("extern ", 0) == 0) {
+                    continue;  // extern structは対象外
+                }
+                if (t.rfind("struct ", 0) != 0) {
+                    continue;
+                }
+                std::string rest = trim(t.substr(7));
+                auto brace = rest.find('{');
+                std::string name = trim(brace == std::string::npos ? rest : rest.substr(0, brace));
+                if (name.empty()) {
+                    continue;
+                }
+                current_struct = name;
+                continue;
+            }
+            if (!t.empty() && t[0] == '}') {
+                current_struct.clear();
+                continue;
+            }
+            PortDecl p;
+            if (parse_port_line(t, p)) {
+                io_structs[current_struct].push_back(p);
+            }
+        }
+    }
+    if (io_structs.empty()) {
+        return {};
+    }
+
+    // 2パス目: トップレベルのインスタンス宣言（`<構造体名> <変数名>;`）を探し、
+    // 宣言順にフィールドをポートとして採用する
+    std::vector<PortDecl> ports;
+    std::istringstream ss(source);
+    std::string line;
+    int depth = 0;
+    while (std::getline(ss, line)) {
+        std::string t = trim(line);
+        int line_depth = depth;
+        for (char c : t) {
+            if (c == '{')
+                depth++;
+            else if (c == '}')
+                depth--;
+        }
+        if (line_depth != 0) {
+            continue;  // 構造体/関数本体内はインスタンス宣言ではない
+        }
         std::istringstream toks(t);
         std::string type_tok;
         std::string name_tok;
         if (!(toks >> type_tok)) {
             continue;
         }
-        // クロックエッジ型は1bit信号として接続する
-        if (type_tok == "posedge" || type_tok == "negedge") {
-            type_tok = "bool";
+        auto it = io_structs.find(type_tok);
+        if (it == io_structs.end()) {
+            continue;
         }
         if (!(toks >> name_tok)) {
             continue;
         }
-        // 名前から `= 初期値` / `;` を除去
-        for (const char* sep : {"=", ";"}) {
-            size_t pos = name_tok.find(sep);
-            if (pos != std::string::npos) {
-                name_tok = name_tok.substr(0, pos);
-            }
-        }
-        name_tok = trim(name_tok);
-        if (name_tok.empty()) {
+        if (name_tok.empty() || name_tok.back() != ';') {
             continue;
         }
-        ports.push_back({direction, type_tok, name_tok});
+        for (const auto& p : it->second) {
+            ports.push_back(p);
+        }
     }
     return ports;
 }
@@ -248,10 +370,17 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
         }
         std::stringstream sub_src;
         sub_src << sub_file.rdbuf();
-        auto ports = extract_ports(sub_src.str());
+        // ポート抽出: IOインスタンス（構造体宣言+インスタンス使用）のフィールドと
+        // 直接のポート宣言（#[input]/#[output]）の両方を対象にする
+        auto ports = extract_io_instance_ports(sub_src.str());
+        for (const auto& p : extract_ports(sub_src.str())) {
+            ports.push_back(p);
+        }
         if (ports.empty()) {
-            result.error = "sv階層import先にポート宣言（#[input]/#[output]）がありません: " +
-                           sub_path.string();
+            result.error =
+                "sv階層import先にポート宣言（IOインスタンスまたは #[input]/#[output]）が"
+                "ありません: " +
+                sub_path.string();
             return result;
         }
 

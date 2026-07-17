@@ -109,6 +109,10 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::set<std::string> module_signal_names_;
     int indent_level_ = 0;
     std::unordered_map<std::string, int> global_string_lengths_;
+    // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）。
+    // インスタンス名 → フィールド名リスト（field_id順）。
+    // フィールドはモジュールポートへ展開され、io.field アクセスはポート名へ写像される
+    std::unordered_map<std::string, std::vector<std::string>> io_instance_fields_;
 
     // モジュール情報
     std::vector<SVModule> modules_;

@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: cycles=3, en=1 -> count=3
+
+// IOインスタンス＋クロック（クロックは直接のポート宣言と併用できる）
+#[input] posedge clk;
+
+struct counter_io {
+    #[input] bool en;
+    #[output] uint count = 0;
+};
+
+counter_io io;
+
+async void tick(posedge clk) {
+    if (io.en) {
+        io.count = io.count + 1;
+    }
+}

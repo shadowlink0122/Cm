@@ -246,6 +246,20 @@ TEST_F(SVCodegenTest, ElseIfChainIndent) {
     EXPECT_GE(elif_count, 3u) << "else if チェーンが生成されていません";
 }
 
+// IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）:
+// フィールドがモジュールポートへ展開され、io.field アクセスはポート名へ
+// フラット化される。IO構造体自体はデータ型（typedef）として出力されない
+TEST_F(SVCodegenTest, IoInstanceExpandsPortsAndFlattensAccess) {
+    const std::string code = load_case("module/io_instance");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "input logic [31:0] a");
+    expect_contains(sv, "output logic [31:0] result");
+    expect_contains(sv, "result <= a;");
+    expect_not_contains(sv, "typedef struct packed");
+    expect_not_contains(sv, "io_t io;");
+    expect_not_contains(sv, "io[");
+}
+
 // importされたモジュール（namespace）内で宣言されたextern structインスタンスの
 // 型名から名前空間修飾を除去する（従来は "hdmi_out::OSC osc_inst" のような
 // 不正なSVが出力されlintエラーになった）

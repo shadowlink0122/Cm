@@ -67,9 +67,35 @@ module alu ( ... );
 endmodule
 ```
 
+## IOの明示的構造体宣言（IOインスタンス・推奨）
+
+モジュールのIOはC/C++スタイルの構造体宣言とそのインスタンスで定義できます。
+
+```cm
+// alu.cm
+struct alu_io {
+    #[input] uint a;
+    #[input] uint b;
+    #[output] uint result = 0;
+};
+
+alu_io io;
+
+void alu_comb() {
+    io.result = io.a + io.b;
+}
+```
+
+- `#[input]`/`#[output]` フィールドを持つ構造体のグローバル変数（IOインスタンス）は、フィールドがそのままモジュールポートへ展開されます（ポート名 = フィールド名。個別のポート宣言は不要）
+- モジュール内のアクセスは `io.field` で行い、SV出力ではポート名へフラット化されます
+- `#[output]` フィールドの既定値（`= 0`）はポートの電源投入時初期値になります
+- 構造体宣言の末尾セミコロン（`};`）を許容します（C/C++互換）
+- クロック等の直接ポート宣言（`#[input] posedge clk;`）とは併用できます
+- IO構造体はデータ型（`typedef struct packed`）としては出力されません
+
 ## 仕組みと制約
 
-- import先のポート宣言（`#[input]`/`#[output]`/`#[inout]`）からextern struct が自動生成され、import文を置換します（インスタンスの型名 = ファイル名のstem。`alu.cm` → `alu`）
+- import先のIOインスタンス（構造体フィールド）と直接のポート宣言（`#[input]`/`#[output]`/`#[inout]`）からextern struct が生成され、import文を置換します（インスタンスの型名 = ファイル名のstem。`alu.cm` → `alu`）
 - import先は個別にSVコンパイルされ、トップの `.sv` に連結されます。ネストした階層import・循環import検出に対応
 - インスタンス出力に接続された信号（上記の `alu_out`）は宣言初期値が出力されません（インスタンスが駆動するため）
 - 対象は単純な相対import（`import ./name;`）のみ。選択import（`::{...}`）やエイリアスは従来どおりフラット化されます
