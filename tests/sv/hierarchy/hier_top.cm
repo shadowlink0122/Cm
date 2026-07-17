@@ -11,13 +11,13 @@ import ./hier_alu;
 
 #[input] posedge clk;
 
-struct hier_top_io {
+struct HierTopIo {
     #[input] uint x;
     #[input] uint y;
     #[output] uint sum = 0;
 };
 
-hier_top_io io;
+HierTopIo io;
 
 uint alu_out = 0;
 utiny op_add = 0;

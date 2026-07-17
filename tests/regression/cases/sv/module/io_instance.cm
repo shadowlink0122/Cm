@@ -4,12 +4,12 @@ module io_instance_top;
 
 // C/C++スタイルの構造体宣言とインスタンスによるIO定義。
 // フィールドがモジュールポートへ展開され、io.field はポート名へ写像される
-struct io_t {
+struct Io {
     #[input] uint a;
     #[output] uint result;
 };
 
-io_t io;
+Io io;
 
 void tick(posedge clk) {
     io.result = io.a;

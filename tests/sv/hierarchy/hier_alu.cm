@@ -6,14 +6,14 @@
 // IOはC/C++スタイルの構造体宣言とそのインスタンスで定義する。
 // フィールドがそのままモジュールポートへ展開されるため、個別のポート宣言は不要
 
-struct hier_alu_io {
+struct HierAluIo {
     #[input] uint a;
     #[input] uint b;
     #[input] utiny op;
     #[output] uint result;
 };
 
-hier_alu_io io;
+HierAluIo io;
 
 void alu_comb() {
     if (io.op == 0) {

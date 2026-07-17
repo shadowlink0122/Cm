@@ -13,13 +13,13 @@
 
 ```cm
 // alu.cm
-struct alu_io {
+struct AluIo {
     #[input] uint a;
     #[input] uint b;
     #[output] uint result = 0;
 };
 
-alu_io io;
+AluIo io;
 
 void alu_comb() {
     io.result = io.a + io.b;

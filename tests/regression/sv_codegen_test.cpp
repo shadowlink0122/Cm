@@ -256,7 +256,7 @@ TEST_F(SVCodegenTest, IoInstanceExpandsPortsAndFlattensAccess) {
     expect_contains(sv, "output logic [31:0] result");
     expect_contains(sv, "result <= a;");
     expect_not_contains(sv, "typedef struct packed");
-    expect_not_contains(sv, "io_t io;");
+    expect_not_contains(sv, "Io io;");
     expect_not_contains(sv, "io[");
 }
 

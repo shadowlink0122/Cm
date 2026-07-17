@@ -147,7 +147,7 @@ std::vector<PortDecl> extract_ports(const std::string& source) {
 
 // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の
 // フィールドをポートとして抽出する。
-// 例: `struct alu_io { #[input] uint a; ... }; alu_io io;` → a等がモジュールポート
+// 例: `struct AluIo { #[input] uint a; ... }; AluIo io;` → a等がモジュールポート
 std::vector<PortDecl> extract_io_instance_ports(const std::string& source) {
     // 1パス目: 構造体定義（名前 → IOフィールド列）を収集する
     std::map<std::string, std::vector<PortDecl>> io_structs;

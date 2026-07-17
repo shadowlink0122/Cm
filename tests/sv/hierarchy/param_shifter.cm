@@ -6,12 +6,12 @@
 
 #[input] posedge clk;
 
-struct param_shifter_io {
+struct ParamShifterIo {
     #[input] bit[WIDTH] din;
     #[output] bit[WIDTH] dout = 0;
 };
 
-param_shifter_io io;
+ParamShifterIo io;
 
 async void shift(posedge clk) {
     io.dout = io.din;
