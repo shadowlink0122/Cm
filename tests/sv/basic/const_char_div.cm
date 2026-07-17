@@ -1,0 +1,19 @@
+//! platform: sv
+//! test: cycles=2 -> code=53, frame=420000, half=210000
+
+// 定数式（文字リテラルのcast・乗算/除算）がSVターゲットでも定数として扱えることの検証
+// （'0' as uint や N*M / N/M を値のコメント補足なしで直接書けること）
+#[input] posedge clk;
+#[output] uint code = 0;
+#[output] uint frame = 0;
+#[output] uint half = 0;
+
+const uint FRAME_CLOCKS = 800 * 525;
+const uint HALF_FRAME = FRAME_CLOCKS / 2;
+const uint ZERO_CODE = '0' as uint;
+
+async void t(posedge clk) {
+    code = ZERO_CODE + 5;
+    frame = FRAME_CLOCKS;
+    half = HALF_FRAME;
+}

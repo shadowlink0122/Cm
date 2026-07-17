@@ -473,6 +473,16 @@ TEST_F(SVCodegenTest, ConstantFoldingApplied) {
     expect_contains(sv, "z = a;");               // (a+0)<<0 → a
 }
 
+// const宣言の定数式（乗算/除算・文字リテラルcast）は最適化レベルに関わらず
+// const評価で畳み込まれ、localparamに確定値が出力される
+TEST_F(SVCodegenTest, ConstDeclFolding) {
+    const std::string code = load_case("expr/const_decl_fold");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "FRAME = 32'd420000");
+    expect_contains(sv, "HALF = 32'd210000");
+    expect_contains(sv, "ZERO = 48");
+}
+
 // O0相当（畳み込みなし）では従来どおり式がそのまま出力される（後方互換）
 TEST_F(SVCodegenTest, ConstantFoldingNotAppliedByDefault) {
     const std::string code = load_case("expr/const_fold");
