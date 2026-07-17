@@ -1,0 +1,27 @@
+//! platform: sv
+//! test: cycles=2 -> debounce=1050000, total=800, ctrl=852, bar=80
+
+// 派生定数の展開検証: float乗算・区間の和・2進リテラル・除算を
+// 値のコメント補足なしで右辺の式として書けること
+#[input] posedge clk;
+#[output] uint debounce = 0;
+#[output] uint total = 0;
+#[output] uint ctrl = 0;
+#[output] uint bar = 0;
+
+const uint CLK_FREQ = 210000000 / 4;
+const uint DEBOUNCE_LIMIT = CLK_FREQ * 0.02;
+const uint H_ACTIVE = 640;
+const uint H_FP = 16;
+const uint H_SYNC = 96;
+const uint H_BP = 48;
+const uint H_TOTAL = H_ACTIVE + H_FP + H_SYNC + H_BP;
+const uint CTRL_00 = 0b1101010100;
+const uint BAR_WIDTH = H_ACTIVE / 8;
+
+async void t(posedge clk) {
+    debounce = DEBOUNCE_LIMIT;
+    total = H_TOTAL;
+    ctrl = CTRL_00;
+    bar = BAR_WIDTH;
+}

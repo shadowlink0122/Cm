@@ -1,0 +1,17 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+module const_decl_derived_top;
+
+const uint CLK_FREQ = 210000000 / 4;
+const uint DEBOUNCE_LIMIT = CLK_FREQ * 0.02;
+const uint H_ACTIVE = 640;
+const uint H_FP = 16;
+const uint H_SYNC = 96;
+const uint H_BP = 48;
+const uint H_TOTAL = H_ACTIVE + H_FP + H_SYNC + H_BP;
+const uint CTRL_00 = 0b1101010100;
+
+void tick(posedge clk) {
+    out = DEBOUNCE_LIMIT + H_TOTAL + CTRL_00;
+}

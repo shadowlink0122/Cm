@@ -483,6 +483,17 @@ TEST_F(SVCodegenTest, ConstDeclFolding) {
     expect_contains(sv, "ZERO = 48");
 }
 
+// 派生const宣言の展開: 整数のみの式（除算・区間の和・2進リテラル）は
+// localparamへ確定値で畳み込まれ、float混在式は式のままSV評価に委譲される
+TEST_F(SVCodegenTest, ConstDeclDerivedExpressions) {
+    const std::string code = load_case("expr/const_decl_derived");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "CLK_FREQ = 32'd52500000");  // 210000000 / 4
+    expect_contains(sv, "H_TOTAL = 32'd800");        // 各区間の和
+    expect_contains(sv, "CTRL_00 = 32'd852");        // 0b1101010100
+    expect_contains(sv, "CLK_FREQ * 0.02");          // float混在はSV側で評価
+}
+
 // O0相当（畳み込みなし）では従来どおり式がそのまま出力される（後方互換）
 TEST_F(SVCodegenTest, ConstantFoldingNotAppliedByDefault) {
     const std::string code = load_case("expr/const_fold");

@@ -1,0 +1,5 @@
+SIM_OK
+TEST 1: debounce=1050000
+TEST 1: total=800
+TEST 1: ctrl=852
+TEST 1: bar=80
