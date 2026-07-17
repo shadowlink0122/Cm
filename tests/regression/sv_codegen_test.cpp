@@ -214,6 +214,16 @@ TEST_F(SVCodegenTest, ElseIfChainIndent) {
     EXPECT_GE(elif_count, 3u) << "else if チェーンが生成されていません";
 }
 
+// importされたモジュール（namespace）内で宣言されたextern structインスタンスの
+// 型名から名前空間修飾を除去する（従来は "hdmi_out::OSC osc_inst" のような
+// 不正なSVが出力されlintエラーになった）
+TEST_F(SVCodegenTest, NamespacedExternInstance) {
+    const std::string code = load_case("module/namespaced_extern_instance");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "OSC #(");
+    EXPECT_EQ(sv.find("hdmi_out::OSC"), std::string::npos);
+}
+
 // 出力ポートの宣言初期値が電源投入時初期値として出力される
 // （従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
 TEST_F(SVCodegenTest, OutputPortInitialValue) {

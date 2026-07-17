@@ -1,0 +1,18 @@
+bool clk = false;
+
+namespace hdmi_out {
+extern struct OSC {
+    #[sv::param] int FREQ_DIV = 4;
+    #[output] bool OSCOUT = clk;
+}
+
+OSC osc_inst;
+}
+
+module ns_inst_top;
+
+uint counter = 0;
+
+void tick(posedge clk) {
+    counter = counter + 1;
+}

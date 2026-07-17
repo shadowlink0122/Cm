@@ -152,20 +152,25 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         std::string var_name = gv->name;
         var_name = strip_namespace(var_name);
 
-        // extern struct インスタンスの検出（型名ベース）
+        // extern struct インスタンスの検出（型名ベース）。
+        // importされたモジュール内の宣言は名前空間修飾付きになるため、
+        // 修飾を除去した名前で照合する
         if (gv->type) {
             const mir::MirStruct* extern_st = nullptr;
+            std::string inst_type_name = strip_namespace(gv->type->name);
             for (const auto& st : program.structs) {
-                if (st && st->name == gv->type->name && st->is_extern) {
+                if (st && st->is_extern && strip_namespace(st->name) == inst_type_name) {
                     extern_st = st.get();
                     break;
                 }
             }
             if (extern_st) {
                 if (emitted_var_names.count(var_name) == 0) {
-                    // インスタンス化文を生成
+                    // インスタンス化文を生成。
+                    // importされたモジュール内で宣言されたインスタンスは
+                    // 型名が名前空間修飾付き（mod::PLL等）になるため除去する
                     std::string inst;
-                    std::string module_name = extern_st->name;
+                    std::string module_name = strip_namespace(extern_st->name);
                     // #[sv::module_name] アトリビュートを探索
                     for (const auto& field : extern_st->fields) {
                         for (const auto& attr : field.attributes) {
