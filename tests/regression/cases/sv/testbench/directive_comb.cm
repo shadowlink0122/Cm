@@ -1,0 +1,12 @@
+//! platform: sv
+//! test: a=3, b=5 -> sum=8
+//! test: a=10, b=20 -> sum=30
+
+// 組み合わせ回路への //! test: ディレクティブ（複数ケース）
+#[input] uint a = 0;
+#[input] uint b = 0;
+#[output] uint sum = 0;
+
+void add() {
+    sum = a + b;
+}

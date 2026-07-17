@@ -1,0 +1,14 @@
+//! platform: sv
+//! test: en=1 -> count=1
+
+// cycles未指定＋クロック付きDUTの //! test: ディレクティブは
+// 暗黙で1サイクル待ってから出力を検証する（回帰: 暗黙1サイクル分岐）
+#[input] posedge clk;
+#[input] bool en = false;
+#[output] uint count = 0;
+
+async void tick(posedge clk) {
+    if (en) {
+        count = count + 1;
+    }
+}

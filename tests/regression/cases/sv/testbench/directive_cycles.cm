@@ -1,0 +1,13 @@
+//! platform: sv
+//! test: cycles=3, en=1 -> count=3
+
+// クロック回路への //! test: ディレクティブ（cycles + 入力の複合形式）
+#[input] posedge clk;
+#[input] bool en = false;
+#[output] uint count = 0;
+
+async void tick(posedge clk) {
+    if (en) {
+        count = count + 1;
+    }
+}

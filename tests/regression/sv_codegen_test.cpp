@@ -78,6 +78,38 @@ class SVCodegenTest : public ::testing::Test {
         return gen.getGeneratedCode();
     }
 
+    // Cmソース → 生成テストベンチ文字列。
+    // //! test: ディレクティブはケースファイル自体から読むため sourceFile を設定し、
+    // compile() が outputFile の隣へ書き出した <name>_tb.sv を読み戻す
+    std::string compile_to_tb(const std::string& name) {
+        std::string path = std::string(CM_SV_CASE_DIR) + "/" + name + ".cm";
+        std::string code = load_case(name);
+
+        Lexer lex(code, LexerPlatform::SV);
+        std::vector<Token> tokens = lex.tokenize();
+        Parser p(tokens);
+        auto ast = p.parse();
+        std::string top_module = codegen::sv::extract_top_module_name(ast);
+
+        hir::HirLowering hir_lowering;
+        auto hir = hir_lowering.lower(ast);
+        mir::MirLowering mir_lowering;
+        auto mir = mir_lowering.lower(hir);
+
+        codegen::sv::SVCodeGenOptions options;
+        options.outputFile = ::testing::TempDir() + "sv_tb_test_out.sv";
+        options.sourceFile = path;
+        options.topModule = top_module;
+        codegen::sv::SVCodeGen gen(options);
+        gen.compile(mir);
+
+        std::ifstream tb(::testing::TempDir() + "sv_tb_test_out_tb.sv");
+        EXPECT_TRUE(tb.is_open()) << "テストベンチが生成されていません";
+        std::stringstream buf;
+        buf << tb.rdbuf();
+        return buf.str();
+    }
+
     // 部分文字列の存在チェック（失敗時に生成SV全体を表示）
     void expect_contains(const std::string& sv, const std::string& needle) {
         EXPECT_NE(sv.find(needle), std::string::npos)
@@ -222,6 +254,35 @@ TEST_F(SVCodegenTest, NamespacedExternInstance) {
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "OSC #(");
     EXPECT_EQ(sv.find("hdmi_out::OSC"), std::string::npos);
+}
+
+// ============================================================
+// //! test: ディレクティブからのテストベンチ生成
+// ============================================================
+
+// 組み合わせ回路: 複数ディレクティブが順にTEST 1/TEST 2として生成され、
+// 入力設定・伝搬遅延待ち（#10）・出力表示が含まれる
+TEST_F(SVCodegenTest, TestbenchDirectiveCombMultiCase) {
+    std::string tb = compile_to_tb("testbench/directive_comb");
+    expect_contains(tb, "a = 3;");
+    expect_contains(tb, "b = 5;");
+    expect_contains(tb, "#10;");
+    expect_contains(tb, "TEST 1: sum=%0d");
+    expect_contains(tb, "a = 10;");
+    expect_contains(tb, "b = 20;");
+    expect_contains(tb, "TEST 2: sum=%0d");
+    // クロックポートが無いのでクロック生成は出力されない
+    expect_not_contains(tb, "always #5");
+}
+
+// クロック回路: cycles+入力の複合形式が入力駆動とrepeat待ちに展開され、
+// クロック生成が付与される
+TEST_F(SVCodegenTest, TestbenchDirectiveCyclesWithInput) {
+    std::string tb = compile_to_tb("testbench/directive_cycles");
+    expect_contains(tb, "en = 1;");
+    expect_contains(tb, "repeat(3) @(posedge clk);");
+    expect_contains(tb, "TEST 1: count=%0d");
+    expect_contains(tb, "always #5 clk = ~clk;");
 }
 
 // 出力ポートの宣言初期値が電源投入時初期値として出力される
