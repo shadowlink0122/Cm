@@ -333,11 +333,27 @@ void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
         }
         break;
     }
-    auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&root->kind);
-    if (!var || !*var) {
-        return;
+    // IOインスタンスのフィールド（io.field）はフィールド名＝ポート名として検証する
+    std::string nm;
+    if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&root->kind)) {
+        if (*mem && (*mem)->object) {
+            if (auto* base_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*mem)->object->kind)) {
+                if (*base_ref && io_instance_fields_.count((*base_ref)->name) > 0) {
+                    nm = (*mem)->member;
+                }
+            }
+        }
+        if (nm.empty()) {
+            return;
+        }
+    } else {
+        auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&root->kind);
+        if (!var || !*var) {
+            return;
+        }
+        nm = (*var)->name;
     }
-    const std::string& nm = (*var)->name;
     if (tb_input_names_.count(nm) > 0) {
         return;  // 入力ポート: OK
     }
@@ -587,6 +603,13 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
     // メンバアクセス
     if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&expr.kind)) {
         if (*member && (*member)->object) {
+            // IOインスタンスのフィールド参照（io.field）はフラットなポート名へ写像する
+            if (auto* base_ref =
+                    std::get_if<std::unique_ptr<hir::HirVarRef>>(&(*member)->object->kind)) {
+                if (*base_ref && io_instance_fields_.count((*base_ref)->name) > 0) {
+                    return (*member)->member;
+                }
+            }
             std::string obj = emitHirExpr(*(*member)->object);
             return obj + "." + (*member)->member;
         }

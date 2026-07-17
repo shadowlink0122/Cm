@@ -1,13 +1,18 @@
 //! platform: sv
 //! test: din=5, cycles=2 -> dout=5
 
-// パラメタライズドサブモジュール（#[sv::parameter]）
+// パラメタライズドサブモジュール（#[sv::parameter] + IOインスタンス）
 #[sv::parameter] const uint WIDTH = 8;
 
 #[input] posedge clk;
-#[input] bit[WIDTH] din;
-#[output] bit[WIDTH] dout = 0;
+
+struct param_shifter_io {
+    #[input] bit[WIDTH] din;
+    #[output] bit[WIDTH] dout = 0;
+};
+
+param_shifter_io io;
 
 async void shift(posedge clk) {
-    dout = din;
+    io.dout = io.din;
 }

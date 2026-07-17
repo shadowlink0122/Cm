@@ -4,21 +4,26 @@
 
 // モジュール階層保持のテスト:
 // //! sv: hierarchy 指定時、相対importはフラット化されず
-// import先のポート宣言から extern struct が自動生成され、
+// import先のIOインスタンス（構造体宣言）から extern struct が生成され、
 // 別モジュールとしてインスタンス化・連結出力される。
 
 import ./hier_alu;
 
 #[input] posedge clk;
-#[input] uint x;
-#[input] uint y;
-#[output] uint sum = 0;
+
+struct hier_top_io {
+    #[input] uint x;
+    #[input] uint y;
+    #[output] uint sum = 0;
+};
+
+hier_top_io io;
 
 uint alu_out = 0;
 utiny op_add = 0;
 
-hier_alu alu0 = hier_alu { a: x, b: y, op: op_add, result: alu_out };
+hier_alu alu0 = hier_alu { a: io.x, b: io.y, op: op_add, result: alu_out };
 
 async void update(posedge clk) {
-    sum = alu_out;
+    io.sum = alu_out;
 }

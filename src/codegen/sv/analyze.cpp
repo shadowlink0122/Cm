@@ -93,6 +93,35 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
+    // 事前パス: IOインスタンス（#[input]/#[output]フィールドを持つ構造体の
+    // グローバル変数）の一覧を先に構築する。インスタンス接続（a: io.x 等）の
+    // 写像で宣言順に依存しないようにするため
+    for (const auto& gv : program.global_vars) {
+        if (!gv || !gv->type) {
+            continue;
+        }
+        std::string io_type_name = strip_namespace(gv->type->name);
+        for (const auto& st : program.structs) {
+            if (!st || st->is_extern || strip_namespace(st->name) != io_type_name) {
+                continue;
+            }
+            bool has_io = false;
+            std::vector<std::string> field_names;
+            for (const auto& f : st->fields) {
+                field_names.push_back(f.name);
+                for (const auto& a : f.attributes) {
+                    if (a == "input" || a == "output" || a == "inout") {
+                        has_io = true;
+                    }
+                }
+            }
+            if (has_io) {
+                io_instance_fields_[strip_namespace(gv->name)] = std::move(field_names);
+            }
+            break;
+        }
+    }
+
     // 事前パス: extern structインスタンスの出力ポートに接続された信号を収集する。
     // これらは内部レジスタ宣言で初期値を出力しない
     // （初期値付き変数への連続代入はiverilog等でエラーになるため）
@@ -302,6 +331,12 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                                         break;
                                     }
                                 }
+                            }
+                            // IOインスタンスのフィールド参照（io.x）はポート名へ写像する
+                            auto dot = sig.find('.');
+                            if (dot != std::string::npos &&
+                                io_instance_fields_.count(sig.substr(0, dot)) != 0) {
+                                sig = sig.substr(dot + 1);
                             }
                             ports.push_back("." + field.name + "(" + sig + ")");
                         }

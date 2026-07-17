@@ -130,6 +130,76 @@ std::vector<SVCodeGen::CollectedPin> SVCodeGen::collectPins(const mir::MirProgra
                       << "' に #[sv::pin] が指定されていません（.cstに含まれません）\n";
         }
     }
+
+    // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の
+    // フィールドからもピン属性を収集する（ポート名 = フィールド名）
+    for (const auto& st : program.structs) {
+        if (!st || st->is_extern) {
+            continue;
+        }
+        bool has_io_field = false;
+        for (const auto& f : st->fields) {
+            for (const auto& a : f.attributes) {
+                if (a == "input" || a == "output" || a == "inout") {
+                    has_io_field = true;
+                }
+            }
+        }
+        if (!has_io_field) {
+            continue;
+        }
+        bool instantiated = false;
+        for (const auto& gv : program.global_vars) {
+            if (gv && gv->type && strip_namespace(gv->type->name) == strip_namespace(st->name)) {
+                instantiated = true;
+                break;
+            }
+        }
+        if (!instantiated) {
+            continue;
+        }
+        for (const auto& f : st->fields) {
+            bool is_dir = false;
+            for (const auto& a : f.attributes) {
+                if (a == "input" || a == "output" || a == "inout") {
+                    is_dir = true;
+                }
+            }
+            if (!is_dir) {
+                continue;
+            }
+            PinInfo info;
+            info.port_name = f.name;
+            for (const auto& attr : f.attributes) {
+                for (const char* attr_name : {"sv::pin", "verilog::pin"}) {
+                    auto args = parse_attr_args(attr, attr_name);
+                    if (args.empty()) {
+                        continue;
+                    }
+                    info.pin_loc = args[0];
+                    for (size_t i = 1; i < args.size(); ++i) {
+                        auto colon = args[i].find(':');
+                        if (colon != std::string::npos) {
+                            info.params.emplace_back(map_io_key(args[i].substr(0, colon)),
+                                                     args[i].substr(colon + 1));
+                        }
+                    }
+                }
+                for (const char* io_name : {"sv::iostandard", "verilog::iostandard"}) {
+                    auto args = parse_attr_args(attr, io_name);
+                    if (!args.empty()) {
+                        info.params.emplace_back("IO_TYPE", args[0]);
+                    }
+                }
+            }
+            if (!info.pin_loc.empty()) {
+                pins.push_back({info.port_name, info.pin_loc, info.params});
+            } else if (options_.emitConstraints) {
+                std::cerr << "警告: ポート '" << f.name
+                          << "' に #[sv::pin] が指定されていません（.cstに含まれません）\n";
+            }
+        }
+    }
     return pins;
 }
 

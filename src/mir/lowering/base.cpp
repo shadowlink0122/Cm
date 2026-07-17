@@ -216,6 +216,21 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
                             field_const.value = (*var_ref)->name;
                             mir_gv->struct_field_inits.emplace_back(field.name, field_const);
                         }
+                    } else if (const auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(
+                                   &field.value->kind)) {
+                        // メンバアクセス接続（io.x 等のIOインスタンスフィールド）:
+                        // "base.member" として保持し、SVコード生成側でポート名へ写像する
+                        if (*member && (*member)->object) {
+                            if (const auto* base_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(
+                                    &(*member)->object->kind)) {
+                                if (*base_ref) {
+                                    field_const.type = hir::make_string();
+                                    field_const.value = (*base_ref)->name + "." + (*member)->member;
+                                    mir_gv->struct_field_inits.emplace_back(field.name,
+                                                                            field_const);
+                                }
+                            }
+                        }
                     } else if (auto fc = try_global_const_eval(*field.value)) {
                         // 定数（パラメータ値等）
                         mir_gv->struct_field_inits.emplace_back(field.name, *fc);

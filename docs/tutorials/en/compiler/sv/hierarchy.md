@@ -74,6 +74,9 @@ void alu_comb() {
 - A trailing semicolon after the struct declaration (`};`) is accepted (C/C++ compatible)
 - Direct port declarations such as `#[input] posedge clk;` can be mixed with an IO instance
 - The IO struct itself is not emitted as a data type (`typedef struct packed`)
+- `#[test]` functions can also read and drive ports as `io.field`, flattened to port names in the generated testbench
+- Parent-side instance connections accept `io.field` values (`alu { a: io.x, ... }` → `.a(x)`)
+- `#[sv::pin]` attributes on IO fields are reflected in pin constraints (.cst/.xdc)
 
 ## Mechanics and constraints
 
