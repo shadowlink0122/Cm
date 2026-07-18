@@ -4,7 +4,7 @@ import std::io::println;
 
 int main() {
     // === ulong と int リテラルのビット演算 ===
-    const ulong mask_val = 0xFF;
+    const ulong _mask_val = 0xFF;
     const ulong val1 = 0x1234;
     const ulong result1 = val1 & 0xFF;
     println(result1);  // 52 (0x34)

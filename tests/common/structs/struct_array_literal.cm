@@ -23,7 +23,7 @@ int main() {
     println("arr = [{arr[0]}, {arr[1]}, {arr[2]}]");
 
     // 3. 構造体の配列（暗黙的型推論リテラル）
-    Point[2] points = [{x: 1, y: 2}, {x: 3, y: 4}];
+    const Point[2] points = [{x: 1, y: 2}, {x: 3, y: 4}];
     println("points[0]: ({points[0].x}, {points[0].y})");
     println("points[1]: ({points[1].x}, {points[1].y})");
 

@@ -5,7 +5,7 @@ int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
     // map: 各要素を2倍
-    int*(int) double_it = (int x) => { return x * 2;
+    const int*(int) double_it = (int x) => { return x * 2;
     };
     int[] doubled = arr.map(double_it);
 
@@ -14,7 +14,7 @@ int main() {
     println("doubled[0]: {first}");
 
     // filter: 偶数のみ
-    bool*(int) is_even = (int x) => { return x % 2 == 0;
+    const bool*(int) is_even = (int x) => { return x % 2 == 0;
     };
     int[] evens = arr.filter(is_even);
     const int even_len = evens.len();

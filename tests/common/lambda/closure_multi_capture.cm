@@ -6,7 +6,7 @@ int main() {
     const int b = 20;
 
     // 2つの外部変数をキャプチャ
-    int*(int) adder = (int x) => { return x + a + b;
+    const int*(int) adder = (int x) => { return x + a + b;
     };
 
     const int result = adder(5);

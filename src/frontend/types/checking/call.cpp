@@ -32,6 +32,10 @@ std::string method_arity_error(const std::string& method_name, size_t arg_count,
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
+        // 関数ポインタ・ラムダを保持する変数経由の呼び出しを使用としてマークする
+        // （W001未使用の誤検出防止。関数名の場合はlookup対象外なので影響しない）
+        scopes_.current().mark_used(ident->name);
+
         // __asm__ / __llvm__ intrinsic - インラインアセンブリ
         // __asm__: ネイティブアセンブリ（x86, ARM64等）- 推奨
         // __llvm__: 後方互換性のため残す（将来はLLVM IR対応予定）
@@ -619,6 +623,15 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 }
 
 ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
+    // メソッド呼び出しの受け手は評価前に初期化済み・変更ありとしてマークする
+    // （arr.dim() / v.push() 等を「使用前の未初期化」と誤検出しない。
+    // 受け手の型を推論する時点で使用チェックが先に発火するため、ここで行う）
+    if (member.is_method_call) {
+        if (auto* recv_ident = member.object->as<ast::IdentExpr>()) {
+            mark_variable_initialized(recv_ident->name);
+            mark_variable_modified(recv_ident->name);
+        }
+    }
     auto obj_type = infer_type(*member.object);
     if (!obj_type) {
         return ast::make_error();

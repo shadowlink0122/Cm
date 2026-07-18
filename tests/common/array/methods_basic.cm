@@ -22,7 +22,7 @@ int main() {
     println("sort first: {sort_first}, last: {sort_last}");
 
     // find
-    bool*(int) gt3 = (int x) => { return x > 3;
+    const bool*(int) gt3 = (int x) => { return x > 3;
     };
     const int found = arr.find(gt3);
     println("find(>3): {found}");

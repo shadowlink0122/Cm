@@ -26,9 +26,9 @@ void print_values(Value[3] vals) {
 Value[3] transform_values(Value[3] input) {
     Value[3] output;
     // 各要素を取り出して別の値に変換
-    const string s = input[0] as string;
+    const string _s = input[0] as string;
     const int n = input[1] as int;
-    const bool b = input[2] as bool;
+    const bool _b = input[2] as bool;
     output[0] = "world" as Value;
     const int doubled = n * 2;
     output[1] = doubled as Value;
@@ -62,7 +62,7 @@ int main() {
 
     // テスト1: 戻り値からunion配列を受け取る
     println("Test 1: Return union array");
-    Value[3] vals = create_values();
+    const Value[3] vals = create_values();
     const string s0 = vals[0] as string;
     const int n0 = vals[1] as int;
     const bool b0 = vals[2] as bool;
@@ -74,7 +74,7 @@ int main() {
 
     // テスト3: 引数→変換→戻り値
     println("Test 3: Transform and return");
-    Value[3] transformed = transform_values(vals);
+    const Value[3] transformed = transform_values(vals);
     const string ts = transformed[0] as string;
     const int tn = transformed[1] as int;
     const bool tb = transformed[2] as bool;
@@ -82,7 +82,7 @@ int main() {
 
     // テスト4: 型混合パターン（string, int, bool, int）
     println("Test 4: Mixed types in array");
-    Value[4] mixed = create_mixed();
+    const Value[4] mixed = create_mixed();
     const string m0 = mixed[0] as string;
     const int m1 = mixed[1] as int;
     const bool m2 = mixed[2] as bool;
@@ -97,7 +97,7 @@ int main() {
 
     // テスト6: ローカルで構築して引数に渡す
     println("Test 6: Local build and pass");
-    Value[3] local = [
+    const Value[3] local = [
         "test" as Value,
         999 as Value,
         true as Value

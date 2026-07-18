@@ -42,8 +42,8 @@ export ulong port_read(ulong port) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     // スクラッチレジスタ用途のASM呼び出し
     const ulong val = read_byte(0x1000);

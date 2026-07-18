@@ -6,7 +6,7 @@ int main() {
 
     // クロージャでmultiplierをキャプチャ
     const int multiplier = 10;
-    int*(int) scale = (int x) => { return x * multiplier; };
+    const int*(int) scale = (int x) => { return x * multiplier; };
     int[] scaled = arr.map(scale);
 
     // 結果を確認
@@ -17,7 +17,7 @@ int main() {
 
     // クロージャでthresholdをキャプチャ
     const int threshold = 3;
-    bool*(int) above_threshold = (int x) => { return x > threshold;
+    const bool*(int) above_threshold = (int x) => { return x > threshold;
     };
     int[] filtered = arr.filter(above_threshold);
     const int filtered_len = filtered.len();

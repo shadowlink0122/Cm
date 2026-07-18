@@ -5,7 +5,7 @@ int main() {
     const int multiplier = 3;
 
     // 外部変数をキャプチャするラムダ
-    int*(int) multiply = (int x) => { return x * multiplier;
+    const int*(int) multiply = (int x) => { return x * multiplier;
     };
 
     const int result = multiply(5);

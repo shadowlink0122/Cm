@@ -51,12 +51,12 @@ int main() {
     // 42
 
     // 引数なし関数ポインタ
-    int*() getter = &get_value;
+    const int*() getter = &get_value;
     println("{getter()}");
     // 42
 
     // void戻り値の関数ポインタ
-    void*(int) printer = &print_int;
+    const void*(int) printer = &print_int;
     printer(100);
     // 100
 

@@ -27,5 +27,5 @@ impl Result {
 
 export void efi_main() {
     const MemAddr addr = 42;
-    const Result r = Result::from_alloc(addr);
+    const Result _r = Result::from_alloc(addr);
 }

@@ -22,11 +22,11 @@ impl Point {
 
 int main() {
     // 1. デフォルトコンストラクタ（明示的呼び出し）
-    Point p1();
+    const Point p1();
     println("p1: ({p1.x}, {p1.y})");
 
     // 2. 引数付きコンストラクタ
-    Point p2(10, 20);
+    const Point p2(10, 20);
     println("p2: ({p2.x}, {p2.y})");
 
     // 3. 通常の初期化（コンストラクタなし）

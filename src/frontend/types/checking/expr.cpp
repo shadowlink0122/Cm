@@ -74,14 +74,21 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             }
         }
         // sizeof(式) の場合は式の型チェックを行う
+        // （コンパイル時のメタ情報取得であり値は読まないため、未初期化チェックの対象外）
         if (sizeof_expr->target_expr) {
+            if (auto* target_ident = sizeof_expr->target_expr->as<ast::IdentExpr>()) {
+                mark_variable_initialized(target_ident->name);
+            }
             infer_type(*sizeof_expr->target_expr);
         }
         // sizeof は常に uint (符号なし整数) を返す
         inferred_type = ast::make_uint();
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
-        // typeof(式) - 式の型を推論
+        // typeof(式) - 式の型を推論（メタ情報取得のため未初期化チェックの対象外）
         if (typeof_expr->target_expr) {
+            if (auto* target_ident = typeof_expr->target_expr->as<ast::IdentExpr>()) {
+                mark_variable_initialized(target_ident->name);
+            }
             infer_type(*typeof_expr->target_expr);
             // typeof自体は型を返すが、ここでは式としてerrorを返す
             // (typeofは通常、型コンテキストで使用される)
@@ -89,7 +96,11 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         inferred_type = ast::make_error();
     } else if (auto* typename_expr = expr.as<ast::TypenameOfExpr>()) {
         // __typename__(型) または __typename__(式) - 文字列を返す
+        // （メタ情報取得のため未初期化チェックの対象外）
         if (typename_expr->target_expr) {
+            if (auto* target_ident = typename_expr->target_expr->as<ast::IdentExpr>()) {
+                mark_variable_initialized(target_ident->name);
+            }
             infer_type(*typename_expr->target_expr);
         }
         inferred_type = ast::make_string();
@@ -218,8 +229,12 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
         return ast::make_double();
     if (lit.is_char())
         return ast::make_char();
-    if (lit.is_string())
+    if (lit.is_string()) {
+        // 文字列リテラルはどこでも補間される（string s = "{x}" 等）ため、
+        // プレースホルダ内の変数参照を使用としてマークする（W001誤検出防止）
+        mark_interpolation_uses(std::get<std::string>(lit.value));
         return ast::make_string();
+    }
     return ast::make_error();
 }
 
@@ -642,12 +657,29 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
             // 借用追跡: オペランドが識別子の場合、借用を登録
             if (auto* ident = unary.operand->as<ast::IdentExpr>()) {
                 scopes_.current().add_borrow(ident->name);
-                // &x はポインタ経由の書き込みがあり得るため、保守的に変更あり・
-                // 初期化済みとして扱う（const推奨・未初期化警告の誤検出防止）
-                mark_variable_modified(ident->name);
-                mark_variable_initialized(ident->name);
                 debug::tc::log(debug::tc::Id::CheckExpr, "Added borrow for '" + ident->name + "'",
                                debug::Level::Debug);
+            }
+            // &x / &arr[i] / &s.field はポインタ経由の書き込みがあり得るため、
+            // 基底変数を保守的に変更あり・初期化済みとして扱う
+            // （const推奨・未初期化警告の誤検出防止）
+            {
+                ast::Expr* addr_base = unary.operand.get();
+                while (addr_base) {
+                    if (auto* idx = addr_base->as<ast::IndexExpr>()) {
+                        addr_base = idx->object.get();
+                    } else if (auto* mem = addr_base->as<ast::MemberExpr>()) {
+                        addr_base = mem->object.get();
+                    } else {
+                        break;
+                    }
+                }
+                if (addr_base) {
+                    if (auto* base_ident = addr_base->as<ast::IdentExpr>()) {
+                        mark_variable_modified(base_ident->name);
+                        mark_variable_initialized(base_ident->name);
+                    }
+                }
             }
             return ast::make_pointer(otype);
         case ast::UnaryOp::PreInc:
@@ -936,6 +968,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                     }
                 }
                 scopes_.current().define(arm.pattern->binding_name, binding_type);
+                mark_variable_initialized(arm.pattern->binding_name);
             }
         }
 
@@ -1134,6 +1167,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
         case ast::MatchPatternKind::Variable:
             if (!pattern->var_name.empty()) {
                 scopes_.current().define(pattern->var_name, expected_type);
+                mark_variable_initialized(pattern->var_name);
             }
             break;
 
@@ -1192,6 +1226,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
                 // 現時点ではexpected_typeをそのまま使用
                 if (!pattern->binding_name.empty()) {
                     scopes_.current().define(pattern->binding_name, expected_type);
+                    mark_variable_initialized(pattern->binding_name);
                 }
             }
             break;
@@ -1250,6 +1285,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             // 束縛変数をパターン型で登録
             if (!pattern->binding_name.empty() && pattern->binding_name != "_") {
                 scopes_.current().define(pattern->binding_name, pattern->type_pattern);
+                mark_variable_initialized(pattern->binding_name);
             }
             break;
         }

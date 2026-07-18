@@ -43,8 +43,8 @@ export ulong mixed_must_asm() {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     const ulong val = must_asm_output();
     const ulong mixed = mixed_must_asm();

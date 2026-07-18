@@ -43,8 +43,8 @@ export ulong read_value(ulong addr) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     // テスト1: operand付き + ret のnaked関数呼出
     switch_to(0x80000);

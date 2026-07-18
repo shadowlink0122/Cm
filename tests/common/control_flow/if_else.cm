@@ -48,8 +48,8 @@ int main() {
     // 複雑な条件
     println("\nComplex conditions:");
     const int age = 25;
-    const bool hasLicense = true;
-    if (age >= 18 && hasLicense) {
+    const bool has_license = true;
+    if (age >= 18 && has_license) {
         println("Can drive");
     }
 

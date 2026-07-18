@@ -29,11 +29,11 @@ struct PointHolder {
 }
 
 interface PointAccessor {
-    Point getPoint();
+    Point get_point();
 }
 
 impl PointHolder for PointAccessor {
-    Point getPoint() {
+    Point get_point() {
         return self.point;
     }
 }
@@ -61,24 +61,24 @@ int main() {
     // Test 3: PointHolderからのチェーン
     PointHolder holder = PointHolder { point: Point { x: 1, y: 2 } };
 
-    // getPoint().field
-    const int px = holder.getPoint().x;
-    println("Test 3 (getPoint.field): {px}");
+    // get_point().field
+    const int px = holder.get_point().x;
+    println("Test 3 (get_point.field): {px}");
     if (px != 1) {
         println("FAIL: expected 1");
         return 1;
     }
 
-    // Test 4: getPoint().method().field
-    const int result4 = holder.getPoint().translate(10, 10).x;
-    println("Test 4 (getPoint.translate.x): {result4}");
+    // Test 4: get_point().method().field
+    const int result4 = holder.get_point().translate(10, 10).x;
+    println("Test 4 (get_point.translate.x): {result4}");
     if (result4 != 11) {  // 1 + 10 = 11
         println("FAIL: expected 11");
         return 1;
     }
 
     // Test 5: 長いチェーン
-    const int result5 = holder.getPoint().translate(5, 5).scale(2).translate(1, 1).x;
+    const int result5 = holder.get_point().translate(5, 5).scale(2).translate(1, 1).x;
     println("Test 5 (long chain): {result5}");
     if (result5 != 13) {  // ((1+5)*2)+1 = 13
         println("FAIL: expected 13");

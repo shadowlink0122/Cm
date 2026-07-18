@@ -26,9 +26,9 @@ int main() {
     println("=== Enum Variant Constructor Test ===");
 
     // Associated Dataを持つバリアントの作成
-    const Color c1 = Color::RGB(RGB { r: 255, g: 128, b: 64 });
+    const Color _c1 = Color::RGB(RGB { r: 255, g: 128, b: 64 });
     const Color c2 = Color::Grayscale(128);
-    const Color c3 = Color::Named("red");
+    const Color _c3 = Color::Named("red");
 
     // シンプルなバリアント
     const int s = Status::Ok;

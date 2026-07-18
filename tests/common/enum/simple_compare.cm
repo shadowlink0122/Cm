@@ -9,7 +9,7 @@ enum Option {
 
 int main() {
     const Option s = Option::Some(42);
-    const Option n = Option::None;
+    const Option _n = Option::None;
 
     // タグ値の比較（パターンバインディングなし）
     int v1 = 0;

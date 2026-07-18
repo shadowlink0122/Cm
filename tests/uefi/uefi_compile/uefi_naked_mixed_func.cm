@@ -60,8 +60,8 @@ export ulong asm_ret_with_locals() {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     pure_asm_ret();
     context_switch_pure(0x80000);

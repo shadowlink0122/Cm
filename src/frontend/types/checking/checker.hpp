@@ -168,6 +168,7 @@ class TypeChecker {
     static bool is_snake_case(const std::string& name);
     static bool is_pascal_case(const std::string& name);
     static bool is_upper_snake_case(const std::string& name);
+    void mark_interpolation_uses(const std::string& format_str);
     void check_naming_conventions(ast::Program& program);
     void check_naming_decl(ast::Decl& decl, bool top_level);
     void check_naming_function(ast::FunctionDecl& func);

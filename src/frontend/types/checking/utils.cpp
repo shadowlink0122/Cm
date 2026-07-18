@@ -654,6 +654,39 @@ void TypeChecker::check_interpolation_scope(const std::string& format_str) {
     }
 }
 
+// 文字列リテラル内の補間プレースホルダが参照する変数を使用としてマークする
+// （check_interpolation_scopeと違いエラーは出さない。あらゆるstringリテラルで呼ばれる）
+void TypeChecker::mark_interpolation_uses(const std::string& format_str) {
+    for (const auto& content : extract_placeholder_exprs(format_str)) {
+        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            continue;
+        }
+        for (auto& decl : program.declarations) {
+            const auto* func = decl->as<ast::FunctionDecl>();
+            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
+                continue;
+            }
+            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
+            if (!ret || !ret->value) {
+                continue;
+            }
+            std::vector<std::string> names;
+            collect_ident_refs(*ret->value, names);
+            for (const auto& name : names) {
+                if (scopes_.current().lookup(name)) {
+                    scopes_.current().mark_used(name);
+                    mark_variable_initialized(name);
+                }
+            }
+        }
+    }
+}
+
 void TypeChecker::error(Span span, const std::string& msg) {
     debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Error);
     diagnostics_.emplace_back(DiagKind::Error, span, msg);

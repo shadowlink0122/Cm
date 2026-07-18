@@ -3,8 +3,8 @@
 // 回避策の「mustなし」パターンではなく、元のバグパターンそのものをテスト
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     // mustブロック内のASM出力変数がスコープ外で動作することを確認
     const ulong result = 0;
@@ -14,7 +14,7 @@ ulong efi_main(void* image_handle, void* system_table) {
 
     // ❌ 以前はmust内のASM出力変数がスコープ外で不正だった
     // ✅ 修正後はresult == 42が正しく反映される
-    const ulong check = result;
+    const ulong _check = result;
 
     // ❌ 以前はwhile(true) + must { hlt } がhltループを脱出していた
     // ✅ 修正後は正しいhltループが生成される

@@ -3,7 +3,7 @@ import std::io::println;
 
 int main() {
     // ラムダ式を変数に代入: (params: Type) => { stmts }
-    int*(int) double_it = (int x) => {
+    const int*(int) double_it = (int x) => {
         return x * 2;
     };
 

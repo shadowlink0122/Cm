@@ -46,8 +46,8 @@ int main() {
 
     println("Version: {VERSION}");
 
-    const Status s = Status::OK;
-    const ID id = 42;
+    const Status _s = Status::OK;
+    const ID _id = 42;
 
     return 0;
 }

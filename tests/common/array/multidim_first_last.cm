@@ -35,8 +35,8 @@ int main() {
 
     // 空文字列
     const string empty = "";
-    const char empty_first = empty.first();
-    const char empty_last = empty.last();
+    const char _empty_first = empty.first();
+    const char _empty_last = empty.last();
     // 空文字の場合は'\0'が返る
     println("empty string first/last done");
 

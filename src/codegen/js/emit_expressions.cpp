@@ -695,7 +695,9 @@ std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
                 oss << std::setprecision(17) << val;
                 return oss.str();
             } else if constexpr (std::is_same_v<T, char>) {
-                return "\"" + escapeString(std::string(1, val)) + "\"";
+                // JSランタイムのchar表現は数値（文字コード）。文字列で出力すると
+                // String.fromCharCode等の数値前提の処理がNaNになる
+                return std::to_string(static_cast<int>(static_cast<unsigned char>(val)));
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return "\"" + escapeString(val) + "\"";
             } else {

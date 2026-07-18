@@ -8,17 +8,17 @@ struct Chain {
 }
 
 // 値渡しで新しいChainを返す形式
-Chain Chain__add(Chain c, int n) {
+Chain chain_add(Chain c, int n) {
     println("add({n})");
     return Chain { value: c.value + n };
 }
 
-Chain Chain__mul(Chain c, int n) {
+Chain chain_mul(Chain c, int n) {
     println("mul({n})");
     return Chain { value: c.value * n };
 }
 
-void Chain__print(Chain c) {
+void chain_print(Chain c) {
     println("Value: {c.value}");
 }
 
@@ -27,9 +27,9 @@ int main() {
     const Chain c = Chain { value: 1 };
 
     // チェーンを分解: c.add(2).mul(3).print()
-    const Chain c1 = Chain__add(c, 2);
-    const Chain c2 = Chain__mul(c1, 3);
-    Chain__print(c2);
+    const Chain c1 = chain_add(c, 2);
+    const Chain c2 = chain_mul(c1, 3);
+    chain_print(c2);
 
     println("End");
 

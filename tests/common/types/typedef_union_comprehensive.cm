@@ -34,7 +34,7 @@ int main() {
 
     // テスト1: 戻り値テスト
     println("Test 1: Return value");
-    Value[2] pair = make_pair();
+    const Value[2] pair = make_pair();
     const int x = pair[0] as int;
     const bool y = pair[1] as bool;
     println("  x={x}, y={y}");
@@ -49,7 +49,7 @@ int main() {
 
     // テスト3: 引数→戻り値の組み合わせ
     println("Test 3: Arg to return");
-    Value[2] swapped = swap_pair(pair);
+    const Value[2] swapped = swap_pair(pair);
     const bool sy = swapped[0] as bool;
     const int sx = swapped[1] as int;
     println("  swapped: sy={sy}, sx={sx}");

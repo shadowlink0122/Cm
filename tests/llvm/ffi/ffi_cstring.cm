@@ -5,7 +5,7 @@ use libc {
 }
 
 int main() {
-    cstring msg = "Hello, FFI!";
+    const cstring msg = "Hello, FFI!";
     puts(msg);
 
     const usize len = strlen(msg);

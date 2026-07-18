@@ -41,13 +41,13 @@ int main() {
     // "PI = 3.14"
 
     // エスケープシーケンス
-    string escaped = "Literal braces: {{ and }}";
+    const string escaped = "Literal braces: {{ and }}";
     println(escaped);
     // "Literal braces: { and }"
 
     // 計算式の埋め込み（将来的な拡張）
-    const int x = 10;
-    const int y = 20;
+    const int _x = 10;
+    const int _y = 20;
     // string sum = "Sum: {x + y}";  // 将来実装予定
     // println(sum);  // "Sum: 30"
 

@@ -275,6 +275,13 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                     }
                     if (entry.is_regular_file() && entry.path().extension() == ".cm") {
                         std::string filepath = entry.path().string();
+                        // .error（意図的に失敗するネガティブテスト）/.skip（環境依存で
+                        // 実行対象外）が並置されたファイルは走査からスキップする
+                        fs::path base = entry.path();
+                        if (fs::exists(base.replace_extension(".error")) ||
+                            fs::exists(base.replace_extension(".skip"))) {
+                            continue;
+                        }
                         // 設定ファイル由来の除外（dir_scan_excludes）はディレクトリ走査にのみ
                         // 適用する（明示的なファイル指定は除外しない）
                         if (!matches_exclude_pattern(filepath, excludes) &&
@@ -461,6 +468,14 @@ int main(int argc, char* argv[]) {
                 auto tokens = lexer.tokenize();
                 Parser parser(std::move(tokens), lexer.is_sv());
                 auto program = parser.parse();
+
+                // コンパイルと同様に、テストモード以外では #[test] 宣言を除去する
+                // （#[test] 関数だけが参照するシンボルの誤検出を防ぐ）
+                {
+                    Target lint_target = lexer.is_sv() ? Target::SV : Target::Native;
+                    ast::TargetFilteringVisitor target_filter(lint_target, opts.test_mode);
+                    target_filter.visit(program);
+                }
 
                 if (parser.has_errors()) {
                     SourceLocationManager loc_mgr(code, file);

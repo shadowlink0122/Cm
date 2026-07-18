@@ -22,7 +22,7 @@ ulong process_bytes(ulong start_addr) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
     return process_bytes(0x1000);
 }

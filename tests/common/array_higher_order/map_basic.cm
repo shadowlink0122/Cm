@@ -5,7 +5,7 @@ int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
     // ラムダ式で各要素を2倍にする
-    int*(int) double_it = (int x) => { return x * 2;
+    const int*(int) double_it = (int x) => { return x * 2;
     };
 
     // map呼び出し

@@ -233,7 +233,26 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         bool is_pointer = tracked_type && tracked_type->kind == ast::TypeKind::Pointer;
         // 初期化子（またはコンストラクタ呼び出し）のない宣言はconst化できないため対象外
         bool can_be_const = let.init != nullptr || let.has_ctor_call;
-        if (!let.is_const && !is_pointer && can_be_const) {
+        // _ 始まりの名前（意図的な未使用・コンパイラ生成の一時変数）は対象外
+        bool is_internal_name = !let.name.empty() && let.name[0] == '_';
+        // 補間プレースホルダを含む文字列リテラル初期化子は対象外
+        // （const stringは補間が実行されない既知の非互換があるため）
+        bool has_interp_literal = false;
+        if (let.init) {
+            if (auto* lit = let.init->as<ast::LiteralExpr>()) {
+                if (lit->is_string()) {
+                    const auto& sval = std::get<std::string>(lit->value);
+                    for (size_t bi = 0; bi + 1 < sval.size(); ++bi) {
+                        if (sval[bi] == '{' && sval[bi + 1] != '{') {
+                            has_interp_literal = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!let.is_const && !is_pointer && can_be_const && !is_internal_name &&
+            !has_interp_literal) {
             non_const_variable_spans_[let.name] = stmt_span;
         }
     }
@@ -241,7 +260,14 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     // 初期化式がある場合は初期化済みとしてマーク
     if (let.init) {
         mark_variable_initialized(let.name);
-    } else if (let.type) {
+    }
+    // コンストラクタ呼び出し宣言はデストラクタ等の副作用のために存在し得るため、
+    // 初期化済みかつ使用済みとして扱う（RAIIパターンのW001誤検出防止）
+    if (let.has_ctor_call) {
+        mark_variable_initialized(let.name);
+        scopes_.current().mark_used(let.name);
+    }
+    if (!let.init && let.type) {
         // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、
         // 未初期化使用の警告対象はスカラ・配列に限定する
         auto resolved = resolve_typedef(let.type);

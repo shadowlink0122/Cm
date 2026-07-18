@@ -40,6 +40,8 @@ int main() {
 
     // 3. get/setの連続呼び出し
     println("3. Get/Set sequence:");
+    // ジェネリックメソッド引数内の使用が追跡されないlint既知の限界
+    // @cm-disable-next-line W001
     const int v0 = *vi.get(0);
     vi.set(0, v0 + 100);
     const int v0_after = *vi.get(0);

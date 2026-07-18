@@ -9,7 +9,7 @@ int main() {
     println("arr = [{a}, {b}, {c}]");
 
     // 浮動小数点配列
-    const float[2] farr = [1.5, 2.5];
+    const float[2] _farr = [1.5, 2.5];
 
     // 空でない配列の代入
     const int[2] arr2 = [10, 20];

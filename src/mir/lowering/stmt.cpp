@@ -128,7 +128,10 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
                     MirConstant c;
                     // LHS/RHSの型のうち広い方を結果型とする
                     c.type = wider_type(lhs->type, rhs->type);
-                    c.value = result;
+                    // 型幅へ正規化する（int32のオーバーフローをラップ等。
+                    // folding.cppと同じ規則。生のint64値を伝播すると
+                    // 表示値と比較結果が実行時セマンティクスと食い違う）
+                    c.value = const_eval::normalize_int(result, c.type);
                     return c;
                 }
             }

@@ -7,7 +7,7 @@ int main() {
     println("=== Union Slice Test ===");
 
     // ユニオン型スライスの作成
-    Value[] values = [];
+    const Value[] values = [];
     println("Empty slice created: len = {values.len()}");
 
     // ユニオン型の値をpush

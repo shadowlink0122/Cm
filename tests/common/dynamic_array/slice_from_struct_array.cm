@@ -13,7 +13,7 @@ int main() {
         arr[i].x = i;
         arr[i].y = i * 10;
     }
-    Point[] s = arr;
+    const Point[] s = arr;
     println("len={s.len()}");
     const Point p1 = s[1];
     println("p1=({p1.x},{p1.y})");
