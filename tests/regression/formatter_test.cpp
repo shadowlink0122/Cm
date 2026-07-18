@@ -1,4 +1,4 @@
-#include "../../src/fmt/formatter.hpp"
+#include "../../src/internal/fmt/formatter.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>

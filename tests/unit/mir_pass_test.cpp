@@ -6,19 +6,19 @@
 // パイプライン全体（Cmソース→最適化）の検証はtests/regression/mir_optimization_test.cpp が担う。
 // パス⇔テスト対応表は tests/regression/cases/mir_optimization/README.md を参照
 
-#include "../../src/mir/nodes.hpp"
-#include "../../src/mir/passes/cleanup/dce.hpp"
-#include "../../src/mir/passes/cleanup/dse.hpp"
-#include "../../src/mir/passes/cleanup/program_dce.hpp"
-#include "../../src/mir/passes/cleanup/simplify_cfg.hpp"
-#include "../../src/mir/passes/interprocedural/inlining.hpp"
-#include "../../src/mir/passes/interprocedural/tail_call_elimination.hpp"
-#include "../../src/mir/passes/loop/const_unroll.hpp"
-#include "../../src/mir/passes/loop/licm.hpp"
-#include "../../src/mir/passes/redundancy/gvn.hpp"
-#include "../../src/mir/passes/scalar/folding.hpp"
-#include "../../src/mir/passes/scalar/propagation.hpp"
-#include "../../src/mir/passes/scalar/sccp.hpp"
+#include "../../src/internal/mir/nodes.hpp"
+#include "../../src/internal/mir/passes/cleanup/dce.hpp"
+#include "../../src/internal/mir/passes/cleanup/dse.hpp"
+#include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
+#include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
+#include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
+#include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
+#include "../../src/internal/mir/passes/loop/const_unroll.hpp"
+#include "../../src/internal/mir/passes/loop/licm.hpp"
+#include "../../src/internal/mir/passes/redundancy/gvn.hpp"
+#include "../../src/internal/mir/passes/scalar/folding.hpp"
+#include "../../src/internal/mir/passes/scalar/propagation.hpp"
+#include "../../src/internal/mir/passes/scalar/sccp.hpp"
 
 #include <functional>
 #include <gtest/gtest.h>

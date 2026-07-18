@@ -1,11 +1,11 @@
-#include "../../src/frontend/lexer/lexer.hpp"
-#include "../../src/frontend/parser/parser.hpp"
-#include "../../src/hir/lowering/lowering.hpp"
-#include "../../src/mir/lowering/lowering.hpp"
-#include "../../src/mir/passes/core/manager.hpp"
-#include "../../src/mir/passes/scalar/folding.hpp"
-#include "../../src/mir/passes/scalar/propagation.hpp"
-#include "../../src/mir/printer.hpp"
+#include "../../src/internal/hir/lowering/lowering.hpp"
+#include "../../src/internal/mir/lowering/lowering.hpp"
+#include "../../src/internal/mir/passes/core/manager.hpp"
+#include "../../src/internal/mir/passes/scalar/folding.hpp"
+#include "../../src/internal/mir/passes/scalar/propagation.hpp"
+#include "../../src/internal/mir/printer.hpp"
+#include "../../src/internal/syntax/lexer/lexer.hpp"
+#include "../../src/internal/syntax/parser/parser.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>

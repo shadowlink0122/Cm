@@ -3,7 +3,7 @@
 // check/lint --strict の命名規則判定（L001）が使うケース判定関数を検証する
 // ============================================================
 
-#include "frontend/types/naming_rules.hpp"
+#include "internal/types/naming_rules.hpp"
 
 #include <gtest/gtest.h>
 

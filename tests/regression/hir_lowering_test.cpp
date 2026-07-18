@@ -1,6 +1,6 @@
-#include "../../src/frontend/lexer/lexer.hpp"
-#include "../../src/frontend/parser/parser.hpp"
-#include "../../src/hir/lowering/lowering.hpp"
+#include "../../src/internal/hir/lowering/lowering.hpp"
+#include "../../src/internal/syntax/lexer/lexer.hpp"
+#include "../../src/internal/syntax/parser/parser.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>

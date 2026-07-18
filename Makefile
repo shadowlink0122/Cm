@@ -496,9 +496,14 @@ test-cm-test:
 	@echo "Running cm test command E2E tests..."
 	@tests/test_cm_test.sh
 
+.PHONY: test-i18n
+test-i18n:
+	@echo "Running i18n / error message E2E tests..."
+	@tests/i18n/run_tests.sh
+
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"

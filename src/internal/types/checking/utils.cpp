@@ -1,0 +1,1322 @@
+// ============================================================
+// TypeChecker 実装 - ユーティリティ関数
+// ============================================================
+
+#include "internal/base/i18n.hpp"
+#include "internal/syntax/lexer/lexer.hpp"
+#include "internal/types/naming_rules.hpp"
+#include "internal/types/type_checker.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <regex>
+
+namespace cm {
+
+ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
+    if (!type)
+        return type;
+
+    // 名前付き型（Struct/Interface/Generic）の場合
+    if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Interface ||
+        type->kind == ast::TypeKind::Generic) {
+        // 名前空間内の非修飾名は「現在の名前空間::名前」へ書き換える（全ての型がここを通るため、宣言型・戻り値型・リテラル型の修飾が一貫し、HIR/コード生成も同じ名前を見る）
+        if (!type->name.empty() && struct_defs_.count(type->name) == 0 &&
+            enum_names_.count(type->name) == 0 && typedef_defs_.count(type->name) == 0 &&
+            interface_names_.count(type->name) == 0 &&
+            !generic_context_.has_type_param(type->name)) {
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
+            }
+        }
+        // enum名の場合はint型として解決
+        // ただしtype_argsを持つTagged Union enum（Result<int,string>等）は除外
+        if (enum_names_.count(type->name)) {
+            // type_argsを持つジェネリックenum（Result<T,E>, Option<T>等）はTagged Unionとしてそのまま保持
+            if (!type->type_args.empty() && generic_enums_.count(type->name)) {
+                // そのまま返す（構造体として扱われる）
+            } else if (!type->type_args.empty()) {
+                // ジェネリックenum以外でもtype_argsがある場合はTagged Union判定
+                bool is_tagged_union = false;
+                auto def_it = enum_defs_.find(type->name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    for (const auto& member : def_it->second->members) {
+                        if (member.has_data()) {
+                            is_tagged_union = true;
+                            break;
+                        }
+                    }
+                }
+                if (!is_tagged_union) {
+                    return ast::make_int();
+                }
+            } else {
+                // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）はTagged Unionとして保持し、値enum（従来型）のみintへ解決する（一律int化すると関数返却・match束縛でペイロードが失われる）
+                bool is_tagged_union = false;
+                auto def_it = enum_defs_.find(type->name);
+                if (def_it != enum_defs_.end() && def_it->second) {
+                    for (const auto& member : def_it->second->members) {
+                        if (member.has_data()) {
+                            is_tagged_union = true;
+                            break;
+                        }
+                    }
+                }
+                if (!is_tagged_union) {
+                    return ast::make_int();
+                }
+            }
+        }
+
+        // typedefに登録されていれば解決
+        auto it = typedef_defs_.find(type->name);
+        if (it != typedef_defs_.end()) {
+            return it->second;
+        }
+    }
+
+    return type;
+}
+
+bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
+    // ビットベクタと整数の互換（v0.16.0 ビットスライス）:
+    // bit[N] への整数代入・整数文脈での bit[N] 使用を許可する
+    {
+        auto is_bit_vec = [](const ast::TypePtr& t) {
+            return t && t->kind == ast::TypeKind::Array && t->element_type &&
+                   t->element_type->kind == ast::TypeKind::Bit;
+        };
+        if ((is_bit_vec(a) && b && b->is_integer()) || (is_bit_vec(b) && a && a->is_integer())) {
+            return true;
+        }
+    }
+
+    if (!a || !b)
+        return false;
+    if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
+        return true;
+
+    // ユニオン型への代入互換性チェック
+    // 例: int | null x = null; → a=Union{int,null}, b=Void
+    // 例: int | null x = 42;   → a=Union{int,null}, b=Int
+    if (a->kind == ast::TypeKind::Union) {
+        auto* union_type = static_cast<const ast::UnionType*>(a.get());
+        if (union_type) {
+            // nullリテラル（Void型）の代入: Nullバリアントがあれば許可
+            if (b->kind == ast::TypeKind::Void) {
+                for (const auto& variant : union_type->variants) {
+                    if (!variant.fields.empty() && variant.fields[0] &&
+                        variant.fields[0]->kind == ast::TypeKind::Null) {
+                        return true;
+                    }
+                }
+            }
+            // メンバー型との互換性チェック: いずれかのバリアントの型と互換なら許可
+            for (const auto& variant : union_type->variants) {
+                if (!variant.fields.empty() && variant.fields[0]) {
+                    // Null型バリアントはスキップ（Voidは上で処理済み）
+                    if (variant.fields[0]->kind == ast::TypeKind::Null)
+                        continue;
+                    if (types_compatible(variant.fields[0], b)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 再帰ガード：相互参照型による無限再帰を防止
+    // 型ペアを正規化してセットで管理
+    static thread_local std::set<std::pair<std::string, std::string>> visited_pairs;
+    std::string a_str = ast::type_to_string(*a);
+    std::string b_str = ast::type_to_string(*b);
+    // 順序を正規化（a < b）
+    auto key = a_str < b_str ? std::make_pair(a_str, b_str) : std::make_pair(b_str, a_str);
+
+    if (visited_pairs.count(key) > 0) {
+        // 既に比較中のペア → 無限再帰を回避、同じと見なす
+        return true;
+    }
+
+    // RAIIガード
+    struct RecursionGuard {
+        std::set<std::pair<std::string, std::string>>& set;
+        std::pair<std::string, std::string> k;
+        RecursionGuard(std::set<std::pair<std::string, std::string>>& s,
+                       std::pair<std::string, std::string> key)
+            : set(s), k(key) {
+            set.insert(k);
+        }
+        ~RecursionGuard() { set.erase(k); }
+    } guard(visited_pairs, key);
+
+    // ジェネリック型パラメータのチェック
+    std::string a_name = ast::type_to_string(*a);
+    std::string b_name = ast::type_to_string(*b);
+    if (generic_context_.has_type_param(a_name) || generic_context_.has_type_param(b_name)) {
+        return a_name == b_name;
+    }
+
+    // ジェネリックenum（Tagged Union）互換性: resolve_typedef前に判定
+    // Result<int, string> vs Result のようにtype_argsが一方にしかない場合でも
+    // 同名のジェネリックenumなら互換とみなす
+    if ((a->kind == ast::TypeKind::Struct || a->kind == ast::TypeKind::Generic) &&
+        (b->kind == ast::TypeKind::Struct || b->kind == ast::TypeKind::Generic) &&
+        a->name == b->name && !a->name.empty() && generic_enums_.count(a->name) > 0 &&
+        a->type_args.size() != b->type_args.size()) {
+        return true;
+    }
+
+    // typedefを展開（名前付き型の場合）
+    a = resolve_typedef(a);
+    b = resolve_typedef(b);
+
+    // インターフェース互換性チェック
+    if (a->kind == ast::TypeKind::Struct && interface_names_.count(a->name)) {
+        if (b->kind == ast::TypeKind::Struct && !interface_names_.count(b->name)) {
+            auto it = impl_interfaces_.find(b->name);
+            if (it != impl_interfaces_.end()) {
+                if (it->second.count(a->name)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 同じ型
+    if (a->kind == b->kind) {
+        if (a->kind == ast::TypeKind::Struct) {
+            // 名前が一致しない場合は不一致
+            if (a->name != b->name) {
+                return false;
+            }
+            // ジェネリック型引数の比較（Result<int, string> vs Result<int, int>など）
+            if (a->type_args.size() != b->type_args.size()) {
+                // Tagged Union enum: 一方がtype_argsなしでも名前一致なら互換
+                // Result<int, string> vs Result（コンストラクタ側が型引数未推論の場合）
+                if (generic_enums_.count(a->name) > 0) {
+                    return true;
+                }
+                return false;
+            }
+            for (size_t i = 0; i < a->type_args.size(); ++i) {
+                if (!types_compatible(a->type_args[i], b->type_args[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (a->kind == ast::TypeKind::Interface) {
+            return a->name == b->name;
+        }
+        // ポインタ型の互換性チェック（借用安全性）
+        if (a->kind == ast::TypeKind::Pointer) {
+            // void* → T* の暗黙変換を許可（FFI用）
+            if (b->element_type && b->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // T* → void* の暗黙変換を許可（FFI用）
+            if (a->element_type && a->element_type->kind == ast::TypeKind::Void) {
+                return true;
+            }
+            // const T* → T* は禁止（constを外せない）
+            // b（代入元）がconstでa（代入先）が非constの場合は禁止
+            if (b->qualifiers.is_const && !a->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型のconst外しも禁止
+            if (b->element_type && b->element_type->qualifiers.is_const && a->element_type &&
+                !a->element_type->qualifiers.is_const) {
+                return false;
+            }
+            // 要素型の互換性をチェック
+            return types_compatible(a->element_type, b->element_type);
+        }
+        // 関数ポインタ型の互換性チェック
+        if (a->kind == ast::TypeKind::Function) {
+            if (!types_compatible(a->return_type, b->return_type)) {
+                return false;
+            }
+            if (a->param_types.size() != b->param_types.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < a->param_types.size(); ++i) {
+                if (!types_compatible(a->param_types[i], b->param_types[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return true;
+    }
+
+    // 数値型間の暗黙変換
+    if (a->is_numeric() && b->is_numeric()) {
+        return true;
+    }
+
+    // 構造体のdefaultメンバとの互換性チェック
+    if (a->kind == ast::TypeKind::Struct) {
+        auto default_type = get_default_member_type(a->name);
+        if (default_type && types_compatible(default_type, b)) {
+            return true;
+        }
+    }
+    if (b->kind == ast::TypeKind::Struct) {
+        auto default_type = get_default_member_type(b->name);
+        if (default_type && types_compatible(a, default_type)) {
+            return true;
+        }
+    }
+
+    // 配列→ポインタ暗黙変換 (array decay)
+    if (a->kind == ast::TypeKind::Pointer && b->kind == ast::TypeKind::Array) {
+        if (a->element_type && b->element_type) {
+            return types_compatible(a->element_type, b->element_type);
+        }
+    }
+
+    // string → *char 暗黙変換 (FFI用)
+    if (a->kind == ast::TypeKind::Pointer && b->kind == ast::TypeKind::String) {
+        if (a->element_type && a->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+
+    // cstring ↔ string 暗黙変換 (FFI用)
+    if ((a->kind == ast::TypeKind::CString && b->kind == ast::TypeKind::String) ||
+        (a->kind == ast::TypeKind::String && b->kind == ast::TypeKind::CString)) {
+        return true;
+    }
+
+    // cstring ↔ *char 暗黙変換 (FFI用)
+    if (a->kind == ast::TypeKind::CString && b->kind == ast::TypeKind::Pointer) {
+        if (b->element_type && b->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+    if (b->kind == ast::TypeKind::CString && a->kind == ast::TypeKind::Pointer) {
+        if (a->element_type && a->element_type->kind == ast::TypeKind::Char) {
+            return true;
+        }
+    }
+
+    // LiteralUnion型とプリミティブ型の互換性
+    // typedef HttpMethod = "GET" | "POST" のような型へのstring代入を許可
+    if (a->kind == ast::TypeKind::LiteralUnion) {
+        // LiteralUnionTypeから基底型を判定
+        auto* lit_union = static_cast<ast::LiteralUnionType*>(a.get());
+        if (lit_union && !lit_union->literals.empty()) {
+            const auto& first_lit = lit_union->literals[0];
+            // 文字列リテラルユニオン → string互換
+            if (std::holds_alternative<std::string>(first_lit.value)) {
+                if (b->kind == ast::TypeKind::String) {
+                    return true;
+                }
+            }
+            // 整数リテラルユニオン → int互換
+            else if (std::holds_alternative<int64_t>(first_lit.value)) {
+                if (b->is_numeric()) {
+                    return true;
+                }
+            }
+            // 浮動小数点リテラルユニオン → float/double互換
+            else if (std::holds_alternative<double>(first_lit.value)) {
+                if (b->is_floating()) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+// ============================================================
+// リテラル型チェック
+// typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE" のような
+// リテラルユニオン型への代入時に、許容されるリテラル値かをチェックする
+// ============================================================
+bool TypeChecker::check_literal_assignment(ast::TypePtr target_type, ast::Expr* init_expr,
+                                           Span span) {
+    if (!target_type || !init_expr) {
+        return true;  // チェック不要
+    }
+
+    // typedefを解決
+    auto resolved_type = resolve_typedef(target_type);
+    if (!resolved_type || resolved_type->kind != ast::TypeKind::LiteralUnion) {
+        return true;  // LiteralUnion型でなければチェック不要
+    }
+
+    // LiteralUnionType にキャスト（TypeKind::LiteralUnionで判定済みなのでstatic_castで安全）
+    auto* lit_union = static_cast<ast::LiteralUnionType*>(resolved_type.get());
+    if (!lit_union || lit_union->literals.empty()) {
+        return true;  // リテラルリストが空ならチェック不要
+    }
+
+    // 初期化式がリテラルでなければチェック不可（動的値は許容）
+    auto* lit_expr = init_expr->as<ast::LiteralExpr>();
+    if (!lit_expr) {
+        // リテラルでない場合は実行時に検証される想定でパス
+        // TODO: 変数参照の場合も追跡可能にするかは将来検討
+        return true;
+    }
+
+    // 許容リテラル一覧を取得して検証
+    bool found = false;
+    std::vector<std::string> allowed_values;
+
+    for (const auto& allowed : lit_union->literals) {
+        // 文字列リテラル
+        if (std::holds_alternative<std::string>(allowed.value)) {
+            const auto& allowed_str = std::get<std::string>(allowed.value);
+            allowed_values.push_back("\"" + allowed_str + "\"");
+
+            if (std::holds_alternative<std::string>(lit_expr->value)) {
+                if (std::get<std::string>(lit_expr->value) == allowed_str) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // 整数リテラル
+        else if (std::holds_alternative<int64_t>(allowed.value)) {
+            int64_t allowed_int = std::get<int64_t>(allowed.value);
+            allowed_values.push_back(std::to_string(allowed_int));
+
+            if (std::holds_alternative<int64_t>(lit_expr->value)) {
+                if (std::get<int64_t>(lit_expr->value) == allowed_int) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // 浮動小数点リテラル
+        else if (std::holds_alternative<double>(allowed.value)) {
+            double allowed_float = std::get<double>(allowed.value);
+            allowed_values.push_back(std::to_string(allowed_float));
+
+            if (std::holds_alternative<double>(lit_expr->value)) {
+                if (std::get<double>(lit_expr->value) == allowed_float) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        // 代入される値を文字列化
+        std::string actual_value;
+        if (std::holds_alternative<std::string>(lit_expr->value)) {
+            actual_value = "\"" + std::get<std::string>(lit_expr->value) + "\"";
+        } else if (std::holds_alternative<int64_t>(lit_expr->value)) {
+            actual_value = std::to_string(std::get<int64_t>(lit_expr->value));
+        } else if (std::holds_alternative<double>(lit_expr->value)) {
+            actual_value = std::to_string(std::get<double>(lit_expr->value));
+        } else if (std::holds_alternative<bool>(lit_expr->value)) {
+            actual_value = std::get<bool>(lit_expr->value) ? "true" : "false";
+        } else {
+            actual_value = "(unknown)";
+        }
+
+        // 許容値の一覧を作成
+        std::string allowed_list;
+        for (size_t i = 0; i < allowed_values.size(); ++i) {
+            if (i > 0)
+                allowed_list += " | ";
+            allowed_list += allowed_values[i];
+        }
+
+        error(span, "Invalid literal value " + actual_value +
+                        " for literal type. Allowed values: " + allowed_list);
+        return false;
+    }
+
+    return true;
+}
+
+ast::TypePtr TypeChecker::common_type(ast::TypePtr a, ast::TypePtr b) {
+    if (a->kind == b->kind)
+        return a;
+
+    // float > int
+    if (a->is_floating() || b->is_floating()) {
+        return a->kind == ast::TypeKind::Double || b->kind == ast::TypeKind::Double
+                   ? ast::make_double()
+                   : ast::make_float();
+    }
+
+    // より大きい整数型
+    auto a_info = a->info();
+    auto b_info = b->info();
+    return a_info.size >= b_info.size ? a : b;
+}
+
+std::vector<std::string> TypeChecker::extract_format_variables(const std::string& format_str) {
+    std::vector<std::string> variables;
+    std::regex placeholder_regex(R"(\{([a-zA-Z_][a-zA-Z0-9_]*)\})");
+    std::smatch match;
+    std::string::const_iterator search_start(format_str.cbegin());
+
+    while (std::regex_search(search_start, format_str.cend(), match, placeholder_regex)) {
+        std::string var_name = match[1];
+        if (std::find(variables.begin(), variables.end(), var_name) == variables.end()) {
+            variables.push_back(var_name);
+        }
+        search_start = match.suffix().first;
+    }
+
+    return variables;
+}
+
+namespace {
+
+// 補間プレースホルダの式文字列を抽出する（MIRのexpr_interpと同じ規則:
+// {{/}}エスケープ、::はパス区切り、[]/()外の単独コロンはフォーマット指定子の開始）
+std::vector<std::string> extract_placeholder_exprs(const std::string& format_str) {
+    std::vector<std::string> contents;
+    size_t pos = 0;
+    while (pos < format_str.length()) {
+        if (pos + 1 < format_str.length() && format_str[pos] == '{' && format_str[pos + 1] == '{') {
+            pos += 2;
+            continue;
+        }
+        if (pos + 1 < format_str.length() && format_str[pos] == '}' && format_str[pos + 1] == '}') {
+            pos += 2;
+            continue;
+        }
+        if (format_str[pos] != '{') {
+            pos++;
+            continue;
+        }
+        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する
+        size_t end = pos + 1;
+        size_t colon_pos = std::string::npos;
+        int depth = 0;
+        while (end < format_str.length() && format_str[end] != '}') {
+            char c = format_str[end];
+            if (c == '[' || c == '(') {
+                depth++;
+            }
+            if (c == ']' || c == ')') {
+                depth--;
+            }
+            if (c == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
+                end += 2;  // ::はパス区切りとしてスキップ
+                continue;
+            }
+            if (c == ':' && depth == 0 && colon_pos == std::string::npos) {
+                colon_pos = end;
+            }
+            end++;
+        }
+        if (end >= format_str.length()) {
+            break;  // 閉じ } がない
+        }
+        size_t content_end = (colon_pos != std::string::npos) ? colon_pos : end;
+        std::string content = format_str.substr(pos + 1, content_end - pos - 1);
+        if (!content.empty()) {
+            contents.push_back(content);
+        }
+        pos = end + 1;
+    }
+    return contents;
+}
+
+// 式ツリー内の識別子参照を収集する（メンバ名・enumパスは対象外）
+void collect_ident_refs(const ast::Expr& e, std::vector<std::string>& out) {
+    if (const auto* id = e.as<ast::IdentExpr>()) {
+        out.push_back(id->name);
+        return;
+    }
+    if (const auto* mem = e.as<ast::MemberExpr>()) {
+        if (mem->object) {
+            collect_ident_refs(*mem->object, out);
+        }
+        for (const auto& arg : mem->args) {
+            if (arg) {
+                collect_ident_refs(*arg, out);
+            }
+        }
+        return;
+    }
+    if (const auto* bin = e.as<ast::BinaryExpr>()) {
+        if (bin->left) {
+            collect_ident_refs(*bin->left, out);
+        }
+        if (bin->right) {
+            collect_ident_refs(*bin->right, out);
+        }
+        return;
+    }
+    if (const auto* un = e.as<ast::UnaryExpr>()) {
+        if (un->operand) {
+            collect_ident_refs(*un->operand, out);
+        }
+        return;
+    }
+    if (const auto* call = e.as<ast::CallExpr>()) {
+        if (call->callee) {
+            collect_ident_refs(*call->callee, out);
+        }
+        for (const auto& arg : call->args) {
+            if (arg) {
+                collect_ident_refs(*arg, out);
+            }
+        }
+        return;
+    }
+    if (const auto* idx = e.as<ast::IndexExpr>()) {
+        if (idx->object) {
+            collect_ident_refs(*idx->object, out);
+        }
+        if (idx->index) {
+            collect_ident_refs(*idx->index, out);
+        }
+        return;
+    }
+    if (const auto* sl = e.as<ast::SliceExpr>()) {
+        if (sl->object) {
+            collect_ident_refs(*sl->object, out);
+        }
+        // ビットスライスの範囲は定数式なので対象外
+        return;
+    }
+    if (const auto* cast = e.as<ast::CastExpr>()) {
+        if (cast->operand) {
+            collect_ident_refs(*cast->operand, out);
+        }
+        return;
+    }
+    if (const auto* tern = e.as<ast::TernaryExpr>()) {
+        if (tern->condition) {
+            collect_ident_refs(*tern->condition, out);
+        }
+        if (tern->then_expr) {
+            collect_ident_refs(*tern->then_expr, out);
+        }
+        if (tern->else_expr) {
+            collect_ident_refs(*tern->else_expr, out);
+        }
+        return;
+    }
+}
+
+}  // namespace
+
+void TypeChecker::check_interpolation_scope(const std::string& format_str) {
+    for (const auto& content : extract_placeholder_exprs(format_str)) {
+        // プレースホルダ内容を式としてパースする（MIRの補間ミニパイプラインと同じ手法）
+        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            continue;  // パース不能な内容はMIR側の処理に委ねる
+        }
+        for (auto& decl : program.declarations) {
+            const auto* func = decl->as<ast::FunctionDecl>();
+            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
+                continue;
+            }
+            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
+            if (!ret || !ret->value) {
+                continue;
+            }
+            std::vector<std::string> names;
+            collect_ident_refs(*ret->value, names);
+            for (const auto& name : names) {
+                if (name.find("::") != std::string::npos || name == "null" || name == "true" ||
+                    name == "false") {
+                    continue;
+                }
+                if (scopes_.current().lookup(name)) {
+                    // 補間内の参照は変数の使用としてマークする（W001誤検出防止）
+                    scopes_.current().mark_used(name);
+                    continue;
+                }
+                if (enum_names_.count(name) || struct_defs_.count(name) ||
+                    typedef_defs_.count(name) || generic_functions_.count(name) ||
+                    interface_names_.count(name)) {
+                    continue;
+                }
+                error(current_span_, "Undefined variable '" + name +
+                                         "' in interpolation placeholder '{" + content + "}'");
+            }
+        }
+    }
+}
+
+// 文字列リテラル内の補間プレースホルダが参照する変数を使用としてマークする（check_interpolation_scopeと違いエラーは出さない。あらゆるstringリテラルで呼ばれる）
+void TypeChecker::mark_interpolation_uses(const std::string& format_str) {
+    for (const auto& content : extract_placeholder_exprs(format_str)) {
+        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
+        Lexer lex(src);
+        auto tokens = lex.tokenize();
+        Parser parser(std::move(tokens));
+        auto program = parser.parse();
+        if (parser.has_errors()) {
+            continue;
+        }
+        for (auto& decl : program.declarations) {
+            const auto* func = decl->as<ast::FunctionDecl>();
+            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
+                continue;
+            }
+            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
+            if (!ret || !ret->value) {
+                continue;
+            }
+            std::vector<std::string> names;
+            collect_ident_refs(*ret->value, names);
+            for (const auto& name : names) {
+                if (scopes_.current().lookup(name)) {
+                    scopes_.current().mark_used(name);
+                    mark_variable_initialized(name);
+                }
+            }
+        }
+    }
+}
+
+void TypeChecker::error(Span span, const std::string& msg) {
+    debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Error);
+    diagnostics_.emplace_back(DiagKind::Error, span, msg);
+}
+
+void TypeChecker::warning(Span span, const std::string& msg) {
+    debug::tc::log(debug::tc::Id::TypeError, msg, debug::Level::Warn);
+    diagnostics_.emplace_back(DiagKind::Warning, span, msg);
+}
+
+// 変数が変更されたことをマーク
+void TypeChecker::mark_variable_modified(const std::string& name) {
+    modified_variables_.insert(name);
+}
+
+// const推奨警告をチェック（関数終了時に呼び出す）
+void TypeChecker::check_const_recommendations() {
+    // Lint警告が無効な場合はスキップ（クリアのみ実行）
+    if (!enable_lint_warnings_) {
+        modified_variables_.clear();
+        non_const_variable_spans_.clear();
+        return;
+    }
+
+    for (const auto& [name, span] : non_const_variable_spans_) {
+        // 変更されていない変数に対してconst推奨警告
+        if (modified_variables_.count(name) == 0) {
+            warning(span, "Variable '" + name + "' is never modified, consider using 'const'");
+        }
+    }
+    // 次の関数用にクリア
+    modified_variables_.clear();
+    non_const_variable_spans_.clear();
+}
+
+// 未使用変数チェック (W001)
+void TypeChecker::check_unused_variables() {
+    // 現在のスコープから未使用シンボルを取得
+    auto unused_symbols = scopes_.current().get_unused_symbols();
+
+    for (const auto& sym : unused_symbols) {
+        // パラメータ名がアンダースコアで始まる場合は警告しない（意図的な未使用）
+        if (!sym.name.empty() && sym.name[0] == '_') {
+            continue;
+        }
+        // self は常に警告しない
+        if (sym.name == "self") {
+            continue;
+        }
+
+        warning(sym.span, "Variable '" + sym.name + "' is never used [W001]");
+    }
+}
+
+// ============================================================
+// 命名規則チェック (L001 naming-convention。check/lint --strict時のみ)
+// 判定ロジックは frontend/types/naming_rules.hpp に分離
+// ============================================================
+
+bool TypeChecker::is_snake_case(const std::string& name) {
+    return naming::is_snake_case(name);
+}
+
+bool TypeChecker::is_pascal_case(const std::string& name) {
+    return naming::is_pascal_case(name);
+}
+
+bool TypeChecker::is_upper_snake_case(const std::string& name) {
+    return naming::is_upper_snake_case(name);
+}
+
+namespace {
+
+// 内部生成名（__prelude注入等）や無名はチェック対象外
+bool naming_exempt(const std::string& name) {
+    return name.empty() || name == "_" || name.rfind("__", 0) == 0;
+}
+
+// importでインライン展開されるライブラリ名前空間はユーザーの責任範囲外
+bool is_library_namespace(const std::string& root) {
+    return root == "std" || root == "native" || root == "js" || root == "uefi" || root == "web" ||
+           root == "wasm";
+}
+
+bool has_attribute(const std::vector<ast::AttributeNode>& attrs, const std::string& name) {
+    for (const auto& attr : attrs) {
+        if (attr.name == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+void TypeChecker::report_naming(Span span, i18n::MsgId decl_kind, const std::string& name,
+                                i18n::MsgId expected) {
+    warning(span, i18n::msgf(i18n::MsgId::LintNamingViolation, i18n::msg(decl_kind), name,
+                             i18n::msg(expected)));
+}
+
+// 関数本体の文を再帰的に走査し、ローカル変数宣言の命名を検査する
+void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
+    for (auto& stmt : stmts) {
+        if (!stmt) {
+            continue;
+        }
+        if (auto* let = stmt->as<ast::LetStmt>()) {
+            if (!naming_exempt(let->name)) {
+                Span span = (let->name_span.start != 0 || let->name_span.end != 0) ? let->name_span
+                                                                                   : stmt->span;
+                if (let->is_const) {
+                    // ローカルconstは snake_case / UPPER_SNAKE_CASE の両方を許容
+                    if (!naming::is_snake_case(let->name) &&
+                        !naming::is_upper_snake_case(let->name)) {
+                        report_naming(span, i18n::MsgId::LintLabelConstantName, let->name,
+                                      i18n::MsgId::LintCaseSnakeOrUpper);
+                    }
+                } else if (!naming::is_snake_case(let->name)) {
+                    report_naming(span, i18n::MsgId::LintLabelVariableName, let->name,
+                                  i18n::MsgId::LintCaseSnake);
+                }
+            }
+        } else if (auto* if_stmt = stmt->as<ast::IfStmt>()) {
+            check_naming_stmts(if_stmt->then_block);
+            check_naming_stmts(if_stmt->else_block);
+        } else if (auto* for_stmt = stmt->as<ast::ForStmt>()) {
+            if (for_stmt->init) {
+                if (auto* init_let = for_stmt->init->as<ast::LetStmt>()) {
+                    if (!naming_exempt(init_let->name) && !naming::is_snake_case(init_let->name)) {
+                        report_naming(for_stmt->init->span, i18n::MsgId::LintLabelVariableName,
+                                      init_let->name, i18n::MsgId::LintCaseSnake);
+                    }
+                }
+            }
+            check_naming_stmts(for_stmt->body);
+        } else if (auto* for_in = stmt->as<ast::ForInStmt>()) {
+            if (!naming_exempt(for_in->var_name) && !naming::is_snake_case(for_in->var_name)) {
+                report_naming(stmt->span, i18n::MsgId::LintLabelVariableName, for_in->var_name,
+                              i18n::MsgId::LintCaseSnake);
+            }
+            check_naming_stmts(for_in->body);
+        } else if (auto* while_stmt = stmt->as<ast::WhileStmt>()) {
+            check_naming_stmts(while_stmt->body);
+        } else if (auto* block = stmt->as<ast::BlockStmt>()) {
+            check_naming_stmts(block->stmts);
+        } else if (auto* switch_stmt = stmt->as<ast::SwitchStmt>()) {
+            for (auto& c : switch_stmt->cases) {
+                check_naming_stmts(c.stmts);
+            }
+        } else if (auto* defer_stmt = stmt->as<ast::DeferStmt>()) {
+            if (defer_stmt->body) {
+                if (auto* body_let = defer_stmt->body->as<ast::LetStmt>()) {
+                    if (!naming_exempt(body_let->name) && !naming::is_snake_case(body_let->name)) {
+                        report_naming(defer_stmt->body->span, i18n::MsgId::LintLabelVariableName,
+                                      body_let->name, i18n::MsgId::LintCaseSnake);
+                    }
+                }
+            }
+        } else if (auto* must_block = stmt->as<ast::MustBlockStmt>()) {
+            check_naming_stmts(must_block->body);
+        }
+    }
+}
+
+// 関数宣言（名前・パラメータ・型パラメータ・本体）の命名を検査する
+void TypeChecker::check_naming_function(ast::FunctionDecl& func) {
+    // extern "C" / コンストラクタ / デストラクタ / main は対象外
+    if (func.is_extern || func.is_constructor || func.is_destructor) {
+        return;
+    }
+    Span span = func.name_span;
+    if (!naming_exempt(func.name) && func.name != "main" && !naming::is_snake_case(func.name)) {
+        report_naming(span, i18n::MsgId::LintLabelFunctionName, func.name,
+                      i18n::MsgId::LintCaseSnake);
+    }
+    for (const auto& param : func.params) {
+        if (!naming_exempt(param.name) && param.name != "self" &&
+            !naming::is_snake_case(param.name)) {
+            report_naming(span, i18n::MsgId::LintLabelParameterName, param.name,
+                          i18n::MsgId::LintCaseSnake);
+        }
+    }
+    for (const auto& gp : func.generic_params) {
+        if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
+            report_naming(span, i18n::MsgId::LintLabelTypeParameterName, gp,
+                          i18n::MsgId::LintCasePascal);
+        }
+    }
+    check_naming_stmts(func.body);
+}
+
+// 宣言単位の命名検査（トップレベル・module配下の両方から呼ばれる）
+void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
+    if (auto* func = decl.as<ast::FunctionDecl>()) {
+        check_naming_function(*func);
+    } else if (auto* st = decl.as<ast::StructDecl>()) {
+        // extern struct はベンダプリミティブ等の外部固定名のため対象外
+        if (st->is_extern) {
+            return;
+        }
+        Span span =
+            (st->name_span.start != 0 || st->name_span.end != 0) ? st->name_span : decl.span;
+        if (!naming_exempt(st->name) && !naming::is_pascal_case(st->name)) {
+            report_naming(span, i18n::MsgId::LintLabelStructName, st->name,
+                          i18n::MsgId::LintCasePascal);
+        }
+        for (const auto& field : st->fields) {
+            // #[sv::param]/#[verilog::param] フィールドはSVパラメータの写しなので
+            // 定数と同じくUPPER_SNAKE_CASEを許容する
+            bool is_param_field = false;
+            for (const auto& attr : field.attributes) {
+                if (attr.name == "sv::param" || attr.name == "verilog::param") {
+                    is_param_field = true;
+                    break;
+                }
+            }
+            if (is_param_field) {
+                if (!naming_exempt(field.name) && !naming::is_snake_case(field.name) &&
+                    !naming::is_upper_snake_case(field.name)) {
+                    report_naming(span, i18n::MsgId::LintLabelFieldName, field.name,
+                                  i18n::MsgId::LintCaseSnakeOrUpper);
+                }
+                continue;
+            }
+            if (!naming_exempt(field.name) && !naming::is_snake_case(field.name)) {
+                report_naming(span, i18n::MsgId::LintLabelFieldName, field.name,
+                              i18n::MsgId::LintCaseSnake);
+            }
+        }
+        for (const auto& gp : st->generic_params) {
+            if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
+                report_naming(span, i18n::MsgId::LintLabelTypeParameterName, gp,
+                              i18n::MsgId::LintCasePascal);
+            }
+        }
+    } else if (auto* en = decl.as<ast::EnumDecl>()) {
+        // 組み込みprelude（Result/Option注入）は対象外
+        if (has_attribute(en->attributes, "__prelude")) {
+            return;
+        }
+        if (!naming_exempt(en->name) && !naming::is_pascal_case(en->name)) {
+            report_naming(decl.span, i18n::MsgId::LintLabelEnumName, en->name,
+                          i18n::MsgId::LintCasePascal);
+        }
+        for (const auto& member : en->members) {
+            // バリアントは PascalCase / UPPER_SNAKE_CASE の両方を許容
+            if (!naming_exempt(member.name) && !naming::is_pascal_case(member.name) &&
+                !naming::is_upper_snake_case(member.name)) {
+                report_naming(decl.span, i18n::MsgId::LintLabelEnumVariantName, member.name,
+                              i18n::MsgId::LintCasePascalOrUpper);
+            }
+        }
+    } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
+        if (!naming_exempt(iface->name) && !naming::is_pascal_case(iface->name)) {
+            report_naming(decl.span, i18n::MsgId::LintLabelInterfaceName, iface->name,
+                          i18n::MsgId::LintCasePascal);
+        }
+        for (const auto& method : iface->methods) {
+            if (!naming_exempt(method.name) && !naming::is_snake_case(method.name)) {
+                report_naming(decl.span, i18n::MsgId::LintLabelMethodName, method.name,
+                              i18n::MsgId::LintCaseSnake);
+            }
+        }
+    } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+        for (auto& method : impl->methods) {
+            if (method) {
+                check_naming_function(*method);
+            }
+        }
+    } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+        if (!naming_exempt(td->name) && !naming::is_pascal_case(td->name)) {
+            report_naming(decl.span, i18n::MsgId::LintLabelTypeAliasName, td->name,
+                          i18n::MsgId::LintCasePascal);
+        }
+    } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
+        if (naming_exempt(gv->name)) {
+            return;
+        }
+        if (gv->is_const && top_level) {
+            // グローバルconstは UPPER_SNAKE_CASE
+            if (!naming::is_upper_snake_case(gv->name)) {
+                report_naming(decl.span, i18n::MsgId::LintLabelGlobalConstantName, gv->name,
+                              i18n::MsgId::LintCaseUpperSnake);
+            }
+        } else if (!gv->is_const && !naming::is_snake_case(gv->name)) {
+            report_naming(decl.span, i18n::MsgId::LintLabelGlobalVariableName, gv->name,
+                          i18n::MsgId::LintCaseSnake);
+        }
+    } else if (auto* mod = decl.as<ast::ModuleDecl>()) {
+        if (mod->path.segments.empty()) {
+            return;
+        }
+        // ライブラリ名前空間（importでインライン展開されたもの）は対象外
+        if (is_library_namespace(mod->path.segments.front())) {
+            return;
+        }
+        for (const auto& seg : mod->path.segments) {
+            if (!naming_exempt(seg) && !naming::is_snake_case(seg)) {
+                report_naming(decl.span, i18n::MsgId::LintLabelModuleName, seg,
+                              i18n::MsgId::LintCaseSnake);
+            }
+        }
+        for (auto& inner : mod->declarations) {
+            if (inner) {
+                check_naming_decl(*inner, top_level);
+            }
+        }
+    }
+    // Import/Export/Use/Macro/ExternBlock/InitialBlock は対象外
+}
+
+// 命名規則チェックのエントリポイント（check() の末尾から呼ばれる）
+void TypeChecker::check_naming_conventions(ast::Program& program) {
+    if (!enable_naming_check_) {
+        return;
+    }
+    for (auto& decl : program.declarations) {
+        if (decl) {
+            check_naming_decl(*decl, /*top_level=*/true);
+        }
+    }
+}
+
+bool TypeChecker::type_implements_interface(const std::string& type_name,
+                                            const std::string& interface_name) {
+    // プリミティブ型の組み込みインターフェース
+    // Ord: 比較可能な型（数値型、文字型）
+    if (interface_name == "Ord") {
+        if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+            type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+            type_name == "long" || type_name == "ulong" || type_name == "float" ||
+            type_name == "double" || type_name == "char") {
+            return true;
+        }
+    }
+
+    // Eq: 等価比較可能な型
+    if (interface_name == "Eq") {
+        if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+            type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+            type_name == "long" || type_name == "ulong" || type_name == "float" ||
+            type_name == "double" || type_name == "char" || type_name == "bool" ||
+            type_name == "string") {
+            return true;
+        }
+    }
+
+    // Clone: コピー可能な型
+    if (interface_name == "Clone") {
+        if (type_name == "int" || type_name == "uint" || type_name == "tiny" ||
+            type_name == "utiny" || type_name == "short" || type_name == "ushort" ||
+            type_name == "long" || type_name == "ulong" || type_name == "float" ||
+            type_name == "double" || type_name == "char" || type_name == "bool" ||
+            type_name == "string") {
+            return true;
+        }
+    }
+
+    // 明示的なimpl実装をチェック
+    auto it = impl_interfaces_.find(type_name);
+    if (it != impl_interfaces_.end()) {
+        if (it->second.count(interface_name)) {
+            return true;
+        }
+    }
+
+    // with による自動実装をチェック
+    if (has_auto_impl(type_name, interface_name)) {
+        return true;
+    }
+
+    return false;
+}
+
+bool TypeChecker::check_type_constraints(const std::string& type_name,
+                                         const std::vector<std::string>& constraints) {
+    for (const auto& constraint : constraints) {
+        if (!type_implements_interface(type_name, constraint)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TypeChecker::mark_variable_initialized(const std::string& name) {
+    initialized_variables_.insert(name);
+}
+
+void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
+    // Lint警告が無効な場合はスキップ
+    if (!enable_lint_warnings_) {
+        return;
+    }
+
+    // 初期化されていない変数の使用を検出
+    // 注: 関数パラメータは常に初期化されているとみなす
+    auto sym = scopes_.current().lookup(name);
+    if (!sym) {
+        return;  // 変数が見つからない場合は他のエラー処理に任せる
+    }
+
+    // グローバル変数/定数は宣言時点で初期化される（SVの信号・定数を含む）ため対象外。
+    // このチェックはローカル変数のフローのみを見る
+    if (scopes_.global().has_local(name)) {
+        return;
+    }
+
+    // initialized_variables_に含まれていない場合は警告
+    if (initialized_variables_.count(name) == 0) {
+        warning(span, "Variable '" + name + "' may be used before initialization");
+    }
+}
+
+// ============================================================
+// コンパイル時定数評価（const強化）
+// ============================================================
+std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
+    // リテラル: 整数値を直接返す
+    if (auto* lit = expr.as<ast::LiteralExpr>()) {
+        if (std::holds_alternative<int64_t>(lit->value)) {
+            return std::get<int64_t>(lit->value);
+        }
+        // bool値もint64_tに変換可能
+        if (std::holds_alternative<bool>(lit->value)) {
+            return std::get<bool>(lit->value) ? 1 : 0;
+        }
+        // double/charは整数として評価不可
+        return std::nullopt;
+    }
+
+    // 識別子: const変数を検索
+    if (auto* ident = expr.as<ast::IdentExpr>()) {
+        auto sym = scopes_.current().lookup(ident->name);
+        if (sym && sym->is_const && sym->const_int_value.has_value()) {
+            return sym->const_int_value;
+        }
+        return std::nullopt;
+    }
+
+    // 単項演算子
+    if (auto* unary = expr.as<ast::UnaryExpr>()) {
+        auto val = evaluate_const_expr(*unary->operand);
+        if (!val)
+            return std::nullopt;
+
+        switch (unary->op) {
+            case ast::UnaryOp::Neg:
+                return -(*val);
+            case ast::UnaryOp::Not:
+                return (*val) ? 0 : 1;
+            case ast::UnaryOp::BitNot:
+                return ~(*val);
+            default:
+                return std::nullopt;
+        }
+    }
+
+    // 二項演算子
+    if (auto* binary = expr.as<ast::BinaryExpr>()) {
+        auto left_val = evaluate_const_expr(*binary->left);
+        auto right_val = evaluate_const_expr(*binary->right);
+        if (!left_val || !right_val)
+            return std::nullopt;
+
+        switch (binary->op) {
+            case ast::BinaryOp::Add:
+                return *left_val + *right_val;
+            case ast::BinaryOp::Sub:
+                return *left_val - *right_val;
+            case ast::BinaryOp::Mul:
+                return *left_val * *right_val;
+            case ast::BinaryOp::Div:
+                if (*right_val == 0)
+                    return std::nullopt;  // ゼロ除算
+                // int64で負に見える値はunsigned定数の可能性があり、符号付き除算だと
+                // 結果が変わるため畳み込みを断念する（実行時は型に従い正しく計算される）
+                if (*left_val < 0 || *right_val < 0)
+                    return std::nullopt;
+                return *left_val / *right_val;
+            case ast::BinaryOp::Mod:
+                if (*right_val == 0)
+                    return std::nullopt;
+                if (*left_val < 0 || *right_val < 0)
+                    return std::nullopt;
+                return *left_val % *right_val;
+            case ast::BinaryOp::BitAnd:
+                return *left_val & *right_val;
+            case ast::BinaryOp::BitOr:
+                return *left_val | *right_val;
+            case ast::BinaryOp::BitXor:
+                return *left_val ^ *right_val;
+            case ast::BinaryOp::Shl:
+                return *left_val << *right_val;
+            case ast::BinaryOp::Shr:
+                // 最上位ビットが立つ値はunsignedの論理シフトと符号付きの算術シフトで結果が分かれるため畳み込みを断念する（MIR側は型情報を持ち正しく畳む）
+                if (*left_val < 0)
+                    return std::nullopt;
+                return *left_val >> *right_val;
+            case ast::BinaryOp::Lt:
+                return (*left_val < *right_val) ? 1 : 0;
+            case ast::BinaryOp::Le:
+                return (*left_val <= *right_val) ? 1 : 0;
+            case ast::BinaryOp::Gt:
+                return (*left_val > *right_val) ? 1 : 0;
+            case ast::BinaryOp::Ge:
+                return (*left_val >= *right_val) ? 1 : 0;
+            case ast::BinaryOp::Eq:
+                return (*left_val == *right_val) ? 1 : 0;
+            case ast::BinaryOp::Ne:
+                return (*left_val != *right_val) ? 1 : 0;
+            case ast::BinaryOp::And:
+                return (*left_val && *right_val) ? 1 : 0;
+            case ast::BinaryOp::Or:
+                return (*left_val || *right_val) ? 1 : 0;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    // 三項演算子
+    if (auto* ternary = expr.as<ast::TernaryExpr>()) {
+        auto cond = evaluate_const_expr(*ternary->condition);
+        if (!cond)
+            return std::nullopt;
+        return *cond ? evaluate_const_expr(*ternary->then_expr)
+                     : evaluate_const_expr(*ternary->else_expr);
+    }
+
+    // その他の式はコンパイル時評価不可
+    return std::nullopt;
+}
+
+// ============================================================
+// 配列サイズのsize_param_name解決（const強化）
+// ============================================================
+void TypeChecker::resolve_array_size(ast::TypePtr& type) {
+    if (!type)
+        return;
+
+    // 配列型でsize_param_nameが設定されている場合
+    if (type->kind == ast::TypeKind::Array && !type->size_param_name.empty()) {
+        // const変数を検索
+        auto sym = scopes_.current().lookup(type->size_param_name);
+        if (sym && sym->is_const && sym->const_int_value.has_value()) {
+            int64_t size = *sym->const_int_value;
+            if (size > 0 && size <= INT32_MAX) {
+                type->array_size = static_cast<uint32_t>(size);
+                // 注: size_param_name は解決後も保持する。
+                // SVバックエンドが #[sv::parameter] の幅を記号のまま（[WIDTH-1:0]）出力するために使用する（v0.16.0 設計01）
+
+                debug::tc::log(debug::tc::Id::TypeInfer,
+                               "Resolved array size: " + sym->name + " = " + std::to_string(size),
+                               debug::Level::Debug);
+            } else {
+                error(current_span_, "Array size must be a positive integer, got " +
+                                         std::to_string(size) + " for '" + type->size_param_name +
+                                         "'");
+            }
+        } else if (sym && !sym->is_const) {
+            error(current_span_, "Array size must be a const variable, but '" +
+                                     type->size_param_name + "' is not const");
+        } else if (!sym) {
+            error(current_span_,
+                  "Undefined variable '" + type->size_param_name + "' used as array size");
+        } else {
+            error(current_span_, "Const variable '" + type->size_param_name +
+                                     "' does not have a compile-time integer value");
+        }
+    }
+
+    // 要素型も再帰的に解決
+    if (type->element_type) {
+        resolve_array_size(type->element_type);
+    }
+}
+
+std::optional<std::string> TypeChecker::resolve_in_namespace(const std::string& name) const {
+    if (current_namespace_.empty() || name.find("::") != std::string::npos) {
+        return std::nullopt;
+    }
+    // 内側の名前空間から外側へ向かって探索する（M::N内なら M::N::name → M::name）
+    std::string ns = current_namespace_;
+    while (!ns.empty()) {
+        std::string qualified = ns + "::" + name;
+        if (struct_defs_.count(qualified) > 0 || interface_names_.count(qualified) > 0 ||
+            enum_names_.count(qualified) > 0 || typedef_defs_.count(qualified) > 0) {
+            return qualified;
+        }
+        auto pos = ns.rfind("::");
+        if (pos == std::string::npos) {
+            break;
+        }
+        ns = ns.substr(0, pos);
+    }
+    return std::nullopt;
+}
+
+bool TypeChecker::is_valid_type(ast::TypePtr type) {
+    if (!type)
+        return true;
+
+    // プリミティブ型は有効
+    if (type->is_primitive())
+        return true;
+
+    switch (type->kind) {
+        case ast::TypeKind::Posedge:
+        case ast::TypeKind::Negedge:
+        case ast::TypeKind::Wire:
+        case ast::TypeKind::Reg:
+        case ast::TypeKind::Bit:
+        case ast::TypeKind::Null:
+            return true;
+        case ast::TypeKind::Pointer:
+        case ast::TypeKind::Array:
+            return is_valid_type(type->element_type);
+        case ast::TypeKind::Struct:
+        case ast::TypeKind::Interface:
+        case ast::TypeKind::Generic:
+            // 構造体名、インターフェース名、enum名、typedef名、またはジェネリック型引数として存在するかチェック
+            if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
+                enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
+                generic_context_.has_type_param(type->name)) {
+                return true;
+            }
+            // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする
+            if (auto qualified = resolve_in_namespace(type->name)) {
+                type->name = *qualified;
+                return true;
+            }
+            return false;
+        default:
+            return true;
+    }
+}
+
+}  // namespace cm

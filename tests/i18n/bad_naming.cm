@@ -1,0 +1,5 @@
+// i18n E2Eテスト用: 命名規則違反（camelCase変数）
+int main() {
+    int badCamelName = 1;
+    return badCamelName;
+}

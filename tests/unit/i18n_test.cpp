@@ -1,9 +1,10 @@
 // i18nカタログの単体テスト（common/i18n.hpp）
 // 言語切替・table[メッセージ][言語] の解決・訳なしIDの英語フォールバックを検証する
 
-#include "../../src/common/i18n.hpp"
+#include "../../src/internal/base/i18n.hpp"
 
 #include <gtest/gtest.h>
+#include <set>
 #include <string>
 
 namespace {
@@ -60,6 +61,45 @@ TEST_F(I18nTest, TableIsFullyPopulated) {
             const char* text = cm::i18n::msg(static_cast<MsgId>(i));
             EXPECT_NE(text, nullptr);
             EXPECT_NE(std::string(text), "");
+        }
+    }
+}
+
+TEST_F(I18nTest, PlaceholderConsistencyAcrossLanguages) {
+    // 訳のプレースホルダは英語（原文）に存在するものだけを使えること
+    // （en側に無い {N} を訳が参照すると、msgfで置換されず {N} のまま出力される）
+    auto collect = [](const char* text) {
+        std::set<int> found;
+        if (!text) {
+            return found;
+        }
+        const std::string s = text;
+        size_t pos = 0;
+        while ((pos = s.find('{', pos)) != std::string::npos) {
+            size_t end = s.find('}', pos);
+            if (end == std::string::npos) {
+                break;
+            }
+            const std::string inner = s.substr(pos + 1, end - pos - 1);
+            if (!inner.empty() && inner.find_first_not_of("0123456789") == std::string::npos) {
+                found.insert(std::stoi(inner));
+            }
+            pos = end + 1;
+        }
+        return found;
+    };
+    const size_t en = static_cast<size_t>(Lang::En);
+    for (size_t i = 0; i < cm::i18n::kMessageCount; ++i) {
+        const auto en_ph = collect(cm::i18n::kMessages[i][en]);
+        for (size_t l = 0; l < cm::i18n::kLangCount; ++l) {
+            if (l == en) {
+                continue;
+            }
+            for (int n : collect(cm::i18n::kMessages[i][l])) {
+                EXPECT_TRUE(en_ph.count(n))
+                    << "message " << i << " lang " << l << " uses placeholder {" << n
+                    << "} that does not exist in the English template";
+            }
         }
     }
 }

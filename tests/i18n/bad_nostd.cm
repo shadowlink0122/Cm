@@ -1,0 +1,5 @@
+// i18n E2Eテスト用: ベアメタルで禁止のexitを使用
+int main() {
+    exit(1);
+    return 0;
+}

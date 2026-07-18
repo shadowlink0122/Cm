@@ -29,10 +29,10 @@ lint:
 
 ### 実装方針
 
-- 既存の `lint::ConfigLoader`（`src/lint/config.{hpp,cpp}`）を汎用の `cm::config` として拡張し、`language` / `compile.optimization` / `compile.target` を読み取る
+- 既存の `lint::ConfigLoader`（`src/internal/lint/config.{hpp,cpp}`）を汎用の `cm::config` として拡張し、`language` / `compile.optimization` / `compile.target` を読み取る
 - 探索は現状どおりカレントディレクトリから親方向へ `.cmconfig.yml` を探す
 - 不正値（`optimization: 9` 等）は警告を出して無視し、デフォルトへフォールバックする
-- CLI側（`src/cli/options.cpp`）は「明示指定されたか」を保持し、未指定時のみconfig値を適用する
+- CLI側（`src/cmd/cm/options.cpp`）は「明示指定されたか」を保持し、未指定時のみconfig値を適用する
 
 ## 段階分割
 

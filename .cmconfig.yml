@@ -5,6 +5,8 @@ lint:
     # lint自身のテストデータ（意図的な命名違反・未使用変数等）
     - tests/linter/fixtures/
     - tests/linter/workspace/
+    # i18n E2Eテストデータ（意図的なエラー・命名違反を含む）
+    - tests/i18n/
     # gtest回帰のケースフィクスチャ（HIR/MIR/フォーマッタ/SV codegenの検証入力。
     # フォーマッタ期待値や意図的な部分コードを含み、gtest経由で検証される）
     - tests/regression/cases/

@@ -47,7 +47,7 @@ camelCase（`camelCase`）はどの宣言でも許容しない。判定は先頭
 
 ### 実装
 
-- ケース判定（`is_snake_case` / `is_pascal_case` / `is_upper_snake_case`）を `src/frontend/types/naming_rules.hpp` の自由関数へ分離する（unitテスト可能にする。TypeCheckerの静的メソッドは同関数への委譲に変更）
+- ケース判定（`is_snake_case` / `is_pascal_case` / `is_upper_snake_case`）を `src/internal/types/naming_rules.hpp` の自由関数へ分離する（unitテスト可能にする。TypeCheckerの静的メソッドは同関数への委譲に変更）
 - `TypeChecker::check_naming_conventions(ast::Program&)` をAST走査として実装し、`check()` の末尾で `enable_naming_check_` が有効な場合に実行する
 - 走査対象: トップレベル宣言、ModuleDecl配下（ライブラリ名前空間を除く）、impl内メソッド、関数本体のLetStmt（ネストしたブロック・if/for/while/switch/defer/must内を含む）
 
