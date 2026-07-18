@@ -66,7 +66,7 @@ Point p1;
 p1.x = 10;
 p1.y = 20;
 
-println("Point: ({}, {})", p1.x, p1.y);
+println("Point: ({p1.x}, {p1.y})");
 ```
 
 ### Default Values
@@ -110,7 +110,7 @@ impl Point {
 
 int main() {
     Point origin;  // Initialized to (0, 0)
-    println("({}, {})", origin.x, origin.y);
+    println("({origin.x}, {origin.y})");
     return 0;
 }
 ```
@@ -197,7 +197,7 @@ impl Point {
     }
 
     void print() {
-        println("Point({}, {})", self.x, self.y);
+        println("Point({self.x}, {self.y})");
     }
 }
 
@@ -223,7 +223,7 @@ interface Printable {
 
 impl Point for Printable {
     void print() {
-        println("Point({}, {})", self.x, self.y);
+        println("Point({self.x}, {self.y})");
     }
 }
 ```
@@ -277,8 +277,7 @@ int main() {
     
     // Loop
     for (int i = 0; i < 3; i++) {
-        println("Point[{}]: ({}, {})", 
-            i, points[i].x, points[i].y);
+        println("Point[{i}]: ({points[i].x}, {points[i].y})");
     }
     
     return 0;
@@ -299,7 +298,7 @@ void modify(Point p) {
 int main() {
     Point p1(10, 20);
     modify(p1);
-    println("{}", p1.x);  // 10 (Unchanged)
+    println("{p1.x}");  // 10 (Unchanged)
     return 0;
 }
 ```
@@ -314,7 +313,7 @@ void modify(Point* p) {
 int main() {
     Point p1(10, 20);
     modify(&p1);
-    println("{}", p1.x);  // 100 (Changed)
+    println("{p1.x}");  // 100 (Changed)
     return 0;
 }
 ```
@@ -339,7 +338,7 @@ Point p;
 
 ```cm
 Point p;
-// println("{}", p.x);  // Warning: Potentially uninitialized
+// println("{p.x}");  // Warning: Potentially uninitialized
 ```
 
 ### ❌ Direct Comparison
@@ -383,7 +382,7 @@ int main() {
     Circle c;
     c.radius = 5.0;
     
-    println("Area: {:.2}", c.area());
+    println("Area: {c.area():.2}");
     return 0;
 }
 ```

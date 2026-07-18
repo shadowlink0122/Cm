@@ -73,9 +73,9 @@ nav_order: 1
 ### ✅ 標準ライブラリ (Native向け)
 
 - **コレクション** - `Vector<T>`, `Queue<T>`, `HashMap<K,V>`
-- **スレッド** - `std::thread`, `Mutex`, `Channel`
-- **ネットワーク** - `std::http` (HTTP/HTTPS、OpenSSL統合)
-- **GPU** - `std::gpu` (Apple Metalバックエンド)
+- **スレッド** - `native::thread`, `Mutex`, `Channel`
+- **ネットワーク** - `native::http` (HTTP/HTTPS、OpenSSL統合)
+- **GPU** - `native::gpu` (Apple Metalバックエンド)
 
 ### 🔄 進行中
 
@@ -99,7 +99,7 @@ int main() { println("Hello, Cm!"); return 0; }
 interface Drawable { void draw(); }
 struct Circle { int radius; }
 impl Circle for Drawable {
-    void draw() { println("Circle({})", self.radius); }
+    void draw() { println("Circle({self.radius})"); }
 }
 ```
 

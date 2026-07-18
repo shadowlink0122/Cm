@@ -72,4 +72,4 @@ panic("unreachable code");  // メッセージを出力して終了
 ---
 
 <!-- nav -->
-← 前: [std::math — 数学関数](math.html) ｜ [目次](index.html) ｜ 次: [std::http - HTTP通信ライブラリ](http.html) →
+← 前: [std::math — 数学関数](math.html) ｜ [目次](index.html) ｜ 次: [native::http - HTTP通信ライブラリ](http.html) →

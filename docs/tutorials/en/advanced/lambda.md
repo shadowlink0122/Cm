@@ -76,7 +76,7 @@ func<int, int, int> add = (int a, int b) => { return a + b; };
 
 ```cm
 func<int, void> print_it = (int x) => {
-    println("Value: {}", x);
+    println("Value: {x}");
 };
 
 print_it(42);  // "Value: 42"
@@ -94,7 +94,7 @@ void process_async(func<int, void> callback) {
 }
 
 process_async((int x) => {
-    println("Got: {}", x);
+    println("Got: {x}");
 });
 ```
 

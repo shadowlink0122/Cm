@@ -46,9 +46,9 @@ nav_exclude: true
 ### ✅ Standard library (Native)
 
 - **Collections** — `Vector<T>`, `Queue<T>`, `HashMap<K,V>`
-- **Threads** — `std::thread`, `Mutex`, `Channel`
-- **Networking** — `std::http` (HTTP/HTTPS, OpenSSL)
-- **GPU** — `std::gpu` (Apple Metal backend)
+- **Threads** — `native::thread`, `Mutex`, `Channel`
+- **Networking** — `native::http` (HTTP/HTTPS, OpenSSL)
+- **GPU** — `native::gpu` (Apple Metal backend)
 
 ---
 
@@ -67,7 +67,7 @@ int main() { println("Hello, Cm!"); return 0; }
 interface Drawable { void draw(); }
 struct Circle { int radius; }
 impl Circle for Drawable {
-    void draw() { println("Circle({})", self.radius); }
+    void draw() { println("Circle({self.radius})"); }
 }
 ```
 

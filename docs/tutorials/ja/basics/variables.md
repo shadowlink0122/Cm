@@ -71,7 +71,9 @@ int y = 10;      // 宣言と初期化
 
 ```cm
 int a, b, c;
-int x = 1, y = 2, z = 3;
+int x = 1;
+int y = 2;
+int z = 3;
 ```
 
 **注意:** Cmには型推論（`var`キーワード）はありません。型は常に明示的に指定する必要があります。
@@ -117,7 +119,7 @@ int value = 42;
 void counter() {
     static int count = 0;
     count++;
-    println("Count: {}", count);
+    println("Count: {count}");
 }
 
 int main() {
@@ -152,7 +154,7 @@ double pi = 3.14;
 
 ```cm
 double pi = 3.14159;
-int truncated = (int)pi;  // 3
+int truncated = pi as int;  // 3
 ```
 
 ---
@@ -184,7 +186,7 @@ int truncated = (int)pi;  // 3
 
 ```cm
 int x;
-println("{}", x);  // 警告: 初期化されていない可能性
+println("{x}");  // 警告: 初期化されていない可能性
 ```
 
 ### ❌ 型の不一致
@@ -233,7 +235,7 @@ bool login_success = true;  // 真偽値
 void counter() {
     static int count = 0;
     count++;
-    println("Count: {}", count);
+    println("Count: {count}");
 }
 
 int main() {

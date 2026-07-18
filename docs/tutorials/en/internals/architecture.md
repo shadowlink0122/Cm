@@ -149,7 +149,7 @@ enum class TypeKind {
 
 ```cm
 // 定義
-func max<T>(T a, T b) -> T { ... }
+<T> T max(T a, T b) { ... }
 
 // 使用
 max(10, 20);      // max__int が生成

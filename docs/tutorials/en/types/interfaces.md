@@ -46,7 +46,7 @@ struct Circle {
 
 impl Circle for Drawable {
     void draw() {
-        println("Drawing a circle with radius {}", self.radius);
+        println("Drawing a circle with radius {self.radius}");
     }
 }
 
@@ -56,7 +56,7 @@ struct Square {
 
 impl Square for Drawable {
     void draw() {
-        println("Drawing a square with side {}", self.side);
+        println("Drawing a square with side {self.side}");
     }
 }
 ```
@@ -96,7 +96,7 @@ A single struct can implement multiple interfaces.
 ```cm
 impl Circle for Printable {
     void print() {
-        println("Circle(radius={})", self.radius);
+        println("Circle(radius={self.radius})");
     }
 }
 

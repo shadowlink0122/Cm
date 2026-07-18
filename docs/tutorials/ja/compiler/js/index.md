@@ -56,7 +56,7 @@ CmのJSバックエンドは以下の機能に対応しています:
 | Mutex / Channel / Atomic | 同上 |
 | GPU演算 (Metal API) | ネイティブ専用 |
 | ファイルI/O (`std::io`) | Node.js APIとの統合は今後 |
-| TCP/HTTP (`std::net`) | 同上 |
+| TCP/HTTP (`native::net`) | 同上 |
 | `calloc` / `realloc` | 未サポート |
 | `malloc` / `free` | ⚠️ GCベースで代替（限定サポート） |
 

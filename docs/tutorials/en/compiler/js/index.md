@@ -56,7 +56,7 @@ The following features are not supported in the JS target (they are skipped):
 | Mutex / Channel / Atomic | Same as above |
 | GPU computation (Metal API) | Native only |
 | File I/O (`std::io`) | Integration with Node.js API is future work |
-| TCP/HTTP (`std::net`) | Same as above |
+| TCP/HTTP (`native::net`) | Same as above |
 | Low-level memory (`malloc`, `free`) | GC managed |
 
 ## Examples

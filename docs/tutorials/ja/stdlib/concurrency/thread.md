@@ -2,7 +2,7 @@
 title: スレッド
 ---
 
-# std::thread - スレッド管理
+# native::thread - スレッド管理
 
 pthreadベースのスレッド生成・管理モジュール。
 
@@ -15,9 +15,9 @@ pthreadベースのスレッド生成・管理モジュール。
 ## 基本的な使い方
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 import std::io::println;
 
 void* worker(void* arg) {
@@ -40,8 +40,8 @@ int main() {
 ## 引数付きスレッド
 
 ```cm
-import std::thread::spawn_with_arg;
-import std::thread::join;
+import native::thread::spawn_with_arg;
+import native::thread::join;
 import std::io::println;
 
 void* compute(void* arg) {
@@ -63,8 +63,8 @@ int main() {
 ## 複数スレッドの一括待機
 
 ```cm
-import std::thread::spawn;
-import std::thread::join_all;
+import native::thread::spawn;
+import native::thread::join_all;
 
 int main() {
     ulong handles[4];
@@ -98,4 +98,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [並行処理 - 概要](index.html) ｜ [目次](index.html) ｜ 次: [std::sync::mutex - 排他制御](mutex.html) →
+← 前: [並行処理 - 概要](index.html) ｜ [目次](index.html) ｜ 次: [native::sync::mutex - 排他制御](mutex.html) →

@@ -51,9 +51,9 @@
 | std::math / core / iter | ✅ | ✅ | ✅ | ✅ | ⚠️ 合成可能な範囲 | ✅ | ✅ |
 | std::collections | ✅ | ✅ | ✅ | ❌ skip中 | ❌ 動的メモリ | ⚠️ | ⚠️ |
 | std::mem（malloc等） | ✅ | ✅ | ✅ | ⚠️ GCエミュレーション | ― | ❌ no_std検査 | ❌ no_std検査 |
-| std::thread / sync | ✅ | ✅ | ― | ❌ シングルスレッド | ― | ❌ | ❌ |
-| std::net / http | ✅ | ✅ | ― | ❌（今後） | ― | ❌ | ❌ |
-| std::gpu（Metal） | ✅ | ✅ macOSのみ | ― | ❌ | ― | ― | ― |
+| native::thread / sync | ✅ | ✅ | ― | ❌ シングルスレッド | ― | ❌ | ❌ |
+| native::net / http | ✅ | ✅ | ― | ❌（今後） | ― | ❌ | ❌ |
+| native::gpu（Metal） | ✅ | ✅ macOSのみ | ― | ❌ | ― | ― | ― |
 | ファイルI/O | ✅ | ✅ | ⚠️ WASI | ❌（今後） | ―（$readmemhのみ） | ❌ Boot Services経由 | ❌ |
 | js::fetch / timer / console | ― | ― | ― | ✅ | ― | ― | ― |
 | uefi::*（Boot Services） | ― | ― | ― | ― | ― | ✅ | ― |

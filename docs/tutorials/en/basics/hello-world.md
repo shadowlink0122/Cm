@@ -35,11 +35,11 @@ int main() {
 ```cm
 int main() {
     const int x = 42;  // Use const for immutable values
-    println("The answer is {}", x);
+    println("The answer is {x}");
 
     const string name = "Alice";  // String is also const
     const int age = 25;           // Age won't change
-    println("{} is {} years old", name, age);
+    println("{name} is {age} years old");
     return 0;
 }
 ```

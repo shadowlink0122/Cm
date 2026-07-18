@@ -2,7 +2,7 @@
 title: TCP/UDP通信
 ---
 
-# std::net - TCP/UDP通信
+# native::net - TCP/UDP通信
 
 低レベルのソケット通信モジュール。TCP/UDP/DNS/イベント多重化(poll)を提供します。
 
@@ -17,14 +17,14 @@ title: TCP/UDP通信
 ### エコーサーバ
 
 ```cm
-import std::net::tcp_listen;
-import std::net::tcp_accept;
-import std::net::tcp_read;
-import std::net::tcp_write;
-import std::net::tcp_close;
-import std::net::buf_create;
-import std::net::buf_get;
-import std::net::buf_destroy;
+import native::net::tcp_listen;
+import native::net::tcp_accept;
+import native::net::tcp_read;
+import native::net::tcp_write;
+import native::net::tcp_close;
+import native::net::buf_create;
+import native::net::buf_get;
+import native::net::buf_destroy;
 import std::io::println;
 
 int main() {
@@ -47,14 +47,14 @@ int main() {
 ### TCPクライアント
 
 ```cm
-import std::net::tcp_connect;
-import std::net::tcp_read;
-import std::net::tcp_write;
-import std::net::tcp_close;
-import std::net::buf_create;
-import std::net::buf_set;
-import std::net::buf_get;
-import std::net::buf_destroy;
+import native::net::tcp_connect;
+import native::net::tcp_read;
+import native::net::tcp_write;
+import native::net::tcp_close;
+import native::net::buf_create;
+import native::net::buf_set;
+import native::net::buf_get;
+import native::net::buf_destroy;
 import std::io::println;
 
 int main() {
@@ -105,14 +105,14 @@ TCPではバイト列を直接操作するため、ヒープバッファAPIを�
 ## UDP通信
 
 ```cm
-import std::net::udp_create;
-import std::net::udp_bind;
-import std::net::udp_sendto;
-import std::net::udp_recvfrom;
-import std::net::udp_close;
-import std::net::buf_create;
-import std::net::buf_set;
-import std::net::buf_destroy;
+import native::net::udp_create;
+import native::net::udp_bind;
+import native::net::udp_sendto;
+import native::net::udp_recvfrom;
+import native::net::udp_close;
+import native::net::buf_create;
+import native::net::buf_set;
+import native::net::buf_destroy;
 
 int main() {
     long fd = udp_create();
@@ -143,7 +143,7 @@ int main() {
 ## DNS解決
 
 ```cm
-import std::net::dns_resolve;
+import native::net::dns_resolve;
 string ip = dns_resolve("example.com");
 // ip = "93.184.216.34"
 ```
@@ -170,13 +170,13 @@ TCP/UDP共通のオプション設定。
 複数ソケットを効率的に監視するためのAPI (kqueue/poll ベース)。
 
 ```cm
-import std::net::poll_create;
-import std::net::poll_add;
-import std::net::poll_wait;
-import std::net::poll_get_fd;
-import std::net::poll_get_events;
-import std::net::poll_destroy;
-import std::net::poll_read_flag;
+import native::net::poll_create;
+import native::net::poll_add;
+import native::net::poll_wait;
+import native::net::poll_get_fd;
+import native::net::poll_get_events;
+import native::net::poll_destroy;
+import native::net::poll_read_flag;
 
 long poller = poll_create();
 poll_add(poller, server_fd, poll_read_flag());
@@ -207,4 +207,4 @@ poll_destroy(poller);
 ---
 
 <!-- nav -->
-← 前: [std::http - HTTP通信ライブラリ](../http.html) ｜ [目次](../index.html) ｜ 次: [並行処理 - 概要](../concurrency/index.html) →
+← 前: [native::http - HTTP通信ライブラリ](../http.html) ｜ [目次](../index.html) ｜ 次: [並行処理 - 概要](../concurrency/index.html) →

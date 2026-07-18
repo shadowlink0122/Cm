@@ -62,8 +62,8 @@ int main() {
     Box a = {value: 10};
     Box b = move a;  // 明示的な移動
 
-    println("{}", b.value); // OK: bが所有者
-    // println("{}", a.value); // エラー: aは移動済み
+    println("{b.value}"); // OK: bが所有者
+    // println("{a.value}"); // エラー: aは移動済み
 
     return 0;
 }

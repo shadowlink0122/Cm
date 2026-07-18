@@ -2,7 +2,7 @@
 title: GPU計算 (Metal)
 ---
 
-# std::gpu - GPU計算 (Apple Metal)
+# native::gpu - GPU計算 (Apple Metal)
 
 Cm標準ライブラリのGPU計算モジュール。Apple Metal Frameworkを使用したGPGPU演算を提供します。
 
@@ -14,7 +14,7 @@ Cm標準ライブラリのGPU計算モジュール。Apple Metal Frameworkを使
 
 ## 概要
 
-`std::gpu` はMetal Compute Shaderを使ってGPU上で大量のデータを並列処理するためのAPIです。
+`native::gpu` はMetal Compute Shaderを使ってGPU上で大量のデータを並列処理するためのAPIです。
 
 1. **デバイス** を作成
 2. **バッファ** にデータを転送
@@ -29,16 +29,16 @@ Cm標準ライブラリのGPU計算モジュール。Apple Metal Frameworkを使
 ### ベクトル加算の例
 
 ```cm
-import std::gpu::device_create;
-import std::gpu::device_name;
-import std::gpu::device_destroy;
-import std::gpu::buffer_create_ints;
-import std::gpu::buffer_write_ints;
-import std::gpu::buffer_read_ints;
-import std::gpu::buffer_destroy;
-import std::gpu::kernel_create;
-import std::gpu::kernel_destroy;
-import std::gpu::dispatch;
+import native::gpu::device_create;
+import native::gpu::device_name;
+import native::gpu::device_destroy;
+import native::gpu::buffer_create_ints;
+import native::gpu::buffer_write_ints;
+import native::gpu::buffer_read_ints;
+import native::gpu::buffer_destroy;
+import native::gpu::kernel_create;
+import native::gpu::kernel_destroy;
+import native::gpu::dispatch;
 import std::io::println;
 
 int main() {
@@ -184,4 +184,4 @@ kernel void my_kernel(
 ---
 
 <!-- nav -->
-← 前: [std::sync::atomic - アトミック操作](concurrency/atomic.html) ｜ [目次](index.html) ｜ 次: [std::collections::vector - 動的配列](collections/vector.html) →
+← 前: [native::sync::atomic - アトミック操作](concurrency/atomic.html) ｜ [目次](index.html) ｜ 次: [std::collections::vector - 動的配列](collections/vector.html) →

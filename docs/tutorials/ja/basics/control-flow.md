@@ -100,7 +100,7 @@ const int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 
 ```cm
 while (i < 5) {
-    println("{}", i);
+    println("{i}");
 }
 // 出力: 0, 1, 2, 3, 4
 ```
@@ -109,7 +109,7 @@ while (i < 5) {
 
 ```cm
 while (true) {
-    println("{}", count);
+    println("{count}");
     count++;
     
         break;  // ループを抜ける
@@ -124,7 +124,7 @@ while (true) {
 while (sum < 100) {
 }
 
-println("Sum: {}", sum);
+println("Sum: {sum}");
 ```
 
 ---
@@ -136,17 +136,17 @@ println("Sum: {}", sum);
 ```cm
 // 基本形
 for (int i = 0; i < 5; i++) {
-    println("{}", i);
+    println("{i}");
 }
 
 // 初期化式なし
 for (; j < 5; j++) {
-    println("{}", j);
+    println("{j}");
 }
 
 // 複数の変数
 for (int i = 0, j = 10; i < 5; i++, j--) {
-    println("i={}, j={}", i, j);
+    println("i={i}, j={j}");
 }
 ```
 
@@ -156,12 +156,12 @@ for (int i = 0, j = 10; i < 5; i++, j--) {
 
 // 型指定あり
 for (int n in arr) {
-    println("{}", n);
+    println("{n}");
 }
 
 // 型推論
 for (n in arr) {
-    println("{}", n);
+    println("{n}");
 }
 ```
 
@@ -176,7 +176,7 @@ for (n in arr) {
     points[2] = Point(50, 60);
     
     for (p in points) {
-        println("({}, {})", p.x, p.y);
+        println("({p.x}, {p.y})");
     }
     
     return 0;
@@ -310,14 +310,14 @@ enum Status {
 while (true) {
         break;
     }
-    println("{}", i);
+    println("{i}");
 }
 
 // for文
 for (int j = 0; j < 10; j++) {
         break;
     }
-    println("{}", j);
+    println("{j}");
 }
 ```
 
@@ -328,14 +328,14 @@ for (int j = 0; j < 10; j++) {
 for (int i = 0; i < 10; i++) {
         continue;  // 奇数はスキップ
     }
-    println("{}", i);
+    println("{i}");
 }
 
 // while文
 while (n < 10) {
         continue;
     }
-    println("{}", n);
+    println("{n}");
 }
 ```
 
@@ -395,7 +395,7 @@ void process_file() {
 for (int i = 1; i <= 9; i++) {
     for (int j = 1; j <= 9; j++) {
         // 改行なしで出力（各自実装が必要）
-        println("{}", i * j);
+        println("{i * j}");
     }
 }
 ```
@@ -408,7 +408,7 @@ for (int i = 1; i <= 9; i++) {
 bool found = false;
 for (int i = 0; i < 10 && !found; i++) {
     for (int j = 0; j < 10; j++) {
-            println("Found: {}*{} = 42", i, j);
+            println("Found: {i}*{j} = 42");
             found = true;
             break;  // 内側のループを抜ける
         }
@@ -474,7 +474,7 @@ for (int i = 0; i < 10 && !found; i++) {
 ```cm
 // ループ条件が常にtrue
 while (i < 10) {
-    println("{}", i);
+    println("{i}");
     // i++を忘れている！
 }
 ```
@@ -484,7 +484,7 @@ while (i < 10) {
 ```cm
 while (i < 5);  // セミコロンがある！
 {
-    println("{}", i);
+    println("{i}");
 }
 // 無限ループになる
 ```
@@ -507,7 +507,7 @@ while (i < 5);  // セミコロンがある！
         } else if (i % 5 == 0) {
             println("Buzz");
         } else {
-            println("{}", i);
+            println("{i}");
         }
     }
     return 0;
@@ -528,8 +528,8 @@ while (i < 5);  // セミコロンがある！
     return result;
 }
 
-    println("5! = {}", factorial(5));  // 120
-    println("10! = {}", factorial(10)); // 3628800
+    println("5! = {factorial(5)}");  // 120
+    println("10! = {factorial(10)}"); // 3628800
     return 0;
 }
 ```
@@ -555,7 +555,7 @@ bool is_prime(int n) {
 }
 
     for (int i = 2; i <= 20; i++) {
-            println("{} is prime", i);
+            println("{i} is prime");
         }
     }
     return 0;

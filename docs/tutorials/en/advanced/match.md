@@ -189,8 +189,8 @@ void check_score(int score) {
 ```cm
 int describe(int n) {
     match (n) {
-        x if x % 2 == 0 => println("{} is even", x),
-        x if x % 2 == 1 => println("{} is odd", x),
+        x if x % 2 == 0 => println("{x} is even"),
+        x if x % 2 == 1 => println("{x} is odd"),
     }
     return 0;
 }
@@ -204,7 +204,7 @@ void fizzbuzz(int n) {
         x if x % 15 == 0 => println("FizzBuzz"),
         x if x % 3 == 0 => println("Fizz"),
         x if x % 5 == 0 => println("Buzz"),
-        x => println("{}", x),
+        x => println("{x}"),
     }
 }
 
@@ -329,9 +329,9 @@ void handle_response(int status) {
         HttpStatus::Ok => println("Success"),
         HttpStatus::NotFound => println("Page not found"),
         HttpStatus::InternalError => println("Server error"),
-        s if s >= 400 && s < 500 => println("Client error: {}", s),
-        s if s >= 500 => println("Server error: {}", s),
-        _ => println("Other status: {}", status),
+        s if s >= 400 && s < 500 => println("Client error: {s}"),
+        s if s >= 500 => println("Server error: {s}"),
+        _ => println("Other status: {status}"),
     }
 }
 ```

@@ -95,4 +95,4 @@ Current implementation has the following limitations:
 ---
 
 <!-- nav -->
-← Prev: [Threads (std::thread)](thread.html) | [Contents](index.html) | Next: [must Keyword](must.html) →
+← Prev: [Threads (native::thread)](thread.html) | [Contents](index.html) | Next: [must Keyword](must.html) →

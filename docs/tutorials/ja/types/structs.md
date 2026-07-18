@@ -66,7 +66,7 @@ Point p1;
 p1.x = 10;
 p1.y = 20;
 
-println("Point: ({}, {})", p1.x, p1.y);
+println("Point: ({p1.x}, {p1.y})");
 ```
 
 ### デフォルト値
@@ -109,7 +109,7 @@ impl Point {
 
 int main() {
     Point origin;  // (0, 0)で初期化
-    println("({}, {})", origin.x, origin.y);
+    println("({origin.x}, {origin.y})");
     return 0;
 }
 ```
@@ -196,7 +196,7 @@ impl Point {
     }
 
     void print() {
-        println("Point({}, {})", self.x, self.y);
+        println("Point({self.x}, {self.y})");
     }
 }
 
@@ -222,7 +222,7 @@ interface Printable {
 
 impl Point for Printable {
     void print() {
-        println("Point({}, {})", self.x, self.y);
+        println("Point({self.x}, {self.y})");
     }
 }
 ```
@@ -251,9 +251,7 @@ int main() {
     line.end.x = 100;
     line.end.y = 100;
     
-    println("Line from ({}, {}) to ({}, {})",
-        line.start.x, line.start.y,
-        line.end.x, line.end.y);
+    println("Line from ({line.start.x}, {line.start.y}) to ({line.end.x}, {line.end.y})");
     
     return 0;
 }
@@ -306,8 +304,7 @@ int main() {
     
     // 配列のループ
     for (int i = 0; i < 3; i++) {
-        println("Point[{}]: ({}, {})", 
-            i, points[i].x, points[i].y);
+        println("Point[{i}]: ({points[i].x}, {points[i].y})");
     }
     
     return 0;
@@ -328,7 +325,7 @@ void modify(Point p) {
 int main() {
     Point p1(10, 20);
     modify(p1);
-    println("{}", p1.x);  // 10（変更されない）
+    println("{p1.x}");  // 10（変更されない）
     return 0;
 }
 ```
@@ -343,7 +340,7 @@ void modify(Point* p) {
 int main() {
     Point p1(10, 20);
     modify(&p1);
-    println("{}", p1.x);  // 100（変更される）
+    println("{p1.x}");  // 100（変更される）
     return 0;
 }
 ```
@@ -368,7 +365,7 @@ Point p;
 
 ```cm
 Point p;
-// println("{}", p.x);  // 警告: 未初期化の可能性
+// println("{p.x}");  // 警告: 未初期化の可能性
 ```
 
 ### ❌ 構造体の直接比較
@@ -414,7 +411,7 @@ int main() {
     c.y = 0.0;
     c.radius = 5.0;
     
-    println("Area: {:.2}", c.area());
+    println("Area: {c.area():.2}");
     return 0;
 }
 ```

@@ -31,7 +31,7 @@ int main() {
 Protect benchmark code where results aren't used:
 
 ```cm
-import std::thread::sleep_ms;
+import native::thread::sleep_ms;
 
 int main() {
     int result = 0;
@@ -55,9 +55,9 @@ int main() {
 Protect side-effect-free operations in thread timing tests:
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 void* worker(void* arg) {
     int count = 0;

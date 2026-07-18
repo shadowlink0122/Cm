@@ -30,7 +30,7 @@ int add(const int a, const int b) {  // パラメータは変更しないのでc
 }
 
 void greet(const string name) {  // nameも変更しないのでconst
-    println("Hello, {}!", name);
+    println("Hello, {name}!");
 }
 
 int main() {
@@ -66,7 +66,7 @@ void increment(int n) {
 int main() {
     int x = 10;  // 可変変数（変更予定がないならconstにすべき）
     increment(x);
-    println("{}", x);  // 10（変更されない）
+    println("{x}");  // 10（変更されない）
     return 0;
 }
 ```
@@ -83,7 +83,7 @@ void increment(int* n) {
 int main() {
     int x = 10;  // 可変変数（変更するのでconstは使えない）
     increment(&x);
-    println("{}", x);  // 11（変更される）
+    println("{x}");  // 11（変更される）
     return 0;
 }
 ```
@@ -112,7 +112,7 @@ double process(double x) { return x; }
 
 ```cm
 void log(string message, int level = 1) {
-    println("[Level {}] {}", level, message);
+    println("[Level {level}] {message}");
 }
 
     return 0;
@@ -176,7 +176,7 @@ overload int foo(double x) { ... } // OK
     return n * factorial(n - 1);
 }
 
-    println("5! = {}", factorial(5));
+    println("5! = {factorial(5)}");
     return 0;
 }
 ```

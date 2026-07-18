@@ -30,8 +30,8 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
-| `std::http` | HTTP/HTTPSクライアント・サーバ | [HTTP通信](http.html) |
-| `std::net` | TCP/UDP/DNS/poll | [TCP/UDP通信](network/tcp.html) |
+| `native::http` | HTTP/HTTPSクライアント・サーバ | [HTTP通信](http.html) |
+| `native::net` | TCP/UDP/DNS/poll | [TCP/UDP通信](network/tcp.html) |
 
 ---
 
@@ -41,10 +41,10 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
-| `std::thread` | スレッド生成・join・sleep | [スレッド](concurrency/thread.html) |
-| `std::sync::mutex` | Mutex・RwLock | [Mutex](concurrency/mutex.html) |
-| `std::sync::channel` | Go風バウンデッドチャネル | [Channel](concurrency/channel.html) |
-| `std::sync::atomic` | アトミック操作 | [Atomic](concurrency/atomic.html) |
+| `native::thread` | スレッド生成・join・sleep | [スレッド](concurrency/thread.html) |
+| `native::sync::mutex` | Mutex・RwLock | [Mutex](concurrency/mutex.html) |
+| `native::sync::channel` | Go風バウンデッドチャネル | [Channel](concurrency/channel.html) |
+| `native::sync::atomic` | アトミック操作 | [Atomic](concurrency/atomic.html) |
 
 
 ---
@@ -53,7 +53,7 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
-| `std::gpu` | Apple Metal GPGPU | [GPU計算](gpu.html) |
+| `native::gpu` | Apple Metal GPGPU | [GPU計算](gpu.html) |
 
 ---
 
@@ -84,4 +84,4 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 ---
 
 <!-- nav -->
-← 前: [スレッド (std::thread)](../advanced/thread.html) ｜ [目次](../index.html) ｜ 次: [std::io — 入出力](io.html) →
+← 前: [スレッド (native::thread)](../advanced/thread.html) ｜ [目次](../index.html) ｜ 次: [std::io — 入出力](io.html) →
