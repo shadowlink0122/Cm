@@ -131,7 +131,7 @@ export void dispatch_n(long kernel, long* buffers, long buffer_count, long count
 
 // デバイスが利用可能かチェック
 export bool is_available() {
-    long dev = gpu_device_create();
+    const long dev = gpu_device_create();
     if (dev == 0) {
         return false;
     }

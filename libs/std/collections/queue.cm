@@ -37,7 +37,7 @@ export impl<T> Queue<T> {
 
     // 末尾に追加（enqueue）
     void enqueue(T value) {
-        long node_size = __sizeof__(QueueNode<T>) as long;
+        const long node_size = __sizeof__(QueueNode<T>) as long;
         void* raw_ptr = malloc(node_size);
         QueueNode<T>* new_node = raw_ptr as QueueNode<T>*;
 
@@ -58,7 +58,7 @@ export impl<T> Queue<T> {
     // 先頭を取得して削除（dequeue）
     T dequeue() {
         QueueNode<T>* head = self.front;
-        T data = head->data;
+        const T data = head->data;
         self.front = head->next;
 
         void* null_ptr = 0 as void*;

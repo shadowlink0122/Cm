@@ -28,10 +28,10 @@ export struct HashMap<K, V> {
 export impl<K, V> HashMap<K, V> {
     // コンストラクタ（デフォルト容量16）
     self() {
-        int capacity = 16;
+        const int capacity = 16;
         // Entryサイズは64バイト固定（十分なサイズ確保）
-        long entry_size = 64;
-        long alloc_size = (capacity as long) * entry_size;
+        const long entry_size = 64;
+        const long alloc_size = (capacity as long) * entry_size;
         void* raw_ptr = malloc(alloc_size);
         self.entries = raw_ptr as Entry<K, V>*;
         self.cap = capacity;
@@ -46,10 +46,10 @@ export impl<K, V> HashMap<K, V> {
         // 簡易ハッシュ（intとして扱う）
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % self.cap;
+        const int idx = h % self.cap;
 
         for (int i = 0; i < self.cap; i++) {
-            int pos = (idx + i) % self.cap;
+            const int pos = (idx + i) % self.cap;
             if (!self.entries[pos].occupied || self.entries[pos].key == key) {
                 if (!self.entries[pos].occupied) {
                     self.size = self.size + 1;
@@ -66,10 +66,10 @@ export impl<K, V> HashMap<K, V> {
     V get(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % self.cap;
+        const int idx = h % self.cap;
 
         for (int i = 0; i < self.cap; i++) {
-            int pos = (idx + i) % self.cap;
+            const int pos = (idx + i) % self.cap;
             if (self.entries[pos].occupied && self.entries[pos].key == key) {
                 return self.entries[pos].value;
             }
@@ -86,10 +86,10 @@ export impl<K, V> HashMap<K, V> {
     bool contains(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % self.cap;
+        const int idx = h % self.cap;
 
         for (int i = 0; i < self.cap; i++) {
-            int pos = (idx + i) % self.cap;
+            const int pos = (idx + i) % self.cap;
             if (self.entries[pos].occupied && self.entries[pos].key == key) {
                 return true;
             }
@@ -104,10 +104,10 @@ export impl<K, V> HashMap<K, V> {
     void remove(K key) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
-        int idx = h % self.cap;
+        const int idx = h % self.cap;
 
         for (int i = 0; i < self.cap; i++) {
-            int pos = (idx + i) % self.cap;
+            const int pos = (idx + i) % self.cap;
             if (self.entries[pos].occupied && self.entries[pos].key == key) {
                 self.entries[pos].occupied = false;
                 self.size = self.size - 1;

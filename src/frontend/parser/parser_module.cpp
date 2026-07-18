@@ -16,7 +16,8 @@ ast::DeclPtr Parser::parse_module() {
     ast::ModulePath path;
     path.segments.push_back(expect_ident());
 
-    while (consume_if(TokenKind::ColonColon)) {
+    // パス区切りは :: と .（ライブラリは module std.core; 形式を使用）の両方を許可
+    while (consume_if(TokenKind::ColonColon) || consume_if(TokenKind::Dot)) {
         path.segments.push_back(expect_ident());
     }
 

@@ -76,8 +76,8 @@ export ulong uefi_reset_input(EfiSystemTable* st) {
     }
 
     // Reset(This, ExtendedVerification=FALSE)
-    ulong fn_addr = reset_fn as ulong;
-    ulong ci_addr = con_in as ulong;
+    const ulong fn_addr = reset_fn as ulong;
+    const ulong ci_addr = con_in as ulong;
     return input_call2(fn_addr, ci_addr, 0);
 }
 
@@ -96,9 +96,9 @@ export ulong uefi_read_key(EfiSystemTable* st, EfiInputKey* key) {
     }
 
     // ReadKeyStroke(This, Key)
-    ulong fn_addr = read_fn as ulong;
-    ulong ci_addr = con_in as ulong;
-    ulong key_addr = key as ulong;
+    const ulong fn_addr = read_fn as ulong;
+    const ulong ci_addr = con_in as ulong;
+    const ulong key_addr = key as ulong;
     return input_call2(fn_addr, ci_addr, key_addr);
 }
 
@@ -121,23 +121,23 @@ export ulong uefi_wait_for_key(EfiSystemTable* st) {
 
     // WaitForEvent(NumberOfEvents=1, Events=&con_in->wait_for_key, Index)
     void* event = con_in->wait_for_key;
-    ulong event_array = event as ulong;
+    const ulong event_array = event as ulong;
     ulong index = 0;
 
     // イベント配列をスタック上に作成
     ulong[1] events;
     events[0] = event_array;
 
-    ulong fn_addr = wait_fn as ulong;
-    ulong num_events = 1;
-    ulong events_addr = events as ulong;
-    ulong index_addr = (&index) as ulong;
+    const ulong fn_addr = wait_fn as ulong;
+    const ulong num_events = 1;
+    const ulong events_addr = events as ulong;
+    const ulong index_addr = (&index) as ulong;
     return input_call3(fn_addr, num_events, events_addr, index_addr);
 }
 
 /// キー入力をブロッキングで読み取り（待機+読み取りの便利関数）
 export ulong uefi_read_key_blocking(EfiSystemTable* st, EfiInputKey* key) {
-    ulong status = uefi_wait_for_key(st);
+    const ulong status = uefi_wait_for_key(st);
     if (efi_error(status)) {
         return status;
     }

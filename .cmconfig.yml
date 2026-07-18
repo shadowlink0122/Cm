@@ -1,0 +1,21 @@
+# Cmリポジトリのlint設定
+# ディレクトリ走査（-r）からの除外。明示的なファイル指定はこの除外の影響を受けない
+lint:
+  exclude:
+    # コンパイラのテストコーパス（意図的な違反・エラー・全構文パターンを含む）
+    - tests/
+    # import専用のモジュール集約dialect（module std.core; typedefエイリアス・export <T>等、
+    # importプリプロセッサ経由でのみ解析可能なファイル群）
+    - libs/std/core/
+    - libs/std/io/
+    - libs/std/iter/
+    - libs/std/math/mod.cm
+    - libs/std/mem/
+    - libs/std/collections/mod.cm
+    - libs/native/io/
+    - libs/native/math/
+    - libs/native/sync/mod.cm
+    - libs/uefi/mod.cm
+    # UEFI例のFFI/ユーティリティ断片（use uefi{} dialect。QEMUフローで検証される）
+    - examples/uefi/libs/
+    - examples/uefi/util/

@@ -231,7 +231,9 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     {
         auto tracked_type = resolve_typedef(let.type ? let.type : init_type);
         bool is_pointer = tracked_type && tracked_type->kind == ast::TypeKind::Pointer;
-        if (!let.is_const && !is_pointer) {
+        // 初期化子（またはコンストラクタ呼び出し）のない宣言はconst化できないため対象外
+        bool can_be_const = let.init != nullptr || let.has_ctor_call;
+        if (!let.is_const && !is_pointer && can_be_const) {
             non_const_variable_spans_[let.name] = stmt_span;
         }
     }

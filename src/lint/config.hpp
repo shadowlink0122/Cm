@@ -58,6 +58,9 @@ class ConfigLoader {
     // 設定ファイルのパスを取得
     const std::string& config_path() const { return config_path_; }
 
+    // ディレクトリ走査から除外するパスパターン（lint: exclude: の項目）
+    const std::vector<std::string>& excludes() const { return excludes_; }
+
     // プリセットを適用
     void apply_preset(Preset preset);
 
@@ -87,6 +90,7 @@ class ConfigLoader {
 
     std::unordered_map<std::string, RuleConfig> rules_;
     std::string config_path_;
+    std::vector<std::string> excludes_;
     bool loaded_ = false;
     Preset current_preset_ = Preset::None;
 

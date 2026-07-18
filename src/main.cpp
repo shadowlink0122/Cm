@@ -233,7 +233,8 @@ bool matches_exclude_pattern(const std::string& filepath,
 
 // .cmファイルを収集（再帰オプション対応）
 std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths, bool recursive,
-                                          const std::vector<std::string>& excludes) {
+                                          const std::vector<std::string>& excludes,
+                                          const std::vector<std::string>& dir_scan_excludes = {}) {
     std::vector<std::string> result;
 
     for (const auto& path : paths) {
@@ -253,6 +254,12 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                 }
             }
         } else if (fs::is_directory(p)) {
+            // 明示的に指定されたディレクトリが除外パターン配下の場合は、
+            // ユーザーの意図を優先して設定由来の除外を適用しない
+            std::vector<std::string> effective_dir_excludes = dir_scan_excludes;
+            if (matches_exclude_pattern(fs::absolute(p).string() + "/", dir_scan_excludes)) {
+                effective_dir_excludes.clear();
+            }
             // ディレクトリの場合
             if (recursive) {
                 // 再帰的に走査（一時ディレクトリ .tmp と隠しディレクトリは常に除外）
@@ -268,7 +275,10 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                     }
                     if (entry.is_regular_file() && entry.path().extension() == ".cm") {
                         std::string filepath = entry.path().string();
-                        if (!matches_exclude_pattern(filepath, excludes)) {
+                        // 設定ファイル由来の除外（dir_scan_excludes）はディレクトリ走査にのみ
+                        // 適用する（明示的なファイル指定は除外しない）
+                        if (!matches_exclude_pattern(filepath, excludes) &&
+                            !matches_exclude_pattern(filepath, effective_dir_excludes)) {
                             result.push_back(filepath);
                         }
                     }
@@ -278,7 +288,8 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                 for (const auto& entry : fs::directory_iterator(p)) {
                     if (entry.is_regular_file() && entry.path().extension() == ".cm") {
                         std::string filepath = entry.path().string();
-                        if (!matches_exclude_pattern(filepath, excludes)) {
+                        if (!matches_exclude_pattern(filepath, excludes) &&
+                            !matches_exclude_pattern(filepath, effective_dir_excludes)) {
                             result.push_back(filepath);
                         }
                     }
@@ -373,8 +384,17 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // ファイルを収集
-        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns);
+        // 設定ファイルを読み込み（除外パターンを収集前に反映する）
+        lint::ConfigLoader config;
+        if (config.find_and_load(".")) {
+            if (opts.verbose) {
+                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
+            }
+        }
+
+        // ファイルを収集（設定のexcludeはディレクトリ走査にのみ適用）
+        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns,
+                                         config.excludes());
 
         if (cm_files.empty()) {
             std::cerr << "エラー: チェック対象の.cmファイルが見つかりません\n";
@@ -387,14 +407,6 @@ int main(int argc, char* argv[]) {
                 std::cout << "  - " << f << "\n";
             }
             std::cout << "\n";
-        }
-
-        // 設定ファイルを読み込み
-        lint::ConfigLoader config;
-        if (config.find_and_load(".")) {
-            if (opts.verbose) {
-                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
-            }
         }
 
         // 各ファイルをチェック

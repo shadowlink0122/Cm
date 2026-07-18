@@ -111,7 +111,7 @@ impl RangeIterator {
 
     /// 次の要素を取得
     int next() {
-        int value = self.current;
+        const int value = self.current;
         self.current = self.current + self.step;
         return value;
     }

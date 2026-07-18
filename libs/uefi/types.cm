@@ -119,6 +119,6 @@ export const ushort SCAN_ESC   = 0x17;
 /// → 符号付き64bit整数として負の値
 export bool efi_error(ulong status) {
     // ビット63がセット = 符号付きで負 → エラー
-    long signed_status = status as long;
+    const long signed_status = status as long;
     return signed_status < 0;
 }

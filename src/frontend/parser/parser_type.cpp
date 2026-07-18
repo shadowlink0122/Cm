@@ -425,6 +425,19 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
             advance();
         }
 
+        // SVの範囲表記 [msb:lsb] は型宣言では非対応（スライス式と紛らわしいため）。
+        // Cmは要素数表記に統一しており、SV出力側で [N-1:0] へ変換される
+        if (check(TokenKind::Colon)) {
+            error(
+                "型の幅・要素数は個数で指定します（SVの範囲表記 [msb:lsb] "
+                "は型宣言では使えません）。例: bit[3:0] ではなく bit[4] と書きます"
+                "（生成されるSVでは logic [3:0] になります）");
+            // 復帰: ']' まで読み飛ばして後続の解析を継続する
+            while (!check(TokenKind::RBracket) && !check(TokenKind::Eof)) {
+                advance();
+            }
+        }
+
         expect(TokenKind::RBracket);
 
         ast::TypePtr arr_type;

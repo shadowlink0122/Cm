@@ -94,6 +94,15 @@ lint:
     W001: error      # promote unused variables to errors
 ```
 
+Use `exclude:` to omit paths from directory scans (`-r`), such as test corpora or import-only module files. Explicitly specified files, or directories under an excluded path given directly, are still linted:
+
+```yaml
+lint:
+  exclude:
+    - tests/          # exclude the test corpus from scans
+    - libs/std/core/  # import-only module aggregation dialect
+```
+
 Line-level disabling comments are also available:
 
 ```cm

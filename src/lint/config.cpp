@@ -130,6 +130,7 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
 
     bool in_lint_section = false;
     bool in_rules_section = false;
+    bool in_exclude_section = false;
 
     while (std::getline(stream, line)) {
         // コメント行をスキップ
@@ -153,6 +154,13 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
         if (indent == 0) {
             in_lint_section = (trimmed == "lint:" || trimmed.substr(0, 5) == "lint:");
             in_rules_section = false;
+            in_exclude_section = false;
+        } else if (in_exclude_section && indent >= 4 && trimmed.substr(0, 2) == "- ") {
+            // 除外パターン: "- tests/"
+            std::string pattern = trim(trimmed.substr(2));
+            if (!pattern.empty()) {
+                excludes_.push_back(pattern);
+            }
         } else if (in_lint_section && indent >= 2 && indent < 4) {
             // preset: の処理
             if (trimmed.substr(0, 7) == "preset:") {
@@ -163,6 +171,7 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
                 }
             }
             in_rules_section = (trimmed == "rules:" || trimmed.substr(0, 6) == "rules:");
+            in_exclude_section = (trimmed == "exclude:" || trimmed.substr(0, 8) == "exclude:");
         } else if (in_rules_section && indent >= 4) {
             // ルール設定を解析: "W001: disabled"
             size_t colon_pos = trimmed.find(':');

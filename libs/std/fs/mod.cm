@@ -55,7 +55,7 @@ export Result<string, string> read_to_string(string path) {
     if (!cm_file_exists(path)) {
         return Result::Err("no such file: " + path);
     }
-    string content = cm_file_read_all(path);
+    const string content = cm_file_read_all(path);
     return Result::Ok(content);
 }
 
