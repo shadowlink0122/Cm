@@ -9,12 +9,12 @@
 
 ### メッセージカタログ方式（enum + string のC++側集約管理）
 
-- 全メッセージは `enum class MsgId` + 言語別文字列テーブルでC++側に集約する（データファイルの二重管理を避け、IDのタイプミスをコンパイルエラーにする）
-- `src/common/messages/message_list.def` — ID + 英語原文の単一ソース（X-macro）。ここから enum（`message_ids.hpp`）と英語テーブル（`messages_en.hpp`）が同順生成されるため、順序ずれが起こらない
-- `src/common/messages/messages_ja.hpp` — 日本語訳（`{MsgId, 訳}` のペア表）。無いIDは英語へフォールバックする
+- 全メッセージは `enum class MsgId` × `enum class Lang` の2次元テーブルでC++側に集約する（データファイルの二重管理を避け、IDのタイプミスをコンパイルエラーにする。X-macroや外部defファイルは使わず素のC++で記述する）
+- `src/common/messages/message_ids.hpp` — メッセージID・言語の列挙（`enum class MsgId` / `enum class Lang { En, Ja }`）
+- `src/common/messages/messages.hpp` — 本文テーブル `kMessages[メッセージ][言語]`（1メッセージ=1行に全言語の本文が並ぶ。英語=原文。行の過不足と英語未定義はコンパイル時に検出。訳が無い言語は `nullptr` で英語へフォールバック）
 - テンプレートは `{0}` `{1}` ... のプレースホルダで動的値を受け取り、言語ごとの語順の違いに対応する（文字列連結による断片化はしない）
 - 取得APIは `i18n::msg(MsgId)`（テンプレート取得）と `i18n::msgf(MsgId, args...)`（プレースホルダ置換）
-- メッセージ追加は message_list.def に1行 + messages_ja.hpp に訳を1行。言語追加は messages_<lang>.hpp を作成し i18n.hpp の言語表へ登録する
+- メッセージ追加は message_ids.hpp にIDを1つ + messages.hpp の同位置へ {英語, 日本語} の行を1つ。言語追加は Lang とテーブルの列 + i18n.hpp の言語処理へ1つずつ
 - `cm help` の本文のみ `src/cli/help_<lang>.txt` のテキストファイルで管理し、CMakeの `configure_file` でビルド時に埋め込む（`{version}` / `{program}` プレースホルダを実行時置換。長文のためenum管理には不向き）
 
 ```cpp

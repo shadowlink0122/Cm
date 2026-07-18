@@ -1,10 +1,9 @@
 // i18nカタログの単体テスト（common/i18n.hpp）
-// 言語切替・enum+stringカタログ解決・訳なしIDの英語フォールバックを検証する
+// 言語切替・table[メッセージ][言語] の解決・訳なしIDの英語フォールバックを検証する
 
 #include "../../src/common/i18n.hpp"
 
 #include <gtest/gtest.h>
-#include <set>
 #include <string>
 
 namespace {
@@ -52,20 +51,16 @@ TEST_F(I18nTest, DiagnosticTemplateTranslated) {
     EXPECT_STREQ(cm::i18n::msg(MsgId::DiagW001), "変数 '{0}' は使用されていません");
 }
 
-TEST_F(I18nTest, EveryMessageHasEnglishText) {
-    // 英語テーブルはmessage_list.defから同順生成されるため、空文字が無いことだけ確認する
+TEST_F(I18nTest, TableIsFullyPopulated) {
+    // 全メッセージ×全言語で本文が引けること（英語はstatic_assertで保証済み。
+    // 日本語がnullptrの行があっても英語フォールバックで空にはならない）
     for (size_t i = 0; i < cm::i18n::kMessageCount; ++i) {
-        EXPECT_NE(cm::i18n::kMessagesEn[i], nullptr);
-        EXPECT_NE(std::string(cm::i18n::kMessagesEn[i]), "");
-    }
-}
-
-TEST_F(I18nTest, JapaneseTableHasNoDuplicateIds) {
-    std::set<MsgId> seen;
-    for (const auto& [id, text] : cm::i18n::kMessagesJa) {
-        EXPECT_TRUE(seen.insert(id).second)
-            << "duplicate translation for id " << static_cast<int>(id);
-        EXPECT_NE(text, nullptr);
+        for (size_t l = 0; l < cm::i18n::kLangCount; ++l) {
+            cm::i18n::set_language(static_cast<Lang>(l));
+            const char* text = cm::i18n::msg(static_cast<MsgId>(i));
+            EXPECT_NE(text, nullptr);
+            EXPECT_NE(std::string(text), "");
+        }
     }
 }
 

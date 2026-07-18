@@ -1,9 +1,9 @@
 #pragma once
 
 // メッセージi18n基盤（設計04: docs/design/v0.16.2/04_message_i18n.md）
-// 全メッセージは enum MsgId + 言語別文字列テーブルでC++側に集約管理する:
-//   - src/common/messages/message_list.def — ID + 英語原文の単一ソース（X-macro）
-//   - src/common/messages/messages_ja.hpp  — 日本語訳（MsgId→訳のペア表。無いIDは英語へフォールバック）
+// 全メッセージは enum MsgId × enum Lang の2次元テーブルでC++側に集約管理する:
+//   - src/common/messages/message_ids.hpp — メッセージID・言語の列挙
+//   - src/common/messages/messages.hpp    — 本文テーブル table[メッセージ][言語]（英語=原文、訳なしは英語へフォールバック）
 // テンプレートは {0} {1} ... のプレースホルダで動的値を受け取り、言語ごとの語順の違いに対応する。
 // IDはenumなのでタイプミスはコンパイルエラーになる。
 // ヘルプ本文は src/cli/help_<lang>.txt（ビルド時埋め込み）で管理する。
@@ -11,8 +11,7 @@
 
 #include "common/text_data.hpp"
 #include "messages/message_ids.hpp"
-#include "messages/messages_en.hpp"
-#include "messages/messages_ja.hpp"
+#include "messages/messages.hpp"
 
 #include <cstring>
 #include <string>
@@ -20,23 +19,6 @@
 namespace cm::i18n {
 
 namespace detail {
-
-// 言語別の訳テーブル（MsgId順の直接参照配列を初回に構築する。nullptr = 訳なし→英語）
-struct TranslationTable {
-    const char* texts[kMessageCount] = {};
-};
-
-template <size_t N>
-inline const TranslationTable& build_table(const std::pair<MsgId, const char*> (&pairs)[N]) {
-    static const TranslationTable table = [&] {
-        TranslationTable t;
-        for (const auto& [id, text] : pairs) {
-            t.texts[static_cast<size_t>(id)] = text;
-        }
-        return t;
-    }();
-    return table;
-}
 
 // msgf用の引数文字列化
 inline std::string to_display(const std::string& value) {
@@ -54,12 +36,6 @@ inline std::string to_display(T value) {
 }
 
 }  // namespace detail
-
-// 対応言語（新しい言語を追加するには messages_<lang>.hpp を作り、この列挙と下のswitch群へ1行ずつ足す）
-enum class Lang {
-    En,
-    Ja,
-};
 
 // 現在の言語（プロセス全体で共有）
 inline Lang& current_lang() {
@@ -112,14 +88,12 @@ inline const char* help_text() {
 
 // ID→メッセージテンプレート（現在言語 → 英語の順でフォールバック）
 inline const char* msg(MsgId id) {
-    const size_t index = static_cast<size_t>(id);
-    if (current_lang() == Lang::Ja) {
-        const char* text = detail::build_table(kMessagesJa).texts[index];
-        if (text) {
-            return text;
-        }
+    const size_t row = static_cast<size_t>(id);
+    const char* text = kMessages[row][static_cast<size_t>(current_lang())];
+    if (text) {
+        return text;
     }
-    return kMessagesEn[index];
+    return kMessages[row][static_cast<size_t>(Lang::En)];
 }
 
 // テンプレート中の {0} {1} ... を引数で置換してメッセージを組み立てる
