@@ -88,6 +88,13 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
         if (std::filesystem::exists(exe_libs)) {
             search_paths.push_back(exe_libs);
         }
+
+        // インストールレイアウト（~/.cm/bin/cm → ~/.cm/libs）にも対応する。
+        // リポジトリ外からインストール済みバイナリで実行しても std::* が解決できるようにする
+        auto install_libs = exe_dir.parent_path() / "libs";
+        if (std::filesystem::exists(install_libs)) {
+            search_paths.push_back(install_libs);
+        }
     }
 
     // 5. プロジェクトルート（project_root/libs/std/io 等を探すため）

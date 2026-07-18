@@ -335,10 +335,13 @@ install: release
 	@cp -L $(CM) $(CM_INSTALL_DIR)/bin/cm
 	@cp build/lib/*.o $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
 	@cp build/lib/*.a $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@rm -rf $(CM_INSTALL_DIR)/libs
+	@cp -R libs $(CM_INSTALL_DIR)/libs
 	@echo ""
 	@echo "✅ インストール完了!"
 	@echo "  バイナリ: $(CM_INSTALL_DIR)/bin/cm"
 	@echo "  ライブラリ: $(CM_INSTALL_DIR)/lib/"
+	@echo "  モジュール: $(CM_INSTALL_DIR)/libs/"
 	@echo ""
 	@if echo "$$PATH" | grep -q "$(CM_INSTALL_DIR)/bin"; then \
 		echo "  PATHは設定済みです"; \
