@@ -5,8 +5,8 @@
 import std::io::println;
 
 int main() {
-    int a = 2147483647;
-    int w = a + 1;
+    const int a = 2147483647;
+    const int w = a + 1;
     println("w = {w}");
     if (w < 0) {
         println("w < 0: true");
@@ -14,8 +14,8 @@ int main() {
         println("w < 0: false");
     }
 
-    tiny t = 127;
-    tiny t2 = t + 1;
+    const tiny t = 127;
+    const tiny t2 = t + 1;
     println("t2 = {t2}");
     if (t2 < 0) {
         println("t2 < 0: true");

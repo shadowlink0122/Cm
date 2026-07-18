@@ -28,12 +28,12 @@ int main() {
         Result::Err(e) => println("err: {e}"),
     }
 
-    bool ok1 = r1.is_ok();
-    bool err2 = r2.is_err();
+    const bool ok1 = r1.is_ok();
+    const bool err2 = r2.is_err();
     println("is_ok: {ok1} is_err: {err2}");
-    int v1 = r1.unwrap();
-    int v2 = r2.unwrap_or(-1);
-    string e2 = r2.unwrap_err();
+    const int v1 = r1.unwrap();
+    const int v2 = r2.unwrap_or(-1);
+    const string e2 = r2.unwrap_err();
     println("unwrap: {v1} unwrap_or: {v2} unwrap_err: {e2}");
 
     Option<int> o1 = find_positive(5);
@@ -42,10 +42,10 @@ int main() {
         Option::Some(v) => println("some: {v}"),
         Option::None => println("none"),
     }
-    bool s = o1.is_some();
-    bool n = o2.is_none();
-    int u = o1.unwrap();
-    int d = o2.unwrap_or(0);
+    const bool s = o1.is_some();
+    const bool n = o2.is_none();
+    const int u = o1.unwrap();
+    const int d = o2.unwrap_or(0);
     println("is_some: {s} is_none: {n} unwrap: {u} unwrap_or: {d}");
 
     // 関数呼び出しを直接matchする（scrutineeの一時変数束縛）

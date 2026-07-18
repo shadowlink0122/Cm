@@ -5,13 +5,13 @@ int main() {
     double[] ds = [];
     ds.push(1.5);
     ds.push(2.5);
-    double dp = ds.pop();
+    const double dp = ds.pop();
     println("d0={ds[0]} pop={dp} len={ds.len()}");
 
     string[] ss = [];
     ss.push("aa");
     ss.push("bb");
-    string sp = ss.pop();
+    const string sp = ss.pop();
     println("s0={ss[0]} pop={sp}");
 
     long[] ls = [];

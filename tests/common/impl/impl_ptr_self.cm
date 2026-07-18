@@ -54,10 +54,10 @@ int main() {
     FBConsole con3;
     FBConsole* ptr3 = &con3;
     ptr3->init(99999, 640);
-    ulong addr = ptr3->get_fb_addr();
+    const ulong addr = ptr3->get_fb_addr();
     println("getter fb_addr: {addr}");
     ptr3->move_cursor(50, 60);
-    int cx = ptr3->get_cursor_x();
+    const int cx = ptr3->get_cursor_x();
     println("getter cursor_x: {cx}");
 
     return 0;

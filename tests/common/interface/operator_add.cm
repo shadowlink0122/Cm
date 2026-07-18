@@ -29,10 +29,10 @@ int main() {
     b.x = 3;
     b.y = 7;
 
-    Vec2 sum = a + b;
+    const Vec2 sum = a + b;
     println("sum: ({sum.x}, {sum.y})");
 
-    Vec2 diff = a - b;
+    const Vec2 diff = a - b;
     println("diff: ({diff.x}, {diff.y})");
 
     return 0;

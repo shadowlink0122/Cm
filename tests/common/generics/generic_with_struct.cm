@@ -38,11 +38,11 @@ int main() {
     point_box.value = p;
     point_box.is_set = true;
 
-    Point extracted = point_box.value;
+    const Point extracted = point_box.value;
     println("Point box: ({extracted.x}, {extracted.y})");
 
     // ジェネリック関数で取得
-    int val = get_value(int_box);
+    const int val = get_value(int_box);
     println("get_value(int_box) = {val}");
 
     return 0;

@@ -2,7 +2,7 @@
 
 void main() {
     // charリテラル単一値
-    char c1 = '3';
+    const char c1 = '3';
     switch(c1) {
         case ('1') {
             println("ONE");
@@ -19,7 +19,7 @@ void main() {
     }
 
     // Orパターン: case ('a' | 'A')
-    char c2 = 'A';
+    const char c2 = 'A';
     switch(c2) {
         case ('a' | 'A') {
             println("ALPHA");
@@ -33,7 +33,7 @@ void main() {
     }
 
     // Orパターン: 小文字も
-    char c3 = 'b';
+    const char c3 = 'b';
     switch(c3) {
         case ('a' | 'A') {
             println("ALPHA");
@@ -47,7 +47,7 @@ void main() {
     }
 
     // else分岐
-    char c4 = 'z';
+    const char c4 = 'z';
     switch(c4) {
         case ('a' | 'A') {
             println("ALPHA");
@@ -58,7 +58,7 @@ void main() {
     }
 
     // 整数switchも引き続き動作確認
-    int x = 42;
+    const int x = 42;
     switch(x) {
         case (42) {
             println("FORTY_TWO");

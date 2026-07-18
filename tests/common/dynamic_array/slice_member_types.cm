@@ -25,8 +25,8 @@ int main() {
     h.vs = [];
     h.vs.push(7 as Value);
     h.vs.push("hi" as Value);
-    int a = h.vs[0] as int;
-    string b = h.vs[1] as string;
+    const int a = h.vs[0] as int;
+    const string b = h.vs[1] as string;
     println("vs len={h.vs.len()} a={a} b={b}");
 
     h.ps = [];
@@ -34,7 +34,7 @@ int main() {
     p.x = 3;
     p.y = 4;
     h.ps.push(p);
-    Point q = h.ps[0];
+    const Point q = h.ps[0];
     println("ps len={h.ps.len()} q=({q.x},{q.y})");
     return 0;
 }

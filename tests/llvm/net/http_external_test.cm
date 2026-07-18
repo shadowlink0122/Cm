@@ -38,7 +38,7 @@ int main() {
     HttpClient client;
     client.init("httpbin.org", 80);
 
-    HttpResponse r1 = client.get("/get");
+    const HttpResponse r1 = client.get("/get");
     if (r1.is_ok == 0) {
         if (is_network_error(r1.err_msg) == 1) {
             // ネットワーク接続エラーを検出した場合は、モック出力を印刷して早期終了
@@ -81,7 +81,7 @@ int main() {
     req.set_url("httpbin.org", 80, "/post");
     req.set_header("Content-Type", "application/json");
     req.set_body("{\"language\": \"Cm\", \"version\": \"0.14\"}");
-    HttpResponse r2 = req.execute();
+    const HttpResponse r2 = req.execute();
 
     if (r2.is_ok == 0) {
         if (is_network_error(r2.err_msg) == 1) {
@@ -116,7 +116,7 @@ int main() {
     // ============================================================
     // テスト3: GET httpbin.org/status/404 — HTTPエラーステータス
     // ============================================================
-    HttpResponse r3 = client.get("/status/404");
+    const HttpResponse r3 = client.get("/status/404");
     if (r3.is_ok == 0) {
         if (is_network_error(r3.err_msg) == 1) {
             println("TEST3: PASS (GET /status/404 -> 404)");
@@ -153,7 +153,7 @@ int main() {
     req4.set_method(METHOD_GET());
     req4.set_url("httpbin.org", 80, "/headers");
     req4.set_header("X-Custom-Header", "CmLang");
-    HttpResponse r4 = req4.execute();
+    const HttpResponse r4 = req4.execute();
 
     if (r4.is_ok == 0) {
         if (is_network_error(r4.err_msg) == 1) {
@@ -186,7 +186,7 @@ int main() {
     // ============================================================
     HttpClient bad_client;
     bad_client.init("127.0.0.1", 19999);  // 未使用ポート → 即connection refused
-    HttpResponse r5 = bad_client.get("/");
+    const HttpResponse r5 = bad_client.get("/");
     if (r5.is_ok == 0) {
         println("TEST5: PASS (connection refused handled)");
     } else {
@@ -199,7 +199,7 @@ int main() {
     // ============================================================
     HttpClient https_client;
     https_client.init("www.google.com", 443);
-    HttpResponse r6 = https_client.get("/");
+    const HttpResponse r6 = https_client.get("/");
     if (r6.is_ok == 0) {
         if (is_network_error(r6.err_msg) == 1) {
             println("TEST6: PASS (HTTPS google.com -> 200)");

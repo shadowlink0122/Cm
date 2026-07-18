@@ -22,7 +22,7 @@ void matrix_multiply_2d(int n) {
     // 行列乗算（キャッシュ効率的なIKJ順）
     for (int i = 0; i < n; i++) {
         for (int k = 0; k < n; k++) {
-            int a_ik = a[i][k];
+            const int a_ik = a[i][k];
             for (int j = 0; j < n; j++) {
                 c[i][j] = c[i][j] + a_ik * b[k][j];
             }
@@ -35,7 +35,7 @@ void matrix_multiply_2d(int n) {
 }
 
 int main() {
-    int n = 300;
+    const int n = 300;
     println("Multiplying {n}x{n} matrices (2D array)...");
 
     matrix_multiply_2d(n);

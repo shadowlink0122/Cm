@@ -26,7 +26,7 @@ int main() {
     node->next = null as TNode*;
 
     println("Step 4: Reading value...");
-    int v = node->value;
+    const int v = node->value;
     println("Node value: {v}");
 
     println("Step 5: Freeing...");

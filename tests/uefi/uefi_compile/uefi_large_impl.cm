@@ -46,7 +46,7 @@ ulong efi_main(void* image_handle, void* system_table) {
 
     LargeStruct ls;
     ls.set_all();
-    ulong total = ls.sum();
+    const ulong total = ls.sum();
 
     return counter.value + total;
 }

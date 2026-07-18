@@ -23,9 +23,9 @@ int main() {
     for (int iter = 0; iter < 10; iter++) {
         int sum = 0;
         for (int i = 0; i < 1000; i++) {
-            int x = points[i].x;
-            int y = points[i].y;
-            int z = points[i].z;
+            const int x = points[i].x;
+            const int y = points[i].y;
+            const int z = points[i].z;
             sum = sum + (x * x + y * y + z * z);
         }
         total = total + sum;

@@ -8,7 +8,7 @@ struct EfiTableHeader {
     uint header_size;
     uint crc32;
     uint reserved;
-}
+};
 
 ulong validate_header(EfiTableHeader* header) {
     if (header->signature == 0) {
@@ -18,7 +18,7 @@ ulong validate_header(EfiTableHeader* header) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    EfiTableHeader header = EfiTableHeader {
+    const EfiTableHeader header = EfiTableHeader {
         signature: 0x5453595320494249,
         revision: 0x00020046,
         header_size: 72,

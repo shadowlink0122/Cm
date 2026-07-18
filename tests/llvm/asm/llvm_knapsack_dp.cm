@@ -31,9 +31,9 @@ int main() {
         int w = 0;
 
         // 一時変数（全てLLVMにレジスタ割り当てを委譲）
-        int wi = 0;       // weights[i-1]
-        int vi = 0;       // values[i-1]
-        int dp_prev = 0;  // dp[i-1][w]
+        const int wi = 0;       // weights[i-1]
+        const int vi = 0;       // values[i-1]
+        const int dp_prev = 0;  // dp[i-1][w]
         int cand = 0;     // 候補値
         long idx = 0;     // 64bitインデックス（メモリアクセス用）
         int tmp2 = 0;     // スクラッチ2
@@ -164,11 +164,11 @@ int main() {
         // ldr/strではsxtwで符号拡張してアドレス計算する
         int i = 0;
         int w = 0;
-        int wi = 0;       // weights[i-1]
-        int vi = 0;       // values[i-1]
-        int dp_prev = 0;  // dp[i-1][w]
+        const int wi = 0;       // weights[i-1]
+        const int vi = 0;       // values[i-1]
+        const int dp_prev = 0;  // dp[i-1][w]
         int cand = 0;     // 候補値
-        int tmp = 0;      // スクラッチ
+        const int tmp = 0;      // スクラッチ
 
         // ARM64版 ナップサックDP
         // :w修飾子で全変数がwレジスタになるため、

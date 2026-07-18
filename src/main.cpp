@@ -255,8 +255,17 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
         } else if (fs::is_directory(p)) {
             // ディレクトリの場合
             if (recursive) {
-                // 再帰的に走査
-                for (const auto& entry : fs::recursive_directory_iterator(p)) {
+                // 再帰的に走査（一時ディレクトリ .tmp と隠しディレクトリは常に除外）
+                for (auto it = fs::recursive_directory_iterator(p);
+                     it != fs::recursive_directory_iterator(); ++it) {
+                    const auto& entry = *it;
+                    if (entry.is_directory()) {
+                        const std::string dirname = entry.path().filename().string();
+                        if (dirname == ".tmp" || (dirname.size() > 1 && dirname[0] == '.')) {
+                            it.disable_recursion_pending();
+                        }
+                        continue;
+                    }
                     if (entry.is_regular_file() && entry.path().extension() == ".cm") {
                         std::string filepath = entry.path().string();
                         if (!matches_exclude_pattern(filepath, excludes)) {

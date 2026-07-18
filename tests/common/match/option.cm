@@ -40,27 +40,27 @@ struct MyOption<T> {
 
 int main() {
     // Some値のテスト
-    MyOption<int> some_val = some(42);
-    int v1 = unwrap_or_match(some_val, 0);
+    const MyOption<int> some_val = some(42);
+    const int v1 = unwrap_or_match(some_val, 0);
     println("unwrap_or_match(Some(42), 0) = {v1}");
 
     // None値のテスト
-    MyOption<int> none_val = none_like(0);
-    int v2 = unwrap_or_match(none_val, -1);
+    const MyOption<int> none_val = none_like(0);
+    const int v2 = unwrap_or_match(none_val, -1);
     println("unwrap_or_match(None, -1) = {v2}");
 
     // option_to_intのテスト
-    int code1 = option_to_int(some_val, 0);
-    int code2 = option_to_int(none_val, 0);
+    const int code1 = option_to_int(some_val, 0);
+    const int code2 = option_to_int(none_val, 0);
     println("option_to_int(Some) = {code1}");
     println("option_to_int(None) = {code2}");
 
     // 複数のOptionを組み合わせたテスト
-    MyOption<int> a = some(10);
-    MyOption<int> b = some(20);
+    const MyOption<int> a = some(10);
+    const MyOption<int> b = some(20);
 
     // 両方Someの場合のみ計算
-    int sum = match (a.is_some) {
+    const int sum = match (a.is_some) {
         true => match (b.is_some) {
             true => a.value + b.value,
             false => 0,

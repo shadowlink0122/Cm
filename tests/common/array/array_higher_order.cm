@@ -22,7 +22,7 @@ int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
     // size() メソッド
-    int s = arr.size();
+    const int s = arr.size();
     println("Size: {s}");
 
     // forEach でイテレーション

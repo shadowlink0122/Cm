@@ -7,7 +7,7 @@ int main() {
         return x * 3;
     };
 
-    int result = triple(4);
+    const int result = triple(4);
     println("triple(4) = {result}");
 
     // 複数パラメータ
@@ -15,7 +15,7 @@ int main() {
         return a + b;
     };
 
-    int sum = add(10, 20);
+    const int sum = add(10, 20);
     println("add(10, 20) = {sum}");
 
     if (result == 12 && sum == 30) {

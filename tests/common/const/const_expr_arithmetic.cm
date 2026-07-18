@@ -30,11 +30,11 @@ int main() {
     print_port(BASE_PORT + REG_OFFSET);
 
     // ケース2: const int同士の算術演算
-    int result1 = BASE_PORT + REG_OFFSET;
+    const int result1 = BASE_PORT + REG_OFFSET;
     println("base + offset = {result1}");
 
     // ケース3: const int同士の乗算
-    int result2 = BASE_PORT * 2;
+    const int result2 = BASE_PORT * 2;
     println("base * 2 = {result2}");
 
     // ケース4: const long + const long → 関数引数
@@ -44,7 +44,7 @@ int main() {
     print_uaddr(UBASE + UOFFSET);
 
     // ケース6: const式の複合演算
-    int complex_val = BASE_PORT + REG_OFFSET * 2;
+    const int complex_val = BASE_PORT + REG_OFFSET * 2;
     println("complex: {complex_val}");
 
     // ケース7: const式をローカル変数経由で使用

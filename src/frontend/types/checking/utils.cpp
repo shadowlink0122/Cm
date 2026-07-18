@@ -638,6 +638,8 @@ void TypeChecker::check_interpolation_scope(const std::string& format_str) {
                     continue;
                 }
                 if (scopes_.current().lookup(name)) {
+                    // 補間内の参照は変数の使用としてマークする（W001誤検出防止）
+                    scopes_.current().mark_used(name);
                     continue;
                 }
                 if (enum_names_.count(name) || struct_defs_.count(name) ||
@@ -1021,6 +1023,12 @@ void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
         return;  // 変数が見つからない場合は他のエラー処理に任せる
     }
 
+    // グローバル変数/定数は宣言時点で初期化される（SVの信号・定数を含む）ため対象外。
+    // このチェックはローカル変数のフローのみを見る
+    if (scopes_.global().has_local(name)) {
+        return;
+    }
+
     // initialized_variables_に含まれていない場合は警告
     if (initialized_variables_.count(name) == 0) {
         warning(span, "Variable '" + name + "' may be used before initialization");
@@ -1088,9 +1096,15 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
             case ast::BinaryOp::Div:
                 if (*right_val == 0)
                     return std::nullopt;  // ゼロ除算
+                // int64で負に見える値はunsigned定数の可能性があり、符号付き除算だと
+                // 結果が変わるため畳み込みを断念する（実行時は型に従い正しく計算される）
+                if (*left_val < 0 || *right_val < 0)
+                    return std::nullopt;
                 return *left_val / *right_val;
             case ast::BinaryOp::Mod:
                 if (*right_val == 0)
+                    return std::nullopt;
+                if (*left_val < 0 || *right_val < 0)
                     return std::nullopt;
                 return *left_val % *right_val;
             case ast::BinaryOp::BitAnd:
@@ -1102,6 +1116,10 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
             case ast::BinaryOp::Shl:
                 return *left_val << *right_val;
             case ast::BinaryOp::Shr:
+                // 最上位ビットが立つ値はunsignedの論理シフトと符号付きの算術シフトで
+                // 結果が分かれるため畳み込みを断念する（MIR側は型情報を持ち正しく畳む）
+                if (*left_val < 0)
+                    return std::nullopt;
                 return *left_val >> *right_val;
             case ast::BinaryOp::Lt:
                 return (*left_val < *right_val) ? 1 : 0;

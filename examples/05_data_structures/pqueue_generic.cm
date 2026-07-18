@@ -42,8 +42,8 @@ int avl_height(AVLNode* node) {
 // 高さを更新
 void avl_update_height(AVLNode* node) {
     if (node != null) {
-        int left_h = avl_height(node->left);
-        int right_h = avl_height(node->right);
+        const int left_h = avl_height(node->left);
+        const int right_h = avl_height(node->right);
         if (left_h > right_h) {
             node->height = left_h + 1;
         } else {
@@ -131,7 +131,7 @@ AVLNode* avl_insert(AVLNode* node, int value) {
     avl_update_height(node);
 
     // 3. バランスファクター確認
-    int balance = avl_balance(node);
+    const int balance = avl_balance(node);
 
     // 4. 不均衡なら回転
     // LL case
@@ -191,7 +191,7 @@ AVLNode* avl_delete_min(AVLNode* node, int* out_value) {
     avl_update_height(node);
 
     // バランス確認
-    int balance = avl_balance(node);
+    const int balance = avl_balance(node);
 
     // RR case
     if (balance < -1 && avl_balance(node->right) <= 0) {
@@ -285,15 +285,15 @@ int main() {
     pq_push(&pq, 10);
     println("  push(10)");
 
-    int size = pq_len(&pq);
+    const int size = pq_len(&pq);
     println("\nQueue size: {size}");
-    int min_val = pq_peek(&pq);
+    const int min_val = pq_peek(&pq);
     println("Peek (min): {min_val}");
 
     // ソート順で取り出し
     println("\nPopping items (sorted order):");
     while (!pq_is_empty(&pq)) {
-        int val = pq_pop(&pq);
+        const int val = pq_pop(&pq);
         println("  pop() = {val}");
     }
 

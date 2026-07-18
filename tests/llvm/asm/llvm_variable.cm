@@ -9,7 +9,7 @@ int main() {
         println("=== LLVM Operand Test ===");
 
         // 変数初期化
-        int x = 50;
+        const int x = 50;
 
         // x86_64 AT&T構文: addl $imm, %reg
         // ${+r:x}が$0に変換される
@@ -23,7 +23,7 @@ int main() {
         // ARM64版
         println("=== LLVM Operand Test ===");
 
-        int x = 50;
+        const int x = 50;
 
         // ARM64: add wN, wN, #imm
         __asm__("add ${+r:x}, ${+r:x}, #10");

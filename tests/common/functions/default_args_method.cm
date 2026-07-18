@@ -15,8 +15,8 @@ int main() {
     c.base = 100;
 
     // 文として（HIR loweringが補完）
-    int r1 = c.add(5);
-    int r2 = c.add(5, 1);
+    const int r1 = c.add(5);
+    const int r2 = c.add(5, 1);
     println("stmt: {r1} {r2}");
 
     // 補間内（MIR loweringが補完）

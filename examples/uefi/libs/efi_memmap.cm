@@ -10,17 +10,17 @@
 /// AllocatePool (BootServices + 0x40)
 export ulong efi_alloc_pool(void* system_table, ulong size, void** out_buffer) {
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);  // offset 0x60
+    const ulong bs_addr = *(st + 12);  // offset 0x60
     ulong* bs = bs_addr as ulong*;
 
-    ulong alloc_fn = *(bs + 8);  // 8 * 8 = 0x40 = AllocatePool
+    const ulong alloc_fn = *(bs + 8);  // 8 * 8 = 0x40 = AllocatePool
 
     // AllocatePool(PoolType=EFI_LOADER_DATA=2, Size, *Buffer)
-    ulong fn_val = alloc_fn;
-    ulong pool_type = 2;  // EFI_LOADER_DATA
-    ulong buf_addr = out_buffer as ulong;
+    const ulong fn_val = alloc_fn;
+    const ulong pool_type = 2;  // EFI_LOADER_DATA
+    const ulong buf_addr = out_buffer as ulong;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         __asm__(`
             pushq ${r:fn_val};
@@ -43,15 +43,15 @@ export ulong efi_alloc_pool(void* system_table, ulong size, void** out_buffer) {
 /// FreePool (BootServices + 0x48)
 export ulong efi_free_pool(void* system_table, void* buffer) {
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);
+    const ulong bs_addr = *(st + 12);
     ulong* bs = bs_addr as ulong*;
 
-    ulong free_fn = *(bs + 9);  // 9 * 8 = 0x48 = FreePool
+    const ulong free_fn = *(bs + 9);  // 9 * 8 = 0x48 = FreePool
 
-    ulong fn_val = free_fn;
-    ulong buf_val = buffer as ulong;
+    const ulong fn_val = free_fn;
+    const ulong buf_val = buffer as ulong;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         __asm__(`
             pushq ${r:fn_val};
@@ -72,20 +72,20 @@ export ulong efi_free_pool(void* system_table, void* buffer) {
 export ulong efi_get_memory_map(void* system_table, ulong* map_size, void* map,
     ulong* map_key, ulong* desc_size, ulong* desc_ver) {
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);
+    const ulong bs_addr = *(st + 12);
     ulong* bs = bs_addr as ulong*;
 
-    ulong get_map_fn = *(bs + 7);  // 7 * 8 = 0x38 = GetMemoryMap
+    const ulong get_map_fn = *(bs + 7);  // 7 * 8 = 0x38 = GetMemoryMap
 
     // 5引数: Win64 ABI - 最初4つはレジスタ、5つ目はスタック
-    ulong fn_val = get_map_fn;
-    ulong ms_val = map_size as ulong;
-    ulong mp_val = map as ulong;
-    ulong mk_val = map_key as ulong;
-    ulong ds_val = desc_size as ulong;
-    ulong dv_val = desc_ver as ulong;
+    const ulong fn_val = get_map_fn;
+    const ulong ms_val = map_size as ulong;
+    const ulong mp_val = map as ulong;
+    const ulong mk_val = map_key as ulong;
+    const ulong ds_val = desc_size as ulong;
+    const ulong dv_val = desc_ver as ulong;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         // 6つの値をpush/popで安全にレジスタへ配置
         // R10=fn, R11=dv(5th arg→stack)
@@ -138,14 +138,14 @@ export string efi_memory_type_name(ulong mem_type) {
 /// Stall (BootServices + 0x100)
 export ulong efi_stall(void* system_table, ulong microseconds) {
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);
+    const ulong bs_addr = *(st + 12);
     ulong* bs = bs_addr as ulong*;
 
-    ulong stall_fn = *(bs + 32);  // 32 * 8 = 0x100 = Stall
+    const ulong stall_fn = *(bs + 32);  // 32 * 8 = 0x100 = Stall
 
-    ulong fn_val = stall_fn;
+    const ulong fn_val = stall_fn;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         __asm__(`
             pushq ${r:fn_val};

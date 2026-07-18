@@ -22,19 +22,19 @@ enum Ascii {
 
 int main() {
     // 文字リテラルで指定したenum値がASCIIコードと一致することを検証
-    int v1 = Ascii::LowerA as int;
-    int v2 = Ascii::LowerB as int;
-    int v3 = Ascii::LowerZ as int;
-    int v4 = Ascii::UpperA as int;
-    int v5 = Ascii::UpperZ as int;
-    int v6 = Ascii::Digit0 as int;
-    int v7 = Ascii::Digit9 as int;
-    int v8 = Ascii::Space as int;
-    int v9 = Ascii::Exclaim as int;
-    int v10 = Ascii::At as int;
-    int v11 = Ascii::BracketL as int;
-    int v12 = Ascii::Backslash as int;
-    int v13 = Ascii::BracketR as int;
+    const int v1 = Ascii::LowerA as int;
+    const int v2 = Ascii::LowerB as int;
+    const int v3 = Ascii::LowerZ as int;
+    const int v4 = Ascii::UpperA as int;
+    const int v5 = Ascii::UpperZ as int;
+    const int v6 = Ascii::Digit0 as int;
+    const int v7 = Ascii::Digit9 as int;
+    const int v8 = Ascii::Space as int;
+    const int v9 = Ascii::Exclaim as int;
+    const int v10 = Ascii::At as int;
+    const int v11 = Ascii::BracketL as int;
+    const int v12 = Ascii::Backslash as int;
+    const int v13 = Ascii::BracketR as int;
 
     println("{v1}");   // 97
     println("{v2}");   // 98

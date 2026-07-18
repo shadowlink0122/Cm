@@ -13,7 +13,7 @@ int process(int value) {
 
 // ポインタパラメータの再代入テスト
 void swap_ptr(int* a, int* b) {
-    int tmp = *a;
+    const int tmp = *a;
     *a = *b;
     *b = tmp;
 }

@@ -28,7 +28,7 @@ Outer make_outer(int base) {
 }
 
 int main() {
-    Outer o = make_outer(3);
+    const Outer o = make_outer(3);
     println("x={o.mid.inner.x}");
     println("y={o.mid.y}");
     println("z={o.z}");

@@ -5,7 +5,7 @@ import std::io;
 import std::collections::vector::*;
 
 int main() {
-    int n = 1000;
+    const int n = 1000;
     Vector<int> vec();
 
     // 逆順で初期化（最悪ケース）

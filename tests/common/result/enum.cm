@@ -107,8 +107,8 @@ int main() {
     }
 
     // unwrap_or
-    int v1 = r1.unwrap_or(-1);
-    int v2 = r2.unwrap_or(-1);
+    const int v1 = r1.unwrap_or(-1);
+    const int v2 = r2.unwrap_or(-1);
     println("r1.unwrap_or(-1) = {v1}");
     println("r2.unwrap_or(-1) = {v2}");
 

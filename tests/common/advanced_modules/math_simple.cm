@@ -9,13 +9,13 @@ double square(double x) {
 int main() {
     println("=== Simple Math Test ===");
 
-    double pi = 3.14159;
-    double e = 2.71828;
+    const double pi = 3.14159;
+    const double e = 2.71828;
     println("PI = {pi}");
     println("E = {e}");
 
-    double r = 2.0;
-    double area = pi * square(r);
+    const double r = 2.0;
+    const double area = pi * square(r);
     println("circle_area(2.0) = {area}");
 
     println("=== PASS ===");

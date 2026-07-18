@@ -10,11 +10,11 @@ int getInt() {
 
 int main() {
     // これはエラーになるべき: string型をint変数に代入
-    int result = getString();
+    const int result = getString();
     println("result = {result}");
 
     // これもエラーになるべき: int型をstring変数に代入
-    string text = getInt();
+    const string text = getInt();
     println("text = {text}");
 
     return 0;

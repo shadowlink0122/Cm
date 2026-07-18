@@ -38,7 +38,7 @@ AVLNode<Task>* cn(Task v) {
 }
 
 void uh(AVLNode<Task>* n) {
-    if (n != null) { int l = nh(n->left); int r = nh(n->right); n->height = (l > r ? l : r) + 1; }
+    if (n != null) { const int l = nh(n->left); const int r = nh(n->right); n->height = (l > r ? l : r) + 1; }
 }
 
 int bf(AVLNode<Task>* n) { if (n == null) { return 0; } return nh(n->left) - nh(n->right); }
@@ -68,7 +68,7 @@ AVLNode<Task>* ins(AVLNode<Task>* n, Task v) {
     if (v < n->value) { n->left = ins(n->left, v); }
     else { n->right = ins(n->right, v); }
     uh(n);
-    int b = bf(n);
+    const int b = bf(n);
     if (b > 1 && n->left != null && v < n->left->value) { return rr(n); }
     if (b < -1 && n->right != null && !(v < n->right->value)) { return rl(n); }
     if (b > 1 && n->left != null && !(v < n->left->value)) { n->left = rl(n->left); return rr(n); }
@@ -87,7 +87,7 @@ AVLNode<Task>* dm(AVLNode<Task>* n, Task* o) {
     if (n->left == null) { *o = n->value; AVLNode<Task>* r = n->right; free(n as void*); return r; }
     n->left = dm(n->left, o);
     uh(n);
-    int b = bf(n);
+    const int b = bf(n);
     if (b < -1) { if (bf(n->right) <= 0) { return rl(n); } n->right = rr(n->right); return rl(n); }
     if (b > 1) { if (bf(n->left) >= 0) { return rr(n); } n->left = rl(n->left); return rr(n); }
     return n;
@@ -136,19 +136,19 @@ int main() {
     tq_push(&tq, mt(5, 500));
     println("  priority=5, id=500");
 
-    int sz = tq_size(&tq);
+    const int sz = tq_size(&tq);
     println("\nQueue size: {sz}");
 
-    Task top = tq_peek(&tq);
-    int top_id = top.id;
-    int top_pri = top.priority;
+    const Task top = tq_peek(&tq);
+    const int top_id = top.id;
+    const int top_pri = top.priority;
     println("Highest priority: id={top_id}, priority={top_pri}");
 
     println("\nProcessing in priority order:");
     while (!tq_empty(&tq)) {
-        Task t = tq_pop(&tq);
-        int tid = t.id;
-        int tpri = t.priority;
+        const Task t = tq_pop(&tq);
+        const int tid = t.id;
+        const int tpri = t.priority;
         println("  id={tid} (priority={tpri})");
     }
 

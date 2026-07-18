@@ -20,55 +20,55 @@ int main() {
     xs.push(1);
     xs.push(4);
 
-    int ln = xs.len();
-    int cp = xs.cap();
+    const int ln = xs.len();
+    const int cp = xs.cap();
     println("len={ln} cap={cp}");
 
-    int popped = xs.pop();
-    int ln2 = xs.len();
+    const int popped = xs.pop();
+    const int ln2 = xs.len();
     println("pop={popped} len={ln2}");
 
     xs.push(4);
     xs.push(1);
     xs.push(5);
     xs.remove(1);
-    int ln3 = xs.len();
+    const int ln3 = xs.len();
     println("after remove: len={ln3} x1={xs[1]}");
 
-    int idx = xs.indexOf(5);
-    bool inc = xs.includes(4);
-    bool con = xs.contains(3);
+    const int idx = xs.indexOf(5);
+    const bool inc = xs.includes(4);
+    const bool con = xs.contains(3);
     println("indexOf={idx} includes={inc} contains={con}");
 
-    int found = xs.find(is_even);
-    int fidx = xs.findIndex(is_even);
-    bool some_v = xs.some(is_even);
-    bool every_v = xs.every(is_even);
+    const int found = xs.find(is_even);
+    const int fidx = xs.findIndex(is_even);
+    const bool some_v = xs.some(is_even);
+    const bool every_v = xs.every(is_even);
     println("find={found} findIndex={fidx} some={some_v} every={every_v}");
 
-    int[] sorted = xs.sort();
-    int[] descs = xs.sortBy(desc);
-    int[] rev = xs.reverse();
+    const int[] sorted = xs.sort();
+    const int[] descs = xs.sortBy(desc);
+    const int[] rev = xs.reverse();
     println("sort={sorted[0]} sortBy={descs[0]} reverse={rev[0]}");
 
-    int f = xs.first();
-    int l = xs.last();
+    const int f = xs.first();
+    const int l = xs.last();
     println("first={f} last={l}");
 
     // 部分スライス
-    int[5] arr = [1, 2, 3, 4, 5];
+    const int[5] arr = [1, 2, 3, 4, 5];
     int[] mid = arr[1:4];
     int[] head = arr[:2];
     int[] tail = arr[3:];
-    int ml = mid.len();
-    int hl = head.len();
-    int tl = tail.len();
+    const int ml = mid.len();
+    const int hl = head.len();
+    const int tl = tail.len();
     println("sub mid={mid[0]} len={ml} head={hl} tail={tl}");
 
     xs.forEach(show);
 
     xs.clear();
-    int ln4 = xs.len();
+    const int ln4 = xs.len();
     println("after clear: len={ln4}");
     return 0;
 }

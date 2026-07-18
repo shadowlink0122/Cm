@@ -13,7 +13,7 @@ void matrix_multiply(int n) {
     // 行列初期化
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            int idx = i * n + j;
+            const int idx = i * n + j;
             a[idx] = (i + j) % 100;
             b[idx] = (i - j + 100) % 100;  // B^T[j][i] = B[i][j]
             c[idx] = 0;
@@ -24,9 +24,9 @@ void matrix_multiply(int n) {
     // SIMD最適化: 内側ループが連続メモリアクセス
     for (int i = 0; i < n; i++) {
         for (int k = 0; k < n; k++) {
-            int a_ik = a[i * n + k];
-            int base_c = i * n;
-            int base_b = k * n;
+            const int a_ik = a[i * n + k];
+            const int base_c = i * n;
+            const int base_b = k * n;
             for (int j = 0; j < n; j++) {
                 c[base_c + j] = c[base_c + j] + a_ik * b[base_b + j];
             }
@@ -39,7 +39,7 @@ void matrix_multiply(int n) {
 }
 
 int main() {
-    int n = 300;
+    const int n = 300;
     println("Multiplying {n}x{n} matrices (1D array, SIMD optimized)...");
 
     matrix_multiply(n);

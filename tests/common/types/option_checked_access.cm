@@ -17,7 +17,7 @@ int main() {
         Option::None => println("div: none"),
     }
     Option<int> m = checked_mod(7, 0);
-    int safe_mod = m.unwrap_or(-1);
+    const int safe_mod = m.unwrap_or(-1);
     println("mod unwrap_or: {safe_mod}");
 
     // 2. 範囲外アクセス: arr[i] は未検査だが、get(i)はOptionを返す
@@ -32,16 +32,16 @@ int main() {
     }
     int[] xs = [10, 20, 30];
     Option<int> o = xs.get(9);
-    int safe_elem = o.unwrap_or(-1);
+    const int safe_elem = o.unwrap_or(-1);
     println("slice oob unwrap_or: {safe_elem}");
     Option<int> o2 = xs.get(2);
-    int in_elem = o2.unwrap_or(-1);
+    const int in_elem = o2.unwrap_or(-1);
     println("slice in unwrap_or: {in_elem}");
 
     // 3. ユニオンcast不一致: uv as string は不一致でパニックだが、isで事前判別できる
-    Value uv = 42;
+    const Value uv = 42;
     if (uv is string) {
-        string s = uv as string;
+        const string s = uv as string;
         println("union: {s}");
     } else {
         println("union: not a string (checked safely)");

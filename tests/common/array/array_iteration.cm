@@ -7,7 +7,7 @@ struct Point {
 }
 
 int main() {
-    int[3] arr = [10, 20, 30];
+    const int[3] arr = [10, 20, 30];
 
     // 1. for-in構文（型指定あり）
     int sum1 = 0;

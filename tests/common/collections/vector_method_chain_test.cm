@@ -40,9 +40,9 @@ int main() {
 
     // 3. get/setの連続呼び出し
     println("3. Get/Set sequence:");
-    int v0 = *vi.get(0);
+    const int v0 = *vi.get(0);
     vi.set(0, v0 + 100);
-    int v0_after = *vi.get(0);
+    const int v0_after = *vi.get(0);
     println("  v0 before=10, after={v0_after}");
     if (v0_after != 110) {
         println("FAIL: expected 110");
@@ -62,7 +62,7 @@ int main() {
     p2.y = 4;
     vp.push(p2);
 
-    int plen = vp.len();
+    const int plen = vp.len();
     println("  vp.len() = {plen}");
     if (plen != 2) {
         println("FAIL: expected 2");
@@ -70,7 +70,7 @@ int main() {
     }
 
     // getの結果を中間変数に取得（Hazard #5.15回避）
-    Point got = *vp.get(0);
+    const Point got = *vp.get(0);
     println("  vp.get(0) = ({got.x}, {got.y})");
     if (got.x != 1 || got.y != 2) {
         println("FAIL: expected (1, 2)");
@@ -79,10 +79,10 @@ int main() {
 
     // 5. pop/push連続操作
     println("5. Pop/Push sequence:");
-    int popped = vi.pop();
+    const int popped = vi.pop();
     println("  popped = {popped}");
     vi.push(50);
-    int last = *vi.get(3);
+    const int last = *vi.get(3);
     println("  after push(50), get(3) = {last}");
     if (last != 50) {
         println("FAIL: expected 50");
@@ -92,7 +92,7 @@ int main() {
     // 6. clear後の再利用
     println("6. Clear and reuse:");
     vi.clear();
-    bool empty = vi.is_empty();
+    const bool empty = vi.is_empty();
     println("  is_empty() = {empty}");
     if (!empty) {
         println("FAIL: expected true");
@@ -100,8 +100,8 @@ int main() {
     }
 
     vi.push(999);
-    int new_len = vi.len();
-    int new_val = *vi.get(0);
+    const int new_len = vi.len();
+    const int new_val = *vi.get(0);
     println("  after push(999): len={new_len}, get(0)={new_val}");
     if (new_len != 1 || new_val != 999) {
         println("FAIL: expected len=1, val=999");

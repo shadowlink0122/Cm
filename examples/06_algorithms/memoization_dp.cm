@@ -16,7 +16,7 @@ int fib(int n, int* memo) {
         return memo[n];
     }
 
-    int result = fib(n - 1, memo) + fib(n - 2, memo);
+    const int result = fib(n - 1, memo) + fib(n - 2, memo);
     memo[n] = result;
     return result;
 }
@@ -36,7 +36,7 @@ int main() {
     // フィボナッチ数列を計算
     println("Fibonacci sequence:");
     for (int i = 0; i <= 20; i += 5) {
-        int result = fib(i, memo);
+        const int result = fib(i, memo);
         println("  fib({i}) = {result}");
     }
 

@@ -13,23 +13,23 @@ int main() {
     // int を代入
     arr[0] = 42 as IntOrLong;
     arr[1] = 100 as IntOrLong;
-    int neg = 0 - 5;
+    const int neg = 0 - 5;
     arr[2] = neg as IntOrLong;
 
     // long を代入
-    long big1 = 1000000;
-    long big2 = 2000000;
+    const long big1 = 1000000;
+    const long big2 = 2000000;
     arr[3] = big1 as IntOrLong;
     arr[4] = big2 as IntOrLong;
 
     println("Array filled with mixed int/long types");
 
     // キャストして取得
-    int n0 = arr[0] as int;
-    int n1 = arr[1] as int;
-    int n2 = arr[2] as int;
-    long l3 = arr[3] as long;
-    long l4 = arr[4] as long;
+    const int n0 = arr[0] as int;
+    const int n1 = arr[1] as int;
+    const int n2 = arr[2] as int;
+    const long l3 = arr[3] as long;
+    const long l4 = arr[4] as long;
 
     println("Values:");
     println("  arr[0] as int: {n0}");

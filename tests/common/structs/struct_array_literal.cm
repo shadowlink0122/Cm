@@ -19,7 +19,7 @@ int main() {
     println("Container: [{c.values[0]}, {c.values[1]}, {c.values[2]}], count={c.count}");
 
     // 2. 配列リテラル直接初期化
-    int[3] arr = [100, 200, 300];
+    const int[3] arr = [100, 200, 300];
     println("arr = [{arr[0]}, {arr[1]}, {arr[2]}]");
 
     // 3. 構造体の配列（暗黙的型推論リテラル）

@@ -23,8 +23,8 @@ ulong very_large_stack_function() {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    ulong r1 = large_stack_function();
-    ulong r2 = very_large_stack_function();
+    const ulong r1 = large_stack_function();
+    const ulong r2 = very_large_stack_function();
 
     // efi_main内でも大きなスタック確保
     ulong[256] local_buffer;

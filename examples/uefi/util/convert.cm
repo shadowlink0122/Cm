@@ -11,7 +11,7 @@ import ../libs/efi_text;
 
 /// ushort値を10進数のASCII文字列としてUEFI出力
 export void efi_print_ushort(void* st, ushort value) {
-    ulong v = value as ulong;
+    const ulong v = value as ulong;
     efi_print_dec(st, v);
 }
 
@@ -25,12 +25,12 @@ export void efi_print_ushort_hex(void* st, ushort value) {
     efi_print(st, "0x" as void*);
 
     // 4桁を上位から出力
-    ulong v = value as ulong;
+    const ulong v = value as ulong;
     ulong i = 0;
     while (i < 4) {
-        ulong shift = (3 - i) * 4;
-        ulong mask = 15;
-        ulong nibble = (v >> shift) & mask;
+        const ulong shift = (3 - i) * 4;
+        const ulong mask = 15;
+        const ulong nibble = (v >> shift) & mask;
         efi_put_char(st, nibble_to_hex_char(nibble));
         i += 1;
     }

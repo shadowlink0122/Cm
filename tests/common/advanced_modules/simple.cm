@@ -4,7 +4,7 @@ import std::io::println;
 import ./math as M;
 
 int main() {
-    float pi = 3.14159;
+    const float pi = 3.14159;
     println("Simple test: PI = {pi}");
     return 0;
 }

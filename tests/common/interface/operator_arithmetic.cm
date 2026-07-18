@@ -28,22 +28,22 @@ impl Num {
 }
 
 int main() {
-    Num a = Num{value: 10};
-    Num b = Num{value: 3};
+    const Num a = Num{value: 10};
+    const Num b = Num{value: 3};
 
-    Num sum = a + b;
+    const Num sum = a + b;
     println("10 + 3 = {sum.value}");
 
-    Num diff = a - b;
+    const Num diff = a - b;
     println("10 - 3 = {diff.value}");
 
-    Num prod = a * b;
+    const Num prod = a * b;
     println("10 * 3 = {prod.value}");
 
-    Num quot = a / b;
+    const Num quot = a / b;
     println("10 / 3 = {quot.value}");
 
-    Num rem = a % b;
+    const Num rem = a % b;
     println("10 % 3 = {rem.value}");
 
     return 0;

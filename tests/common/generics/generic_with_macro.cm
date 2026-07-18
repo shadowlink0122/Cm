@@ -36,15 +36,15 @@ int main() {
     println(c2.capacity);  // 10
 
     // マクロをジェネリック関数に渡す
-    int v = identity(VERSION);
+    const int v = identity(VERSION);
     println(v);  // 13
 
     // マクロ文字列をジェネリックに渡す
-    string s = identity(PREFIX);
+    const string s = identity(PREFIX);
     println(s);  // Item:
 
     // マクロ定数での計算
-    int doubled = DEFAULT_CAPACITY * 2;
+    const int doubled = DEFAULT_CAPACITY * 2;
     Container<int> c3;
     c3.value = doubled;
     c3.capacity = doubled;

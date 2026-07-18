@@ -17,20 +17,20 @@ int main() {
     // 1. プリミティブ型スライス
     println("\n--- Primitive Types ---");
 
-    int[] ints = [1, 2, 3, 4, 5];
+    const int[] ints = [1, 2, 3, 4, 5];
     println("int[]: {ints.len()} elements");
     println("ints[0] = {ints[0]}, ints[4] = {ints[4]}");
 
-    float[] floats = [1.5, 2.5, 3.5];
+    const float[] floats = [1.5, 2.5, 3.5];
     println("float[]: {floats.len()} elements");
 
-    bool[] bools = [true, false, true];
+    const bool[] bools = [true, false, true];
     println("bool[]: {bools.len()} elements");
 
-    char[] chars = ['H', 'e', 'l', 'l', 'o'];
+    const char[] chars = ['H', 'e', 'l', 'l', 'o'];
     println("char[]: {chars.len()} elements");
 
-    string[] strings = ["Hello", "World", "Test"];
+    const string[] strings = ["Hello", "World", "Test"];
     println("string[]: {strings.len()} elements");
     println("strings[0] = {strings[0]}");
 
@@ -40,13 +40,13 @@ int main() {
     Point[] points = [Point{x: 1, y: 2}, Point{x: 3, y: 4}];
     println("Point[]: {points.len()} elements");
 
-    Point p0 = points[0];
+    const Point p0 = points[0];
     println("points[0].x = {p0.x}, points[0].y = {p0.y}");
 
     points.push(Point{x: 5, y: 6});
     println("After push: {points.len()} elements");
 
-    Point p2 = points[2];
+    const Point p2 = points[2];
     println("points[2].x = {p2.x}");
 
     // 3. 構造体メンバとしてのスライス
@@ -60,11 +60,11 @@ int main() {
     c.values.push(300);
 
     println("c.name = {c.name}");
-    int c_len = c.values.len();
+    const int c_len = c.values.len();
     println("c.values.len() = {c_len}");
-    int c_v0 = c.values[0];
-    int c_v1 = c.values[1];
-    int c_v2 = c.values[2];
+    const int c_v0 = c.values[0];
+    const int c_v1 = c.values[1];
+    const int c_v2 = c.values[2];
     println("c.values[0] = {c_v0}");
     println("c.values[1] = {c_v1}");
     println("c.values[2] = {c_v2}");
@@ -80,7 +80,7 @@ int main() {
     arr.push(30);
     println("After push x3: len={arr.len()}");
 
-    int popped = arr.pop();
+    const int popped = arr.pop();
     println("Popped: {popped}, len={arr.len()}");
 
     arr.remove(0);
@@ -96,7 +96,7 @@ int main() {
     // 5. 配列リテラル初期化
     println("\n--- Array Literal Init ---");
 
-    int[] nums = [10, 20, 30, 40, 50];
+    const int[] nums = [10, 20, 30, 40, 50];
     println("nums initialized with 5 elements");
     println("nums[0] = {nums[0]}");
     println("nums[1] = {nums[1]}");

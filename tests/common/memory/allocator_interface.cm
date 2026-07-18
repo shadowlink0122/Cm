@@ -9,7 +9,7 @@ int main() {
     int* p1 = raw1 as int*;
 
     *p1 = 42;
-    int v1 = *p1;
+    const int v1 = *p1;
 
     if (v1 == 42) {
         print("malloc single int: ok\n");
@@ -24,7 +24,7 @@ int main() {
     void* raw2 = alloc.alloc(sizeof(int));
     int* p2 = raw2 as int*;
     *p2 = 100;
-    int v2 = *p2;
+    const int v2 = *p2;
 
     if (v2 == 100) {
         print("alloc single int: ok\n");
@@ -36,7 +36,7 @@ int main() {
     void* raw3 = alloc.reallocate(raw2, sizeof(int) * 2);
     int* p3 = raw3 as int*;
     *p3 = 200;
-    int v3 = *p3;
+    const int v3 = *p3;
 
     if (v3 == 200) {
         print("reallocate: ok\n");

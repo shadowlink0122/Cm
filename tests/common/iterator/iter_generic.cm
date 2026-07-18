@@ -17,15 +17,15 @@ bool int_iter_has_next(Iterator<int>* iter) {
 
 int int_iter_next(Iterator<int>* iter) {
     int* data = iter->data;
-    int idx = iter->index;
-    int value = data[idx];
+    const int idx = iter->index;
+    const int value = data[idx];
     iter->index = idx + 1;
     return value;
 }
 
 int int_iter_peek(Iterator<int>* iter) {
     int* data = iter->data;
-    int idx = iter->index;
+    const int idx = iter->index;
     return data[idx];
 }
 
@@ -40,21 +40,21 @@ int main() {
     int_iter.index = 0;
 
     // peekは値を消費しない
-    int first_peek = int_iter_peek(&int_iter);
+    const int first_peek = int_iter_peek(&int_iter);
     println("peek: {first_peek}");
 
     // nextは値を消費
-    int first_next = int_iter_next(&int_iter);
+    const int first_next = int_iter_next(&int_iter);
     println("next: {first_next}");
 
     // 再度peekすると次の要素
-    int second_peek = int_iter_peek(&int_iter);
+    const int second_peek = int_iter_peek(&int_iter);
     println("peek after next: {second_peek}");
 
     // 残りを走査
     println("remaining values:");
     while (int_iter_has_next(&int_iter)) {
-        int v = int_iter_next(&int_iter);
+        const int v = int_iter_next(&int_iter);
         println("  {v}");
     }
 

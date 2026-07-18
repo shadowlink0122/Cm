@@ -11,8 +11,8 @@ int main() {
     IntPtr p1 = &a;
     FloatPtr p2 = &f;
 
-    int v1 = *p1;
-    float v2 = *p2;
+    const int v1 = *p1;
+    const float v2 = *p2;
 
     println("v1 = {v1}");
     println("v2 = {v2}");

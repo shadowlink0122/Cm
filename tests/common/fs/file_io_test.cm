@@ -7,8 +7,8 @@ import std::io::print;
 import std::fs::{write_file, exists, read_file, append_file, remove, read_to_string, remove_file};
 
 int main() {
-    string path = "test_io.txt";
-    string content = "Hello, Cm File I/O!\nLine 2: Testing write/read.";
+    const string path = "test_io.txt";
+    const string content = "Hello, Cm File I/O!\nLine 2: Testing write/read.";
 
     println("=== File I/O Test ===");
 
@@ -31,7 +31,7 @@ int main() {
 
     // 3. Read
     print("Reading from file: ");
-    string read_back = read_file(path);
+    const string read_back = read_file(path);
     if (read_back == content) {
         println("SUCCESS");
     } else {
@@ -40,7 +40,7 @@ int main() {
 
     // 4. Append
     print("Appending to file: ");
-    string extra = "\nLine 3: Appended.";
+    const string extra = "\nLine 3: Appended.";
     if (append_file(path, extra)) {
         println("SUCCESS");
     } else {
@@ -49,7 +49,7 @@ int main() {
 
     // 5. Read all back
     print("Verifying append: ");
-    string final_content = read_file(path);
+    const string final_content = read_file(path);
     if (final_content == content + extra) {
         println("SUCCESS");
     } else {
@@ -67,7 +67,7 @@ int main() {
 
     // 7. Result API: 存在しないファイルはErr
     print("read_to_string missing: ");
-    Result<string, string> missing = read_to_string("no_such_file.txt");
+    const Result<string, string> missing = read_to_string("no_such_file.txt");
     match (missing) {
         Result::Ok(v) => println("FAILED"),
         Result::Err(e) => println("SUCCESS ({e})"),

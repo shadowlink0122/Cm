@@ -22,9 +22,9 @@ int main() {
     println("counter: {counter}");  // 3
 
     // 3. auto型推論
-    auto x = 100;     // int
-    auto y = 1.5;     // float
-    auto z = "text";  // string
+    const auto x = 100;     // int
+    const auto y = 1.5;     // float
+    const auto z = "text";  // string
     println("auto: x={x}, y={y}, z={z}");
 
     // 4. 配列（ループで初期化）

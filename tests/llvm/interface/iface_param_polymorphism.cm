@@ -15,10 +15,10 @@ int describe(Shape sh) {
 }
 
 int main() {
-    Sq sq = Sq { s: 5 };
-    Rect rc = Rect { w: 3, h: 4 };
-    int a = describe(sq);
-    int b = describe(rc);
+    const Sq sq = Sq { s: 5 };
+    const Rect rc = Rect { w: 3, h: 4 };
+    const int a = describe(sq);
+    const int b = describe(rc);
     println("param: {a} {b}");
     return 0;
 }

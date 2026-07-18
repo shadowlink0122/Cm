@@ -13,6 +13,6 @@ ulong add_offset(ulong x, ulong offset) {
 
 // export関数から非export関数を呼び出す
 export ulong compute(ulong x) {
-    ulong doubled = double_value(x);
+    const ulong doubled = double_value(x);
     return add_offset(doubled, 10);
 }

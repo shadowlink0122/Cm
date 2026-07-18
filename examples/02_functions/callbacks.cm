@@ -52,8 +52,8 @@ int main() {
 
     // 1. 関数ポインタ
     println("--- Function pointer ---");
-    int r1 = apply_comparator(10, 20, &compare_asc);
-    int r2 = apply_comparator(10, 20, &compare_desc);
+    const int r1 = apply_comparator(10, 20, &compare_asc);
+    const int r2 = apply_comparator(10, 20, &compare_desc);
     println("compare_asc(10, 20) = {r1}");
     println("compare_desc(10, 20) = {r2}");
 
@@ -62,15 +62,15 @@ int main() {
     println("--- Interface ---");
     Doubler d;
     Squarer s;
-    int d_result = d.process(5);
-    int s_result = s.process(5);
+    const int d_result = d.process(5);
+    const int s_result = s.process(5);
     println("Doubler.process(5) = {d_result}");
     println("Squarer.process(5) = {s_result}");
 
     // 3. ラムダ
     println("");
     println("--- Lambda ---");
-    int*(int) triple = (int x) => x * 3;
+    const int*(int) triple = (int x) => x * 3;
     println("triple(7) = {triple(7)}");
 
     println("\n=== Done ===");

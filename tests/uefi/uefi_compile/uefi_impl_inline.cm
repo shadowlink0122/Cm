@@ -11,7 +11,7 @@ struct SerialPort {
 impl SerialPort {
     void putc(ulong ch) {
         // selfとchを使用するメソッド
-        ulong p = self.port;
+        const ulong p = self.port;
     }
 
     ulong get_port() {

@@ -25,6 +25,6 @@ int testGlobalConst() {
 }
 
 int main() {
-    int result = testGlobalConst();
+    const int result = testGlobalConst();
     return result;
 }

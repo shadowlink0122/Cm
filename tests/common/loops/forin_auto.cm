@@ -9,7 +9,7 @@ struct Point {
 
 int main() {
     // 1次元固定配列 with auto
-    int[5] arr1d = [1, 2, 3, 4, 5];
+    const int[5] arr1d = [1, 2, 3, 4, 5];
     int sum1 = 0;
     for (auto x in arr1d) {
         sum1 = sum1 + x;
@@ -17,7 +17,7 @@ int main() {
     println("1D array sum: {sum1}");
 
     // 1次元スライス with auto
-    int[] slice1d = [10, 20, 30];
+    const int[] slice1d = [10, 20, 30];
     int sum2 = 0;
     for (auto x in slice1d) {
         sum2 = sum2 + x;
@@ -25,10 +25,10 @@ int main() {
     println("1D slice sum: {sum2}");
 
     // 2次元固定配列 with auto（各行は配列）
-    int[3][2] arr2d = [[1, 2, 3], [4, 5, 6]];
+    const int[3][2] arr2d = [[1, 2, 3], [4, 5, 6]];
     int row_count = 0;
     for (auto row in arr2d) {
-        int first = row[0];
+        const int first = row[0];
         println("row {row_count} first: {first}");
         row_count = row_count + 1;
     }
@@ -46,7 +46,7 @@ int main() {
     println("point sum: {point_sum}");
 
     // 空のスライス（ループが実行されないことを確認）
-    int[] empty = [];
+    const int[] empty = [];
     int empty_count = 0;
     for (auto x in empty) {
         empty_count = empty_count + 1;
@@ -54,7 +54,7 @@ int main() {
     println("empty count: {empty_count}");
 
     // 文字列配列 with auto
-    string[3] names = ["Alice", "Bob", "Charlie"];
+    const string[3] names = ["Alice", "Bob", "Charlie"];
     int name_count = 0;
     for (auto name in names) {
         name_count = name_count + 1;

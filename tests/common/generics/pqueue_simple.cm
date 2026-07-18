@@ -60,7 +60,7 @@ void item_queue_push(ItemQueue* q, Item data) {
 // 先頭を取得して削除
 Item item_queue_pop(ItemQueue* q) {
     ItemNode* head = q->head;
-    Item data = head->data;
+    const Item data = head->data;
     q->head = head->next;
     free(head as void*);
     q->size = q->size - 1;
@@ -86,27 +86,27 @@ int main() {
     // 要素を追加
     println("Pushing items:");
 
-    Item item1 = {value: 100, priority: 1};
+    const Item item1 = {value: 100, priority: 1};
     item_queue_push(&q, item1);
     println("  push(value=100, priority=1)");
 
-    Item item2 = {value: 200, priority: 2};
+    const Item item2 = {value: 200, priority: 2};
     item_queue_push(&q, item2);
     println("  push(value=200, priority=2)");
 
-    Item item3 = {value: 300, priority: 3};
+    const Item item3 = {value: 300, priority: 3};
     item_queue_push(&q, item3);
     println("  push(value=300, priority=3)");
 
-    int size = item_queue_len(&q);
+    const int size = item_queue_len(&q);
     println("Queue size: {size}");
 
     // 要素を取り出し
     println("Popping items:");
     while (!item_queue_is_empty(&q)) {
-        Item popped = item_queue_pop(&q);
-        int v = popped.value;
-        int p = popped.priority;
+        const Item popped = item_queue_pop(&q);
+        const int v = popped.value;
+        const int p = popped.priority;
         println("  pop() = value={v}, priority={p}");
     }
 

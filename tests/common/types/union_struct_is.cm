@@ -16,11 +16,11 @@ typedef Shape = Circle | Rect;
 
 int main() {
     Shape s = Circle { radius: 5 } as Shape;
-    bool ic = s is Circle;
-    bool ir = s is Rect;
+    const bool ic = s is Circle;
+    const bool ir = s is Rect;
     println("circle: is Circle={ic} is Rect={ir}");
     if (s is Circle) {
-        Circle c = s as Circle;
+        const Circle c = s as Circle;
         println("radius: {c.radius}");
     }
 

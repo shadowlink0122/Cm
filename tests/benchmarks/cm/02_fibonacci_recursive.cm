@@ -11,8 +11,8 @@ int fibonacci(int n) {
 }
 
 int main() {
-    int n = 30;
-    int result = fibonacci(n);
+    const int n = 30;
+    const int result = fibonacci(n);
 
     println("Fibonacci({n}) = {result}");
     return 0;

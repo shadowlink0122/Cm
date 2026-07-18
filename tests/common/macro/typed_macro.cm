@@ -17,7 +17,7 @@ int main() {
     println("=== Typed Macro Test ===");
 
     // int型マクロ
-    int v = VERSION;
+    const int v = VERSION;
     println(v);
     println(DEBUG_LEVEL);
 
@@ -35,7 +35,7 @@ int main() {
     }
 
     // マクロを式で使用
-    int next_version = VERSION + 1;
+    const int next_version = VERSION + 1;
     println(next_version);
 
     println("=== Complete ===");

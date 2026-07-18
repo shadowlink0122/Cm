@@ -18,9 +18,9 @@ impl Num for Ord {
 }
 
 int main() {
-    Num x = Num{value: 5};
-    Num y = Num{value: 5};
-    Num z = Num{value: 8};
+    const Num x = Num{value: 5};
+    const Num y = Num{value: 5};
+    const Num z = Num{value: 8};
 
     if (x == y) {
         println("5 == 5: true");

@@ -10,8 +10,8 @@ Result<int, string> divide(int a, int b) {
 }
 
 Result<int, string> calc(int a, int b) {
-    int q = divide(a, b)?;
-    int q2 = divide(q, 2)?;
+    const int q = divide(a, b)?;
+    const int q2 = divide(q, 2)?;
     return Result::Ok(q2 * 10);
 }
 
@@ -23,8 +23,8 @@ Option<int> half(int x) {
 }
 
 Option<int> quarter(int x) {
-    int h = half(x)?;
-    int q = half(h)?;
+    const int h = half(x)?;
+    const int q = half(h)?;
     return Option::Some(q);
 }
 
@@ -46,7 +46,7 @@ int main() {
         Option::None => println("quarter: none"),
     }
     // ?と三項演算子の共存
-    int t = 1 == 1 ? 100 : 200;
+    const int t = 1 == 1 ? 100 : 200;
     println("ternary: {t}");
     return 0;
 }

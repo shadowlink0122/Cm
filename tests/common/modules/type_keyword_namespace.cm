@@ -26,14 +26,14 @@ int main() {
     println("=== Type Keyword Namespace Test ===");
 
     // string::関数呼び出し
-    int len = string::length(0);
+    const int len = string::length(0);
     println(len);
 
-    int cat = string::concat(10, 20);
+    const int cat = string::concat(10, 20);
     println(cat);
 
     // int::関数呼び出し
-    int doubled = int::double_val(5);
+    const int doubled = int::double_val(5);
     println(doubled);
 
     println("=== Complete ===");

@@ -16,13 +16,13 @@ int main() {
     println("Main thread starting worker");
 
     // スレッドを生成（関数ポインタをvoid*にキャスト）
-    ulong t = spawn(worker as void*);
+    const ulong t = spawn(worker as void*);
 
     // spawnの直後に表示（ワーカーは50ms待つので必ず先に表示される）
     println("Main thread waiting for worker");
 
     // スレッドの終了を待機
-    int result = join(t);
+    const int result = join(t);
 
     print("Worker returned: ");
     println(result);

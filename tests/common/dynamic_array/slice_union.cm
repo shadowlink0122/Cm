@@ -15,15 +15,15 @@ int main() {
     // 個々の型として扱われる
 
     // 整数
-    int i = 42;
+    const int i = 42;
     println("int value: {i}");
 
     // 浮動小数点
-    float f = 3.14;
+    const float f = 3.14;
     println("float value: {f}");
 
     // 文字列
-    string s = "hello";
+    const string s = "hello";
     println("string value: {s}");
 
     println("=== Test Passed ===");

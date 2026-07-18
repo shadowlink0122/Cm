@@ -17,9 +17,9 @@ int add_values(int a, int b) {
 // ASMを含む関数を呼び出す関数
 // インライン展開されると問題が発生するケースのシミュレーション
 int caller_with_asm() {
-    int x = 10;
+    const int x = 10;
     do_nothing_asm();
-    int y = 20;
+    const int y = 20;
     do_nothing_asm();
     return x + y;
 }
@@ -38,15 +38,15 @@ int multi_asm_caller() {
 
 int main() {
     // テスト1: ASM含む関数の呼出し
-    int v1 = caller_with_asm();
+    const int v1 = caller_with_asm();
     println("caller_with_asm (expect 30): {v1}");
 
     // テスト2: ループ内ASM呼出し
-    int v2 = multi_asm_caller();
+    const int v2 = multi_asm_caller();
     println("multi_asm_caller (expect 30): {v2}");
 
     // テスト3: ASMなし関数（インライン展開可能な対照）
-    int v3 = add_values(15, 25);
+    const int v3 = add_values(15, 25);
     println("add_values (expect 40): {v3}");
 
     println("PASS");

@@ -19,8 +19,8 @@ struct GenericArray<T> {
 
 impl GenericArray<T> {
     void init(int cap) {
-        long elem_size = __sizeof__(T) as long;
-        long alloc_size = (cap as long) * elem_size;
+        const long elem_size = __sizeof__(T) as long;
+        const long alloc_size = (cap as long) * elem_size;
         void* raw = malloc(alloc_size);
         self.data = raw as T*;
         self.size = 0;
@@ -56,8 +56,8 @@ int main() {
     *p0 = 111;
     *p1 = 222;
 
-    int v0 = arr.get(0);
-    int v1 = arr.get(1);
+    const int v0 = arr.get(0);
+    const int v1 = arr.get(1);
 
     if (v0 != 111 || v1 != 222) {
         println("FAIL: 参照取得");
@@ -65,12 +65,12 @@ int main() {
     }
 
     // 2. move操作テスト
-    int x = 42;
-    int y = move x;
+    const int x = 42;
+    const int y = move x;
     Resource r1;
     r1.id = 1;
     r1.value = 100;
-    Resource r2 = move r1;
+    const Resource r2 = move r1;
 
     if (y != 42 || r2.id != 1) {
         println("FAIL: move操作");
@@ -86,7 +86,7 @@ int main() {
     res1.value = 100;
     resources.push(res1);
 
-    Resource got1 = resources.get(0);
+    const Resource got1 = resources.get(0);
     if (got1.id != 1 || got1.value != 100) {
         println("FAIL: 構造体配列");
         return 1;
@@ -95,7 +95,7 @@ int main() {
     // 4. 参照経由の構造体変更
     Resource* ref = resources.get_ref(0);
     (*ref).value = 999;
-    Resource got2 = resources.get(0);
+    const Resource got2 = resources.get(0);
     if (got2.value != 999) {
         println("FAIL: 参照経由変更");
         return 1;

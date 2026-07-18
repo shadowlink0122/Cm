@@ -8,8 +8,8 @@ int triple(int a, int b = 2, int c = 3) { return a * 100 + b * 10 + c; }
 
 int main() {
     // 文として（HIR loweringが補完）
-    int r1 = greet(1);
-    int r2 = greet(1, 2);
+    const int r1 = greet(1);
+    const int r2 = greet(1, 2);
     println("stmt: {r1} {r2}");
 
     // 補間内（MIR loweringが補完）

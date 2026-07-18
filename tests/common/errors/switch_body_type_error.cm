@@ -1,0 +1,14 @@
+// switch本体（case内）の型エラー検出の回帰テスト
+// （従来はswitch文の中身がTypeCheckerで走査されず、型エラーが素通りしていた）
+
+int main() {
+    const int x = 3;
+    switch (x) {
+        case (1) {
+            const string s = x;  // エラー: int を string へ代入
+            println(s);
+        }
+        else {}
+    }
+    return 0;
+}

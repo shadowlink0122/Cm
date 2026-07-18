@@ -14,13 +14,13 @@ export void show_system_info(void* st) {
 
     // UEFI Revision: offset 8のqwordの下位32bit = revision
     ulong* rev_qptr = (st as ulong + 8) as ulong*;
-    ulong rev_raw = *rev_qptr;
-    ulong rev_mask = 4294967295;
-    ulong rev = rev_raw & rev_mask;
-    ulong sixteen = 16;
-    ulong major = rev >> sixteen;
-    ulong ffff = 65535;
-    ulong minor = rev & ffff;
+    const ulong rev_raw = *rev_qptr;
+    const ulong rev_mask = 4294967295;
+    const ulong rev = rev_raw & rev_mask;
+    const ulong sixteen = 16;
+    const ulong major = rev >> sixteen;
+    const ulong ffff = 65535;
+    const ulong minor = rev & ffff;
 
     efi_print(st, "UEFI Revision: " as void*);
     efi_print_dec(st, major);
@@ -30,8 +30,8 @@ export void show_system_info(void* st) {
 
     // Firmware Revision (SystemTable + 0x20)
     ulong* fw_qptr = (st as ulong + 32) as ulong*;
-    ulong fw_raw = *fw_qptr;
-    ulong fw_rev = fw_raw & rev_mask;
+    const ulong fw_raw = *fw_qptr;
+    const ulong fw_rev = fw_raw & rev_mask;
     efi_print(st, "Firmware Rev:  " as void*);
     efi_print_dec(st, fw_rev);
     efi_println(st, "" as void*);

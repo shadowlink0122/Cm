@@ -22,8 +22,8 @@ impl Rect for Shape {
 }
 
 int main() {
-    Sq sq = Sq { s: 5 };
-    Rect rc = Rect { w: 3, h: 4 };
+    const Sq sq = Sq { s: 5 };
+    const Rect rc = Rect { w: 3, h: 4 };
 
     // 複数実装のディスパッチ（補間内の仮想呼び出し）
     Shape a = sq;
@@ -31,8 +31,8 @@ int main() {
     println("value: {a.area()} {b.area()}");
 
     // 引数付きメソッドと戻り値
-    int s2 = a.scaled(2);
-    int r3 = b.scaled(3);
+    const int s2 = a.scaled(2);
+    const int r3 = b.scaled(3);
     println("args: {s2} {r3}");
 
     // 再代入で実装が切り替わる

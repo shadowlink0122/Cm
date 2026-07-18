@@ -3,8 +3,8 @@ import std::io::println;
 import ./hier_export/std;
 
 int main() {
-    int r1 = std::io::file::read_file(5);
-    int r2 = std::io::stream::open_stream(3);
+    const int r1 = std::io::file::read_file(5);
+    const int r2 = std::io::stream::open_stream(3);
     println("read_file: {r1}");
     println("open_stream: {r2}");
     return 0;

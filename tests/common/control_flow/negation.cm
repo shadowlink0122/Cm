@@ -3,8 +3,8 @@ import std::io::println;
 
 int main() {
     // bool値の否定
-    bool t = true;
-    bool f = false;
+    const bool t = true;
+    const bool f = false;
 
     println("!true = {!t}");
     println("!false = {!f}");
@@ -36,8 +36,8 @@ int main() {
     }
 
     // 比較演算子との組み合わせ
-    int x = 5;
-    int y = 10;
+    const int x = 5;
+    const int y = 10;
 
     if (!(x > y)) {
         println("!(5 > 10) is true");
@@ -48,14 +48,14 @@ int main() {
     }
 
     // 論理演算子との組み合わせ
-    bool a = true;
-    bool b = false;
+    const bool a = true;
+    const bool b = false;
 
     // 複雑な式は事前に評価
-    bool not_a_and_b = !(a && b);
-    bool not_a_or_b = !(a || b);
-    bool not_a_or_not_b = !a || !b;
-    bool not_a_and_not_b = !a && !b;
+    const bool not_a_and_b = !(a && b);
+    const bool not_a_or_b = !(a || b);
+    const bool not_a_or_not_b = !a || !b;
+    const bool not_a_and_not_b = !a && !b;
 
     println("!(a && b) = {not_a_and_b}");
     println("!(a || b) = {not_a_or_b}");

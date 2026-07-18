@@ -19,16 +19,16 @@ int main() {
 
     // テスト1: typedef unionの基本使用
     println("Test 1: Typedef union with null");
-    MaybeInt x = null;
-    MaybeInt y = 42 as MaybeInt;
+    const MaybeInt x = null;
+    const MaybeInt y = 42 as MaybeInt;
     println("  x declared");
     println("  y declared");
 
     // テスト2: typedef union関数呼び出し
     println("Test 2: Function with union return");
-    MaybeInt result1 = get_value(true);
-    MaybeInt result2 = get_value(false);
-    int v1 = result1 as int;
+    const MaybeInt result1 = get_value(true);
+    const MaybeInt result2 = get_value(false);
+    const int v1 = result1 as int;
     println("  v1={v1}");
 
     // テスト3: 変数でインラインユニオン型宣言
@@ -45,13 +45,13 @@ int main() {
 
     // テスト5: null型を含むユニオンへのnull代入
     println("Test 5: Null assignment");
-    MaybeInt m = null;
+    const MaybeInt m = null;
     println("  null assigned to MaybeInt");
 
     // テスト6: null型を含むユニオンへの値代入
     println("Test 6: Value assignment");
-    MaybeInt n = 100 as MaybeInt;
-    int v6 = n as int;
+    const MaybeInt n = 100 as MaybeInt;
+    const int v6 = n as int;
     println("  v6={v6}");
 
     println("=== PASS ===");

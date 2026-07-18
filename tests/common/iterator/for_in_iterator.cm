@@ -24,7 +24,7 @@ impl RangeIterator {
     }
 
     int next() {
-        int value = self.current;
+        const int value = self.current;
         self.current = self.current + self.step;
         return value;
     }
@@ -32,11 +32,11 @@ impl RangeIterator {
 
 int main() {
     // ヘルパー関数でイテレータを作成
-    RangeIterator it = make_range_iter(1, 4);
+    const RangeIterator it = make_range_iter(1, 4);
 
     // while (it.has_next()) { ... } パターン
     while (it.has_next()) {
-        int x = it.next();
+        const int x = it.next();
         println("{x}");
     }
 

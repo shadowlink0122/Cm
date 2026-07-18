@@ -6,11 +6,11 @@ int main() {
     println("=== Line Reading Test ===");
 
     // テストフォルダ内のデータファイルを使用
-    string data_path = "data/line_read_data.txt";
+    const string data_path = "data/line_read_data.txt";
 
     // 1. テストファイル作成（複数行）
-    string lines = "First Line\nSecond Line\nThird Line\n";
-    bool ok = write_file(data_path, lines);
+    const string lines = "First Line\nSecond Line\nThird Line\n";
+    const bool ok = write_file(data_path, lines);
     if (!ok) {
         println("Write failed");
         return 1;
@@ -18,7 +18,7 @@ int main() {
     println("File written");
 
     // 2. 読み込み
-    string content = read_file(data_path);
+    const string content = read_file(data_path);
     println("Read content");
 
     // 3. 行カウントと行の長さ表示
@@ -28,7 +28,7 @@ int main() {
     for (int i = 0; i < content.len() as int; i++) {
         if (content[i] == '\n') {
             line_count = line_count + 1;
-            int line_len = i - line_start;
+            const int line_len = i - line_start;
             println("Line {line_count}: {line_len} chars");
             line_start = i + 1;
         }

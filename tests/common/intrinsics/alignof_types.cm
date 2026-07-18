@@ -21,12 +21,12 @@ struct AlignMixed {
 
 int main() {
     // 基本型のアラインメント
-    int a_char = __alignof__(char);
-    int a_short = __alignof__(short);
-    int a_int = __alignof__(int);
-    int a_long = __alignof__(long);
-    int a_float = __alignof__(float);
-    int a_double = __alignof__(double);
+    const int a_char = __alignof__(char);
+    const int a_short = __alignof__(short);
+    const int a_int = __alignof__(int);
+    const int a_long = __alignof__(long);
+    const int a_float = __alignof__(float);
+    const int a_double = __alignof__(double);
 
     if (a_char != 1) { println("FAIL: alignof(char) = {a_char}");
         return 1;
@@ -48,10 +48,10 @@ int main() {
     }
 
     // 構造体のアラインメント（最大メンバーに従う）
-    int a_s_char = __alignof__(AlignChar);
-    int a_s_int = __alignof__(AlignInt);
-    int a_s_double = __alignof__(AlignDouble);
-    int a_s_mixed = __alignof__(AlignMixed);
+    const int a_s_char = __alignof__(AlignChar);
+    const int a_s_int = __alignof__(AlignInt);
+    const int a_s_double = __alignof__(AlignDouble);
+    const int a_s_mixed = __alignof__(AlignMixed);
 
     if (a_s_char != 1) { println("FAIL: alignof(AlignChar) = {a_s_char}");
         return 1;

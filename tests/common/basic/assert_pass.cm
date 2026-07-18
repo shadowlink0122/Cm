@@ -4,11 +4,11 @@ import std::io::println;
 import std::debug::assert;
 
 int main() {
-    int x = 5;
+    const int x = 5;
     assert(x == 5, "x must be 5");
     assert(x > 0, "x must be positive");
 
-    uint u = 10;
+    const uint u = 10;
     assert(u < 100, "u must be less than 100");
 
     println("all asserts passed");

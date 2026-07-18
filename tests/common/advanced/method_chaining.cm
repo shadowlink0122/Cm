@@ -46,12 +46,12 @@ int main() {
     println("=== Method Chaining Test ===");
 
     // 1. シンプルなチェーン（外部関数経由）
-    Point p = Point(10, 20);
+    const Point p = Point(10, 20);
     println("p: ({p.x}, {p.y})");
 
     // チェーンを分解: p.move(5, 5).get_sum()
-    Point moved = Point__move(p, 5, 5);
-    int sum = Point__get_sum(moved);
+    const Point moved = Point__move(p, 5, 5);
+    const int sum = Point__get_sum(moved);
     println("After move(5,5): ({moved.x}, {moved.y})");
     println("Sum: {sum}");
 
@@ -62,9 +62,9 @@ int main() {
     }
 
     // 2. Wrapper経由
-    Wrapper w = Wrapper { p: Point { x: 1, y: 2 } };
-    Wrapper cloned = Wrapper__clone(w);
-    Point wp = Wrapper__get_point(cloned);
+    const Wrapper w = Wrapper { p: Point { x: 1, y: 2 } };
+    const Wrapper cloned = Wrapper__clone(w);
+    const Point wp = Wrapper__get_point(cloned);
     println("Cloned point: ({wp.x}, {wp.y})");
 
     if (wp.x == 1) {
@@ -74,10 +74,10 @@ int main() {
     }
 
     // 3. 多重チェーン
-    Wrapper w2 = Wrapper__clone(Wrapper__clone(w));
-    Point wp2 = Wrapper__get_point(w2);
-    Point moved2 = Point__move(wp2, 10, 10);
-    int val = Point__get_sum(moved2);
+    const Wrapper w2 = Wrapper__clone(Wrapper__clone(w));
+    const Point wp2 = Wrapper__get_point(w2);
+    const Point moved2 = Point__move(wp2, 10, 10);
+    const int val = Point__get_sum(moved2);
     println("Multiple chain result: {val}");
 
     if (val == 23) {

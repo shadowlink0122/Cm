@@ -6,12 +6,12 @@ use libc {
 
 int main() {
     // 整数1つ分のメモリを確保
-    int size = 4;
+    const int size = 4;
     void* ptr = malloc(size);
     int* p = ptr;
     *p = 12345;
 
-    int value = *p;
+    const int value = *p;
     println("Allocated: {value}");
 
     // メモリ解放

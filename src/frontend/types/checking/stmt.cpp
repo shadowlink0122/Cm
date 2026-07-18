@@ -66,6 +66,29 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
             check_statement(*s);
         }
         scopes_.pop();
+    } else if (auto* switch_stmt = stmt.as<ast::SwitchStmt>()) {
+        // switch本体の検査（従来は未走査で、case内の型エラーや
+        // 変数の使用・変更がLint追跡から漏れていた）
+        if (switch_stmt->expr) {
+            infer_type(*switch_stmt->expr);
+        }
+        for (auto& c : switch_stmt->cases) {
+            scopes_.push();
+            for (auto& s : c.stmts) {
+                check_statement(*s);
+            }
+            scopes_.pop();
+        }
+    } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
+        if (defer_stmt->body) {
+            check_statement(*defer_stmt->body);
+        }
+    } else if (auto* must_block = stmt.as<ast::MustBlockStmt>()) {
+        scopes_.push();
+        for (auto& s : must_block->body) {
+            check_statement(*s);
+        }
+        scopes_.pop();
     }
 }
 
@@ -203,36 +226,29 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         error(stmt_span, "Cannot infer type for '" + let.name + "'");
     }
 
-    // 非const変数を追跡（const推奨警告用）
-    if (!let.is_const) {
-        non_const_variable_spans_[let.name] = stmt_span;
+    // 非const変数を追跡（const推奨警告用）。
+    // ポインタ型は const T* がpointee-constを意味し、束縛のconst化を表せないため対象外
+    {
+        auto tracked_type = resolve_typedef(let.type ? let.type : init_type);
+        bool is_pointer = tracked_type && tracked_type->kind == ast::TypeKind::Pointer;
+        if (!let.is_const && !is_pointer) {
+            non_const_variable_spans_[let.name] = stmt_span;
+        }
     }
 
     // 初期化式がある場合は初期化済みとしてマーク
     if (let.init) {
         mark_variable_initialized(let.name);
-    }
-
-    // 命名規則チェック
-    // _ で始まる変数は意図的に命名規則を無視（unused placeholder等）
-    if (!let.name.empty() && let.name[0] != '_') {
-        // name_spanが設定されていればそれを使用、なければstmt_span
-        Span name_pos = let.name_span.is_empty() ? stmt_span : let.name_span;
-        if (let.is_const) {
-            // L102: 定数はUPPER_SNAKE_CASE（ただし小文字snake_caseも許容）
-            // 厳密なチェックは設定可能にする予定
-            if (enable_lint_warnings_ && !is_snake_case(let.name) &&
-                !is_upper_snake_case(let.name)) {
-                warning(name_pos, "Constant name '" + let.name +
-                                      "' should be UPPER_SNAKE_CASE or snake_case [L102]");
-            }
-        } else {
-            // L101: 変数はsnake_case
-            if (enable_lint_warnings_ && !is_snake_case(let.name)) {
-                warning(name_pos, "Variable name '" + let.name + "' should be snake_case [L101]");
-            }
+    } else if (let.type) {
+        // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、
+        // 未初期化使用の警告対象はスカラ・配列に限定する
+        auto resolved = resolve_typedef(let.type);
+        if (resolved && resolved->kind == ast::TypeKind::Struct) {
+            mark_variable_initialized(let.name);
         }
     }
+
+    // 命名規則チェックは check_naming_conventions（L001 --strict）へ一本化
 }
 
 void TypeChecker::check_return(ast::ReturnStmt& ret) {
@@ -438,6 +454,8 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     }
 
     scopes_.current().define(for_in.var_name, for_in.var_type, false);
+    // ループ変数はイテレーションで毎回代入されるため初期化済みとして扱う
+    mark_variable_initialized(for_in.var_name);
 
     for (auto& s : for_in.body) {
         check_statement(*s);

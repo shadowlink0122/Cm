@@ -15,7 +15,7 @@ int main() {
     Vec2 p;
     p.x = 10;
     p.y = 20;
-    int result = sum_coords(p);
+    const int result = sum_coords(p);
     println("{result}");
     return 0;
 }

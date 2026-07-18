@@ -22,7 +22,7 @@ export void halt_loop_no_must() {
 
 // テスト3: must内のASM出力変数
 export ulong must_asm_output() {
-    ulong result = 0;
+    const ulong result = 0;
     must {
         __asm__("movq $$42, ${=r:result}");
     }
@@ -31,10 +31,10 @@ export ulong must_asm_output() {
 
 // テスト4: mustとmust以外のASMが混在
 export ulong mixed_must_asm() {
-    ulong a = 0;
+    const ulong a = 0;
     __asm__("movq $$10, ${=r:a}");
 
-    ulong b = 0;
+    const ulong b = 0;
     must {
         __asm__("movq $$20, ${=r:b}");
     }
@@ -46,8 +46,8 @@ ulong efi_main(void* image_handle, void* system_table) {
     void* ih = image_handle;
     void* st = system_table;
 
-    ulong val = must_asm_output();
-    ulong mixed = mixed_must_asm();
+    const ulong val = must_asm_output();
+    const ulong mixed = mixed_must_asm();
 
     halt_loop();
     return val + mixed;

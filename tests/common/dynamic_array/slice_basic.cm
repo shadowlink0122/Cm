@@ -18,14 +18,14 @@ int main() {
 
     // インデックスアクセス
     int v0 = arr[0];
-    int v1 = arr[1];
-    int v2 = arr[2];
+    const int v1 = arr[1];
+    const int v2 = arr[2];
     println("arr[0] = {v0}");
     println("arr[1] = {v1}");
     println("arr[2] = {v2}");
 
     // pop: 末尾から削除
-    int last = arr.pop();
+    const int last = arr.pop();
     println("popped = {last}");
 
     len = arr.len();

@@ -8,7 +8,7 @@ struct Point with Debug {
 }
 
 int main() {
-    Point p = {x: 10, y: 20};
+    const Point p = {x: 10, y: 20};
     println("{p.debug()}");
     return 0;
 }

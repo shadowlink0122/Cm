@@ -9,16 +9,16 @@ int main() {
     // ===========================================
     println("1. Integer type casts:");
 
-    int i = 42;
-    long l = i as long;
-    short s = i as short;
-    tiny t = i as tiny;
+    const int i = 42;
+    const long l = i as long;
+    const short s = i as short;
+    const tiny t = i as tiny;
     println("  int 42 -> long: {l}");
     println("  int 42 -> short: {s}");
     println("  int 42 -> tiny: {t}");
 
-    long big = 1000000;
-    int from_long = big as int;
+    const long big = 1000000;
+    const int from_long = big as int;
     println("  long 1000000 -> int: {from_long}");
 
     // ===========================================
@@ -26,27 +26,27 @@ int main() {
     // ===========================================
     println("2. Float/Int casts:");
 
-    double d = 3.14159;
-    int d_to_i = d as int;
+    const double d = 3.14159;
+    const int d_to_i = d as int;
     println("  double 3.14159 -> int: {d_to_i}");
 
-    float f = 2.5;
-    int f_to_i = f as int;
+    const float f = 2.5;
+    const int f_to_i = f as int;
     println("  float 2.5 -> int: {f_to_i}");
 
-    int i2 = 7;
-    double i_to_d = i2 as double;
-    float i_to_f = i2 as float;
+    const int i2 = 7;
+    const double i_to_d = i2 as double;
+    const float i_to_f = i2 as float;
     println("  int 7 -> double: {i_to_d}");
     println("  int 7 -> float: {i_to_f}");
 
     // float <-> double
-    double d2 = 1.23456789;
-    float d_to_f = d2 as float;
+    const double d2 = 1.23456789;
+    const float d_to_f = d2 as float;
     println("  double 1.23456789 -> float: {d_to_f}");
 
-    float f2 = 9.87;
-    double f_to_d = f2 as double;
+    const float f2 = 9.87;
+    const double f_to_d = f2 as double;
     println("  float 9.87 -> double: {f_to_d}");
 
     // ===========================================
@@ -54,17 +54,17 @@ int main() {
     // ===========================================
     println("3. Bool/Int casts:");
 
-    bool btrue = true;
-    bool bfalse = false;
-    int btrue_i = btrue as int;
-    int bfalse_i = bfalse as int;
+    const bool btrue = true;
+    const bool bfalse = false;
+    const int btrue_i = btrue as int;
+    const int bfalse_i = bfalse as int;
     println("  true -> int: {btrue_i}");
     println("  false -> int: {bfalse_i}");
 
-    int one = 1;
-    int zero = 0;
-    bool one_b = one as bool;
-    bool zero_b = zero as bool;
+    const int one = 1;
+    const int zero = 0;
+    const bool one_b = one as bool;
+    const bool zero_b = zero as bool;
     println("  1 -> bool: {one_b}");
     println("  0 -> bool: {zero_b}");
 
@@ -74,17 +74,17 @@ int main() {
     println("4. Pointer casts:");
 
     int val1 = 111;
-    int val2 = 222;
-    int val3 = 333;
+    const int val2 = 222;
+    const int val3 = 333;
 
     int* ip = &val1;
     void* vp = ip as void*;
     int* ip2 = vp as int*;
-    int val = *ip2;
+    const int val = *ip2;
     println("  int* -> void* -> int*: {val}");
 
-    long addr = ip as long;
-    bool addr_nonzero = addr != 0;
+    const long addr = ip as long;
+    const bool addr_nonzero = addr != 0;
     println("  int* -> long (address): nonzero={addr_nonzero}");
 
     // ===========================================
@@ -92,12 +92,12 @@ int main() {
     // ===========================================
     println("5. Unsigned casts:");
 
-    uint ui = 100 as uint;
-    int ui_to_i = ui as int;
+    const uint ui = 100 as uint;
+    const int ui_to_i = ui as int;
     println("  uint 100 -> int: {ui_to_i}");
 
-    int neg = 0 - 1;
-    uint neg_to_ui = neg as uint;
+    const int neg = 0 - 1;
+    const uint neg_to_ui = neg as uint;
     println("  int -1 -> uint: converted");
 
     // ===========================================
@@ -105,12 +105,12 @@ int main() {
     // ===========================================
     println("6. Char/Int casts:");
 
-    char c = 'A';
-    int c_to_i = c as int;
+    const char c = 'A';
+    const int c_to_i = c as int;
     println("  'A' -> int: {c_to_i}");
 
-    int code = 66;
-    char i_to_c = code as char;
+    const int code = 66;
+    const char i_to_c = code as char;
     println("  66 -> char: B");
 
     // ===========================================
@@ -118,10 +118,10 @@ int main() {
     // ===========================================
     println("7. Chained casts:");
 
-    double d3 = 99.9;
-    int d3_i = d3 as int;
-    short d3_s = d3_i as short;
-    tiny chain = d3_s as tiny;
+    const double d3 = 99.9;
+    const int d3_i = d3 as int;
+    const short d3_s = d3_i as short;
+    const tiny chain = d3_s as tiny;
     println("  double 99.9 -> int -> short -> tiny: {chain}");
 
     println("");

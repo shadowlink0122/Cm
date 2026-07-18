@@ -34,8 +34,8 @@ int main() {
     println("(*ptr).inner->value = {(*ptr).inner->value}");
 
     // 変数経由でも動作確認
-    int v1 = ptr->inner->value;
-    int v2 = (*ptr).inner->value;
+    const int v1 = ptr->inner->value;
+    const int v2 = (*ptr).inner->value;
     println("v1 = {v1}, v2 = {v2}");
 
     return 0;

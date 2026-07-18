@@ -10,7 +10,7 @@ int main() {
     println(x);
 
     // 複数の変数
-    int y = 20;
+    const int y = 20;
     int z = x + y;
     println(z);
 

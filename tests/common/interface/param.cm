@@ -21,7 +21,7 @@ int extract_value(Number n) {
 int main() {
     Number n;
     n.value = 42;
-    int v = extract_value(n);
+    const int v = extract_value(n);
     println("{v}");
     return 0;
 }

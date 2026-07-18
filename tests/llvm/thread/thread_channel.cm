@@ -12,7 +12,7 @@ import native::thread::join_all;
 
 // プロデューサー: チャネルに1〜5の値を送信
 void* producer(void* arg) {
-    long ch = arg as long;
+    const long ch = arg as long;
     int i = 1;
     while (i <= 5) {
         send(ch, i as long);
@@ -27,7 +27,7 @@ int main() {
     println("=== Thread Channel Test ===");
 
     // チャネル作成（バッファサイズ2 — バックプレッシャーテスト）
-    long ch = create(2);
+    const long ch = create(2);
     println("channel created");
 
     // プロデューサースレッド生成（join_all使用）
@@ -40,7 +40,7 @@ int main() {
 
     while (count < 5) {
         long value = 0;
-        int ret = recv(ch, &value);
+        const int ret = recv(ch, &value);
         if (ret != 0) {
             break;
         }

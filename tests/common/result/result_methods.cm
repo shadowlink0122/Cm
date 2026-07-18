@@ -14,32 +14,32 @@ int main() {
     println("=== CmResult Test ===");
 
     // is_ok テスト
-    CmResult<int, string> r1 = safe_divide(10, 2);
-    bool b1 = r1.is_ok;
+    const CmResult<int, string> r1 = safe_divide(10, 2);
+    const bool b1 = r1.is_ok;
     println("r1 is_ok: {b1}");
 
-    CmResult<int, string> r2 = safe_divide(10, 0);
-    bool b2 = r2.is_ok;
+    const CmResult<int, string> r2 = safe_divide(10, 0);
+    const bool b2 = r2.is_ok;
     println("r2 is_ok: {b2}");
 
     // unwrap テスト
-    int v1 = result_unwrap(r1);
+    const int v1 = result_unwrap(r1);
     println("r1 unwrap: {v1}");
 
     // unwrap_or テスト
-    int v2 = result_unwrap_or(r2, -1);
+    const int v2 = result_unwrap_or(r2, -1);
     println("r2 unwrap_or: {v2}");
 
     // unwrap_err テスト
-    string e1 = result_unwrap_err(r2);
+    const string e1 = result_unwrap_err(r2);
     println("r2 unwrap_err: {e1}");
 
     // チェイン テスト
-    CmResult<int, string> r3 = safe_divide(100, 5);
+    const CmResult<int, string> r3 = safe_divide(100, 5);
     if (r3.is_ok) {
-        int v3 = result_unwrap(r3);
-        CmResult<int, string> r4 = safe_divide(v3, 2);
-        int v4 = result_unwrap(r4);
+        const int v3 = result_unwrap(r3);
+        const CmResult<int, string> r4 = safe_divide(v3, 2);
+        const int v4 = result_unwrap(r4);
         println("100 / 5 / 2 = {v4}");
     }
 

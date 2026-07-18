@@ -48,17 +48,17 @@ int main() {
 
     // 4スレッド起動・個別待機
     // ※ join_allはJIT環境でスタック配列ポインタ変換の問題があるため個別joinを使用
-    ulong t0 = spawn_with_arg(&worker as void*, shared);
-    ulong t1 = spawn_with_arg(&worker as void*, shared);
-    ulong t2 = spawn_with_arg(&worker as void*, shared);
-    ulong t3 = spawn_with_arg(&worker as void*, shared);
+    const ulong t0 = spawn_with_arg(&worker as void*, shared);
+    const ulong t1 = spawn_with_arg(&worker as void*, shared);
+    const ulong t2 = spawn_with_arg(&worker as void*, shared);
+    const ulong t3 = spawn_with_arg(&worker as void*, shared);
     join(t0);
     join(t1);
     join(t2);
     join(t3);
 
     // 検証: 4スレッド × 1000回 = 4000
-    int result = *counter_ptr;
+    const int result = *counter_ptr;
     if (result == 4000) {
         println("threads completed successfully");
     } else {

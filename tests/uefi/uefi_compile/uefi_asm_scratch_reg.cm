@@ -9,7 +9,7 @@
 
 // スクラッチレジスタとして%rdiを使用（ABIパラメータではない）
 export ulong read_byte(ulong addr) {
-    ulong result = 0;
+    const ulong result = 0;
     __asm__(`
         movq ${r:addr}, %rdi;
         xorq %rax, %rax;
@@ -31,7 +31,7 @@ export void memcpy_inline(ulong dst, ulong src, ulong len) {
 
 // 複数のスクラッチレジスタを同時使用
 export ulong port_read(ulong port) {
-    ulong value = 0;
+    const ulong value = 0;
     __asm__(`
         movq ${r:port}, %rdx;
         xorq %rax, %rax;
@@ -46,9 +46,9 @@ ulong efi_main(void* image_handle, void* system_table) {
     void* st = system_table;
 
     // スクラッチレジスタ用途のASM呼び出し
-    ulong val = read_byte(0x1000);
+    const ulong val = read_byte(0x1000);
     memcpy_inline(0x2000, 0x3000, 256);
-    ulong pval = port_read(0x3F8);
+    const ulong pval = port_read(0x3F8);
 
     while (true) { __asm__("hlt"); }
     return val + pval;

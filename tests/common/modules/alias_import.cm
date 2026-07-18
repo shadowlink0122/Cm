@@ -3,7 +3,7 @@ import std::io::println;
 import ./alias_import/very_long_module_name as m;
 
 int main() {
-    int result = m::calculate(21);
+    const int result = m::calculate(21);
     println("Result: {result}");
     return 0;
 }

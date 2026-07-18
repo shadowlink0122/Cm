@@ -9,7 +9,7 @@ int main() {
     MyInt x = 42;
     MyInt* p = &x;
 
-    MyInt v = *p;
+    const MyInt v = *p;
     println("x = {x}");
     println("*p = {v}");
 
@@ -20,7 +20,7 @@ int main() {
     MyFloat f = 3.14;
     MyFloat* fp = &f;
 
-    MyFloat fv = *fp;
+    const MyFloat fv = *fp;
     println("f = {f}");
     println("*fp = {fv}");
 

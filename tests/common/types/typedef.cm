@@ -3,7 +3,7 @@ import std::io::println;
 typedef Integer = int;
 
 int main() {
-    Integer x = 42;
+    const Integer x = 42;
     println("{x}");
     return 0;
 }

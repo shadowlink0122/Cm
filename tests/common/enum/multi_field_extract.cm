@@ -17,7 +17,7 @@ enum Point {
 }
 
 int main() {
-    Point p = Point::Coord(Coord { x: 10, y: 20 });
+    const Point p = Point::Coord(Coord { x: 10, y: 20 });
 
     // matchで値抽出（ステートメント形式）
     match (p) {
@@ -25,7 +25,7 @@ int main() {
             println("origin");
         }
         Point::Coord(c) => {
-            int sum = c.x + c.y;
+            const int sum = c.x + c.y;
             println("x={c.x}, y={c.y}, sum={sum}");
         }
     }

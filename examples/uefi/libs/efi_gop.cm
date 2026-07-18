@@ -26,17 +26,17 @@ export ulong gop_init(
     ulong* out_stride
 ) {
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);  // offset 0x60 = BootServices
+    const ulong bs_addr = *(st + 12);  // offset 0x60 = BootServices
     ulong* bs = bs_addr as ulong*;
 
     // LocateProtocol関数ポインタ取得
     // BootServices offset: Header(24bytes) + 37 function pointers = 24 + 37*8 = 320
     // qword index: 320/8 = 40
-    ulong locate_fn = *(bs + 40);
+    const ulong locate_fn = *(bs + 40);
 
     // LocateProtocol(GUID*, Registration=NULL, **Interface)
-    ulong gop_ptr = 0;
-    ulong result = 0;
+    const ulong gop_ptr = 0;
+    const ulong result = 0;
 
     // ASMでLocateProtocol呼び出し
     // GUIDをimmediate定数としてASM内に直接記述（Cm変数参照はASM内で不正値になるため）
@@ -63,7 +63,7 @@ export ulong gop_init(
     }
 
     // エラーチェック
-    long signed_result = result as long;
+    const long signed_result = result as long;
     if (signed_result < 0) {
         efi_print(system_table, "GOP LocateProtocol failed: " as void*);
         efi_print_hex(system_table, result);
@@ -74,24 +74,24 @@ export ulong gop_init(
     // GOPプロトコルからMode情報を取得
     // GOP構造体: QueryMode(0x00), SetMode(0x08), Blt(0x10), Mode(0x18)
     ulong* gop = gop_ptr as ulong*;
-    ulong mode_addr = *(gop + 3);  // offset 0x18 = Mode
+    const ulong mode_addr = *(gop + 3);  // offset 0x18 = Mode
 
     // Mode構造体:
     //   MaxMode(u32, 0x00), Mode(u32, 0x04), Info(ptr, 0x08),
     //   SizeOfInfo(ulong, 0x10), FrameBufferBase(ulong, 0x18), FrameBufferSize(ulong, 0x20)
     ulong* mode = mode_addr as ulong*;
-    ulong fb_base = *(mode + 3);  // offset 0x18 = FrameBufferBase
+    const ulong fb_base = *(mode + 3);  // offset 0x18 = FrameBufferBase
 
     // Info構造体のポインタを取得
-    ulong info_addr = *(mode + 1);  // offset 0x08 = Info
+    const ulong info_addr = *(mode + 1);  // offset 0x08 = Info
 
     // ModeInfo構造体:
     //   Version(u32, 0x00), HRes(u32, 0x04), VRes(u32, 0x08),
     //   PixelFormat(u32, 0x0C), PixelInformation(16bytes, 0x10), PixelsPerScanLine(u32, 0x20)
     uint* info32 = info_addr as uint*;
-    ulong hres = (*(info32 + 1)) as ulong;    // offset 0x04 = HRes
-    ulong vres = (*(info32 + 2)) as ulong;    // offset 0x08 = VRes
-    ulong stride = (*(info32 + 8)) as ulong;  // offset 0x20 = PixelsPerScanLine
+    const ulong hres = (*(info32 + 1)) as ulong;    // offset 0x04 = HRes
+    const ulong vres = (*(info32 + 2)) as ulong;    // offset 0x08 = VRes
+    const ulong stride = (*(info32 + 8)) as ulong;  // offset 0x20 = PixelsPerScanLine
 
     // callerのポインタに書き込み
     *out_fb = fb_base;

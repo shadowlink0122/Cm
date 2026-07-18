@@ -27,14 +27,14 @@ void* server_thread(void* arg) {
 
     // 7リクエスト処理
     for (int i = 0; i < 7; i++) {
-        HttpServerRequest req = server.accept();
-        string method = req.method();
-        string path = req.path();
+        const HttpServerRequest req = server.accept();
+        const string method = req.method();
+        const string path = req.path();
 
         if (method == "GET" && path == "/api/hello") {
             req.respond(200, "{\"message\": \"Hello, World!\"}");
         } else if (method == "POST" && path == "/api/echo") {
-            string body = req.body();
+            const string body = req.body();
             req.respond(200, body);
         } else if (method == "PUT" && path == "/api/update") {
             req.respond(200, "{\"updated\": true}");
@@ -51,10 +51,10 @@ void* server_thread(void* arg) {
 
 // 非同期GETワーカー (結果のステータスコードをチャネルに送信)
 void* async_get_worker(void* ch_ptr) {
-    long ch = ch_ptr as long;
+    const long ch = ch_ptr as long;
     HttpClient client;
     client.init("127.0.0.1", 18300);
-    HttpResponse resp = client.get("/api/hello");
+    const HttpResponse resp = client.get("/api/hello");
     if (resp.is_ok == 1) {
         send(ch, resp.status as long);
     } else {
@@ -67,7 +67,7 @@ int main() {
     println("=== HTTP REST API Test ===");
 
     // Cmサーバスレッド起動
-    ulong server = spawn(server_thread as void*);
+    const ulong server = spawn(server_thread as void*);
     sleep_ms(30);
 
     // HttpClient初期化
@@ -77,7 +77,7 @@ int main() {
     // ============================================================
     // テスト1: GET /api/hello
     // ============================================================
-    HttpResponse r1 = client.get("/api/hello");
+    const HttpResponse r1 = client.get("/api/hello");
     if (r1.is_ok == 1) {
         println("GET /api/hello: {r1.status}");
         println("Body: {r1.body}");
@@ -93,7 +93,7 @@ int main() {
     // ============================================================
     // テスト2: POST /api/echo
     // ============================================================
-    HttpResponse r2 = client.post("/api/echo", "{\"name\": \"Cm\"}");
+    const HttpResponse r2 = client.post("/api/echo", "{\"name\": \"Cm\"}");
     if (r2.is_ok == 1) {
         println("POST /api/echo: {r2.status}");
         println("Body: {r2.body}");
@@ -109,7 +109,7 @@ int main() {
     // ============================================================
     // テスト3: PUT /api/update
     // ============================================================
-    HttpResponse r3 = client.put("/api/update", "{\"key\": \"value\"}");
+    const HttpResponse r3 = client.put("/api/update", "{\"key\": \"value\"}");
     if (r3.is_ok == 1) {
         println("PUT /api/update: {r3.status}");
         println("Body: {r3.body}");
@@ -125,7 +125,7 @@ int main() {
     // ============================================================
     // テスト4: DELETE /api/remove
     // ============================================================
-    HttpResponse r4 = client.delete_req("/api/remove");
+    const HttpResponse r4 = client.delete_req("/api/remove");
     if (r4.is_ok == 1) {
         println("DELETE /api/remove: {r4.status}");
         println("Body: {r4.body}");
@@ -141,7 +141,7 @@ int main() {
     // ============================================================
     // テスト5: GET /api/not_found → 404
     // ============================================================
-    HttpResponse r5 = client.get("/api/not_found");
+    const HttpResponse r5 = client.get("/api/not_found");
     if (r5.is_ok == 1) {
         println("GET /api/not_found: {r5.status}");
         println("Body: {r5.body}");
@@ -159,7 +159,7 @@ int main() {
     // ============================================================
     HttpClient bad_client;
     bad_client.init("127.0.0.1", 19999);
-    HttpResponse r6 = bad_client.get("/api/hello");
+    const HttpResponse r6 = bad_client.get("/api/hello");
     if (r6.is_ok == 1) {
         println("TEST6: FAIL (expected failure)");
     } else {
@@ -170,9 +170,9 @@ int main() {
     // ============================================================
     // テスト7: 非同期並列GETリクエスト (thread + channel)
     // ============================================================
-    long ch = create(4);
-    ulong t1 = spawn_with_arg(async_get_worker as void*, ch as void*);
-    ulong t2 = spawn_with_arg(async_get_worker as void*, ch as void*);
+    const long ch = create(4);
+    const ulong t1 = spawn_with_arg(async_get_worker as void*, ch as void*);
+    const ulong t2 = spawn_with_arg(async_get_worker as void*, ch as void*);
 
     long result1 = 0;
     long result2 = 0;

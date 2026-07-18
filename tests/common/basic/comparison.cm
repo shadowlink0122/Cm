@@ -1,53 +1,53 @@
 // Phase 1: 比較演算
 import std::io::println;
 int main() {
-    int a = 10;
-    int b = 20;
-    int c = 10;
+    const int a = 10;
+    const int b = 20;
+    const int c = 10;
 
     // 等価
-    bool eq1 = a == b;
-    bool eq2 = a == c;
+    const bool eq1 = a == b;
+    const bool eq2 = a == c;
     println(eq1);
     // false (0)
     println(eq2);
     // true (1)
 
     // 非等価
-    bool ne1 = a != b;
-    bool ne2 = a != c;
+    const bool ne1 = a != b;
+    const bool ne2 = a != c;
     println(ne1);
     // true (1)
     println(ne2);
     // false (0)
 
     // 小なり
-    bool lt1 = a < b;
-    bool lt2 = a < c;
+    const bool lt1 = a < b;
+    const bool lt2 = a < c;
     println(lt1);
     // true (1)
     println(lt2);
     // false (0)
 
     // 小なりイコール
-    bool le1 = a <= b;
-    bool le2 = a <= c;
+    const bool le1 = a <= b;
+    const bool le2 = a <= c;
     println(le1);
     // true (1)
     println(le2);
     // true (1)
 
     // 大なり
-    bool gt1 = a > b;
-    bool gt2 = b > a;
+    const bool gt1 = a > b;
+    const bool gt2 = b > a;
     println(gt1);
     // false (0)
     println(gt2);
     // true (1)
 
     // 大なりイコール
-    bool ge1 = a >= b;
-    bool ge2 = a >= c;
+    const bool ge1 = a >= b;
+    const bool ge2 = a >= c;
     println(ge1);
     // false (0)
     println(ge2);

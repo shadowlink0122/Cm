@@ -5,6 +5,7 @@
 #include "../type_checker.hpp"
 
 #include <algorithm>
+#include <regex>
 #include <sstream>
 
 namespace cm {
@@ -44,6 +45,17 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 if (!std::holds_alternative<std::string>(lit->value)) {
                     error(current_span_, ident->name + " argument must be a string literal");
                     return ast::make_error();
+                }
+                // ${制約:変数名} で参照される変数を使用・変更・初期化済みとしてマークする
+                // （=r/+r制約はasmが書き込むため、Lintの誤検出を防ぐ）
+                const std::string& asm_text = std::get<std::string>(lit->value);
+                static const std::regex asm_operand_re(R"(\$\{[^:}]*:([A-Za-z_][A-Za-z0-9_]*)\})");
+                for (std::sregex_iterator it(asm_text.begin(), asm_text.end(), asm_operand_re), end;
+                     it != end; ++it) {
+                    const std::string var_name = (*it)[1].str();
+                    scopes_.current().mark_used(var_name);
+                    mark_variable_modified(var_name);
+                    mark_variable_initialized(var_name);
                 }
             } else {
                 error(current_span_, ident->name + " argument must be a string literal");
@@ -616,6 +628,13 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
     // メソッド呼び出しの場合
     if (member.is_method_call) {
+        // メソッドがselfを変更するかは静的に判別しないため、受け手の変数を
+        // 保守的に「変更あり」として扱う（const推奨の誤提案を防ぐ）
+        if (auto* recv = member.object->as<ast::IdentExpr>()) {
+            mark_variable_modified(recv->name);
+            mark_variable_initialized(recv->name);
+        }
+
         // 配列型のビルトインメソッド
         if (obj_type->kind == ast::TypeKind::Array) {
             return infer_array_method(member, obj_type);

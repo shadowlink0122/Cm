@@ -282,15 +282,7 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         }
 
         // L100: 関数名はsnake_caseであるべき
-        // main関数とネームスペース付き関数は除外
-        if (enable_lint_warnings_ && func->name != "main" &&
-            func->name.find("::") == std::string::npos) {
-            if (!is_snake_case(func->name)) {
-                // name_spanが設定されていればそれを使用、なければdecl.span
-                Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
-                warning(name_pos, "Function name '" + func->name + "' should be snake_case [L100]");
-            }
-        }
+        // 関数名の命名規則チェックは check_naming_conventions（L001 --strict）へ一本化
     } else if (auto* st = decl.as<ast::StructDecl>()) {
         if (!st->generic_params.empty()) {
             generic_structs_[st->name] = st->generic_params;
@@ -302,13 +294,6 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         scopes_.global().define(st->name, ast::make_named(st->name));
         register_struct(st->name, *st);
-
-        // L103: 型名はPascalCaseであるべき
-        if (enable_lint_warnings_ && !is_pascal_case(st->name)) {
-            // name_spanが設定されていればそれを使用、なければdecl.span
-            Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
-            warning(name_pos, "Type name '" + st->name + "' should be PascalCase [L103]");
-        }
 
         // with / #[derive] を合わせた同一interfaceの重複指定はエラー（記述ミス検出）
         std::set<std::string> seen_auto_impls;
@@ -377,6 +362,9 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         if (var_type) {
             scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
                                     const_int_value);
+            // グローバル変数/定数は宣言時点で初期化済みとみなす
+            // （未初期化使用の警告はローカル変数のフローのみを対象にする）
+            mark_variable_initialized(gv->name);
             debug::tc::log(debug::tc::Id::Resolved,
                            "Global " + std::string(gv->is_const ? "const" : "var") + ": " +
                                gv->name + " : " + ast::type_to_string(*var_type),

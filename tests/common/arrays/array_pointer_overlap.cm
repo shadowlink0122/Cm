@@ -21,8 +21,8 @@ int main() {
     println("arr[4]: {arr[4]}");
 
     // ポインタ経由アクセス
-    int v0 = ptr[0];
-    int v1 = ptr[1];
+    const int v0 = ptr[0];
+    const int v1 = ptr[1];
     println("ptr[0]: {v0}");
     println("ptr[1]: {v1}");
 
@@ -55,8 +55,8 @@ int main() {
     // 互いに干渉しないこと
     println("a[2]: {a[2]}");
     println("b[0]: {b[0]}");
-    int pav = pa[0];
-    int pbv = pb[2];
+    const int pav = pa[0];
+    const int pbv = pb[2];
     println("pa[0]: {pav}");
     println("pb[2]: {pbv}");
 

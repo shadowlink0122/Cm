@@ -6,14 +6,14 @@ typedef IntOrLong = int | long;
 
 int main() {
     // ケース1: int値をunion経由で格納・取得
-    IntOrLong u1 = 42 as IntOrLong;
-    int v1 = u1 as int;
+    const IntOrLong u1 = 42 as IntOrLong;
+    const int v1 = u1 as int;
     println("int via union: {v1}");
 
     // ケース2: long値をunion経由で格納・取得
-    long big = 1000000;
-    IntOrLong u2 = big as IntOrLong;
-    long v2 = u2 as long;
+    const long big = 1000000;
+    const IntOrLong u2 = big as IntOrLong;
+    const long v2 = u2 as long;
     println("long via union: {v2}");
 
     // ケース3: 配列内でint/long混在
@@ -21,24 +21,24 @@ int main() {
     arr[0] = 10 as IntOrLong;
     arr[1] = 20 as IntOrLong;
 
-    long l1 = 3000000;
-    long l2 = 4000000;
+    const long l1 = 3000000;
+    const long l2 = 4000000;
     arr[2] = l1 as IntOrLong;
     arr[3] = l2 as IntOrLong;
 
-    int a0 = arr[0] as int;
-    int a1 = arr[1] as int;
-    long a2 = arr[2] as long;
-    long a3 = arr[3] as long;
+    const int a0 = arr[0] as int;
+    const int a1 = arr[1] as int;
+    const long a2 = arr[2] as long;
+    const long a3 = arr[3] as long;
     println("arr[0]: {a0}");
     println("arr[1]: {a1}");
     println("arr[2]: {a2}");
     println("arr[3]: {a3}");
 
     // ケース4: const値経由のlong→union（SCCPが定数畳み込みするパターン）
-    long val = 9999999;
-    IntOrLong u3 = val as IntOrLong;
-    long v3 = u3 as long;
+    const long val = 9999999;
+    const IntOrLong u3 = val as IntOrLong;
+    const long v3 = u3 as long;
     println("const long via union: {v3}");
 
     println("PASS");

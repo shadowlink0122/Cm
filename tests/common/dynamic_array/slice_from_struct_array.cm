@@ -15,7 +15,7 @@ int main() {
     }
     Point[] s = arr;
     println("len={s.len()}");
-    Point p1 = s[1];
+    const Point p1 = s[1];
     println("p1=({p1.x},{p1.y})");
     println("direct=({s[2].x},{s[2].y})");
     return 0;

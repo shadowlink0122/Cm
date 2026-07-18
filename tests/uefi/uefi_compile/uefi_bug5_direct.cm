@@ -4,7 +4,7 @@
 
 ulong process_bytes(ulong start_addr) {
     ulong addr = start_addr;
-    ulong byte_val = 1;
+    const ulong byte_val = 1;
 
     // ASMで値を設定（シミュレーション: アドレスから0を読み取り）
     __asm__("movq $$0, ${=r:byte_val}");

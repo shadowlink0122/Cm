@@ -3,11 +3,11 @@ import std::io::println;
 
 int main() {
     // char (8bit character)
-    char c = 'A';
+    const char c = 'A';
     println("char: {c}");
 
     // 別の文字
-    char d = 'Z';
+    const char d = 'Z';
     println("char: {d}");
 
     return 0;

@@ -12,8 +12,8 @@ import ./simple_math/math::{add_int, add_double, multiply_int};
 
 int main() {
     // 1. 選択的インポートのテスト
-    int sum = add(10, 20);
-    int prod = multiply(3, 4);
+    const int sum = add(10, 20);
+    const int prod = multiply(3, 4);
     println("add(10,20) = {sum}");
     println("multiply(3,4) = {prod}");
 
@@ -22,9 +22,9 @@ int main() {
     println("SIMPLE_PI = {SIMPLE_PI}");
 
     // 3. オーバーロードインポートのテスト
-    int isum = add_int(100, 200);
-    double dsum = add_double(1.5, 2.5);
-    int iprod = multiply_int(6, 7);
+    const int isum = add_int(100, 200);
+    const double dsum = add_double(1.5, 2.5);
+    const int iprod = multiply_int(6, 7);
     println("add_int(100,200) = {isum}");
     println("add_double(1.5,2.5) = {dsum}");
     println("multiply_int(6,7) = {iprod}");

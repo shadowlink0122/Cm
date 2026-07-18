@@ -42,7 +42,7 @@ int main() {
     println("T3: ({r.pos.x},{r.pos.y}) ({r.size.x},{r.size.y})");
 
     // === T4: 配列フィールドを含む構造体の初期化 ===
-    Container c = {values: [10, 20, 30], count: 3};
+    const Container c = {values: [10, 20, 30], count: 3};
     println("T4: [{c.values[0]},{c.values[1]},{c.values[2]}] count={c.count}");
 
     // === T5: 配列フィールドの再代入 ===

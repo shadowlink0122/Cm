@@ -5,7 +5,7 @@ import std::io::println;
 
 int main() {
     {
-        int b = 42;
+        const int b = 42;
         println("in block: {b}");
     }
     // b はブロックスコープを抜けているため補間内でもエラーになるべき

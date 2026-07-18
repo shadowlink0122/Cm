@@ -6,22 +6,22 @@ int main() {
 
     // 1. 文字列入力
     print("Enter your name: ");
-    string name = input();
+    const string name = input();
     println("Hello, " + name + "!");
 
     // 2. 整数入力
     print("Enter your age: ");
-    int age = input_int();
+    const int age = input_int();
     println("Next year, you will be " + (age + 1) + ".");
 
     // 3. 入力_string (エイリアス)
     print("Enter your city: ");
-    string city = input_string();
+    const string city = input_string();
     println("You live in " + city);
 
     // 4. bool入力
     print("Are you happy? (true/false): ");
-    bool happy = input_bool();
+    const bool happy = input_bool();
     if (happy) {
         println("Great to hear!");
     } else {

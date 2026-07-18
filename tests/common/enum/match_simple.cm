@@ -10,10 +10,10 @@ enum Status {
 
 int main() {
     // enum型として変数を宣言
-    int s = Status::Error;
+    const int s = Status::Error;
 
     // matchで式として値を返す
-    int result = match (s) {
+    const int result = match (s) {
         Status::Ok => 0,
         Status::Error => 100,
         Status::Pending => 50,

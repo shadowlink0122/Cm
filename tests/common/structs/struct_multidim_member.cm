@@ -19,7 +19,7 @@ int main() {
     println("m[1][2]={m.grid[1][2]}");
 
     // 構造体コピーの値セマンティクス
-    Matrix n = m;
+    const Matrix n = m;
     n.grid[1][2] = 99;
     println("m[1][2] after copy={m.grid[1][2]}");
     println("n[1][2]={n.grid[1][2]}");

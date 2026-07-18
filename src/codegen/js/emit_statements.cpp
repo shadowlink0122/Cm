@@ -314,8 +314,8 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                                 }
                             }
                         }
-                        if (isCharArg) {
-                            // char型は文字に変換
+                        if (isCharArg && !(argStr.size() >= 2 && argStr.front() == '"')) {
+                            // char型は文字に変換（定数畳み込み済みの文字列リテラルはそのまま）
                             argStr = "String.fromCharCode(" + argStr + ")";
                         }
                     }
@@ -543,7 +543,8 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                                 }
                             }
                         }
-                        if (isCharArg) {
+                        if (isCharArg && !(argStr.size() >= 2 && argStr.front() == '"')) {
+                            // 定数畳み込み済みの文字列リテラルはそのまま使う
                             argStr = "String.fromCharCode(" + argStr + ")";
                         }
 

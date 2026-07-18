@@ -9,7 +9,7 @@ struct Point with Display {
 
 int main() {
     Point p = {x: 30, y: 40};
-    string s = p.toString();
+    const string s = p.toString();
     println("{s}");
     return 0;
 }

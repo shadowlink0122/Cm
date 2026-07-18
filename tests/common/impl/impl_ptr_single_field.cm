@@ -20,17 +20,17 @@ int main() {
     Wrapper* ptr = &w;
 
     // getter
-    ulong v1 = ptr->get();
+    const ulong v1 = ptr->get();
     println("get: {v1}");
 
     // setter
     ptr->set(42);
-    ulong v2 = ptr->get();
+    const ulong v2 = ptr->get();
     println("after set: {v2}");
 
     // selfを読み書きする複合メソッド
     ptr->double_it();
-    ulong v3 = ptr->get();
+    const ulong v3 = ptr->get();
     println("after double: {v3}");
 
     // 元変数に反映されているか

@@ -12,9 +12,9 @@ void write_register(void* base, int offset, int value) {
 }
 
 int main() {
-    int[4] regs = [0, 0, 0, 0];
+    const int[4] regs = [0, 0, 0, 0];
     void* base = regs as void*;
     write_register(base, 2, 42);
-    int val = read_register(base, 2);
+    const int val = read_register(base, 2);
     return val;  // 42
 }

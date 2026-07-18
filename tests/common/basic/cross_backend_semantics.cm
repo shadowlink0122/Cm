@@ -20,19 +20,19 @@ int main() {
     println("shr = {neg7() >> 1}");
 
     // 狭い型のキャスト往復（tiny -1 → utiny 255 → int 255）
-    tiny t = minus1();
-    utiny u = t as utiny;
-    int i = u as int;
+    const tiny t = minus1();
+    const utiny u = t as utiny;
+    const int i = u as int;
     println("cast = {i}");
 
     // 論理演算の短絡と結合
-    bool b = yes();
+    const bool b = yes();
     if (b && !(!b)) {
         println("logic ok");
     }
 
     // 文字列比較
-    string s1 = "abc";
+    const string s1 = "abc";
     if (s1 == "abc") {
         println("streq ok");
     }

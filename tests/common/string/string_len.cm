@@ -2,16 +2,16 @@ import std::io::println;
 // 文字列の.len()メソッドテスト
 
 int main() {
-    string s = "Hello";
-    uint len = s.len();
+    const string s = "Hello";
+    const uint len = s.len();
     println(len);
     // 5
 
-    string empty = "";
+    const string empty = "";
     println(empty.len());
     // 0
 
-    string long_str = "Hello, World!";
+    const string long_str = "Hello, World!";
     println(long_str.len());
     // 13
 

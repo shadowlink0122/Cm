@@ -14,7 +14,7 @@ void test_asm() {
 
 // 通常の1行バッククォート文字列
 void test_inline_backtick() {
-    string s = `hello`;
+    const string s = `hello`;
     println(s);
     // インデントが崩壊していないことを確認
     println("backtick done");
@@ -22,13 +22,13 @@ void test_inline_backtick() {
 
 // 複数の1行バッククォートが混在するケース
 void test_multiple() {
-    string a = `one`;
-    string b = `two`;
+    const string a = `one`;
+    const string b = `two`;
     println(a);
     println(b);
     // ネストされたブロック
     if (true) {
-        string c = `three`;
+        const string c = `three`;
         println(c);
     }
     println("end");

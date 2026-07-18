@@ -23,15 +23,15 @@ struct Pair<T> {
 // テスト関数
 int main() {
     // int型でのidentityテスト
-    int x = identity(42);
+    const int x = identity(42);
     println("identity(42) = {x}");
 
     // int型でのmaxテスト
-    int m1 = max(10, 20);
+    const int m1 = max(10, 20);
     println("max(10, 20) = {m1}");
 
     // double型でのmaxテスト
-    double m2 = max(3.14, 2.71);
+    const double m2 = max(3.14, 2.71);
     println("max(3.14, 2.71) = {m2}");
 
     // ジェネリック構造体のテスト (int)

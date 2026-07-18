@@ -14,13 +14,13 @@ struct MyStruct {
 
 int main() {
     // 基本型の型名
-    string t_int = __typename__(int);
-    string t_uint = __typename__(uint);
-    string t_char = __typename__(char);
-    string t_bool = __typename__(bool);
-    string t_float = __typename__(float);
-    string t_double = __typename__(double);
-    string t_string = __typename__(string);
+    const string t_int = __typename__(int);
+    const string t_uint = __typename__(uint);
+    const string t_char = __typename__(char);
+    const string t_bool = __typename__(bool);
+    const string t_float = __typename__(float);
+    const string t_double = __typename__(double);
+    const string t_string = __typename__(string);
 
     if (t_int != "int") { println("FAIL: typename(int) = '{t_int}'");
         return 1;
@@ -45,8 +45,8 @@ int main() {
     }
 
     // 構造体の型名
-    string t_point = __typename__(Point);
-    string t_mystruct = __typename__(MyStruct);
+    const string t_point = __typename__(Point);
+    const string t_mystruct = __typename__(MyStruct);
 
     if (t_point != "Point") { println("FAIL: typename(Point) = '{t_point}'");
         return 1;

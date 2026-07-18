@@ -18,8 +18,8 @@ int main() {
 
     // 選択的インポートでアクセス（名前空間不要）
     println("\nTesting from import:");
-    Vector3 v1 = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
-    Vector3 v2 = Vector3 { x: 4.0, y: 5.0, z: 6.0 };
+    const Vector3 v1 = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
+    const Vector3 v2 = Vector3 { x: 4.0, y: 5.0, z: 6.0 };
 
     const float result = dot(v1, v2);
     println("dot(v1, v2) = {result}");

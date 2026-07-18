@@ -2,10 +2,10 @@ import std::io::println;
 // 基本的なmatch式のテスト
 
 int main() {
-    int x = 2;
+    const int x = 2;
 
     // 整数リテラルパターン
-    int result = match (x) {
+    const int result = match (x) {
         1 => 10,
         2 => 20,
         3 => 30,

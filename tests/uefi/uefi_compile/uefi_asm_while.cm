@@ -17,7 +17,7 @@ ulong efi_main(void* image_handle, void* system_table) {
     }
 
     // ASM出力変数がwhile外でも正しく参照されること
-    ulong result = 0;
+    const ulong result = 0;
     __asm__("movq $$42, ${=r:result}");
 
     return result + count;

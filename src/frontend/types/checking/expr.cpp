@@ -306,6 +306,28 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 return ast::make_error();
             }
         }
+        // 代入先は書き込み位置なので、左辺の基底変数を初期化済みとして先にマークする
+        // （x = 1 / arr[i] = v / p.field = v を「使用前の未初期化」と誤検出しない）
+        ast::Expr* base = binary.left.get();
+        while (base) {
+            if (auto* idx = base->as<ast::IndexExpr>()) {
+                base = idx->object.get();
+            } else if (auto* mem = base->as<ast::MemberExpr>()) {
+                base = mem->object.get();
+            } else if (auto* slc = base->as<ast::SliceExpr>()) {
+                // ビットスライス代入 word[11:4] = v も基底変数の変更として扱う
+                base = slc->object.get();
+            } else {
+                break;
+            }
+        }
+        if (base) {
+            if (auto* base_ident = base->as<ast::IdentExpr>()) {
+                // 要素・フィールドへの書き込みも基底変数の初期化・変更として扱う
+                mark_variable_initialized(base_ident->name);
+                mark_variable_modified(base_ident->name);
+            }
+        }
     }
 
     auto ltype = infer_type(*binary.left);
@@ -360,6 +382,8 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 }
                 // 変数が変更されたことをマーク（const推奨警告用）
                 mark_variable_modified(ident->name);
+                // 代入は初期化とみなす（宣言のみ→代入のパターンを未初期化と誤検出しない）
+                mark_variable_initialized(ident->name);
 
                 // ライフタイムチェック: ポインタ代入時のスコープ比較
                 // p = &x の場合、pのスコープレベル < xのスコープレベルなら危険
@@ -618,6 +642,10 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
             // 借用追跡: オペランドが識別子の場合、借用を登録
             if (auto* ident = unary.operand->as<ast::IdentExpr>()) {
                 scopes_.current().add_borrow(ident->name);
+                // &x はポインタ経由の書き込みがあり得るため、保守的に変更あり・
+                // 初期化済みとして扱う（const推奨・未初期化警告の誤検出防止）
+                mark_variable_modified(ident->name);
+                mark_variable_initialized(ident->name);
                 debug::tc::log(debug::tc::Id::CheckExpr, "Added borrow for '" + ident->name + "'",
                                debug::Level::Debug);
             }
@@ -1252,6 +1280,8 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
     scopes_.push();
     for (const auto& param : lambda.params) {
         scopes_.current().define(param.name, param.type);
+        // ラムダパラメータは呼び出し時に必ず値が渡されるため初期化済み
+        mark_variable_initialized(param.name);
     }
 
     // ラムダ本体の型チェック

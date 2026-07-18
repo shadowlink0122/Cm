@@ -16,9 +16,9 @@ Value[3] create_values() {
 
 // === union配列を引数として受け取り、各要素を表示 ===
 void print_values(Value[3] vals) {
-    string s = vals[0] as string;
-    int n = vals[1] as int;
-    bool b = vals[2] as bool;
+    const string s = vals[0] as string;
+    const int n = vals[1] as int;
+    const bool b = vals[2] as bool;
     println("  print_values: s={s}, n={n}, b={b}");
 }
 
@@ -26,11 +26,11 @@ void print_values(Value[3] vals) {
 Value[3] transform_values(Value[3] input) {
     Value[3] output;
     // 各要素を取り出して別の値に変換
-    string s = input[0] as string;
-    int n = input[1] as int;
-    bool b = input[2] as bool;
+    const string s = input[0] as string;
+    const int n = input[1] as int;
+    const bool b = input[2] as bool;
     output[0] = "world" as Value;
-    int doubled = n * 2;
+    const int doubled = n * 2;
     output[1] = doubled as Value;
     output[2] = false as Value;
     return output;
@@ -48,12 +48,12 @@ Value[4] create_mixed() {
 
 // === union配列の一部を読み取る関数 ===
 string get_first_string(Value[4] arr) {
-    string s = arr[0] as string;
+    const string s = arr[0] as string;
     return s;
 }
 
 int get_second_int(Value[4] arr) {
-    int n = arr[1] as int;
+    const int n = arr[1] as int;
     return n;
 }
 
@@ -63,9 +63,9 @@ int main() {
     // テスト1: 戻り値からunion配列を受け取る
     println("Test 1: Return union array");
     Value[3] vals = create_values();
-    string s0 = vals[0] as string;
-    int n0 = vals[1] as int;
-    bool b0 = vals[2] as bool;
+    const string s0 = vals[0] as string;
+    const int n0 = vals[1] as int;
+    const bool b0 = vals[2] as bool;
     println("  s={s0}, n={n0}, b={b0}");
 
     // テスト2: union配列を引数に渡す
@@ -75,24 +75,24 @@ int main() {
     // テスト3: 引数→変換→戻り値
     println("Test 3: Transform and return");
     Value[3] transformed = transform_values(vals);
-    string ts = transformed[0] as string;
-    int tn = transformed[1] as int;
-    bool tb = transformed[2] as bool;
+    const string ts = transformed[0] as string;
+    const int tn = transformed[1] as int;
+    const bool tb = transformed[2] as bool;
     println("  ts={ts}, tn={tn}, tb={tb}");
 
     // テスト4: 型混合パターン（string, int, bool, int）
     println("Test 4: Mixed types in array");
     Value[4] mixed = create_mixed();
-    string m0 = mixed[0] as string;
-    int m1 = mixed[1] as int;
-    bool m2 = mixed[2] as bool;
-    int m3 = mixed[3] as int;
+    const string m0 = mixed[0] as string;
+    const int m1 = mixed[1] as int;
+    const bool m2 = mixed[2] as bool;
+    const int m3 = mixed[3] as int;
     println("  m0={m0}, m1={m1}, m2={m2}, m3={m3}");
 
     // テスト5: union配列から一部を取り出す関数
     println("Test 5: Extract from union array");
-    string first = get_first_string(mixed);
-    int second = get_second_int(mixed);
+    const string first = get_first_string(mixed);
+    const int second = get_second_int(mixed);
     println("  first={first}, second={second}");
 
     // テスト6: ローカルで構築して引数に渡す

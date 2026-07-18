@@ -5,12 +5,12 @@ import std::io::println;
 
 int main() {
     uint word = 0xABCD;
-    uint hi = (word[15:8]) as uint;
-    uint lo = (word[7:0]) as uint;
+    const uint hi = (word[15:8]) as uint;
+    const uint lo = (word[7:0]) as uint;
     println("read: {hi} {lo}");
 
-    uint i = 1;
-    uint nib = (word[i*4 +: 4]) as uint;
+    const uint i = 1;
+    const uint nib = (word[i*4 +: 4]) as uint;
     println("part: {nib}");
 
     word[11:4] = 0xFF;
@@ -20,8 +20,8 @@ int main() {
     println("write2: {word}");
 
     // 64bit境界
-    ulong wide = 0xF0F0F0F0F0F0F0F0;
-    ulong mid = (wide[39:32]) as ulong;
+    const ulong wide = 0xF0F0F0F0F0F0F0F0;
+    const ulong mid = (wide[39:32]) as ulong;
     println("wide: {mid}");
     return 0;
 }

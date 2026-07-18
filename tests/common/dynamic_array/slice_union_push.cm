@@ -17,17 +17,17 @@ int main() {
     Value[] xs = make_slice();
     println("len={xs.len()}");
 
-    int a = xs[0] as int;
-    string b = xs[1] as string;
-    int c = xs[2] as int;
+    const int a = xs[0] as int;
+    const string b = xs[1] as string;
+    const int c = xs[2] as int;
     println("a={a}");
     println("b={b}");
     println("c={c}");
 
     // リテラル構築（push構築と同一の格納表現であること）
     Value[] ys = [10 as Value, "twenty" as Value];
-    int y0 = ys[0] as int;
-    string y1 = ys[1] as string;
+    const int y0 = ys[0] as int;
+    const string y1 = ys[1] as string;
     println("y0={y0}");
     println("y1={y1}");
 

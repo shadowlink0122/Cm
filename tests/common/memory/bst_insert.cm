@@ -63,16 +63,16 @@ int main() {
 
     // 値を確認
     println("\nTree structure:");
-    int r = root->value;
+    const int r = root->value;
     println("Root: {r}");
 
     if (root->left != null) {
-        int l = root->left->value;
+        const int l = root->left->value;
         println("Left: {l}");
     }
 
     if (root->right != null) {
-        int ri = root->right->value;
+        const int ri = root->right->value;
         println("Right: {ri}");
     }
 

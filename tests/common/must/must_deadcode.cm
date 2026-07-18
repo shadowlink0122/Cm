@@ -1,7 +1,7 @@
 // must_test.cm - must{}がデッドコードを防止するかテスト
 
 int main() {
-    int x = 0;
+    const int x = 0;
 
     // 通常の不要な代入（デッドコード削除される可能性あり）
     int dead1 = 100;

@@ -2,8 +2,8 @@
 import std::io::println;
 
 int main() {
-    int x = 42;
-    bool b = x is int;
+    const int x = 42;
+    const bool b = x is int;
     println("{b}");
     return 0;
 }

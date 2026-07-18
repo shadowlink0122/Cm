@@ -20,21 +20,21 @@ impl Rect {
 }
 
 int main() {
-    int[] xs = [1, 2, 3, 4, 5];
+    const int[] xs = [1, 2, 3, 4, 5];
     println("some = {xs.some(is_even)}");
     println("every = {xs.every(is_even)}");
     println("find = {xs.find(is_even)}");
 
-    int[3] arr = [10, 21, 30];
+    const int[3] arr = [10, 21, 30];
     println("arr some = {arr.some(is_even)}");
 
     println("free = {add(1, 2)}");
     println("nested = {add(add(1, 2), 3)}");
 
-    string n = "cm";
+    const string n = "cm";
     println("str = {greet(n)}");
 
-    Rect r = {w: 4, h: 2};
+    const Rect r = {w: 4, h: 2};
     println("method str = {r.label(n)}");
     println("method float = {r.ratio(3)}");
     return 0;

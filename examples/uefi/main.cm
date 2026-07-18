@@ -35,10 +35,10 @@ ulong efi_main(void* image_handle, void* system_table) {
         ushort ch = 0;
 
         // キー入力をブロッキング待機
-        ulong status = efi_read_key_blocking(system_table, &scan, &ch);
+        const ulong status = efi_read_key_blocking(system_table, &scan, &ch);
 
         // エラー時はリトライ
-        long signed_status = status as long;
+        const long signed_status = status as long;
         if (signed_status < 0) {
             continue;
         }

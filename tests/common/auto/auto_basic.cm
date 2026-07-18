@@ -3,19 +3,19 @@ import std::io::println;
 
 int main() {
     // 整数
-    auto x = 42;
+    const auto x = 42;
     println("x = {x}");
 
     // 浮動小数点
-    auto pi = 3.14159;
+    const auto pi = 3.14159;
     println("pi = {pi}");
 
     // 文字列
-    auto msg = "Hello, auto!";
+    const auto msg = "Hello, auto!";
     println("msg = {msg}");
 
     // bool
-    auto flag = true;
+    const auto flag = true;
     if (flag) {
         println("flag is true");
     }

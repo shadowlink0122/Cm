@@ -21,13 +21,13 @@ struct Nested {
 
 int main() {
     // 基本型
-    int s_char = __sizeof__(char);
-    int s_tiny = __sizeof__(tiny);
-    int s_short = __sizeof__(short);
-    int s_int = __sizeof__(int);
-    int s_long = __sizeof__(long);
-    int s_float = __sizeof__(float);
-    int s_double = __sizeof__(double);
+    const int s_char = __sizeof__(char);
+    const int s_tiny = __sizeof__(tiny);
+    const int s_short = __sizeof__(short);
+    const int s_int = __sizeof__(int);
+    const int s_long = __sizeof__(long);
+    const int s_float = __sizeof__(float);
+    const int s_double = __sizeof__(double);
 
     if (s_char != 1) { println("FAIL: sizeof(char)");
         return 1;
@@ -52,10 +52,10 @@ int main() {
     }
 
     // 構造体
-    int s_empty = __sizeof__(Empty);
-    int s_single = __sizeof__(Single);
-    int s_mixed = __sizeof__(Mixed);
-    int s_nested = __sizeof__(Nested);
+    const int s_empty = __sizeof__(Empty);
+    const int s_single = __sizeof__(Single);
+    const int s_mixed = __sizeof__(Mixed);
+    const int s_nested = __sizeof__(Nested);
 
     if (s_empty != 1) { println("FAIL: sizeof(Empty) = {s_empty}");
         return 1;

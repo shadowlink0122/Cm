@@ -22,9 +22,9 @@ int main() {
     }
 
     // 直接デリファレンス
-    int v0 = *ptrs[0];
-    int v1 = *ptrs[1];
-    int v2 = *ptrs[2];
+    const int v0 = *ptrs[0];
+    const int v1 = *ptrs[1];
+    const int v2 = *ptrs[2];
     println("v0 = {v0}, v1 = {v1}, v2 = {v2}");
 
     // ループでの使用

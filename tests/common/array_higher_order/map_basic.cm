@@ -12,7 +12,7 @@ int main() {
     int[] doubled = arr.map(double_it);
 
     // 結果の長さを確認
-    uint len = doubled.len();
+    const uint len = doubled.len();
     println("Map result length: {len}");
 
     if (len == 5) {

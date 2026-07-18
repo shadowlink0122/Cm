@@ -27,9 +27,9 @@ int main() {
     points[2] = p2;
 
     // 読み出しテスト
-    Point r0 = points[0];
-    Point r1 = points[1];
-    Point r2 = points[2];
+    const Point r0 = points[0];
+    const Point r1 = points[1];
+    const Point r2 = points[2];
 
     println("points[0] = ({r0.x}, {r0.y})");
     println("points[1] = ({r1.x}, {r1.y})");

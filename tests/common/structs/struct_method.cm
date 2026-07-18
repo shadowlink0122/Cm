@@ -41,7 +41,7 @@ int main() {
     o.z = 999;
 
     // 1. 複合メソッド呼び出し（o.inner.method()）
-    int v = o.inner.get_value();
+    const int v = o.inner.get_value();
     println("inner.get_value(): {v}");
 
     // 2. self経由のネストアクセス（impl内）

@@ -12,7 +12,7 @@ int main() {
     int[] evens = arr.filter(is_even);
 
     // 結果の長さを確認（2と4が抽出されるので2）
-    uint len = evens.len();
+    const uint len = evens.len();
     println("Filter result length: {len}");
 
     if (len == 2) {

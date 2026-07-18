@@ -5,8 +5,8 @@ import ./hierarchy_rebuild/io/stream::{open};
 
 int main() {
     // 直接インポートした関数を使用
-    int r = read(5);
-    int s = open(50);
+    const int r = read(5);
+    const int s = open(50);
 
     println("Read: {r}");
     // 50

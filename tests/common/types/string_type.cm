@@ -3,15 +3,15 @@ import std::io::println;
 
 int main() {
     // string (文字列)
-    string s = "Hello, World!";
+    const string s = "Hello, World!";
     println("string: {s}");
 
     // 空文字列
-    string empty = "";
+    const string empty = "";
     println("empty: '{empty}'");
 
     // 日本語
-    string jp = "こんにちは";
+    const string jp = "こんにちは";
     println("japanese: {jp}");
 
     return 0;

@@ -16,18 +16,18 @@ int main() {
     Rect rc = Rect { w: 3, h: 4 };
 
     Shape* p = &sq;
-    int a1 = (*p).area();
+    const int a1 = (*p).area();
 
     // ポインタの付け替え（vtableも切り替わる）
     p = &rc;
-    int a2 = (*p).area();
+    const int a2 = (*p).area();
 
     println("ptr dispatch: {a1} {a2}");
 
     // interface値のアドレス経由
     Shape sh = sq;
     Shape* q = &sh;
-    int a3 = (*q).area();
+    const int a3 = (*q).area();
     println("via value: {a3}");
     return 0;
 }

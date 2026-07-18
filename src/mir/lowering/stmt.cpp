@@ -1,6 +1,7 @@
 #include "stmt.hpp"
 
 #include "../../common/debug.hpp"
+#include "../passes/scalar/const_eval.hpp"
 
 #include <cinttypes>
 #include <functional>
@@ -74,6 +75,8 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
                 int64_t r = std::get<int64_t>(rhs->value);
                 int64_t result = 0;
                 bool ok = true;
+                // 符号なし型は論理シフト・符号なし除算で畳み込む（folding.cppと同じ規則）
+                const bool uns = const_eval::use_unsigned_op(lhs->type, rhs->type);
                 switch ((*bin)->op) {
                     case hir::HirBinaryOp::Add:
                         result = l + r;
@@ -86,13 +89,17 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
                         break;
                     case hir::HirBinaryOp::Div:
                         if (r != 0)
-                            result = l / r;
+                            result = uns ? static_cast<int64_t>(static_cast<uint64_t>(l) /
+                                                                static_cast<uint64_t>(r))
+                                         : l / r;
                         else
                             ok = false;
                         break;
                     case hir::HirBinaryOp::Mod:
                         if (r != 0)
-                            result = l % r;
+                            result = uns ? static_cast<int64_t>(static_cast<uint64_t>(l) %
+                                                                static_cast<uint64_t>(r))
+                                         : l % r;
                         else
                             ok = false;
                         break;
@@ -109,7 +116,9 @@ static std::optional<MirConstant> try_const_eval(const hir::HirExpr& expr, Lower
                         result = l << r;
                         break;
                     case hir::HirBinaryOp::Shr:
-                        result = l >> r;
+                        result = uns ? static_cast<int64_t>(static_cast<uint64_t>(l) >>
+                                                            (static_cast<uint64_t>(r) & 63))
+                                     : l >> (r & 63);
                         break;
                     default:
                         ok = false;

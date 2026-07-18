@@ -25,9 +25,9 @@ int main() {
     println("After operations: x={p.x}, y={p.y}");
 
     // メンバー間の演算
-    int sum = p.x + p.y;
+    const int sum = p.x + p.y;
     // 15 + 40 = 55
-    int product = p.x * p.y;
+    const int product = p.x * p.y;
     // 15 * 40 = 600
 
     println("Sum: {sum}");
