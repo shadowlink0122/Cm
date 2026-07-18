@@ -57,12 +57,6 @@ Cm言語コンパイラ v{version}
                          ループ判定の削減による高速化。特にJSターゲットや
                          低い-Oレベルで効果的）
 
-インクリメンタルビルド:
-  --no-cache            キャッシュを無効化（デフォルト: 有効）
-  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）
-  cache clear           キャッシュを全削除
-  cache stats           キャッシュ統計を表示
-
 その他のオプション:
   --lang=<en|ja>        メッセージ言語（デフォルト: en。CM_LANG環境変数や
                         .cmconfig.yml の language: でも指定可能）

@@ -1,6 +1,6 @@
 #include "options.hpp"
 
-#include "help_text.hpp"
+#include "help.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/base/i18n.hpp"
 
@@ -59,13 +59,6 @@ Options parse_options(int argc, char* argv[]) {
         // #[test] 関数を実行（//! platform: でSVシミュレーション/JITを振り分け）
         opts.command = Command::Test;
         opts.test_mode = true;
-    } else if (cmd == "cache") {
-        opts.command = Command::Cache;
-        // サブコマンドを取得
-        if (argc > 2) {
-            opts.cache_subcommand = argv[2];
-        }
-        return opts;
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
@@ -205,13 +198,6 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg == "-r" || arg == "--recursive") {
             // -r オプション: 再帰的にディレクトリをチェック
             opts.recursive = true;
-        } else if (arg == "--incremental") {
-            opts.incremental = true;
-        } else if (arg == "--no-cache") {
-            opts.incremental = false;
-        } else if (arg.substr(0, 12) == "--cache-dir=") {
-            opts.cache_dir = arg.substr(12);
-            opts.incremental = true;  // --cache-dir指定時は暗黙的に有効化
         } else if (arg.substr(0, 10) == "--exclude=") {
             // --exclude=PATTERN: 除外パターン
             opts.exclude_patterns.push_back(arg.substr(10));

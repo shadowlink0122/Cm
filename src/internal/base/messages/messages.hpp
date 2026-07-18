@@ -9,22 +9,6 @@ namespace cm::i18n {
 
 // clang-format off
 inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
-    // ===== cache =====
-    // CacheCacheClearError
-    {"cache clear error: {0}\n",
-     "キャッシュクリアエラー: {0}\n"},
-    // CacheCacheDirectoryCreationError
-    {"cache directory creation error: {0}\n",
-     "キャッシュディレクトリ作成エラー: {0}\n"},
-    // CacheCacheModuleCacheSaveError
-    {"[CACHE] module cache save error: {0}\n",
-     "[CACHE] モジュールキャッシュ保存エラー: {0}\n"},
-    // CacheCacheSaveError
-    {"cache save error: {0}\n",
-     "キャッシュ保存エラー: {0}\n"},
-    // CacheDeleted
-    {"{0} (deleted)",
-     "{0} (削除)"},
     // ===== cli =====
     // CliAsyncAwaitIsOnlySupported
     {"error: async/await is only supported on the JS target\n",
@@ -35,51 +19,15 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliAwaitExpressionDetectedFunction
     {"  await expression detected (function: {0}）\n",
      "  await式が検出されました（関数: {0}）\n"},
-    // CliCacheCleared
-    {"✓ cache cleared: {0}\n",
-     "✓ キャッシュを削除しました: {0}\n"},
-    // CliCacheDoesNotExist
-    {"cache does not exist: {0}\n",
-     "キャッシュが存在しません: {0}\n"},
-    // CliCacheHit
-    {"✓ cache hit: {0}\n",
-     "✓ キャッシュヒット: {0}\n"},
-    // CliCacheHitMs
-    {"✓ cache hit: {0} ({1}ms)\n",
-     "✓ キャッシュヒット: {0} ({1}ms)\n"},
-    // CliCacheHitsModuleS
-    {"  cache hits: {0}/{1} module(s)\n",
-     "  キャッシュヒット: {0}/{1} モジュール\n"},
-    // CliCacheMissPerformingFullCompilation
-    {"cache miss: performing full compilation\n",
-     "キャッシュミス: フルコンパイルを実行\n"},
-    // CliCacheRestoreFailedRecompiling
-    {"cache restore failed: {0} -> recompiling\n",
-     "キャッシュ復元失敗: {0} → 再コンパイル\n"},
-    // CliCacheSaved
-    {"✓ cache saved: {0}\n",
-     "✓ キャッシュ保存完了: {0}\n"},
-    // CliCacheStatistics
-    {"=== Cache statistics ===\n",
-     "=== キャッシュ統計 ===\n"},
     // CliCannotOpenFile
     {"error: cannot open file: {0}",
      "エラー: ファイルを開けません: {0}"},
     // CliCannotWriteFile
     {"error: cannot write file: {0}\n",
      "エラー: ファイルに書き込めません: {0}\n"},
-    // CliChanged
-    {" ({0} changed)",
-     " ({0} 変更)"},
-    // CliChangesDetectedFileS
-    {"changes detected ({0} file(s)):\n",
-     "変更検出 ({0}ファイル):\n"},
     // CliCheckComplete
     {"\n=== Check complete ===\n",
      "\n=== チェック完了 ===\n"},
-    // CliChecking
-    {"checking: {0}\n\n",
-     "チェック中: {0}\n\n"},
     // CliClockDrivenTestsRequirePlatform
     {"hint: clock-driven tests require //! platform: sv at the top of the file\n",
      "ヒント: クロック駆動のテストはファイル先頭に //! platform: sv を指定してください\n"},
@@ -107,21 +55,12 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliDefinedSymbols
     {"defined symbols: ",
      "定義済みシンボル: "},
-    // CliDirectory
-    {"directory: {0}\n",
-     "ディレクトリ: {0}\n"},
-    // CliEntries
-    {"entries: {0}\n",
-     "エントリ数: {0}\n"},
     // CliException
     {"{0}: exception: {1}\n",
      "{0}: 例外: {1}\n"},
     // CliFailedFileS
     {"failed: {0} file(s)\n",
      "失敗: {0} ファイル\n"},
-    // CliFastCacheRestoreFailedFalling
-    {"fast cache restore failed: {0} -> falling back to normal path\n",
-     "高速キャッシュ復元失敗: {0} → 通常パス\n"},
     // CliFile
     {"  file: {0}\n",
      "  ファイル: {0}\n"},
@@ -167,6 +106,9 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliImportedModules
     {"imported modules:\n",
      "インポートされたモジュール:\n"},
+    // CliInternalError
+    {"internal error ({0}): {1}\n",
+     "内部エラー（{0}）: {1}\n"},
     // CliInvalidCommandForm
     {"error: invalid command form\n",
      "エラー: 不正なコマンド形式です\n"},
@@ -194,9 +136,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliJavascriptCodeGenerationError
     {"JavaScript code generation error: {0}\n",
      "JavaScript コード生成エラー: {0}\n"},
-    // CliJitCacheHitMs
-    {"✓ JIT cache hit ({0}ms)\n",
-     "✓ JITキャッシュヒット ({0}ms)\n"},
     // CliJitCompilerIsDisabledAn
     {"error: JIT compiler is disabled; an LLVM-enabled build is required\n",
      "エラー: JITコンパイラが無効です。LLVM対応ビルドが必要です。\n"},
@@ -209,9 +148,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliJitExecutionError2
     {"JIT execution error: {0}\n",
      "JIT実行エラー: {0}\n"},
-    // CliLintComplete
-    {"✓ lint complete\n",
-     "✓ Lint完了\n"},
     // CliLlvmCodeGenerationError
     {"LLVM code generation error: {0}\n",
      "LLVM コード生成エラー: {0}\n"},
@@ -242,9 +178,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliMsg
     {"error: {0}: {1}\n",
      "エラー: {0}: {1}\n"},
-    // CliMsg2
-    {"error: {0}\n",
-     "エラー: {0}\n"},
     // CliMultipleInputFilesAreNot
     {"multiple input files are not allowed",
      "複数の入力ファイルは指定できません"},
@@ -254,9 +187,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliNeedsFormattingPlaceS
     {"{0}: needs formatting ({1} place(s))\n",
      "{0}: 要整形（{1} 箇所）\n"},
-    // CliNewest
-    {"newest:   {0}\n",
-     "最新:     {0}\n"},
     // CliNoCmFilesFoundTo
     {"error: no .cm files found to check\n",
      "エラー: チェック対象の.cmファイルが見つかりません\n"},
@@ -266,9 +196,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliNoCommandSpecified
     {"error: no command specified\n",
      "エラー: コマンドが指定されていません\n"},
-    // CliNoFormattingNeeded
-    {"✓ no formatting needed\n",
-     "✓ 整形不要\n"},
     // CliNoInputFileOrDirectory
     {"error: no input file or directory specified\n",
      "エラー: 入力ファイルまたはディレクトリが指定されていません\n"},
@@ -284,9 +211,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliNoteForWhileStatementsAre
     {"  Note: for/while statements are converted to HirLoop\n",
      "  Note: for/while文がHirLoopに変換されています\n"},
-    // CliOldest
-    {"oldest:   {0}\n",
-     "最古:     {0}\n"},
     // CliOptimizationComplete
     {"optimization complete\n\n",
      "最適化完了\n\n"},
@@ -299,9 +223,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliPathDoesNotExist
     {"error: path does not exist: {0}\n",
      "エラー: パスが存在しません: {0}\n"},
-    // CliPerModuleIncrementalCompilationModule
-    {"⚡ per-module incremental compilation: {0}/{1} module(s) recompiled\n",
-     "⚡ モジュール別差分コンパイル: {0}/{1} モジュール再コンパイル\n"},
     // CliPlaceSFormatted
     {"{0}: {1} place(s) formatted\n",
      "{0}: {1} 箇所の整形\n"},
@@ -362,9 +283,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliSvTestSimulationIsNot
     {"error: SV test simulation is not supported on Windows\n",
      "エラー: SVテストのシミュレーション実行はWindowsでは未対応です\n"},
-    // CliSyntaxAndTypeCheckPassed
-    {"✓ syntax and type check passed\n",
-     "✓ 構文と型チェックが成功しました\n"},
     // CliSyntaxErrorsOccurred
     {"syntax errors occurred\n",
      "構文エラーが発生しました\n"},
@@ -398,15 +316,9 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliTokens
     {"tokens: {0}\n\n",
      "トークン数: {0}\n\n"},
-    // CliTotalSizeKb
-    {"total size: {0} KB\n",
-     "合計サイズ: {0} KB\n"},
     // CliTypeCheckOk
     {"type check: OK\n\n",
      "型チェック: OK\n\n"},
-    // CliUnknownCacheSubcommand
-    {"unknown cache subcommand: {0}\n",
-     "不明なcacheサブコマンド: {0}\n"},
     // CliUnknownCommandRunCmHelp
     {"unknown command: {0}\nrun 'cm help' for usage",
      "不明なコマンド: {0}\n'cm help' でヘルプを表示"},
@@ -416,9 +328,6 @@ inline constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliUnknownTarget
     {"error: unknown target '{0}'\n",
      "エラー: 不明なターゲット '{0}'\n"},
-    // CliUsageCmCacheClearCm
-    {"usage: cm cache clear | cm cache stats\n",
-     "使用法: cm cache clear | cm cache stats\n"},
     // CliUseCmTestPlatformSv
     {"hint: use 'cm test' (//! platform: sv) for simulation\n",
      "ヒント: シミュレーション実行は cm test（//! platform: sv）を使用してください\n"},

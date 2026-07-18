@@ -59,12 +59,6 @@ Optimization options:
                         speeds up loop checks, especially for the JS target
                         and low -O levels)
 
-Incremental build:
-  --no-cache            Disable the cache (default: enabled)
-  --cache-dir=<dir>     Cache directory (default: .cm-cache)
-  cache clear           Clear the entire cache
-  cache stats           Show cache statistics
-
 Other options:
   --lang=<en|ja>        Message language (default: en; also CM_LANG env var
                         or 'language:' in .cmconfig.yml)

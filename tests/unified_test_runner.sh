@@ -331,10 +331,8 @@ if [ "$BACKEND" = "js" ] && ! command -v node >/dev/null 2>&1; then
 fi
 
 # キャッシュオプションの構築
+# インクリメンタルビルド廃止に伴い、cmへ渡すキャッシュオプションは無い（-n/--no-cacheは互換のため受理のみ）
 CACHE_OPTS=""
-if [ "$NO_CACHE" = true ]; then
-    CACHE_OPTS="--no-cache"
-fi
 
 # テスト前キャッシュクリア
 if [ "$CLEAN_CACHE" = true ]; then

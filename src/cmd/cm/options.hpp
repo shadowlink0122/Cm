@@ -8,7 +8,7 @@
 namespace cm::cli {
 
 // サブコマンド
-enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Cache, Test };
+enum class Command { None, Run, Compile, Check, Lint, Fmt, Help, Test };
 
 // コマンドラインオプション
 struct Options {
@@ -38,10 +38,6 @@ struct Options {
     std::string output_file;      // -o オプション
     size_t max_output_size = 16;  // 最大出力サイズ（GB）、デフォルト16GB
     bool use_jit = true;          // JITコンパイラ使用（デフォルト）
-    // インクリメンタルビルド設定
-    bool incremental = false;             // デフォルトで無効（--incrementalで有効化）
-    std::string cache_dir = ".cm-cache";  // キャッシュディレクトリ
-    std::string cache_subcommand;         // cache サブコマンド（clear/stats）
     // SVターゲットオプション
     bool sv_strict_lint = false;       // --sv-strict-lint: lint_off抑止を出力しない
     bool sv_always_ff = false;         // --sv-always-ff: always_ff/always_comb等を保持

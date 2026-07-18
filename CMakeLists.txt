@@ -42,13 +42,13 @@ set(CM_LANGS en ja)
 set(CM_TEXTDATA_DECLS "")
 set(CM_TEXTDATA_TABLE "")
 foreach(_cm_lang IN LISTS CM_LANGS)
-    file(READ "${CMAKE_SOURCE_DIR}/src/cmd/cm/help_${_cm_lang}.txt" _cm_lang_help)
+    file(READ "${CMAKE_SOURCE_DIR}/src/cmd/cm/help/${_cm_lang}.txt" _cm_lang_help)
     string(APPEND CM_TEXTDATA_DECLS
         "inline constexpr const char* kHelp_${_cm_lang} = R\"CMTEXT(${_cm_lang_help})CMTEXT\";\n\n")
     string(APPEND CM_TEXTDATA_TABLE
         "    {\"${_cm_lang}\", kHelp_${_cm_lang}},\n")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/src/cmd/cm/help_${_cm_lang}.txt")
+        "${CMAKE_SOURCE_DIR}/src/cmd/cm/help/${_cm_lang}.txt")
 endforeach()
 configure_file("${CMAKE_SOURCE_DIR}/src/internal/base/text_data.hpp.in"
                "${CMAKE_BINARY_DIR}/generated/internal/base/text_data.hpp" @ONLY)
@@ -304,6 +304,14 @@ set(CM_MIR_SOURCES
 # Main executable
 set(CM_SOURCES
     src/cmd/cm/main.cpp
+    src/cmd/cm/util.cpp
+    src/cmd/cm/check.cpp
+    src/cmd/cm/fmt.cpp
+    src/cmd/cm/build.cpp
+    src/cmd/cm/backend/run.cpp
+    src/cmd/cm/backend/sv.cpp
+    src/cmd/cm/backend/js.cpp
+    src/cmd/cm/backend/llvm.cpp
     ${CM_LEXER_SOURCES}
     ${CM_PARSER_SOURCES}
     # Type checking (分割済み)
@@ -343,7 +351,6 @@ set(CM_SOURCES
     src/internal/base/format_string.cpp
     src/internal/base/source_location.cpp
     src/internal/base/diagnostics.cpp
-    src/internal/base/cache_manager.cpp
     src/internal/hir/string_interpolation.cpp
     src/internal/diagnostics/engine.cpp
     src/internal/diagnostics/catalog.cpp
