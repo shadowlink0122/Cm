@@ -76,6 +76,24 @@ TEST_F(FormatterIntegrationTest, WrapExplodesLongArgs) {
     expect_format_case("wrap/long_args");
 }
 
+// 1行に詰め込まれた文ブロック（{ 文; 文; }）はブロック展開する
+// （演算子折り返しだと if ヘッダの途中で折れ、`; }` 継続行が次回実行の
+// セミコロン改行で再分割されて冪等性が崩れるため）
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlock) {
+    expect_format_case("wrap/inline_block");
+}
+
+// } else { は同一行に残したままブロック展開する
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockWithElse) {
+    expect_format_case("wrap/inline_block_else");
+}
+
+// 展開後もなお最大幅を超える文は、正規化後のインデント幅を見込んだ上で
+// 演算子折り返しが再帰適用される（1回の実行で固定点に到達する）
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockThenWrapsLongStmt) {
+    expect_format_case("wrap/inline_block_long_stmt");
+}
+
 // コードが短く行末コメントだけで幅超過する行は折り返さない
 TEST_F(FormatterIntegrationTest, WrapSkipsCommentOverflow) {
     expect_stable_case("wrap/comment_overflow");

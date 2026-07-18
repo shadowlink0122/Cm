@@ -1,0 +1,6 @@
+int result = 0;
+int count = 0;
+
+void pick_larger(int lhs_value, int rhs_value) {
+    if (lhs_value > rhs_value) { result = lhs_value; count = count + 1; } else { result = rhs_value; count = count + 2; }
+}

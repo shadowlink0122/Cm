@@ -637,8 +637,18 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // ファイルを収集
-        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns);
+        // 設定ファイルを読み込み（check/lintと同じ除外をfmtのディレクトリ走査にも適用する。
+        // フォーマッタ期待値や意図的な部分コードのフィクスチャを-rで書き換えないため）
+        lint::ConfigLoader config;
+        if (config.find_and_load(".")) {
+            if (opts.verbose) {
+                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
+            }
+        }
+
+        // ファイルを収集（設定のexcludeはディレクトリ走査にのみ適用）
+        auto cm_files = collect_cm_files(opts.input_files, opts.recursive, opts.exclude_patterns,
+                                         config.excludes());
 
         if (cm_files.empty()) {
             std::cerr << "エラー: フォーマット対象の.cmファイルが見つかりません\n";

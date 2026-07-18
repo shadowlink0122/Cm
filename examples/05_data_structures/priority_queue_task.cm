@@ -38,7 +38,11 @@ AVLNode<Task>* cn(Task v) {
 }
 
 void uh(AVLNode<Task>* n) {
-    if (n != null) { const int l = nh(n->left); const int r = nh(n->right); n->height = (l > r ? l : r) + 1; }
+    if (n != null) {
+        const int l = nh(n->left);
+        const int r = nh(n->right);
+        n->height = (l > r ? l : r) + 1;
+    }
 }
 
 int bf(AVLNode<Task>* n) { if (n == null) { return 0; } return nh(n->left) - nh(n->right); }

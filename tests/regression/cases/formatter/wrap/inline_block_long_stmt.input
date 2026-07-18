@@ -1,0 +1,5 @@
+uint total = 0;
+
+void accumulate(uint value0, uint value1, uint value2, uint value3, uint value4, uint mask) {
+    if (mask != 0) { total = (value0 & mask) + (value1 & mask) + (value2 & mask) + (value3 & mask) + (value4 & mask) + (value0 >> 1); }
+}

@@ -32,6 +32,98 @@ bool is_sized_literal_quote(const std::string& s, size_t i) {
     return std::isalnum(static_cast<unsigned char>(s[i + 2])) != 0;
 }
 
+// 1行に詰め込まれた文ブロック（{ 文; 文; }）の展開位置（wrap_long_linesの補助）
+struct BlockExpansionStart {
+    size_t pos;  // 新しい行の開始位置（行内絶対位置）
+    int depth;   // その行の行内相対ブロック深さ（インデント段数）
+};
+
+// 展開位置を収集する。文レベル（丸括弧・角括弧の外）の波括弧内に ; がある場合のみ
+// 非空を返す。分割は {の直後・;の直後・}の直前で行い、各行の相対深さも記録する
+// （enforce_semicolon_newline / normalize_indentation の再実行と一致する固定点を作る）
+std::vector<BlockExpansionStart> collect_block_expansion_starts(const std::string& line,
+                                                                size_t content_start,
+                                                                size_t code_end) {
+    std::vector<BlockExpansionStart> starts;
+    bool has_stmt_semicolon = false;
+    bool in_string = false;
+    bool in_char = false;
+    int block_depth = 0;      // 行内で開いた文レベル波括弧の深さ
+    std::vector<char> stack;  // 未閉の括弧（種類）
+    // スタックに丸括弧・角括弧が無い＝文レベル（for(;;)やクロージャ引数内は対象外）
+    auto brace_only = [&stack]() {
+        for (char b : stack) {
+            if (b == '(' || b == '[')
+                return false;
+        }
+        return true;
+    };
+    for (size_t i = content_start; i < code_end; ++i) {
+        char c = line[i];
+        if (in_string) {
+            if (c == '\\') {
+                ++i;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (in_char) {
+            if (c == '\\') {
+                ++i;
+            } else if (c == '\'') {
+                in_char = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+        } else if (c == '\'' && !is_sized_literal_quote(line, i)) {
+            in_char = true;
+        } else if (c == '(' || c == '[') {
+            stack.push_back(c);
+        } else if (c == ')' || c == ']') {
+            if (!stack.empty())
+                stack.pop_back();
+        } else if (c == '{') {
+            if (brace_only()) {
+                block_depth++;
+                starts.push_back({i + 1, block_depth});  // { の直後で改行
+            }
+            stack.push_back(c);
+        } else if (c == '}') {
+            if (!stack.empty())
+                stack.pop_back();
+            if (brace_only()) {
+                if (block_depth > 0)
+                    block_depth--;
+                // } の直前で改行（"} else {" は同一行に残る）
+                starts.push_back({i, block_depth});
+            }
+        } else if (c == ';') {
+            if (brace_only()) {
+                if (!stack.empty()) {
+                    has_stmt_semicolon = true;
+                }
+                starts.push_back({i + 1, block_depth});  // ; の直後で改行
+            }
+        }
+    }
+    if (!has_stmt_semicolon) {
+        return {};
+    }
+    std::sort(starts.begin(), starts.end(),
+              [](const BlockExpansionStart& a, const BlockExpansionStart& b) {
+                  return a.pos != b.pos ? a.pos < b.pos : a.depth < b.depth;
+              });
+    starts.erase(std::unique(starts.begin(), starts.end(),
+                             [](const BlockExpansionStart& a, const BlockExpansionStart& b) {
+                                 return a.pos == b.pos;
+                             }),
+                 starts.end());
+    return starts;
+}
+
 }  // namespace
 
 FormatResult Formatter::format(const std::string& original_code) {
@@ -953,6 +1045,56 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
         if (code_end <= max_width) {
             result << line;
             continue;
+        }
+
+        // 1行に詰め込まれた文ブロック（{ 文; 文; }）を含む場合はブロック展開する。
+        // 演算子折り返しでは if ヘッダの途中等で折れて読みにくく、さらに `; }` を含む
+        // 継続行が次回実行の enforce_semicolon_newline で再分割されて冪等性が崩れるため
+        {
+            std::vector<BlockExpansionStart> starts =
+                collect_block_expansion_starts(line, content_start, code_end);
+            if (!starts.empty()) {
+                std::vector<std::string> out_lines;
+                size_t seg_start = content_start;
+                // 各行のインデントは後段の normalize_indentation 再実行と一致するよう
+                // 相対ブロック深さぶん深くする（再帰折り返しの幅判定を正確にするため）
+                auto emit_segment = [&](size_t seg_end, int depth) {
+                    std::string seg = line.substr(seg_start, seg_end - seg_start);
+                    while (!seg.empty() && seg.front() == ' ')
+                        seg.erase(seg.begin());
+                    while (!seg.empty() && seg.back() == ' ')
+                        seg.pop_back();
+                    if (!seg.empty()) {
+                        size_t indent = content_start + static_cast<size_t>(depth) * indent_width_;
+                        out_lines.push_back(std::string(indent, ' ') + seg);
+                    }
+                };
+                int seg_depth = 0;
+                for (const auto& start : starts) {
+                    if (start.pos >= code_end)
+                        break;
+                    emit_segment(start.pos, seg_depth);
+                    seg_start = start.pos;
+                    seg_depth = start.depth;
+                }
+                emit_segment(code_end, seg_depth);
+                // 2行以上に展開できた場合のみ採用（1行のままなら通常の折り返しへ）。
+                // 展開後もなお長い文は再帰適用で演算子折り返しに委ねる
+                if (out_lines.size() > 1) {
+                    if (comment_start != std::string::npos) {
+                        out_lines.back() += "  " + line.substr(comment_start);
+                    }
+                    std::string joined;
+                    for (size_t li = 0; li < out_lines.size(); ++li) {
+                        if (li > 0)
+                            joined += '\n';
+                        joined += out_lines[li];
+                    }
+                    result << wrap_long_lines(joined, changes);
+                    changes++;
+                    continue;
+                }
+            }
         }
 
         // 折り返し位置の選択: より浅い括弧深さの候補を優先し、同深さならカンマを優先する

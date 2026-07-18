@@ -16,9 +16,9 @@ int cnt = 0;
 async void encode(posedge clk) {
     if (de == true) {
         // ポップカウント
-        const uint n1 = (data_in & 1) + ((data_in >> 1) & 1) + ((data_in >> 2) & 1) + ((data_in >> 3) & 1)
-            + ((data_in >> 4) & 1) + ((data_in >> 5) & 1) + ((data_in >> 6) & 1)
-            + ((data_in >> 7) & 1);
+        const uint n1 = (data_in & 1) + ((data_in >> 1) & 1) + ((data_in >> 2) & 1)
+            + ((data_in >> 3) & 1) + ((data_in >> 4) & 1) + ((data_in >> 5) & 1)
+            + ((data_in >> 6) & 1) + ((data_in >> 7) & 1);
 
         // ステージ 1: 遷移最小化 (XOR)
         const uint q0 = data_in & 1;
