@@ -455,6 +455,12 @@ int main(int argc, char* argv[]) {
 
                 // 型チェック
                 TypeChecker checker;
+                // check/lintではLint警告（W001等）を有効化する
+                checker.set_enable_lint_warnings(true);
+                // --strict指定時は宣言の命名規則チェック（L001）を有効化
+                if (opts.force_check) {
+                    checker.set_enable_naming_check(true);
+                }
                 bool type_check_ok = checker.check(program);
                 (void)type_check_ok;  // 警告抑制：将来のエラー処理で使用予定
 

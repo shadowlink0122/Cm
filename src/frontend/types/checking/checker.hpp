@@ -42,6 +42,9 @@ class TypeChecker {
     // Lint警告の有効/無効を設定
     void set_enable_lint_warnings(bool enable) { enable_lint_warnings_ = enable; }
 
+    // 命名規則チェック（--strict）の有効/無効を設定
+    void set_enable_naming_check(bool enable) { enable_naming_check_ = enable; }
+
    private:
     // ============================================================
     // 宣言の登録・チェック (decl.cpp)
@@ -161,11 +164,16 @@ class TypeChecker {
     // 未使用変数チェック (W001)
     void check_unused_variables();
 
-    // 命名規則チェック (L100-L103)
+    // 命名規則チェック (L001 naming-convention。--strict時のみ)
     static bool is_snake_case(const std::string& name);
     static bool is_pascal_case(const std::string& name);
     static bool is_upper_snake_case(const std::string& name);
-    void check_naming_conventions();
+    void check_naming_conventions(ast::Program& program);
+    void check_naming_decl(ast::Decl& decl, bool top_level);
+    void check_naming_function(ast::FunctionDecl& func);
+    void check_naming_stmts(std::vector<ast::StmtPtr>& stmts);
+    void report_naming(Span span, const std::string& decl_kind, const std::string& name,
+                       const std::string& expected);
 
     // match式のヘルパー
     void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type);
@@ -181,6 +189,9 @@ class TypeChecker {
 
     // Lint警告の有効/無効（デフォルト: false = 警告なし）
     bool enable_lint_warnings_ = false;
+
+    // 命名規則チェックの有効/無効（check/lint --strict でのみ有効）
+    bool enable_naming_check_ = false;
 
     // 現在チェック中の文/式のSpan（エラー表示用）
     Span current_span_;

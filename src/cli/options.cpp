@@ -11,7 +11,9 @@ std::string get_version() {
 #ifdef CM_VERSION
     return CM_VERSION;
 #else
-    return "0.15.1";
+// バージョンはVERSIONファイル由来のCM_VERSION定義が唯一のソース。
+// フォールバックで古いバージョンを返すと実体と乖離するため、未定義はビルドエラーにする
+#error "CM_VERSION が定義されていません（ビルド設定でVERSIONファイルから定義してください）"
 #endif
 }
 
@@ -37,6 +39,7 @@ void print_help(const char* program_name) {
     std::cout << "  -d=<level>            デバッグレベル（trace/debug/info/warn/error）\n";
     std::cout << "  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）\n";
     std::cout << "  --force-check, --strict コンパイル時に厳格な型チェック/警告を強制実行\n";
+    std::cout << "                        check/lint: 宣言の命名規則チェック（L001）を有効化\n";
 
     std::cout << "コンパイル時オプション:\n";
     std::cout << "  --target=<target>     コンパイルターゲット\n";

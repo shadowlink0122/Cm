@@ -78,6 +78,9 @@ bool TypeChecker::check(ast::Program& program) {
         check_declaration(*decl);
     }
 
+    // 命名規則チェック（check/lint --strict時のみ有効）
+    check_naming_conventions(program);
+
     debug::tc::log(debug::tc::Id::End, std::to_string(diagnostics_.size()) + " issues");
     return !has_errors();
 }

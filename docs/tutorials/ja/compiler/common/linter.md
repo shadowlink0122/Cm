@@ -16,35 +16,57 @@ Cmには静的解析ツール（Linter）が組み込まれています。コー
 
 # ディレクトリ内を再帰的にチェック
 ./cm lint src/
+
+# 命名規則チェック（L001）を有効にしてチェック
+./cm lint --strict src/main.cm
+./cm check --strict src/main.cm
 ```
 
 ## チェック項目
 
-### 1. 命名規則
+### 1. 命名規則（L001。--strict時のみ）
 
-Cmでは以下の命名規則を推奨しています：
+`cm check --strict` / `cm lint --strict` は、全ての宣言の名前が世界標準（C/C++/Rust）の命名規則に従っているかを検査します：
 
-| 対象 | 規則 | 例 |
+| 宣言 | 許容ケース | 例 |
 |-----|------|-----|
-| 変数・関数 | snake_case | `my_variable`, `calc_sum` |
-| 型・構造体 | PascalCase | `MyStruct`, `HttpClient` |
-| 定数 | SCREAMING_SNAKE_CASE | `MAX_SIZE`, `PI` |
+| struct / enum / interface / typedef型名 | PascalCase | `AdderIo`, `HttpClient` |
+| ジェネリック型パラメータ | PascalCase | `T`, `TKey` |
+| 関数・メソッド名 | snake_case | `calc_sum` |
+| 変数・パラメータ・フィールド | snake_case | `total_count` |
+| グローバル定数（const） | UPPER_SNAKE_CASE | `MAX_SIZE`, `CLK_FREQ` |
+| ローカル定数（const） | snake_case / UPPER_SNAKE_CASE | `base`, `MAX_N` |
+| enumバリアント | PascalCase / UPPER_SNAKE_CASE | `North`, `CTRL_00` |
+| モジュール名 | snake_case | `hdmi_out` |
+
+camelCase はどの宣言でも許容されません。先頭のアンダースコアは判定前に除去されます（`_unused` は snake_case として扱われます）。
 
 ```cm
-// ⚠️ 警告: 変数名はsnake_caseを推奨
-int myVariable = 10;  // → my_variable
+// ⚠️ L001: 構造体名 'bad_struct' は PascalCase 命名規則に従っていません
+struct bad_struct {
+    int badField;  // ⚠️ L001: フィールド名は snake_case
+}
 
 // ✅ OK
-int my_variable = 10;
+struct GoodStruct {
+    int good_field;
+}
 ```
 
-### 2. 未使用変数
+チェック対象外（外部で名前が固定されるもの等）：
+
+- `extern struct` とそのフィールド（ベンダプリミティブ: `OSC`, `TLVDS_D2` 等）
+- `extern "C"` ブロック内の関数（Cシンボル名）
+- `self()` コンストラクタ / `~self()` デストラクタ / 演算子オーバーロード / `main`
+- importでインライン展開される標準ライブラリ名前空間（`std` / `native` 等）
+
+### 2. 未使用変数（W001）
 
 使用されていない変数を検出します：
 
 ```cm
 int main() {
-    int x = 10;  // ⚠️ 警告: 変数 'x' が未使用
+    int x = 10;  // ⚠️ W001: 変数 'x' が未使用
     return 0;
 }
 ```
@@ -61,53 +83,36 @@ int main() {
 }
 ```
 
-## 設定ファイル (.cmlint.yml)
+## 設定ファイル (.cmconfig.yml)
 
-プロジェクトルートに`.cmlint.yml`を配置してルールを設定できます：
+プロジェクトルート（またはその親ディレクトリ）に `.cmconfig.yml` を配置してルールごとのレベルを設定できます：
 
 ```yaml
-# 命名規則チェックを有効化
-naming:
-  enabled: true
-  variables: snake_case
-  types: PascalCase
+lint:
+  rules:
+    L001: disabled   # 命名規則チェックを無効化
+    W001: error      # 未使用変数をエラーに昇格
+```
 
-# 未使用変数チェックを有効化
-unused:
-  enabled: true
-  warn_unused_params: false  # 未使用引数は警告しない
+行単位で無効化するコメントも使用できます：
 
-# const推奨を無効化
-const_suggestion:
-  enabled: false
+```cm
+// @cm-disable-next-line L001
+struct legacy_struct {  // この行のL001は報告されない
+    int id;
+}
 ```
 
 ## 出力例
 
 ```
-warning: variable 'myValue' should use snake_case naming
-  --> src/main.cm:5:9
-  |
-5 |     int myValue = 10;
-  |         ^^^^^^^
-  |
-  = help: consider renaming to 'my_value'
-
-warning: unused variable 'x'
-  --> src/main.cm:8:9
-  |
-8 |     int x = 42;
-  |         ^
-  |
+src/main.cm:5:9: warning: 変数名 'myValue' は snake_case 命名規則に従っていません [L001]
+src/main.cm:8:9: warning: Variable 'x' is never used [W001]
 ```
 
 ## 関連項目
 
 - [Formatter](formatter.md) - コードフォーマッター
-
----
-
-**最終更新:** 2026-02-08
 
 ---
 

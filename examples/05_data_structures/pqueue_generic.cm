@@ -68,11 +68,11 @@ int avl_balance(AVLNode* node) {
 // A   B                B   C
 AVLNode* avl_rotate_right(AVLNode* y) {
     AVLNode* x = y->left;
-    AVLNode* B = x->right;
+    AVLNode* subtree_b = x->right;
 
     // 回転実行
     x->right = y;
-    y->left = B;
+    y->left = subtree_b;
 
     // 高さ更新
     avl_update_height(y);
@@ -89,11 +89,11 @@ AVLNode* avl_rotate_right(AVLNode* y) {
 //   B   C          A   B
 AVLNode* avl_rotate_left(AVLNode* x) {
     AVLNode* y = x->right;
-    AVLNode* B = y->left;
+    AVLNode* subtree_b = y->left;
 
     // 回転実行
     y->left = x;
-    x->right = B;
+    x->right = subtree_b;
 
     // 高さ更新
     avl_update_height(x);

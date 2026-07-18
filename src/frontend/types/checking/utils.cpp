@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "../../lexer/lexer.hpp"
+#include "../naming_rules.hpp"
 #include "../type_checker.hpp"
 
 #include <algorithm>
@@ -706,63 +707,240 @@ void TypeChecker::check_unused_variables() {
 }
 
 // ============================================================
-// 命名規則チェック (L100-L103)
+// 命名規則チェック (L001 naming-convention。check/lint --strict時のみ)
+// 判定ロジックは frontend/types/naming_rules.hpp に分離
 // ============================================================
 
-// snake_case判定: 小文字、数字、アンダースコアのみ、先頭は小文字またはアンダースコア
 bool TypeChecker::is_snake_case(const std::string& name) {
-    if (name.empty())
-        return true;
-
-    // 先頭は小文字またはアンダースコア
-    if (!std::islower(name[0]) && name[0] != '_') {
-        return false;
-    }
-
-    for (char c : name) {
-        if (!std::islower(c) && !std::isdigit(c) && c != '_') {
-            return false;
-        }
-    }
-    return true;
+    return naming::is_snake_case(name);
 }
 
-// PascalCase判定: 先頭が大文字、アンダースコアなし
 bool TypeChecker::is_pascal_case(const std::string& name) {
-    if (name.empty())
-        return true;
-
-    // 先頭は大文字
-    if (!std::isupper(name[0])) {
-        return false;
-    }
-
-    // アンダースコアは禁止
-    for (char c : name) {
-        if (c == '_') {
-            return false;
-        }
-    }
-    return true;
+    return naming::is_pascal_case(name);
 }
 
-// UPPER_SNAKE_CASE判定: 大文字、数字、アンダースコアのみ
 bool TypeChecker::is_upper_snake_case(const std::string& name) {
-    if (name.empty())
-        return true;
-
-    for (char c : name) {
-        if (!std::isupper(c) && !std::isdigit(c) && c != '_') {
-            return false;
-        }
-    }
-    return true;
+    return naming::is_upper_snake_case(name);
 }
 
-// 命名規則をチェック（関数終了時に呼び出す）
-void TypeChecker::check_naming_conventions() {
-    // 現在のスコープの変数をチェック
-    // Note: 関数名や構造体名のチェックはregister_declaration時に行う
+namespace {
+
+// 内部生成名（__prelude注入等）や無名はチェック対象外
+bool naming_exempt(const std::string& name) {
+    return name.empty() || name == "_" || name.rfind("__", 0) == 0;
+}
+
+// importでインライン展開されるライブラリ名前空間はユーザーの責任範囲外
+bool is_library_namespace(const std::string& root) {
+    return root == "std" || root == "native" || root == "js" || root == "uefi" || root == "web" ||
+           root == "wasm";
+}
+
+bool has_attribute(const std::vector<ast::AttributeNode>& attrs, const std::string& name) {
+    for (const auto& attr : attrs) {
+        if (attr.name == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+void TypeChecker::report_naming(Span span, const std::string& decl_kind, const std::string& name,
+                                const std::string& expected) {
+    warning(span,
+            decl_kind + " '" + name + "' は " + expected + " 命名規則に従っていません [L001]");
+}
+
+// 関数本体の文を再帰的に走査し、ローカル変数宣言の命名を検査する
+void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
+    for (auto& stmt : stmts) {
+        if (!stmt) {
+            continue;
+        }
+        if (auto* let = stmt->as<ast::LetStmt>()) {
+            if (!naming_exempt(let->name)) {
+                Span span = (let->name_span.start != 0 || let->name_span.end != 0) ? let->name_span
+                                                                                   : stmt->span;
+                if (let->is_const) {
+                    // ローカルconstは snake_case / UPPER_SNAKE_CASE の両方を許容
+                    if (!naming::is_snake_case(let->name) &&
+                        !naming::is_upper_snake_case(let->name)) {
+                        report_naming(span, "定数名", let->name,
+                                      "snake_case または UPPER_SNAKE_CASE");
+                    }
+                } else if (!naming::is_snake_case(let->name)) {
+                    report_naming(span, "変数名", let->name, "snake_case");
+                }
+            }
+        } else if (auto* if_stmt = stmt->as<ast::IfStmt>()) {
+            check_naming_stmts(if_stmt->then_block);
+            check_naming_stmts(if_stmt->else_block);
+        } else if (auto* for_stmt = stmt->as<ast::ForStmt>()) {
+            if (for_stmt->init) {
+                if (auto* init_let = for_stmt->init->as<ast::LetStmt>()) {
+                    if (!naming_exempt(init_let->name) && !naming::is_snake_case(init_let->name)) {
+                        report_naming(for_stmt->init->span, "変数名", init_let->name, "snake_case");
+                    }
+                }
+            }
+            check_naming_stmts(for_stmt->body);
+        } else if (auto* for_in = stmt->as<ast::ForInStmt>()) {
+            if (!naming_exempt(for_in->var_name) && !naming::is_snake_case(for_in->var_name)) {
+                report_naming(stmt->span, "変数名", for_in->var_name, "snake_case");
+            }
+            check_naming_stmts(for_in->body);
+        } else if (auto* while_stmt = stmt->as<ast::WhileStmt>()) {
+            check_naming_stmts(while_stmt->body);
+        } else if (auto* block = stmt->as<ast::BlockStmt>()) {
+            check_naming_stmts(block->stmts);
+        } else if (auto* switch_stmt = stmt->as<ast::SwitchStmt>()) {
+            for (auto& c : switch_stmt->cases) {
+                check_naming_stmts(c.stmts);
+            }
+        } else if (auto* defer_stmt = stmt->as<ast::DeferStmt>()) {
+            if (defer_stmt->body) {
+                if (auto* body_let = defer_stmt->body->as<ast::LetStmt>()) {
+                    if (!naming_exempt(body_let->name) && !naming::is_snake_case(body_let->name)) {
+                        report_naming(defer_stmt->body->span, "変数名", body_let->name,
+                                      "snake_case");
+                    }
+                }
+            }
+        } else if (auto* must_block = stmt->as<ast::MustBlockStmt>()) {
+            check_naming_stmts(must_block->body);
+        }
+    }
+}
+
+// 関数宣言（名前・パラメータ・型パラメータ・本体）の命名を検査する
+void TypeChecker::check_naming_function(ast::FunctionDecl& func) {
+    // extern "C" / コンストラクタ / デストラクタ / main は対象外
+    if (func.is_extern || func.is_constructor || func.is_destructor) {
+        return;
+    }
+    Span span = func.name_span;
+    if (!naming_exempt(func.name) && func.name != "main" && !naming::is_snake_case(func.name)) {
+        report_naming(span, "関数名", func.name, "snake_case");
+    }
+    for (const auto& param : func.params) {
+        if (!naming_exempt(param.name) && param.name != "self" &&
+            !naming::is_snake_case(param.name)) {
+            report_naming(span, "パラメータ名", param.name, "snake_case");
+        }
+    }
+    for (const auto& gp : func.generic_params) {
+        if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
+            report_naming(span, "型パラメータ名", gp, "PascalCase");
+        }
+    }
+    check_naming_stmts(func.body);
+}
+
+// 宣言単位の命名検査（トップレベル・module配下の両方から呼ばれる）
+void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
+    if (auto* func = decl.as<ast::FunctionDecl>()) {
+        check_naming_function(*func);
+    } else if (auto* st = decl.as<ast::StructDecl>()) {
+        // extern struct はベンダプリミティブ等の外部固定名のため対象外
+        if (st->is_extern) {
+            return;
+        }
+        Span span =
+            (st->name_span.start != 0 || st->name_span.end != 0) ? st->name_span : decl.span;
+        if (!naming_exempt(st->name) && !naming::is_pascal_case(st->name)) {
+            report_naming(span, "構造体名", st->name, "PascalCase");
+        }
+        for (const auto& field : st->fields) {
+            if (!naming_exempt(field.name) && !naming::is_snake_case(field.name)) {
+                report_naming(span, "フィールド名", field.name, "snake_case");
+            }
+        }
+        for (const auto& gp : st->generic_params) {
+            if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
+                report_naming(span, "型パラメータ名", gp, "PascalCase");
+            }
+        }
+    } else if (auto* en = decl.as<ast::EnumDecl>()) {
+        // 組み込みprelude（Result/Option注入）は対象外
+        if (has_attribute(en->attributes, "__prelude")) {
+            return;
+        }
+        if (!naming_exempt(en->name) && !naming::is_pascal_case(en->name)) {
+            report_naming(decl.span, "enum名", en->name, "PascalCase");
+        }
+        for (const auto& member : en->members) {
+            // バリアントは PascalCase / UPPER_SNAKE_CASE の両方を許容
+            if (!naming_exempt(member.name) && !naming::is_pascal_case(member.name) &&
+                !naming::is_upper_snake_case(member.name)) {
+                report_naming(decl.span, "enumバリアント名", member.name,
+                              "PascalCase または UPPER_SNAKE_CASE");
+            }
+        }
+    } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
+        if (!naming_exempt(iface->name) && !naming::is_pascal_case(iface->name)) {
+            report_naming(decl.span, "インターフェース名", iface->name, "PascalCase");
+        }
+        for (const auto& method : iface->methods) {
+            if (!naming_exempt(method.name) && !naming::is_snake_case(method.name)) {
+                report_naming(decl.span, "メソッド名", method.name, "snake_case");
+            }
+        }
+    } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+        for (auto& method : impl->methods) {
+            if (method) {
+                check_naming_function(*method);
+            }
+        }
+    } else if (auto* td = decl.as<ast::TypedefDecl>()) {
+        if (!naming_exempt(td->name) && !naming::is_pascal_case(td->name)) {
+            report_naming(decl.span, "型エイリアス名", td->name, "PascalCase");
+        }
+    } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
+        if (naming_exempt(gv->name)) {
+            return;
+        }
+        if (gv->is_const && top_level) {
+            // グローバルconstは UPPER_SNAKE_CASE
+            if (!naming::is_upper_snake_case(gv->name)) {
+                report_naming(decl.span, "グローバル定数名", gv->name, "UPPER_SNAKE_CASE");
+            }
+        } else if (!gv->is_const && !naming::is_snake_case(gv->name)) {
+            report_naming(decl.span, "グローバル変数名", gv->name, "snake_case");
+        }
+    } else if (auto* mod = decl.as<ast::ModuleDecl>()) {
+        if (mod->path.segments.empty()) {
+            return;
+        }
+        // ライブラリ名前空間（importでインライン展開されたもの）は対象外
+        if (is_library_namespace(mod->path.segments.front())) {
+            return;
+        }
+        for (const auto& seg : mod->path.segments) {
+            if (!naming_exempt(seg) && !naming::is_snake_case(seg)) {
+                report_naming(decl.span, "モジュール名", seg, "snake_case");
+            }
+        }
+        for (auto& inner : mod->declarations) {
+            if (inner) {
+                check_naming_decl(*inner, top_level);
+            }
+        }
+    }
+    // Import/Export/Use/Macro/ExternBlock/InitialBlock は対象外
+}
+
+// 命名規則チェックのエントリポイント（check() の末尾から呼ばれる）
+void TypeChecker::check_naming_conventions(ast::Program& program) {
+    if (!enable_naming_check_) {
+        return;
+    }
+    for (auto& decl : program.declarations) {
+        if (decl) {
+            check_naming_decl(*decl, /*top_level=*/true);
+        }
+    }
 }
 
 bool TypeChecker::type_implements_interface(const std::string& type_name,

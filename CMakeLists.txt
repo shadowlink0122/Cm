@@ -29,6 +29,9 @@ set(CMAKE_UNITY_BUILD_BATCH_SIZE 16)
 # VERSIONファイルからバージョンを読み取り、コンパイル時定数として埋め込む
 file(READ "${CMAKE_SOURCE_DIR}/VERSION" CM_VERSION_RAW)
 string(STRIP "${CM_VERSION_RAW}" CM_VERSION)
+if(CM_VERSION STREQUAL "")
+    message(FATAL_ERROR "VERSIONファイルが空です。バージョンを設定してください")
+endif()
 add_compile_definitions(CM_VERSION="${CM_VERSION}")
 
 # Options
@@ -737,6 +740,15 @@ if(BUILD_TESTING)
         target_include_directories(error_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(error_test gtest_main)
         gtest_discover_tests(error_test PROPERTIES LABELS "unit")
+
+        # Unit tests - 命名規則判定（check/lint --strict のL001）
+        add_executable(naming_rules_test
+            tests/unit/naming_rules_test.cpp
+        )
+        set_target_properties(naming_rules_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(naming_rules_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(naming_rules_test gtest_main)
+        gtest_discover_tests(naming_rules_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR最適化パス
         # （手組みMIRに対して各パスの.cppを単体で検証。
