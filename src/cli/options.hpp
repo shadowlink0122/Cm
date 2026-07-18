@@ -1,7 +1,6 @@
 #pragma once
 
-// コマンドラインインターフェース: オプション定義とパース
-// （main.cpp から分離。docs/archive/013 §4.3-4 巨大TU分割の一環）
+// コマンドラインインターフェース: オプション定義とパース（main.cpp から分離。docs/archive/013 §4.3-4 巨大TU分割の一環）
 
 #include <string>
 #include <vector>
@@ -29,6 +28,9 @@ struct Options {
     std::string target = "";      // ターゲット (native, wasm, js, web)
     bool run_after_emit = false;  // 生成後に実行
     int optimization_level = 3;   // デフォルト最適化レベル3
+    bool lang_from_cli = false;   // --lang= がCLIで明示されたか（config値より優先）
+    bool opt_level_from_cli = false;  // -O<n> がCLIで明示されたか（config値より優先）
+    bool target_from_cli = false;  // --target= がCLIで明示されたか（config値より優先）
     bool debug = false;
     std::string debug_level = "info";
     bool verbose = false;         // デフォルトは静かなモード

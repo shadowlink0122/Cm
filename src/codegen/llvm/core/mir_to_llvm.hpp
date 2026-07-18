@@ -31,8 +31,7 @@ class MIRToLLVM {
     std::unordered_set<mir::LocalId> allocatedLocals;
 
     // ASM入出力operandで参照される変数のセット（volatile store/loadの対象）
-    // BUG修正(v0.14.2): 以前はallocatedLocals全体をvolatile化していたが、
-    // ASM参照変数のみに限定してコードサイズ爆発を防止
+    // BUG修正(v0.14.2): 以前はallocatedLocals全体をvolatile化していたが、ASM参照変数のみに限定してコードサイズ爆発を防止
     std::unordered_set<mir::LocalId> asmReferencedLocals;
 
     // 基本ブロックマッピング

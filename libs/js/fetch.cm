@@ -24,9 +24,7 @@ use js {
 ///     return 0;
 ///   }
 export async int fetch_text(string url) {
-    // NOTE: 実際のfetch APIの戻り値は Response オブジェクトだが、
-    // 現時点ではCm言語にPromise/Objectサポートがないため、
-    // 簡略化した整数型で代用。将来のバージョンで型安全なAPIに拡張予定。
+    // NOTE: 実際のfetch APIの戻り値は Response オブジェクトだが、現時点ではCm言語にPromise/Objectサポートがないため、簡略化した整数型で代用。将来のバージョンで型安全なAPIに拡張予定。
     const int response = await fetch(url);
     return response;
 }

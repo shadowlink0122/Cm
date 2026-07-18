@@ -884,8 +884,7 @@ void MirLowering::generate_auto_operator_impl(const hir::HirStruct& st,
 // 通常の関数をlowering
 void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
     // 事前パス: 全HIR関数を登録する。
-    // 後方の関数を呼ぶ呼び出しでもデフォルト引数補完（lower_call）が
-    // 参照できるようにするため、本体のlowering前にマップを完成させる
+    // 後方の関数を呼ぶ呼び出しでもデフォルト引数補完（lower_call）が参照できるようにするため、本体のlowering前にマップを完成させる
     for (const auto& decl : hir_program.declarations) {
         if (auto* func = std::get_if<std::unique_ptr<hir::HirFunction>>(&decl->kind)) {
             hir_functions[(*func)->name] = func->get();
@@ -895,8 +894,7 @@ void MirLowering::lower_functions(const hir::HirProgram& hir_program) {
             }
         } else if (auto* impl = std::get_if<std::unique_ptr<hir::HirImpl>>(&decl->kind)) {
             // implメソッドもマングル名（type__method）で登録する。
-            // 補間ミニパイプラインの戻り型解決が関数本体のlowering中に
-            // 参照するため、Pass 3を待たずここで登録する必要がある
+            // 補間ミニパイプラインの戻り型解決が関数本体のlowering中に参照するため、Pass 3を待たずここで登録する必要がある
             if (!(*impl)->target_type.empty()) {
                 for (const auto& method : (*impl)->methods) {
                     if (!method) {

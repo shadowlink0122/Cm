@@ -79,8 +79,7 @@ void JSCodeGen::emitFunction(const mir::MirFunction& func, const mir::MirProgram
 
 // implメソッドのself引数ソースを事前分析
 // パターン: _tempN = Use(Copy(original_struct)) → Call(StructType__method, [Copy(_tempN), ...])
-// このパターンで_tempNがimplメソッドのself引数としてのみ使われる場合、
-// _tempNへの代入時に__cm_cloneをスキップして参照渡しにする
+// このパターンで_tempNがimplメソッドのself引数としてのみ使われる場合、_tempNへの代入時に__cm_cloneをスキップして参照渡しにする
 void JSCodeGen::collectImplSelfSources(const mir::MirFunction& func) {
     impl_self_sources_.clear();
 
@@ -244,9 +243,7 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
             if (boxed_locals_.count(local.id)) {
                 std::string varName;
                 if (local.id < func.arg_locals.size()) {
-                    // named arg? getLocalVarName usually handles this but here signatures used
-                    // simple names let's stick to getLocalVarName-ish logic or signature logic.
-                    // implementation uses sanitizeIdentifier(local.name) for signature.
+                    // named arg? getLocalVarName usually handles this but here signatures used simple names let's stick to getLocalVarName-ish logic or signature logic. implementation uses sanitizeIdentifier(local.name) for signature.
                     varName = sanitizeIdentifier(local.name);
                 } else {
                     // signature logic was:
@@ -331,8 +328,7 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
         return;
     }
 
-    // 非線形フローはすべてswitch/dispatchパターンで処理
-    // （emitStructuredFlowは不完全で __dispatch ラベルエラーの原因になるため廃止）
+    // 非線形フローはすべてswitch/dispatchパターンで処理（emitStructuredFlowは不完全で __dispatch ラベルエラーの原因になるため廃止）
 
     // 複雑な制御フローの場合はswitch/dispatchパターンを使用
     bool needLabels = func.basic_blocks.size() > 1;

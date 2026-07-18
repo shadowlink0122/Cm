@@ -96,8 +96,7 @@ void SVExpr::print(std::string& out, int parent_prec, bool is_right_operand) con
 
     // 括弧の要否判定:
     // - 自身の優先順位が親より弱ければ必須
-    // - 同順位でも、右オペランド位置では結合法則を満たす演算子以外は必須
-    //   （例: a - (b - c) / a / (b / c)）
+    // - 同順位でも、右オペランド位置では結合法則を満たす演算子以外は必須（例: a - (b - c) / a / (b / c)）
     bool need_paren = false;
     if (kind_ != Kind::Atom && parent_prec >= 0) {
         if (prec < parent_prec) {

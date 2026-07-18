@@ -68,10 +68,8 @@ void BlockMonitor::add_instruction(const std::string& instruction_text) {
         block.hash_history.erase(block.hash_history.begin());
     }
 
-    // 注意: かつてここで周期的な命令パターンを無限ループとして検出していたが、
-    // ループ展開（--funroll-loops）や手書きの反復コードなど正当な繰り返しを
-    // 誤検出するため撤去した。暴走対策は命令数上限
-    // （max_instructions_per_block / max_duplicate_instructions）が担う
+    // 注意: かつてここで周期的な命令パターンを無限ループとして検出していたが、ループ展開（--funroll-loops）や手書きの反復コードなど正当な繰り返しを
+    // 誤検出するため撤去した。暴走対策は命令数上限（max_instructions_per_block / max_duplicate_instructions）が担う
 }
 
 std::string BlockMonitor::get_statistics() const {

@@ -3,8 +3,7 @@
 // ConOut.OutputString をインラインASM経由で呼出し
 // ASCII -> UCS-2 変換もASMで実行
 //
-// 注意: string型は関数パラメータとして渡すとデータが壊れるため、
-//       全てのインターフェースは void* + ulong で受け取る
+// 注意: string型は関数パラメータとして渡すとデータが壊れるため、全てのインターフェースは void* + ulong で受け取る
 // 注意: ASMに渡す値は全てulongにキャストすること
 // 注意: 全てのASMブロックはmust{}で囲むこと（最適化除去防止）
 // 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用

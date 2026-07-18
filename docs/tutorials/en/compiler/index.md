@@ -23,6 +23,7 @@ Pages are organized by backend: `common/` (shared tools), `native/` (LLVM native
 | [Preprocessor](common/preprocessor.html) | 🟡 Intermediate | Conditional compilation |
 | [Linter](common/linter.html) | 🟢 Beginner | Static analysis (cm lint) |
 | [Formatter](common/formatter.html) | 🟢 Beginner | Code formatting (cm fmt) |
+| [Configuration file](common/config.html) | 🟢 Beginner | .cmconfig.yml (language, compile defaults, lint settings) |
 | [Optimization](common/optimization.html) | 🔴 Advanced | O0-O3, --funroll-loops, tail calls |
 
 ## Native (native/)
@@ -54,7 +55,7 @@ Pages are organized by backend: `common/` (shared tools), `native/` (LLVM native
 | [Control flow and loops](sv/control-flow.html) | 🟡 Intermediate | if/case, loop reconstruction, constant loop unrolling |
 | [Data structures](sv/data.html) | 🟡 Intermediate | Concatenation, enum FSMs, arrays, strings |
 | [Memory initialization](sv/memory.html) | 🟡 Intermediate | Array initializers, $readmemh, --emit-memfile |
-| [Module hierarchy](sv/hierarchy.html) | 🟡 Intermediate | Submodules via //! sv: hierarchy |
+| [Module hierarchy](sv/hierarchy.html) | 🟡 Intermediate | Submodules via exported IO structs |
 | [Board I/O](sv/board-io.html) | 🟡 Intermediate | #[sv::pin], --emit-constraints, tristate, CDC sync |
 | [State init and simulation](sv/state-sim.html) | 🟡 Intermediate | Initial values, initial blocks, testbenches, assertions |
 | [Semantics guarantees](sv/semantics.html) | 🟡 Intermediate | Guaranteed Cm↔SV semantic correspondences |

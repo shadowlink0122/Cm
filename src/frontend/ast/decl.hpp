@@ -30,8 +30,7 @@ enum class ConstraintKind {
 
 // ============================================================
 // インターフェース境界（型制約）
-// すべての制約はインターフェースを対象とする
-// 「型T はインターフェースI を実装している」ことを要求
+// すべての制約はインターフェースを対象とする（「型T はインターフェースI を実装している」ことを要求）
 // ============================================================
 struct TypeConstraint {
     ConstraintKind kind = ConstraintKind::None;
@@ -416,9 +415,7 @@ inline DeclPtr make_struct(std::string name, std::vector<Field> fields, Span s =
 
 // TODO: パーサー更新時に修正
 // inline DeclPtr make_import(std::vector<std::string> path, std::string alias = "", Span s = {}) {
-//     return std::make_unique<Decl>(std::make_unique<ImportDecl>(std::move(path),
-//     std::move(alias)),
-//                                   s);
+//     return std::make_unique<Decl>(std::make_unique<ImportDecl>(std::move(path), std::move(alias)), s);
 // }
 
 }  // namespace cm::ast

@@ -399,8 +399,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             }
 
             if (is_slice_init_from_array) {
-                // 配列リテラルからスライスへの初期化
-                // まず空のスライスを作成してから、各要素をpushで追加
+                // 配列リテラルからスライスへの初期化まず空のスライスを作成してから、各要素をpushで追加
                 if (auto* arr_lit =
                         std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&let.init->kind)) {
                     const auto& elements = (*arr_lit)->elements;
@@ -758,9 +757,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                           std::to_string(block->statements.size()) + " statements");
                         }
                     }
-                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を
-                    // 経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、
-                    // O0での `as` タグ検査パニックや `is` の誤判定になる）
+                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、O0での `as` タグ検査パニックや `is` の誤判定になる）
                     hir::TypePtr resolved_let_type = ctx.resolve_typedef(let.type);
                     hir::TypePtr init_type =
                         (init_value < ctx.func->locals.size())
@@ -929,13 +926,11 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
 
         // 左辺が複雑な式（メンバーアクセス等）の場合もbuild_lvalue_placeで対応
         // この場合はフォールスルーして通常パスの build_lvalue_place を使う
-        // ただし配列リテラルの各要素を直接書き込むために、ここでplaceを構築
-        // （フォールスルーさせると通常のtemp copyパスを通ってしまう）
+        // ただし配列リテラルの各要素を直接書き込むために、ここでplaceを構築（フォールスルーさせると通常のtemp copyパスを通ってしまう）
     }
 
     // 右辺値をlowering
-    // 配列リテラルRHSは代入先の型を期待型として渡す
-    // （`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
+    // 配列リテラルRHSは代入先の型を期待型として渡す（`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
     hir::TypePtr assign_target_type = assign.target ? assign.target->type : nullptr;
     if ((!assign_target_type || assign_target_type->kind != hir::TypeKind::Array) &&
         assign.target) {
@@ -1562,8 +1557,7 @@ void StmtLowering::emit_scope_destructors(LoweringContext& ctx) {
         // ローカル変数の型名はモノモフィゼーション前なので不正確な場合がある
         std::string actual_type_name = type_name;
 
-        // 登録時の型名がマングル済み（__を含む）の場合はそのまま使用
-        // そうでない場合はローカル変数の型名を確認
+        // 登録時の型名がマングル済み（__を含む）の場合はそのまま使用そうでない場合はローカル変数の型名を確認
         if (type_name.find("__") == std::string::npos && local_id < ctx.func->locals.size()) {
             const auto& local_decl = ctx.func->locals[local_id];
             if (local_decl.type && !local_decl.type->name.empty() &&

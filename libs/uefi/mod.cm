@@ -6,8 +6,7 @@
 //   import uefi::mem::uefi_alloc_pool;
 //
 // コンパイル:
-//   cm compile --target=uefi -o app.o main.cm
-//   lld-link /subsystem:efi_application /entry:efi_main /out:BOOTX64.EFI app.o
+//   cm compile --target=uefi -o app.o main.cm lld-link /subsystem:efi_application /entry:efi_main /out:BOOTX64.EFI app.o
 module uefi;
 
 // UEFI基本型・ステータスコード

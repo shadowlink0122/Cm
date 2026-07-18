@@ -102,8 +102,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             }
 
             // 整数除算・剰余: ゼロ除算は実行時エラー、除算はMath.truncで整数化。
-            // result_typeが無い場合（文字列補間式のパース経由等）は
-            // オペランド型から整数演算かどうかを判定する
+            // result_typeが無い場合（文字列補間式のパース経由等）はオペランド型から整数演算かどうかを判定する
             const bool int_operands =
                 lhsType && lhsType->is_integer() && rhsType && rhsType->is_integer();
             const bool int_divmod = (data.result_type && data.result_type->is_integer()) ||
@@ -130,9 +129,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                              is_unsigned_int(rhsType);
 
             // 64ビット整数のビット演算はBigIntで行う。
-            // JSのビット演算子（>> >>> << & | ^）は32ビット固定のため、
-            // long/ulongではシフト量>=32やbit32以上のマスクが壊れる
-            // （精度はNumberの53bitに制限される点は従来どおり）
+            // JSのビット演算子（>> >>> << & | ^）は32ビット固定のため、long/ulongではシフト量>=32やbit32以上のマスクが壊れる（精度はNumberの53bitに制限される点は従来どおり）
             auto is_64bit_int = [](const hir::TypePtr& t) {
                 if (!t)
                     return false;
@@ -285,8 +282,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
             // 構造体フィールドへのRef（&p.x）→ {__arr: 親オブジェクト, __idx: "フィールド名"}
-            // 文字列キーでも obj[key] で読み書きできるため、配列要素ポインタと
-            // 同一のデリファレンス経路（.__arr[.__idx]）がそのまま機能する
+            // 文字列キーでも obj[key] で読み書きできるため、配列要素ポインタと同一のデリファレンス経路（.__arr[.__idx]）がそのまま機能する
             if (!data.place.projections.empty() &&
                 data.place.projections.back().kind == mir::ProjectionKind::Field) {
                 std::string base = getLocalVarName(func, data.place.local);
@@ -332,8 +328,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 }
             }
             if (boxed_locals_.count(data.place.local)) {
-                // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0}
-                // boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
+                // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0} boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
                 return "{__arr: " + getLocalVarName(func, data.place.local) + ", __idx: 0}";
             }
             return getLocalVarName(func, data.place.local);
@@ -344,8 +339,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             std::string operand = emitOperand(*data.operand, func);
 
             // ユニオン型の実行時型判別 (expr is Type):
-            // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する
-            // （構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
+            // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する（構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
             if (data.check_only) {
                 if (data.target_type) {
                     hir::TypePtr srcUnion = getOperandType(*data.operand, func);
@@ -439,13 +433,11 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                                                  "_vtable";
                         return "{ data: " + operand + ", vtable: " + vtableName + " }";
                     } else if (sourceType && sourceType->kind == TypeKind::Interface) {
-                        // Interface -> Interface
-                        // すでにあるvtableを使うか、動的解決が必要だが、現在はそのまま返す
+                        // Interface -> Interfaceすでにあるvtableを使うか、動的解決が必要だが、現在はそのまま返す
                         return operand;
                     }
                     // ソース型が不明またはプリミティブの場合（基本的にはStruct -> Interfaceを想定）
-                    // プリミティブの実装（impl int for Interface等）の場合も考慮が必要だが、
-                    // 現状はStructのみ対応
+                    // プリミティブの実装（impl int for Interface等）の場合も考慮が必要だが、現状はStructのみ対応
                 }
             }
             return operand;
@@ -538,8 +530,7 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
         if (operand.kind == mir::MirOperand::Copy) {
             std::string result = emitPlace(place, func);
             // 構造体の場合は深いコピーを作成
-            // ただしimplメソッドのself引数ソースの場合はスキップ
-            // （JSの参照渡しでselfの変更を元変数に伝搬させるため）
+            // ただしimplメソッドのself引数ソースの場合はスキップ（JSの参照渡しでselfの変更を元変数に伝搬させるため）
             if (place.local < func.locals.size() && place.projections.empty()) {
                 const auto& local = func.locals[place.local];
                 if (local.type && local.type->kind == ast::TypeKind::Struct) {
@@ -624,9 +615,7 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
             case mir::ProjectionKind::Deref: {
                 // ポインタ参照外し:
                 // 注意: boxed変数の[0]はボックス解除（ポインタ値の取り出し）であって
-                // デリファレンスではない。旧実装はboxedポインタのDerefをno-opにして
-                // いたため、int** 経由で付け替えた後の *p がポインタオブジェクトの
-                // まま読まれていた（ptr_double回帰）。boxed/非boxedとも同じ
+                // デリファレンスではない。旧実装はboxedポインタのDerefをno-opにしていたため、int** 経由で付け替えた後の *p がポインタオブジェクトのまま読まれていた（ptr_double回帰）。boxed/非boxedとも同じ
                 // ポインタ解決を適用する（resultは既にポインタ値になっている）
                 if (currentType && currentType->kind == TypeKind::Pointer &&
                     currentType->element_type &&
@@ -653,8 +642,7 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                     }
                 } else if (currentType && currentType->element_type &&
                            currentType->element_type->kind == ast::TypeKind::Struct) {
-                    // 構造体ポインタ: オブジェクト直接参照ならno-op、
-                    // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
+                    // 構造体ポインタ: オブジェクト直接参照ならno-op、ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
                     // 指し先を取り出す（実行時判定の両対応）
                     result = "((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" +
                              result + ")";

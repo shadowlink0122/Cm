@@ -14,8 +14,7 @@ namespace cm::mir::opt {
 // ============================================================
 class ConstantFolding : public OptimizationPass {
    public:
-    // fold_terminators=false は文の書き換えのみ行い、SwitchInt→Gotoの
-    // 制御フロー変更を行わない（SVバックエンド等、CFG形状を保ちたい用途向け）
+    // fold_terminators=false は文の書き換えのみ行い、SwitchInt→Gotoの制御フロー変更を行わない（SVバックエンド等、CFG形状を保ちたい用途向け）
     explicit ConstantFolding(bool fold_terminators = true) : fold_terminators_(fold_terminators) {}
 
     std::string name() const override { return "Constant Folding"; }

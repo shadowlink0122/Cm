@@ -1,8 +1,7 @@
 //! platform: sv
 //! test: cycles=4 -> sum=100
 
-// exportされた配列の複数行初期化子のimport回帰テスト
-// （table_rom.cmの行末コメントに ; や { があっても切り詰められない）
+// exportされた配列の複数行初期化子のimport回帰テスト（table_rom.cmの行末コメントに ; や { があっても切り詰められない）
 import table_rom;
 
 #[input] posedge clk;

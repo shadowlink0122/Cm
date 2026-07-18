@@ -3,8 +3,7 @@
 // ============================================================
 // Cmソース断片 → 生成SV文字列 のゴールデンテスト。
 // 過去に統合テスト（lint）をすり抜けた「合法だが意味が違うSV」
-// を出力する回帰（優先順位括弧・符号付き定数・ループ構造化等）を
-// コード生成器のレベルで検証する。
+// を出力する回帰（優先順位括弧・符号付き定数・ループ構造化等）をコード生成器のレベルで検証する。
 
 #include "../../src/codegen/sv/codegen.hpp"
 #include "../../src/codegen/sv/expr_tree.hpp"
@@ -61,8 +60,7 @@ class SVCodegenTest : public ::testing::Test {
         if (unroll_loops) {
             mir::opt::unroll_constant_loops(mir);
         }
-        // SVターゲットの本番パイプライン（O1以上）と同じ定数畳み込み・恒等式簡約
-        // （文数・CFG形状を保存するモード）
+        // SVターゲットの本番パイプライン（O1以上）と同じ定数畳み込み・恒等式簡約（文数・CFG形状を保存するモード）
         if (fold_constants) {
             mir::opt::ConstantFolding folding(/*fold_terminators=*/false);
             folding.run_on_program(mir);
@@ -79,8 +77,7 @@ class SVCodegenTest : public ::testing::Test {
     }
 
     // Cmソース → 生成テストベンチ文字列。
-    // //! test: ディレクティブはケースファイル自体から読むため sourceFile を設定し、
-    // compile() が outputFile の隣へ書き出した <name>_tb.sv を読み戻す
+    // //! test: ディレクティブはケースファイル自体から読むため sourceFile を設定し、compile() が outputFile の隣へ書き出した <name>_tb.sv を読み戻す
     std::string compile_to_tb(const std::string& name) {
         std::string path = std::string(CM_SV_CASE_DIR) + "/" + name + ".cm";
         std::string code = load_case(name);
@@ -218,9 +215,7 @@ TEST_F(SVCodegenTest, RegisterInitialValue) {
     expect_contains(sv, "counter = 32'd42;");
 }
 
-// else if チェーンの全行が先頭のifと同じインデントで出力される
-// （従来はelse if正規化がネスト2段目以降の "end else if" 行に
-// インデント調整を適用せず、1段深くずれてSVの見た目が崩れていた）
+// else if チェーンの全行が先頭のifと同じインデントで出力される（従来はelse if正規化がネスト2段目以降の "end else if" 行にインデント調整を適用せず、1段深くずれてSVの見た目が崩れていた）
 TEST_F(SVCodegenTest, ElseIfChainIndent) {
     const std::string code = load_case("control/else_if_chain_indent");
     std::string sv = compile_to_sv(code);
@@ -247,8 +242,7 @@ TEST_F(SVCodegenTest, ElseIfChainIndent) {
 }
 
 // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）:
-// フィールドがモジュールポートへ展開され、io.field アクセスはポート名へ
-// フラット化される。IO構造体自体はデータ型（typedef）として出力されない
+// フィールドがモジュールポートへ展開され、io.field アクセスはポート名へフラット化される。IO構造体自体はデータ型（typedef）として出力されない
 TEST_F(SVCodegenTest, IoInstanceExpandsPortsAndFlattensAccess) {
     const std::string code = load_case("module/io_instance");
     std::string sv = compile_to_sv(code);
@@ -260,8 +254,7 @@ TEST_F(SVCodegenTest, IoInstanceExpandsPortsAndFlattensAccess) {
     expect_not_contains(sv, "io[");
 }
 
-// importされたモジュール（namespace）内で宣言されたextern structインスタンスの
-// 型名から名前空間修飾を除去する（従来は "hdmi_out::OSC osc_inst" のような
+// importされたモジュール（namespace）内で宣言されたextern structインスタンスの型名から名前空間修飾を除去する（従来は "hdmi_out::OSC osc_inst" のような
 // 不正なSVが出力されlintエラーになった）
 TEST_F(SVCodegenTest, NamespacedExternInstance) {
     const std::string code = load_case("module/namespaced_extern_instance");
@@ -274,8 +267,7 @@ TEST_F(SVCodegenTest, NamespacedExternInstance) {
 // //! test: ディレクティブからのテストベンチ生成
 // ============================================================
 
-// 組み合わせ回路: 複数ディレクティブが順にTEST 1/TEST 2として生成され、
-// 入力設定・伝搬遅延待ち（#10）・出力表示が含まれる
+// 組み合わせ回路: 複数ディレクティブが順にTEST 1/TEST 2として生成され、入力設定・伝搬遅延待ち（#10）・出力表示が含まれる
 TEST_F(SVCodegenTest, TestbenchDirectiveCombMultiCase) {
     std::string tb = compile_to_tb("testbench/directive_comb");
     expect_contains(tb, "a = 3;");
@@ -289,8 +281,7 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCombMultiCase) {
     expect_not_contains(tb, "always #5");
 }
 
-// クロック回路: cycles+入力の複合形式が入力駆動とrepeat待ちに展開され、
-// クロック生成が付与される
+// クロック回路: cycles+入力の複合形式が入力駆動とrepeat待ちに展開され、クロック生成が付与される
 TEST_F(SVCodegenTest, TestbenchDirectiveCyclesWithInput) {
     std::string tb = compile_to_tb("testbench/directive_cycles");
     expect_contains(tb, "en = 1;");
@@ -299,38 +290,33 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCyclesWithInput) {
     expect_contains(tb, "always #5 clk = ~clk;");
 }
 
-// 出力ポートの宣言初期値が電源投入時初期値として出力される
-// （従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
+// 出力ポートの宣言初期値が電源投入時初期値として出力される（従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
 TEST_F(SVCodegenTest, OutputPortInitialValue) {
     const std::string code = load_case("module/output_port_initial_value");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "output logic [31:0] max_seen = 32'd7");
 }
 
-// `module NAME;` ヘッダ宣言がSVトップモジュール名に反映される
-// （従来はファイル名由来の名前になり宣言が無視されていた）
+// `module NAME;` ヘッダ宣言がSVトップモジュール名に反映される（従来はファイル名由来の名前になり宣言が無視されていた）
 TEST_F(SVCodegenTest, ModuleTopName) {
     const std::string code = load_case("module/module_top_name");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "module my_top");
 }
 
-// SV予約語と衝突する識別子（program等）は明確なエラーで停止する
-// （従来はそのまま出力され、iverilog等で構文エラーになっていた）
+// SV予約語と衝突する識別子（program等）は明確なエラーで停止する（従来はそのまま出力され、iverilog等で構文エラーになっていた）
 TEST_F(SVCodegenTest, ReservedIdentifierRejected) {
     const std::string code = load_case("errors/sv_reserved_identifier");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
-// 非対応構文（インラインアセンブリ）はSV007で明示エラーになる
-// （従来は // unsupported statement として静かにコメント化されていた）
+// 非対応構文（インラインアセンブリ）はSV007で明示エラーになる（従来は // unsupported statement として静かにコメント化されていた）
 TEST_F(SVCodegenTest, InlineAsmRejectedWithSV007) {
     const std::string code = load_case("errors/sv007_inline_asm");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
 }
 
-// #[test] 内の未対応呼び出し（ユーザー関数）はSV007で明示エラーになる
-// （従来はコメントとして静かに握り潰されていた）
+// #[test] 内の未対応呼び出し（ユーザー関数）はSV007で明示エラーになる（従来はコメントとして静かに握り潰されていた）
 TEST_F(SVCodegenTest, TestbenchUnknownCallRejectedWithSV007) {
     const std::string code = load_case("errors/sv007_test_unknown_call");
     EXPECT_THROW(compile_to_sv(code), std::runtime_error);
@@ -344,8 +330,7 @@ TEST_F(SVCodegenTest, UnusedLocalparamRemoved) {
     expect_not_contains(sv, "UNUSED_CONST");
 }
 
-// 関数ローカル変数は名前付きalwaysブロック内に宣言される
-// （モジュールスコープへホイストしない）
+// 関数ローカル変数は名前付きalwaysブロック内に宣言される（モジュールスコープへホイストしない）
 TEST_F(SVCodegenTest, LocalsDeclaredInsideNamedBlock) {
     const std::string code = load_case("process/block_local_decl");
     std::string sv = compile_to_sv(code);
@@ -359,8 +344,7 @@ TEST_F(SVCodegenTest, LocalsDeclaredInsideNamedBlock) {
     }
 }
 
-// async関数のクロックが内部信号（OSC等で駆動）の場合、
-// 自動のclk/rstポートを注入しない（重複宣言になる不具合の修正）
+// async関数のクロックが内部信号（OSC等で駆動）の場合、自動のclk/rstポートを注入しない（重複宣言になる不具合の修正）
 TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
     const std::string code = load_case("module/async_internal_clock");
     std::string sv = compile_to_sv(code);
@@ -372,8 +356,7 @@ TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
     EXPECT_EQ(sv.find("logic clk", first + 1), std::string::npos) << sv;
 }
 
-// プロセス内ループはwhileループとして再構成され、
-// ループ後のコードが到達可能な位置に出力される
+// プロセス内ループはwhileループとして再構成され、ループ後のコードが到達可能な位置に出力される
 TEST_F(SVCodegenTest, WhileLoopReconstruction) {
     const std::string code = load_case("control/while_loop_reconstruction");
     std::string sv = compile_to_sv(code);
@@ -391,8 +374,7 @@ TEST_F(SVCodegenTest, ArrayInitialBlock) {
     expect_contains(sv, "rom[3] = 40;");
 }
 
-// 定数トリップカウントのループは静的展開され while が残らない
-// （generate/genvar相当。合成ツールは動的whileを展開できない）
+// 定数トリップカウントのループは静的展開され while が残らない（generate/genvar相当。合成ツールは動的whileを展開できない）
 TEST_F(SVCodegenTest, ConstantLoopUnroll) {
     const std::string code = load_case("control/constant_loop_unroll");
     std::string sv = compile_to_sv(code, /*emit_memfile=*/false, /*unroll_loops=*/true);
@@ -451,24 +433,21 @@ TEST_F(SVCodegenTest, ImmediateAssertion) {
     expect_contains(sv, "else $error(\"assertion failed: value out of range\");");
 }
 
-// ラッチ推論（Phase 3）: if前にデフォルト代入があれば組み合わせ回路
-// （従来の「if行数 vs else行数」テキスト判定では誤ってラッチ扱いだった）
+// ラッチ推論（Phase 3）: if前にデフォルト代入があれば組み合わせ回路（従来の「if行数 vs else行数」テキスト判定では誤ってラッチ扱いだった）
 TEST_F(SVCodegenTest, LatchInferenceDefaultAssignIsComb) {
     const std::string code = load_case("process/latch_inference_default_assign_is_comb");
     std::string sv = compile_to_sv(code);
     expect_not_contains(sv, "ラッチ推論");
 }
 
-// ラッチ推論（Phase 3）: if/elseがあっても片側でしか代入されない信号はラッチ
-// （従来のテキスト判定ではif/elseが揃っていると見逃していた）
+// ラッチ推論（Phase 3）: if/elseがあっても片側でしか代入されない信号はラッチ（従来のテキスト判定ではif/elseが揃っていると見逃していた）
 TEST_F(SVCodegenTest, LatchInferenceOneSidedAssignIsLatch) {
     const std::string code = load_case("process/latch_inference_one_sided_assign_is_latch");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "ラッチ推論: lout が全パスで代入されません");
 }
 
-// 三項演算子の構造的判定（Phase 2b）: 同一変数への単一代入のif/elseは
-// cond ? a : b に、else-ifチェーンは入れ子の三項に畳まれる
+// 三項演算子の構造的判定（Phase 2b）: 同一変数への単一代入のif/elseはcond ? a : b に、else-ifチェーンは入れ子の三項に畳まれる
 TEST_F(SVCodegenTest, StructuralTernaryChain) {
     const std::string code = load_case("expr/structural_ternary_chain");
     std::string sv = compile_to_sv(code);
@@ -558,8 +537,7 @@ TEST_F(SVCodegenTest, ConstDeclFolding) {
     expect_contains(sv, "ZERO = 48");
 }
 
-// 派生const宣言の展開: 整数のみの式（除算・区間の和・2進リテラル）は
-// localparamへ確定値で畳み込まれ、float混在式は式のままSV評価に委譲される
+// 派生const宣言の展開: 整数のみの式（除算・区間の和・2進リテラル）はlocalparamへ確定値で畳み込まれ、float混在式は式のままSV評価に委譲される
 TEST_F(SVCodegenTest, ConstDeclDerivedExpressions) {
     const std::string code = load_case("expr/const_decl_derived");
     std::string sv = compile_to_sv(code);

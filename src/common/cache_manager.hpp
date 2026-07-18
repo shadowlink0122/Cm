@@ -1,8 +1,7 @@
 #pragma once
 
 // インクリメンタルビルド用キャッシュマネージャー
-// 全入力ファイルの合成フィンガープリントを計算し、
-// コンパイル成果物（.o等）をキャッシュする
+// 全入力ファイルの合成フィンガープリントを計算し、コンパイル成果物（.o等）をキャッシュする
 
 #include <filesystem>
 #include <map>
@@ -147,8 +146,7 @@ class CacheManager {
 
     // ========== 高速キャッシュ判定 ==========
 
-    // 入力ファイルのタイムスタンプ+サイズで高速にキャッシュヒットを判定
-    // （ImportPreprocessor + SHA-256 計算をスキップする）
+    // 入力ファイルのタイムスタンプ+サイズで高速にキャッシュヒットを判定（ImportPreprocessor + SHA-256 計算をスキップする）
     QuickCheckResult quick_check(const std::string& input_file, const std::string& target,
                                  int optimization_level);
 

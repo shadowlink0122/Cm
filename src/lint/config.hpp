@@ -61,6 +61,15 @@ class ConfigLoader {
     // ディレクトリ走査から除外するパスパターン（lint: exclude: の項目）
     const std::vector<std::string>& excludes() const { return excludes_; }
 
+    // メッセージ言語（language: の値。未設定なら空文字列）
+    const std::string& language() const { return language_; }
+
+    // 既定の最適化レベル（compile: optimization: の値。未設定なら-1）
+    int compile_optimization() const { return compile_optimization_; }
+
+    // 既定のコンパイルターゲット（compile: target: の値。未設定なら空文字列）
+    const std::string& compile_target() const { return compile_target_; }
+
     // プリセットを適用
     void apply_preset(Preset preset);
 
@@ -91,6 +100,9 @@ class ConfigLoader {
     std::unordered_map<std::string, RuleConfig> rules_;
     std::string config_path_;
     std::vector<std::string> excludes_;
+    std::string language_;           // language: の値（en/ja。未設定なら空）
+    int compile_optimization_ = -1;  // compile: optimization: の値（未設定なら-1）
+    std::string compile_target_;     // compile: target: の値（未設定なら空）
     bool loaded_ = false;
     Preset current_preset_ = Preset::None;
 

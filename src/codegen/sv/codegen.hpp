@@ -117,8 +117,7 @@ class SVCodeGen : public BufferedCodeGenerator {
     // モジュール情報
     std::vector<SVModule> modules_;
 
-    // whileループ再構成中のexitブロックIDスタック
-    // （ループ本体内からexitへの分岐をループ脱出として出力するために使用）
+    // whileループ再構成中のexitブロックIDスタック（ループ本体内からexitへの分岐をループ脱出として出力するために使用）
     std::vector<size_t> loop_exit_stack_;
 
     // ループを囲む名前付きブロックの名前スタック。
@@ -132,8 +131,7 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::unordered_map<mir::LocalId, SVExprPtr> temp_trees_;
     std::unordered_set<mir::LocalId> single_def_temps_;
 
-    // 現在出力中の関数のループヘッダ→ラッチ一覧
-    // （DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）
+    // 現在出力中の関数のループヘッダ→ラッチ一覧（DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）
     std::unordered_map<size_t, std::vector<size_t>> current_loop_latches_;
 
     // === 型マッピング ===
@@ -172,9 +170,7 @@ class SVCodeGen : public BufferedCodeGenerator {
                             int target_width = 0);
     // 右辺値を生成
     // === 式ツリー（式ツリー化 Phase 1）===
-    // rvalueを式ツリーとして構築する。単一定義テンポラリの参照は
-    // 記録済みのツリーを構造的にスプライスし、優先順位括弧は
-    // プリンタが構造から決定する（テキスト置換の括弧補正を不要にする）
+    // rvalueを式ツリーとして構築する。単一定義テンポラリの参照は記録済みのツリーを構造的にスプライスし、優先順位括弧はプリンタが構造から決定する（テキスト置換の括弧補正を不要にする）
     SVExprPtr buildRvalueTree(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
                               int target_width = 0);
     SVExprPtr buildOperandTree(const mir::MirOperand& op, const mir::MirFunction& func,
@@ -184,8 +180,7 @@ class SVCodeGen : public BufferedCodeGenerator {
     void collectSingleDefTemps(const mir::MirFunction& func);
 
     // 組み合わせブロックの代入完全性解析（式ツリー化 Phase 3）。
-    // 関数内で書き込まれるモジュールレベル信号のうち、entryから各returnまでの
-    // すべての制御パスで代入されるとは限らないものを返す（must-assignデータフロー）。
+    // 関数内で書き込まれるモジュールレベル信号のうち、entryから各returnまでのすべての制御パスで代入されるとは限らないものを返す（must-assignデータフロー）。
     // 空でなければラッチ推論となる
     std::vector<std::string> findIncompletelyAssignedSignals(const mir::MirFunction& func);
 

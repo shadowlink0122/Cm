@@ -5,8 +5,7 @@
 // WASM/Web/Baremetal環境では利用不可。
 //
 // モジュール構成:
-//   native::io       - ファイルI/O、ストリーム、バッファ付きI/O
-//   native::math     - 三角関数、対数、冪乗等 (libm依存)
+//   native::io       - ファイルI/O、ストリーム、バッファ付きI/O native::math     - 三角関数、対数、冪乗等 (libm依存)
 //   native::sync     - 同期プリミティブ (Mutex, RwLock, Atomic, Channel)
 //   native::thread   - スレッド (spawn, join)
 //   native::net      - ネットワーク (TCP通信, イベント多重化)

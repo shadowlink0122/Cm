@@ -1,5 +1,4 @@
-// Bug#10拡張テスト: ポインタ経由implメソッドのネスト呼出し+malloc+cast
-// ptr->method() で method が self.other_method() を呼ぶパターンの検証
+// Bug#10拡張テスト: ポインタ経由implメソッドのネスト呼出し+malloc+cast ptr->method() で method が self.other_method() を呼ぶパターンの検証
 import std::io::println;
 
 use libc {

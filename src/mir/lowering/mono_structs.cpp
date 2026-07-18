@@ -81,8 +81,7 @@ void Monomorphization::collect_struct_specializations(
         if (!func)
             continue;
 
-        // ジェネリック関数内のローカル変数はスキップ
-        // （関数モノモーフィゼーション時に処理される）
+        // ジェネリック関数内のローカル変数はスキップ（関数モノモーフィゼーション時に処理される）
         if (generic_func_names.count(func->name) > 0) {
             continue;
         }
@@ -790,8 +789,7 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 continue;
 
             // Bug#10修正: ネスト呼出しでselfが既にポインタ型の場合
-            // Ref経由で作られたポインタ（expr_call.cppのDeref+Ref処理）は
-            // 正しく構築済みなのでそのまま維持する。
+            // Ref経由で作られたポインタ（expr_call.cppのDeref+Ref処理）は正しく構築済みなのでそのまま維持する。
             // 元のポインタ変数（Pointer型ローカル）が直接渡された場合のみ
             // 引数を維持してスキップする。
             if (local_type->kind == hir::TypeKind::Pointer) {

@@ -143,6 +143,14 @@ void HirLowering::process_namespace(ast::ModuleDecl& mod, const std::string& par
                 hir.declarations.push_back(std::move(hir_decl));
             }
             st->name = original_name;
+        } else if (auto* gvar = inner_decl->as<ast::GlobalVarDecl>()) {
+            // グローバル変数も修飾名で降下し、import元の同名グローバルとの衝突を防ぐ（名前空間内の非修飾参照は型チェッカーが修飾名へ書き換え済み）
+            std::string original_name = gvar->name;
+            gvar->name = full_namespace + "::" + original_name;
+            if (auto hir_decl = lower_decl(*inner_decl)) {
+                hir.declarations.push_back(std::move(hir_decl));
+            }
+            gvar->name = original_name;
         } else {
             if (auto hir_decl = lower_decl(*inner_decl)) {
                 hir.declarations.push_back(std::move(hir_decl));

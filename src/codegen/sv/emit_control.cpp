@@ -20,10 +20,8 @@ namespace cm::codegen::sv {
 void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id,
                                    std::set<size_t>& visited, std::ostringstream& ss,
                                    size_t merge_block) {
-    // ループ本体の出力中にexitブロックへ到達した場合はループ脱出を出力
-    // （exitブロック自体はループ終了後に出力される）。
-    // break は SV-2005 キーワードで古いIcarus Verilog等が未対応のため、
-    // ループを囲む名前付きブロックへの disable で脱出する（Verilog-1995互換）
+    // ループ本体の出力中にexitブロックへ到達した場合はループ脱出を出力（exitブロック自体はループ終了後に出力される）。
+    // break は SV-2005 キーワードで古いIcarus Verilog等が未対応のため、ループを囲む名前付きブロックへの disable で脱出する（Verilog-1995互換）
     if (!loop_exit_stack_.empty() && block_id == loop_exit_stack_.back()) {
         ss << indent() << "disable " << loop_name_stack_.back() << ";\n";
         return;
@@ -83,8 +81,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 // === ループヘッダ検出とwhileループ再構成 ===
                 // このブロックへの後方エッジがあり、かつ片方の分岐だけが
                 // 自然ループに属する場合、ループヘッダとみなす。
-                // if/elseとして出力するとバックエッジが消えて
-                // 「ループ本体が最大1回・ループ後コードが到達不能」という
+                // if/elseとして出力するとバックエッジが消えて「ループ本体が最大1回・ループ後コードが到達不能」という
                 // 誤ったSVになるため、whileループとして構造を復元する
                 auto latch_it = current_loop_latches_.find(current_block);
                 if (current_block != SIZE_MAX && latch_it != current_loop_latches_.end()) {
@@ -109,16 +106,13 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             ss << indent() << "while (" << loop_cond << ") begin\n";
                             increaseIndent();
                             // ループ本体を出力。ループ脱出（exitへの分岐）を検出できるよう
-                            // exitブロックをスタックに積む。ヘッダへの後方エッジは
-                            // visited済みのため自然に停止する
+                            // exitブロックをスタックに積む。ヘッダへの後方エッジはvisited済みのため自然に停止する
                             loop_exit_stack_.push_back(exit);
                             loop_name_stack_.push_back(loop_name);
                             emitBlockRecursive(func, body, visited, ss, exit);
                             loop_name_stack_.pop_back();
                             loop_exit_stack_.pop_back();
-                            // ヘッダブロックの文（ループ条件の再計算）を本体末尾で
-                            // 再実行する。条件のテンポラリが2箇所で代入されることに
-                            // なり、インライン展開の対象からも自動的に外れる
+                            // ヘッダブロックの文（ループ条件の再計算）を本体末尾で再実行する。条件のテンポラリが2箇所で代入されることになり、インライン展開の対象からも自動的に外れる
                             if (current_block < func.basic_blocks.size() &&
                                 func.basic_blocks[current_block]) {
                                 for (const auto& stmt :
@@ -164,9 +158,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
 
                 // === 三項演算子の構造的判定（式ツリー化 Phase 2b） ===
                 // 両分岐が「同一placeへの単一代入行」なら cond ? a : b として出力。
-                // 内側の分岐は再帰で先に三項化されるため、else-ifチェーンも
-                // 自然に入れ子の三項として畳まれる
-                // （従来はテキストの5行パターン検出パスで行っていた）
+                // 内側の分岐は再帰で先に三項化されるため、else-ifチェーンも自然に入れ子の三項として畳まれる（従来はテキストの5行パターン検出パスで行っていた）
                 auto parse_single_assign = [](const std::string& text, std::string& lhs,
                                               std::string& rhs, std::string& op) {
                     // 「1行のみ + 行末が ;」であること
@@ -238,8 +230,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     merge = findMergeBlock(func, sd.targets[0].second, sd.targets[1].second);
                 }
 
-                // matchは網羅性検査済み・switchはdefault生成があるため、
-                // シミュレーション時の重複ヒット検出が得られる unique case を出力する
+                // matchは網羅性検査済み・switchはdefault生成があるため、シミュレーション時の重複ヒット検出が得られる unique case を出力する
                 ss << indent() << "unique case (" << cond << ")\n";
                 increaseIndent();
 
@@ -471,8 +462,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
                     }
                 } else {
-                    // SV複製: {N{expr}}
-                    // count を直接整数値として取得
+                    // SV複製: {N{expr}} count を直接整数値として取得
                     std::string count_str = "1";
                     if (cd.args.size() > 0 && cd.args[0]) {
                         if (cd.args[0]->kind == mir::MirOperand::Constant) {

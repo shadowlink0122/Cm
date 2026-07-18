@@ -18,8 +18,7 @@ import native::thread::spawn_with_arg;
 import native::thread::join;
 import native::thread::sleep_ms;
 
-// サーバスレッド: tcp_listen結果を受け取り、成功時のみaccept
-// argレイアウト: [server_fd: long]
+// サーバスレッド: tcp_listen結果を受け取り、成功時のみaccept argレイアウト: [server_fd: long]
 void* server_thread(void* arg) {
     const long server_fd = *(arg as long*);
     if (server_fd < 0) {

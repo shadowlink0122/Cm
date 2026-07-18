@@ -3,8 +3,7 @@
 //! test: a=10, b=2 -> sum=12, diff=8
 
 // 混合ビット幅演算テスト
-// int(32bit) と ushort(16bit) の混合演算が
-// 正しい幅キャストで生成されることを検証
+// int(32bit) と ushort(16bit) の混合演算が正しい幅キャストで生成されることを検証
 
 #[input]  int a = 0;
 #[input]  ushort b = 0;

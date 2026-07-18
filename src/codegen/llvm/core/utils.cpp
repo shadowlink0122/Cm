@@ -377,8 +377,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     }
     // 配列スライス
     else if (name == "__builtin_array_slice") {
-        // void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end,
-        // i64* out_len)
+        // void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end, i64* out_len)
         auto funcType =
             llvm::FunctionType::get(ctx.getPtrType(),
                                     {ctx.getPtrType(), ctx.getI64Type(), ctx.getI64Type(),
@@ -696,8 +695,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
-    // int32_t cm_udp_sendto(int64_t fd, int64_t host_ptr, int32_t port, int64_t buf_ptr, int32_t
-    // size)
+    // int32_t cm_udp_sendto(int64_t fd, int64_t host_ptr, int32_t port, int64_t buf_ptr, int32_t size)
     else if (name == "cm_udp_sendto") {
         auto funcType =
             llvm::FunctionType::get(ctx.getI32Type(),
@@ -901,8 +899,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
-    // void cm_http_request_set_url(int64_t handle, const char* host, int32_t port, const char*
-    // path)
+    // void cm_http_request_set_url(int64_t handle, const char* host, int32_t port, const char* path)
     else if (name == "cm_http_request_set_url") {
         auto funcType = llvm::FunctionType::get(
             ctx.getVoidType(),
@@ -1164,8 +1161,7 @@ llvm::Function* MIRToLLVM::declareExternalFunction(const std::string& name) {
     }
 
     // Bug#45修正: ベース名の前方一致検索（マングリング名の不一致を解決）
-    // impl for ブロック内から外部関数を呼ぶ場合、呼び出し側はベース名（例: heap_size_to_class）を
-    // 使用するが、currentProgram内の関数名はマングリング済み（例: heap_size_to_class_u64）。
+    // impl for ブロック内から外部関数を呼ぶ場合、呼び出し側はベース名（例: heap_size_to_class）を使用するが、currentProgram内の関数名はマングリング済み（例: heap_size_to_class_u64）。
     // 完全一致で見つからなかった場合、name + "_" で始まる関数を検索して正しいシグネチャを取得する。
     if (currentProgram) {
         for (const auto& func : currentProgram->functions) {
@@ -1215,8 +1211,7 @@ llvm::Value* MIRToLLVM::callIntrinsic([[maybe_unused]] const std::string& name,
     return nullptr;
 }
 
-// NOTE: freeHeapAllocatedLocals() はベアメタル対応のため削除
-// すべての配列はスタックに割り当てられるため、明示的な解放は不要
+// NOTE: freeHeapAllocatedLocals() はベアメタル対応のため削除すべての配列はスタックに割り当てられるため、明示的な解放は不要
 
 // パニック生成
 void MIRToLLVM::generatePanic(const std::string& message) {

@@ -1,6 +1,5 @@
 // 補間プレースホルダ内でのResult/Optionメソッド呼び出しの回帰テスト:
-// 旧: 補間ミニパイプラインの型名（__TaggedUnion_Option等）がHIRメソッド脱糖の
-// 判定と不一致で未解決シンボル（__TaggedUnion_Option__unwrap_or）になっていた
+// 旧: 補間ミニパイプラインの型名（__TaggedUnion_Option等）がHIRメソッド脱糖の判定と不一致で未解決シンボル（__TaggedUnion_Option__unwrap_or）になっていた
 import std::io::println;
 
 Option<int> find(int k) {

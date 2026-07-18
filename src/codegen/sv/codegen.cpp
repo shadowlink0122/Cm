@@ -1,5 +1,6 @@
 #include "codegen.hpp"
 
+#include "../../common/i18n.hpp"
 #include "../../common/text_utils.hpp"
 #include "../../frontend/ast/typedef.hpp"
 #include "../../mir/analysis/dominators.hpp"
@@ -263,10 +264,8 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     append_line("");
 
     // Verilatorリント警告の抑止メタコメント。
-    // UNUSED/UNDRIVEN は式ツリー化・未使用テンポラリ宣言除去（2026-07-05）で
-    // 全テスト・実デザインとも警告ゼロを確認したため出力しない。
-    // WIDTH系は混合幅演算で依然発生するため既定で抑止する
-    // （--sv-strict-lint 指定時はすべて省略し、警告を可視化する）
+    // UNUSED/UNDRIVEN は式ツリー化・未使用テンポラリ宣言除去（2026-07-05）で全テスト・実デザインとも警告ゼロを確認したため出力しない。
+    // WIDTH系は混合幅演算で依然発生するため既定で抑止する（--sv-strict-lint 指定時はすべて省略し、警告を可視化する）
     if (!options_.strictLint) {
         emitLine("/* verilator lint_off WIDTHTRUNC */");
         emitLine("/* verilator lint_off WIDTHEXPAND */");
@@ -276,8 +275,7 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     increaseIndent();
 
     // ==== 使用判定コーパス ====
-    // 未使用localparam・未使用テンポラリの除去のため、モジュール本文
-    // （全ブロック・宣言・ポート型）のテキストを集約して識別子の使用を判定する
+    // 未使用localparam・未使用テンポラリの除去のため、モジュール本文（全ブロック・宣言・ポート型）のテキストを集約して識別子の使用を判定する
     std::string usage_corpus;
     for (const auto* vec :
          {&mod.always_ff_blocks, &mod.always_comb_blocks, &mod.always_latch_blocks,
@@ -367,9 +365,7 @@ void SVCodeGen::emitModule(const SVModule& mod) {
     }
 
     // 内部レジスタ宣言。
-    // どのブロックでも使用されない _tNNN テンポラリ宣言はここで除去する
-    // （式ツリー化によりインライン展開されたテンポラリ。テンポラリ名は
-    //   関数間で衝突するため、全ブロックのテキストを対象に判定する）
+    // どのブロックでも使用されない _tNNN テンポラリ宣言はここで除去する（式ツリー化によりインライン展開されたテンポラリ。テンポラリ名は関数間で衝突するため、全ブロックのテキストを対象に判定する）
     std::string all_blocks_text;
     for (const auto* vec : {&mod.always_ff_blocks, &mod.always_comb_blocks,
                             &mod.always_latch_blocks, &mod.assign_statements, &mod.function_blocks,
@@ -405,8 +401,7 @@ void SVCodeGen::emitModule(const SVModule& mod) {
 
     // always_ff ブロック
     for (const auto& block : mod.always_ff_blocks) {
-        // Gowin EDA 互換のため always_ff @ を always @ に置換
-        // （--sv-always-ff 指定時は保持し、多重ドライバ検査等のSV機能を活かす）
+        // Gowin EDA 互換のため always_ff @ を always @ に置換（--sv-always-ff 指定時は保持し、多重ドライバ検査等のSV機能を活かす）
         std::string modified =
             options_.keepAlwaysFF ? block : replace_all(block, "always_ff @", "always @");
         emit(modified);
@@ -513,8 +508,7 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
         if (effective_width == 0)
             effective_width = width;
         // signed型かどうか判定（定数の型に従う）。
-        // 以前はtarget_width指定時にunsigned扱いにしていたが、SVでは片方が
-        // unsignedだと比較全体がunsignedになり、s < 32'd0 のような符号付き
+        // 以前はtarget_width指定時にunsigned扱いにしていたが、SVでは片方がunsignedだと比較全体がunsignedになり、s < 32'd0 のような符号付き
         // 比較が壊れるため、'sd を維持する
         bool is_signed =
             type && (type->kind == hir::TypeKind::Int || type->kind == hir::TypeKind::Short ||
@@ -538,8 +532,7 @@ std::string SVCodeGen::emitConstant(const mir::MirConstant& constant, const hir:
 // === 配列初期値のinitialブロック生成 ===
 
 // 配列リテラル初期値を initial ブロックとして生成する。
-// FPGA合成ツールはROM/RAMの初期内容として扱い、
-// シミュレーションでは時刻0に初期化される
+// FPGA合成ツールはROM/RAMの初期内容として扱い、シミュレーションでは時刻0に初期化される
 std::string SVCodeGen::buildArrayInitial(const mir::MirGlobalVar& gv, const std::string& var_name) {
     if (!gv.init_expr) {
         return "";
@@ -611,7 +604,7 @@ void SVCodeGen::emitMemfileIfRequested(const mir::MirGlobalVar& gv,
 
     std::ofstream file(out_path);
     if (!file.is_open()) {
-        std::cerr << "警告: memfileを書き出せません: " << out_path.string() << "\n";
+        std::cerr << i18n::tr("warning: cannot write memfile: ") << out_path.string() << "\n";
         return;
     }
     for (const auto& elem : (*arr)->elements) {
@@ -680,8 +673,7 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
             if (proj.index_local < func.locals.size()) {
                 std::string idx_name;
                 // 添字が単一定義テンポラリなら式ツリーをスプライスする（Phase 2）。
-                // 文字列スライスの算術式に埋め込まれる場合があるため、
-                // 原子でない式は括弧で囲む
+                // 文字列スライスの算術式に埋め込まれる場合があるため、原子でない式は括弧で囲む
                 auto idx_tree = temp_trees_.find(proj.index_local);
                 if (idx_tree != temp_trees_.end()) {
                     idx_name = idx_tree->second->to_string();
@@ -750,8 +742,7 @@ std::string SVCodeGen::emitOperand(const mir::MirOperand& operand, const mir::Mi
             std::string result;
             // 単一定義テンポラリは式ツリーをスプライスする（Phase 2）。
             // 本関数の呼び出し元は if条件・配列添字・呼び出し引数などの
-            // 自己区切りコンテキスト、または括弧を自前で管理するツリー経路のため、
-            // 括弧なしの式文字列で安全
+            // 自己区切りコンテキスト、または括弧を自前で管理するツリー経路のため、括弧なしの式文字列で安全
             bool spliced = false;
             if (place.projections.empty()) {
                 auto it = temp_trees_.find(place.local);
@@ -854,8 +845,7 @@ SVExprPtr SVCodeGen::buildOperandTree(const mir::MirOperand& op, const mir::MirF
             }
         }
     }
-    // それ以外は既存のテキスト生成を原子として利用する
-    // （信号名・リテラル・投影付きplace等の出力ロジックを共有）
+    // それ以外は既存のテキスト生成を原子として利用する（信号名・リテラル・投影付きplace等の出力ロジックを共有）
     return SVExpr::atom(emitOperand(op, func, target_width));
 }
 
@@ -889,14 +879,15 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             int k = static_cast<int>(rvalue.kind);
             std::string kind_name = (k >= 0 && k <= 6) ? kRvalueNames[k] : std::to_string(k);
             throw std::runtime_error(
-                "エラー[SV007]: SVターゲットで非対応の式です（MirRvalue::" + kind_name +
-                "）。参照・集約構築・フォーマット変換は合成できません");
+                i18n::tr("error[SV007]: unsupported expression on the SV target (MirRvalue::") +
+                kind_name +
+                i18n::tr("); references, aggregate construction, and format conversion are not "
+                         "synthesizable"));
         }
     }
 }
 
-// rvalueを式ツリーに変換する。二項・単項演算はノードとして構築し、
-// オペランド位置の単一定義テンポラリは構造的にインライン展開される。
+// rvalueを式ツリーに変換する。二項・単項演算はノードとして構築し、オペランド位置の単一定義テンポラリは構造的にインライン展開される。
 // その他のrvalue（キャスト・Use等）は既存のテキスト生成を原子として扱う
 SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::MirFunction& func,
                                      int target_width) {
@@ -1024,8 +1015,7 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
             }
             SVExprPtr operand_tree = buildOperandTree(*cast.operand, func);
             // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。
-            // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の
-            // 切り捨てが失われ、計算結果そのものが変わってしまう
+            // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の切り捨てが失われ、計算結果そのものが変わってしまう
             int cast_w = is_integer_type(cast.target_type) ? getBitWidth(cast.target_type) : 0;
             if (cast_w > 0) {
                 hir::TypePtr source_type = resolve_operand_type(*cast.operand, func);
@@ -1065,9 +1055,7 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
 
 // === 代入完全性解析（式ツリー化 Phase 3）===
 // 組み合わせ（Auto）ブロックのラッチ推論に使用する。
-// must-assignデータフロー: MustIn(B) = ∩ MustOut(pred)、
-// MustOut(B) = MustIn(B) ∪ gen(B)。各returnブロックのMustOutに
-// 含まれない書き込み対象信号が「全パスで代入されない信号」= ラッチ要因
+// must-assignデータフロー: MustIn(B) = ∩ MustOut(pred)、MustOut(B) = MustIn(B) ∪ gen(B)。各returnブロックのMustOutに含まれない書き込み対象信号が「全パスで代入されない信号」= ラッチ要因
 std::vector<std::string> SVCodeGen::findIncompletelyAssignedSignals(const mir::MirFunction& func) {
     const size_t nblocks = func.basic_blocks.size();
     if (nblocks == 0) {
@@ -1246,16 +1234,13 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
                 }
             }
             // 32bit(intデフォルト)の場合は定数リテラル幅の調整不要
-            // (インライン展開後のコンテキストでは型情報が失われるため、
-            //  混合幅の解決はCmソース側で型を統一して行う)
+            // (インライン展開後のコンテキストでは型情報が失われるため、混合幅の解決はCmソース側で型を統一して行う)
             if (target_w == 32)
                 target_w = 0;
-            // 式ツリーとして構築（単一定義テンポラリは構造的にインライン展開され、
-            // 優先順位括弧はプリンタが構造から決定する）
+            // 式ツリーとして構築（単一定義テンポラリは構造的にインライン展開され、優先順位括弧はプリンタが構造から決定する）
             SVExprPtr rhs_tree =
                 assign.rvalue ? buildRvalueTree(*assign.rvalue, func, target_w) : SVExpr::atom("0");
-            // 単一定義テンポラリへの代入はツリーを記録し、以後の使用箇所で
-            // 構造的にスプライスする。行自体は出力しない（Phase 2:
+            // 単一定義テンポラリへの代入はツリーを記録し、以後の使用箇所で構造的にスプライスする。行自体は出力しない（Phase 2:
             // 従来のテキストベースのインライン展開パスを置き換える）
             if (assign.place.projections.empty() &&
                 single_def_temps_.count(assign.place.local) > 0) {
@@ -1300,11 +1285,12 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
         case mir::MirStatement::Nop:
             return "";  // SVでは不要
         case mir::MirStatement::Asm:
-            throw std::runtime_error(
-                "エラー[SV007]: インラインアセンブリ（__asm__）はSVターゲットで使用できません");
+            throw std::runtime_error(i18n::tr(
+                "error[SV007]: inline assembly (__asm__) is not available on the SV target"));
         default:
             throw std::runtime_error(
-                "エラー[SV007]: SVターゲットで非対応の文です（MirStatement kind=" +
+                i18n::tr(
+                    "error[SV007]: unsupported statement on the SV target (MirStatement kind=") +
                 std::to_string(static_cast<int>(stmt.kind)) + "）");
     }
 }
@@ -1401,7 +1387,7 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
 void SVCodeGen::compile(const mir::MirProgram& program) {
     // 非合成型チェック（エラーがあればコンパイル停止）
     if (!validateSynthesizableTypes(program)) {
-        throw std::runtime_error("SVターゲットで非合成型が検出されました");
+        throw std::runtime_error(i18n::tr("non-synthesizable types detected on the SV target"));
     }
 
     validateReservedIdentifiers(program);
@@ -1429,9 +1415,10 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
     writeToFile(generated_code_, options_.outputFile);
 
     if (options_.verbose) {
-        std::cout << "✓ SystemVerilog 生成完了: " << options_.outputFile << "\n";
-        std::cout << "  行数: " << get_stats().total_lines << "\n";
-        std::cout << "  サイズ: " << get_stats().total_bytes << " bytes\n";
+        std::cout << i18n::tr("✓ SystemVerilog generation complete: ") << options_.outputFile
+                  << "\n";
+        std::cout << i18n::tr("  lines: ") << get_stats().total_lines << "\n";
+        std::cout << i18n::tr("  size: ") << get_stats().total_bytes << " bytes\n";
     }
 
     // テストベンチ自動生成（テスト内容がある場合のみ。
@@ -1464,7 +1451,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
             cst_path = stem + ".cst";
             writeToFile(cst, cst_path);
             if (options_.verbose) {
-                std::cout << "✓ ピン制約生成: " << cst_path << "\n";
+                std::cout << i18n::tr("✓ pin constraints generated: ") << cst_path << "\n";
             }
         }
         std::string module_name = modules_.empty() ? "top" : modules_[0].name;
@@ -1473,7 +1460,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
             std::string tcl_path = stem + "_build.tcl";
             writeToFile(tcl, tcl_path);
             if (options_.verbose) {
-                std::cout << "✓ プロジェクトスクリプト生成: " << tcl_path << "\n";
+                std::cout << i18n::tr("✓ project script generated: ") << tcl_path << "\n";
             }
         }
     }
@@ -1497,7 +1484,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
 void SVCodeGen::writeToFile(const std::string& content, const std::string& path) {
     std::ofstream ofs(path);
     if (!ofs) {
-        std::cerr << "エラー: ファイル '" << path << "' を開けません\n";
+        std::cerr << i18n::tr("error: cannot open file '") << path << "'\n";
         return;
     }
     ofs << content;

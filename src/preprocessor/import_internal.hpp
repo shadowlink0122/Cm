@@ -1,8 +1,7 @@
 #pragma once
 
 // ============================================================
-// importプリプロセッサ内部ヘルパー（import / export_filter /
-// module_resolve で共有する行解析ユーティリティ）
+// importプリプロセッサ内部ヘルパー（import / export_filter / module_resolve で共有する行解析ユーティリティ）
 // ============================================================
 
 #include <cctype>
@@ -20,8 +19,7 @@ inline size_t skip_ws(const std::string& s, size_t pos = 0) {
     return pos;
 }
 
-// 行のコード部分を返す: //コメント以降を除去し、文字列/文字リテラルの
-// 中身は空白にマスクする（; や括弧の走査でリテラル内の文字を誤検出しないため）。
+// 行のコード部分を返す: //コメント以降を除去し、文字列/文字リテラルの中身は空白にマスクする（; や括弧の走査でリテラル内の文字を誤検出しないため）。
 // SV幅付きリテラル（16'd256等）のクォートは文字リテラル開始として扱わない
 inline std::string code_portion(const std::string& line) {
     std::string out;
@@ -98,8 +96,7 @@ inline bool line_starts_with(const std::string& line, const char* keyword) {
 }
 
 // 複数行にまたがる export { ... }; ブロックを1行へ正規化する。
-// export処理（process_export_syntax / filter_exports / extract_reexports /
-// extract_exported_blocks）はいずれも行単位の解析であり、複数行ブロックを
+// export処理（process_export_syntax / filter_exports / extract_reexports / extract_exported_blocks）はいずれも行単位の解析であり、複数行ブロックを
 // そのまま渡すと未処理の生 export { がパーサへ届き構文エラーになる。
 // ブロック内の行コメントは除去し、消費した行は行数維持のため空コメント行にする
 inline std::string normalize_export_blocks(const std::string& source) {

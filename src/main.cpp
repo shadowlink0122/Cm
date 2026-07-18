@@ -18,6 +18,7 @@
 #include "codegen/sv/hierarchy.hpp"
 #include "common/cache_manager.hpp"
 #include "common/debug_messages.hpp"
+#include "common/i18n.hpp"
 #include "common/source_location.hpp"
 #include "fmt/formatter.hpp"
 #include "frontend/ast/target_filtering_visitor.hpp"
@@ -62,8 +63,7 @@ namespace fs = std::filesystem;
 
 namespace cm {
 
-// CLIオプション処理（Command/Options/parse_options/print_help/get_version）は
-// src/cli/options.{hpp,cpp} へ分離した（013 §4.3-4 巨大TU分割）
+// CLIオプション処理（Command/Options/parse_options/print_help/get_version）はsrc/cli/options.{hpp,cpp} へ分離した（013 §4.3-4 巨大TU分割）
 using cli::Command;
 using cli::get_version;
 using cli::Options;
@@ -83,7 +83,7 @@ ReadFileResult read_file(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         result.success = false;
-        result.error_message = "エラー: ファイルを開けません: " + filename;
+        result.error_message = i18n::tr("error: cannot open file: ") + filename;
         return result;
     }
 
@@ -117,8 +117,7 @@ std::string parse_platform_directive(const std::string& code_content) {
 }
 
 // platformディレクティブと現在のターゲットを比較
-// or形式: "js|web" → jsまたはwebならtrue
-// not形式: "!native" → native以外ならtrue
+// or形式: "js|web" → jsまたはwebならtrue not形式: "!native" → native以外ならtrue
 bool match_platform_directive(const std::string& directive, const std::string& current_target) {
     if (directive.empty()) {
         return true;
@@ -165,7 +164,7 @@ int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
 #if defined(_WIN32)
     (void)sv_path;
     (void)quiet;
-    std::cerr << "エラー: SVテストのシミュレーション実行はWindowsでは未対応です\n";
+    std::cerr << i18n::tr("error: SV test simulation is not supported on Windows\n");
     return 1;
 #else
     // 子プロセス（iverilog/vvp）の出力と順序が入れ替わらないようフラッシュする
@@ -182,26 +181,26 @@ int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
 
     if (std::system("command -v iverilog >/dev/null 2>&1") != 0 ||
         std::system("command -v vvp >/dev/null 2>&1") != 0) {
-        std::cerr << "エラー: iverilog / vvp が見つかりません（SVテストの実行に必要）\n";
-        std::cerr << "ヒント: macOS: brew install icarus-verilog / "
-                     "Ubuntu: sudo apt-get install iverilog\n";
+        std::cerr << i18n::tr("error: iverilog / vvp not found (required to run SV tests)\n");
+        std::cerr << i18n::tr(
+            "hint: macOS: brew install icarus-verilog / Ubuntu: sudo apt-get install iverilog\n");
         return 1;
     }
     if (!fs::exists(tb)) {
-        std::cerr << "エラー: テストベンチが生成されていません: " << tb.string() << "\n";
+        std::cerr << i18n::tr("error: testbench has not been generated: ") << tb.string() << "\n";
         return 1;
     }
     std::string compile_cmd =
         "iverilog -g2012 -o '" + sim.string() + "' '" + sv.string() + "' '" + tb.string() + "'";
     if (std::system(compile_cmd.c_str()) != 0) {
-        std::cerr << "エラー: iverilog コンパイルに失敗しました\n";
+        std::cerr << i18n::tr("error: iverilog compilation failed\n");
         return 1;
     }
     std::string run_cmd = "cd '" + dir.string() + "' && vvp '" + fs::absolute(sim).string() + "'";
     int rc = std::system(run_cmd.c_str());
     int exit_code = WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
     if (exit_code == 0 && !quiet) {
-        std::cout << "✓ SVテスト成功\n";
+        std::cout << i18n::tr("✓ SV test passed\n");
     }
     return exit_code;
 #endif
@@ -241,7 +240,7 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
         fs::path p(path);
 
         if (!fs::exists(p)) {
-            std::cerr << "エラー: パスが存在しません: " << path << "\n";
+            std::cerr << i18n::tr("error: path does not exist: ") << path << "\n";
             continue;
         }
 
@@ -254,8 +253,7 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                 }
             }
         } else if (fs::is_directory(p)) {
-            // 明示的に指定されたディレクトリが除外パターン配下の場合は、
-            // ユーザーの意図を優先して設定由来の除外を適用しない
+            // 明示的に指定されたディレクトリが除外パターン配下の場合は、ユーザーの意図を優先して設定由来の除外を適用しない
             std::vector<std::string> effective_dir_excludes = dir_scan_excludes;
             if (matches_exclude_pattern(fs::absolute(p).string() + "/", dir_scan_excludes)) {
                 effective_dir_excludes.clear();
@@ -275,8 +273,7 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
                     }
                     if (entry.is_regular_file() && entry.path().extension() == ".cm") {
                         std::string filepath = entry.path().string();
-                        // .error（意図的に失敗するネガティブテスト）/.skip（環境依存で
-                        // 実行対象外）が並置されたファイルは走査からスキップする
+                        // .error（意図的に失敗するネガティブテスト）/.skip（環境依存で実行対象外）が並置されたファイルは走査からスキップする
                         fs::path base = entry.path();
                         if (fs::exists(base.replace_extension(".error")) ||
                             fs::exists(base.replace_extension(".skip"))) {
@@ -348,7 +345,7 @@ void print_hir(const hir::HirProgram& program) {
                 }
             }
             if (has_loop) {
-                std::cout << "  Note: for/while文がHirLoopに変換されています\n";
+                std::cout << i18n::tr("  Note: for/while statements are converted to HirLoop\n");
             }
         }
     }
@@ -360,6 +357,16 @@ void print_hir(const hir::HirProgram& program) {
 int main(int argc, char* argv[]) {
     using namespace cm;
 
+    // メッセージ言語の初期解決: CM_LANG環境変数（CLIの--lang=が後で上書きする。
+    // .cmconfig.yml の language: はCLI/環境変数が無い場合のみ後段で適用される）
+    bool lang_from_env = false;
+    if (const char* env_lang = std::getenv("CM_LANG")) {
+        lang_from_env = i18n::set_language_from_string(env_lang);
+        if (lang_from_env && std::string(env_lang) == "ja") {
+            debug::set_lang(1);
+        }
+    }
+
     // オプションをパース
     Options opts = parse_options(argc, argv);
 
@@ -367,6 +374,33 @@ int main(int argc, char* argv[]) {
     if (opts.has_error) {
         std::cerr << opts.error_message << "\n";
         return 1;
+    }
+
+    // .cmconfig.yml の設定を適用（優先順位: CLI > 環境変数 > config > デフォルト）
+    {
+        lint::ConfigLoader global_config;
+        if (global_config.find_and_load(".")) {
+            if (!opts.lang_from_cli && !lang_from_env && !global_config.language().empty()) {
+                if (i18n::set_language_from_string(global_config.language())) {
+                    if (global_config.language() == "ja") {
+                        debug::set_lang(1);
+                    }
+                } else {
+                    std::cerr << i18n::tr(
+                                     "warning: invalid language in .cmconfig.yml "
+                                     "(expected en or ja): ")
+                              << global_config.language() << "\n";
+                }
+            }
+            if (!opts.opt_level_from_cli && global_config.compile_optimization() >= 0) {
+                opts.optimization_level = global_config.compile_optimization();
+            }
+            if (!opts.target_from_cli && opts.target.empty() &&
+                !global_config.compile_target().empty() &&
+                global_config.compile_target() != "native") {
+                opts.target = global_config.compile_target();
+            }
+        }
     }
 
     // ターゲットのポインタ幅を設定（HIR/MIRの型サイズ計算が参照する）
@@ -387,7 +421,7 @@ int main(int argc, char* argv[]) {
     // Check/Lintコマンドの複数ファイル処理
     if (opts.command == Command::Check || opts.command == Command::Lint) {
         if (opts.input_files.empty()) {
-            std::cerr << "エラー: 入力ファイルまたはディレクトリが指定されていません\n";
+            std::cerr << i18n::tr("error: no input file or directory specified\n");
             return 1;
         }
 
@@ -395,7 +429,7 @@ int main(int argc, char* argv[]) {
         lint::ConfigLoader config;
         if (config.find_and_load(".")) {
             if (opts.verbose) {
-                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
+                std::cout << i18n::tr("config file: ") << config.config_path() << "\n\n";
             }
         }
 
@@ -404,12 +438,12 @@ int main(int argc, char* argv[]) {
                                          config.excludes());
 
         if (cm_files.empty()) {
-            std::cerr << "エラー: チェック対象の.cmファイルが見つかりません\n";
+            std::cerr << i18n::tr("error: no .cm files found to check\n");
             return 1;
         }
 
         if (opts.verbose) {
-            std::cout << "チェック対象: " << cm_files.size() << " ファイル\n";
+            std::cout << i18n::tr("files to check: ") << cm_files.size() << i18n::tr(" file(s)\n");
             for (const auto& f : cm_files) {
                 std::cout << "  - " << f << "\n";
             }
@@ -443,9 +477,8 @@ int main(int argc, char* argv[]) {
                 auto preprocess_result = import_preprocessor.process(code, file);
 
                 if (!preprocess_result.success) {
-                    std::cerr << file
-                              << ": プリプロセッサエラー: " << preprocess_result.error_message
-                              << "\n";
+                    std::cerr << file << i18n::tr(": preprocessor error: ")
+                              << preprocess_result.error_message << "\n";
                     total_errors++;
                     continue;
                 }
@@ -469,8 +502,7 @@ int main(int argc, char* argv[]) {
                 Parser parser(std::move(tokens), lexer.is_sv());
                 auto program = parser.parse();
 
-                // コンパイルと同様に、テストモード以外では #[test] 宣言を除去する
-                // （#[test] 関数だけが参照するシンボルの誤検出を防ぐ）
+                // コンパイルと同様に、テストモード以外では #[test] 宣言を除去する（#[test] 関数だけが参照するシンボルの誤検出を防ぐ）
                 {
                     Target lint_target = lexer.is_sv() ? Target::SV : Target::Native;
                     ast::TargetFilteringVisitor target_filter(lint_target, opts.test_mode);
@@ -509,8 +541,7 @@ int main(int argc, char* argv[]) {
 
                 for (const auto& diag : checker.diagnostics()) {
                     // ルールIDを抽出 (メッセージ末尾の [W001] や [L100] など)。
-                    // 誤爆防止のため「メッセージ末尾」かつ「英字1-3字+数字2-4桁」の
-                    // 形式に限定する（[0:0] や int[3] 等の型表記はルールIDではない）
+                    // 誤爆防止のため「メッセージ末尾」かつ「英字1-3字+数字2-4桁」の形式に限定する（[0:0] や int[3] 等の型表記はルールIDではない）
                     std::string rule_id;
                     auto bracket_pos = diag.message.rfind('[');
                     auto close_pos = diag.message.rfind(']');
@@ -605,9 +636,11 @@ int main(int argc, char* argv[]) {
                                     if (std::isalnum(prev) || prev == '_')
                                         continue;
                                 }
-                                std::cerr << file << ":" << line_num
-                                          << ": warning: ベアメタル環境では '" << func
-                                          << "' は使用できません [B001]\n";
+                                std::cerr << file << ":" << line_num << i18n::tr(": warning: '")
+                                          << func
+                                          << i18n::tr(
+                                                 "' is not available in bare-metal environments "
+                                                 "[B001]\n");
                                 total_warnings++;
                             }
                         }
@@ -617,15 +650,16 @@ int main(int argc, char* argv[]) {
                 files_checked++;
 
             } catch (const std::exception& e) {
-                std::cerr << file << ": 例外: " << e.what() << "\n";
+                std::cerr << file << i18n::tr(": exception: ") << e.what() << "\n";
                 total_errors++;
             }
         }
 
         // サマリー表示
-        std::cout << "\n=== チェック完了 ===\n";
-        std::cout << "ファイル数: " << files_checked << "/" << cm_files.size() << "\n";
-        std::cout << "エラー: " << total_errors << ", 警告: " << total_warnings << "\n";
+        std::cout << i18n::tr("\n=== Check complete ===\n");
+        std::cout << i18n::tr("files: ") << files_checked << "/" << cm_files.size() << "\n";
+        std::cout << i18n::tr("errors: ") << total_errors << i18n::tr(", warnings: ")
+                  << total_warnings << "\n";
 
         return (total_errors > 0) ? 1 : 0;
     }
@@ -633,7 +667,7 @@ int main(int argc, char* argv[]) {
     // Fmtコマンドの複数ファイル処理
     if (opts.command == Command::Fmt) {
         if (opts.input_files.empty()) {
-            std::cerr << "エラー: 入力ファイルまたはディレクトリが指定されていません\n";
+            std::cerr << i18n::tr("error: no input file or directory specified\n");
             return 1;
         }
 
@@ -642,7 +676,7 @@ int main(int argc, char* argv[]) {
         lint::ConfigLoader config;
         if (config.find_and_load(".")) {
             if (opts.verbose) {
-                std::cout << "設定ファイル: " << config.config_path() << "\n\n";
+                std::cout << i18n::tr("config file: ") << config.config_path() << "\n\n";
             }
         }
 
@@ -651,12 +685,12 @@ int main(int argc, char* argv[]) {
                                          config.excludes());
 
         if (cm_files.empty()) {
-            std::cerr << "エラー: フォーマット対象の.cmファイルが見つかりません\n";
+            std::cerr << i18n::tr("error: no .cm files found to format\n");
             return 1;
         }
 
         if (opts.verbose) {
-            std::cout << "フォーマット対象: " << cm_files.size() << " ファイル\n";
+            std::cout << i18n::tr("formatting: ") << cm_files.size() << i18n::tr(" file(s)\n");
         }
 
         // 各ファイルをフォーマット
@@ -682,7 +716,8 @@ int main(int argc, char* argv[]) {
                 if (result.modified) {
                     if (opts.fmt_check) {
                         // --check: 書き込まず要整形ファイルとして報告
-                        std::cout << file << ": 要整形（" << result.changes_applied << " 箇所）\n";
+                        std::cout << file << i18n::tr(": needs formatting (")
+                                  << result.changes_applied << i18n::tr(" place(s))\n");
                         files_modified++;
                         total_changes += result.changes_applied;
                     } else {
@@ -695,17 +730,17 @@ int main(int argc, char* argv[]) {
 
                             if (opts.verbose) {
                                 std::cout << file << ": " << result.changes_applied
-                                          << " 箇所の整形\n";
+                                          << i18n::tr(" place(s) formatted\n");
                             }
                         } else {
-                            std::cerr << "エラー: ファイルに書き込めません: " << file << "\n";
+                            std::cerr << i18n::tr("error: cannot write file: ") << file << "\n";
                             files_failed++;
                         }
                     }
                 }
 
             } catch (const std::exception& e) {
-                std::cerr << "エラー: " << file << ": " << e.what() << "\n";
+                std::cerr << i18n::tr("error: ") << file << ": " << e.what() << "\n";
                 files_failed++;
             }
         }
@@ -713,17 +748,17 @@ int main(int argc, char* argv[]) {
         // サマリー表示（quietモードでは抑制）
         if (!opts.quiet) {
             if (opts.fmt_check) {
-                std::cout << "\n=== フォーマットチェック完了 ===\n";
-                std::cout << "要整形: " << files_modified << "/" << cm_files.size()
-                          << " ファイル\n";
+                std::cout << i18n::tr("\n=== Format check complete ===\n");
+                std::cout << i18n::tr("needs formatting: ") << files_modified << "/"
+                          << cm_files.size() << i18n::tr(" file(s)\n");
             } else {
-                std::cout << "\n=== フォーマット完了 ===\n";
-                std::cout << "ファイル数: " << files_modified << "/" << cm_files.size()
-                          << " 修正\n";
-                std::cout << "整形箇所: " << total_changes << " 箇所\n";
+                std::cout << i18n::tr("\n=== Format complete ===\n");
+                std::cout << i18n::tr("files: ") << files_modified << "/" << cm_files.size()
+                          << i18n::tr(" fixed\n");
+                std::cout << i18n::tr("formatted: ") << total_changes << i18n::tr(" place(s)\n");
             }
             if (files_failed > 0) {
-                std::cout << "失敗: " << files_failed << " ファイル\n";
+                std::cout << i18n::tr("failed: ") << files_failed << i18n::tr(" file(s)\n");
             }
         }
 
@@ -742,18 +777,18 @@ int main(int argc, char* argv[]) {
 
         if (opts.cache_subcommand == "clear") {
             if (cache_mgr.clear()) {
-                std::cout << "✓ キャッシュを削除しました: " << opts.cache_dir << "\n";
+                std::cout << i18n::tr("✓ cache cleared: ") << opts.cache_dir << "\n";
             } else {
-                std::cout << "キャッシュが存在しません: " << opts.cache_dir << "\n";
+                std::cout << i18n::tr("cache does not exist: ") << opts.cache_dir << "\n";
             }
             return 0;
         } else if (opts.cache_subcommand == "stats") {
             auto stats = cache_mgr.get_stats();
             auto entries = cache_mgr.get_all_entries();
-            std::cout << "=== キャッシュ統計 ===\n";
-            std::cout << "ディレクトリ: " << opts.cache_dir << "\n";
-            std::cout << "エントリ数: " << stats.total_entries << "\n";
-            std::cout << "合計サイズ: " << (stats.total_size_bytes / 1024) << " KB\n";
+            std::cout << i18n::tr("=== Cache statistics ===\n");
+            std::cout << i18n::tr("directory: ") << opts.cache_dir << "\n";
+            std::cout << i18n::tr("entries: ") << stats.total_entries << "\n";
+            std::cout << i18n::tr("total size: ") << (stats.total_size_bytes / 1024) << " KB\n";
             if (!entries.empty()) {
                 // 最古・最新のエントリを表示
                 std::string oldest = entries.begin()->second.created_at;
@@ -767,14 +802,14 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (!oldest.empty()) {
-                    std::cout << "最古:     " << oldest << "\n";
-                    std::cout << "最新:     " << newest << "\n";
+                    std::cout << i18n::tr("oldest:   ") << oldest << "\n";
+                    std::cout << i18n::tr("newest:   ") << newest << "\n";
                 }
             }
             return 0;
         } else {
-            std::cerr << "不明なcacheサブコマンド: " << opts.cache_subcommand << "\n";
-            std::cerr << "使用法: cm cache clear | cm cache stats\n";
+            std::cerr << i18n::tr("unknown cache subcommand: ") << opts.cache_subcommand << "\n";
+            std::cerr << i18n::tr("usage: cm cache clear | cm cache stats\n");
             return 1;
         }
     }
@@ -782,10 +817,10 @@ int main(int argc, char* argv[]) {
     // run/compileコマンドは単一ファイル
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (argc == 1) {
-            std::cerr << "エラー: コマンドが指定されていません\n";
-            std::cerr << "'cm help' でヘルプを表示\n";
+            std::cerr << i18n::tr("error: no command specified\n");
+            std::cerr << i18n::tr("run 'cm help' for usage\n");
         } else {
-            std::cerr << "エラー: 入力ファイルが指定されていません\n";
+            std::cerr << i18n::tr("error: no input file specified\n");
         }
         return 1;
     }
@@ -828,9 +863,9 @@ int main(int argc, char* argv[]) {
             // JITフロー: Runと同じ経路で #[test] 関数を実行
             if (!match_platform_directive(directive, "native") &&
                 !match_platform_directive(directive, "jit")) {
-                std::cerr << "エラー: platform '" << directive
-                          << "' のテスト実行は未対応です（sv または native/JIT のみ）\n";
-                std::cerr << "  ファイル: " << opts.input_file << "\n";
+                std::cerr << i18n::tr("error: test execution for platform '") << directive
+                          << i18n::tr("' is not supported (only sv or native/JIT)\n");
+                std::cerr << i18n::tr("  file: ") << opts.input_file << "\n";
                 return 1;
             }
             opts.command = Command::Run;
@@ -850,18 +885,18 @@ int main(int argc, char* argv[]) {
             }
 
             if (!match_platform_directive(directive, current)) {
-                std::cerr << "警告: このファイルはプラットフォーム '" << directive
-                          << "' 向けです（現在: " << current << "）\n";
-                std::cerr << "  ファイル: " << opts.input_file << "\n";
-                std::cerr << "ヒント: --target=" << directive
-                          << " オプションで対象プラットフォームを指定してください\n\n";
+                std::cerr << i18n::tr("warning: this file targets platform '") << directive
+                          << i18n::tr("' (current: ") << current << "）\n";
+                std::cerr << i18n::tr("  file: ") << opts.input_file << "\n";
+                std::cerr << i18n::tr("hint: use --target=") << directive
+                          << i18n::tr(" to specify the target platform\n\n");
                 return 1;
             }
         }
     }
 
-    // ========== SVモジュール階層の保持（//! sv: hierarchy）==========
-    // 相対importをextern struct宣言に置換し、import先を後段で個別コンパイルする
+    // ========== SVモジュール階層の保持（exportされたIO構造体を持つ相対import）==========
+    // 対象importをextern struct宣言に置換し、import先を後段で個別コンパイルする
     std::vector<std::string> sv_hierarchy_submodules;
     {
         bool is_sv_early =
@@ -869,15 +904,15 @@ int main(int argc, char* argv[]) {
         if (is_sv_early) {
             auto hres = codegen::sv::process_sv_hierarchy(code, opts.input_file);
             if (!hres.error.empty()) {
-                std::cerr << "sv階層化エラー: " << hres.error << "\n";
+                std::cerr << i18n::tr("SV hierarchy error: ") << hres.error << "\n";
                 return 1;
             }
             if (hres.enabled) {
                 code = hres.transformed_source;
                 sv_hierarchy_submodules = hres.submodule_files;
                 if (opts.verbose && !sv_hierarchy_submodules.empty()) {
-                    std::cout << "sv階層化: " << sv_hierarchy_submodules.size()
-                              << " 個のサブモジュールを検出\n";
+                    std::cout << i18n::tr("SV hierarchy: ") << sv_hierarchy_submodules.size()
+                              << i18n::tr(" submodule(s) detected\n");
                 }
             }
         }
@@ -886,13 +921,13 @@ int main(int argc, char* argv[]) {
     if (opts.verbose) {
         switch (opts.command) {
             case Command::Run:
-                std::cout << "実行中: " << opts.input_file << "\n\n";
+                std::cout << i18n::tr("running: ") << opts.input_file << "\n\n";
                 break;
             case Command::Compile:
-                std::cout << "コンパイル中: " << opts.input_file << "\n\n";
+                std::cout << i18n::tr("compiling: ") << opts.input_file << "\n\n";
                 break;
             case Command::Check:
-                std::cout << "チェック中: " << opts.input_file << "\n\n";
+                std::cout << i18n::tr("checking: ") << opts.input_file << "\n\n";
                 break;
             default:
                 break;
@@ -935,13 +970,14 @@ int main(int argc, char* argv[]) {
                     std::filesystem::copy_file(cached_obj, output,
                                                std::filesystem::copy_options::overwrite_existing);
                     if (opts.verbose || !opts.quiet) {
-                        std::cout << "✓ キャッシュヒット: " << output << "\n";
+                        std::cout << i18n::tr("✓ cache hit: ") << output << "\n";
                     }
                     return 0;
                 } catch (const std::exception& e) {
                     // 高速パス失敗 → 通常パスにフォールバック
                     if (opts.verbose) {
-                        std::cout << "高速キャッシュ復元失敗: " << e.what() << " → 通常パス\n";
+                        std::cout << i18n::tr("fast cache restore failed: ") << e.what()
+                                  << i18n::tr(" -> falling back to normal path\n");
                     }
                 }
             }
@@ -958,7 +994,8 @@ int main(int argc, char* argv[]) {
                                        .count();
 
         if (!preprocess_result.success) {
-            std::cerr << "プリプロセッサエラー: " << preprocess_result.error_message << "\n";
+            std::cerr << i18n::tr("preprocessor error: ") << preprocess_result.error_message
+                      << "\n";
             return 1;
         }
 
@@ -1018,7 +1055,7 @@ int main(int argc, char* argv[]) {
                             auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               hit_end - compile_start)
                                               .count();
-                            std::cout << "✓ キャッシュヒット: " << output << " (" << hit_ms
+                            std::cout << i18n::tr("✓ cache hit: ") << output << " (" << hit_ms
                                       << "ms)\n";
                         }
                         // 高速キャッシュ判定用の情報を更新（次回は高速パスが使えるように）
@@ -1028,7 +1065,8 @@ int main(int argc, char* argv[]) {
                         return 0;
                     } catch (const std::exception& e) {
                         if (opts.verbose) {
-                            std::cout << "キャッシュ復元失敗: " << e.what() << " → 再コンパイル\n";
+                            std::cout << i18n::tr("cache restore failed: ") << e.what()
+                                      << i18n::tr(" -> recompiling\n");
                         }
                     }
                 } else {
@@ -1059,12 +1097,13 @@ int main(int argc, char* argv[]) {
                         }
                     }
                     if (opts.verbose) {
-                        std::cout << "キャッシュミス: フルコンパイルを実行\n";
+                        std::cout << i18n::tr("cache miss: performing full compilation\n");
                         // 変更ファイルを表示
                         auto changed = cache_mgr.detect_changed_files(
                             preprocess_result.resolved_files, target_key, opts.optimization_level);
                         if (!changed.empty()) {
-                            std::cout << "変更検出 (" << changed.size() << "ファイル):\n";
+                            std::cout << i18n::tr("changes detected (") << changed.size()
+                                      << i18n::tr(" file(s)):\n");
                             for (const auto& f : changed) {
                                 auto name = std::filesystem::path(f).filename().string();
                                 std::cout << "  → " << name << "\n";
@@ -1076,7 +1115,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (opts.debug && !preprocess_result.imported_modules.empty()) {
-            std::cout << "インポートされたモジュール:\n";
+            std::cout << i18n::tr("imported modules:\n");
             for (const auto& module : preprocess_result.imported_modules) {
                 std::cout << "  - " << module << "\n";
             }
@@ -1094,8 +1133,7 @@ int main(int argc, char* argv[]) {
         for (const auto& def : opts.defines) {
             conditional.define(def);
         }
-        // テストモード（cm test / --test）: TEST を自動定義
-        // （#[test] と連動するテスト補助コードを #ifdef TEST で書けるようにする）
+        // テストモード（cm test / --test）: TEST を自動定義（#[test] と連動するテスト補助コードを #ifdef TEST で書けるようにする）
         if (opts.test_mode) {
             conditional.define("TEST");
         }
@@ -1112,7 +1150,7 @@ int main(int argc, char* argv[]) {
         }
         code = conditional.process(code);
         if (opts.debug) {
-            std::cout << "定義済みシンボル: ";
+            std::cout << i18n::tr("defined symbols: ");
             for (const auto& def : conditional.definitions()) {
                 std::cout << def << " ";
             }
@@ -1139,7 +1177,7 @@ int main(int argc, char* argv[]) {
         auto tokens = lexer.tokenize();
 
         if (opts.debug)
-            std::cout << "トークン数: " << tokens.size() << "\n\n";
+            std::cout << i18n::tr("tokens: ") << tokens.size() << "\n\n";
 
         // ========== Parser ==========
         if (opts.debug)
@@ -1148,24 +1186,25 @@ int main(int argc, char* argv[]) {
         auto program = parser.parse();
 
         if (parser.has_errors()) {
-            std::cerr << "構文エラーが発生しました\n";
+            std::cerr << i18n::tr("syntax errors occurred\n");
             // ソース位置管理を作成
             SourceLocationManager loc_mgr(code, opts.input_file);
 
             // 診断情報を表示
             for (const auto& diag : parser.diagnostics()) {
                 // エラーメッセージをフォーマットして表示
-                std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
+                std::string error_type =
+                    (diag.severity == DiagKind::Error ? i18n::tr("error(s)")
+                                                      : i18n::tr("warning(s)"));
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
             return 1;  // エラー時は1で終了
         }
         if (opts.debug)
-            std::cout << "宣言数: " << program.declarations.size() << "\n\n";
+            std::cout << i18n::tr("declarations: ") << program.declarations.size() << "\n\n";
 
-        // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得
-        // （lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
+        // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得（lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
         const std::string sv_top_module = codegen::sv::extract_top_module_name(program);
 
         // ========== Target Filtering ==========
@@ -1259,7 +1298,9 @@ int main(int argc, char* argv[]) {
                         diag.span, diag.message, preprocess_result.source_map, file_contents,
                         diag.severity == DiagKind::Error ? "error" : "warning");
                 } else {
-                    std::string error_type = (diag.severity == DiagKind::Error ? "エラー" : "警告");
+                    std::string error_type =
+                        (diag.severity == DiagKind::Error ? i18n::tr("error(s)")
+                                                          : i18n::tr("warning(s)"));
                     std::cerr << loc_mgr.format_error_location(diag.span,
                                                                error_type + ": " + diag.message);
                 }
@@ -1271,12 +1312,12 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (opts.debug)
-            std::cout << "型チェック: OK\n\n";
+            std::cout << i18n::tr("type check: OK\n\n");
 
         // チェックコマンドの場合はここで終了
         if (opts.command == Command::Check) {
             if (opts.verbose) {
-                std::cout << "✓ 構文と型チェックが成功しました\n";
+                std::cout << i18n::tr("✓ syntax and type check passed\n");
             }
             return 0;
         }
@@ -1297,7 +1338,7 @@ int main(int argc, char* argv[]) {
             runner.print(source);
 
             if (opts.verbose) {
-                std::cout << "✓ Lint完了\n";
+                std::cout << i18n::tr("✓ lint complete\n");
             }
 
             return (result.error_count > 0) ? 1 : 0;
@@ -1323,7 +1364,7 @@ int main(int argc, char* argv[]) {
                 }
             } else {
                 if (opts.verbose) {
-                    std::cout << "✓ 整形不要\n";
+                    std::cout << i18n::tr("✓ no formatting needed\n");
                 }
             }
 
@@ -1340,7 +1381,7 @@ int main(int argc, char* argv[]) {
                                 std::chrono::steady_clock::now() - phase_hir_start)
                                 .count();
         if (opts.debug)
-            std::cout << "HIR宣言数: " << hir.declarations.size() << "\n\n";
+            std::cout << i18n::tr("HIR declarations: ") << hir.declarations.size() << "\n\n";
 
         // HIRを表示
         if (opts.show_hir) {
@@ -1364,11 +1405,12 @@ int main(int argc, char* argv[]) {
                                 .count();
 
         if (opts.debug)
-            std::cout << "MIR関数数: " << mir.functions.size() << "\n\n" << std::flush;
+            std::cout << i18n::tr("MIR functions: ") << mir.functions.size() << "\n\n"
+                      << std::flush;
 
         // MIRを表示（最適化前）
         if (opts.show_mir && !opts.show_mir_opt) {
-            std::cout << "=== MIR (最適化前) ===\n";
+            std::cout << i18n::tr("=== MIR (before optimization) ===\n");
             mir::MirPrinter printer;
             printer.print(mir, std::cout);
         }
@@ -1399,16 +1441,14 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[OPT] Optimization complete" << std::endl;
 
             if (opts.debug)
-                std::cout << "最適化完了\n\n";
+                std::cout << i18n::tr("optimization complete\n\n");
         }
 
-        // SVターゲット: 定数トリップカウントのループを静的展開する
-        // （generate/genvar相当。合成ツールは動的whileを展開できないため）
+        // SVターゲット: 定数トリップカウントのループを静的展開する（generate/genvar相当。合成ツールは動的whileを展開できないため）
         if (is_sv) {
             mir::opt::unroll_constant_loops(mir);
             // 合成前の定数畳み込み・恒等式簡約（2*3+4→10、x*1→x 等）。
-            // 文数・CFG形状を変えない書き換えのみで、DCE/CopyProp等の
-            // 文除去系パスはHWロジックを消すため引き続き実行しない
+            // 文数・CFG形状を変えない書き換えのみで、DCE/CopyProp等の文除去系パスはHWロジックを消すため引き続き実行しない
             if (opts.optimization_level > 0) {
                 mir::opt::ConstantFolding sv_folding(/*fold_terminators=*/false);
                 sv_folding.run_on_program(mir);
@@ -1431,8 +1471,7 @@ int main(int argc, char* argv[]) {
 
         // プログラムレベルのデッドコード削除
         // 未使用の自動生成関数を削除する
-        // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、
-        // DCEはコンパイル時のみ実行する
+        // 注意: インタプリタではインターフェースメソッドの動的ディスパッチがあるため、DCEはコンパイル時のみ実行する
         // SVターゲットでは全関数をハードウェアモジュールとして保持
         if (opts.command == Command::Compile && !is_sv) {
             mir::opt::ProgramDeadCodeElimination program_dce;
@@ -1441,7 +1480,7 @@ int main(int argc, char* argv[]) {
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {
-            std::cout << "=== MIR (最適化後) ===" << std::endl;
+            std::cout << i18n::tr("=== MIR (after optimization) ===") << std::endl;
             mir::MirPrinter printer;
             printer.print(mir, std::cout);
             return 0;
@@ -1481,17 +1520,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (has_async || has_await) {
-                    std::cerr << "エラー: async/awaitはJSターゲット専用の機能です" << std::endl;
+                    std::cerr << i18n::tr("error: async/await is only supported on the JS target")
+                              << std::endl;
                     if (has_async) {
-                        std::cerr << "  async関数が検出されました: " << async_func_name
+                        std::cerr << i18n::tr("  async function detected: ") << async_func_name
                                   << std::endl;
                     }
                     if (has_await) {
-                        std::cerr << "  await式が検出されました（関数: " << await_func_name << "）"
-                                  << std::endl;
+                        std::cerr << i18n::tr("  await expression detected (function: ")
+                                  << await_func_name << "）" << std::endl;
                     }
-                    std::cerr << "ヒント: --target=js オプションでJSターゲットを指定して"
-                                 "ください"
+                    std::cerr << i18n::tr("hint: specify the JS target with --target=js")
                               << std::endl;
                     return 1;
                 }
@@ -1501,8 +1540,7 @@ int main(int argc, char* argv[]) {
         // ========== Backend ==========
         if (opts.command == Command::Run) {
             // ========== --target指定時のディスパッチ ==========
-            // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で
-            // 実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
+            // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
             if (opts.target == "js" || opts.target == "web") {
                 // JS生成 → Node.jsで実行
                 cm::codegen::js::JSCodeGenOptions js_opts;
@@ -1516,13 +1554,14 @@ int main(int argc, char* argv[]) {
                     cm::codegen::js::JSCodeGen codegen(js_opts);
                     codegen.compile(mir);
                 } catch (const std::exception& e) {
-                    std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
+                    std::cerr << i18n::tr("JavaScript code generation error: ") << e.what() << "\n";
                     return 1;
                 }
                 if (std::system("command -v node > /dev/null 2>&1") != 0) {
-                    std::cerr << "エラー: node が見つかりません（--target=js の実行に必要です）\n";
-                    std::cerr << "ヒント: cm compile --target=js で生成した .js を任意の"
-                                 "JS実行系で実行してください\n";
+                    std::cerr << i18n::tr("error: node not found (required to run --target=js)\n");
+                    std::cerr << i18n::tr(
+                        "hint: generate .js with \'cm compile --target=js\' and run it with any JS "
+                        "runtime\n");
                     return 1;
                 }
                 std::string cmd = "node " + js_opts.outputFile;
@@ -1534,15 +1573,17 @@ int main(int argc, char* argv[]) {
 #endif
             }
             if (opts.target == "wasm") {
-                std::cerr << "エラー: cm run は --target=wasm の直接実行に未対応です\n";
-                std::cerr << "ヒント: cm compile --emit-llvm --target=wasm -o out.wasm の後、"
-                             "wasmtime out.wasm 等で実行してください\n";
+                std::cerr << i18n::tr(
+                    "error: cm run does not support direct execution of --target=wasm\n");
+                std::cerr << i18n::tr(
+                    "hint: run \'cm compile --emit-llvm --target=wasm -o out.wasm\' and execute it "
+                    "with wasmtime out.wasm etc.\n");
                 return 1;
             }
             if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
-                std::cerr << "エラー: cm run は --target=sv の直接実行に未対応です\n";
-                std::cerr << "ヒント: シミュレーション実行は cm test（//! platform: sv）を"
-                             "使用してください\n";
+                std::cerr << i18n::tr(
+                    "error: cm run does not support direct execution of --target=sv\n");
+                std::cerr << i18n::tr("hint: use \'cm test\' (//! platform: sv) for simulation\n");
                 return 1;
             }
 
@@ -1564,7 +1605,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (test_fns.empty()) {
-                    std::cerr << "エラー: #[test] 関数が見つかりません: " << opts.input_file
+                    std::cerr << i18n::tr("error: no #[test] functions found: ") << opts.input_file
                               << "\n";
                     return 1;
                 }
@@ -1579,11 +1620,13 @@ int main(int argc, char* argv[]) {
                             std::get<mir::MirTerminator::CallData>(block->terminator->data);
                         if (data.func && data.func->kind == mir::MirOperand::FunctionRef &&
                             std::get<std::string>(data.func->data) == "step") {
-                            std::cerr << "エラー: step() は //! platform: sv のテストでのみ"
-                                         "使用できます（テスト関数: "
+                            std::cerr << i18n::tr(
+                                             "error: step() is only available in //! platform: sv "
+                                             "tests (test function: ")
                                       << fn->name << "）\n";
-                            std::cerr << "ヒント: クロック駆動のテストはファイル先頭に "
-                                         "//! platform: sv を指定してください\n";
+                            std::cerr << i18n::tr(
+                                "hint: clock-driven tests require //! platform: sv at the top of "
+                                "the file\n");
                             return 1;
                         }
                     }
@@ -1593,13 +1636,13 @@ int main(int argc, char* argv[]) {
                     cm::codegen::jit::JITEngine jit;
                     auto result = jit.execute(mir, fn->name, opts.optimization_level);
                     if (!result.success) {
-                        std::cerr << "JIT実行エラー (" << fn->name << "): " << result.errorMessage
-                                  << "\n";
+                        std::cerr << i18n::tr("JIT execution error (") << fn->name
+                                  << "): " << result.errorMessage << "\n";
                         return 1;
                     }
                     std::cout << "[PASS] " << fn->name << "\n";
                 }
-                std::cout << "✓ " << test_fns.size() << " 件のテストが成功\n";
+                std::cout << "✓ " << test_fns.size() << i18n::tr(" test(s) passed\n");
                 return 0;
             }
 
@@ -1615,7 +1658,7 @@ int main(int argc, char* argv[]) {
                             auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               hit_end - compile_start)
                                               .count();
-                            std::cout << "✓ JITキャッシュヒット (" << hit_ms << "ms)\n";
+                            std::cout << i18n::tr("✓ JIT cache hit (") << hit_ms << "ms)\n";
                         }
                         // キャッシュされたバイナリを直接実行
                         std::string cmd = cached_exec.string();
@@ -1644,22 +1687,23 @@ int main(int argc, char* argv[]) {
             auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {
-                std::cerr << "JIT実行エラー: " << result.errorMessage << std::endl;
+                std::cerr << i18n::tr("JIT execution error: ") << result.errorMessage << std::endl;
                 return 1;
             }
 
-            // 注意: JIT実行後のキャッシュ保存（codegen.compile）は、
-            // LLVM globalの再初期化問題とstdout汚染のため実装しない。
+            // 注意: JIT実行後のキャッシュ保存（codegen.compile）は、LLVM globalの再初期化問題とstdout汚染のため実装しない。
             // JITキャッシュは「cm compile」で生成されたキャッシュの再利用のみサポート。
 
             if (opts.verbose) {
-                std::cout << "プログラム終了コード: " << result.exitCode << std::endl;
-                std::cout << "✓ JIT実行完了" << std::endl;
+                std::cout << i18n::tr("program exit code: ") << result.exitCode << std::endl;
+                std::cout << i18n::tr("✓ JIT execution complete") << std::endl;
             }
 
             return result.exitCode;
 #else
-            std::cerr << "エラー: JITコンパイラが無効です。LLVM対応ビルドが必要です。" << std::endl;
+            std::cerr << i18n::tr(
+                             "error: JIT compiler is disabled; an LLVM-enabled build is required")
+                      << std::endl;
             return 1;
 #endif
         }
@@ -1712,12 +1756,13 @@ int main(int argc, char* argv[]) {
                                 argv[0], opts.input_file, sv_hierarchy_submodules,
                                 sv_opts.outputFile, opts.optimization_level, opts.emit_memfile,
                                 hier_error)) {
-                            std::cerr << "sv階層化エラー: " << hier_error << "\n";
+                            std::cerr << i18n::tr("SV hierarchy error: ") << hier_error << "\n";
                             return 1;
                         }
                         if (!opts.quiet) {
-                            std::cout << "✓ サブモジュール " << sv_hierarchy_submodules.size()
-                                      << " 個を連結\n";
+                            std::cout << i18n::tr("✓ concatenated ")
+                                      << sv_hierarchy_submodules.size()
+                                      << i18n::tr(" submodule(s)\n");
                         }
                     }
 
@@ -1726,8 +1771,8 @@ int main(int argc, char* argv[]) {
                         auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               compile_end - compile_start)
                                               .count();
-                        std::cout << "✓ SystemVerilog 生成完了: " << sv_opts.outputFile << " ("
-                                  << compile_ms << "ms)\n";
+                        std::cout << i18n::tr("✓ SystemVerilog generation complete: ")
+                                  << sv_opts.outputFile << " (" << compile_ms << "ms)\n";
                     }
 
                     // cm test (SVフロー): 生成物をiverilog+vvpでシミュレーション実行
@@ -1735,7 +1780,8 @@ int main(int argc, char* argv[]) {
                         return run_sv_test_simulation(sv_opts.outputFile, opts.quiet);
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "SystemVerilog コード生成エラー: " << e.what() << "\n";
+                    std::cerr << i18n::tr("SystemVerilog code generation error: ") << e.what()
+                              << "\n";
                     return 1;
                 }
             }
@@ -1764,7 +1810,8 @@ int main(int argc, char* argv[]) {
                     codegen.compile(mir);
 
                     if (opts.verbose) {
-                        std::cout << "✓ JavaScript コード生成完了: " << js_opts.outputFile << "\n";
+                        std::cout << i18n::tr("✓ JavaScript code generation complete: ")
+                                  << js_opts.outputFile << "\n";
                     }
 
                     // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
@@ -1794,7 +1841,8 @@ int main(int argc, char* argv[]) {
 
                         if (cache_mgr.store(cache_fingerprint, js_opts.outputFile, entry)) {
                             if (opts.verbose) {
-                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                                std::cout << i18n::tr("✓ cache saved: ") << entry.object_file
+                                          << "\n";
                             }
                             // 高速キャッシュ判定用の情報を保存
                             std::string target_key = opts.target.empty() ? "native" : opts.target;
@@ -1808,7 +1856,7 @@ int main(int argc, char* argv[]) {
                     // --runオプションがある場合は実行（Node.js）
                     if (opts.run_after_emit && opts.target != "web") {
                         if (opts.verbose) {
-                            std::cout << "実行中: node " << js_opts.outputFile << "\n";
+                            std::cout << i18n::tr("running: node ") << js_opts.outputFile << "\n";
                         }
                         std::string cmd = "node " + js_opts.outputFile;
                         int exec_result = std::system(cmd.c_str());
@@ -1819,7 +1867,7 @@ int main(int argc, char* argv[]) {
 #endif
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "JavaScript コード生成エラー: " << e.what() << "\n";
+                    std::cerr << i18n::tr("JavaScript code generation error: ") << e.what() << "\n";
                     return 1;
                 }
             } else {
@@ -1850,9 +1898,10 @@ int main(int argc, char* argv[]) {
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
                 } else if (!opts.target.empty() && opts.target != "native") {
-                    std::cerr << "エラー: 不明なターゲット '" << opts.target << "'\n";
-                    std::cerr << "有効なターゲット: native, wasm, js, web, bm, bm-x86, "
-                                 "baremetal-arm, baremetal-x86, uefi\n";
+                    std::cerr << i18n::tr("error: unknown target '") << opts.target << "'\n";
+                    std::cerr << i18n::tr(
+                        "valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, "
+                        "baremetal-x86, uefi\n");
                     return 1;
                 } else {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
@@ -1914,8 +1963,7 @@ int main(int argc, char* argv[]) {
                     }
 
                     // モジュール分割情報を事前計算
-                    // 注意: 現在モジュール分割コンパイルは無効化されている
-                    // （フロントエンドが毎回全実行されるため、効果が限定的）
+                    // 注意: 現在モジュール分割コンパイルは無効化されている（フロントエンドが毎回全実行されるため、効果が限定的）
                     // 将来 --split-modules オプションで有効化可能
                     cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info_pre;
 
@@ -1935,9 +1983,10 @@ int main(int argc, char* argv[]) {
                         // === モジュール別差分コンパイル ===
                         // 現在無効化中 - フロントエンド差分化後に再有効化予定
                         if (opts.verbose) {
-                            std::cout << "⚡ モジュール別差分コンパイル: " << changed_modules.size()
-                                      << "/" << module_info_pre.module_names.size()
-                                      << " モジュール再コンパイル\n";
+                            std::cout << i18n::tr("⚡ per-module incremental compilation: ")
+                                      << changed_modules.size() << "/"
+                                      << module_info_pre.module_names.size()
+                                      << i18n::tr(" module(s) recompiled\n");
                         }
 
                         // キャッシュ済みオブジェクトのマップ
@@ -1991,8 +2040,8 @@ int main(int argc, char* argv[]) {
                                 if (mo.from_cache)
                                     cached_count++;
                             }
-                            std::cout << "  キャッシュヒット: " << cached_count << "/"
-                                      << module_objects.size() << " モジュール\n";
+                            std::cout << i18n::tr("  cache hits: ") << cached_count << "/"
+                                      << module_objects.size() << i18n::tr(" module(s)\n");
                         }
                     } else {
                         // === 従来の全体コンパイル ===
@@ -2007,7 +2056,7 @@ int main(int argc, char* argv[]) {
 
                     // --lir-opt: 最適化後のLLVM IRを表示
                     if (opts.show_lir_opt) {
-                        std::cout << "=== LLVM IR (最適化後) ===\n";
+                        std::cout << i18n::tr("=== LLVM IR (after optimization) ===\n");
                         std::cout << codegen.getIRString();
                         std::cout << "========================\n";
                         return 0;
@@ -2018,36 +2067,39 @@ int main(int argc, char* argv[]) {
                         auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               compile_end - compile_start)
                                               .count();
-                        std::cout << "✓ コンパイル完了: " << llvm_opts.outputFile << " ("
-                                  << compile_ms << "ms)\n";
+                        std::cout << i18n::tr("✓ compilation complete: ") << llvm_opts.outputFile
+                                  << " (" << compile_ms << "ms)\n";
                         if (opts.verbose) {
                             auto frontend_ms = phase_preprocess_ms + phase_parse_ms +
                                                phase_typecheck_ms + phase_hir_ms + phase_mir_ms +
                                                phase_opt_ms;
-                            std::cout << "  プリプロセス: " << phase_preprocess_ms << "ms\n";
-                            std::cout
-                                << "  パース+型チェック: " << phase_parse_ms + phase_typecheck_ms
-                                << "ms\n";
-                            std::cout << "  HIR+MIR変換: " << phase_hir_ms + phase_mir_ms << "ms\n";
-                            std::cout << "  MIR最適化: " << phase_opt_ms << "ms\n";
+                            std::cout << i18n::tr("  preprocess: ") << phase_preprocess_ms
+                                      << "ms\n";
+                            std::cout << i18n::tr("  parse + type check: ")
+                                      << phase_parse_ms + phase_typecheck_ms << "ms\n";
+                            std::cout << i18n::tr("  HIR + MIR lowering: ")
+                                      << phase_hir_ms + phase_mir_ms << "ms\n";
+                            std::cout << i18n::tr("  MIR optimization: ") << phase_opt_ms << "ms\n";
                             std::cout << "  LLVM codegen: " << phase_llvm_ms << "ms\n";
-                            std::cout << "  フロントエンド合計: " << frontend_ms << "ms ("
+                            std::cout << i18n::tr("  frontend total: ") << frontend_ms << "ms ("
                                       << (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0)
                                       << "%)\n";
 
                             // モジュール分割情報を表示
                             if (!module_info.module_names.empty()) {
-                                std::cout << "  モジュール: " << module_info.module_names.size()
-                                          << " 検出";
+                                std::cout << i18n::tr("  modules: ")
+                                          << module_info.module_names.size()
+                                          << i18n::tr(" detected");
                                 if (!module_info.changed_modules.empty() &&
                                     module_info.changed_modules.size() <
                                         module_info.module_names.size()) {
                                     std::cout << " (" << module_info.changed_modules.size()
-                                              << " 変更)";
+                                              << i18n::tr(" changed)");
                                 }
                                 std::cout << "\n";
                                 for (const auto& [name, count] : module_info.module_func_count) {
-                                    std::cout << "    " << name << ": " << count << " 関数\n";
+                                    std::cout << "    " << name << ": " << count
+                                              << i18n::tr(" function(s)\n");
                                 }
                             }
                         }
@@ -2082,7 +2134,8 @@ int main(int argc, char* argv[]) {
 
                         if (cache_mgr.store(cache_fingerprint, llvm_opts.outputFile, entry)) {
                             if (opts.verbose) {
-                                std::cout << "✓ キャッシュ保存完了: " << entry.object_file << "\n";
+                                std::cout << i18n::tr("✓ cache saved: ") << entry.object_file
+                                          << "\n";
                             }
                             // 高速キャッシュ判定用の情報を保存
                             std::string target_key = opts.target.empty() ? "native" : opts.target;
@@ -2097,24 +2150,24 @@ int main(int argc, char* argv[]) {
                     if (opts.run_after_emit &&
                         llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
                         if (opts.verbose) {
-                            std::cout << "実行中: " << llvm_opts.outputFile << "\n";
+                            std::cout << i18n::tr("running: ") << llvm_opts.outputFile << "\n";
                         }
                         int exec_result = std::system(llvm_opts.outputFile.c_str());
                         return WEXITSTATUS(exec_result);
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "LLVM コード生成エラー: " << e.what() << "\n";
+                    std::cerr << i18n::tr("LLVM code generation error: ") << e.what() << "\n";
                     return 1;
                 }
 #else
-                std::cerr << "エラー: LLVM バックエンドが有効になっていません。\n";
-                std::cerr << "CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n";
+                std::cerr << i18n::tr("error: the LLVM backend is not enabled\n");
+                std::cerr << i18n::tr("rebuild with -DCM_USE_LLVM=ON in CMake\n");
                 return 1;
 #endif
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "エラー: " << e.what() << "\n";
+        std::cerr << i18n::tr("error: ") << e.what() << "\n";
         return 1;
     }
 

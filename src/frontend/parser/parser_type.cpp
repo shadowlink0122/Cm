@@ -251,9 +251,7 @@ ast::TypePtr Parser::parse_type() {
             break;
     }
 
-    // 注: SV固有型（posedge/negedge/wire/reg）は
-    // レキサーのLexerPlatform::SVモードでキーワードトークンとして生成され、
-    // 上記switch文のcaseで処理される。非SVモードではIdentとして扱われる。
+    // 注: SV固有型（posedge/negedge/wire/reg）はレキサーのLexerPlatform::SVモードでキーワードトークンとして生成され、上記switch文のcaseで処理される。非SVモードではIdentとして扱われる。
 
     // 関数ポインタ型: int*(int, int) または ポインタ型: void*
     if (base_type && check(TokenKind::Star)) {

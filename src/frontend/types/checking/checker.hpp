@@ -133,13 +133,15 @@ class TypeChecker {
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
 
-    // 補間プレースホルダ内の式を現在のスコープで検査する
-    // （従来は素通りし、スコープ外変数の参照がゴミ値になっていた）
+    // 補間プレースホルダ内の式を現在のスコープで検査する（従来は素通りし、スコープ外変数の参照がゴミ値になっていた）
     void check_interpolation_scope(const std::string& format_str);
 
-    // 名前空間内の非修飾型名を「現在の名前空間::名前」として解決する
-    // （内側から外側へ探索。解決できた場合は修飾名を返す）
+    // 名前空間内の非修飾型名を「現在の名前空間::名前」として解決する（内側から外側へ探索。解決できた場合は修飾名を返す）
     std::optional<std::string> resolve_in_namespace(const std::string& name) const;
+
+    // 変数参照を検索する。名前空間内の非修飾参照は「現在の名前空間::名前」へフォールバックし、解決できた場合は参照名を修飾名へ書き換えて
+    // HIR/コード生成が一貫した名前を見るようにする
+    std::optional<Symbol> lookup_var_ident(ast::IdentExpr& ident);
     void error(Span span, const std::string& msg);
     void warning(Span span, const std::string& msg);
     bool type_implements_interface(const std::string& type_name, const std::string& interface_name);

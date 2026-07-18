@@ -2,10 +2,7 @@
 
 // 定数畳み込み共通ユーティリティ
 //
-// MIRの整数定数は int64_t で保持されるが、Cmの整数型は 8/16/32/64bit の
-// 幅と符号を持つ。畳み込み結果を型の幅に正規化（ラップ）しないと、
-// 「int w = INT_MAX + 1 が 2147483648 のまま伝播し、表示値(-2147483648)と
-// 比較結果(w < 0 が false)が食い違う」等の不整合が起きる。
+// MIRの整数定数は int64_t で保持されるが、Cmの整数型は 8/16/32/64bit の幅と符号を持つ。畳み込み結果を型の幅に正規化（ラップ）しないと、「int w = INT_MAX + 1 が 2147483648 のまま伝播し、表示値(-2147483648)と比較結果(w < 0 が false)が食い違う」等の不整合が起きる。
 // SCCP と ConstantFolding の両方から使用する。
 
 #include "../../nodes.hpp"
@@ -74,8 +71,7 @@ inline int64_t normalize_int(int64_t value, const hir::TypePtr& type) {
     return static_cast<int64_t>(v);
 }
 
-// 比較・除算・剰余・右シフトを符号なしで実行すべきか
-// （どちらかのオペランドが符号なし型なら符号なし演算）
+// 比較・除算・剰余・右シフトを符号なしで実行すべきか（どちらかのオペランドが符号なし型なら符号なし演算）
 inline bool use_unsigned_op(const hir::TypePtr& lhs_type, const hir::TypePtr& rhs_type) {
     return is_unsigned_type(lhs_type) || is_unsigned_type(rhs_type);
 }

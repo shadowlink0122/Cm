@@ -287,8 +287,7 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
             HirExprPtr pattern_value;
             if (is_tagged_union && !variant_full_name.empty()) {
                 // Tagged Union: タグ値を直接intリテラルとして生成
-                // lower_exprを使うとHirEnumConstruct(構造体型)が返され、
-                // __tag(int)との比較で型不一致になる
+                // lower_exprを使うとHirEnumConstruct(構造体型)が返され、__tag(int)との比較で型不一致になる
                 auto ev_it = enum_values_.find(variant_full_name);
                 if (ev_it != enum_values_.end()) {
                     auto tag_lit = std::make_unique<HirLiteral>();
@@ -328,8 +327,7 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
             auto tag_expr = std::make_unique<HirExpr>(std::move(tag_access), make_int());
 
             // タグ値を直接intリテラルとして生成
-            // lower_exprを使うとTagged Union型のHirEnumConstructが返されるため、
-            // __tag(int)との比較で型不一致になる
+            // lower_exprを使うとTagged Union型のHirEnumConstructが返されるため、__tag(int)との比較で型不一致になる
             HirExprPtr pattern_value;
             auto ev_it = enum_values_.find(pattern.enum_variant);
             if (ev_it != enum_values_.end()) {
@@ -360,8 +358,7 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
 
         case ast::MatchPatternKind::Masked: {
             // (scrutinee & mask) == value。
-            // bit[N] スクルティニ（ビットスライス結果等）は比較型をuintへ正規化する
-            // （bit[N]定数がLLVMでiNに、値側がi32になりICmp型不一致になるため）
+            // bit[N] スクルティニ（ビットスライス結果等）は比較型をuintへ正規化する（bit[N]定数がLLVMでiNに、値側がi32になりICmp型不一致になるため）
             ast::TypePtr cmp_type = scrutinee->type;
             if (cmp_type && cmp_type->kind == ast::TypeKind::Array && cmp_type->element_type &&
                 cmp_type->element_type->kind == ast::TypeKind::Bit) {

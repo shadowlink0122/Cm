@@ -29,8 +29,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
         }
         case mir::MirRvalue::BinaryOp: {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
-            // std::cerr << "[MIR2LLVM]         Converting BinaryOp, op=" <<
-            // static_cast<int>(binop.op)
+            // std::cerr << "[MIR2LLVM]         Converting BinaryOp, op=" << static_cast<int>(binop.op)
             // << "\n";
 
             auto lhs = convertOperand(*binop.lhs);
@@ -59,9 +58,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
         }
         case mir::MirRvalue::Ref: {
             // アドレス取得（&）: Placeのアドレス計算は convertPlaceToAddress に委譲する。
-            // 旧実装はここに独自のプロジェクション走査を持っていたが、
-            // Fieldプロジェクション後に現在型を更新しないため、
-            // &h.vals[i] のような Field→Index 連鎖で誤ったGEP型により
+            // 旧実装はここに独自のプロジェクション走査を持っていたが、Fieldプロジェクション後に現在型を更新しないため、&h.vals[i] のような Field→Index 連鎖で誤ったGEP型により
             // 不正なアドレスを生成していた（共有実装は多段連鎖を正しく処理する）
             auto& refData = std::get<mir::MirRvalue::RefData>(rvalue.data);
             return convertPlaceToAddress(refData.place);
@@ -86,8 +83,7 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             auto sourceType = value->getType();
 
             // 同じ型なら変換不要
-            // ただし、ポインタ同士（ptr == ptr）の場合でもunion alloca→string等の
-            // 抽出が必要なケースがあるためスキップする
+            // ただし、ポインタ同士（ptr == ptr）の場合でもunion alloca→string等の抽出が必要なケースがあるためスキップする
             if (sourceType == targetType) {
                 bool isUnionAllocaExtract = false;
                 if (sourceType->isPointerTy()) {

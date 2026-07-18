@@ -1,6 +1,5 @@
 // リテラル型チェックのテスト
-// typedef HttpMethod = "GET" | "POST" などのリテラル型への代入時に
-// コンパイル時に値の妥当性を検証する機能のテスト
+// typedef HttpMethod = "GET" | "POST" などのリテラル型への代入時にコンパイル時に値の妥当性を検証する機能のテスト
 
 // HTTP メソッドのリテラル型（文字列）
 typedef HttpMethod = "GET" | "POST" | "PUT" | "DELETE";

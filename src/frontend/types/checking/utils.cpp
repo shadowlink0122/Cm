@@ -2,6 +2,7 @@
 // TypeChecker 実装 - ユーティリティ関数
 // ============================================================
 
+#include "../../../common/i18n.hpp"
 #include "../../lexer/lexer.hpp"
 #include "../naming_rules.hpp"
 #include "../type_checker.hpp"
@@ -19,9 +20,7 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
     // 名前付き型（Struct/Interface/Generic）の場合
     if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Interface ||
         type->kind == ast::TypeKind::Generic) {
-        // 名前空間内の非修飾名は「現在の名前空間::名前」へ書き換える
-        // （全ての型がここを通るため、宣言型・戻り値型・リテラル型の
-        // 修飾が一貫し、HIR/コード生成も同じ名前を見る）
+        // 名前空間内の非修飾名は「現在の名前空間::名前」へ書き換える（全ての型がここを通るため、宣言型・戻り値型・リテラル型の修飾が一貫し、HIR/コード生成も同じ名前を見る）
         if (!type->name.empty() && struct_defs_.count(type->name) == 0 &&
             enum_names_.count(type->name) == 0 && typedef_defs_.count(type->name) == 0 &&
             interface_names_.count(type->name) == 0 &&
@@ -33,8 +32,7 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
         // enum名の場合はint型として解決
         // ただしtype_argsを持つTagged Union enum（Result<int,string>等）は除外
         if (enum_names_.count(type->name)) {
-            // type_argsを持つジェネリックenum（Result<T,E>, Option<T>等）は
-            // Tagged Unionとしてそのまま保持
+            // type_argsを持つジェネリックenum（Result<T,E>, Option<T>等）はTagged Unionとしてそのまま保持
             if (!type->type_args.empty() && generic_enums_.count(type->name)) {
                 // そのまま返す（構造体として扱われる）
             } else if (!type->type_args.empty()) {
@@ -53,9 +51,7 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     return ast::make_int();
                 }
             } else {
-                // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）は
-                // Tagged Unionとして保持し、値enum（従来型）のみintへ解決する
-                // （一律int化すると関数返却・match束縛でペイロードが失われる）
+                // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）はTagged Unionとして保持し、値enum（従来型）のみintへ解決する（一律int化すると関数返却・match束縛でペイロードが失われる）
                 bool is_tagged_union = false;
                 auto def_it = enum_defs_.find(type->name);
                 if (def_it != enum_defs_.end() && def_it->second) {
@@ -654,8 +650,7 @@ void TypeChecker::check_interpolation_scope(const std::string& format_str) {
     }
 }
 
-// 文字列リテラル内の補間プレースホルダが参照する変数を使用としてマークする
-// （check_interpolation_scopeと違いエラーは出さない。あらゆるstringリテラルで呼ばれる）
+// 文字列リテラル内の補間プレースホルダが参照する変数を使用としてマークする（check_interpolation_scopeと違いエラーは出さない。あらゆるstringリテラルで呼ばれる）
 void TypeChecker::mark_interpolation_uses(const std::string& format_str) {
     for (const auto& content : extract_placeholder_exprs(format_str)) {
         std::string src = "int __interp_scope_check__() { return (" + content + "); }";
@@ -784,8 +779,8 @@ bool has_attribute(const std::vector<ast::AttributeNode>& attrs, const std::stri
 
 void TypeChecker::report_naming(Span span, const std::string& decl_kind, const std::string& name,
                                 const std::string& expected) {
-    warning(span,
-            decl_kind + " '" + name + "' は " + expected + " 命名規則に従っていません [L001]");
+    warning(span, i18n::tr(decl_kind) + " '" + name + "' " + i18n::tr("does not follow the ") +
+                      i18n::tr(expected) + i18n::tr(" naming convention [L001]"));
 }
 
 // 関数本体の文を再帰的に走査し、ローカル変数宣言の命名を検査する
@@ -802,11 +797,11 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
                     // ローカルconstは snake_case / UPPER_SNAKE_CASE の両方を許容
                     if (!naming::is_snake_case(let->name) &&
                         !naming::is_upper_snake_case(let->name)) {
-                        report_naming(span, "定数名", let->name,
-                                      "snake_case または UPPER_SNAKE_CASE");
+                        report_naming(span, "constant name", let->name,
+                                      "snake_case or UPPER_SNAKE_CASE");
                     }
                 } else if (!naming::is_snake_case(let->name)) {
-                    report_naming(span, "変数名", let->name, "snake_case");
+                    report_naming(span, "variable name", let->name, "snake_case");
                 }
             }
         } else if (auto* if_stmt = stmt->as<ast::IfStmt>()) {
@@ -816,14 +811,15 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
             if (for_stmt->init) {
                 if (auto* init_let = for_stmt->init->as<ast::LetStmt>()) {
                     if (!naming_exempt(init_let->name) && !naming::is_snake_case(init_let->name)) {
-                        report_naming(for_stmt->init->span, "変数名", init_let->name, "snake_case");
+                        report_naming(for_stmt->init->span, "variable name", init_let->name,
+                                      "snake_case");
                     }
                 }
             }
             check_naming_stmts(for_stmt->body);
         } else if (auto* for_in = stmt->as<ast::ForInStmt>()) {
             if (!naming_exempt(for_in->var_name) && !naming::is_snake_case(for_in->var_name)) {
-                report_naming(stmt->span, "変数名", for_in->var_name, "snake_case");
+                report_naming(stmt->span, "variable name", for_in->var_name, "snake_case");
             }
             check_naming_stmts(for_in->body);
         } else if (auto* while_stmt = stmt->as<ast::WhileStmt>()) {
@@ -838,7 +834,7 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
             if (defer_stmt->body) {
                 if (auto* body_let = defer_stmt->body->as<ast::LetStmt>()) {
                     if (!naming_exempt(body_let->name) && !naming::is_snake_case(body_let->name)) {
-                        report_naming(defer_stmt->body->span, "変数名", body_let->name,
+                        report_naming(defer_stmt->body->span, "variable name", body_let->name,
                                       "snake_case");
                     }
                 }
@@ -857,17 +853,17 @@ void TypeChecker::check_naming_function(ast::FunctionDecl& func) {
     }
     Span span = func.name_span;
     if (!naming_exempt(func.name) && func.name != "main" && !naming::is_snake_case(func.name)) {
-        report_naming(span, "関数名", func.name, "snake_case");
+        report_naming(span, "function name", func.name, "snake_case");
     }
     for (const auto& param : func.params) {
         if (!naming_exempt(param.name) && param.name != "self" &&
             !naming::is_snake_case(param.name)) {
-            report_naming(span, "パラメータ名", param.name, "snake_case");
+            report_naming(span, "parameter name", param.name, "snake_case");
         }
     }
     for (const auto& gp : func.generic_params) {
         if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
-            report_naming(span, "型パラメータ名", gp, "PascalCase");
+            report_naming(span, "type parameter name", gp, "PascalCase");
         }
     }
     check_naming_stmts(func.body);
@@ -885,16 +881,32 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         Span span =
             (st->name_span.start != 0 || st->name_span.end != 0) ? st->name_span : decl.span;
         if (!naming_exempt(st->name) && !naming::is_pascal_case(st->name)) {
-            report_naming(span, "構造体名", st->name, "PascalCase");
+            report_naming(span, "struct name", st->name, "PascalCase");
         }
         for (const auto& field : st->fields) {
+            // #[sv::param]/#[verilog::param] フィールドはSVパラメータの写しなので
+            // 定数と同じくUPPER_SNAKE_CASEを許容する
+            bool is_param_field = false;
+            for (const auto& attr : field.attributes) {
+                if (attr.name == "sv::param" || attr.name == "verilog::param") {
+                    is_param_field = true;
+                    break;
+                }
+            }
+            if (is_param_field) {
+                if (!naming_exempt(field.name) && !naming::is_snake_case(field.name) &&
+                    !naming::is_upper_snake_case(field.name)) {
+                    report_naming(span, "field name", field.name, "snake_case or UPPER_SNAKE_CASE");
+                }
+                continue;
+            }
             if (!naming_exempt(field.name) && !naming::is_snake_case(field.name)) {
-                report_naming(span, "フィールド名", field.name, "snake_case");
+                report_naming(span, "field name", field.name, "snake_case");
             }
         }
         for (const auto& gp : st->generic_params) {
             if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
-                report_naming(span, "型パラメータ名", gp, "PascalCase");
+                report_naming(span, "type parameter name", gp, "PascalCase");
             }
         }
     } else if (auto* en = decl.as<ast::EnumDecl>()) {
@@ -903,23 +915,23 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
             return;
         }
         if (!naming_exempt(en->name) && !naming::is_pascal_case(en->name)) {
-            report_naming(decl.span, "enum名", en->name, "PascalCase");
+            report_naming(decl.span, "enum name", en->name, "PascalCase");
         }
         for (const auto& member : en->members) {
             // バリアントは PascalCase / UPPER_SNAKE_CASE の両方を許容
             if (!naming_exempt(member.name) && !naming::is_pascal_case(member.name) &&
                 !naming::is_upper_snake_case(member.name)) {
-                report_naming(decl.span, "enumバリアント名", member.name,
-                              "PascalCase または UPPER_SNAKE_CASE");
+                report_naming(decl.span, "enum variant name", member.name,
+                              "PascalCase or UPPER_SNAKE_CASE");
             }
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
         if (!naming_exempt(iface->name) && !naming::is_pascal_case(iface->name)) {
-            report_naming(decl.span, "インターフェース名", iface->name, "PascalCase");
+            report_naming(decl.span, "interface name", iface->name, "PascalCase");
         }
         for (const auto& method : iface->methods) {
             if (!naming_exempt(method.name) && !naming::is_snake_case(method.name)) {
-                report_naming(decl.span, "メソッド名", method.name, "snake_case");
+                report_naming(decl.span, "method name", method.name, "snake_case");
             }
         }
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
@@ -930,7 +942,7 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         }
     } else if (auto* td = decl.as<ast::TypedefDecl>()) {
         if (!naming_exempt(td->name) && !naming::is_pascal_case(td->name)) {
-            report_naming(decl.span, "型エイリアス名", td->name, "PascalCase");
+            report_naming(decl.span, "type alias name", td->name, "PascalCase");
         }
     } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
         if (naming_exempt(gv->name)) {
@@ -939,10 +951,10 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         if (gv->is_const && top_level) {
             // グローバルconstは UPPER_SNAKE_CASE
             if (!naming::is_upper_snake_case(gv->name)) {
-                report_naming(decl.span, "グローバル定数名", gv->name, "UPPER_SNAKE_CASE");
+                report_naming(decl.span, "global constant name", gv->name, "UPPER_SNAKE_CASE");
             }
         } else if (!gv->is_const && !naming::is_snake_case(gv->name)) {
-            report_naming(decl.span, "グローバル変数名", gv->name, "snake_case");
+            report_naming(decl.span, "global variable name", gv->name, "snake_case");
         }
     } else if (auto* mod = decl.as<ast::ModuleDecl>()) {
         if (mod->path.segments.empty()) {
@@ -954,7 +966,7 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         }
         for (const auto& seg : mod->path.segments) {
             if (!naming_exempt(seg) && !naming::is_snake_case(seg)) {
-                report_naming(decl.span, "モジュール名", seg, "snake_case");
+                report_naming(decl.span, "module name", seg, "snake_case");
             }
         }
         for (auto& inner : mod->declarations) {
@@ -1149,8 +1161,7 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
             case ast::BinaryOp::Shl:
                 return *left_val << *right_val;
             case ast::BinaryOp::Shr:
-                // 最上位ビットが立つ値はunsignedの論理シフトと符号付きの算術シフトで
-                // 結果が分かれるため畳み込みを断念する（MIR側は型情報を持ち正しく畳む）
+                // 最上位ビットが立つ値はunsignedの論理シフトと符号付きの算術シフトで結果が分かれるため畳み込みを断念する（MIR側は型情報を持ち正しく畳む）
                 if (*left_val < 0)
                     return std::nullopt;
                 return *left_val >> *right_val;
@@ -1204,8 +1215,7 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
             if (size > 0 && size <= INT32_MAX) {
                 type->array_size = static_cast<uint32_t>(size);
                 // 注: size_param_name は解決後も保持する。
-                // SVバックエンドが #[sv::parameter] の幅を記号のまま
-                // （[WIDTH-1:0]）出力するために使用する（v0.16.0 設計01）
+                // SVバックエンドが #[sv::parameter] の幅を記号のまま（[WIDTH-1:0]）出力するために使用する（v0.16.0 設計01）
 
                 debug::tc::log(debug::tc::Id::TypeInfer,
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),
@@ -1282,9 +1292,7 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
                 generic_context_.has_type_param(type->name)) {
                 return true;
             }
-            // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する
-            // （外側の名前空間へ向かって順に探索）。解決できた場合は型名を
-            // 修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする
+            // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする
             if (auto qualified = resolve_in_namespace(type->name)) {
                 type->name = *qualified;
                 return true;

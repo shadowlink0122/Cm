@@ -1,4 +1,5 @@
 #include "../../common/debug/par.hpp"
+#include "../../common/i18n.hpp"
 #include "parser.hpp"
 
 namespace cm {
@@ -15,7 +16,7 @@ ast::Program Parser::parse() {
     while (!is_at_end() && iterations < MAX_ITERATIONS) {
         // エラーが蓄積しすぎた場合はコンパイルを中断
         if (diagnostics_.size() > 50) {
-            error("エラーが多すぎるためコンパイルを中断します");
+            error(i18n::tr("too many errors; aborting compilation"));
             break;
         }
         // 無限ループ検出
@@ -334,6 +335,17 @@ bool Parser::is_global_var_start() {
 
     advance();
 
+    // 名前空間修飾型（mod::Type、mod::sub::Type）をスキップ
+    while (!is_at_end() && check(TokenKind::ColonColon)) {
+        advance();  // ::
+        if (!is_at_end() && check(TokenKind::Ident)) {
+            advance();  // Type
+        } else {
+            pos_ = saved_pos;
+            return false;
+        }
+    }
+
     // 配列サフィックス [N] をスキップ（bit[4], utiny[1024], bit[WIDTH] 等。
     // サイズはリテラルまたはconst/パラメータ参照の識別子）
     while (!is_at_end() && check(TokenKind::LBracket)) {
@@ -382,7 +394,7 @@ ast::DeclPtr Parser::parse_function(bool is_export, bool is_static, bool is_inli
 
     // main関数はエクスポート不可
     if (is_export && name == "main") {
-        error("main関数はエクスポートできません");
+        error(i18n::tr("the main function cannot be exported"));
     }
 
     expect(TokenKind::LParen);
@@ -545,11 +557,11 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
 
         field.name = expect_ident();
 
-        // フィールドのデフォルト値（= expr）: extern struct と
-        // IOフィールド（#[input]/#[output]/#[inout] 属性付き）で許可する
+        // フィールドのデフォルト値（= expr）: extern struct、IOフィールド（#[input]/#[output]/#[inout] 属性付き）、パラメータフィールド（#[sv::param] 属性付き）で許可する
         bool has_dir_attr = false;
         for (const auto& a : field.attributes) {
-            if (a.name == "input" || a.name == "output" || a.name == "inout") {
+            if (a.name == "input" || a.name == "output" || a.name == "inout" ||
+                a.name == "sv::param" || a.name == "verilog::param") {
                 has_dir_attr = true;
             }
         }

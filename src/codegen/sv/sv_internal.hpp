@@ -3,8 +3,7 @@
 // ============================================================
 // SVバックエンド内部ヘルパー
 // ============================================================
-// SVコード生成の翻訳単位（codegen/analyze/emit_control/validation/
-// testbench）間で共有する小さなヘルパー。外部公開APIではない
+// SVコード生成の翻訳単位（codegen/analyze/emit_control/validation/ testbench）間で共有する小さなヘルパー。外部公開APIではない
 
 #include "../../common/text_utils.hpp"
 #include "../../mir/analysis/dominators.hpp"
@@ -110,8 +109,7 @@ inline std::unordered_map<size_t, std::vector<size_t>> compute_loop_latches(
 
 // start が header の自然ループに属するか判定する。
 // 「header を通らずにいずれかのラッチへ到達できる」ことが条件。
-// （単純な到達可能性では、外側ループのバックエッジ経由で
-//   ループ外からもヘッダに戻れてしまい誤判定する）
+// （単純な到達可能性では、外側ループのバックエッジ経由でループ外からもヘッダに戻れてしまい誤判定する）
 inline bool in_natural_loop(const mir::MirFunction& func, size_t start, size_t header,
                             const std::vector<size_t>& latches) {
     std::set<size_t> latch_set(latches.begin(), latches.end());
@@ -156,8 +154,7 @@ inline bool is_integer_type(const hir::TypePtr& type) {
     }
 }
 
-// #[sv::tri(oe: "...", out: "...")] / #[sv::sync(clk: "...", src: "...", stages: N)]
-// の key:value 引数を取り出す簡易パーサ
+// #[sv::tri(oe: "...", out: "...")] / #[sv::sync(clk: "...", src: "...", stages: N)]の key:value 引数を取り出す簡易パーサ
 inline std::map<std::string, std::string> parseSvAttrKV(const std::string& attr,
                                                         const std::string& name) {
     std::map<std::string, std::string> kv;

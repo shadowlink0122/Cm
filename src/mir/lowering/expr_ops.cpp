@@ -1,5 +1,4 @@
-// expr_lowering_ops.cpp - 演算式のlowering
-// lower_binary, lower_unary
+// expr_lowering_ops.cpp - 演算式のlowering lower_binary, lower_unary
 
 #include "../../common/debug.hpp"
 #include "expr.hpp"
@@ -49,8 +48,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         }
 
         // 右辺を先に評価
-        // 配列リテラルRHSは代入先の型を期待型として渡す
-        // （`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
+        // 配列リテラルRHSは代入先の型を期待型として渡す（`h.vs = []` のような空リテラルが要素型int既定に落ちるのを防ぐ）
         hir::TypePtr assign_target_type = bin.lhs ? bin.lhs->type : nullptr;
         if ((!assign_target_type || assign_target_type->kind != hir::TypeKind::Array) && bin.lhs) {
             if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&bin.lhs->kind)) {
@@ -113,8 +111,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                         place.projections.push_back(PlaceProjection::field(*field_idx));
 
                         // 次の型を取得
-                        // ジェネリック構造体の場合はベース構造体名で検索し、
-                        // フィールド型がジェネリックパラメータなら置換する
+                        // ジェネリック構造体の場合はベース構造体名で検索し、フィールド型がジェネリックパラメータなら置換する
                         std::string lookup_name = inner_type->name;
                         if (ctx.struct_defs && ctx.struct_defs->count(lookup_name)) {
                             const auto* struct_def = ctx.struct_defs->at(lookup_name);
@@ -216,8 +213,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         hir::TypePtr current_type;
 
         if (build_lvalue_place(bin.lhs.get(), place, current_type)) {
-            // スライスへのインデックス書き込みはCmSlice*への直接GEPになり不正
-            // （SIGBUS）なため、要素ポインタ経由のデリファレンス格納へ正規化する
+            // スライスへのインデックス書き込みはCmSlice*への直接GEPになり不正（SIGBUS）なため、要素ポインタ経由のデリファレンス格納へ正規化する
             hir::TypePtr walk_type = nullptr;
             if (place.local < ctx.func->locals.size()) {
                 walk_type = ctx.func->locals[place.local].type;
@@ -488,15 +484,15 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                     LocalId result = ctx.new_temp(hir::make_bool());
                     BlockId success_block = ctx.new_block();
 
-                    // < と > では引数の順序を変える
-                    // <= と >= では結果を反転する
+                    // a > b は b < a、a <= b は !(b < a) なので Gt と Le で引数を入れ替え、
+                    // <= と >= は結果を反転する
                     std::vector<MirOperandPtr> args;
-                    if (bin.op == hir::HirBinaryOp::Lt || bin.op == hir::HirBinaryOp::Le) {
-                        // a < b または a <= b: __op_lt(a, b)
+                    if (bin.op == hir::HirBinaryOp::Lt || bin.op == hir::HirBinaryOp::Ge) {
+                        // a < b: __op_lt(a, b) / a >= b: !__op_lt(a, b)
                         args.push_back(MirOperand::copy(MirPlace{lhs}));
                         args.push_back(MirOperand::copy(MirPlace{rhs}));
                     } else {
-                        // a > b または a >= b: __op_lt(b, a)
+                        // a > b: __op_lt(b, a) / a <= b: !__op_lt(b, a)
                         args.push_back(MirOperand::copy(MirPlace{rhs}));
                         args.push_back(MirOperand::copy(MirPlace{lhs}));
                     }
@@ -517,7 +513,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
 
                     // <= と >= は !(b < a) と !(a < b) を計算
                     if (bin.op == hir::HirBinaryOp::Le || bin.op == hir::HirBinaryOp::Ge) {
-                        // a <= b は !(b < a) → 結果を反転
+                        // 結果を反転
                         LocalId neg_result = ctx.new_temp(hir::make_bool());
                         auto unary_rvalue = std::make_unique<MirRvalue>();
                         unary_rvalue->kind = MirRvalue::UnaryOp;
@@ -734,16 +730,14 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         auto lhs_type = bin.lhs->type;
         auto rhs_type = bin.rhs->type;
 
-        // HIRの型が利用できない、またはエラー型の場合、ローカル変数から型を取得
-        // （operator実装内の式など、型チェッカーが型を設定しない場合に対応）
+        // HIRの型が利用できない、またはエラー型の場合、ローカル変数から型を取得（operator実装内の式など、型チェッカーが型を設定しない場合に対応）
         if ((!lhs_type || lhs_type->is_error()) && lhs < ctx.func->locals.size()) {
             lhs_type = ctx.func->locals[lhs].type;
         }
         if ((!rhs_type || rhs_type->is_error()) && rhs < ctx.func->locals.size()) {
             rhs_type = ctx.func->locals[rhs].type;
         }
-        // ローカルの型もエラー型の場合は「不明」として扱い、
-        // エラー型が結果型に伝播しないようにする（int既定へフォールバック）。
+        // ローカルの型もエラー型の場合は「不明」として扱い、エラー型が結果型に伝播しないようにする（int既定へフォールバック）。
         // 文字列補間式のパース経由など、型チェッカを通らないHIRで発生する
         if (lhs_type && lhs_type->is_error()) {
             lhs_type = nullptr;
@@ -916,8 +910,7 @@ static bool build_place_for_incdec(ExprLowering& lowering, const hir::HirExpr& e
 LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& ctx) {
     // ?演算子（Result/Optionのエラー伝播）:
     //   tag == 0（Ok/Some）ならペイロードを返し、
-    //   それ以外（Err/None）ならユニオン値を丸ごと関数の戻り値へコピーして早期returnする
-    //   （Result<T,E>とResult<U,E>は同一のタグ付きユニオン表現のため直接コピーできる）
+    //   それ以外（Err/None）ならユニオン値を丸ごと関数の戻り値へコピーして早期returnする（Result<T,E>とResult<U,E>は同一のタグ付きユニオン表現のため直接コピーできる）
     if (unary.op == hir::HirUnaryOp::Try) {
         LocalId operand = lower_expression(*unary.operand, ctx);
 
@@ -1010,8 +1003,7 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
 
         // 変数以外の左辺値（配列要素・構造体フィールド・デリファレンス）:
         // projection付きplaceを構築して read-modify-write を生成する。
-        // （以前はここに来ると黙って const 0 に置換され、
-        //   a[0]++ / s.v-- が no-op になるバグがあった）
+        // （以前はここに来ると黙って const 0 に置換され、a[0]++ / s.v-- が no-op になるバグがあった）
         {
             MirPlace place{0};  // localはbuild_place_for_incdecで設定される
             hir::TypePtr place_type;
@@ -1121,9 +1113,7 @@ LocalId ExprLowering::lower_unary(const hir::HirUnary& unary, LoweringContext& c
 
         // 一般化パス: 左辺値式（ネストしたメンバ・インデックス・デリファレンス）から
         // プロジェクション付きPlaceを構築し、実体を直接参照する。
-        // 旧実装はオブジェクト部分を一時変数へコピーしてそのアドレスを取っていたため、
-        // &h.pos.x や &h.vals[i] のような2段以上のアクセスで書き込みが実体に
-        // 反映されなかった。&ptr[i]（ポインタ算術になるケース）のみ後続の特別処理に委ねる
+        // 旧実装はオブジェクト部分を一時変数へコピーしてそのアドレスを取っていたため、&h.pos.x や &h.vals[i] のような2段以上のアクセスで書き込みが実体に反映されなかった。&ptr[i]（ポインタ算術になるケース）のみ後続の特別処理に委ねる
         {
             bool is_ptr_index = false;
             if (auto idx0 = std::get_if<std::unique_ptr<hir::HirIndex>>(&unary.operand->kind)) {

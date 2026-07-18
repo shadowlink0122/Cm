@@ -2,10 +2,8 @@
 // Naked属性条件修正テスト: ASMとCmコード混在関数でnaked不適用を確認
 //
 // 修正内容:
-// - iretq/retを含むASM関数にnaked属性を付与する条件を
-//   「純ASM関数のみ」に限定（hasRetInAsm && !hasNonAsmStmt）
-// - ASMとCmコード（関数呼び出し、変数宣言等）が混在する関数は
-//   通常のコード生成パスを使用。naked化すると非ASM文が省略されGPFが発生
+// - iretq/retを含むASM関数にnaked属性を付与する条件を「純ASM関数のみ」に限定（hasRetInAsm && !hasNonAsmStmt）
+// - ASMとCmコード（関数呼び出し、変数宣言等）が混在する関数は通常のコード生成パスを使用。naked化すると非ASM文が省略されGPFが発生
 
 // テスト1: 純ASM関数（ret含む） → Nakedが正しく適用される
 export void pure_asm_ret() {

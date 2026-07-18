@@ -437,8 +437,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "__cm_unwrap(" + argStrs[0] + ").forEach((x) => " + argStrs[2] + "(x))";
     }
     if (name == "cm_slice_push_blob" && argStrs.size() >= 2) {
-        // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、
-        // オブジェクト直接参照（構造体ローカルの&）ならそのままpushする
+        // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、オブジェクト直接参照（構造体ローカルの&）ならそのままpushする
         return "__cm_unwrap(" + argStrs[0] +
                ").push(((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" + argStrs[1] +
                "))";

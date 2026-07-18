@@ -592,8 +592,7 @@ bool ConstantLoopUnroll::try_unroll_one(MirFunction& func) {
                         }
                         BlockValue lhs_root = resolve_chain(block_values, v.bin_lhs);
                         // 増分文の左辺は「増分前のiv」なので、ブロック内解決では
-                        // Binary（自分自身の定義）に到達する。根本ローカルがivである
-                        // ことだけを確認する（Alias経由でiv到達 or 直接iv）
+                        // Binary（自分自身の定義）に到達する。根本ローカルがivであることだけを確認する（Alias経由でiv到達 or 直接iv）
                         bool lhs_is_iv = false;
                         if (lhs_root.kind == BlockValue::Alias && lhs_root.alias == iv) {
                             lhs_is_iv = true;

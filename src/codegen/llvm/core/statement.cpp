@@ -92,8 +92,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                     destType->element_type &&
                     destType->element_type->kind == hir::TypeKind::Struct &&
                     isInterfaceType(destType->element_type->name)) {
-                    // Ref rvalue（&sq）またはUse copy（ポインタ変数経由）で
-                    // ソースが具象構造体を指す場合
+                    // Ref rvalue（&sq）またはUse copy（ポインタ変数経由）でソースが具象構造体を指す場合
                     const std::string& ifaceName = destType->element_type->name;
                     llvm::Value* dataPtr = nullptr;
                     std::string concreteName;
@@ -112,8 +111,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                             }
                         }
                     } else if (assign.rvalue->kind == mir::MirRvalue::Use) {
-                        // 具象構造体ポインタ変数のコピー
-                        // （&sq が一旦 *Sq テンポラリを経由するケース）
+                        // 具象構造体ポインタ変数のコピー（&sq が一旦 *Sq テンポラリを経由するケース）
                         auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
                         if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
                                                 useData.operand->kind == mir::MirOperand::Move)) {
@@ -465,8 +463,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     rvalue = builder->CreateFPExt(rvalue, targetType, "fpext");
                                 }
                             }
-                            // LLVM 14+: opaque pointersではポインタ間のBitCastは不要
-                            // すべてのポインタは単に ptr 型
+                            // LLVM 14+: opaque pointersではポインタ間のBitCastは不要すべてのポインタは単に ptr 型
                             else if (sourceType->isPointerTy() && targetType->isPointerTy()) {
                                 // opaque pointersでは何もしない
                                 // rvalueはそのまま使用可能
@@ -477,8 +474,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         // 型検証を追加して安全にstore
                         if (addr && rvalue) {
                             // Deref時: アドレスをターゲット型のポインタにbitcast
-                            // LLVM 14 typed pointers
-                            // modeでは、store先のポインタ型とrvalueの型が一致する必要がある
+                            // LLVM 14 typed pointers modeでは、store先のポインタ型とrvalueの型が一致する必要がある
                             if (hasDeref && targetType && !targetType->isPointerTy()) {
                                 auto targetPtrType = llvm::PointerType::get(targetType, 0);
                                 if (addr->getType() != targetPtrType) {
@@ -662,8 +658,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                 // 通常のStore操作を実行
 
                                 // Tagged Unionペイロードへの書き込み:
-                                // ペイロードフィールドはi8[N]配列。プリミティブ値(i32等)の場合、
-                                // 配列全体がストアされず上位バイトにゴミが残る。
+                                // ペイロードフィールドはi8[N]配列。プリミティブ値(i32等)の場合、配列全体がストアされず上位バイトにゴミが残る。
                                 // → ストア前にペイロード領域をゼロクリアして安全性を確保
                                 if (isTaggedUnionPayload && addr) {
                                     // ペイロードi8配列のサイズを取得
@@ -693,11 +688,9 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                         addr, llvm::ConstantInt::get(ctx.getI8Type(), 0),
                                         payloadSize, llvm::MaybeAlign());
 
-                                    // ペイロード値のビット幅がペイロード領域より小さい場合、
-                                    // ゼロ拡張して全バイトを定義済みにする
+                                    // ペイロード値のビット幅がペイロード領域より小さい場合、ゼロ拡張して全バイトを定義済みにする
                                     // 例: Result<ulong, long>::Ok(0) で i32(0) → i64(0) に拡張
-                                    // これによりLLVM最適化がmemset+storeをconstant phiに
-                                    // 畳み込む際にundefinedバイトが生成されない
+                                    // これによりLLVM最適化がmemset+storeをconstant phiに畳み込む際にundefinedバイトが生成されない
                                     if (rvalue->getType()->isIntegerTy() && payloadSize > 0) {
                                         unsigned valueBits =
                                             rvalue->getType()->getIntegerBitWidth();
@@ -756,8 +749,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 );
                 // Bug#7修正: must { __asm__() } の場合のみコンパイラバリアを挿入
                 // LLVMの制御フロー最適化（hlt後のコードを到達不能と判断）を阻止
-                // ハードウェアfence (mfence) ではなくコンパイラバリアを使用
-                // （UEFIベアメタル環境ではmfenceがGPFを引き起こす可能性があるため）
+                // ハードウェアfence (mfence) ではなくコンパイラバリアを使用（UEFIベアメタル環境ではmfenceがGPFを引き起こす可能性があるため）
                 if (asmData.is_must) {
                     auto* barrierTy = llvm::FunctionType::get(ctx.getVoidType(), false);
                     auto* barrier = llvm::InlineAsm::get(
@@ -786,8 +778,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                 (void)inputCount;  // 現時点では読み取り不要だが、インクリメントは維持
 
                 // AArch64ターゲット判定とオペランド型記録
-                // LLVMのAArch64バックエンドがi32に対してxレジスタを割り当てる場合があるため、
-                // :w修飾子を付与して32bitレジスタ(w)を強制する
+                // LLVMのAArch64バックエンドがi32に対してxレジスタを割り当てる場合があるため、:w修飾子を付与して32bitレジスタ(w)を強制する
                 std::string asmTriple = module->getTargetTriple();
                 bool isAArch64Target = (asmTriple.find("aarch64") != std::string::npos ||
                                         asmTriple.find("arm64") != std::string::npos);
@@ -966,8 +957,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                                     initStore->setVolatile(true);
                                 }
                                 localPtr = alloca;
-                                // localsマップを更新して、後続のcopy操作が
-                                // allocaからvolatile loadで値を読み取れるようにする
+                                // localsマップを更新して、後続のcopy操作がallocaからvolatile loadで値を読み取れるようにする
                                 locals[operand.local_id] = alloca;
                                 allocatedLocals.insert(operand.local_id);
                             }
@@ -1137,8 +1127,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
                 // ハードコードレジスタの自動クロバー検出
                 // ASMコード内の %reg パターンを検出し、入出力オペランドでないものを
-                // 自動的にクロバーとして追加する
-                // （LLVMのインライン展開時にレジスタの値が不正に再利用されることを防止）
+                // 自動的にクロバーとして追加する（LLVMのインライン展開時にレジスタの値が不正に再利用されることを防止）
                 {
                     // x86-64のレジスタ名一覧（LLVM形式）
                     // 64bit → LLVM名のマッピング
@@ -1189,16 +1178,14 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         size_t searchPos = 0;
                         while ((searchPos = asmCode.find(pattern, searchPos)) !=
                                std::string::npos) {
-                            // レジスタ名の直後が英数字やアンダースコアでないことを確認
-                            // （%r12の検出で%r12bを誤検出しないように）
+                            // レジスタ名の直後が英数字やアンダースコアでないことを確認（%r12の検出で%r12bを誤検出しないように）
                             size_t afterPos = searchPos + pattern.size();
                             bool isFullMatch = true;
                             if (afterPos < asmCode.size()) {
                                 char nextChar = asmCode[afterPos];
                                 // %r8, %r9等の短いパターンと%r8d等の区別
                                 if (std::isalnum(nextChar) || nextChar == '_') {
-                                    // ただし%eax等→%eaxl等は普通ないので、
-                                    // 32bit以上のパターンは次の文字がレジスタ拡張子でなければOK
+                                    // ただし%eax等→%eaxl等は普通ないので、32bit以上のパターンは次の文字がレジスタ拡張子でなければOK
                                     if (pattern.size() >= 4) {
                                         // %rax, %eax等: 後ろの文字は通常ない
                                         isFullMatch = false;
@@ -1215,8 +1202,7 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
                         }
                     }
 
-                    // オペランドとして使用されているレジスタは除外しない
-                    // （LLVMは入出力オペランドと重複するクロバーを自動的に無視する）
+                    // オペランドとして使用されているレジスタは除外しない（LLVMは入出力オペランドと重複するクロバーを自動的に無視する）
                     // 既に追加済みのクロバーとの重複チェック
                     for (const auto& reg : detectedClobbers) {
                         std::string clobStr = "~{" + reg + "}";

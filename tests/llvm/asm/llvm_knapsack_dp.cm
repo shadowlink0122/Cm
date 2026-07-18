@@ -160,8 +160,7 @@ int main() {
         int* v_ptr = &values[0];
 
         // ループ変数と一時変数は全てint(32bit)で統一
-        // AArch64での:w修飾子により全オペランドがwレジスタ(32bit)に
-        // ldr/strではsxtwで符号拡張してアドレス計算する
+        // AArch64での:w修飾子により全オペランドがwレジスタ(32bit)にldr/strではsxtwで符号拡張してアドレス計算する
         int i = 0;
         int w = 0;
         const int wi = 0;       // weights[i-1]
@@ -171,8 +170,7 @@ int main() {
         const int tmp = 0;      // スクラッチ
 
         // ARM64版 ナップサックDP
-        // :w修飾子で全変数がwレジスタになるため、
-        // ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
+        // :w修飾子で全変数がwレジスタになるため、ldr/strの[base, offset]ではsxtwで32→64bit拡張が必要
         __asm__(`
         // 外側ループ: i = 1
         mov ${+r:i}, #1

@@ -657,8 +657,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 }
             }
 
-            // exportブロック抽出用にサブインポート展開済みソースを保存
-            // （export キーワードあり + Exported symbols セクションあり）
+            // exportブロック抽出用にサブインポート展開済みソースを保存（export キーワードあり + Exported symbols セクションあり）
             std::string export_extraction_source = module_source;
 
             // exportキーワードを削除（キャッシュして重複処理を回避）
@@ -777,8 +776,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 // namespace名を決定
                 std::string module_namespace;
 
-                // サブモジュールパスがある場合、サブモジュールのみを名前空間として使用
-                // （親モジュールの名前空間はスキップ）
+                // サブモジュールパスがある場合、サブモジュールのみを名前空間として使用（親モジュールの名前空間はスキップ）
                 if (!submodule_path.empty()) {
                     module_namespace = submodule_path;
                 } else {
@@ -832,8 +830,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 }
 
                 // 階層的な名前空間を開く
-                // サブモジュールパスがある場合は外側の名前空間をスキップ
-                // （モジュールソース内ですでに正しい名前空間が生成されている）
+                // サブモジュールパスがある場合は外側の名前空間をスキップ（モジュールソース内ですでに正しい名前空間が生成されている）
                 if (submodule_path.empty()) {
                     for (const auto& ns : namespace_parts) {
                         emit_line("namespace " + ns + " {", "<generated>", 0, import_chain);
@@ -1076,8 +1073,7 @@ void ImportPreprocessor::parse_import_items(const std::string& items_str, Import
 
 std::string ImportPreprocessor::add_module_prefix(const std::string& source,
                                                   const std::string& module_name) {
-    // すでにexportキーワードは削除されているので、関数と定数の宣言に
-    // モジュール名をプレフィックスとして追加する
+    // すでにexportキーワードは削除されているので、関数と定数の宣言にモジュール名をプレフィックスとして追加する
 
     std::string result;
     std::istringstream input(source);

@@ -149,8 +149,7 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
             }
             config.debugInfo = options.debugInfo;
             // Bug#13修正: UEFIターゲットではCodeGen最適化を無効化
-            // LLVM TargetMachineのISel/SelectionDAG最適化が
-            // efi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
+            // LLVM TargetMachineのISel/SelectionDAG最適化がefi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
             if (config.target == BuildTarget::BaremetalUEFI) {
                 config.optLevel = 0;
             } else {
@@ -183,8 +182,7 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
 
             // 最適化
             // Bug#13修正: UEFIターゲットではLLVM最適化パスをスキップ
-            // O2のインライン展開+DCEがefi_mainの制御フローを破壊し、
-            // call/ret命令が消滅してフォールスルークラッシュを引き起こす
+            // O2のインライン展開+DCEがefi_mainの制御フローを破壊し、call/ret命令が消滅してフォールスルークラッシュを引き起こす
             bool isUefiModule = config.target == BuildTarget::BaremetalUEFI;
             if (options.optimizationLevel > 0 && !isUefiModule) {
                 llvm::LoopAnalysisManager LAM;

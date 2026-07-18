@@ -1,0 +1,76 @@
+Cm言語コンパイラ v{version}
+
+使用方法:
+  {program} <コマンド> [オプション] <ファイル>
+
+コマンド:
+  run <file>            プログラムを実行（JIT、デフォルト）
+  compile <file>        プログラムをコンパイル（LLVM）
+  check <file>          構文と型チェックのみ実行
+  lint <file>           静的解析を実行
+  fmt <file>            コードフォーマット
+  test <file>           #[test] 関数を実行（//! platform: sv は
+                        iverilogシミュレーション、それ以外はJIT実行）
+  help                  このヘルプを表示
+
+オプション:
+  -o <file>             出力ファイル名を指定
+  -O<n>                 最適化レベル（0-3）
+  --verbose, -v         詳細な出力を表示
+  --quiet, -q           出力を抑制
+  --debug, -d           デバッグ出力を有効化
+  -d=<level>            デバッグレベル（trace/debug/info/warn/error）
+  --max-output-size=<n> 最大出力ファイルサイズ（GB、デフォルト16GB）
+  --force-check, --strict コンパイル時に厳格な型チェック/警告を強制実行
+                        check/lint: 宣言の命名規則チェック（L001）を有効化
+コンパイル時オプション:
+  --target=<target>     コンパイルターゲット
+                        native:        ネイティブ実行ファイル（デフォルト）
+                        wasm:          WebAssembly
+                        js:            JavaScript (Node.js向け)
+                        web:           JavaScript + HTML (ブラウザ向け)
+                        baremetal-arm: ベアメタル ARM Cortex-M
+                        baremetal-x86: ベアメタル x86_64
+                        uefi:          UEFI Application
+                        sv:            SystemVerilog (FPGA向けRTL)
+                        bm:            baremetal-arm の短縮形
+  --emit-llvm           LLVM IRを生成
+  --emit-js             JavaScriptを生成
+  --emit-memfile        SV: 配列リテラル初期値を.hexファイルとして書き出す
+  --sv-strict-lint      SV: lint_off抑止を出力しない（幅警告を可視化）
+  --sv-always-ff        SV: always_ff/always_comb等を保持（既定はGowin互換のalways @）
+  --sv-warn-nba         SV: posedge関数内で代入済み状態変数の参照（前サイクル値）を警告
+  --emit-constraints    SV: #[sv::pin]属性から.cst/.tclを生成（Gowin）
+  -D <NAME>             条件付きコンパイル定義を追加（#ifdef用）
+  --test                #[test] 関数を含めてコンパイル（TESTを自動定義）
+  --check               fmt: 整形せず、要整形ファイルがあれば非0終了
+  --run                 生成後に実行
+  --ast                 AST（抽象構文木）を表示
+  --hir                 HIR（高レベル中間表現）を表示
+  --mir                 MIR（中レベル中間表現）を表示
+  --mir-opt             最適化後のMIRを表示
+  --lir-opt             最適化後のLLVM IRを表示（codegen直前）
+
+最適化オプション:
+  --funroll-loops[=N]   定数トリップカウントループをMIRレベルで静的展開
+                        （Nは展開する最大イテレーション数、デフォルト64。
+                         ループ判定の削減による高速化。特にJSターゲットや
+                         低い-Oレベルで効果的）
+
+インクリメンタルビルド:
+  --no-cache            キャッシュを無効化（デフォルト: 有効）
+  --cache-dir=<dir>     キャッシュディレクトリ（デフォルト: .cm-cache）
+  cache clear           キャッシュを全削除
+  cache stats           キャッシュ統計を表示
+
+その他のオプション:
+  --lang=<en|ja>        メッセージ言語（デフォルト: en。CM_LANG環境変数や
+                        .cmconfig.yml の language: でも指定可能）
+  --version             バージョン情報を表示
+
+例:
+  {program} run examples/hello.cm
+  {program} compile -O2 -o output src/main.cm
+  {program} compile --backend=llvm --target=wasm -o app.wasm main.cm
+  {program} compile --backend=llvm --target=bm -o firmware.o main.cm
+  {program} check --verbose src/lib.cm

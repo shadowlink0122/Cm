@@ -73,9 +73,7 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
 
     // 各文を処理
     for (auto& stmt : block.statements) {
-        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は
-        // 常に定数追跡から除外する必要がある
-        // （インラインアセンブリは実行時に変数を変更するため）
+        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は常に定数追跡から除外する必要がある（インラインアセンブリは実行時に変数を変更するため）
         if (stmt->kind == MirStatement::Asm) {
             const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
             for (const auto& operand : asm_data.operands) {
@@ -137,8 +135,7 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
             // Rvalueを評価して定数化できるかチェック
             auto folded = evaluate_rvalue(*assign_data.rvalue, constants);
             if (!folded) {
-                // 完全畳み込みできない場合は代数的恒等式の簡約を試みる
-                // （x*1→x, x+0→x, x*0→0 等。文数・制御フローは変えない）
+                // 完全畳み込みできない場合は代数的恒等式の簡約を試みる（x*1→x, x+0→x, x*0→0 等。文数・制御フローは変えない）
                 if (simplify_identity(assign_data, constants)) {
                     changed = true;
                     // x*0→0 等、簡約結果が定数になったケースを追跡へ乗せる
@@ -495,8 +492,7 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
     MirConstant result;
     result.type = target_type;
 
-    // 整数 -> 整数: ターゲット型の幅・符号に正規化してキャスト
-    // （例: utiny 255 as int → 255、tiny -1 as utiny → 255、int 300 as utiny → 44）
+    // 整数 -> 整数: ターゲット型の幅・符号に正規化してキャスト（例: utiny 255 as int → 255、tiny -1 as utiny → 255、int 300 as utiny → 44）
     if (const_eval::integer_bit_width(target_type) > 0) {
         if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
             result.value = const_eval::normalize_int(*int_val, target_type);

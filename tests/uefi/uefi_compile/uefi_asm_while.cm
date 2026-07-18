@@ -8,8 +8,7 @@ ulong efi_main(void* image_handle, void* system_table) {
     ulong status = 0;
     __asm__("movq $$1, ${=r:status}");
 
-    // while条件でASM出力変数を使用する場合の代用パターン
-    // （定数畳み込みがstatus=0を固定化しないことを確認）
+    // while条件でASM出力変数を使用する場合の代用パターン（定数畳み込みがstatus=0を固定化しないことを確認）
     ulong count = 0;
     while (status != 0) {
         count = count + 1;

@@ -659,8 +659,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
     }
 
     // scrutineeが変数参照以外（関数呼び出し等）の場合、一時変数へ束縛する。
-    // 各アームの条件・ペイロード抽出はscrutineeをクローンして複数回参照するが、
-    // クローンできない式はダミー値に落ちて誤マッチ・副作用の重複実行になる
+    // 各アームの条件・ペイロード抽出はscrutineeをクローンして複数回参照するが、クローンできない式はダミー値に落ちて誤マッチ・副作用の重複実行になる
     HirStmtPtr scrutinee_binding;
     if (!std::get_if<std::unique_ptr<HirVarRef>>(&scrutinee->kind)) {
         static int match_tmp_counter = 0;
@@ -770,8 +769,7 @@ HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
             }
         }
 
-        // Typeパターンの場合、ペイロードを as で取り出して束縛
-        // （条件側の is でタグ確認済みのため as のタグ検査は成功する）
+        // Typeパターンの場合、ペイロードを as で取り出して束縛（条件側の is でタグ確認済みのため as のタグ検査は成功する）
         if (arm.pattern && arm.pattern->kind == ast::MatchPatternKind::Type) {
             if (!arm.pattern->binding_name.empty() && arm.pattern->binding_name != "_") {
                 auto as_cast = std::make_unique<HirCast>();

@@ -6,8 +6,7 @@ namespace cm::mir::opt {
 
 namespace {
 // 代入先ローカルの整数型に定数を正規化する。
-// 幅の狭い型への代入で値をラップし、型情報も代入先に合わせる
-// （例: tiny への代入で int定数128 → tiny -128）
+// 幅の狭い型への代入で値をラップし、型情報も代入先に合わせる（例: tiny への代入で int定数128 → tiny -128）
 void normalize_constant_to_local(const MirFunction& func, LocalId local, MirConstant& constant) {
     if (local >= func.locals.size()) {
         return;
@@ -61,9 +60,7 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
 
     // Bug#5修正: ASM出力変数を事前にOverdefined化
     // インラインアセンブリの出力変数は実行時に決定されるため、定数として扱えない。
-    // ループ前の初期代入（例: byte_val = 0）により定数推論されると、
-    // compute_successorsがループ本体への到達を遮断し、ASM出力のOverdefined化が
-    // 反復解析で反映されない。事前マーキングで安全に回避する。
+    // ループ前の初期代入（例: byte_val = 0）により定数推論されると、compute_successorsがループ本体への到達を遮断し、ASM出力のOverdefined化が反復解析で反映されない。事前マーキングで安全に回避する。
     for (const auto& block : func.basic_blocks) {
         if (!block)
             continue;
@@ -344,8 +341,7 @@ SparseConditionalConstantPropagation::transfer_block(const MirFunction& func,
         }
         if (!assign_data.place.projections.empty()) {
             // プロジェクションがある場合（フィールドアクセス、インデックス、デリファレンス）
-            // デリファレンス書き込みはエイリアスの可能性があるため、
-            // 全てのローカル変数をOverdefinedにする（保守的）
+            // デリファレンス書き込みはエイリアスの可能性があるため、全てのローカル変数をOverdefinedにする（保守的）
             bool has_deref = false;
             for (const auto& proj : assign_data.place.projections) {
                 if (proj.kind == ProjectionKind::Deref) {
@@ -544,8 +540,7 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
     if (local >= func.locals.size()) {
         return false;
     }
-    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、
-    // 定数として束縛しない（callをまたいだ古い値の伝播を防ぐ）
+    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、定数として束縛しない（callをまたいだ古い値の伝播を防ぐ）
     if (func.locals[local].is_global || func.locals[local].is_static) {
         return false;
     }
@@ -555,8 +550,7 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
         return true;
     }
     // Bug#8修正: 整数型同士の場合は型が異なっても定数バインドを許可
-    // const ulong同士の加算結果がint型変数に代入される場合等に
-    // 定数畳み込みが効かない問題を解消する
+    // const ulong同士の加算結果がint型変数に代入される場合等に定数畳み込みが効かない問題を解消する
     auto is_integer_type = [](const hir::TypePtr& t) -> bool {
         if (!t)
             return false;
@@ -750,8 +744,7 @@ bool SparseConditionalConstantPropagation::apply_constants(
             if (stmt->kind != MirStatement::Assign) {
                 continue;
             }
-            // no_optフラグがtrueの場合は定数置換をスキップするが、
-            // 代入先変数はOverdefinedにする（後続の参照で誤った定数が使われないよう）
+            // no_optフラグがtrueの場合は定数置換をスキップするが、代入先変数はOverdefinedにする（後続の参照で誤った定数が使われないよう）
             if (stmt->no_opt) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
                 if (assign_data.place.projections.empty() &&
@@ -952,10 +945,8 @@ bool SparseConditionalConstantPropagation::rewrite_operand(const MirFunction& fu
     }
 
     // 定数の型がローカル変数の型と異なる場合、定数の型を更新
-    // Bug#8修正でcan_bind_constantが整数型間の定数バインドを許可したため、
-    // int定数がlong型ローカルに伝播される場合がある。
-    // その際、定数の型もlongに更新しないと、
-    // union cast（例: long as IntOrLong）で不正なタグ値が設定される問題がある。
+    // Bug#8修正でcan_bind_constantが整数型間の定数バインドを許可したため、int定数がlong型ローカルに伝播される場合がある。
+    // その際、定数の型もlongに更新しないと、union cast（例: long as IntOrLong）で不正なタグ値が設定される問題がある。
     MirConstant adjusted_constant = value.constant;
     if (place->local < func.locals.size()) {
         const auto& local_type = func.locals[place->local].type;

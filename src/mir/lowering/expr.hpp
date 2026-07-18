@@ -54,8 +54,7 @@ class ExprLowering : public MirLoweringBase {
     std::pair<std::vector<std::string>, std::string> extract_named_placeholders(
         const std::string& format_str, LoweringContext& ctx);
 
-    // 補間プレースホルダの内容を式としてパースしMIRへ降下する
-    // （{a + b} 等、変数名パターンで扱えない一般式のフォールバック。
+    // 補間プレースホルダの内容を式としてパースしMIRへ降下する（{a + b} 等、変数名パターンで扱えない一般式のフォールバック。
     //  パースに失敗した場合は std::nullopt を返す）
     std::optional<LocalId> lower_interp_expression(const std::string& content,
                                                    LoweringContext& ctx);

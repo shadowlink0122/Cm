@@ -1,10 +1,11 @@
 // constraints.cpp - 物理制約ファイル（Gowin .cst / .tcl）の生成
-// #[sv::pin("U12", io_type: "LVCMOS33", drive: 8)] 属性と
-// //! sv: device: / //! sv: option: ディレクティブから、
+// #[sv::pin("U12", io_type: "LVCMOS33", drive: 8)] 属性と//! sv: device: / //! sv: option: ディレクティブから、
 // --emit-constraints 指定時にピン制約とプロジェクトスクリプトを生成する。
 // 設計: docs/design/v0.16.0/02_constraints_emission.md
 
+#include "../../common/i18n.hpp"
 #include "codegen.hpp"
+#include "sv_internal.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -126,13 +127,14 @@ std::vector<SVCodeGen::CollectedPin> SVCodeGen::collectPins(const mir::MirProgra
             pins.push_back({info.port_name, info.pin_loc, info.params});
         } else if (is_port(*gv) && options_.emitConstraints) {
             // 割り当て漏れの検出（clk等の暗黙ポートも対象）
-            std::cerr << "警告: ポート '" << gv->name
-                      << "' に #[sv::pin] が指定されていません（.cstに含まれません）\n";
+            std::cerr
+                << i18n::tr("warning: port '") << gv->name
+                << i18n::tr(
+                       "' has no #[sv::pin] attribute (it will not be included in the .cst)\n");
         }
     }
 
-    // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の
-    // フィールドからもピン属性を収集する（ポート名 = フィールド名）
+    // IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）のフィールドからもピン属性を収集する（ポート名 = フィールド名）
     for (const auto& st : program.structs) {
         if (!st || st->is_extern) {
             continue;
@@ -195,8 +197,10 @@ std::vector<SVCodeGen::CollectedPin> SVCodeGen::collectPins(const mir::MirProgra
             if (!info.pin_loc.empty()) {
                 pins.push_back({info.port_name, info.pin_loc, info.params});
             } else if (options_.emitConstraints) {
-                std::cerr << "警告: ポート '" << f.name
-                          << "' に #[sv::pin] が指定されていません（.cstに含まれません）\n";
+                std::cerr
+                    << i18n::tr("warning: port '") << f.name
+                    << i18n::tr(
+                           "' has no #[sv::pin] attribute (it will not be included in the .cst)\n");
             }
         }
     }

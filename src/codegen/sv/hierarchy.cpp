@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <sstream>
 
 namespace cm::codegen::sv {
@@ -21,23 +20,6 @@ std::string trim(const std::string& s) {
     }
     size_t last = s.find_last_not_of(" \t\r\n");
     return s.substr(first, last - first + 1);
-}
-
-// ソースに `//! sv: hierarchy` ディレクティブが含まれるか
-bool has_hierarchy_directive(const std::string& source) {
-    std::istringstream ss(source);
-    std::string line;
-    while (std::getline(ss, line)) {
-        std::string t = trim(line);
-        if (t.rfind("//!", 0) != 0) {
-            continue;
-        }
-        t = trim(t.substr(3));
-        if (t.rfind("sv:", 0) == 0 && trim(t.substr(3)) == "hierarchy") {
-            return true;
-        }
-    }
-    return false;
 }
 
 // サブモジュールのポート情報
@@ -105,136 +87,9 @@ bool parse_port_line(const std::string& raw, PortDecl& out) {
     return true;
 }
 
-// サブモジュールのソースからポート宣言を抽出する（行単位の軽量スキャン）。
-// 対象: `#[input] uint a;` / `#[output] utiny out = 0;` / `#[input] posedge clk;` 等。
-// struct本体内のフィールド（IO契約構造体等）はポートではないためスキップする
-std::vector<PortDecl> extract_ports(const std::string& source) {
-    std::vector<PortDecl> ports;
-    std::istringstream ss(source);
-    std::string line;
-    int struct_depth = 0;
-    while (std::getline(ss, line)) {
-        std::string t = trim(line);
-        if (struct_depth > 0) {
-            for (char c : t) {
-                if (c == '{')
-                    struct_depth++;
-                else if (c == '}')
-                    struct_depth--;
-            }
-            continue;
-        }
-        std::string decl_check = t;
-        if (decl_check.rfind("export ", 0) == 0) {
-            decl_check = trim(decl_check.substr(7));
-        }
-        if (decl_check.rfind("struct ", 0) == 0 || decl_check.rfind("extern struct ", 0) == 0) {
-            for (char c : t) {
-                if (c == '{')
-                    struct_depth++;
-                else if (c == '}')
-                    struct_depth--;
-            }
-            continue;
-        }
-        PortDecl p;
-        if (parse_port_line(t, p)) {
-            ports.push_back(p);
-        }
-    }
-    return ports;
-}
-
-// IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の
-// フィールドをポートとして抽出する。
-// 例: `struct AluIo { #[input] uint a; ... }; AluIo io;` → a等がモジュールポート
-std::vector<PortDecl> extract_io_instance_ports(const std::string& source) {
-    // 1パス目: 構造体定義（名前 → IOフィールド列）を収集する
-    std::map<std::string, std::vector<PortDecl>> io_structs;
-    {
-        std::istringstream ss(source);
-        std::string line;
-        std::string current_struct;
-        while (std::getline(ss, line)) {
-            std::string t = trim(line);
-            if (current_struct.empty()) {
-                if (t.rfind("export ", 0) == 0) {
-                    t = trim(t.substr(7));
-                }
-                if (t.rfind("extern ", 0) == 0) {
-                    continue;  // extern structは対象外
-                }
-                if (t.rfind("struct ", 0) != 0) {
-                    continue;
-                }
-                std::string rest = trim(t.substr(7));
-                auto brace = rest.find('{');
-                std::string name = trim(brace == std::string::npos ? rest : rest.substr(0, brace));
-                if (name.empty()) {
-                    continue;
-                }
-                current_struct = name;
-                continue;
-            }
-            if (!t.empty() && t[0] == '}') {
-                current_struct.clear();
-                continue;
-            }
-            PortDecl p;
-            if (parse_port_line(t, p)) {
-                io_structs[current_struct].push_back(p);
-            }
-        }
-    }
-    if (io_structs.empty()) {
-        return {};
-    }
-
-    // 2パス目: トップレベルのインスタンス宣言（`<構造体名> <変数名>;`）を探し、
-    // 宣言順にフィールドをポートとして採用する
-    std::vector<PortDecl> ports;
-    std::istringstream ss(source);
-    std::string line;
-    int depth = 0;
-    while (std::getline(ss, line)) {
-        std::string t = trim(line);
-        int line_depth = depth;
-        for (char c : t) {
-            if (c == '{')
-                depth++;
-            else if (c == '}')
-                depth--;
-        }
-        if (line_depth != 0) {
-            continue;  // 構造体/関数本体内はインスタンス宣言ではない
-        }
-        std::istringstream toks(t);
-        std::string type_tok;
-        std::string name_tok;
-        if (!(toks >> type_tok)) {
-            continue;
-        }
-        auto it = io_structs.find(type_tok);
-        if (it == io_structs.end()) {
-            continue;
-        }
-        if (!(toks >> name_tok)) {
-            continue;
-        }
-        if (name_tok.empty() || name_tok.back() != ';') {
-            continue;
-        }
-        for (const auto& p : it->second) {
-            ports.push_back(p);
-        }
-    }
-    return ports;
-}
-
 // サブモジュールの #[sv::parameter] const 宣言を抽出する。
 // 対象: `#[sv::parameter] const uint WIDTH = 8;` 形式。
-// 生成するextern structに #[sv::param] フィールドとして写し、
-// インスタンス側から #(.WIDTH(値)) で上書き可能にする（v0.16.0 設計01 P3）
+// 生成するextern structに #[sv::param] フィールドとして写し、インスタンス側から #(.WIDTH(値)) で上書き可能にする（v0.16.0 設計01 P3）
 struct ParamDecl {
     std::string type;
     std::string name;
@@ -295,6 +150,115 @@ std::vector<ParamDecl> extract_parameters(const std::string& source) {
     return params;
 }
 
+// exportされたIO構造体（方向属性フィールドを持つ export struct）の情報。
+// これが宣言されたモジュールだけが階層化（別モジュールとしてのインスタンス化）の対象になる
+struct ExportedIoStruct {
+    bool found = false;
+    std::string name;               // 構造体名
+    std::vector<ParamDecl> params;  // #[sv::param] フィールド（宣言順）
+    std::vector<PortDecl> ports;    // 方向属性フィールド（宣言順）
+};
+
+// `#[sv::param] uint WIDTH = 8;` 形式のパラメータフィールドをパースする。
+// パラメータフィールドでなければfalseを返す
+bool parse_param_field_line(const std::string& raw, ParamDecl& out) {
+    std::string t = trim(raw);
+    if (t.rfind("#[", 0) != 0) {
+        return false;
+    }
+    bool is_param = false;
+    while (t.rfind("#[", 0) == 0) {
+        size_t close = t.find(']');
+        if (close == std::string::npos) {
+            break;
+        }
+        std::string attr = trim(t.substr(2, close - 2));
+        if (attr == "sv::param" || attr == "verilog::param") {
+            is_param = true;
+        }
+        t = trim(t.substr(close + 1));
+    }
+    if (!is_param || t.empty()) {
+        return false;
+    }
+    std::istringstream toks(t);
+    ParamDecl p;
+    if (!(toks >> p.type) || !(toks >> p.name)) {
+        return false;
+    }
+    auto eq = t.find('=');
+    if (eq != std::string::npos) {
+        std::string val = trim(t.substr(eq + 1));
+        auto semi = val.find(';');
+        if (semi != std::string::npos) {
+            val = trim(val.substr(0, semi));
+        }
+        p.default_value = val;
+    }
+    auto cut = p.name.find_first_of("=;");
+    if (cut != std::string::npos) {
+        p.name = trim(p.name.substr(0, cut));
+    }
+    if (p.name.empty()) {
+        return false;
+    }
+    out = p;
+    return true;
+}
+
+// ソースから最初のexportされたIO構造体を抽出する。
+// 対象: `export struct Name { #[sv::param]/#[input]/#[output]/#[inout] フィールド }`。
+// 方向属性フィールドを1つ以上持つものだけをIO構造体とみなす
+ExportedIoStruct extract_exported_io_struct(const std::string& source) {
+    std::istringstream ss(source);
+    std::string line;
+    std::string current_struct;
+    ExportedIoStruct current;
+    while (std::getline(ss, line)) {
+        std::string t = trim(line);
+        if (current_struct.empty()) {
+            if (t.rfind("export ", 0) != 0) {
+                continue;
+            }
+            t = trim(t.substr(7));
+            if (t.rfind("extern ", 0) == 0) {
+                continue;  // extern structは対象外（既に外部モジュール宣言）
+            }
+            if (t.rfind("struct ", 0) != 0) {
+                continue;
+            }
+            std::string rest = trim(t.substr(7));
+            auto brace = rest.find('{');
+            std::string name = trim(brace == std::string::npos ? rest : rest.substr(0, brace));
+            if (name.empty()) {
+                continue;
+            }
+            current_struct = name;
+            current = ExportedIoStruct{};
+            current.name = name;
+            continue;
+        }
+        if (!t.empty() && t[0] == '}') {
+            if (!current.ports.empty()) {
+                current.found = true;
+                return current;
+            }
+            current_struct.clear();
+            continue;
+        }
+        ParamDecl pd;
+        if (parse_param_field_line(t, pd)) {
+            current.params.push_back(pd);
+            continue;
+        }
+        PortDecl p;
+        if (parse_port_line(t, p)) {
+            current.ports.push_back(p);
+        }
+    }
+    return ExportedIoStruct{};
+}
+
 // import文から相対モジュール指定子を取り出す（対象外なら空文字列）。
 // 対象: `import ./name;` / `import ../dir/name;`（選択import等は対象外）
 std::string parse_relative_import(const std::string& line) {
@@ -321,10 +285,6 @@ std::string parse_relative_import(const std::string& line) {
 
 HierarchyResult process_sv_hierarchy(const std::string& source, const std::string& input_file) {
     HierarchyResult result;
-    if (!has_hierarchy_directive(source)) {
-        return result;
-    }
-    result.enabled = true;
 
     // 循環import検出
     std::error_code ec;
@@ -338,6 +298,9 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
     }
 
     auto base_dir = abs_input.parent_path();
+
+    // 階層化したモジュールの修飾名置換対（モジュール名, IO構造体名）
+    std::vector<std::pair<std::string, std::string>> qualified_names;
 
     std::ostringstream out;
     std::istringstream ss(source);
@@ -355,14 +318,14 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
             continue;
         }
 
-        // サブモジュールファイルの解決
+        // サブモジュールファイルの解決。
+        // 見つからない場合は通常のimport解決に委ねる（エラー報告もそちらで行う）
         auto sub_path = (base_dir / (spec + ".cm")).lexically_normal();
         if (!std::filesystem::exists(sub_path)) {
-            result.error = "sv階層import先が見つかりません: " + sub_path.string();
-            return result;
+            out << line;
+            continue;
         }
 
-        // ポート抽出
         std::ifstream sub_file(sub_path);
         if (!sub_file.is_open()) {
             result.error = "sv階層import先を読み込めません: " + sub_path.string();
@@ -370,40 +333,52 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
         }
         std::stringstream sub_src;
         sub_src << sub_file.rdbuf();
-        // ポート抽出: IOインスタンス（構造体宣言+インスタンス使用）のフィールドと
-        // 直接のポート宣言（#[input]/#[output]）の両方を対象にする
-        auto ports = extract_io_instance_ports(sub_src.str());
-        for (const auto& p : extract_ports(sub_src.str())) {
-            ports.push_back(p);
-        }
-        if (ports.empty()) {
-            result.error =
-                "sv階層import先にポート宣言（IOインスタンスまたは #[input]/#[output]）が"
-                "ありません: " +
-                sub_path.string();
-            return result;
+
+        // 発動条件: import先がexportされたIO構造体（方向属性フィールドを持つ
+        // export struct）を宣言していること。無ければ従来どおりフラット化する
+        auto io_struct = extract_exported_io_struct(sub_src.str());
+        if (!io_struct.found) {
+            out << line;
+            continue;
         }
 
         // モジュール名 = ファイル名のstem
         std::string module_name = sub_path.stem().string();
 
+        // パラメータ: IO構造体の #[sv::param] フィールドに加え、
+        // #[sv::parameter] const 宣言からの抽出も併用し名前で重複排除する
+        auto params = io_struct.params;
+        for (const auto& pr : extract_parameters(sub_src.str())) {
+            bool dup = false;
+            for (const auto& e : params) {
+                if (e.name == pr.name) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) {
+                params.push_back(pr);
+            }
+        }
+
         // 1行のextern struct宣言に置換する（行番号を保存するため）。
-        // #[sv::parameter] は #[sv::param] フィールドとして写し、
-        // インスタンス側からstructリテラルで上書き可能にする
-        auto sub_params = extract_parameters(sub_src.str());
+        // 方向属性フィールドは初期値を除去して写す（extern structでは
+        // 出力フィールドの `= 値` が接続指定と解釈されるため）
         std::string decl = "extern struct " + module_name + " { ";
-        for (const auto& pr : sub_params) {
+        for (const auto& pr : params) {
             decl += "#[sv::param] " + pr.type + " " + pr.name;
             if (!pr.default_value.empty()) {
                 decl += " = " + pr.default_value;
             }
             decl += "; ";
         }
-        for (const auto& p : ports) {
+        for (const auto& p : io_struct.ports) {
             decl += "#[" + p.direction + "] " + p.type + " " + p.name + "; ";
         }
         decl += "}";
         out << decl;
+        result.enabled = true;
+        qualified_names.emplace_back(module_name, io_struct.name);
 
         // サブモジュールを記録（重複排除）
         std::string sub_str = sub_path.string();
@@ -419,7 +394,21 @@ HierarchyResult process_sv_hierarchy(const std::string& source, const std::strin
         }
     }
 
-    result.transformed_source = out.str();
+    if (!result.enabled) {
+        return result;
+    }
+
+    // 親ソース中の修飾名 `<モジュール名>::<IO構造体名>` を `<モジュール名>` へ置換し、既存のextern structインスタンス生成（モジュールインスタンス化）に接続する
+    std::string transformed = out.str();
+    for (const auto& [module_name, struct_name] : qualified_names) {
+        const std::string from = module_name + "::" + struct_name;
+        size_t pos = 0;
+        while ((pos = transformed.find(from, pos)) != std::string::npos) {
+            transformed.replace(pos, from.size(), module_name);
+            pos += module_name.size();
+        }
+    }
+    result.transformed_source = transformed;
     return result;
 }
 
@@ -444,8 +433,7 @@ bool append_submodules(const std::string& exe_path, const std::string& top_input
     }
     chain += abs_input.string();
 
-    // 相対パスの実行ファイルはカレントディレクトリ基準で絶対化する
-    // （サブプロセスをどのcwdでも起動できるように）
+    // 相対パスの実行ファイルはカレントディレクトリ基準で絶対化する（サブプロセスをどのcwdでも起動できるように）
     std::string exe = exe_path;
     if (exe.find('/') != std::string::npos) {
         auto abs_exe = std::filesystem::absolute(exe, ec);

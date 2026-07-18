@@ -1,6 +1,5 @@
 // interface値の動的ディスパッチ:
-// 具象構造体の代入でfat pointer（実装オブジェクトへのポインタ + vtable）が
-// 構築され、メソッド呼び出しがvtable経由で実装先へ届くことを検証
+// 具象構造体の代入でfat pointer（実装オブジェクトへのポインタ + vtable）が構築され、メソッド呼び出しがvtable経由で実装先へ届くことを検証
 import std::io::println;
 
 interface Shape {

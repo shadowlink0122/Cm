@@ -46,8 +46,7 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
                             debug::Level::Debug);
 
             // Tagged Union enumの場合はHirEnumConstructを生成
-            // これにより、Option::Noneのようなペイロードなしバリアントも
-            // __TaggedUnion_型で正しく初期化される（tag + payload）
+            // これにより、Option::Noneのようなペイロードなしバリアントも__TaggedUnion_型で正しく初期化される（tag + payload）
             std::string enum_name;
             std::string variant_name;
             auto sep = ident->name.find("::");
@@ -208,10 +207,8 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             return std::make_unique<HirExpr>(std::move(lit), marker_type);
         }
 
-        // 型引数にジェネリックパラメータを含む複合型（QueueNode<T> 等）も
-        // マーカー化してモノモーフィゼーション時に実サイズへ置換する。
-        // HIR時点の推定サイズはT=longや構造体Tで実レイアウトを下回り、
-        // mallocの下回り確保による隣接ヒープ破壊の原因になっていた
+        // 型引数にジェネリックパラメータを含む複合型（QueueNode<T> 等）もマーカー化してモノモーフィゼーション時に実サイズへ置換する。
+        // HIR時点の推定サイズはT=longや構造体Tで実レイアウトを下回り、mallocの下回り確保による隣接ヒープ破壊の原因になっていた
         if (target_type_ptr && !target_type_ptr->type_args.empty()) {
             std::function<bool(const ast::TypePtr&)> has_generic_param =
                 [&](const ast::TypePtr& t) -> bool {
@@ -642,8 +639,7 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
                     member->member = "__tag";  // Tagged Unionのタグフィールド
 
                     // タグ値を直接intリテラルとして生成
-                    // lower_expr(binary.right)を使うとTagged Union型の
-                    // HirEnumConstructが返されるため、int比較に使用不可
+                    // lower_expr(binary.right)を使うとTagged Union型のHirEnumConstructが返されるため、int比較に使用不可
                     auto tag_lit = std::make_unique<HirLiteral>();
                     tag_lit->value = rhs_tag_value;
 
@@ -839,8 +835,7 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
 
         // 静的メソッド呼び出し(Type::method)をType__method形式に変換
         // モジュールパス(std::io::println)は変換しない
-        // 判定: ::が1つのみで、左側が既知の構造体/enum名の場合のみ変換
-        // （大文字始まりだけで判定すると大文字の名前空間エイリアス
+        // 判定: ::が1つのみで、左側が既知の構造体/enum名の場合のみ変換（大文字始まりだけで判定すると大文字の名前空間エイリアス
         // `import ./mod as M; M::f()` が誤変換されシンボル不一致になる）
         size_t first_colon = func_name.find("::");
         if (first_colon != std::string::npos) {

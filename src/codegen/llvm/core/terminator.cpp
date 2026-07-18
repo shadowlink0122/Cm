@@ -118,8 +118,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                 // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
             }
 
-            // panic(msg): void __cm_panic(const char*) へ正規化して呼び出す
-            // （呼び出し式の型（T等）から誤ったシグネチャで宣言されると
+            // panic(msg): void __cm_panic(const char*) へ正規化して呼び出す（呼び出し式の型（T等）から誤ったシグネチャで宣言されると
             // wasmでsignature mismatchになる。panicは戻らないため戻り値は使われない）
             if (funcName == "panic") {
                 auto panicType = llvm::FunctionType::get(
@@ -187,8 +186,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     }
                 }
 
-                // MIR関数として存在する場合は、通常の関数呼び出しとして続行
-                // （このブロックを抜けて、後続の通常関数呼び出し処理へ）
+                // MIR関数として存在する場合は、通常の関数呼び出しとして続行（このブロックを抜けて、後続の通常関数呼び出し処理へ）
                 if (!isMirFunction) {
                     size_t colonPos = funcName.find("::");
                     std::string enumName = funcName.substr(0, colonPos);
@@ -224,8 +222,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // ============================================================
             if (funcName == "__builtin_array_slice") {
                 // 引数: arr, elem_size, arr_len, start, end
-                // ランタイム関数: void* __builtin_array_slice(void* arr, i64 elem_size, i64
-                // arr_len, i64 start, i64 end, i64* out_len)
+                // ランタイム関数: void* __builtin_array_slice(void* arr, i64 elem_size, i64 arr_len, i64 start, i64 end, i64* out_len)
 
                 std::vector<llvm::Value*> args;
                 for (const auto& arg : callData.args) {
@@ -408,8 +405,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
             // ============================================================
             if (funcName == "cm_array_equal") {
                 // 引数: lhs, rhs, lhs_len, rhs_len, elem_size
-                // ランタイム関数: bool cm_array_equal(void* lhs, void* rhs, i64 lhs_len, i64
-                // rhs_len, i64 elem_size)
+                // ランタイム関数: bool cm_array_equal(void* lhs, void* rhs, i64 lhs_len, i64 rhs_len, i64 elem_size)
 
                 std::vector<llvm::Value*> args;
                 for (const auto& arg : callData.args) {
@@ -544,9 +540,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         llvm::Value* funcPtr = builder->CreateLoad(
                                             ctx.getPtrType(), funcPtrPtr, "func_ptr");
 
-                                        // インターフェース宣言のシグネチャから関数型を構成
-                                        // （旧実装は void(ptr) 固定で戻り値が破棄され、
-                                        //   メソッド引数も渡されなかった）
+                                        // インターフェース宣言のシグネチャから関数型を構成（旧実装は void(ptr) 固定で戻り値が破棄され、メソッド引数も渡されなかった）
                                         llvm::Type* retType = ctx.getVoidType();
                                         if (ifaceMethod && ifaceMethod->return_type &&
                                             ifaceMethod->return_type->kind != hir::TypeKind::Void) {
@@ -561,8 +555,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                         auto funcType =
                                             llvm::FunctionType::get(retType, paramTypes, false);
 #if LLVM_VERSION_MAJOR < 15
-                                        // LLVM 14: typed
-                                        // pointerが必要なので関数ポインタ型にキャスト
+                                        // LLVM 14: typed pointerが必要なので関数ポインタ型にキャスト
                                         auto funcPtrType = llvm::PointerType::get(funcType, 0);
                                         funcPtr = builder->CreateBitCast(funcPtr, funcPtrType,
                                                                          "func_ptr_cast");
@@ -813,8 +806,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                     }
                 }
                 if (!callee) {
-                    // Bug#45修正: import先のexport関数がprogram.functionsに含まれない場合、
-                    // declareExternalFunctionのvoid()フォールバックに到達する。
+                    // Bug#45修正: import先のexport関数がprogram.functionsに含まれない場合、declareExternalFunctionのvoid()フォールバックに到達する。
                     // 実引数のLLVM型とdestinationの戻り値型から正しいFunctionTypeを構築して宣言する。
                     std::vector<llvm::Type*> paramTypes;
                     for (const auto& arg : args) {
@@ -843,8 +835,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             }
                         }
                     }
-                    // varargs関数の場合、固定パラメータのみをparamTypesに含めるべき
-                    // （可変長引数はFunctionTypeのパラメータに含めない）
+                    // varargs関数の場合、固定パラメータのみをparamTypesに含めるべき（可変長引数はFunctionTypeのパラメータに含めない）
                     if (isVarArg && currentProgram) {
                         for (const auto& func : currentProgram->functions) {
                             if (func && func->name == funcName) {
@@ -927,8 +918,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                                     vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
                                 }
 
-                                // 引数が構造体へのポインタの場合、そのポインタをdata
-                                // pointerとして使用
+                                // 引数が構造体へのポインタの場合、そのポインタをdata pointerとして使用
                                 llvm::Value* dataPtr = args[i];
 
                                 // 構造体値の場合は、その値をヒープにコピーする
@@ -969,8 +959,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                         }
                         // プリミティブ型への借用self: ポインタ化
                         else if (expectedType->isPointerTy() && !actualType->isPointerTy()) {
-                            // 配列型の場合、配列の先頭要素へのポインタを取得
-                            // （コピーを避けてバッファへのポインタを渡す）
+                            // 配列型の場合、配列の先頭要素へのポインタを取得（コピーを避けてバッファへのポインタを渡す）
                             if (actualType->isArrayTy()) {
                                 // args[i]がLoadInstの場合、元のallocaからGEPを取得
                                 if (auto* loadInst = llvm::dyn_cast<llvm::LoadInst>(args[i])) {
@@ -1076,8 +1065,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
                             }
                         }
                         // 浮動小数点幅の不一致（doubleリテラル → floatパラメータ等）
-                        // 従来は変換されず "Call parameter type does not match" の
-                        // LLVM検証エラーになっていた
+                        // 従来は変換されず "Call parameter type does not match" のLLVM検証エラーになっていた
                         else if (expectedType->isFloatingPointTy() &&
                                  actualType->isFloatingPointTy()) {
                             if (expectedType->getPrimitiveSizeInBits() <
@@ -1110,8 +1098,7 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
 
                 auto result = builder->CreateCall(callee, args);
 
-                // void関数の返り値をdestinationに格納しようとするとLLVMがクラッシュするため、
-                // void型の場合はdestination処理をスキップ
+                // void関数の返り値をdestinationに格納しようとするとLLVMがクラッシュするため、void型の場合はdestination処理をスキップ
                 if (callData.destination && !result->getType()->isVoidTy()) {
                     auto destLocal = callData.destination->local;
                     llvm::Value* resultToStore = result;

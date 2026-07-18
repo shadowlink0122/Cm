@@ -10,8 +10,7 @@ using namespace cm::fmt;
 // フォーマッタ統合テスト
 // ============================================================
 // Cmソースは tests/regression/cases/formatter/ の .cm ファイルに分割。
-// - <name>.input + <name>.expected.cm: 整形結果がexpectedに一致すること
-//   （入力は意図的に未整形のfixtureのため、リポジトリ全体への
+// - <name>.input + <name>.expected.cm: 整形結果がexpectedに一致すること（入力は意図的に未整形のfixtureのため、リポジトリ全体への
 //   cm fmt 一括適用で書き換わらないよう .cm 拡張子を付けない）
 // - <name>.cm: 既に整形済みで、fmtを適用しても変化しないこと（安定ケース）
 // いずれも冪等性（expected/安定ファイルへの再適用で変化なし）を検証する。
@@ -60,8 +59,7 @@ TEST_F(FormatterIntegrationTest, WrapLongExpression) {
     expect_format_case("wrap/long_expr");
 }
 
-// {} 内の要素で折り返す場合は全要素を1行ずつに展開する
-// （開き{で改行・1要素1行・閉じ}を独立行に。中途半端な貪欲詰めにしない）
+// {} 内の要素で折り返す場合は全要素を1行ずつに展開する（開き{で改行・1要素1行・閉じ}を独立行に。中途半端な貪欲詰めにしない）
 TEST_F(FormatterIntegrationTest, WrapExplodesBraceList) {
     expect_format_case("wrap/brace_list");
 }
@@ -76,9 +74,7 @@ TEST_F(FormatterIntegrationTest, WrapExplodesLongArgs) {
     expect_format_case("wrap/long_args");
 }
 
-// 1行に詰め込まれた文ブロック（{ 文; 文; }）はブロック展開する
-// （演算子折り返しだと if ヘッダの途中で折れ、`; }` 継続行が次回実行の
-// セミコロン改行で再分割されて冪等性が崩れるため）
+// 1行に詰め込まれた文ブロック（{ 文; 文; }）はブロック展開する（演算子折り返しだと if ヘッダの途中で折れ、`; }` 継続行が次回実行のセミコロン改行で再分割されて冪等性が崩れるため）
 TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlock) {
     expect_format_case("wrap/inline_block");
 }
@@ -88,8 +84,7 @@ TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockWithElse) {
     expect_format_case("wrap/inline_block_else");
 }
 
-// 展開後もなお最大幅を超える文は、正規化後のインデント幅を見込んだ上で
-// 演算子折り返しが再帰適用される（1回の実行で固定点に到達する）
+// 展開後もなお最大幅を超える文は、正規化後のインデント幅を見込んだ上で演算子折り返しが再帰適用される（1回の実行で固定点に到達する）
 TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockThenWrapsLongStmt) {
     expect_format_case("wrap/inline_block_long_stmt");
 }

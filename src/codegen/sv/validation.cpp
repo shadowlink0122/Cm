@@ -1,6 +1,7 @@
 // ============================================================
 // SVバックエンド検証 - 予約語・非合成型・NBA警告
 // ============================================================
+#include "../../common/i18n.hpp"
 #include "codegen.hpp"
 #include "sv_internal.hpp"
 
@@ -106,8 +107,7 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 break;
             case hir::TypeKind::String:
                 // const文字列は実長のlocalparamとして合成可能。
-                // 非constのstringは logic [23:0]（3文字分）固定のため、
-                // 3文字を超える初期値はサイレントに切り詰められてしまう → エラーにする
+                // 非constのstringは logic [23:0]（3文字分）固定のため、3文字を超える初期値はサイレントに切り詰められてしまう → エラーにする
                 if (!gv->is_const && gv->init_value) {
                     if (const auto* sval = std::get_if<std::string>(&gv->init_value->value)) {
                         if (sval->length() > 3) {
@@ -122,19 +122,24 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
-                // 従来は警告のみで logic [31:0] として出力され、演算結果が
-                // 静かに壊れていた。非対応として明示エラーにする
-                std::cerr << "error[SV004]: 浮動小数点型はSVターゲット非対応です: " << gv->name
-                          << "（固定小数点で記述するか、ベンダーIPを extern struct で"
-                             "利用してください）\n";
+                // 従来は警告のみで logic [31:0] として出力され、演算結果が静かに壊れていた。非対応として明示エラーにする
+                std::cerr << i18n::tr(
+                                 "error[SV004]: floating-point types are not supported on the SV "
+                                 "target: ")
+                          << gv->name
+                          << i18n::tr(
+                                 " (use fixed-point arithmetic or a vendor IP via "
+                                 "extern struct)\n");
                 has_error = true;
                 break;
             case hir::TypeKind::Array:
                 // 動的配列（スライス）は実行時確保が前提のため合成不能。
                 // 従来は無警告で未定義のランタイム関数呼び出しを出力していた
                 if (!gv->type->array_size.has_value() && gv->type->size_param_name.empty()) {
-                    std::cerr << "error[SV006]: 動的配列（スライス）はSVターゲット非対応です: "
-                              << gv->name << "（固定長配列 T[N] を使用してください）\n";
+                    std::cerr << i18n::tr(
+                                     "error[SV006]: dynamic arrays (slices) are not supported on "
+                                     "the SV target: ")
+                              << gv->name << i18n::tr("(use a fixed-size array T[N])\n");
                     has_error = true;
                 }
                 break;
@@ -162,19 +167,22 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                     has_error = true;
                     break;
                 case hir::TypeKind::String:
-                    // String types not synthesizable error is removed to allow local string
-                    // constants/temporaries
+                    // String types not synthesizable error is removed to allow local string constants/temporaries
                     break;
                 case hir::TypeKind::Float:
                 case hir::TypeKind::Double:
-                    std::cerr << "error[SV004]: 浮動小数点型はSVターゲット非対応です: "
+                    std::cerr << i18n::tr(
+                                     "error[SV004]: floating-point types are not supported on the "
+                                     "SV target: ")
                               << func->name << "::" << local.name << "\n";
                     has_error = true;
                     break;
                 case hir::TypeKind::Array:
                     if (!local.type->array_size.has_value() &&
                         local.type->size_param_name.empty()) {
-                        std::cerr << "error[SV006]: 動的配列（スライス）はSVターゲット非対応です: "
+                        std::cerr << i18n::tr(
+                                         "error[SV006]: dynamic arrays (slices) are not supported "
+                                         "on the SV target: ")
                                   << func->name << "::" << local.name << "\n";
                         has_error = true;
                     }
@@ -188,8 +196,7 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
 }
 
 // SV予約語と衝突する識別子のチェック。
-// そのまま出力すると不正なSV（iverilog等で構文エラー）になるため、
-// 明確なエラーとしてコンパイルを停止する（監査08 A-4対応）
+// そのまま出力すると不正なSV（iverilog等で構文エラー）になるため、明確なエラーとしてコンパイルを停止する（監査08 A-4対応）
 void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) const {
     std::vector<std::string> collisions;
     auto check_name = [&](const std::string& raw, const std::string& kind) {
@@ -200,15 +207,14 @@ void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) cons
     };
     for (const auto& gv : program.global_vars) {
         if (gv) {
-            check_name(gv->name, "変数");
+            check_name(gv->name, i18n::tr("variable"));
         }
     }
     for (const auto& func : program.functions) {
         if (!func) {
             continue;
         }
-        // モジュール本体へ出力されない関数は対象外
-        // （analyzeFunctionのスキップ条件と対応: main / assert・panic
+        // モジュール本体へ出力されない関数は対象外（analyzeFunctionのスキップ条件と対応: main / assert・panic
         //   イントリンシック / #[test] テスト関数）
         std::string fn_name = strip_namespace(func->name);
         if (fn_name == "main" || fn_name == "assert" || fn_name == "panic") {
@@ -224,31 +230,29 @@ void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) cons
         if (is_test_fn) {
             continue;
         }
-        check_name(func->name, "関数");
+        check_name(func->name, i18n::tr("function"));
         for (const auto& local : func->locals) {
             // ユーザー定義のローカル変数のみ（コンパイラ生成の一時変数は対象外）
             if (local.is_user_variable && !local.is_global && !local.name.empty()) {
-                check_name(local.name, "変数");
+                check_name(local.name, i18n::tr("variable"));
             }
         }
     }
     if (!collisions.empty()) {
-        std::string msg = "SystemVerilogの予約語と衝突する識別子があります: ";
+        std::string msg = i18n::tr("identifiers conflict with SystemVerilog reserved words: ");
         for (size_t i = 0; i < collisions.size(); ++i) {
             if (i > 0) {
                 msg += ", ";
             }
             msg += collisions[i];
         }
-        msg += "。別の名前に変更してください";
+        msg += i18n::tr("; rename them");
         throw std::runtime_error(msg);
     }
 }
 
 // --sv-warn-nba: posedge/negedge関数内で「代入した状態変数をその後で参照」を警告する。
-// 状態変数への代入は次サイクル反映（ノンブロッキング代入）のため、
-// 直後の参照は前サイクル値を読む。ソフトウェア的な逐次実行とは結果が
-// 異なるため、意図の確認を促す（基本ブロック内の保守的な検査）
+// 状態変数への代入は次サイクル反映（ノンブロッキング代入）のため、直後の参照は前サイクル値を読む。ソフトウェア的な逐次実行とは結果が異なるため、意図の確認を促す（基本ブロック内の保守的な検査）
 void SVCodeGen::warnNbaReadback(const mir::MirProgram& program) const {
     if (!options_.warnNba) {
         return;
@@ -284,11 +288,13 @@ void SVCodeGen::warnNbaReadback(const mir::MirProgram& program) const {
             }
             const std::string& nm = func->locals[pl->local].name;
             if (warned.insert(nm).second) {
-                std::cerr << "警告: SVターゲット: 関数 '" << strip_namespace(func->name)
-                          << "' 内で代入した状態変数 '" << nm
-                          << "' をその後で参照しています。posedge関数内の代入は"
-                          << "次サイクル反映（ノンブロッキング代入）のため、"
-                          << "この参照は前サイクルの値を読みます\n";
+                std::cerr << i18n::tr("warning: SV target: function '")
+                          << strip_namespace(func->name) << i18n::tr("' assigns state variable '")
+                          << nm
+                          << i18n::tr(
+                                 "' and reads it afterwards; assignments in posedge "
+                                 "functions take effect next cycle (non-blocking), so "
+                                 "this read sees the previous-cycle value\n");
             }
         };
         for (const auto& bb : func->basic_blocks) {

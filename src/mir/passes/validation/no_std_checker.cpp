@@ -1,5 +1,7 @@
 #include "no_std_checker.hpp"
 
+#include "../../../common/i18n.hpp"
+
 #include <set>
 
 namespace cm::mir::opt {
@@ -79,26 +81,27 @@ std::string NoStdChecker::getErrorMessage(const std::string& funcName, const std
     if (callee == "println" || callee == "__println__" || callee == "print" ||
         callee == "__print__" || callee == "printf" || callee == "puts" ||
         callee.find("cm_print") == 0 || callee.find("cm_println") == 0) {
-        category = "OS標準出力";
+        category = "OS standard output";
     } else if (callee == "malloc" || callee == "free" || callee == "calloc" ||
                callee == "realloc") {
-        category = "OSヒープメモリ管理";
+        category = "OS heap memory management";
     } else if (callee == "open" || callee == "close" || callee == "read" || callee == "write" ||
                callee == "lseek" || callee.find("cm_file_") == 0 || callee.find("cm_read_") == 0 ||
                callee.find("cm_io_") == 0) {
-        category = "ファイルI/O";
+        category = "file I/O";
     } else if (callee == "exit") {
-        category = "プロセス制御";
+        category = "process control";
     } else if (callee == "socket" || callee == "connect" || callee == "bind") {
-        category = "ネットワーク";
+        category = "networking";
     } else if (callee.find("pthread_") == 0) {
-        category = "スレッド";
+        category = "threading";
     } else {
-        category = "OS依存機能";
+        category = "OS-dependent functionality";
     }
 
-    return "エラー: 関数 '" + funcName + "' 内で '" + callee + "' を使用しています。" + category +
-           " はベアメタル環境では使用できません";
+    return std::string(i18n::tr("error: function '")) + funcName + i18n::tr("' uses '") + callee +
+           i18n::tr("'; ") + i18n::tr(category) +
+           i18n::tr(" is not available in bare-metal environments");
 }
 
 void NoStdChecker::checkFunction(const MirFunction& func, CheckResult& result) {

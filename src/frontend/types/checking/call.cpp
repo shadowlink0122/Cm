@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 関数/メソッド呼び出し
 // ============================================================
 
+#include "../../../common/i18n.hpp"
 #include "../type_checker.hpp"
 
 #include <algorithm>
@@ -32,8 +33,7 @@ std::string method_arity_error(const std::string& method_name, size_t arg_count,
 
 ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
     if (auto* ident = call.callee->as<ast::IdentExpr>()) {
-        // 関数ポインタ・ラムダを保持する変数経由の呼び出しを使用としてマークする
-        // （W001未使用の誤検出防止。関数名の場合はlookup対象外なので影響しない）
+        // 関数ポインタ・ラムダを保持する変数経由の呼び出しを使用としてマークする（W001未使用の誤検出防止。関数名の場合はlookup対象外なので影響しない）
         scopes_.current().mark_used(ident->name);
 
         // __asm__ / __llvm__ intrinsic - インラインアセンブリ
@@ -50,8 +50,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     error(current_span_, ident->name + " argument must be a string literal");
                     return ast::make_error();
                 }
-                // ${制約:変数名} で参照される変数を使用・変更・初期化済みとしてマークする
-                // （=r/+r制約はasmが書き込むため、Lintの誤検出を防ぐ）
+                // ${制約:変数名} で参照される変数を使用・変更・初期化済みとしてマークする（=r/+r制約はasmが書き込むため、Lintの誤検出を防ぐ）
                 const std::string& asm_text = std::get<std::string>(lit->value);
                 static const std::regex asm_operand_re(R"(\$\{[^:}]*:([A-Za-z_][A-Za-z0-9_]*)\})");
                 for (std::sregex_iterator it(asm_text.begin(), asm_text.end(), asm_operand_re), end;
@@ -85,8 +84,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 infer_type(*arg);
             }
 
-            // 補間プレースホルダ内の変数参照をスコープ検査する
-            // （従来は素通りし、ブロック外に出た変数の参照がゴミ値になっていた）
+            // 補間プレースホルダ内の変数参照をスコープ検査する（従来は素通りし、ブロック外に出た変数の参照がゴミ値になっていた）
             if (!call.args.empty() && call.args[0]) {
                 if (const auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
                     if (lit->is_string()) {
@@ -153,16 +151,15 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_named(ident->name);
         }
 
-        // exit(code) ビルトイン: プロセスを終了する
-        // （HIRビルトインとして各バックエンドが処理する。std::debug::assert等が使用）
+        // exit(code) ビルトイン: プロセスを終了する（HIRビルトインとして各バックエンドが処理する。std::debug::assert等が使用）
         if (ident->name == "exit") {
             if (call.args.size() != 1) {
-                error(current_span_, "exit は exit(終了コード) の形式で使用します");
+                error(current_span_, i18n::tr("exit must be used as exit(exit_code)"));
                 return ast::make_void();
             }
             auto code_type = infer_type(*call.args[0]);
             if (code_type && code_type->kind != ast::TypeKind::Bool && !code_type->is_integer()) {
-                error(current_span_, "exit の終了コードは整数型である必要があります");
+                error(current_span_, i18n::tr("the exit code for exit must be an integer type"));
             }
             return ast::make_void();
         }
@@ -171,12 +168,13 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // nクロック進める（SVでは repeat(n) @(posedge clk) に変換される）
         if (ident->name == "step") {
             if (call.args.size() != 1) {
-                error(current_span_, "step は step(クロック数) の形式で使用します");
+                error(current_span_, i18n::tr("step must be used as step(cycle_count)"));
                 return ast::make_void();
             }
             auto step_arg = infer_type(*call.args[0]);
             if (!step_arg || !step_arg->is_integer()) {
-                error(current_span_, "step の引数は整数型（クロック数）である必要があります");
+                error(current_span_,
+                      i18n::tr("the argument to step must be an integer type (cycle count)"));
             }
             return ast::make_void();
         }
@@ -252,9 +250,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 通常の関数はシンボルテーブルから検索
         auto sym = scopes_.current().lookup(ident->name);
         if (!sym && !current_namespace_.empty() && ident->name.find("::") == std::string::npos) {
-            // 名前空間内の非修飾呼び出しは「現在の名前空間::名前」として解決する
-            // （内側から外側へ探索。解決できた場合は呼び出し名を修飾名へ書き換え、
-            // HIR/コード生成が一貫した名前を見るようにする）
+            // 名前空間内の非修飾呼び出しは「現在の名前空間::名前」として解決する（内側から外側へ探索。解決できた場合は呼び出し名を修飾名へ書き換え、HIR/コード生成が一貫した名前を見るようにする）
             std::string ns = current_namespace_;
             while (!ns.empty()) {
                 std::string qualified = ns + "::" + ident->name;
@@ -623,8 +619,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 }
 
 ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
-    // メソッド呼び出しの受け手は評価前に初期化済み・変更ありとしてマークする
-    // （arr.dim() / v.push() 等を「使用前の未初期化」と誤検出しない。
+    // メソッド呼び出しの受け手は評価前に初期化済み・変更ありとしてマークする（arr.dim() / v.push() 等を「使用前の未初期化」と誤検出しない。
     // 受け手の型を推論する時点で使用チェックが先に発火するため、ここで行う）
     if (member.is_method_call) {
         if (auto* recv_ident = member.object->as<ast::IdentExpr>()) {
@@ -641,8 +636,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
     // メソッド呼び出しの場合
     if (member.is_method_call) {
-        // メソッドがselfを変更するかは静的に判別しないため、受け手の変数を
-        // 保守的に「変更あり」として扱う（const推奨の誤提案を防ぐ）
+        // メソッドがselfを変更するかは静的に判別しないため、受け手の変数を保守的に「変更あり」として扱う（const推奨の誤提案を防ぐ）
         if (auto* recv = member.object->as<ast::IdentExpr>()) {
             mark_variable_modified(recv->name);
             mark_variable_initialized(recv->name);
@@ -795,8 +789,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
         }
 
         // 組み込みenum型（Result<T,E>/Option<T>）のメソッド
-        // type_methods_はベース名（"Result"）で登録されているため、
-        // インスタンス化名（"Result<int, string>" / "Result__int__string"）から
+        // type_methods_はベース名（"Result"）で登録されているため、インスタンス化名（"Result<int, string>" / "Result__int__string"）から
         // ベース名で引き、戻り値・引数のジェネリックパラメータを型引数で置換する
         std::string enum_base = obj_type->name;
         {
@@ -1062,8 +1055,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         return ast::make_array(obj_type->element_type, obj_type->array_size);
     }
     if (member.member == "get") {
-        // チェック付き要素アクセス: 範囲内ならOption::Some(要素)、範囲外ならOption::None
-        // （Rustのslice::get相当。arr[i]の範囲外アクセスを避けるための安全API）
+        // チェック付き要素アクセス: 範囲内ならOption::Some(要素)、範囲外ならOption::None（Rustのslice::get相当。arr[i]の範囲外アクセスを避けるための安全API）
         if (member.args.size() != 1) {
             error(current_span_, "Array get() takes 1 index argument");
         } else {

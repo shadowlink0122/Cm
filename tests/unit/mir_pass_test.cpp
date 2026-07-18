@@ -3,8 +3,7 @@
 // ============================================================
 // 各パスを手組みのMIR（フロントエンド・lowering非依存）に対して
 // 単体で実行し、変換の性質を検証する。
-// パイプライン全体（Cmソース→最適化）の検証は
-// tests/regression/mir_optimization_test.cpp が担う。
+// パイプライン全体（Cmソース→最適化）の検証はtests/regression/mir_optimization_test.cpp が担う。
 // パス⇔テスト対応表は tests/regression/cases/mir_optimization/README.md を参照
 
 #include "../../src/mir/nodes.hpp"
@@ -312,8 +311,7 @@ TEST(MirPassTest, ConstantFolding_FloatIdentityNotSimplified) {
 }
 
 TEST(MirPassTest, ConstantFolding_TerminatorFoldControl) {
-    // 定数discriminantのSwitchIntは既定でGotoへ畳み込まれ、
-    // fold_terminators=false（SVバックエンド用の契約）では保持される
+    // 定数discriminantのSwitchIntは既定でGotoへ畳み込まれ、fold_terminators=false（SVバックエンド用の契約）では保持される
     auto build = [] {
         auto f = make_function();
         BlockId b1 = f->add_block();
@@ -504,8 +502,7 @@ TEST(MirPassTest, SimplifyCFG_CollapsesGotoChain) {
 
     opt::SimplifyControlFlow simplify;
     EXPECT_TRUE(simplify.run(*f));
-    // Goto連鎖はブロックマージで完全に潰れ、b3の内容と終端が
-    // エントリブロックへ取り込まれる
+    // Goto連鎖はブロックマージで完全に潰れ、b3の内容と終端がエントリブロックへ取り込まれる
     EXPECT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::Return);
     EXPECT_EQ(f->basic_blocks[0]->statements.size(), 1u);
 }
@@ -515,8 +512,7 @@ TEST(MirPassTest, SimplifyCFG_CollapsesGotoChain) {
 // ============================================================
 
 TEST(MirPassTest, LICM_HoistsInvariantOutOfHeader) {
-    // 現実装はループヘッダブロック内の文のみを巻き上げ対象とする
-    // （本体ブロックの不変式は対象外。README参照）。
+    // 現実装はループヘッダブロック内の文のみを巻き上げ対象とする（本体ブロックの不変式は対象外。README参照）。
     // ヘッダ内の _inv = _x * _y がプリヘッダへ移動される
     auto f = make_function();
     LocalId x = f->add_local("x", hir::make_int());
@@ -564,8 +560,7 @@ TEST(MirPassTest, LICM_HoistsInvariantOutOfHeader) {
 // ============================================================
 
 TEST(MirPassTest, ConstUnroll_UnrollsConstantTripLoop) {
-    // while (_i < 4) { _acc += _i; _i += 1; } が完全展開され、
-    // 到達可能なCFGからサイクルが消える
+    // while (_i < 4) { _acc += _i; _i += 1; } が完全展開され、到達可能なCFGからサイクルが消える
     auto f = make_function();
     LocalId acc = f->add_local("acc", hir::make_int());
     LocalId i = f->add_local("i", hir::make_int());
@@ -607,8 +602,7 @@ TEST(MirPassTest, ConstUnroll_UnrollsConstantTripLoop) {
 // ============================================================
 
 TEST(MirPassTest, TCE_MarksSelfTailCall) {
-    // 自己再帰の末尾呼び出しが is_tail_call としてマークされる
-    // （LLVMコード生成で tail call 属性になる）
+    // 自己再帰の末尾呼び出しが is_tail_call としてマークされる（LLVMコード生成で tail call 属性になる）
     auto f = make_function("count_down");
     LocalId ret = f->return_local;
     BlockId after = f->add_block();
@@ -638,12 +632,8 @@ TEST(MirPassTest, TCE_IgnoresNonSelfCall) {
 // ============================================================
 
 TEST(MirPassTest, FunctionInlining_CurrentlyDormant) {
-    // 既知の問題を固定するテスト: インライン化パスは呼び出し先を旧形式の
-    // Constant(文字列)として期待するが、現行のMIR loweringはFunctionRefを
-    // 発行するため、実質的に全呼び出しが対象外（パスは休眠状態）。
-    // FunctionRefを認識させて有効化するとperform_inliningの潜在バグ
-    // （デストラクタ順序破壊・SIGSEGV等）が露出するため、有効化は
-    // perform_inliningの再設計とセットで行う（inlining.cppのコメント参照）。
+    // 既知の問題を固定するテスト: インライン化パスは呼び出し先を旧形式のConstant(文字列)として期待するが、現行のMIR loweringはFunctionRefを発行するため、実質的に全呼び出しが対象外（パスは休眠状態）。
+    // FunctionRefを認識させて有効化するとperform_inliningの潜在バグ（デストラクタ順序破壊・SIGSEGV等）が露出するため、有効化はperform_inliningの再設計とセットで行う（inlining.cppのコメント参照）。
     // 有効化された際はこのテストを展開検証（Call終端子の減少）へ書き換えること
     MirProgram program;
     {

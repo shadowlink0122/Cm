@@ -17,9 +17,7 @@ using namespace cm;
 // ============================================================
 // MIR最適化パイプラインの統合テスト
 // ============================================================
-// Cmソース（tests/regression/cases/mir_optimization/ の .cm ファイル）を
-// フロントエンド〜MIR loweringに通した上で、最適化パイプライン全体
-// （複数パスの組み合わせ・収束反復）の動作を検証する。
+// Cmソース（tests/regression/cases/mir_optimization/ の .cm ファイル）をフロントエンド〜MIR loweringに通した上で、最適化パイプライン全体（複数パスの組み合わせ・収束反復）の動作を検証する。
 // 各パス単体の検証は tests/unit/mir_pass_test.cpp（手組みMIR）が担う。
 // パス⇔テスト対応表は cases/mir_optimization/README.md を参照
 class MirOptimizationTest : public ::testing::Test {

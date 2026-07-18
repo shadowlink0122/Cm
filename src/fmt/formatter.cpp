@@ -4,6 +4,8 @@
 
 #include "formatter.hpp"
 
+#include "../common/i18n.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -17,8 +19,7 @@ namespace fmt {
 namespace {
 
 // SV幅付きリテラル（8'd170, 4'b1010, 16'hFFFF）の ' かどうかを判定する。
-// 文字リテラルの開始と誤認すると括弧カウントが狂うため、
-// lexerの規則（数字 + ' + 基数文字 + 値）に合わせて除外する
+// 文字リテラルの開始と誤認すると括弧カウントが狂うため、lexerの規則（数字 + ' + 基数文字 + 値）に合わせて除外する
 bool is_sized_literal_quote(const std::string& s, size_t i) {
     if (i >= s.size() || s[i] != '\'')
         return false;
@@ -39,8 +40,7 @@ struct BlockExpansionStart {
 };
 
 // 展開位置を収集する。文レベル（丸括弧・角括弧の外）の波括弧内に ; がある場合のみ
-// 非空を返す。分割は {の直後・;の直後・}の直前で行い、各行の相対深さも記録する
-// （enforce_semicolon_newline / normalize_indentation の再実行と一致する固定点を作る）
+// 非空を返す。分割は {の直後・;の直後・}の直前で行い、各行の相対深さも記録する（enforce_semicolon_newline / normalize_indentation の再実行と一致する固定点を作る）
 std::vector<BlockExpansionStart> collect_block_expansion_starts(const std::string& line,
                                                                 size_t content_start,
                                                                 size_t code_end) {
@@ -152,9 +152,7 @@ FormatResult Formatter::format(const std::string& original_code) {
     // 7. 演算子周りの空白
     code = normalize_operator_spacing(code, changes);
 
-    // 8. 最大行幅を超える宣言・式の折り返し
-    //    （空白正規化で行長が確定した後に実行し、折り返した継続行の
-    //    インデントは次のインデント正規化の再実行で整える）
+    // 8. 最大行幅を超える宣言・式の折り返し（空白正規化で行長が確定した後に実行し、折り返した継続行のインデントは次のインデント正規化の再実行で整える）
     code = wrap_long_lines(code, changes);
 
     // 9. インデント正規化の再実行（折り返しで生じた継続行を整える）
@@ -176,7 +174,7 @@ FormatResult Formatter::format(const std::string& original_code) {
 bool Formatter::format_file(const std::string& filepath) {
     std::ifstream ifs(filepath);
     if (!ifs) {
-        std::cerr << "エラー: ファイルを読み込めません: " << filepath << "\n";
+        std::cerr << i18n::tr("error: cannot read file: ") << filepath << "\n";
         return false;
     }
 
@@ -190,7 +188,7 @@ bool Formatter::format_file(const std::string& filepath) {
     if (result.modified) {
         std::ofstream ofs(filepath);
         if (!ofs) {
-            std::cerr << "エラー: ファイルを書き込めません: " << filepath << "\n";
+            std::cerr << i18n::tr("error: cannot write file: ") << filepath << "\n";
             return false;
         }
         ofs << result.formatted_code;
@@ -202,7 +200,7 @@ bool Formatter::format_file(const std::string& filepath) {
 
 void Formatter::print_summary(const FormatResult& result, std::ostream& out) const {
     if (result.changes_applied > 0) {
-        out << "✓ " << result.changes_applied << " 箇所のフォーマット修正\n";
+        out << "✓ " << result.changes_applied << i18n::tr(" formatting fix(es)\n");
     }
 }
 
@@ -306,9 +304,7 @@ std::string Formatter::enforce_kr_braces(const std::string& code, size_t& change
             }
 
             // 次の行が "{" のみで、現在行が宣言・制御ヘッダの場合のみ結合する。
-            // 現在行が `)` または識別子で終わるとき（関数・if/for・struct名等）に限り、
-            // 裸ブロックの `{`（前の行が `;`/`{`/`}` 等で終わる）や
-            // 行末コメント付きの行への結合を防ぐ
+            // 現在行が `)` または識別子で終わるとき（関数・if/for・struct名等）に限り、裸ブロックの `{`（前の行が `;`/`{`/`}` 等で終わる）や行末コメント付きの行への結合を防ぐ
             if (next_trimmed == "{") {
                 size_t end = curr.find_last_not_of(" \t\r");
                 bool has_comment = (curr.find("//") != std::string::npos);
@@ -348,8 +344,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     int backtick_base_depth = 0;  // バッククォート開始時の深さ
 
     // 条件付きコンパイルブロック（#ifdef/#ifndef〜#end）をブロック扱いするためのスタック。
-    // #else/#end を対応する #ifdef と同列に揃え、#else では分岐開始時点の
-    // 括弧カウンタを復元する（分岐ごとに波括弧が不均衡でも崩れない）
+    // #else/#end を対応する #ifdef と同列に揃え、#else では分岐開始時点の括弧カウンタを復元する（分岐ごとに波括弧が不均衡でも崩れない）
     struct CondState {
         int brace;            // #ifdef 時点のブレース深さ
         int bracket;          // #ifdef 時点のブラケット深さ
@@ -359,8 +354,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     std::vector<CondState> cond_stack;
 
     // 文の継続行（長い式の折り返し）のインデント状態。
-    // 文の開始行と同じ括弧深さの継続行は1段深くする（1回目で+1し、
-    // 2回目以降も同じ深さ）。開き括弧が未閉の継続行は括弧深さに従う
+    // 文の開始行と同じ括弧深さの継続行は1段深くする（1回目で+1し、2回目以降も同じ深さ）。開き括弧が未閉の継続行は括弧深さに従う
     bool stmt_open = false;    // 直前のコード行が文の途中で終わっているか
     int stmt_group_depth = 0;  // 文の開始行時点の bracket+paren 深さ
 
@@ -465,8 +459,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             paren_depth--;
         }
 
-        // 条件付きコンパイルディレクティブの判定
-        // （ブロック内容を1段インデントする。#ifdef/#else/#end自体は外側の深さで出力）
+        // 条件付きコンパイルディレクティブの判定（ブロック内容を1段インデントする。#ifdef/#else/#end自体は外側の深さで出力）
         bool is_cond_open = (content.rfind("#ifdef", 0) == 0 || content.rfind("#ifndef", 0) == 0);
         bool is_cond_else = (content.rfind("#else", 0) == 0);
         bool is_cond_end = (content.rfind("#end", 0) == 0);
@@ -483,8 +476,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                 // 文の開始行: この時点の括弧深さを記録
                 stmt_group_depth = group_now;
             } else if (group_now == stmt_group_depth && !starts_with_any_close) {
-                // 開き括弧で深くなっていない継続行のみ+1段
-                // （未閉括弧のある継続行は括弧深さのインデントに従う。
+                // 開き括弧で深くなっていない継続行のみ+1段（未閉括弧のある継続行は括弧深さのインデントに従う。
                 // 末尾カンマなしの最終要素直後の閉じ括弧は継続行ではない）
                 is_continuation = true;
             }
@@ -497,8 +489,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             const CondState& top = cond_stack.back();
             total_depth = top.directive_depth;
             if (is_cond_else) {
-                // 次の分岐は #ifdef 直後と同じ状態から数え直す
-                // （前の分岐内で開いた波括弧等の影響を持ち越さない）
+                // 次の分岐は #ifdef 直後と同じ状態から数え直す（前の分岐内で開いた波括弧等の影響を持ち越さない）
                 brace_depth = top.brace;
                 bracket_depth = top.bracket;
                 paren_depth = top.paren;
@@ -559,8 +550,7 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                 }
 
                 if (found_close) {
-                    // 1行バッククォート: バッククォート内をスキップし、
-                    // 閉じバッククォート以降のブレースカウントを継続
+                    // 1行バッククォート: バッククォート内をスキップし、閉じバッククォート以降のブレースカウントを継続
                     i = close_pos;  // 閉じバッククォート位置までスキップ
                     // ループのi++で次の文字に進む
                 } else {
@@ -1097,8 +1087,7 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
             }
         }
 
-        // 折り返し位置の選択: より浅い括弧深さの候補を優先し、同深さならカンマを優先する
-        // （深い位置のカンマで呼び出しの途中を折るより、浅い演算子で折るほうが読みやすい）
+        // 折り返し位置の選択: より浅い括弧深さの候補を優先し、同深さならカンマを優先する（深い位置のカンマで呼び出しの途中を折るより、浅い演算子で折るほうが読みやすい）
         bool has_comma = false;
         bool has_op = false;
         int min_comma_depth = 0;
@@ -1133,9 +1122,7 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
             continue;
         }
 
-        // 括弧グループ（{} / [] / 関数引数の () ）内の要素で折り返す場合は
-        // 全要素を1行ずつに展開する（中途半端な貪欲詰めにせず、
-        // 開き括弧で改行・1要素1行・閉じ括弧を独立行にする）
+        // 括弧グループ（{} / [] / 関数引数の () ）内の要素で折り返す場合は全要素を1行ずつに展開する（中途半端な貪欲詰めにせず、開き括弧で改行・1要素1行・閉じ括弧を独立行にする）
         if (use_comma) {
             bool explode_brace = true;
             size_t group_open = std::string::npos;

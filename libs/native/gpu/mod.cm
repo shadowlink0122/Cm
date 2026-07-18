@@ -214,8 +214,7 @@ export long device_memory_size(long device) {
 // グリッドdispatch API
 // ============================================================
 
-// スレッドグループサイズを明示指定してdispatch
-// group_x=0の場合はカーネル最大値を自動使用
+// スレッドグループサイズを明示指定してdispatch group_x=0の場合はカーネル最大値を自動使用
 export void dispatch_grid(long kernel, long buf_a, long buf_b, long buf_out, long grid_x,
     long group_x) {
     gpu_dispatch_grid(kernel, buf_a, buf_b, buf_out, grid_x, group_x);

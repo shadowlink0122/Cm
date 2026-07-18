@@ -7,8 +7,7 @@
 //
 // このテストでは:
 // 1. 外側/内側両方のコンストラクタが呼ばれること
-// 2. 明示的なスコープ終了でデストラクタが呼ばれること
-// を検証する
+// 2. 明示的なスコープ終了でデストラクタが呼ばれることを検証する
 
 import std::io::println;
 import std::collections::vector::*;
@@ -115,8 +114,7 @@ int main() {
     println("=== All Nested Vector Lifecycle Tests PASSED ===");
 
     // 注意: ここでmatrix, row0, row1などがスコープを抜ける
-    // 外側matrixのデストラクタは呼ばれるが、
-    // 現在の実装では内側Vector<int>のデストラクタは呼ばれない
+    // 外側matrixのデストラクタは呼ばれるが、現在の実装では内側Vector<int>のデストラクタは呼ばれない
     // これはv0.14.0で対応予定
 
     return 0;

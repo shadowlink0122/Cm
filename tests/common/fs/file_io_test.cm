@@ -1,7 +1,6 @@
 // ファイルI/Oのテスト（std::fs）
 // 基本API（bool返却）とResult API（Rust準拠）の両方を検証する
-// 注: `import std::fs; fs::write_file(...)` の名前空間形式は
-// モジュールシステム全体で未対応のため選択的importを使用する
+// 注: `import std::fs; fs::write_file(...)` の名前空間形式はモジュールシステム全体で未対応のため選択的importを使用する
 import std::io::println;
 import std::io::print;
 import std::fs::{write_file, exists, read_file, append_file, remove, read_to_string, remove_file};

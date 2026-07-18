@@ -74,8 +74,7 @@ bool CopyPropagation::same_type(const hir::TypePtr& a, const hir::TypePtr& b) co
     }
     // ポインタ/参照/配列は要素型まで再帰比較する。
     // 従来は kind と name（ポインタでは空文字）のみの比較だったため
-    // *Shape と *Sq が同一視され、interface coercion を含むコピーが
-    // 伝播されて型の意味が失われていた
+    // *Shape と *Sq が同一視され、interface coercion を含むコピーが伝播されて型の意味が失われていた
     if (a->kind == hir::TypeKind::Pointer || a->kind == hir::TypeKind::Reference ||
         a->kind == hir::TypeKind::Array) {
         return same_type(a->element_type, b->element_type);
@@ -90,9 +89,7 @@ bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalI
 
     // 各文を処理
     for (auto& stmt : block.statements) {
-        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は
-        // 常にコピー情報から削除する必要がある
-        // （インラインアセンブリは実行時に変数を変更するため）
+        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は常にコピー情報から削除する必要がある（インラインアセンブリは実行時に変数を変更するため）
         if (stmt->kind == MirStatement::Asm) {
             const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
             for (const auto& operand : asm_data.operands) {

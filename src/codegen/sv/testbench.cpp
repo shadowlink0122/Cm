@@ -125,8 +125,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         return "";
     }
 
-    // #[test] からの参照解決用にポート名を記録し、テストベンチ生成モードへ
-    // （DUT内部信号の読み取りは dut. 階層参照として出力する）
+    // #[test] からの参照解決用にポート名を記録し、テストベンチ生成モードへ（DUT内部信号の読み取りは dut. 階層参照として出力する）
     tb_port_names_.clear();
     tb_input_names_.clear();
     for (const auto& port : mod.ports) {
@@ -142,8 +141,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     ss << "module " << mod.name << "_tb;\n\n";
 
-    // モジュールパラメータをTB側にlocalparamとして写す
-    // （信号宣言の [WIDTH-1:0] などがTB内でも解決できるように）
+    // モジュールパラメータをTB側にlocalparamとして写す（信号宣言の [WIDTH-1:0] などがTB内でも解決できるように）
     for (const auto& hp : mod.header_parameters) {
         std::string lp = hp;
         const std::string pfx = "parameter ";
@@ -215,8 +213,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 
     // テストシーケンス
     // VCDはシミュレーション実行時のカレントディレクトリに出力する。
-    // コンパイル時の-oの相対パスを埋め込むと、シミュレータを別の
-    // ディレクトリから実行したときに開けず異常終了するため
+    // コンパイル時の-oの相対パスを埋め込むと、シミュレータを別のディレクトリから実行したときに開けず異常終了するため
     ss << "    // テストシーケンス\n";
     ss << "    initial begin\n";
     ss << "        $dumpfile(\"" << mod.name << "_tb.vcd\");\n";
@@ -318,8 +315,7 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
 }
 
 // #[test] からの代入先を検証する。
-// 駆動できるのはDUTの入力ポートのみ（出力ポート・内部信号への代入は
-// 意図しない多重駆動や不正な階層代入になるため明確なエラーで停止する。
+// 駆動できるのはDUTの入力ポートのみ（出力ポート・内部信号への代入は意図しない多重駆動や不正な階層代入になるため明確なエラーで停止する。
 // 内部信号の「読み取り」は dut. 階層参照として対応済み）
 void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
     // 配列アクセス等はルートの識別子まで辿る
@@ -369,8 +365,7 @@ void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
 }
 
 // #[test] 関数のHIR文をテストベンチのinitial文へ変換する。
-// 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/
-// assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
+// 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/ assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
 std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
     const std::string ind = "        ";
 
@@ -494,8 +489,7 @@ std::string SVCodeGen::emitHirExpr(const hir::HirExpr& expr) {
     if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr.kind)) {
         if (*var) {
             const std::string& nm = (*var)->name;
-            // テストベンチ生成中: ポート以外のDUT内部信号（内部レジスタ等）は
-            // 階層参照（dut.名前）として読み取る
+            // テストベンチ生成中: ポート以外のDUT内部信号（内部レジスタ等）は階層参照（dut.名前）として読み取る
             if (emitting_testbench_ && tb_port_names_.count(nm) == 0 &&
                 module_signal_names_.count(nm) > 0) {
                 return "dut." + nm;

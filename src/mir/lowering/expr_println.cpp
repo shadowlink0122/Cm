@@ -108,10 +108,8 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
 
                     // 名前付き変数を解決して追加（プレースホルダの順番通り）
                     for (const auto& var_name : var_names) {
-                        // 演算子を含む一般式（{a + b} 等）とメソッド/関数呼び出し
-                        // （{xs.first()} {xs.some(fn)} 等）は本物の式パーサで降下する。
-                        // 従来は未対応パターンとして未初期化テンポラリが渡されゴミ値が
-                        // 表示されていた（失敗時は従来経路へフォールバック）
+                        // 演算子を含む一般式（{a + b} 等）とメソッド/関数呼び出し（{xs.first()} {xs.some(fn)} 等）は本物の式パーサで降下する。
+                        // 従来は未対応パターンとして未初期化テンポラリが渡されゴミ値が表示されていた（失敗時は従来経路へフォールバック）
                         if (interp_content_is_expression(var_name) ||
                             interp_content_is_call(var_name)) {
                             if (auto expr_local = lower_interp_expression(var_name, ctx)) {
@@ -459,8 +457,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                             std::string ptr_name = var_name.substr(0, arrow_pos);
                             std::string member_name = var_name.substr(arrow_pos + 2);
 
-                            // ptr_name にドットが含まれる場合（obj.field->member形式）は
-                            // else節のドットアクセス処理に任せる
+                            // ptr_name にドットが含まれる場合（obj.field->member形式）はelse節のドットアクセス処理に任せる
                             if (ptr_name.find('.') != std::string::npos) {
                                 // 以下のelse節（dot_pos処理）にフォールスルー
                                 goto handle_dot_access;
@@ -589,8 +586,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                         !arr_type->array_size.has_value();
 
                                         if (is_slice && remaining.empty()) {
-                                            // スライスのインデックスアクセス - cm_slice_get_*
-                                            // を呼び出す
+                                            // スライスのインデックスアクセス - cm_slice_get_*を呼び出す
                                             hir::TypePtr elem_type = arr_type->element_type
                                                                          ? arr_type->element_type
                                                                          : hir::make_int();
@@ -737,9 +733,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                     place.projections.push_back(
                                                         PlaceProjection::index(idx_local));
 
-                                                    // 配列/ポインタの要素型に更新
-                                                    // （ポインタを辿らないと ptr[i] の補間temp
-                                                    // がポインタ型になり、wasm32では4バイト
+                                                    // 配列/ポインタの要素型に更新（ポインタを辿らないと ptr[i] の補間tempがポインタ型になり、wasm32では4バイト
                                                     // allocaへの8バイトstoreというUBになる）
                                                     if (current_type &&
                                                         (current_type->kind ==
@@ -881,8 +875,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                 std::string obj_name = var_name.substr(0, dot_pos);
                                 std::string member_name = var_name.substr(dot_pos + 1);
 
-                                // メソッド呼び出しかどうかチェック
-                                // （末尾が "()" または "(args...)" の場合）
+                                // メソッド呼び出しかどうかチェック（末尾が "()" または "(args...)" の場合）
                                 bool is_method_call = false;
                                 std::string method_args_str;
                                 {
@@ -968,8 +961,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                         } else if (obj_type &&
                                                    obj_type->kind == hir::TypeKind::Struct) {
                                             // 構造体のメソッド呼び出し
-                                            // member_name
-                                            // にドットが含まれる場合、構造体フィールドのスライスメソッド
+                                            // member_nameにドットが含まれる場合、構造体フィールドのスライスメソッド
                                             // 例: c.values.len() → member_name = "values.len"
                                             size_t inner_dot = member_name.find('.');
                                             if (inner_dot != std::string::npos) {
@@ -1112,8 +1104,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 method_args.push_back(
                                                     MirOperand::copy(MirPlace{*obj_id}));
 
-                                                // メソッドの明示的引数（{b.get(0)} 等）を
-                                                // カンマ区切りで解決して追加
+                                                // メソッドの明示的引数（{b.get(0)} 等）をカンマ区切りで解決して追加
                                                 if (!method_args_str.empty()) {
                                                     std::string cur;
                                                     int depth = 0;
@@ -1235,8 +1226,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                             } else if (arrow_pos != std::string::npos &&
                                                        (dot_pos == std::string::npos ||
                                                         arrow_pos < dot_pos)) {
-                                                // field->next
-                                                // のような形式（ポインタデリファレンス）
+                                                // field->nextのような形式（ポインタデリファレンス）
                                                 field_part = remaining.substr(0, arrow_pos);
                                                 remaining = remaining.substr(arrow_pos + 2);
                                                 is_arrow = true;
@@ -1871,8 +1861,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 hir::TypePtr return_type = hir::make_int();
                                                 LocalId result = ctx.new_temp(return_type);
 
-                                                // 引数の準備
-                                                // （整数/boolリテラルとローカル変数をサポート）
+                                                // 引数の準備（整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
                                                     call_args.push_back(
@@ -1916,16 +1905,14 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 hir::TypePtr return_type = hir::make_int();
                                                 LocalId result = ctx.new_temp(return_type);
 
-                                                // 引数の準備
-                                                // （整数/boolリテラルとローカル変数をサポート）
+                                                // 引数の準備（整数/boolリテラルとローカル変数をサポート）
                                                 std::vector<MirOperandPtr> call_args;
                                                 for (const auto& arg_str : func_args) {
                                                     call_args.push_back(
                                                         lower_interp_call_arg(ctx, arg_str));
                                                 }
 
-                                                // デフォルト引数の補完（{greet(1)} 等、
-                                                // 省略された末尾引数をHIR関数定義から評価）
+                                                // デフォルト引数の補完（{greet(1)} 等、省略された末尾引数をHIR関数定義から評価）
                                                 if (ctx.hir_func_defs) {
                                                     auto fit = ctx.hir_func_defs->find(func_name);
                                                     if (fit != ctx.hir_func_defs->end() &&
@@ -2040,8 +2027,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                     arg_locals.push_back(ctx.new_temp(err_type));
                                                 }
                                             } else {
-                                                // 通常の変数
-                                                // まずconst値をチェック（定数として登録されている場合）
+                                                // 通常の変数まずconst値をチェック（定数として登録されている場合）
                                                 auto const_val = ctx.get_const_value(var_name);
                                                 if (const_val) {
                                                     // const変数の値を一時変数に格納
@@ -2074,8 +2060,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                     // 明示的な引数は無視（単一の文字列リテラルのみ許可）
                     // 将来的にはエラーを報告する
                     if (call.args.size() > 1) {
-                        // TODO: エラーを報告: println accepts only a single string literal. Use
-                        // variable interpolation instead: println("{var}") 現在は追加引数を無視
+                        // TODO: エラーを報告: println accepts only a single string literal. Use variable interpolation instead: println("{var}") 現在は追加引数を無視
                     }
 
                     // 引数の数を追加

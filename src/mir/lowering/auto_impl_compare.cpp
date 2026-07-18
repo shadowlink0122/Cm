@@ -532,6 +532,9 @@ void MirLowering::rewrite_struct_comparison_operators() {
                 // 結果を格納する場所
                 MirPlace result_place = assign_data->place;
 
+                // 演算子種別を退避（この後のresizeで文が破棄され、bin_dataは無効になるため）
+                const MirBinaryOp bin_op = bin_data.op;
+
                 // 引数を準備
                 std::vector<MirOperandPtr> args;
                 auto lhs_op = std::make_unique<MirOperand>();
@@ -542,8 +545,8 @@ void MirLowering::rewrite_struct_comparison_operators() {
                 rhs_op->kind = bin_data.rhs->kind;
                 rhs_op->data = bin_data.rhs->data;
 
-                // > と >= は引数を入れ替え
-                if (bin_data.op == MirBinaryOp::Gt || bin_data.op == MirBinaryOp::Ge) {
+                // a > b は b < a、a <= b は !(b < a) なので Gt と Le で引数を入れ替える
+                if (bin_op == MirBinaryOp::Gt || bin_op == MirBinaryOp::Le) {
                     args.push_back(std::move(rhs_op));
                     args.push_back(std::move(lhs_op));
                 } else {
@@ -564,13 +567,10 @@ void MirLowering::rewrite_struct_comparison_operators() {
                 // 現在のブロックの文を切り詰め
                 block->statements.resize(stmt_idx);
 
-                // <= と >= の場合は、< の結果または a == b の結果が true
-                // 単純化のため、< と == を両方呼び出す必要がある
-                // 今回は < のみ使用して、<= は !( > ) として実装
+                // <= と >= は < の呼び出し結果の反転で導出する
+                // （a <= b は !(b < a)、a >= b は !(a < b)。引数の入れ替えは上で実施済み）
 
-                if (bin_data.op == MirBinaryOp::Le || bin_data.op == MirBinaryOp::Ge) {
-                    // <= は !(a > b) = !(b < a)
-                    // >= は !(a < b)
+                if (bin_op == MirBinaryOp::Le || bin_op == MirBinaryOp::Ge) {
                     // 一時変数を作成して結果を反転
                     LocalId temp_result = func->add_local("_lt_tmp", hir::make_bool(), true, false);
 

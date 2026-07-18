@@ -125,8 +125,7 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
             }
 
             // 構造体/ユニオンポインタへの丸ごとDeref代入（*p = v）:
-            // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ）は要素を置換し、
-            // オブジェクト直接参照はフィールドコピーで表現する（IIFEは代入左辺にできないため）
+            // ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ）は要素を置換し、オブジェクト直接参照はフィールドコピーで表現する（IIFEは代入左辺にできないため）
             if (data.place.projections.size() == 1 &&
                 data.place.projections[0].kind == mir::ProjectionKind::Deref &&
                 target_local < func.locals.size()) {

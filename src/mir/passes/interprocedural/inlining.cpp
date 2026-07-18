@@ -56,13 +56,10 @@ bool FunctionInlining::process_block(
 
     auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
 
-    // 既知の問題: 現行のMIR loweringは呼び出し先をFunctionRefで表現するが、
-    // 本パスは旧形式のConstant(文字列)のみ認識するため、実質的に全呼び出しが
+    // 既知の問題: 現行のMIR loweringは呼び出し先をFunctionRefで表現するが、本パスは旧形式のConstant(文字列)のみ認識するため、実質的に全呼び出しが
     // 対象外（パスは休眠状態）。FunctionRefを認識させて有効化すると
     // perform_inliningの潜在バグ（デストラクタ実行順序の破壊・メソッド
-    // チェーンの誤結果・アロケータのSIGSEGV等）がインタプリタスイートで
-    // 広範に露出することを確認済み（2026-07-14）。有効化はperform_inliningの
-    // 再設計（ローカル/ブロックのリマップとデストラクタ・戻り値の扱いの検証）
+    // チェーンの誤結果・アロケータのSIGSEGV等）がインタプリタスイートで広範に露出することを確認済み（2026-07-14）。有効化はperform_inliningの再設計（ローカル/ブロックのリマップとデストラクタ・戻り値の扱いの検証）
     // とセットで行うこと。バックエンド対応マトリクスの既知の問題も参照
     if (call_data.func->kind != MirOperand::Constant)
         return false;
@@ -117,8 +114,7 @@ bool FunctionInlining::should_inline(const MirFunction& callee) {
         return false;
     }
 
-    // ASM文を含む関数はインライン化しない
-    // （レジスタ割当前提の崩壊、ret命令の帰先消失を防止）
+    // ASM文を含む関数はインライン化しない（レジスタ割当前提の崩壊、ret命令の帰先消失を防止）
     for (const auto& b : callee.basic_blocks) {
         if (!b)
             continue;

@@ -65,9 +65,7 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
         std::cerr << "[MIR] All passes complete" << std::endl;
 
     // Bug#45修正: モジュール修飾名の正規化
-    // import先の関数がモジュール修飾名（例: kmalloc::heap_size_to_class）で
-    // FunctionRefに登録されている場合、関数定義名（heap_size_to_class）と
-    // 一致しないためDCEで誤削除される。全FunctionRefを単純名に統一する。
+    // import先の関数がモジュール修飾名（例: kmalloc::heap_size_to_class）でFunctionRefに登録されている場合、関数定義名（heap_size_to_class）と一致しないためDCEで誤削除される。全FunctionRefを単純名に統一する。
     {
         // まず関数名のマッピングを構築（修飾名 → 単純名）
         std::unordered_map<std::string, std::string> name_map;

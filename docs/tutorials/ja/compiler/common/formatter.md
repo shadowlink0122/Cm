@@ -197,4 +197,4 @@ int main() {
 
 ---
 
-<!-- nav -->← 前: [Linter (cm lint)](linter.html) ｜ [目次](../index.html) ｜ 次: [MIR最適化パス](optimization.html) →
+<!-- nav -->← 前: [Linter (cm lint)](linter.html) ｜ [目次](../index.html) ｜ 次: [設定ファイル（.cmconfig.yml）](config.html) →

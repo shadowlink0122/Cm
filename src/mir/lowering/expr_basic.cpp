@@ -1,6 +1,4 @@
-// expr_lowering_basic.cpp - 基本式のlowering
-// lower_literal, lower_var_ref, lower_member, lower_index,
-// lower_ternary, lower_struct_literal, lower_array_literal, convert_to_string
+// expr_lowering_basic.cpp - 基本式のlowering lower_literal, lower_var_ref, lower_member, lower_index, lower_ternary, lower_struct_literal, lower_array_literal, convert_to_string
 
 #include "../../common/debug.hpp"
 #include "expr.hpp"
@@ -416,8 +414,7 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
             return temp;
         }
 
-        // 既知の関数名なら関数参照として解決する
-        // （補間ミニパイプライン経由ではis_function_refが立たないため）
+        // 既知の関数名なら関数参照として解決する（補間ミニパイプライン経由ではis_function_refが立たないため）
         if (ctx.hir_func_defs && ctx.hir_func_defs->count(var.name)) {
             hir::TypePtr func_ptr_type =
                 expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
@@ -507,8 +504,7 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // 単純enum（ペイロードなし、int表現）の __tag は値そのもの。
-    // Tagged Union化されないenum変数への c.__tag は恒等アクセスとして扱う
-    // （enum比較のHIR書き換えが一律に __tag 抽出を挿入するため）
+    // Tagged Union化されないenum変数への c.__tag は恒等アクセスとして扱う（enum比較のHIR書き換えが一律に __tag 抽出を挿入するため）
     if (member.member == "__tag" && (!obj_type || obj_type->kind != hir::TypeKind::Struct)) {
         if (!needs_deref) {
             return object;
@@ -674,8 +670,7 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
     }
 
     // 最終的なフィールドの型で一時変数を作成
-    // 重要: shared_ptrの参照共有で後から型が変更される問題を回避するため、
-    // 型をディープコピーする
+    // 重要: shared_ptrの参照共有で後から型が変更される問題を回避するため、型をディープコピーする
     hir::TypePtr final_type = current_type;
     if (current_type &&
         (current_type->kind == hir::TypeKind::Int || current_type->kind == hir::TypeKind::UInt ||
@@ -835,8 +830,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         elem_type = current_type ? current_type : hir::make_int();
     }
 
-    // フォールバック: HIR型情報がnull、またはelement_typeがジェネリック型の場合、
-    // MIRローカル変数の型から判定
+    // フォールバック: HIR型情報がnull、またはelement_typeがジェネリック型の場合、MIRローカル変数の型から判定
     // ジェネリック関数内での ptr[i] アクセスでは、HIRの型がまだ T* のままなので
     // モノモーフ化後のMIRローカル変数の型を使用する必要がある
     bool needs_fallback =
@@ -877,8 +871,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         }
     }
 
-    // スライスの場合、HIR型はtypedefエイリアス未解決のことがあるため、
-    // 解決済みのMIRローカル型がユニオンならそちらを優先する
+    // スライスの場合、HIR型はtypedefエイリアス未解決のことがあるため、解決済みのMIRローカル型がユニオンならそちらを優先する
     if (is_slice && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
         if (array_type && array_type->kind == hir::TypeKind::Array && array_type->element_type &&
@@ -957,8 +950,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
 
     // ポインタ型の「変数」に対するインデックスアクセスの場合、Index前にDerefが必要
     // p[0] → place.projections = [Deref, Index(0)]
-    // ただし self.data[idx] のようなメンバーアクセス経由は、lower_expressionで
-    // 既にポインタ値がtemp変数にロードされているため、Derefは不要
+    // ただし self.data[idx] のようなメンバーアクセス経由は、lower_expressionで既にポインタ値がtemp変数にロードされているため、Derefは不要
     bool is_var_ref = index_expr.object && std::holds_alternative<std::unique_ptr<hir::HirVarRef>>(
                                                index_expr.object->kind);
     if (is_var_ref && index_expr.object && index_expr.object->type &&
@@ -1210,8 +1202,7 @@ LocalId ExprLowering::lower_array_literal(const hir::HirArrayLiteral& lit,
     LocalId result = ctx.new_temp(array_type);
 
     // elem_typeも解決する（new_tempと同じ解決パスを通る）
-    // expected_typeのelement_typeはtypedef未解決のStruct型("Value")の場合があるため、
-    // 正確な型比較のためにlocals経由で解決済みの型を取得する
+    // expected_typeのelement_typeはtypedef未解決のStruct型("Value")の場合があるため、正確な型比較のためにlocals経由で解決済みの型を取得する
     if (result < ctx.func->locals.size() && ctx.func->locals[result].type &&
         ctx.func->locals[result].type->kind == hir::TypeKind::Array &&
         ctx.func->locals[result].type->element_type) {
@@ -1362,8 +1353,7 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
 
     // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入
     // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
-    // b as void* で配列全体がコピーされるのを防ぐため、
-    // 配列のアドレスを取得してからポインタキャストを行う
+    // b as void* で配列全体がコピーされるのを防ぐため、配列のアドレスを取得してからポインタキャストを行う
     if (target_type &&
         (target_type->kind == hir::TypeKind::Pointer ||
          target_type->kind == hir::TypeKind::Reference) &&

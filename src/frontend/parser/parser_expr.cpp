@@ -1,4 +1,5 @@
 #include "../../common/debug/par.hpp"
+#include "../../common/i18n.hpp"
 #include "parser.hpp"
 
 namespace cm {
@@ -602,8 +603,7 @@ ast::ExprPtr Parser::parse_postfix() {
         }
 
         // ?演算子（Result/Optionのエラー伝播）: expr?
-        // 三項演算子（cond ? a : b）と区別するため、? の次のトークンが
-        // 式を開始し得る場合は三項演算子として上位に委ねる
+        // 三項演算子（cond ? a : b）と区別するため、? の次のトークンが式を開始し得る場合は三項演算子として上位に委ねる
         if (check(TokenKind::Question)) {
             bool next_starts_expr = false;
             if (pos_ + 1 < tokens_.size()) {
@@ -1463,8 +1463,8 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
     // 例: ulong match = 1; → matchがKwMatchとしてレキシングされ、= がLBraceでないためエラー
     if (!check(TokenKind::LBrace)) {
         error(
-            "match式の後に '{' "
-            "が必要です。'match'はCm言語の予約語のため、変数名として使用できません");
+            i18n::tr("'{' is required after match; 'match' is a reserved word in Cm and "
+                     "cannot be used as a variable name"));
         // ダミーのmatch式を返して呼び出し元に安全に戻る
         auto match_expr =
             std::make_unique<ast::MatchExpr>(std::move(scrutinee), std::vector<ast::MatchArm>{});
@@ -1482,7 +1482,7 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
     while (!check(TokenKind::RBrace) && !is_at_end() && match_arm_iterations < MAX_MATCH_ARMS) {
         // stuck検出: posが前回と同じ→パーサが進めていない（初回含む）
         if (pos_ == last_pos && match_arm_iterations > 0) {
-            error("match式のパターン解析でパーサが停滞しました");
+            error(i18n::tr("parser stalled while parsing match patterns"));
             // 次のRBraceまでスキップ
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 advance();

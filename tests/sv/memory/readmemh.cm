@@ -3,8 +3,7 @@
 // #[sv::memfile] 属性のテスト:
 // 属性付き配列は要素代入のinitialブロックではなく
 // initial $readmemh("<path>", <var>); として出力される。
-// hexファイル自体は合成/シミュレーション環境で用意する
-// （--emit-memfile を使えばコンパイル時に生成できる）。
+// hexファイル自体は合成/シミュレーション環境で用意する（--emit-memfile を使えばコンパイル時に生成できる）。
 
 #[input] posedge clk;
 #[input] uint idx;

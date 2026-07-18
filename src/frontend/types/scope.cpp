@@ -51,6 +51,26 @@ std::optional<Symbol> Scope::lookup(const std::string& name) const {
     return std::nullopt;
 }
 
+// 現スコープのみで `<名前空間>::name` に一意に一致するシンボルを検索する
+// （importモジュールの名前空間外へ複製された関数が、モジュール内グローバルを非修飾名で参照するケースの解決用。複数の名前空間に同名がある場合は曖昧なので解決しない）
+std::optional<Symbol> Scope::lookup_suffix_unique(const std::string& name) const {
+    const std::string suffix = "::" + name;
+    const Symbol* found = nullptr;
+    for (const auto& [key, sym] : symbols_) {
+        if (key.size() > suffix.size() &&
+            key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            if (found) {
+                return std::nullopt;  // 複数一致は曖昧
+            }
+            found = &sym;
+        }
+    }
+    if (found) {
+        return *found;
+    }
+    return std::nullopt;
+}
+
 // 変数を使用済みとしてマーク（未使用検出用）
 bool Scope::mark_used(const std::string& name) {
     auto it = symbols_.find(name);

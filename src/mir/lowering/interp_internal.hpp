@@ -50,8 +50,7 @@ inline bool interp_content_is_expression(const std::string& s) {
             continue;
         }
         if (paren != 0 || bracket != 0) {
-            // 括弧内の ':'（ビットスライス x[3:0] / パートセレクト +: ）は
-            // 本物の式パーサで処理すべき式マーカー
+            // 括弧内の ':'（ビットスライス x[3:0] / パートセレクト +: ）は本物の式パーサで処理すべき式マーカー
             if (c == ':' && bracket != 0) {
                 return true;
             }
@@ -108,8 +107,7 @@ inline bool interp_content_is_expression(const std::string& s) {
 
 // 補間内のメソッド/関数呼び出しを本物の式パーサ経路で降下すべきか判定する。
 // 自動実装メソッド（debug/toString/css系）は旧経路がネスト展開込みで
-// 正しく整形できるため除外する（式パーサ経路では文字列ポインタが
-// 数値表示になることを実測確認済み。with_debug系テストが検出する）
+// 正しく整形できるため除外する（式パーサ経路では文字列ポインタが数値表示になることを実測確認済み。with_debug系テストが検出する）
 inline bool interp_content_is_call(const std::string& s) {
     if (s.find('(') == std::string::npos) {
         return false;
@@ -124,8 +122,7 @@ inline bool interp_content_is_call(const std::string& s) {
 }
 
 // 補間内の関数呼び出し引数文字列をMIRオペランドへ変換するヘルパー
-// 整数リテラル・boolリテラル・ローカル変数名をサポートする
-// （それ以外の複雑な式は従来どおりダミーの0を返す）
+// 整数リテラル・boolリテラル・ローカル変数名をサポートする（それ以外の複雑な式は従来どおりダミーの0を返す）
 // ジェネリック構造体の特殊化名（Box<int> → Box__int）を構成する。
 // 補間内メソッド呼び出しの関数名解決で、型引数を落とすと
 // 未定義シンボル参照（Box__get）になるため必ず型引数を反映する

@@ -23,6 +23,7 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 | [プリプロセッサ](common/preprocessor.html) | 🟡 中級 | 条件付きコンパイル |
 | [Linter](common/linter.html) | 🟢 初級 | 静的解析（cm lint） |
 | [Formatter](common/formatter.html) | 🟢 初級 | コードフォーマット（cm fmt） |
+| [設定ファイル](common/config.html) | 🟢 初級 | .cmconfig.yml（言語・コンパイル既定値・lint設定） |
 | [最適化](common/optimization.html) | 🔴 上級 | O0-O3、--funroll-loops、末尾呼び出し最適化 |
 
 ## ネイティブ（native/）
@@ -54,7 +55,7 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 | [制御構文とループ](sv/control-flow.html) | 🟡 中級 | if/case・ループ再構成・定数ループ展開 |
 | [データ構造](sv/data.html) | 🟡 中級 | 連接・enum FSM・配列・文字列 |
 | [メモリ初期化](sv/memory.html) | 🟡 中級 | 配列初期値・$readmemh・--emit-memfile |
-| [モジュール階層](sv/hierarchy.html) | 🟡 中級 | //! sv: hierarchy によるサブモジュール化 |
+| [モジュール階層](sv/hierarchy.html) | 🟡 中級 | exportされたIO構造体によるサブモジュール化 |
 | [実機I/O](sv/board-io.html) | 🟡 中級 | #[sv::pin]・--emit-constraints・トライステート・CDC同期 |
 | [状態初期化とシミュレーション](sv/state-sim.html) | 🟡 中級 | 初期値・initial・テストベンチ・アサーション |
 | [意味論保証](sv/semantics.html) | 🟡 中級 | Cm↔SV意味論対応の保証事項 |

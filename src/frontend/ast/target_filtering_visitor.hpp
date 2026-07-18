@@ -84,8 +84,7 @@ class TargetFilteringVisitor {
 
     bool check_target_attributes(const std::vector<AttributeNode>& attrs) {
         for (const auto& attr : attrs) {
-            // #[test] 宣言はテストモード以外で除去する
-            // （テストビルド限定コンパイル。Rustの #[cfg(test)] + #[test] に相当）
+            // #[test] 宣言はテストモード以外で除去する（テストビルド限定コンパイル。Rustの #[cfg(test)] + #[test] に相当）
             if (attr.name == "test" && !include_tests_) {
                 return false;
             }
@@ -197,14 +196,14 @@ class TargetFilteringVisitor {
     }
 
     void filter_methods(std::vector<std::unique_ptr<FunctionDecl>>& methods) {
-        methods.erase(std::remove_if(methods.begin(), methods.end(),
-                                     [this](const std::unique_ptr<FunctionDecl>& f) {
-                                         // Create a temporary Decl wrapper to use should_keep?
-                                         // Or redundant. accessing f->attributes directly is
-                                         // easier.
-                                         return !check_target_attributes(f->attributes);
-                                     }),
-                      methods.end());
+        methods.erase(
+            std::remove_if(methods.begin(), methods.end(),
+                           [this](const std::unique_ptr<FunctionDecl>& f) {
+                               // Create a temporary Decl wrapper to use should_keep?
+                               // Or redundant. accessing f->attributes directly is easier.
+                               return !check_target_attributes(f->attributes);
+                           }),
+            methods.end());
     }
 
     void filter_c_decls(std::vector<std::unique_ptr<FunctionDecl>>& decls) {

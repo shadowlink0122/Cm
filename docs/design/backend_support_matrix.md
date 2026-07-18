@@ -65,7 +65,7 @@
 | SV専用キーワード（posedge/negedge/wire/reg/always系/assign/initial/bit） | SVのみ | `//! platform: sv` で字句レベルから有効化。他プラットフォームでは通常の識別子 |
 | `#[input]/#[output]/#[inout]` ポート、`#[sv::*]` 属性群 | SVのみ | pin/param/parameter/sync/tri/bram/lutram/memfile 等 |
 | don't-careビットマッチ `0b1?00` | SVで検証済み | if-elseチェーンに脱糖（意味論は全バックエンド共通の設計だが、テストはSVのみ） |
-| `//! sv: hierarchy` モジュール階層化 | SVのみ | |
+| exportされたIO構造体によるモジュール階層化 | SVのみ | |
 | `module NAME;` トップモジュール名宣言 | SVのみ | 他バックエンドではnamespace相当 |
 | Boot Services（uefi::table等） | UEFIのみ | |
 | `__NO_STD__`/`__BAREMETAL__`/`__UEFI__` 定義 | UEFI/baremetal | no_std検査（println/malloc/ファイルIO/スレッド等の禁止）と対 |

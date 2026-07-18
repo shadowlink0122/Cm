@@ -1,0 +1,333 @@
+# cm メッセージ日本語カタログ（英語原文<TAB>日本語訳、1行1メッセージ）
+# 文中の改行・タブは \n・\t で表記する。# 始まりの行はコメント
+# ビルド時に埋め込まれ、実行時に --lang=ja / CM_LANG=ja / .cmconfig.yml language: ja で使用される
+\n=== Check complete ===\n	\n=== チェック完了 ===\n
+\n=== Format check complete ===\n	\n=== フォーマットチェック完了 ===\n
+\n=== Format complete ===\n	\n=== フォーマット完了 ===\n
+\nrun 'cm help' for usage	\n'cm help' でヘルプを表示
+  HIR + MIR lowering: 	  HIR+MIR変換: 
+  MIR optimization: 	  MIR最適化: 
+  Note: for/while statements are converted to HirLoop\n	  Note: for/while文がHirLoopに変換されています\n
+  async function detected: 	  async関数が検出されました: 
+  await expression detected (function: 	  await式が検出されました（関数: 
+  cache hits: 	  キャッシュヒット: 
+  file: 	  ファイル: 
+  frontend total: 	  フロントエンド合計: 
+  lines: 	  行数: 
+  modules: 	  モジュール: 
+  parse + type check: 	  パース+型チェック: 
+  preprocess: 	  プリプロセス: 
+  size: 	  サイズ: 
+ (current function return type: 	（現在の関数の戻り値型: 
+ (deleted)	 (削除)
+ (function: 	 (関数: 
+ (use fixed-point arithmetic or a vendor IP via extern struct)\n	（固定小数点で記述するか、ベンダーIPを extern struct で利用してください）\n
+ -> falling back to normal path\n	 → 通常パス\n
+ -> recompiling\n	 → 再コンパイル\n
+ MB\n	MBに達しています\n
+ changed)	 変更)
+ detected	 検出
+ file(s)\n	 ファイル\n
+ file(s)):\n	ファイル):\n
+ fixed\n	 修正\n
+ formatting fix(es)\n	 箇所のフォーマット修正\n
+ function(s)\n	 関数\n
+ is already used	 は既に使用されています
+ is not available in bare-metal environments	 はベアメタル環境では使用できません
+ module(s)\n	 モジュール\n
+ module(s) recompiled\n	 モジュール再コンパイル\n
+ naming convention [L001]	 命名規則に従っていません [L001]
+ place(s)\n	 箇所\n
+ place(s) formatted\n	 箇所の整形\n
+ place(s))\n	 箇所）\n
+ submodule(s)\n	 個を連結\n
+ submodule(s) detected\n	 個のサブモジュールを検出\n
+ test(s) passed\n	 件のテストが成功\n
+ to specify the target platform\n\n	 オプションで対象プラットフォームを指定してください\n\n
+#[test] function '	#[test] 関数 '
+' (current: 	' 向けです（現在: 
+' assigns state variable '	' 内で代入した状態変数 '
+' cannot be added (size exceeded)	' を追加できません（サイズ超過）
+' cannot take parameters	' は引数を取れません
+' failed to parse\n	' のパースに失敗しました\n
+' generation failed	' の生成に失敗
+' has no #[sv::pin] attribute (it will not be included in the .cst)\n	' に #[sv::pin] が指定されていません（.cstに含まれません）\n
+' is not a variant of the union	' はユニオンの変種に含まれていません
+' is not available in bare-metal environments [B001]\n	' は使用できません [B001]\n
+' is not supported (only sv or native/JIT)\n	' のテスト実行は未対応です（sv または native/JIT のみ）\n
+' must return void	' の戻り値は void である必要があります
+' not found\n	' が見つかりません\n
+' uses '	' 内で '
+' was not committed\n	' はコミットされませんでした\n
+'; 	' を使用しています。
+'?' can only be used inside functions returning 	'?' は次を返す関数の中でのみ使用できます: 
+'?' can only be used on Result/Option values (target type: 	'?' はResult/Option型の値にのみ使用できます（対象の型: 
+'is' can only be used on union-typed values (left-hand type: 	'is' はユニオン型の値にのみ使用できます（左辺の型: 
+'{0}' is not a variant of enum '{1}'	'{0}' は enum '{1}' のバリアントではありません
+() is not available. 	() は使用できません。
+(use a fixed-size array T[N])\n	（固定長配列 T[N] を使用してください）\n
+); references, aggregate construction, and format conversion are not synthesizable	）。参照・集約構築・フォーマット変換は合成できません
+, warnings: 	, 警告: 
+--funroll-loops count must be in the range 1-1024	--funroll-loops の展開回数は1-1024の範囲で指定してください
+: exception: 	: 例外: 
+: needs formatting (	: 要整形（
+: preprocessor error: 	: プリプロセッサエラー: 
+: warning: '	: warning: ベアメタル環境では '
+; rename them	。別の名前に変更してください
+=== Cache statistics ===\n	=== キャッシュ統計 ===\n
+=== LLVM IR (after optimization) ===\n	=== LLVM IR (最適化後) ===\n
+=== MIR (after optimization) ===	=== MIR (最適化後) ===
+=== MIR (before optimization) ===\n	=== MIR (最適化前) ===\n
+HIR declarations: 	HIR宣言数: 
+JIT execution error (	JIT実行エラー (
+JIT execution error: 	JIT実行エラー: 
+JavaScript code generation error: 	JavaScript コード生成エラー: 
+JavaScript has no heap memory management	JavaScriptにはヒープメモリ管理機能がありません
+LLVM code generation error: 	LLVM コード生成エラー: 
+MIR functions: 	MIR関数数: 
+OS heap memory management	OSヒープメモリ管理
+OS standard output	OS標準出力
+OS-dependent functionality	OS依存機能
+PascalCase or UPPER_SNAKE_CASE	PascalCase または UPPER_SNAKE_CASE
+SV hierarchy error: 	sv階層化エラー: 
+SV hierarchy: 	sv階層化: 
+SystemVerilog code generation error: 	SystemVerilog コード生成エラー: 
+[CACHE] module cache save error: 	[CACHE] モジュールキャッシュ保存エラー: 
+[CODEGEN] error: 	[CODEGEN] エラー: 
+[CODEGEN] section '	[CODEGEN] セクション '
+[CODEGEN] warning: generated code exceeds 	[CODEGEN] 警告: 生成コードが
+a constant expression is required	定数式が必要です
+a semicolon is required after the statement	文の後にセミコロンが必要です
+a single-arm match expression can be replaced with if-let	単一アームのmatch式はif-letに置き換えられます
+a switch statement requires case or else	switch文内にはcaseまたはelseが必要です
+an unnecessary copy of '{0}' can be avoided	'{0}' の不要なコピーを避けられます
+bit slices on a scalar bit (width 1) must be [0:0]	スカラーbit（幅1）へのビットスライスは [0:0] のみ有効です
+bit-slice ranges must be integer literals (v0.16.0 limitation; e.g. x[7:4])	ビットスライスの範囲は整数リテラルで指定してください（v0.16.0時点の制限。例: x[7:4]）
+cache clear error: 	キャッシュクリアエラー: 
+cache directory creation error: 	キャッシュディレクトリ作成エラー: 
+cache does not exist: 	キャッシュが存在しません: 
+cache miss: performing full compilation\n	キャッシュミス: フルコンパイルを実行\n
+cache restore failed: 	キャッシュ復元失敗: 
+cache save error: 	キャッシュ保存エラー: 
+cannot modify '{0}' while it is borrowed	借用中の '{0}' を変更できません
+cannot modify through a const pointer	constポインタ経由で変更できません
+casting to void* is not available on the JS target	JSターゲットでは void* へのキャストは使用できません
+changes detected (	変更検出 (
+checking: 	チェック中: 
+code after a return statement is unreachable	return文の後のコードは到達不能です
+code generation time exceeded the limit	コード生成時間が制限を超過しました
+compiling: 	コンパイル中: 
+config file: 	設定ファイル: 
+consider adding an interface constraint to type parameter '{0}'	型パラメータ '{0}' にインターフェース制約を追加することを検討してください
+consider replacing magic number '{0}' with a named constant	マジックナンバー '{0}' を定数に置き換えることを検討してください
+consider specifying type arguments explicitly	型引数を明示的に指定することを検討してください
+consider using a match expression instead of multiple if-else	複数のif-elseよりもmatch式を使用することを検討してください
+consider using a reference instead of a raw pointer	生ポインタよりも参照を使用することを検討してください
+consider using an iterator instead of an index-based loop	インデックスベースのループよりイテレータを使用することを検討してください
+consider using explicit patterns instead of a wildcard	ワイルドカードの代わりに明示的なパターンを使用することを検討してください
+constant name	定数名
+converting literal '{0}' to '{1}' may lose precision	リテラル '{0}' を '{1}' に変換すると精度が失われる可能性があります
+declarations: 	宣言数: 
+defined symbols: 	定義済みシンボル: 
+directory: 	ディレクトリ: 
+does not follow the 	は 
+duplicate else clause	重複するelse節
+duplicate match arm: '{0}'	重複するmatchアーム: '{0}'
+entries: 	エントリ数: 
+enum name	enum名
+enum value 	enum値 
+enum values require an integer or character literal	enum値には整数リテラルまたは文字リテラルが必要です
+enum variant '{0}' is unused	enumバリアント '{0}' は使用されていません
+enum variant name	enumバリアント名
+error(s)	エラー
+error: 	エラー: 
+error: JIT compiler is disabled; an LLVM-enabled build is required	エラー: JITコンパイラが無効です。LLVM対応ビルドが必要です。
+error: SV test simulation is not supported on Windows\n	エラー: SVテストのシミュレーション実行はWindowsでは未対応です\n
+error: async/await is only supported on the JS target	エラー: async/awaitはJSターゲット専用の機能です
+error: cannot open file '	エラー: ファイル '
+error: cannot open file: 	エラー: ファイルを開けません: 
+error: cannot read file: 	エラー: ファイルを読み込めません: 
+error: cannot write file: 	エラー: ファイルに書き込めません: 
+error: cm run does not support direct execution of --target=sv\n	エラー: cm run は --target=sv の直接実行に未対応です\n
+error: cm run does not support direct execution of --target=wasm\n	エラー: cm run は --target=wasm の直接実行に未対応です\n
+error: function '	エラー: 関数 '
+error: invalid command form\n	エラー: 不正なコマンド形式です\n
+error: iverilog / vvp not found (required to run SV tests)\n	エラー: iverilog / vvp が見つかりません（SVテストの実行に必要）\n
+error: iverilog compilation failed\n	エラー: iverilog コンパイルに失敗しました\n
+error: module '	エラー: モジュール '
+error: no #[test] functions found: 	エラー: #[test] 関数が見つかりません: 
+error: no .cm files found to check\n	エラー: チェック対象の.cmファイルが見つかりません\n
+error: no .cm files found to format\n	エラー: フォーマット対象の.cmファイルが見つかりません\n
+error: no command specified\n	エラー: コマンドが指定されていません\n
+error: no input file or directory specified\n	エラー: 入力ファイルまたはディレクトリが指定されていません\n
+error: no input file specified\n	エラー: 入力ファイルが指定されていません\n
+error: node not found (required to run --target=js)\n	エラー: node が見つかりません（--target=js の実行に必要です）\n
+error: path does not exist: 	エラー: パスが存在しません: 
+error: step() is only available in //! platform: sv tests (test function: 	エラー: step() は //! platform: sv のテストでのみ使用できます（テスト関数: 
+error: test execution for platform '	エラー: platform '
+error: testbench has not been generated: 	エラー: テストベンチが生成されていません: 
+error: the LLVM backend is not enabled\n	エラー: LLVM バックエンドが有効になっていません。\n
+error: unknown target '	エラー: 不明なターゲット '
+error[JS]: 	エラー[JS]: 
+error[SV004]: floating-point types are not supported on the SV target: 	error[SV004]: 浮動小数点型はSVターゲット非対応です: 
+error[SV006]: dynamic arrays (slices) are not supported on the SV target: 	error[SV006]: 動的配列（スライス）はSVターゲット非対応です: 
+error[SV007]: inline assembly (__asm__) is not available on the SV target	エラー[SV007]: インラインアセンブリ（__asm__）はSVターゲットで使用できません
+error[SV007]: unsupported expression on the SV target (MirRvalue::	エラー[SV007]: SVターゲットで非対応の式です（MirRvalue::
+error[SV007]: unsupported statement on the SV target (MirStatement kind=	エラー[SV007]: SVターゲットで非対応の文です（MirStatement kind=
+errors: 	エラー: 
+exit must be used as exit(exit_code)	exit は exit(終了コード) の形式で使用します
+failed to instantiate generic type '{0}'	ジェネリック型 '{0}' のインスタンス化に失敗しました
+failed: 	失敗: 
+fast cache restore failed: 	高速キャッシュ復元失敗: 
+field name	フィールド名
+file I/O	ファイルI/O
+files to check: 	チェック対象: 
+files: 	ファイル数: 
+formatted: 	整形箇所: 
+formatting: 	フォーマット対象: 
+function	関数
+function '	関数 '
+function '{0}' is not defined	関数 '{0}' は定義されていません
+function name	関数名
+generated code line count exceeded the limit	生成コード行数が制限を超過しました
+generated code size exceeded the limit	生成コードサイズが制限を超過しました
+global constant name	グローバル定数名
+global variable name	グローバル変数名
+hint: calloc/realloc/void* are not available on the JS target. 	ヒント: calloc/realloc/void* はJSターゲットでは利用できません。
+hint: clock-driven tests require //! platform: sv at the top of the file\n	ヒント: クロック駆動のテストはファイル先頭に //! platform: sv を指定してください\n
+hint: generate .js with 'cm compile --target=js' and run it with any JS runtime\n	ヒント: cm compile --target=js で生成した .js を任意のJS実行系で実行してください\n
+hint: macOS: brew install icarus-verilog / Ubuntu: sudo apt-get install iverilog\n	ヒント: macOS: brew install icarus-verilog / Ubuntu: sudo apt-get install iverilog\n
+hint: specify the JS target with --target=js	ヒント: --target=js オプションでJSターゲットを指定してください
+hint: use 'cm test' (//! platform: sv) for simulation\n	ヒント: シミュレーション実行は cm test（//! platform: sv）を使用してください\n
+hint: use --target=	ヒント: --target=
+identifiers conflict with SystemVerilog reserved words: 	SystemVerilogの予約語と衝突する識別子があります: 
+implicit conversion from '{0}' to '{1}'	'{0}' から '{1}' への暗黙的な型変換
+import '{0}' is unused	import '{0}' は使用されていません
+imported modules:\n	インポートされたモジュール:\n
+inconsistent brace style (K&R style recommended)	波括弧のスタイルが一貫していません（K&Rスタイル推奨）
+inconsistent indentation	インデントが一貫していません
+interface name	インターフェース名
+invalid --funroll-loops value: 	無効な--funroll-loopsの値: 
+invalid --lang value (en or ja): 	無効な--langの値（en または ja）: 
+invalid bit-slice range (hi >= lo >= 0, width <= 64)	ビットスライス範囲が不正です（hi >= lo >= 0、幅は64以下）
+invalid literal: '{0}'	無効なリテラル: '{0}'
+invalid maximum output size: 	無効な最大出力サイズ: 
+invalid pointer arithmetic: '{0}'	無効なポインタ演算: '{0}'
+invalid type argument: '{0}' cannot be used for type parameter '{1}'	無効な型引数: '{0}' は型パラメータ '{1}' に使用できません
+line is too long ({0} > {1} characters)	行が長すぎます（{0} > {1}文字）
+literal '{0}' is out of range for type '{1}'	リテラル '{0}' は型 '{1}' の範囲を超えています
+literal types require a string, integer, or floating-point literal	リテラル型には文字列、整数、または浮動小数点リテラルが必要です
+loop-invariant computation '{0}' inside the loop	ループ内で不変な計算 '{0}' があります
+malloc/free are replaced by GC. 	malloc/freeはGCベースで代替されます。
+match expression is not exhaustive: '{0}' is not covered	match式が網羅的ではありません: '{0}' がカバーされていません
+match guards must be of type bool	matchガードはbool型である必要があります
+maximum output size must be in the range 1-1024 GB	最大出力サイズは1-1024GBの範囲で指定してください
+method name	メソッド名
+missing newline at end of file	ファイル末尾に改行がありません
+module name	モジュール名
+multiple input files are not allowed	複数の入力ファイルは指定できません
+name '{0}' does not follow the {1} naming convention	名前 '{0}' は {1} 命名規則に従っていません
+needs formatting: 	要整形: 
+networking	ネットワーク
+newest:   	最新:     
+non-synthesizable types detected on the SV target	SVターゲットで非合成型が検出されました
+none	なし
+null pointer dereference	nullポインタの参照解除です
+oldest:   	最古:     
+on the JS target, 	JSターゲットでは 
+optimization complete\n\n	最適化完了\n\n
+optimization level must be in the range 0-3	最適化レベルは0-3の範囲で指定してください
+parameter '{0}' is unused	パラメータ '{0}' は使用されていません
+parameter name	パラメータ名
+parser stalled while parsing match patterns	match式のパターン解析でパーサが停滞しました
+part-select width must be an integer literal from 1 to 64 (v0.16.0 limitation)	パートセレクトの幅は1〜64の整数リテラルで指定してください（v0.16.0時点の制限）
+part-select width on a scalar bit (width 1) must be 1	スカラーbit（幅1）へのパートセレクト幅は1のみ有効です
+pointer '{0}' may be null	ポインタ '{0}' がnullである可能性があります
+pointer casts from void* are not available on the JS target	JSターゲットでは void* からのポインタキャストは使用できません
+pointer type mismatch: '{0}' and '{1}'	ポインタ型が一致しません: '{0}' と '{1}'
+preprocessor error: 	プリプロセッサエラー: 
+process control	プロセス制御
+program exit code: 	プログラム終了コード: 
+raw pointers in structs may cause ownership issues	構造体内の生ポインタは所有権の問題を引き起こす可能性があります
+rebuild with -DCM_USE_LLVM=ON in CMake\n	CMakeで -DCM_USE_LLVM=ON を指定してビルドしてください。\n
+recursion depth exceeded the limit (500)	再帰深度が制限(500)を超えました
+recursive type instantiation is not supported: '{0}'	再帰的な型のインスタンス化はサポートされていません: '{0}'
+required block '	必須ブロック '
+returning a pointer to local variable '{0}'	ローカル変数 '{0}' へのポインタを返しています
+returning a raw pointer; ownership may become unclear	生ポインタを返しています。所有権が不明確になる可能性があります
+run 'cm help' for usage\n	'cm help' でヘルプを表示\n
+running: 	実行中: 
+running: node 	実行中: node 
+snake_case or UPPER_SNAKE_CASE	snake_case または UPPER_SNAKE_CASE
+step must be used as step(cycle_count)	step は step(クロック数) の形式で使用します
+struct name	構造体名
+syntax errors occurred\n	構文エラーが発生しました\n
+the -o option requires an output file name	-o オプションには出力ファイル名が必要です
+the argument to step must be an integer type (cycle count)	step の引数は整数型（クロック数）である必要があります
+the base of a part-select must be an integer type	パートセレクトの基点は整数型である必要があります
+the exit code for exit must be an integer type	exit の終了コードは整数型である必要があります
+the loop can be optimized with for-in	ループを for-in で最適化できます
+the main function cannot be exported	main関数はエクスポートできません
+the result of the match expression is unused	match式の結果が使用されていません
+the target type '	'is' の対象型 '
+the upper bit of the bit slice exceeds the type width	ビットスライスの上位ビットが型の幅を超えています
+the void* type is not available on the JS target (variable: 	JSターゲットでは void* 型は使用できません（変数: 
+this match arm is unreachable	このmatchアームには到達できません
+threading	スレッド
+to run a file, use: 	ファイルを実行するには次を使用してください: 
+tokens: 	トークン数: 
+too many errors; aborting compilation	エラーが多すぎるためコンパイルを中断します
+total size: 	合計サイズ: 
+trailing whitespace at end of line	行末に不要な空白があります
+type '{0}' can be written more simply as '{1}'	型 '{0}' はより簡潔に '{1}' と書けます
+type '{0}' is not defined	型 '{0}' は定義されていません
+type alias name	型エイリアス名
+type annotation '{0}' can be inferred	型注釈 '{0}' は推論可能です
+type check: OK\n\n	型チェック: OK\n\n
+type constraint not satisfied: '{0}' does not implement '{1}'	型制約を満たしていません: '{0}' は '{1}' を実装していません
+type mismatch: '{0}' and '{1}'	型が一致しません: '{0}' と '{1}'
+type parameter '{0}' is unused	型パラメータ '{0}' は使用されていません
+type parameter count mismatch: '{0}' requires {1} type parameter(s)	型パラメータの数が一致しません: '{0}' は {1} 個の型パラメータを必要とします
+type parameter name	型パラメータ名
+type pattern '	型パターン '
+type patterns can only be used in match on union types (target type: 	型パターンはユニオン型のmatchでのみ使用できます（対象の型: 
+typedef requires a valid type	typedefには有効な型が必要です
+unexpected token '{0}'	予期しないトークン '{0}'
+unknown	不明
+unknown cache subcommand: 	不明なcacheサブコマンド: 
+unknown command: 	不明なコマンド: 
+unknown option: 	不明なオプション: 
+unmatched closing brace: '{0}'	対応する閉じ括弧がありません: '{0}'
+usage: cm cache clear | cm cache stats\n	使用法: cm cache clear | cm cache stats\n
+use '->' for access through pointers	ポインタ経由のアクセスには '->' を使用してください
+use '->' for field access on pointer types	ポインタ型に対するフィールドアクセスには '->' を使用してください
+variable	変数
+variable '{0}' can be const	変数 '{0}' は const にできます
+variable '{0}' is not defined	変数 '{0}' は定義されていません
+variable '{0}' is unused	変数 '{0}' は使用されていません
+variable '{0}' is used after move	move後の変数 '{0}' を使用しています
+variable '{0}' shadows a variable in an outer scope	変数 '{0}' は外側のスコープの変数を隠蔽しています
+variable name	変数名
+warning(s)	警告
+warning: SV target: function '	警告: SVターゲット: 関数 '
+warning: cannot write memfile: 	警告: memfileを書き出せません: 
+warning: invalid language in .cmconfig.yml (expected en or ja): 	警告: .cmconfig.yml の言語設定が不正です（en または ja）: 
+warning: port '	警告: ポート '
+warning: this file targets platform '	警告: このファイルはプラットフォーム '
+wildcard pattern '_' captures all cases	ワイルドカードパターン '_' がすべてのケースを捕捉しています
+⚡ per-module incremental compilation: 	⚡ モジュール別差分コンパイル: 
+✓ JIT cache hit (	✓ JITキャッシュヒット (
+✓ JIT execution complete	✓ JIT実行完了
+✓ JavaScript code generation complete: 	✓ JavaScript コード生成完了: 
+✓ SV test passed\n	✓ SVテスト成功\n
+✓ SystemVerilog generation complete: 	✓ SystemVerilog 生成完了: 
+✓ cache cleared: 	✓ キャッシュを削除しました: 
+✓ cache hit: 	✓ キャッシュヒット: 
+✓ cache saved: 	✓ キャッシュ保存完了: 
+✓ compilation complete: 	✓ コンパイル完了: 
+✓ concatenated 	✓ サブモジュール 
+✓ lint complete\n	✓ Lint完了\n
+✓ no formatting needed\n	✓ 整形不要\n
+✓ pin constraints generated: 	✓ ピン制約生成: 
+✓ project script generated: 	✓ プロジェクトスクリプト生成: 
+✓ syntax and type check passed\n	✓ 構文と型チェックが成功しました\n

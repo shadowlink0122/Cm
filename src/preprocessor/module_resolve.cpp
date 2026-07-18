@@ -156,8 +156,7 @@ std::filesystem::path ImportPreprocessor::resolve_module_path(
     }
 
     // ファイル名を生成
-    // segments が3つ以上の場合（例: std::mem::malloc）、
-    // 最後の要素は関数/変数名として扱い、モジュールパスは最後の1つ手前まで
+    // segments が3つ以上の場合（例: std::mem::malloc）、最後の要素は関数/変数名として扱い、モジュールパスは最後の1つ手前まで
     std::string full_filename = module_specifier;
     std::replace(full_filename.begin(), full_filename.end(), ':', '/');
 

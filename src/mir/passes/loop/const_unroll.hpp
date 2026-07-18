@@ -11,10 +11,7 @@ namespace cm::mir::opt {
 // 初期値・境界・増分がすべて定数のループを、ループ構造を持たない
 // 直列のブロック列に展開する。
 //
-// SVバックエンドでは while ループとして出力されるが、合成ツールは
-// 動的な while を展開できないことが多い。本パスでMIRレベルで
-// 静的展開することで generate/genvar 相当の繰り返し構造生成を実現する
-// （sv_backend_missing_features.md 項目6）。
+// SVバックエンドでは while ループとして出力されるが、合成ツールは動的な while を展開できないことが多い。本パスでMIRレベルで静的展開することで generate/genvar 相当の繰り返し構造生成を実現する（sv_backend_missing_features.md 項目6）。
 class ConstantLoopUnroll : public OptimizationPass {
    public:
     // max_trips: 展開する最大イテレーション数（超えるループは展開しない）

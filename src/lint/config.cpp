@@ -131,12 +131,19 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
     bool in_lint_section = false;
     bool in_rules_section = false;
     bool in_exclude_section = false;
+    bool in_compile_section = false;
 
     while (std::getline(stream, line)) {
         // コメント行をスキップ
         std::string trimmed = trim(line);
         if (trimmed.empty() || trimmed[0] == '#') {
             continue;
+        }
+
+        // 行内コメントを除去（"language: ja  # コメント" 等）
+        size_t hash_pos = trimmed.find(" #");
+        if (hash_pos != std::string::npos) {
+            trimmed = trim(trimmed.substr(0, hash_pos));
         }
 
         // インデントレベルを計算
@@ -153,8 +160,24 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
         // セクション判定
         if (indent == 0) {
             in_lint_section = (trimmed == "lint:" || trimmed.substr(0, 5) == "lint:");
+            in_compile_section = (trimmed == "compile:" || trimmed.substr(0, 8) == "compile:");
             in_rules_section = false;
             in_exclude_section = false;
+            // トップレベル設定: language: en|ja（メッセージ言語）
+            if (trimmed.substr(0, 9) == "language:") {
+                language_ = trim(trimmed.substr(9));
+            }
+        } else if (in_compile_section && indent >= 2) {
+            // compile: セクション（コンパイル既定値）
+            if (trimmed.substr(0, 13) == "optimization:") {
+                std::string value = trim(trimmed.substr(13));
+                // 不正値（数値以外・0-3範囲外）は無視してデフォルトへフォールバック
+                if (value.size() == 1 && value[0] >= '0' && value[0] <= '3') {
+                    compile_optimization_ = value[0] - '0';
+                }
+            } else if (trimmed.substr(0, 7) == "target:") {
+                compile_target_ = trim(trimmed.substr(7));
+            }
         } else if (in_exclude_section && indent >= 4 && trimmed.substr(0, 2) == "- ") {
             // 除外パターン: "- tests/"
             std::string pattern = trim(trimmed.substr(2));

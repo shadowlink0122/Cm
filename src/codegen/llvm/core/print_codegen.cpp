@@ -110,8 +110,7 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
     auto valueType = value->getType();
 
     // HIR型がPointer型の場合、ポインタを16進数で表示
-    // ただし、value自体がプリミティブ型（整数、浮動小数点）の場合は除外
-    // （プリミティブimplのself参照がポインタ経由で渡されるケース）
+    // ただし、value自体がプリミティブ型（整数、浮動小数点）の場合は除外（プリミティブimplのself参照がポインタ経由で渡されるケース）
     if (hirType && hirType->kind == hir::TypeKind::Pointer &&
         (valueType->isPointerTy() ||
          (valueType->isIntegerTy() && valueType->getIntegerBitWidth() == 64))) {
@@ -135,8 +134,7 @@ llvm::Value* MIRToLLVM::generateFormatReplace(llvm::Value* currentStr, llvm::Val
         return result;
     }
 
-    // タグ付きユニオン値: 実行時タグで分岐し、有効なバリアントの値として整形する
-    // （従来は未対応型として素通りし、プレースホルダが空になっていた）
+    // タグ付きユニオン値: 実行時タグで分岐し、有効なバリアントの値として整形する（従来は未対応型として素通りし、プレースホルダが空になっていた）
     // 値は集約（{i32, [N x i8]}）またはそのポインタの両形式で届く
     {
         auto resolvedU = resolveTypeAlias(hirType);

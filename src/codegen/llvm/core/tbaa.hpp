@@ -12,8 +12,7 @@ namespace cm::codegen::llvm_backend {
 
 /// TBAAメタデータマネージャー
 /// LLVMの型ベースエイリアス解析（TBAA）用のメタデータを管理
-/// これにより、異なる型のポインタがエイリアスしないことをLLVMに伝え、
-/// ループベクトル化などの最適化を有効にする
+/// これにより、異なる型のポインタがエイリアスしないことをLLVMに伝え、ループベクトル化などの最適化を有効にする
 class TBAAManager {
    public:
     explicit TBAAManager(llvm::LLVMContext& ctx, llvm::Module& mod)

@@ -1,4 +1,5 @@
 #include "../../common/debug/par.hpp"
+#include "../../common/i18n.hpp"
 #include "../ast/module.hpp"
 #include "parser.hpp"
 
@@ -35,8 +36,7 @@ ast::DeclPtr Parser::parse_namespace() {
     expect(TokenKind::KwNamespace);
 
     // BUG修正(v0.14.2): namespace名に型キーワード（string, int等）も許可
-    // プリプロセッサがimportファイル名をnamespace名に使用するため、
-    // "string.cm" → "namespace string { ... }" が正しくパースできる必要がある
+    // プリプロセッサがimportファイル名をnamespace名に使用するため、"string.cm" → "namespace string { ... }" が正しくパースできる必要がある
     std::string namespace_name;
     if (check(TokenKind::Ident)) {
         namespace_name = expect_ident();
@@ -932,7 +932,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
                 value = static_cast<int64_t>(s.empty() ? 0 : static_cast<unsigned char>(s[0]));
                 advance();
             } else {
-                error("enum値には整数リテラルまたは文字リテラルが必要です");
+                error(i18n::tr("enum values require an integer or character literal"));
                 return nullptr;
             }
 
@@ -942,7 +942,8 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
 
             // 重複チェック（Associated dataがない場合のみ）
             if (!has_associated_data && used_values.count(value)) {
-                error("enum値 " + std::to_string(value) + " は既に使用されています");
+                error(i18n::tr("enum value ") + std::to_string(value) +
+                      i18n::tr(" is already used"));
                 return nullptr;
             }
             used_values.insert(value);
@@ -955,7 +956,8 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
             if (!has_associated_data) {
                 // シンプルなenumの場合はオートインクリメント
                 if (used_values.count(next_value)) {
-                    error("enum値 " + std::to_string(next_value) + " は既に使用されています");
+                    error(i18n::tr("enum value ") + std::to_string(next_value) +
+                          i18n::tr(" is already used"));
                     return nullptr;
                 }
                 used_values.insert(next_value);
@@ -1023,7 +1025,8 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
                 literals.emplace_back(current().get_float());
                 advance();
             } else {
-                error("リテラル型には文字列、整数、または浮動小数点リテラルが必要です");
+                error(
+                    i18n::tr("literal types require a string, integer, or floating-point literal"));
                 return nullptr;
             }
         } while (consume_if(TokenKind::Pipe));
@@ -1044,7 +1047,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
         do {
             auto type = parse_type();
             if (!type) {
-                error("typedefには有効な型が必要です");
+                error(i18n::tr("typedef requires a valid type"));
                 return nullptr;
             }
             // C++スタイルの配列・ポインタサフィックスをチェック (T*, T[N])

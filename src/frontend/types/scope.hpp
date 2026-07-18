@@ -59,6 +59,9 @@ class Scope {
     // シンボル検索（親スコープも検索）
     std::optional<Symbol> lookup(const std::string& name) const;
 
+    // 現スコープのみで `<名前空間>::name` に一意に一致するシンボルを検索
+    std::optional<Symbol> lookup_suffix_unique(const std::string& name) const;
+
     // 現スコープのみ検索
     bool has_local(const std::string& name) const { return symbols_.count(name) > 0; }
 

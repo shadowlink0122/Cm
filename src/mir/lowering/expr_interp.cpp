@@ -209,9 +209,7 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 }
 
 // 補間プレースホルダの内容を式としてパースしMIRへ降下する。
-// 内容を返り値とするダミー関数を本物のフロントエンド
-// （Lexer→Parser→HirLowering）でHIRに変換し、そのreturn式を
-// 現在の関数コンテキストで通常の式loweringに掛ける
+// 内容を返り値とするダミー関数を本物のフロントエンド（Lexer→Parser→HirLowering）でHIRに変換し、そのreturn式を現在の関数コンテキストで通常の式loweringに掛ける
 std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& content,
                                                              LoweringContext& ctx) {
     try {
@@ -225,8 +223,7 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
         }
 
         hir::HirLowering hir_lowering;
-        // 補間式内で Color::Blue 等のenumバリアントを解決できるよう、
-        // 元プログラムのenum定義を引き継ぐ
+        // 補間式内で Color::Blue 等のenumバリアントを解決できるよう、元プログラムのenum定義を引き継ぐ
         if (ctx.enum_defs) {
             hir_lowering.seed_enum_values(*ctx.enum_defs);
         }
@@ -284,9 +281,7 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                                 if (ctx.hir_func_defs) {
                                     auto fit = ctx.hir_func_defs->find(callee);
                                     if (fit == ctx.hir_func_defs->end()) {
-                                        // メソッドはマングル名（Type__method / ns::method）で
-                                        // 登録されているため境界つき末尾一致で探索する
-                                        // （budget が get に誤マッチする類を防ぐ）
+                                        // メソッドはマングル名（Type__method / ns::method）で登録されているため境界つき末尾一致で探索する（budget が get に誤マッチする類を防ぐ）
                                         for (const auto& [fn_name, fn] : *ctx.hir_func_defs) {
                                             if (!fn || fn_name.size() <= callee.size() + 1 ||
                                                 fn_name.compare(fn_name.size() - callee.size(),
@@ -332,8 +327,7 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
 }
 
 // 補間プレースホルダの内容を値ローカルへ解決する。
-// 単純な識別子は直接参照し、それ以外は本物の式パーサ＋既存の
-// lowering経路（lower_interp_expression）で評価する。
+// 単純な識別子は直接参照し、それ以外は本物の式パーサ＋既存のlowering経路（lower_interp_expression）で評価する。
 // 解決不能な内容は従来どおりエラー型のダミー値を返す
 LocalId ExprLowering::resolve_interp_placeholder(const std::string& content, LoweringContext& ctx) {
     bool plain = !content.empty() &&

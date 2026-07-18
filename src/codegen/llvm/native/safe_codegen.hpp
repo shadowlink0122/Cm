@@ -72,8 +72,7 @@ class SafeCodeGenerator {
                     return;
                 }
 
-                // 定期的にshould_stopをチェックするカスタムパスを追加
-                // （LLVMの内部パスに割り込むことはできないため、これは限定的な効果）
+                // 定期的にshould_stopをチェックするカスタムパスを追加（LLVMの内部パスに割り込むことはできないため、これは限定的な効果）
 
                 // コード生成を実行
                 pass.run(module);

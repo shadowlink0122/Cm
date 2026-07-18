@@ -17,8 +17,7 @@ namespace cm::preprocessor {
 
 std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                                                const std::vector<std::string>& import_items) {
-    // 選択的インポート：指定されたアイテムのみを抽出
-    // （行単位解析のため複数行 export { ... } は先に1行へ正規化する）
+    // 選択的インポート：指定されたアイテムのみを抽出（行単位解析のため複数行 export { ... } は先に1行へ正規化する）
     std::stringstream result;
     std::stringstream input(normalize_export_blocks(module_source));
     std::string line;
@@ -460,8 +459,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                         else if (cur_line[k] == '}')
                             brace_count--;
                     }
-                    // 開始行を記録する（終了行を記録するとPhase 3の
-                    // 処理済みマークが本体行とずれ、重複・欠落出力になる）
+                    // 開始行を記録する（終了行を記録するとPhase 3の処理済みマークが本体行とずれ、重複・欠落出力になる）
                     size_t start_i = i;
 
                     // 構造体本体を収集
@@ -560,8 +558,7 @@ std::string ImportPreprocessor::process_export_syntax(const std::string& source)
                 int line_num = definitions[name].first;
                 // 同じ行番号の定義は一度だけ出力
                 if (output_lines.count(line_num) == 0) {
-                    // export リストに載った定義は export キーワード付きで出力する
-                    // （名前空間内の非export関数は外部から参照できないため）
+                    // export リストに載った定義は export キーワード付きで出力する（名前空間内の非export関数は外部から参照できないため）
                     const std::string& def_text = definitions[name].second;
                     size_t def_pos = skip_ws(def_text);
                     if (!starts_with_keyword(def_text, def_pos, "export")) {
@@ -753,8 +750,7 @@ std::string ImportPreprocessor::process_implicit_impl_export(const std::string& 
         // impl Type for Interface をチェック
         if (std::regex_search(line, impl_match, impl_regex)) {
             std::string type_name = impl_match[2].str();
-            // エクスポートされた構造体のimplの場合、exportキーワードを追加
-            // （まだexportキーワードがない場合のみ）
+            // エクスポートされた構造体のimplの場合、exportキーワードを追加（まだexportキーワードがない場合のみ）
             if (exported_structs.count(type_name) > 0 && line.find("export") == std::string::npos) {
                 std::string indent = impl_match[1].str();
                 line = indent + "export " + line.substr(indent.length());
@@ -916,8 +912,7 @@ std::string ImportPreprocessor::process_hierarchical_reexport(const std::string&
 }
 
 // exportされたブロック（関数・struct・const等）をモジュールソースから抽出する
-// namespace外へのforward展開用: namespaceラップされたモジュールのexportシンボルを
-// namespace外にも出力して、名前空間修飾なしで呼び出し可能にする
+// namespace外へのforward展開用: namespaceラップされたモジュールのexportシンボルをnamespace外にも出力して、名前空間修飾なしで呼び出し可能にする
 std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     const std::string& module_source) {
     // 行単位解析のため複数行 export { ... } は先に1行へ正規化する
@@ -931,12 +926,11 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     std::vector<std::string> block_lines;
     int brace_depth = 0;
     bool found_opening_brace = false;
-    bool has_export_blocks = false;  // export関数が存在するか
+    bool has_export_functions = false;  // export関数が存在するか（ヘルパー複製の要否判定）
 
     while (std::getline(input, line)) {
         // サブモジュールのExported symbolsセクションを検出してパススルー
-        // これにより推移的なエクスポートが可能になる
-        // （モジュールAがBをimport、BがCをimport → AからCのexport関数を呼べる）
+        // これにより推移的なエクスポートが可能になる（モジュールAがBをimport、BがCをimport → AからCのexport関数を呼べる）
         if (!in_export_block && !in_sub_exported_section && !in_non_export_block &&
             line.find("// ===== Exported symbols from ") != std::string::npos) {
             in_sub_exported_section = true;
@@ -982,15 +976,23 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
                     continue;
                 }
                 in_export_block = true;
-                has_export_blocks = true;
+                // export関数か判定（struct/enum等の型exportではヘルパー関数の複製は不要。
+                // 型のみexportするモジュールで非export関数が名前空間外へ複製されると、モジュール内グローバル変数への参照が名前空間外で解決できず壊れるため）
+                {
+                    std::regex nonfunc_export(
+                        R"(^\s*export\s+(struct|enum|interface|typedef|impl|extern|const)\b)");
+                    if (!std::regex_search(line, nonfunc_export) &&
+                        code_portion(line).find('(') != std::string::npos) {
+                        has_export_functions = true;
+                    }
+                }
                 block_lines.clear();
                 block_lines.push_back(line);
                 brace_depth = 0;
                 found_opening_brace = false;
 
                 // 開き括弧をチェック（コメント・文字列リテラル内は除外。
-                // 除外しないと複数行の配列初期化子がコメント内の ; や { で
-                // 途中終了し、export再宣言が先頭行のみに切り詰められる）
+                // 除外しないと複数行の配列初期化子がコメント内の ; や { で途中終了し、export再宣言が先頭行のみに切り詰められる）
                 std::string code_line = code_portion(line);
                 for (char c : code_line) {
                     if (c == '{') {
@@ -1212,10 +1214,9 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
         }
     }
 
-    // export関数が存在する場合のみ、非export定義も含める
-    // （内部ヘルパー関数がexport関数から参照される可能性がある）
+    // export関数が存在する場合のみ、非export定義も含める（内部ヘルパー関数がexport関数から参照される可能性がある）
     std::string exported = result.str();
-    if (has_export_blocks) {
+    if (has_export_functions) {
         std::string non_exported = non_export_result.str();
         if (!non_exported.empty()) {
             exported = non_exported + exported;

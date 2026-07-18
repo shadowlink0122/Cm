@@ -40,8 +40,7 @@ inline std::string target_to_string(Target t) {
     }
 }
 
-// ターゲットのポインタ幅（バイト）。HIR/MIRの型サイズ計算
-// （__sizeof__の定数畳み込み・スライスblob要素サイズ等）が参照する。
+// ターゲットのポインタ幅（バイト）。HIR/MIRの型サイズ計算（__sizeof__の定数畳み込み・スライスblob要素サイズ等）が参照する。
 // wasm32等の32bitターゲットでは4になり、codegenのDataLayoutと一致させる
 inline int& target_pointer_size_ref() {
     static int size = 8;

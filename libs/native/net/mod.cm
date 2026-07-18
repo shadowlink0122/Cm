@@ -1,8 +1,7 @@
 // std/net/mod.cm - ネットワークモジュール
 // TCP通信 + イベント多重化（kqueue/poll）
 // C++ backing (net_runtime.cpp) を使用
-// Note: Cmコンパイラの制約によりextern "C"関数のポインタパラメータは
-//       long(opaque handle)として渡し、C++側でキャストする
+// Note: Cmコンパイラの制約によりextern "C"関数のポインタパラメータはlong(opaque handle)として渡し、C++側でキャストする
 module native.net;
 
 // ============================================================

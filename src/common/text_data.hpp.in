@@ -1,0 +1,16 @@
+#pragma once
+
+// ビルド時に生成されるテキストデータ（CMake configure_file による埋め込み。手編集しない）
+// 原本: src/cli/help_en.txt / src/cli/help_ja.txt / src/common/i18n_ja.tsv
+
+namespace cm::textdata {
+
+// ヘルプ本文（{version} / {program} プレースホルダを実行時に置換する）
+inline constexpr const char* kHelpEn = R"CMTEXT(@CM_HELP_EN_TEXT@)CMTEXT";
+
+inline constexpr const char* kHelpJa = R"CMTEXT(@CM_HELP_JA_TEXT@)CMTEXT";
+
+// 日本語メッセージカタログ（英語原文<TAB>日本語訳のTSV。\n・\t はエスケープ表記）
+inline constexpr const char* kJaCatalogTsv = R"CMTEXT(@CM_I18N_JA_TSV@)CMTEXT";
+
+}  // namespace cm::textdata

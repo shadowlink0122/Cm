@@ -67,13 +67,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 debug::Level::Warn);
         }
 
-        // obj_typeがnullの場合はデバッグログのみ
-        // （フォールバックは使用せず、型チェッカーの設定に依存）
+        // obj_typeがnullの場合はデバッグログのみ（フォールバックは使用せず、型チェッカーの設定に依存）
 
-        // 組み込みResult<T,E>/Option<T>のメソッドをタグ比較・ペイロード取り出しへ脱糖する
-        // （is_ok/is_err/is_some/is_none/unwrap/unwrap_or/unwrap_err/expect）
-        // 補間ミニパイプライン経由ではMIRローカル型名（__TaggedUnion_Option等）で渡るため、
-        // 基底enum名へ正規化してから判定する
+        // 組み込みResult<T,E>/Option<T>のメソッドをタグ比較・ペイロード取り出しへ脱糖する（is_ok/is_err/is_some/is_none/unwrap/unwrap_or/unwrap_err/expect）
+        // 補間ミニパイプライン経由ではMIRローカル型名（__TaggedUnion_Option等）で渡るため、基底enum名へ正規化してから判定する
         std::string enum_base = obj_type ? obj_type->name : "";
         {
             static const std::string kTaggedPrefix = "__TaggedUnion_";
@@ -86,9 +83,7 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 enum_base = enum_base.substr(0, dunder);
             }
         }
-        // enum_defs_はミニパイプライン（補間式）ではprelude宣言が無く空になるため、
-        // ビルトイン登録・seedで必ず入るenum_values_のタグキーで判定する
-        // （ユーザーが同名structを定義した場合はタグキーが無いので誤脱糖しない）
+        // enum_defs_はミニパイプライン（補間式）ではprelude宣言が無く空になるため、ビルトイン登録・seedで必ず入るenum_values_のタグキーで判定する（ユーザーが同名structを定義した場合はタグキーが無いので誤脱糖しない）
         const bool is_builtin_sum_type =
             (enum_base == "Result" && enum_values_.count("Result::Ok") > 0) ||
             (enum_base == "Option" && enum_values_.count("Option::Some") > 0);
@@ -172,8 +167,7 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             }
             if (mem.member == "unwrap_or" && !mem.args.empty()) {
                 auto fallback = lower_expr(*mem.args[0]);
-                // 型引数が失われている場合（補間ミニパイプライン等）は
-                // フォールバック引数の型からペイロード型を復元する
+                // 型引数が失われている場合（補間ミニパイプライン等）はフォールバック引数の型からペイロード型を復元する
                 if (obj_type->type_args.empty() && fallback->type) {
                     ok_type = fallback->type;
                 }
@@ -208,8 +202,7 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             // get(i): チェック付き要素アクセス（Rustのslice::get相当）。
             // 範囲内なら Option::Some(arr[i])、範囲外なら Option::None へ脱糖する。
-            // arr[i] の範囲外アクセス（固定長=未定義値・スライス=0）を
-            // Option型で安全にハンドリングするためのAPI
+            // arr[i] の範囲外アクセス（固定長=未定義値・スライス=0）をOption型で安全にハンドリングするためのAPI
             if (mem.member == "get" && mem.args.size() == 1) {
                 TypePtr elem_type =
                     obj_type->element_type ? obj_type->element_type : ast::make_int();
@@ -995,8 +988,7 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
     auto hir = std::make_unique<HirMember>();
     hir->object = lower_expr(*mem.object);
     hir->member = mem.member;
-    // 型チェッカーを通らない経路（文字列補間のミニパイプライン）では、
-    // シードされた構造体フィールド定義からメンバ型を補完する
+    // 型チェッカーを通らない経路（文字列補間のミニパイプライン）では、シードされた構造体フィールド定義からメンバ型を補完する
     if ((!type || type->is_error()) && !seeded_struct_fields_.empty() && hir->object &&
         hir->object->type) {
         auto sit = seeded_struct_fields_.find(hir->object->type->name);

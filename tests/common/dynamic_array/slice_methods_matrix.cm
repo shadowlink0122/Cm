@@ -1,6 +1,5 @@
 import std::io::println;
-// slice_methods_matrix.cm - スライスの全メソッド網羅テスト
-// （補間内のメソッド直接呼び出しは既知の制限のため、変数に受けてから出力する）
+// slice_methods_matrix.cm - スライスの全メソッド網羅テスト（補間内のメソッド直接呼び出しは既知の制限のため、変数に受けてから出力する）
 
 bool is_even(int x) {
     return x % 2 == 0;

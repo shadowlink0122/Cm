@@ -15,9 +15,7 @@ std::vector<Token> Lexer::tokenize() {
     while (!is_at_end()) {
         Token tok = next_token();
 
-        // デバッグモード時のみ高コストなログ出力を実行
-        // （get_line_number/get_column_number は O(n) 線形スキャンのため、
-        //   非デバッグ時は引数評価自体をスキップする）
+        // デバッグモード時のみ高コストなログ出力を実行（get_line_number/get_column_number は O(n) 線形スキャンのため、非デバッグ時は引数評価自体をスキップする）
         if (::cm::debug::debug_mode() && ::cm::debug::Level::Trace >= ::cm::debug::debug_level()) {
             debug::lex::dump_position(get_line_number(pos_), get_column_number(pos_),
                                       "Scanning at pos " + std::to_string(pos_));

@@ -1,6 +1,5 @@
 // implメソッドのデフォルト引数の回帰テスト:
-// 旧: HIR loweringがメソッドパラメータのdefault_valueを落とし、
-// 省略した引数が型のデフォルト値(0)で補完されて誤った計算結果になっていた
+// 旧: HIR loweringがメソッドパラメータのdefault_valueを落とし、省略した引数が型のデフォルト値(0)で補完されて誤った計算結果になっていた
 import std::io::println;
 
 struct Counter { int base; }

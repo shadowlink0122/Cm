@@ -219,4 +219,4 @@ cm build --dump-mir main.cm
 ---
 
 <!-- nav -->
-← 前: [Formatter (cm fmt)](formatter.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - LLVMバックエンド](../native/index.html) →
+← 前: [設定ファイル（.cmconfig.yml）](config.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - LLVMバックエンド](../native/index.html) →

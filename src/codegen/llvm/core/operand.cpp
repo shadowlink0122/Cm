@@ -754,8 +754,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 bool isPointerIndexing =
                     (currentType && currentType->kind == hir::TypeKind::Pointer);
 
-                // Deref後（currentTypeはポインタの要素型）でもaddrがLoadInst結果の場合は
-                // ポインタへのインデックスアクセスとして扱う
+                // Deref後（currentTypeはポインタの要素型）でもaddrがLoadInst結果の場合はポインタへのインデックスアクセスとして扱う
                 if (!isPointerIndexing && addr && llvm::isa<llvm::LoadInst>(addr)) {
                     // LoadInstの結果（ポインタ値）へのインデックスアクセス
                     isPointerIndexing = true;
@@ -1046,8 +1045,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     currentType->element_type->kind == hir::TypeKind::Struct &&
                     isInterfaceType(currentType->element_type->name)) {
                     currentType = currentType->element_type;
-                    // SSA形式（fat値がそのまま束縛されている）場合は
-                    // 一時スピルしてアドレス化する
+                    // SSA形式（fat値がそのまま束縛されている）場合は一時スピルしてアドレス化する
                     if (addr && !addr->getType()->isPointerTy()) {
                         auto fatTy = getInterfaceFatPtrType(currentType->name);
                         auto spill = builder->CreateAlloca(fatTy, nullptr, "iface_spill");
@@ -1065,8 +1063,7 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                 // allocaに格納されていない場合は、追加のロードは不要
                 bool needsLoad = true;
 
-                // addrがllvm::Argumentの場合は直接ポインタ値として使用
-                // （引数はlocals[arg_local] = &argで直接格納されている）
+                // addrがllvm::Argumentの場合は直接ポインタ値として使用（引数はlocals[arg_local] = &argで直接格納されている）
                 if (llvm::isa<llvm::Argument>(addr)) {
                     needsLoad = false;
                     // addrはすでにポインタ値なのでそのまま使用

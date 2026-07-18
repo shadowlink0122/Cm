@@ -343,8 +343,7 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
         if (enum_defs) {
             auto it = enum_defs->find(type->name);
 
-            // モノモーフ化された型名（例: Result__ulong__long）の場合、
-            // ベース名（Result）でenum_defsをフォールバック検索
+            // モノモーフ化された型名（例: Result__ulong__long）の場合、ベース名（Result）でenum_defsをフォールバック検索
             if (it == enum_defs->end()) {
                 size_t dunder_pos = type->name.find("__");
                 if (dunder_pos != std::string::npos && dunder_pos > 0) {

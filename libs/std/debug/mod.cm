@@ -19,8 +19,7 @@ import std::io::println;
 ///
 /// SVバックエンドのみ、ハードウェアには exit が存在しないため
 /// コンパイラが呼び出し箇所を即時アサーション
-/// assert (cond) else $error("assertion failed: msg"); に変換する
-/// （シミュレーションで検証され、合成ツールでは無視される。
+/// assert (cond) else $error("assertion failed: msg"); に変換する（シミュレーションで検証され、合成ツールでは無視される。
 ///   この関数定義自体はSV出力されない）。
 export void assert(bool cond, string msg) {
     if (!cond) {

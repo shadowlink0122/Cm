@@ -34,6 +34,19 @@ if(CM_VERSION STREQUAL "")
 endif()
 add_compile_definitions(CM_VERSION="${CM_VERSION}")
 
+# ヘルプ本文とメッセージカタログをデータファイルから生成ヘッダへ埋め込む
+# （原本: src/cli/help_{en,ja}.txt / src/common/i18n_ja.tsv。変更時は再configureで追従）
+file(READ "${CMAKE_SOURCE_DIR}/src/cli/help_en.txt" CM_HELP_EN_TEXT)
+file(READ "${CMAKE_SOURCE_DIR}/src/cli/help_ja.txt" CM_HELP_JA_TEXT)
+file(READ "${CMAKE_SOURCE_DIR}/src/common/i18n_ja.tsv" CM_I18N_JA_TSV)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/cli/help_en.txt"
+    "${CMAKE_SOURCE_DIR}/src/cli/help_ja.txt"
+    "${CMAKE_SOURCE_DIR}/src/common/i18n_ja.tsv")
+configure_file("${CMAKE_SOURCE_DIR}/src/common/text_data.hpp.in"
+               "${CMAKE_BINARY_DIR}/generated/common/text_data.hpp" @ONLY)
+include_directories("${CMAKE_BINARY_DIR}/generated")
+
 # Options
 option(CM_DEBUG_BUILD "Enable debug logging macros" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
@@ -740,6 +753,15 @@ if(BUILD_TESTING)
         target_include_directories(error_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(error_test gtest_main)
         gtest_discover_tests(error_test PROPERTIES LABELS "unit")
+
+        # Unit tests - メッセージi18nカタログ（en/ja切替・フォールバック）
+        add_executable(i18n_test
+            tests/unit/i18n_test.cpp
+        )
+        set_target_properties(i18n_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(i18n_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(i18n_test gtest_main)
+        gtest_discover_tests(i18n_test PROPERTIES LABELS "unit")
 
         # Unit tests - 命名規則判定（check/lint --strict のL001）
         add_executable(naming_rules_test

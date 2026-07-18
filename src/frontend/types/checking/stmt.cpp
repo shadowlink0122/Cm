@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 文のチェック
 // ============================================================
 
+#include "../../../common/i18n.hpp"
 #include "../type_checker.hpp"
 
 namespace cm {
@@ -29,8 +30,7 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
     } else if (auto* expr_stmt = stmt.as<ast::ExprStmt>()) {
         if (expr_stmt->expr) {
             auto expr_type = infer_type(*expr_stmt->expr);
-            // must_use検査: Result型の値を使わずに捨てる文は警告する
-            // （Rustのunused_must_use相当。エラーの取りこぼしを静的に検出する）
+            // must_use検査: Result型の値を使わずに捨てる文は警告する（Rustのunused_must_use相当。エラーの取りこぼしを静的に検出する）
             // matchは文として使われるため対象外
             if (expr_type && expr_type->kind == ast::TypeKind::Struct &&
                 !expr_stmt->expr->as<ast::MatchExpr>()) {
@@ -46,9 +46,10 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
                         warn_span = current_span_;
                     }
                     warning(warn_span,
-                            "未使用のResult値です。エラーが無視されています。match・is_ok()・"
-                            "unwrap()等で処理するか、変数に受けて明示的に扱ってください "
-                            "[must_use]");
+                            std::string(i18n::tr("unused Result value; the error is ignored. "
+                                                 "Handle it with match, is_ok(), unwrap(), etc., "
+                                                 "or assign it to a variable explicitly ")) +
+                                "[must_use]");
                 }
             }
         }
@@ -67,8 +68,7 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
         }
         scopes_.pop();
     } else if (auto* switch_stmt = stmt.as<ast::SwitchStmt>()) {
-        // switch本体の検査（従来は未走査で、case内の型エラーや
-        // 変数の使用・変更がLint追跡から漏れていた）
+        // switch本体の検査（従来は未走査で、case内の型エラーや変数の使用・変更がLint追跡から漏れていた）
         if (switch_stmt->expr) {
             infer_type(*switch_stmt->expr);
         }
@@ -175,8 +175,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
             }
         }
         // 借用システム Phase 2: const変数がポインタ型の場合、element_typeにconstを適用
-        // Cmでは "const int* p" は "const (int*) p" としてパースされるため、
-        // ポインタのelement_typeにconst修飾を伝播する
+        // Cmでは "const int* p" は "const (int*) p" としてパースされるため、ポインタのelement_typeにconst修飾を伝播する
         if (let.is_const && resolved_type->kind == ast::TypeKind::Pointer &&
             resolved_type->element_type) {
             resolved_type->element_type->qualifiers.is_const = true;
@@ -235,8 +234,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         bool can_be_const = let.init != nullptr || let.has_ctor_call;
         // _ 始まりの名前（意図的な未使用・コンパイラ生成の一時変数）は対象外
         bool is_internal_name = !let.name.empty() && let.name[0] == '_';
-        // 補間プレースホルダを含む文字列リテラル初期化子は対象外
-        // （const stringは補間が実行されない既知の非互換があるため）
+        // 補間プレースホルダを含む文字列リテラル初期化子は対象外（const stringは補間が実行されない既知の非互換があるため）
         bool has_interp_literal = false;
         if (let.init) {
             if (auto* lit = let.init->as<ast::LiteralExpr>()) {
@@ -261,15 +259,13 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.init) {
         mark_variable_initialized(let.name);
     }
-    // コンストラクタ呼び出し宣言はデストラクタ等の副作用のために存在し得るため、
-    // 初期化済みかつ使用済みとして扱う（RAIIパターンのW001誤検出防止）
+    // コンストラクタ呼び出し宣言はデストラクタ等の副作用のために存在し得るため、初期化済みかつ使用済みとして扱う（RAIIパターンのW001誤検出防止）
     if (let.has_ctor_call) {
         mark_variable_initialized(let.name);
         scopes_.current().mark_used(let.name);
     }
     if (!let.init && let.type) {
-        // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、
-        // 未初期化使用の警告対象はスカラ・配列に限定する
+        // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、未初期化使用の警告対象はスカラ・配列に限定する
         auto resolved = resolve_typedef(let.type);
         if (resolved && resolved->kind == ast::TypeKind::Struct) {
             mark_variable_initialized(let.name);

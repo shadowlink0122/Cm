@@ -140,8 +140,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
 
     // MirFunctionを作成
     auto mir_func = std::make_unique<MirFunction>();
-    // Bug#45修正: モジュール修飾名 (e.g. "kmalloc::heap_size_to_class") を
-    // 単純名 (e.g. "heap_size_to_class") に正規化する。
+    // Bug#45修正: モジュール修飾名 (e.g. "kmalloc::heap_size_to_class") を単純名 (e.g. "heap_size_to_class") に正規化する。
     // ただし、current_module_pathと一致するプレフィックスのみを剥がす。
     // 他モジュールのnamespace修飾は保持し、シンボル衝突を防止する。
     std::string func_name = func.name;
@@ -358,8 +357,7 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
                 mir_func->name = type_name + "__" + method->name;
             }
 
-            // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、
-            // 非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。
+            // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。
             // モノモーフィゼーション側はgeneric_paramsと名前の'<'で判別するので
             // 非ジェネリックの登録は無害）
             hir_functions[mir_func->name] = method.get();

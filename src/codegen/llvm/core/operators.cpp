@@ -25,8 +25,7 @@ static bool isUnsignedType(const hir::TypePtr& type) {
 }
 
 // 整数ゼロ除算の実行時チェックを挿入する。
-// 除数が定数0なら無条件で、非定数なら分岐でトラップする
-// （従来はLLVMのsdiv/udivの未定義動作でゴミ値が返っていた）
+// 除数が定数0なら無条件で、非定数なら分岐でトラップする（従来はLLVMのsdiv/udivの未定義動作でゴミ値が返っていた）
 static void emitDivByZeroCheck(llvm::IRBuilder<>* builder, llvm::LLVMContext& llvm_ctx,
                                llvm::Value* rhs,
                                const std::function<void(const std::string&)>& panic) {
@@ -67,9 +66,7 @@ static void coerceFloatTypes(llvm::IRBuilder<>* builder, llvm::Value*& lhs, llvm
 }
 
 // ポインタ演算の要素サイズをDataLayoutから計算する。
-// 従来は構造体名パターン（Vector→16等）のハードコード推定で、
-// wasm32等のポインタ幅が異なるターゲットや未知の構造体で
-// 実レイアウトとずれ、隣接要素の読み書き破壊を起こしていた
+// 従来は構造体名パターン（Vector→16等）のハードコード推定で、wasm32等のポインタ幅が異なるターゲットや未知の構造体で実レイアウトとずれ、隣接要素の読み書き破壊を起こしていた
 int64_t MIRToLLVM::getElementAllocSize(const hir::TypePtr& type) {
     if (!type)
         return 1;

@@ -3,10 +3,10 @@
 // 階層化テスト用のALUサブモジュール（hier_top.cm からインスタンス化される）
 // op: 0=加算, 1=減算, 2=AND, その他=OR
 //
-// IOはC/C++スタイルの構造体宣言とそのインスタンスで定義する。
+// exportされたIO構造体がこのモジュールの公開インターフェース契約になる。
 // フィールドがそのままモジュールポートへ展開されるため、個別のポート宣言は不要
 
-struct HierAluIo {
+export struct HierAluIo {
     #[input] uint a;
     #[input] uint b;
     #[input] utiny op;

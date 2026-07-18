@@ -197,4 +197,4 @@ To check code style in CI:
 
 ---
 
-<!-- nav -->← Prev: [Linter (cm lint)](linter.html) | [Contents](../index.html) | Next: [MIR最適化パス](optimization.html) →
+<!-- nav -->← Prev: [Linter (cm lint)](linter.html) | [Contents](../index.html) | Next: [Configuration File (.cmconfig.yml)](config.html) →

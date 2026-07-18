@@ -406,8 +406,7 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     }
 
     // 関数作成
-    // Bug#45修正: 同名の既存関数がvoid()で先に作成されている場合がある
-    // （MIR内にarg_locals空のエントリと非空のエントリが重複して存在するため）
+    // Bug#45修正: 同名の既存関数がvoid()で先に作成されている場合がある（MIR内にarg_locals空のエントリと非空のエントリが重複して存在するため）
     // シグネチャ不一致の既存関数を削除してから正しいシグネチャで再作成
     if (auto existingFunc = module->getFunction(func.name)) {
         if (existingFunc->getFunctionType() != funcType) {
@@ -479,8 +478,7 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
             // Bug#12修正: ret/iretを含む純ASM関数にのみNaked属性を付与
             // Naked属性でprologue/epilogue除去（operandの有無に関わらず）
             // 注意: ASMとCmコードが混在する関数（例: syscall_entry）には
-            // Naked属性を付与しない。Naked関数ではASM文のみ出力されるため、
-            // 混在関数の通常コード（関数呼び出し等）が省略されてGPFを引き起こす
+            // Naked属性を付与しない。Naked関数ではASM文のみ出力されるため、混在関数の通常コード（関数呼び出し等）が省略されてGPFを引き起こす
             if (hasRetInAsm && !hasNonAsmStmt) {
                 llvmFunc->addFnAttr(llvm::Attribute::Naked);
             }
@@ -493,13 +491,10 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     if (isUefiTarget) {
         llvmFunc->setCallingConv(llvm::CallingConv::Win64);
         // Bug#13修正: LLVMのO2パイプラインのインライン展開を防止
-        // インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が
-        // インライン展開されたコードのself/引数として上書きされ、
-        // UEFIデータ構造が破壊される
+        // インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)がインライン展開されたコードのself/引数として上書きされ、UEFIデータ構造が破壊される
         llvmFunc->addFnAttr(llvm::Attribute::NoInline);
         // Bug#17修正: スタックプローブ無効化
-        // LLVMはWindowsターゲットで4KB以上のスタックフレームに___chkstk_msを挿入するが、
-        // UEFI/ベアメタル環境ではこの関数が存在しないためリンクエラーになる
+        // LLVMはWindowsターゲットで4KB以上のスタックフレームに___chkstk_msを挿入するが、UEFI/ベアメタル環境ではこの関数が存在しないためリンクエラーになる
         llvmFunc->addFnAttr("no-stack-arg-probe");
         // efi_mainはDLLExportで最適化除去を防ぎ、optnoneで全最適化を無効化
         // optnoneはインライン展開 + DCE(デッドコード削除)を両方防止
@@ -586,8 +581,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // パス3: インポートモジュールのstruct型を動的に推論・登録
-    // program.structsに含まれないが、関数のメソッドとして参照されるstruct型を
-    // 関数bodyのフィールドプロジェクションから推論して登録する
+    // program.structsに含まれないが、関数のメソッドとして参照されるstruct型を関数bodyのフィールドプロジェクションから推論して登録する
     {
         // 全関数のローカル型から参照されるstruct名を収集
         std::unordered_map<std::string, const mir::MirFunction*> missingStructFunctions;
@@ -924,8 +918,7 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
                 }
             }
 
-            // interface dispatch関数（InterfaceName__method）の場合、
-            // 対応するvtableのimpl関数も到達可能に追加
+            // interface dispatch関数（InterfaceName__method）の場合、対応するvtableのimpl関数も到達可能に追加
             // 例: Printable__print が呼ばれる場合、Point__print等を追加
             size_t dunder = current.rfind("__");
             if (dunder != std::string::npos && dunder > 0) {
@@ -1171,8 +1164,7 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     // === vtable生成 ===
     // currentProgramが必要なのでダミーで対応は難しい
     // vtable情報はModuleProgramのvtablesから直接生成
-    // 注意: generateVTables()はMirProgramを必要とするため、
-    //        モジュール単位ではvtableを個別に処理する必要がある
+    // 注意: generateVTables()はMirProgramを必要とするため、モジュール単位ではvtableを個別に処理する必要がある
     // 現時点ではvtableを使うプログラムは全体コンパイルにフォールバック
 
     // === 自モジュール関数の実装を変換 ===
@@ -1184,8 +1176,7 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         declaredFunctions.insert(funcId);
         convertFunction(*func);
     }
-    // Bug#45修正: extern_functionsにbody付きのimport先export関数が含まれる場合、
-    // bodyも生成する (declareだけだとリンカエラーになる)
+    // Bug#45修正: extern_functionsにbody付きのimport先export関数が含まれる場合、bodyも生成する (declareだけだとリンカエラーになる)
     for (const auto* func : module.extern_functions) {
         if (!func->basic_blocks.empty() && !func->is_extern) {
             auto funcId = generateFunctionId(*func);
@@ -1252,8 +1243,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // NOTE: heapAllocatedLocalsはベアメタル対応のため削除（malloc不使用）
 
         // Bug#12修正: naked関数（ret/iret含むASM）の専用コード生成パス
-        // naked関数ではalloca/load/storeを生成せず、関数引数を
-        // ASMオペランドに直接マッピングする
+        // naked関数ではalloca/load/storeを生成せず、関数引数をASMオペランドに直接マッピングする
         if (currentFunction->hasFnAttribute(llvm::Attribute::Naked)) {
             // エントリーブロック作成（ASM呼び出しのみ）
             auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
@@ -1442,11 +1432,9 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         for (auto& arg : currentFunction->args()) {
             if (argIdx < func.arg_locals.size()) {
                 auto localIdx = func.arg_locals[argIdx];
-                // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用
-                // （C ABIで16バイト以下の構造体はレジスタ渡しされる）
+                // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用（C ABIで16バイト以下の構造体はレジスタ渡しされる）
                 if (arg.getType()->isStructTy() || arg.getType()->isArrayTy()) {
-                    // 構造体・配列の値渡しパラメータの場合、allocaに格納してポインタとして使用
-                    // （構造体: C ABIで16バイト以下はレジスタ渡し、配列: GEP操作にポインタが必要）
+                    // 構造体・配列の値渡しパラメータの場合、allocaに格納してポインタとして使用（構造体: C ABIで16バイト以下はレジスタ渡し、配列: GEP操作にポインタが必要）
                     auto alloca = builder->CreateAlloca(arg.getType(), nullptr,
                                                         "arg_" + std::to_string(argIdx) + "_stack");
                     builder->CreateStore(&arg, alloca);
@@ -1523,8 +1511,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // LLVM mem2regパスが自動的にSSA形式に最適化してくれる
                     // 配列へのポインタ型の一時変数もallocaを生成する（Bug#9修正）
                     // 以前はSSA形式で扱っていたが、Ref(array)の結果がSSA代入されると
-                    // locals[ref_result] = locals[array] (配列alloca) となり、
-                    // Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
+                    // locals[ref_result] = locals[array] (配列alloca) となり、Copy時にCreateLoad(allocatedType=[N x T])が配列全体をloadしてしまう。
                     // これにより後続のstore先(ptr alloca=8B)にバッファオーバーフローが発生。
                     // allocaを生成してstore ptr → load ptrの正しいパスを通すことで修正。
                     // Hazard #45修正: 文字列一時変数のallocaスキップを削除
@@ -1558,8 +1545,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                                 elemSize = 2;
                             } else if (elemKind == hir::TypeKind::Union ||
                                        elemKind == hir::TypeKind::Struct) {
-                                // ユニオン・構造体: blob格納のため実サイズを
-                                // DataLayoutから取得（MIR側の計算と一致させる）
+                                // ユニオン・構造体: blob格納のため実サイズをDataLayoutから取得（MIR側の計算と一致させる）
                                 auto* elemTy = convertType(local.type->element_type);
                                 elemSize = static_cast<int64_t>(
                                     module->getDataLayout().getTypeAllocSize(elemTy));
@@ -1742,8 +1728,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 到達可能性分析: エントリブロックから到達可能なブロックのみを変換
-        // 到達不能ブロック（例: デフォルトの return 0）がLLVM O3で
-        // unreachable → ud2 (x86_64 SIGILL) に最適化される問題を防止
+        // 到達不能ブロック（例: デフォルトの return 0）がLLVM O3でunreachable → ud2 (x86_64 SIGILL) に最適化される問題を防止
         std::unordered_set<size_t> reachableBlocks;
         {
             std::queue<size_t> worklist;
@@ -1824,8 +1809,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
-        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " <<
-        // func.basic_blocks.size()
+        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size()
         //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロック / 到達不能ブロックはスキップ
@@ -1833,8 +1817,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                 continue;
             }
 
-            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" <<
-            // func.basic_blocks.size()
+            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size()
             //           << "\n";
 
             // プログレス表示
@@ -1862,15 +1845,13 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
     }
 
     // blocksはunordered_mapなので、countで存在確認
-    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks
-    // map...\n";
+    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
     if (blocks.count(block.id) > 0) {
         // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map,
-        // skipping\n";
+        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
         if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
@@ -1937,9 +1918,7 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertStatement(*stmt);
 
-        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed
-        // successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " <<
-        // stmt_idx << " to "
+        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to "
         // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
         if (stmt_idx == block.statements.size() - 1) {

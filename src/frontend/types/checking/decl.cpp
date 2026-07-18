@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 宣言の登録・チェック
 // ============================================================
 
+#include "../../../common/i18n.hpp"
 #include "../type_checker.hpp"
 #include "match_hoist.hpp"
 
@@ -18,9 +19,7 @@ TypeChecker::TypeChecker() {
 bool TypeChecker::check(ast::Program& program) {
     debug::tc::log(debug::tc::Id::Start);
 
-    // 組み込みprelude: Result<T, E> / Option<T> を実enum宣言としてプログラム先頭に
-    // 注入する（TypeChecker内だけの疑似登録ではHIR/MIR/コード生成にenum定義が
-    // 届かず、関数返却でのペイロード喪失や型IDの分裂を起こしていた）。
+    // 組み込みprelude: Result<T, E> / Option<T> を実enum宣言としてプログラム先頭に注入する（TypeChecker内だけの疑似登録ではHIR/MIR/コード生成にenum定義が届かず、関数返却でのペイロード喪失や型IDの分裂を起こしていた）。
     // ユーザーが同名を定義している場合は注入しない
     {
         bool has_result = false;
@@ -39,8 +38,7 @@ bool TypeChecker::check(ast::Program& program) {
                                     std::vector<ast::EnumMember> members) {
             auto en = std::make_unique<ast::EnumDecl>(name, std::move(members));
             en->generic_params = std::move(params);
-            // preludeマーカー: register_enumの組み込みメソッド消去
-            // （ユーザー再定義向け）を抑止する
+            // preludeマーカー: register_enumの組み込みメソッド消去（ユーザー再定義向け）を抑止する
             en->attributes.emplace_back("__prelude");
             return std::make_unique<ast::Decl>(std::move(en), Span{});
         };
@@ -64,8 +62,7 @@ bool TypeChecker::check(ast::Program& program) {
         }
     }
 
-    // 式形式matchの呼び出しscrutineeを一時変数へ退避するASTプリパス
-    // （HIRの三項演算子脱糖でのクローン多重評価を避け、単一評価を保証する）
+    // 式形式matchの呼び出しscrutineeを一時変数へ退避するASTプリパス（HIRの三項演算子脱糖でのクローン多重評価を避け、単一評価を保証する）
     hoist_match_call_scrutinees(program);
 
     // Pass 1: 関数シグネチャを登録
@@ -184,6 +181,12 @@ void TypeChecker::register_namespace(ast::ModuleDecl& mod, const std::string& pa
             st->name = full_namespace + "::" + original_name;
             register_declaration(*inner_decl);
             st->name = original_name;
+        } else if (auto* gvar = inner_decl->as<ast::GlobalVarDecl>()) {
+            // グローバル変数も修飾名で登録し、import元の同名グローバルとの衝突を防ぐ（非修飾参照は infer_ident の名前空間フォールバックで解決される）
+            std::string original_name = gvar->name;
+            gvar->name = full_namespace + "::" + original_name;
+            register_declaration(*inner_decl);
+            gvar->name = original_name;
         } else {
             register_declaration(*inner_decl);
         }
@@ -255,9 +258,7 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         // 本体を持つ同名関数の重複定義を検出する。
         // 自由関数のオーバーロードは未対応であり、従来は診断なしで
         // LLVMの検証エラー（不正なコード生成）まで到達していた。
-        // モジュールのフラット化により同一定義が複数回現れることがあるため、
-        // シグネチャ（引数型・戻り値型・本体文数）が完全一致する重複は許容し、
-        // 異なるシグネチャの同名定義のみをエラーとする
+        // モジュールのフラット化により同一定義が複数回現れることがあるため、シグネチャ（引数型・戻り値型・本体文数）が完全一致する重複は許容し、異なるシグネチャの同名定義のみをエラーとする
         if (!func->body.empty() && !func->is_extern && func->generic_params.empty()) {
             auto type_sig = [](const ast::TypePtr& t) -> std::string {
                 if (!t) {
@@ -274,10 +275,10 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             auto [it, inserted] = defined_function_sigs_.emplace(func->name, sig);
             if (!inserted && it->second != sig) {
                 Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
-                error(name_pos, "関数 '" + func->name +
-                                    "' は既に異なるシグネチャで定義されています"
-                                    "（自由関数のオーバーロードは未対応です。"
-                                    "別名を使用してください）");
+                error(name_pos, i18n::tr("function '") + func->name +
+                                    i18n::tr("' is already defined with a different signature "
+                                             "(free-function overloading is not supported; "
+                                             "use a different name)"));
             }
         }
 
@@ -362,8 +363,7 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         if (var_type) {
             scopes_.global().define(gv->name, var_type, gv->is_const, false, decl.span,
                                     const_int_value);
-            // グローバル変数/定数は宣言時点で初期化済みとみなす
-            // （未初期化使用の警告はローカル変数のフローのみを対象にする）
+            // グローバル変数/定数は宣言時点で初期化済みとみなす（未初期化使用の警告はローカル変数のフローのみを対象にする）
             mark_variable_initialized(gv->name);
             debug::tc::log(debug::tc::Id::Resolved,
                            "Global " + std::string(gv->is_const ? "const" : "var") + ": " +
@@ -902,8 +902,7 @@ void TypeChecker::register_enum(ast::EnumDecl& en) {
             // Tagged Union用のタグ値として使用
             enum_values_[full_name] = variant_index;
 
-            // ジェネリックenumの場合、variantは通常の関数として登録しない
-            // （infer_call内のenum constructor処理で処理する）
+            // ジェネリックenumの場合、variantは通常の関数として登録しない（infer_call内のenum constructor処理で処理する）
             if (!en.generic_params.empty()) {
                 debug::tc::log(debug::tc::Id::Resolved,
                                "  " + full_name + "(...) -> " + en.name +
@@ -981,16 +980,16 @@ void TypeChecker::register_print() {
 }
 
 void TypeChecker::check_function(ast::FunctionDecl& func) {
-    // #[test] 関数は「引数なし・戻り値void」に限定する
-    // （SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
+    // #[test] 関数は「引数なし・戻り値void」に限定する（SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
     for (const auto& attr : func.attributes) {
         if (attr.name == "test") {
             if (!func.params.empty()) {
-                error(func.name_span, "#[test] 関数 '" + func.name + "' は引数を取れません");
+                error(func.name_span, i18n::tr("#[test] function '") + func.name +
+                                          i18n::tr("' cannot take parameters"));
             }
             if (!func.return_type || func.return_type->kind != ast::TypeKind::Void) {
                 error(func.name_span,
-                      "#[test] 関数 '" + func.name + "' の戻り値は void である必要があります");
+                      i18n::tr("#[test] function '") + func.name + i18n::tr("' must return void"));
             }
             break;
         }

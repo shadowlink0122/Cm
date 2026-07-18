@@ -354,8 +354,7 @@ bool LoopUnroller::performPartialUnroll(llvm::Loop* loop, unsigned unrollFactor,
 bool LoopUnroller::performRuntimeUnroll(llvm::Loop* loop, unsigned unrollFactor,
                                         llvm::IRBuilder<>& /* builder */, llvm::DominatorTree& DT) {
     // 実行時展開は複雑なため、簡易実装
-    // 実際にはトリップカウントを実行時に判定し、
-    // メインループとエピローグループを生成する必要がある
+    // 実際にはトリップカウントを実行時に判定し、メインループとエピローグループを生成する必要がある
 
     auto* header = loop->getHeader();
     auto* preheader = loop->getLoopPreheader();

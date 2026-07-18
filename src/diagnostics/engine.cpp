@@ -4,6 +4,8 @@
 
 #include "engine.hpp"
 
+#include "../common/i18n.hpp"
+
 #include <algorithm>
 
 namespace cm {
@@ -26,8 +28,9 @@ void DiagnosticEngine::report(const std::string& id, Span span,
         level = it->second;
     }
 
+    // テンプレートは英語原文キー。日本語設定時はカタログで訳してからフォーマットする
     diagnostics_.push_back(
-        {id, def->name, level, span, format_message(def->message_template, args)});
+        {id, def->name, level, span, format_message(i18n::tr(def->message_template), args)});
 }
 
 void DiagnosticEngine::report_direct(const std::string& id, const std::string& name,
@@ -91,17 +94,17 @@ void DiagnosticEngine::print(const Source& source, std::ostream& out) const {
     if (errors + warnings + hints > 0) {
         out << bold;
         if (errors > 0) {
-            out << "\033[31merror\033[0m: " << errors << " 件";
+            out << "\033[31merror\033[0m: " << errors;
         }
         if (warnings > 0) {
             if (errors > 0)
                 out << ", ";
-            out << "\033[33mwarning\033[0m: " << warnings << " 件";
+            out << "\033[33mwarning\033[0m: " << warnings;
         }
         if (hints > 0) {
             if (errors + warnings > 0)
                 out << ", ";
-            out << "\033[34mhint\033[0m: " << hints << " 件";
+            out << "\033[34mhint\033[0m: " << hints;
         }
         out << reset << "\n";
     }

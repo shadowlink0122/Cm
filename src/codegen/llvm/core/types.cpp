@@ -14,8 +14,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
     if (!type)
         return ctx.getI32Type();
 
-    // TypeAlias/typedef を基底型に解決してからkind-based dispatch
-    // resolveTypeAlias() は Struct 名の typedef も解決する
+    // TypeAlias/typedef を基底型に解決してからkind-based dispatch resolveTypeAlias() は Struct 名の typedef も解決する
     auto resolved = resolveTypeAlias(type);
     if (!resolved)
         return ctx.getI32Type();
@@ -58,16 +57,13 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
             return ctx.getPtrType();
         case hir::TypeKind::Pointer:
         case hir::TypeKind::Reference: {
-            // interface型へのポインタは「実装オブジェクトへのポインタ + vtable」の
-            // fat pointer値として表現する（隠し領域を介さず、dataフィールドが
-            // 実装オブジェクトそのものを指す）
+            // interface型へのポインタは「実装オブジェクトへのポインタ + vtable」のfat pointer値として表現する（隠し領域を介さず、dataフィールドが実装オブジェクトそのものを指す）
             if (type->element_type && type->element_type->kind == hir::TypeKind::Struct &&
                 isInterfaceType(type->element_type->name)) {
                 return getInterfaceFatPtrType(type->element_type->name);
             }
             // LLVM 14+: opaque pointersを使用するが、元の型情報は保持する
-            // ポインタ型はctx.getPtrType()を返すが、
-            // 内部的には元の型情報（type->element_type）を保持している
+            // ポインタ型はctx.getPtrType()を返すが、内部的には元の型情報（type->element_type）を保持している
             // store/load時に適切な型でキャストする
             return ctx.getPtrType();
         }
@@ -383,10 +379,8 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 return structType;
             }
 
-            // モノモーフィズされたenum名（Result__int__string / Result<int, string>）は
-            // ベースenumの__TaggedUnion_型へ正規化する。正規化しないと未知名フォール
-            // バックが同レイアウト別IDの構造体を生成し、関数シグネチャと本体で型が
-            // 分裂して返却値のペイロードが失われる
+            // モノモーフィズされたenum名（Result__int__string / Result<int, string>）はベースenumの__TaggedUnion_型へ正規化する。正規化しないと未知名フォール
+            // バックが同レイアウト別IDの構造体を生成し、関数シグネチャと本体で型が分裂して返却値のペイロードが失われる
             {
                 std::string base = lookupName;
                 auto lt = base.find('<');

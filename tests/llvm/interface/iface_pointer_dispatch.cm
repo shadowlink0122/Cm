@@ -1,6 +1,5 @@
 // interfaceポインタの動的ディスパッチ:
-// Shape* は実装オブジェクトを直接指すfat pointerとして表現され、
-// 付け替えによって実装が切り替わることを検証
+// Shape* は実装オブジェクトを直接指すfat pointerとして表現され、付け替えによって実装が切り替わることを検証
 import std::io::println;
 
 interface Shape { int area(); }

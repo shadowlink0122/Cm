@@ -1,8 +1,7 @@
 //! platform: sv
 //! test: cycles=2 -> debounce=1050000, total=800, ctrl=852, bar=80
 
-// 派生定数の展開検証: float乗算・区間の和・2進リテラル・除算を
-// 値のコメント補足なしで右辺の式として書けること
+// 派生定数の展開検証: float乗算・区間の和・2進リテラル・除算を値のコメント補足なしで右辺の式として書けること
 #[input] posedge clk;
 #[output] uint debounce = 0;
 #[output] uint total = 0;

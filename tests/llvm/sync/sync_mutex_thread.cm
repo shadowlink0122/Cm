@@ -12,8 +12,7 @@ import native::thread::spawn_with_arg;
 import native::thread::join;
 
 // 共有データ構造:
-// メモリレイアウト: [mutex_buf: 64bytes][counter: 4bytes]
-// offset 0: mutex (pthread_mutex_t = 64bytes)
+// メモリレイアウト: [mutex_buf: 64bytes][counter: 4bytes] offset 0: mutex (pthread_mutex_t = 64bytes)
 // offset 64: counter (int)
 
 // 各スレッドが実行する関数

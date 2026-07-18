@@ -2,8 +2,7 @@
 // libs::efi_gop - UEFI Graphics Output Protocol (GOP) 初期化
 // BootServicesのLocateProtocolでGOPを取得し、フレームバッファ情報を提供
 // 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
-// 注意: UEFIバイナリのグローバル変数への書き込みは動作しないため、
-//       全情報はcallerのローカル変数（ポインタ経由）で受け渡す
+// 注意: UEFIバイナリのグローバル変数への書き込みは動作しないため、全情報はcallerのローカル変数（ポインタ経由）で受け渡す
 
 import ./efi_core;
 import ./efi_text;
@@ -77,8 +76,7 @@ export ulong gop_init(
     const ulong mode_addr = *(gop + 3);  // offset 0x18 = Mode
 
     // Mode構造体:
-    //   MaxMode(u32, 0x00), Mode(u32, 0x04), Info(ptr, 0x08),
-    //   SizeOfInfo(ulong, 0x10), FrameBufferBase(ulong, 0x18), FrameBufferSize(ulong, 0x20)
+    //   MaxMode(u32, 0x00), Mode(u32, 0x04), Info(ptr, 0x08), SizeOfInfo(ulong, 0x10), FrameBufferBase(ulong, 0x18), FrameBufferSize(ulong, 0x20)
     ulong* mode = mode_addr as ulong*;
     const ulong fb_base = *(mode + 3);  // offset 0x18 = FrameBufferBase
 
@@ -86,8 +84,7 @@ export ulong gop_init(
     const ulong info_addr = *(mode + 1);  // offset 0x08 = Info
 
     // ModeInfo構造体:
-    //   Version(u32, 0x00), HRes(u32, 0x04), VRes(u32, 0x08),
-    //   PixelFormat(u32, 0x0C), PixelInformation(16bytes, 0x10), PixelsPerScanLine(u32, 0x20)
+    //   Version(u32, 0x00), HRes(u32, 0x04), VRes(u32, 0x08), PixelFormat(u32, 0x0C), PixelInformation(16bytes, 0x10), PixelsPerScanLine(u32, 0x20)
     uint* info32 = info_addr as uint*;
     const ulong hres = (*(info32 + 1)) as ulong;    // offset 0x04 = HRes
     const ulong vres = (*(info32 + 2)) as ulong;    // offset 0x08 = VRes

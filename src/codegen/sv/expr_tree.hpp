@@ -2,9 +2,7 @@
 
 // SV式ツリー（svバックエンド式ツリー化 Phase 1）
 //
-// 「一度テキストを出力してから文字列操作で括弧を補正する」旧設計を置き換える
-// ための小さな式AST。優先順位括弧はプリンタが構造から一意に決定するため、
-// get_outermost_operator 等のテキストヒューリスティックが不要になる。
+// 「一度テキストを出力してから文字列操作で括弧を補正する」旧設計を置き換えるための小さな式AST。優先順位括弧はプリンタが構造から一意に決定するため、get_outermost_operator 等のテキストヒューリスティックが不要になる。
 // （docs/design/sv_backend_missing_features.md 項目11 / docs/archive/013 §4.3-1）
 
 #include <memory>

@@ -38,8 +38,7 @@ void Monomorphization::scan_generic_calls(
 
             const auto& func_name = std::get<std::string>(call_data.func->data);
 
-            // ジェネリック関数かチェック
-            // まず直接チェック
+            // ジェネリック関数かチェックまず直接チェック
             if (generic_funcs.count(func_name) > 0) {
                 // 型引数を推論
                 auto it = hir_functions.find(func_name);
@@ -61,8 +60,7 @@ void Monomorphization::scan_generic_calls(
             // func_name が "Container<int>__print" のような形式の場合
             // "Container<T>__print" にマッチするジェネリック関数を探す
             for (const auto& generic_name : generic_funcs) {
-                // generic_name = "Container<T>__print"
-                // func_name = "Container<int>__print"
+                // generic_name = "Container<T>__print" func_name = "Container<int>__print"
                 // パターンマッチングで型引数を抽出
                 auto pos = generic_name.find("<");
                 if (pos == std::string::npos)
@@ -185,8 +183,7 @@ void Monomorphization::scan_generic_calls(
             // "Vector<T>__init" や "HashMap<K, V>__put" にマッチするジェネリック関数を探す
             // パターン: Base__TypeArg1__TypeArg2__method -> Base<T, U>__method
             for (const auto& generic_name : generic_funcs) {
-                // generic_name = "Vector<T>__init" または "HashMap<K, V>__put"
-                // func_name = "Vector__int__init" または "HashMap__int__int__put"
+                // generic_name = "Vector<T>__init" または "HashMap<K, V>__put" func_name = "Vector__int__init" または "HashMap__int__int__put"
 
                 auto angle_pos = generic_name.find("<");
                 if (angle_pos == std::string::npos)
@@ -237,8 +234,7 @@ void Monomorphization::scan_generic_calls(
                     continue;
 
                 // メソッド名を除いた残りの部分を型引数として構築
-                // ネストジェネリクス対応: Vector__Vector__int__dtor -> type_args = [Vector__int]
-                // remaining = "Vector__int__dtor" (base_name "Vector" は既に除去済み)
+                // ネストジェネリクス対応: Vector__Vector__int__dtor -> type_args = [Vector__int] remaining = "Vector__int__dtor" (base_name "Vector" は既に除去済み)
                 // parts = [Vector, int, dtor]
                 // メソッド名 "dtor" を除いた全てを1つの型引数として連結 -> "Vector__int"
                 std::vector<std::string> type_args;
@@ -679,8 +675,7 @@ void Monomorphization::generate_generic_specializations(
             }
 
             // sizeof_for_Tマーカー型を持つ定数オペランドの値を再計算
-            // ジェネリック型パラメータのsizeofがHIR段階でマーカー型として保存され、
-            // モノモフィゼーション時に実際の型サイズに置換される
+            // ジェネリック型パラメータのsizeofがHIR段階でマーカー型として保存され、モノモフィゼーション時に実際の型サイズに置換される
             if (op->kind == MirOperand::Constant) {
                 auto* const_data = std::get_if<MirConstant>(&op->data);
                 if (!const_data)
@@ -713,8 +708,7 @@ void Monomorphization::generate_generic_specializations(
                         const_data->type = hir::make_long();
                     } else if (type_param_name.find('<') != std::string::npos) {
                         // 複合ジェネリック型（sizeof_for_QueueNode<T> 等）:
-                        // 型引数をtype_substで置換し、置換後フィールドの
-                        // 自然アライメントレイアウトでサイズを再計算する
+                        // 型引数をtype_substで置換し、置換後フィールドの自然アライメントレイアウトでサイズを再計算する
                         std::string base = type_param_name.substr(0, type_param_name.find('<'));
                         std::string args_str = type_param_name.substr(base.size() + 1);
                         if (!args_str.empty() && args_str.back() == '>') {
@@ -1670,9 +1664,7 @@ int64_t Monomorphization::calculate_specialized_type_size(const hir::TypePtr& ty
             // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
             return cm::target_pointer_size();
         case hir::TypeKind::Struct: {
-            // 自然アライメントのCレイアウトで計算する
-            // （従来のフィールド数×8はcodegenの実レイアウトとずれ、
-            // memcpyサイズ・要素ストライドの不一致で隣接データを破壊していた）
+            // 自然アライメントのCレイアウトで計算する（従来のフィールド数×8はcodegenの実レイアウトとずれ、memcpyサイズ・要素ストライドの不一致で隣接データを破壊していた）
             const hir::HirStruct* st = nullptr;
             if (hir_struct_defs && hir_struct_defs->count(type->name)) {
                 st = hir_struct_defs->at(type->name);

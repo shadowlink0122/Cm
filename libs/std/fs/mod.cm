@@ -60,8 +60,7 @@ export Result<string, string> read_to_string(string path) {
 }
 
 /// 文字列をファイルへ書き込む（上書き。Rustのfs::write相当）
-/// 注: 関数名はlibcのwriteとのシンボル衝突（std::ioの出力が壊れる）を
-/// 避けるためwrite_allとする
+/// 注: 関数名はlibcのwriteとのシンボル衝突（std::ioの出力が壊れる）を避けるためwrite_allとする
 export Result<bool, string> write_all(string path, string content) {
     if (cm_file_write_all(path, content)) {
         return Result::Ok(true);

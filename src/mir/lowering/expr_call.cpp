@@ -1,5 +1,4 @@
-// expr_lowering_call.cpp - 関数呼び出しのlowering
-// extract_named_placeholders, lower_call
+// expr_lowering_call.cpp - 関数呼び出しのlowering extract_named_placeholders, lower_call
 
 #include "../../common/debug.hpp"
 #include "../../frontend/lexer/lexer.hpp"
@@ -47,8 +46,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     }
 
     // ジェネリック構造体メソッドの特殊化名補正。
-    // 文字列補間式のパース経由などHIRに型引数情報が無い場合、呼び出し名が
-    // Box__get のように型引数なしで構成され未定義シンボル参照になる。
+    // 文字列補間式のパース経由などHIRに型引数情報が無い場合、呼び出し名がBox__get のように型引数なしで構成され未定義シンボル参照になる。
     // レシーバ変数のMIRローカル型は特殊化済み名（Box__int）を持つため、
     // そこから Box__int__get を再構成する
     std::string effective_call_name = call.func_name;
@@ -98,8 +96,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {
                 // Bug#10修正: ptr->method() パターン検出
-                // パーサーが -> を Deref(ptr) に変換するため、
-                // self引数が HirUnary(Deref, HirVarRef(ptr)) の形式になる。
+                // パーサーが -> を Deref(ptr) に変換するため、self引数が HirUnary(Deref, HirVarRef(ptr)) の形式になる。
                 // Deref結果への参照を作成して渡す（通常のs.method()と同じRef方式）。
                 if (auto unary_ptr = std::get_if<std::unique_ptr<hir::HirUnary>>(&arg->kind)) {
                     const auto& unary = **unary_ptr;
@@ -263,8 +260,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     }
 
     // デフォルト引数の補完。
-    // 通常はHIR loweringが適用するが、文字列補間式のミニパイプライン経由の
-    // 呼び出しでは関数定義情報が無く未補完のまま到達するため、
+    // 通常はHIR loweringが適用するが、文字列補間式のミニパイプライン経由の呼び出しでは関数定義情報が無く未補完のまま到達するため、
     // ここでHIR関数定義のデフォルト式を評価して不足分を追加する
     if (ctx.hir_func_defs && !call.func_name.empty()) {
         auto fit = ctx.hir_func_defs->find(call.func_name);

@@ -1,4 +1,5 @@
 #include "../../common/debug/par.hpp"
+#include "../../common/i18n.hpp"
 #include "parser.hpp"
 
 namespace cm {
@@ -18,7 +19,7 @@ ast::StmtPtr Parser::parse_stmt() {
 
     // 再帰深度制限
     if (parse_depth_ > 500) {
-        error("再帰深度が制限(500)を超えました");
+        error(i18n::tr("recursion depth exceeded the limit (500)"));
         return nullptr;
     }
     debug::par::log(debug::par::Id::Stmt, "", debug::Level::Trace);
@@ -101,7 +102,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 cases.emplace_back(std::move(pattern), std::move(stmts));
             } else if (consume_if(TokenKind::KwElse)) {
                 if (has_else) {
-                    error("重複するelse節");
+                    error(i18n::tr("duplicate else clause"));
                 }
                 has_else = true;
 
@@ -109,7 +110,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 auto stmts = parse_block();
                 cases.emplace_back(nullptr, std::move(stmts));
             } else {
-                error("switch文内にはcaseまたはelseが必要です");
+                error(i18n::tr("a switch statement requires case or else"));
                 // エラー回復: 次のcase/else/}まで進める
                 while (!check(TokenKind::KwCase) && !check(TokenKind::KwElse) &&
                        !check(TokenKind::RBrace) && !is_at_end()) {

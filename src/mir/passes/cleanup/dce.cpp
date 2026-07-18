@@ -6,8 +6,7 @@ bool DeadCodeElimination::run(MirFunction& func) {
     bool changed = false;
 
     // デストラクタ関数の場合は到達不可能ブロック除去をスキップ
-    // モノモフィゼーションで生成されたデストラクタは複雑なブロック構造を持つ可能性があり、
-    // 誤って到達可能なブロックが削除されることがあるため
+    // モノモフィゼーションで生成されたデストラクタは複雑なブロック構造を持つ可能性があり、誤って到達可能なブロックが削除されることがあるため
     bool is_destructor = func.name.find("__dtor") != std::string::npos;
 
     // 1. 到達不可能ブロックを除去（デストラクタ以外のみ）
@@ -88,9 +87,7 @@ bool DeadCodeElimination::remove_dead_stores(MirFunction& func) {
         used_locals.insert(param);
     }
 
-    // グローバル変数・static変数への代入は関数外から観測可能なため、
-    // 関数内で読まれていなくても常に使用扱いにする
-    // （これがないと g = 999 のような単純代入がデッドストアとして
+    // グローバル変数・static変数への代入は関数外から観測可能なため、関数内で読まれていなくても常に使用扱いにする（これがないと g = 999 のような単純代入がデッドストアとして
     //   削除され、グローバルへの書き込みが消失する）
     for (const auto& local : func.locals) {
         if (local.is_global || local.is_static) {
@@ -205,8 +202,7 @@ void DeadCodeElimination::collect_used_locals_in_statement(const MirStatement& s
     if (stmt.kind == MirStatement::Assign) {
         const auto& assign_data = std::get<MirStatement::AssignData>(stmt.data);
 
-        // mustブロック内の代入はターゲット変数自体も使用済みとしてマーク
-        // （デッドストア扱いを防止）
+        // mustブロック内の代入はターゲット変数自体も使用済みとしてマーク（デッドストア扱いを防止）
         if (stmt.no_opt) {
             used.insert(assign_data.place.local);
         }

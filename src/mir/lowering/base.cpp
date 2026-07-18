@@ -63,8 +63,7 @@ hir::TypePtr MirLoweringBase::resolve_typedef(hir::TypePtr type) {
         // enum定義を確認
         auto enum_it = enum_defs.find(type->name);
 
-        // モノモーフ化された型名（例: Result__ulong__long）の場合、
-        // ベース名（Result）でenum_defsをフォールバック検索
+        // モノモーフ化された型名（例: Result__ulong__long）の場合、ベース名（Result）でenum_defsをフォールバック検索
         if (enum_it == enum_defs.end()) {
             size_t dunder_pos = type->name.find("__");
             if (dunder_pos != std::string::npos && dunder_pos > 0) {
@@ -172,8 +171,7 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         if (const_val) {
             const_val->type = gv.type ? gv.type : const_val->type;
             global_const_values[gv.name] = *const_val;
-            // SVバックエンドではlocalparam出力のため、global_varsにも登録する
-            // （returnせずフォールスルーで下のMirGlobalVar登録へ進む）
+            // SVバックエンドではlocalparam出力のため、global_varsにも登録する（returnせずフォールスルーで下のMirGlobalVar登録へ進む）
         }
     }
 
@@ -192,9 +190,7 @@ void MirLoweringBase::register_global_var(const hir::HirGlobalVar& gv) {
         if (const_val) {
             mir_gv->init_value = std::make_unique<MirConstant>(*const_val);
         } else {
-            // 定数評価できない初期化式はHIR式のまま保持する
-            // （assign文/const定数のほか、配列リテラル初期値のinitial出力等で
-            //   SVコードジェネレータが使用する）
+            // 定数評価できない初期化式はHIR式のまま保持する（assign文/const定数のほか、配列リテラル初期値のinitial出力等でSVコードジェネレータが使用する）
             mir_gv->init_expr = gv.init.get();
         }
 

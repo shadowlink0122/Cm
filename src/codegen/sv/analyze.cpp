@@ -93,9 +93,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
-    // 事前パス: IOインスタンス（#[input]/#[output]フィールドを持つ構造体の
-    // グローバル変数）の一覧を先に構築する。インスタンス接続（a: io.x 等）の
-    // 写像で宣言順に依存しないようにするため
+    // 事前パス: IOインスタンス（#[input]/#[output]フィールドを持つ構造体のグローバル変数）の一覧を先に構築する。インスタンス接続（a: io.x 等）の写像で宣言順に依存しないようにするため
     for (const auto& gv : program.global_vars) {
         if (!gv || !gv->type) {
             continue;
@@ -123,8 +121,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
 
     // 事前パス: extern structインスタンスの出力ポートに接続された信号を収集する。
-    // これらは内部レジスタ宣言で初期値を出力しない
-    // （初期値付き変数への連続代入はiverilog等でエラーになるため）
+    // これらは内部レジスタ宣言で初期値を出力しない（初期値付き変数への連続代入はiverilog等でエラーになるため）
     std::set<std::string> instance_driven_signals;
     for (const auto& gv : program.global_vars) {
         if (!gv || !gv->type) {
@@ -183,8 +180,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         var_name = strip_namespace(var_name);
 
         // IOインスタンスの検出: #[input]/#[output]/#[inout] フィールドを持つ
-        // 構造体のグローバル変数は、フィールドをモジュールポートへ展開する
-        // （個別のポート宣言は不要。io.field アクセスはポート名へ写像される）
+        // 構造体のグローバル変数は、フィールドをモジュールポートへ展開する（個別のポート宣言は不要。io.field アクセスはポート名へ写像される）
         if (gv->type) {
             const mir::MirStruct* io_st = nullptr;
             std::string io_type_name = strip_namespace(gv->type->name);
@@ -246,8 +242,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
 
         // extern struct インスタンスの検出（型名ベース）。
-        // importされたモジュール内の宣言は名前空間修飾付きになるため、
-        // 修飾を除去した名前で照合する
+        // importされたモジュール内の宣言は名前空間修飾付きになるため、修飾を除去した名前で照合する
         if (gv->type) {
             const mir::MirStruct* extern_st = nullptr;
             std::string inst_type_name = strip_namespace(gv->type->name);
@@ -260,8 +255,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             if (extern_st) {
                 if (emitted_var_names.count(var_name) == 0) {
                     // インスタンス化文を生成。
-                    // importされたモジュール内で宣言されたインスタンスは
-                    // 型名が名前空間修飾付き（mod::PLL等）になるため除去する
+                    // importされたモジュール内で宣言されたインスタンスは型名が名前空間修飾付き（mod::PLL等）になるため除去する
                     std::string inst;
                     std::string module_name = strip_namespace(extern_st->name);
                     // #[sv::module_name] アトリビュートを探索
@@ -439,8 +433,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 continue;
             }
 
-            // 配列const: localparamのunpacked配列はiverilogが未対応のため、
-            // 信号宣言 + initialブロックでの要素別初期化として出力する
+            // 配列const: localparamのunpacked配列はiverilogが未対応のため、信号宣言 + initialブロックでの要素別初期化として出力する
             std::string arr_suffix = getArraySuffix(gv->type);
             if (!arr_suffix.empty() && gv->init_expr) {
                 if (auto* arr =
@@ -652,8 +645,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                 std::string array_suffix = getArraySuffix(gv->type);
                 std::string reg_decl = mapType(gv->type) + " " + var_name + array_suffix;
                 // 宣言初期値を電源投入時初期値として出力する。
-                // 出力しないとシミュレーションでXのままFSMが進まない
-                // （FPGA合成でもレジスタの初期値として扱われる）。
+                // 出力しないとシミュレーションでXのままFSMが進まない（FPGA合成でもレジスタの初期値として扱われる）。
                 // ただしインスタンス出力に接続された信号は連続駆動されるため
                 // 初期値を付けない（iverilog等で二重駆動エラーになる）
                 if (gv->init_value && array_suffix.empty() &&
@@ -675,11 +667,9 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
     }
 
     // クロック信号の解決。
-    // エッジ型（posedge/negedge）パラメータのクロック名が
-    // 入力ポートにもグローバル信号（OSC等で駆動される内部クロック）にも
+    // エッジ型（posedge/negedge）パラメータのクロック名が入力ポートにもグローバル信号（OSC等で駆動される内部クロック）にも
     // 無い場合のみ、その名前で入力ポートを自動生成する。
-    // （従来は無条件に `input clk, rst` を注入していたため、内部クロックと
-    //   重複宣言になる不具合があった）
+    // （従来は無条件に `input clk, rst` を注入していたため、内部クロックと重複宣言になる不具合があった）
     auto global_signal_exists = [&program](const std::string& n) {
         for (const auto& gv : program.global_vars) {
             if (gv && gv->name == n) {
@@ -726,8 +716,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
-    // エッジ型パラメータを持たないasync関数がある場合は
-    // 従来どおり暗黙の clk/rst を自動追加する
+    // エッジ型パラメータを持たないasync関数がある場合は従来どおり暗黙の clk/rst を自動追加する
     bool has_async = false;
     for (const auto& func : program.functions) {
         if (!func || !func->is_async) {
@@ -817,9 +806,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
 
         std::ostringstream ss;
-        // ビット幅計算: 最大タグ値を表現できるビット数を算出
-        // （明示的なタグ値はメンバー数-1 より大きい場合があるため、
-        //   メンバー数ではなく実際の値の最大から求める）
+        // ビット幅計算: 最大タグ値を表現できるビット数を算出（明示的なタグ値はメンバー数-1 より大きい場合があるため、メンバー数ではなく実際の値の最大から求める）
         int64_t max_tag = static_cast<int64_t>(e->members.size()) - 1;
         for (const auto& m : e->members) {
             if (m.tag_value > max_tag) {
@@ -856,8 +843,7 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             continue;
         if (st->is_extern)
             continue;  // extern struct はtypedef出力しない
-        // IO契約構造体（#[input]/#[output]/#[inout] フィールドを持つ）は
-        // モジュールのインターフェース宣言なのでデータ型として出力しない
+        // IO契約構造体（#[input]/#[output]/#[inout] フィールドを持つ）はモジュールのインターフェース宣言なのでデータ型として出力しない
         bool is_io_contract = false;
         for (const auto& f : st->fields) {
             for (const auto& a : f.attributes) {
@@ -923,8 +909,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }
     }
 
-    // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic
-    // void関数は always_comb / always_ff にフォールスルー
+    // 非always/非async関数で、非void（戻り値あり）の場合 → SV function automatic void関数は always_comb / always_ff にフォールスルー
     if (!func.is_always && !func.is_async &&
         func.always_kind == mir::MirFunction::AlwaysKind::None) {
         // edgeパラメータの有無を確認
@@ -1035,8 +1020,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                     pos += flat_func_name.size();
                 }
 
-                // 式ツリー化（Phase 2）により単一定義テンポラリは
-                // 出力時に構造的へインライン展開済み。
+                // 式ツリー化（Phase 2）により単一定義テンポラリは出力時に構造的へインライン展開済み。
                 // テキストベースの再展開パスは不要になった
                 body_content = raw_body;
 
@@ -1085,9 +1069,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         }  // if (!is_void && !has_edge_param)
     }
 
-    // ローカル変数・一時変数をalwaysブロック内ローカルとして宣言する候補を収集
-    // （モジュールスコープへのホイストをやめ、スコープ汚染と
-    //   function内ローカルとの名前衝突（VARHIDDEN）を防ぐ。
+    // ローカル変数・一時変数をalwaysブロック内ローカルとして宣言する候補を収集（モジュールスコープへのホイストをやめ、スコープ汚染とfunction内ローカルとの名前衝突（VARHIDDEN）を防ぐ。
     //   ポートやモジュール信号と名前が衝突する変数は従来どおり宣言しない＝
     //   モジュールスコープの実体を参照する）
     std::vector<std::pair<std::string, std::string>> block_local_decls;  // {名前, 宣言文}
@@ -1306,8 +1288,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         block_ss << indent() << "always_comb begin\n";
     }
 
-    // ブロック内ローカル宣言のスコープとして名前付きブロックにする
-    // （名前付きブロック内の変数宣言はVerilog-2001から全ツールで有効）
+    // ブロック内ローカル宣言のスコープとして名前付きブロックにする（名前付きブロック内の変数宣言はVerilog-2001から全ツールで有効）
     {
         std::string header = block_ss.str();
         const std::string begin_nl = " begin\n";
@@ -1332,13 +1313,10 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         emitBlockRecursive(func, 0, visited, raw_ss);
     }
 
-    // 式ツリー化（Phase 2）により単一定義テンポラリは出力時に
-    // 構造的へインライン展開済み。テキストベースのインライン展開パス
-    // （Pass1/Pass2）は不要になった
+    // 式ツリー化（Phase 2）により単一定義テンポラリは出力時に構造的へインライン展開済み。テキストベースのインライン展開パス（Pass1/Pass2）は不要になった
     const std::string body_text = raw_ss.str();
 
-    // 本文で実際に使用されるローカル変数のみブロック内に宣言する
-    // （単一定義テンポラリは式ツリーへインライン済みのため宣言不要）
+    // 本文で実際に使用されるローカル変数のみブロック内に宣言する（単一定義テンポラリは式ツリーへインライン済みのため宣言不要）
     {
         auto used_in_body = [&body_text](const std::string& name) {
             return contains_identifier(body_text, name);
@@ -1355,8 +1333,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
     decreaseIndent();
     block_ss << indent() << "end\n";
 
-    // 未使用テンポラリ宣言の除去はモジュール出力時に全ブロックを対象に行う
-    // （テンポラリ名は関数間で衝突するため、関数単位の除去は誤削除の危険がある）
+    // 未使用テンポラリ宣言の除去はモジュール出力時に全ブロックを対象に行う（テンポラリ名は関数間で衝突するため、関数単位の除去は誤削除の危険がある）
     std::string block_content = block_ss.str();
 
     // 三項演算子化は emitTerminator の構造的判定（Phase 2b）で実施済み
@@ -1395,8 +1372,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 if (next_trim != std::string::npos &&
                     elif_lines[i + 1].substr(next_trim, 4) == "if (") {
                     // 結合: "end else if (...) begin"
-                    // ネストされた結合（2段目以降）では自身も調整対象のため、
-                    // 現在のindent_adjustを適用して1段浅くする
+                    // ネストされた結合（2段目以降）では自身も調整対象のため、現在のindent_adjustを適用して1段浅くする
                     std::string merged_indent = indent_str;
                     if (indent_adjust > 0 && static_cast<int>(trim_start) > indent_adjust) {
                         merged_indent = indent_str.substr(static_cast<size_t>(indent_adjust));
@@ -1446,8 +1422,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         block_content = elif_ss.str();
     }
 
-    // 冗長三項（cond ? X : X）は構造的検出が両辺同一時に直接単純代入を
-    // 出力するため、テキストベースの除去パスは不要になった
+    // 冗長三項（cond ? X : X）は構造的検出が両辺同一時に直接単純代入を出力するため、テキストベースの除去パスは不要になった
 
     if (has_explicit_edge || func.is_async ||
         func.always_kind == mir::MirFunction::AlwaysKind::FF) {
@@ -1464,8 +1439,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
             // Auto: MIRの代入完全性解析で判別（式ツリー化 Phase 3）。
             // entryから各returnまでの全制御パスで代入されない
             // モジュールレベル信号があればラッチ推論となる。
-            // （従来は「if行数 vs else行数」のテキストヒューリスティックで、
-            //   if前のデフォルト代入を見落とし、片側代入のif/elseを見逃していた）
+            // （従来は「if行数 vs else行数」のテキストヒューリスティックで、if前のデフォルト代入を見落とし、片側代入のif/elseを見逃していた）
             auto incomplete_signals = findIncompletelyAssignedSignals(func);
             if (!incomplete_signals.empty()) {
                 // ブロックヘッダを always_latch に置換し、要因の信号を注記する

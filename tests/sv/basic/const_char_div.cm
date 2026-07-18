@@ -1,8 +1,7 @@
 //! platform: sv
 //! test: cycles=2 -> code=53, frame=420000, half=210000
 
-// 定数式（文字リテラルのcast・乗算/除算）がSVターゲットでも定数として扱えることの検証
-// （'0' as uint や N*M / N/M を値のコメント補足なしで直接書けること）
+// 定数式（文字リテラルのcast・乗算/除算）がSVターゲットでも定数として扱えることの検証（'0' as uint や N*M / N/M を値のコメント補足なしで直接書けること）
 #[input] posedge clk;
 #[output] uint code = 0;
 #[output] uint frame = 0;
