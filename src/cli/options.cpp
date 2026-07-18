@@ -20,11 +20,7 @@ std::string get_version() {
 }
 
 void print_help(const char* program_name) {
-    if (i18n::language() == i18n::Lang::Ja) {
-        print_help_ja(program_name, get_version());
-    } else {
-        print_help_en(program_name, get_version());
-    }
+    print_help_text(program_name, get_version());
 }
 
 Options parse_options(int argc, char* argv[]) {
@@ -78,14 +74,13 @@ Options parse_options(int argc, char* argv[]) {
         std::exit(0);
     } else if (cmd[0] != '-') {
         // 旧形式は使用不可 - ヘルプを表示
-        std::cerr << i18n::tr("error: invalid command form\n");
-        std::cerr << i18n::tr("to run a file, use: ") << "cm run " << cmd << "\n\n";
+        std::cerr << i18n::msg(i18n::MsgId::CliInvalidCommandForm);
+        std::cerr << i18n::msgf(i18n::MsgId::CliToRunAFileUse, cmd);
         opts.command = Command::Help;
         return opts;
     } else {
         opts.has_error = true;
-        opts.error_message =
-            i18n::tr("unknown command: ") + cmd + i18n::tr("\nrun 'cm help' for usage");
+        opts.error_message = i18n::msgf(i18n::MsgId::CliUnknownCommandRunCmHelp, cmd);
         return opts;
     }
 
@@ -139,13 +134,13 @@ Options parse_options(int argc, char* argv[]) {
                 opts.unroll_max_trips = std::stoi(arg.substr(16));
                 if (opts.unroll_max_trips < 1 || opts.unroll_max_trips > 1024) {
                     opts.has_error = true;
-                    opts.error_message =
-                        i18n::tr("--funroll-loops count must be in the range 1-1024");
+                    opts.error_message = i18n::msg(i18n::MsgId::CliFunrollLoopsCountMustBe);
                     return opts;
                 }
             } catch (...) {
                 opts.has_error = true;
-                opts.error_message = i18n::tr("invalid --funroll-loops value: ") + arg.substr(16);
+                opts.error_message =
+                    i18n::msgf(i18n::MsgId::CliInvalidFunrollLoopsValue, arg.substr(16));
                 return opts;
             }
         } else if (arg.substr(0, 9) == "--target=") {
@@ -158,7 +153,7 @@ Options parse_options(int argc, char* argv[]) {
                 opts.output_file = argv[++i];
             } else {
                 opts.has_error = true;
-                opts.error_message = i18n::tr("the -o option requires an output file name");
+                opts.error_message = i18n::msg(i18n::MsgId::CliTheOOptionRequiresAn);
                 return opts;
             }
         } else if (arg == "--force-check" || arg == "--strict") {
@@ -169,7 +164,7 @@ Options parse_options(int argc, char* argv[]) {
                 opts.opt_level_from_cli = true;
                 if (opts.optimization_level < 0 || opts.optimization_level > 3) {
                     opts.has_error = true;
-                    opts.error_message = i18n::tr("optimization level must be in the range 0-3");
+                    opts.error_message = i18n::msg(i18n::MsgId::CliOptimizationLevelMustBeIn);
                     return opts;
                 }
             }
@@ -182,13 +177,13 @@ Options parse_options(int argc, char* argv[]) {
                     opts.max_output_size = std::stoul(arg.substr(18));
                     if (opts.max_output_size < 1 || opts.max_output_size > 1024) {
                         opts.has_error = true;
-                        opts.error_message =
-                            i18n::tr("maximum output size must be in the range 1-1024 GB");
+                        opts.error_message = i18n::msg(i18n::MsgId::CliMaximumOutputSizeMustBe);
                         return opts;
                     }
                 } catch (...) {
                     opts.has_error = true;
-                    opts.error_message = i18n::tr("invalid maximum output size: ") + arg.substr(18);
+                    opts.error_message =
+                        i18n::msgf(i18n::MsgId::CliInvalidMaximumOutputSize, arg.substr(18));
                     return opts;
                 }
             }
@@ -202,7 +197,7 @@ Options parse_options(int argc, char* argv[]) {
             std::string lang = arg.substr(7);
             if (!i18n::set_language_from_string(lang)) {
                 opts.has_error = true;
-                opts.error_message = i18n::tr("invalid --lang value (en or ja): ") + lang;
+                opts.error_message = i18n::msgf(i18n::MsgId::CliInvalidLangValueEnOr, lang);
                 return opts;
             }
             opts.lang_from_cli = true;
@@ -231,14 +226,13 @@ Options parse_options(int argc, char* argv[]) {
                     opts.input_file = arg;
                 } else {
                     opts.has_error = true;
-                    opts.error_message = i18n::tr("multiple input files are not allowed");
+                    opts.error_message = i18n::msg(i18n::MsgId::CliMultipleInputFilesAreNot);
                     return opts;
                 }
             }
         } else {
             opts.has_error = true;
-            opts.error_message =
-                i18n::tr("unknown option: ") + arg + i18n::tr("\nrun 'cm help' for usage");
+            opts.error_message = i18n::msgf(i18n::MsgId::CliUnknownOptionRunCmHelp, arg);
             return opts;
         }
     }

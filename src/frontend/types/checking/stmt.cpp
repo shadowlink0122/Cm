@@ -45,11 +45,7 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
                     if (warn_span.start == 0) {
                         warn_span = current_span_;
                     }
-                    warning(warn_span,
-                            std::string(i18n::tr("unused Result value; the error is ignored. "
-                                                 "Handle it with match, is_ok(), unwrap(), etc., "
-                                                 "or assign it to a variable explicitly ")) +
-                                "[must_use]");
+                    warning(warn_span, i18n::msg(i18n::MsgId::TypeUnusedResultValueTheError));
                 }
             }
         }

@@ -932,7 +932,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
                 value = static_cast<int64_t>(s.empty() ? 0 : static_cast<unsigned char>(s[0]));
                 advance();
             } else {
-                error(i18n::tr("enum values require an integer or character literal"));
+                error(i18n::msg(i18n::MsgId::ParseEnumValuesRequireAnInteger));
                 return nullptr;
             }
 
@@ -942,8 +942,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
 
             // 重複チェック（Associated dataがない場合のみ）
             if (!has_associated_data && used_values.count(value)) {
-                error(i18n::tr("enum value ") + std::to_string(value) +
-                      i18n::tr(" is already used"));
+                error(i18n::msgf(i18n::MsgId::ParseEnumValueIsAlreadyUsed, std::to_string(value)));
                 return nullptr;
             }
             used_values.insert(value);
@@ -956,8 +955,8 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
             if (!has_associated_data) {
                 // シンプルなenumの場合はオートインクリメント
                 if (used_values.count(next_value)) {
-                    error(i18n::tr("enum value ") + std::to_string(next_value) +
-                          i18n::tr(" is already used"));
+                    error(i18n::msgf(i18n::MsgId::ParseEnumValueIsAlreadyUsed,
+                                     std::to_string(next_value)));
                     return nullptr;
                 }
                 used_values.insert(next_value);
@@ -1025,8 +1024,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
                 literals.emplace_back(current().get_float());
                 advance();
             } else {
-                error(
-                    i18n::tr("literal types require a string, integer, or floating-point literal"));
+                error(i18n::msg(i18n::MsgId::ParseLiteralTypesRequireAString));
                 return nullptr;
             }
         } while (consume_if(TokenKind::Pipe));
@@ -1047,7 +1045,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
         do {
             auto type = parse_type();
             if (!type) {
-                error(i18n::tr("typedef requires a valid type"));
+                error(i18n::msg(i18n::MsgId::ParseTypedefRequiresAValidType));
                 return nullptr;
             }
             // C++スタイルの配列・ポインタサフィックスをチェック (T*, T[N])

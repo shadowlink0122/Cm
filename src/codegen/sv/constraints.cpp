@@ -127,10 +127,7 @@ std::vector<SVCodeGen::CollectedPin> SVCodeGen::collectPins(const mir::MirProgra
             pins.push_back({info.port_name, info.pin_loc, info.params});
         } else if (is_port(*gv) && options_.emitConstraints) {
             // 割り当て漏れの検出（clk等の暗黙ポートも対象）
-            std::cerr
-                << i18n::tr("warning: port '") << gv->name
-                << i18n::tr(
-                       "' has no #[sv::pin] attribute (it will not be included in the .cst)\n");
+            std::cerr << i18n::msgf(i18n::MsgId::SvPortHasNoSvPin, gv->name);
         }
     }
 
@@ -197,10 +194,7 @@ std::vector<SVCodeGen::CollectedPin> SVCodeGen::collectPins(const mir::MirProgra
             if (!info.pin_loc.empty()) {
                 pins.push_back({info.port_name, info.pin_loc, info.params});
             } else if (options_.emitConstraints) {
-                std::cerr
-                    << i18n::tr("warning: port '") << f.name
-                    << i18n::tr(
-                           "' has no #[sv::pin] attribute (it will not be included in the .cst)\n");
+                std::cerr << i18n::msgf(i18n::MsgId::SvPortHasNoSvPin, f.name);
             }
         }
     }

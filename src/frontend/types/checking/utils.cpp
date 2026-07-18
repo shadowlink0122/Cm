@@ -777,10 +777,10 @@ bool has_attribute(const std::vector<ast::AttributeNode>& attrs, const std::stri
 
 }  // namespace
 
-void TypeChecker::report_naming(Span span, const std::string& decl_kind, const std::string& name,
-                                const std::string& expected) {
-    warning(span, i18n::tr(decl_kind) + " '" + name + "' " + i18n::tr("does not follow the ") +
-                      i18n::tr(expected) + i18n::tr(" naming convention [L001]"));
+void TypeChecker::report_naming(Span span, i18n::MsgId decl_kind, const std::string& name,
+                                i18n::MsgId expected) {
+    warning(span, i18n::msgf(i18n::MsgId::LintNamingViolation, i18n::msg(decl_kind), name,
+                             i18n::msg(expected)));
 }
 
 // 関数本体の文を再帰的に走査し、ローカル変数宣言の命名を検査する
@@ -797,11 +797,12 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
                     // ローカルconstは snake_case / UPPER_SNAKE_CASE の両方を許容
                     if (!naming::is_snake_case(let->name) &&
                         !naming::is_upper_snake_case(let->name)) {
-                        report_naming(span, "constant name", let->name,
-                                      "snake_case or UPPER_SNAKE_CASE");
+                        report_naming(span, i18n::MsgId::LintLabelConstantName, let->name,
+                                      i18n::MsgId::LintCaseSnakeOrUpper);
                     }
                 } else if (!naming::is_snake_case(let->name)) {
-                    report_naming(span, "variable name", let->name, "snake_case");
+                    report_naming(span, i18n::MsgId::LintLabelVariableName, let->name,
+                                  i18n::MsgId::LintCaseSnake);
                 }
             }
         } else if (auto* if_stmt = stmt->as<ast::IfStmt>()) {
@@ -811,15 +812,16 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
             if (for_stmt->init) {
                 if (auto* init_let = for_stmt->init->as<ast::LetStmt>()) {
                     if (!naming_exempt(init_let->name) && !naming::is_snake_case(init_let->name)) {
-                        report_naming(for_stmt->init->span, "variable name", init_let->name,
-                                      "snake_case");
+                        report_naming(for_stmt->init->span, i18n::MsgId::LintLabelVariableName,
+                                      init_let->name, i18n::MsgId::LintCaseSnake);
                     }
                 }
             }
             check_naming_stmts(for_stmt->body);
         } else if (auto* for_in = stmt->as<ast::ForInStmt>()) {
             if (!naming_exempt(for_in->var_name) && !naming::is_snake_case(for_in->var_name)) {
-                report_naming(stmt->span, "variable name", for_in->var_name, "snake_case");
+                report_naming(stmt->span, i18n::MsgId::LintLabelVariableName, for_in->var_name,
+                              i18n::MsgId::LintCaseSnake);
             }
             check_naming_stmts(for_in->body);
         } else if (auto* while_stmt = stmt->as<ast::WhileStmt>()) {
@@ -834,8 +836,8 @@ void TypeChecker::check_naming_stmts(std::vector<ast::StmtPtr>& stmts) {
             if (defer_stmt->body) {
                 if (auto* body_let = defer_stmt->body->as<ast::LetStmt>()) {
                     if (!naming_exempt(body_let->name) && !naming::is_snake_case(body_let->name)) {
-                        report_naming(defer_stmt->body->span, "variable name", body_let->name,
-                                      "snake_case");
+                        report_naming(defer_stmt->body->span, i18n::MsgId::LintLabelVariableName,
+                                      body_let->name, i18n::MsgId::LintCaseSnake);
                     }
                 }
             }
@@ -853,17 +855,20 @@ void TypeChecker::check_naming_function(ast::FunctionDecl& func) {
     }
     Span span = func.name_span;
     if (!naming_exempt(func.name) && func.name != "main" && !naming::is_snake_case(func.name)) {
-        report_naming(span, "function name", func.name, "snake_case");
+        report_naming(span, i18n::MsgId::LintLabelFunctionName, func.name,
+                      i18n::MsgId::LintCaseSnake);
     }
     for (const auto& param : func.params) {
         if (!naming_exempt(param.name) && param.name != "self" &&
             !naming::is_snake_case(param.name)) {
-            report_naming(span, "parameter name", param.name, "snake_case");
+            report_naming(span, i18n::MsgId::LintLabelParameterName, param.name,
+                          i18n::MsgId::LintCaseSnake);
         }
     }
     for (const auto& gp : func.generic_params) {
         if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
-            report_naming(span, "type parameter name", gp, "PascalCase");
+            report_naming(span, i18n::MsgId::LintLabelTypeParameterName, gp,
+                          i18n::MsgId::LintCasePascal);
         }
     }
     check_naming_stmts(func.body);
@@ -881,7 +886,8 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         Span span =
             (st->name_span.start != 0 || st->name_span.end != 0) ? st->name_span : decl.span;
         if (!naming_exempt(st->name) && !naming::is_pascal_case(st->name)) {
-            report_naming(span, "struct name", st->name, "PascalCase");
+            report_naming(span, i18n::MsgId::LintLabelStructName, st->name,
+                          i18n::MsgId::LintCasePascal);
         }
         for (const auto& field : st->fields) {
             // #[sv::param]/#[verilog::param] フィールドはSVパラメータの写しなので
@@ -896,17 +902,20 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
             if (is_param_field) {
                 if (!naming_exempt(field.name) && !naming::is_snake_case(field.name) &&
                     !naming::is_upper_snake_case(field.name)) {
-                    report_naming(span, "field name", field.name, "snake_case or UPPER_SNAKE_CASE");
+                    report_naming(span, i18n::MsgId::LintLabelFieldName, field.name,
+                                  i18n::MsgId::LintCaseSnakeOrUpper);
                 }
                 continue;
             }
             if (!naming_exempt(field.name) && !naming::is_snake_case(field.name)) {
-                report_naming(span, "field name", field.name, "snake_case");
+                report_naming(span, i18n::MsgId::LintLabelFieldName, field.name,
+                              i18n::MsgId::LintCaseSnake);
             }
         }
         for (const auto& gp : st->generic_params) {
             if (!naming_exempt(gp) && !naming::is_pascal_case(gp)) {
-                report_naming(span, "type parameter name", gp, "PascalCase");
+                report_naming(span, i18n::MsgId::LintLabelTypeParameterName, gp,
+                              i18n::MsgId::LintCasePascal);
             }
         }
     } else if (auto* en = decl.as<ast::EnumDecl>()) {
@@ -915,23 +924,26 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
             return;
         }
         if (!naming_exempt(en->name) && !naming::is_pascal_case(en->name)) {
-            report_naming(decl.span, "enum name", en->name, "PascalCase");
+            report_naming(decl.span, i18n::MsgId::LintLabelEnumName, en->name,
+                          i18n::MsgId::LintCasePascal);
         }
         for (const auto& member : en->members) {
             // バリアントは PascalCase / UPPER_SNAKE_CASE の両方を許容
             if (!naming_exempt(member.name) && !naming::is_pascal_case(member.name) &&
                 !naming::is_upper_snake_case(member.name)) {
-                report_naming(decl.span, "enum variant name", member.name,
-                              "PascalCase or UPPER_SNAKE_CASE");
+                report_naming(decl.span, i18n::MsgId::LintLabelEnumVariantName, member.name,
+                              i18n::MsgId::LintCasePascalOrUpper);
             }
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
         if (!naming_exempt(iface->name) && !naming::is_pascal_case(iface->name)) {
-            report_naming(decl.span, "interface name", iface->name, "PascalCase");
+            report_naming(decl.span, i18n::MsgId::LintLabelInterfaceName, iface->name,
+                          i18n::MsgId::LintCasePascal);
         }
         for (const auto& method : iface->methods) {
             if (!naming_exempt(method.name) && !naming::is_snake_case(method.name)) {
-                report_naming(decl.span, "method name", method.name, "snake_case");
+                report_naming(decl.span, i18n::MsgId::LintLabelMethodName, method.name,
+                              i18n::MsgId::LintCaseSnake);
             }
         }
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
@@ -942,7 +954,8 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         }
     } else if (auto* td = decl.as<ast::TypedefDecl>()) {
         if (!naming_exempt(td->name) && !naming::is_pascal_case(td->name)) {
-            report_naming(decl.span, "type alias name", td->name, "PascalCase");
+            report_naming(decl.span, i18n::MsgId::LintLabelTypeAliasName, td->name,
+                          i18n::MsgId::LintCasePascal);
         }
     } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
         if (naming_exempt(gv->name)) {
@@ -951,10 +964,12 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         if (gv->is_const && top_level) {
             // グローバルconstは UPPER_SNAKE_CASE
             if (!naming::is_upper_snake_case(gv->name)) {
-                report_naming(decl.span, "global constant name", gv->name, "UPPER_SNAKE_CASE");
+                report_naming(decl.span, i18n::MsgId::LintLabelGlobalConstantName, gv->name,
+                              i18n::MsgId::LintCaseUpperSnake);
             }
         } else if (!gv->is_const && !naming::is_snake_case(gv->name)) {
-            report_naming(decl.span, "global variable name", gv->name, "snake_case");
+            report_naming(decl.span, i18n::MsgId::LintLabelGlobalVariableName, gv->name,
+                          i18n::MsgId::LintCaseSnake);
         }
     } else if (auto* mod = decl.as<ast::ModuleDecl>()) {
         if (mod->path.segments.empty()) {
@@ -966,7 +981,8 @@ void TypeChecker::check_naming_decl(ast::Decl& decl, bool top_level) {
         }
         for (const auto& seg : mod->path.segments) {
             if (!naming_exempt(seg) && !naming::is_snake_case(seg)) {
-                report_naming(decl.span, "module name", seg, "snake_case");
+                report_naming(decl.span, i18n::MsgId::LintLabelModuleName, seg,
+                              i18n::MsgId::LintCaseSnake);
             }
         }
         for (auto& inner : mod->declarations) {

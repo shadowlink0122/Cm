@@ -66,9 +66,7 @@ bool JSCodeGen::validatePointerUsage(const mir::MirProgram& program) {
             const auto& local = func->locals[i];
             if (isVoidPointer(local.type)) {
                 errors.push_back(
-                    {i18n::tr("the void* type is not available on the JS target (variable: ") +
-                         local.name + "）",
-                     func->name});
+                    {i18n::msgf(i18n::MsgId::JsTheVoidTypeIsNot, local.name), func->name});
             }
         }
 
@@ -86,10 +84,7 @@ bool JSCodeGen::validatePointerUsage(const mir::MirProgram& program) {
                     const auto& funcName = std::get<std::string>(callData.func->data);
                     if (isProhibitedFunction(funcName)) {
                         errors.push_back(
-                            {i18n::tr("on the JS target, ") + funcName +
-                                 i18n::tr("() is not available. ") +
-                                 std::string(i18n::tr("JavaScript has no heap memory management")),
-                             func->name});
+                            {i18n::msgf(i18n::MsgId::JsOnTheJsTargetIs, funcName), func->name});
                     }
                 }
             }
@@ -115,16 +110,13 @@ bool JSCodeGen::validatePointerUsage(const mir::MirProgram& program) {
                         std::get<mir::MirRvalue::CastData>(assignData.rvalue->data);
                     if (isVoidPointer(castData.target_type)) {
                         errors.push_back(
-                            {i18n::tr("casting to void* is not available on the JS target"),
-                             func->name});
+                            {i18n::msg(i18n::MsgId::JsCastingToVoidIsNot), func->name});
                     }
                     // void*からのキャスト（as T*）もチェック
                     if (castData.target_type && castData.target_type->kind == TypeKind::Pointer &&
                         castData.operand && isVoidPointer(castData.operand->type)) {
                         errors.push_back(
-                            {i18n::tr(
-                                 "pointer casts from void* are not available on the JS target"),
-                             func->name});
+                            {i18n::msg(i18n::MsgId::JsPointerCastsFromVoidAre), func->name});
                     }
                 }
             }
@@ -134,15 +126,14 @@ bool JSCodeGen::validatePointerUsage(const mir::MirProgram& program) {
     // エラーを出力
     if (!errors.empty()) {
         for (const auto& err : errors) {
-            std::cerr << i18n::tr("error[JS]: ") << err.message;
+            std::cerr << i18n::msgf(i18n::MsgId::JsJs, err.message);
             if (!err.function_name.empty()) {
-                std::cerr << i18n::tr(" (function: ") << err.function_name << ")";
+                std::cerr << i18n::msgf(i18n::MsgId::JsFunction, err.function_name);
             }
             std::cerr << std::endl;
         }
         // 最初のエラーだけでコンパイル中止（重複エラーを避ける）
-        std::cerr << i18n::tr("hint: calloc/realloc/void* are not available on the JS target. ")
-                  << i18n::tr("malloc/free are replaced by GC. ") << std::endl;
+        std::cerr << i18n::msg(i18n::MsgId::JsCallocReallocVoidAreNot);
         return false;
     }
 

@@ -77,31 +77,29 @@ bool NoStdChecker::isForbiddenFunction(const std::string& name) {
 }
 
 std::string NoStdChecker::getErrorMessage(const std::string& funcName, const std::string& callee) {
-    std::string category;
+    i18n::MsgId category;
     if (callee == "println" || callee == "__println__" || callee == "print" ||
         callee == "__print__" || callee == "printf" || callee == "puts" ||
         callee.find("cm_print") == 0 || callee.find("cm_println") == 0) {
-        category = "OS standard output";
+        category = i18n::MsgId::NostdCatOsStdout;
     } else if (callee == "malloc" || callee == "free" || callee == "calloc" ||
                callee == "realloc") {
-        category = "OS heap memory management";
+        category = i18n::MsgId::NostdCatOsHeap;
     } else if (callee == "open" || callee == "close" || callee == "read" || callee == "write" ||
                callee == "lseek" || callee.find("cm_file_") == 0 || callee.find("cm_read_") == 0 ||
                callee.find("cm_io_") == 0) {
-        category = "file I/O";
+        category = i18n::MsgId::NostdCatFileIo;
     } else if (callee == "exit") {
-        category = "process control";
+        category = i18n::MsgId::NostdCatProcess;
     } else if (callee == "socket" || callee == "connect" || callee == "bind") {
-        category = "networking";
+        category = i18n::MsgId::NostdCatNetwork;
     } else if (callee.find("pthread_") == 0) {
-        category = "threading";
+        category = i18n::MsgId::NostdCatThread;
     } else {
-        category = "OS-dependent functionality";
+        category = i18n::MsgId::NostdCatOsDependent;
     }
 
-    return std::string(i18n::tr("error: function '")) + funcName + i18n::tr("' uses '") + callee +
-           i18n::tr("'; ") + i18n::tr(category) +
-           i18n::tr(" is not available in bare-metal environments");
+    return i18n::msgf(i18n::MsgId::NostdForbiddenCall, funcName, callee, i18n::msg(category));
 }
 
 void NoStdChecker::checkFunction(const MirFunction& func, CheckResult& result) {

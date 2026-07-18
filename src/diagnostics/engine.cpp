@@ -28,9 +28,9 @@ void DiagnosticEngine::report(const std::string& id, Span span,
         level = it->second;
     }
 
-    // テンプレートは英語原文キー。日本語設定時はカタログで訳してからフォーマットする
+    // message_templateはカタログID（diag.E001等）。現在言語のテンプレートを引いてフォーマットする
     diagnostics_.push_back(
-        {id, def->name, level, span, format_message(i18n::tr(def->message_template), args)});
+        {id, def->name, level, span, format_message(i18n::msg(def->message_id), args)});
 }
 
 void DiagnosticEngine::report_direct(const std::string& id, const std::string& name,

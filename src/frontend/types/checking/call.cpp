@@ -154,12 +154,12 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // exit(code) ビルトイン: プロセスを終了する（HIRビルトインとして各バックエンドが処理する。std::debug::assert等が使用）
         if (ident->name == "exit") {
             if (call.args.size() != 1) {
-                error(current_span_, i18n::tr("exit must be used as exit(exit_code)"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeExitMustBeUsedAs));
                 return ast::make_void();
             }
             auto code_type = infer_type(*call.args[0]);
             if (code_type && code_type->kind != ast::TypeKind::Bool && !code_type->is_integer()) {
-                error(current_span_, i18n::tr("the exit code for exit must be an integer type"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeTheExitCodeForExit));
             }
             return ast::make_void();
         }
@@ -168,13 +168,12 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // nクロック進める（SVでは repeat(n) @(posedge clk) に変換される）
         if (ident->name == "step") {
             if (call.args.size() != 1) {
-                error(current_span_, i18n::tr("step must be used as step(cycle_count)"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeStepMustBeUsedAs));
                 return ast::make_void();
             }
             auto step_arg = infer_type(*call.args[0]);
             if (!step_arg || !step_arg->is_integer()) {
-                error(current_span_,
-                      i18n::tr("the argument to step must be an integer type (cycle count)"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeTheArgumentToStepMust));
             }
             return ast::make_void();
         }

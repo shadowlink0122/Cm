@@ -174,7 +174,7 @@ FormatResult Formatter::format(const std::string& original_code) {
 bool Formatter::format_file(const std::string& filepath) {
     std::ifstream ifs(filepath);
     if (!ifs) {
-        std::cerr << i18n::tr("error: cannot read file: ") << filepath << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::FmtCannotReadFile, filepath);
         return false;
     }
 
@@ -188,7 +188,7 @@ bool Formatter::format_file(const std::string& filepath) {
     if (result.modified) {
         std::ofstream ofs(filepath);
         if (!ofs) {
-            std::cerr << i18n::tr("error: cannot write file: ") << filepath << "\n";
+            std::cerr << i18n::msgf(i18n::MsgId::FmtCannotWriteFile, filepath);
             return false;
         }
         ofs << result.formatted_code;
@@ -200,7 +200,7 @@ bool Formatter::format_file(const std::string& filepath) {
 
 void Formatter::print_summary(const FormatResult& result, std::ostream& out) const {
     if (result.changes_applied > 0) {
-        out << "✓ " << result.changes_applied << i18n::tr(" formatting fix(es)\n");
+        out << i18n::msgf(i18n::MsgId::FmtFormattingFixEs, result.changes_applied);
     }
 }
 

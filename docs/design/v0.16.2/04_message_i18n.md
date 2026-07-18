@@ -7,19 +7,21 @@
 
 ## 設計
 
-### メッセージカタログ方式
+### メッセージカタログ方式（enum + string のC++側集約管理）
 
-- `src/common/i18n.hpp`（ヘッダオンリー）を新設し、`cm::i18n::tr(key)` でメッセージを取得する
-- 英語文字列をソース中の唯一の原文（キー）とし、日本語カタログはデータファイル `src/common/i18n_ja.tsv`（英語原文<TAB>日本語訳、改行・タブは `\n`・`\t` 表記）で管理する
-- TSVはCMakeの `configure_file` でビルド時に生成ヘッダ（`textdata::kJaCatalogTsv`）へ埋め込み、初回参照時にパースする（実行時のファイル依存なし・翻訳追加はTSVに1行追記するだけ）
-- カタログに無いキーは英語のまま出力する（フォールバック）ため、訳し漏れがあっても英語で一貫する
-- 書式引数を含むメッセージは既存の文字列連結を維持し、連結の断片単位ではなく文単位でカタログ化する
-- `cm help` の本文も `src/cli/help_en.txt` / `help_ja.txt` のテキストファイルで管理し、同じ仕組みで埋め込む（`{version}` / `{program}` プレースホルダを実行時置換）
+- 全メッセージは `enum class MsgId` + 言語別文字列テーブルでC++側に集約する（データファイルの二重管理を避け、IDのタイプミスをコンパイルエラーにする）
+- `src/common/messages/message_list.def` — ID + 英語原文の単一ソース（X-macro）。ここから enum（`message_ids.hpp`）と英語テーブル（`messages_en.hpp`）が同順生成されるため、順序ずれが起こらない
+- `src/common/messages/messages_ja.hpp` — 日本語訳（`{MsgId, 訳}` のペア表）。無いIDは英語へフォールバックする
+- テンプレートは `{0}` `{1}` ... のプレースホルダで動的値を受け取り、言語ごとの語順の違いに対応する（文字列連結による断片化はしない）
+- 取得APIは `i18n::msg(MsgId)`（テンプレート取得）と `i18n::msgf(MsgId, args...)`（プレースホルダ置換）
+- メッセージ追加は message_list.def に1行 + messages_ja.hpp に訳を1行。言語追加は messages_<lang>.hpp を作成し i18n.hpp の言語表へ登録する
+- `cm help` の本文のみ `src/cli/help_<lang>.txt` のテキストファイルで管理し、CMakeの `configure_file` でビルド時に埋め込む（`{version}` / `{program}` プレースホルダを実行時置換。長文のためenum管理には不向き）
 
 ```cpp
 // 使用例
-std::cerr << i18n::tr("error: cannot open file: ") << path << "\n";
-// 言語がjaの場合 → "エラー: ファイルを開けません: <path>"
+std::cerr << i18n::msgf(i18n::MsgId::CliCannotOpenFile, path);
+// en: "error: cannot open file: <path>"
+// ja: "エラー: ファイルを開けません: <path>"
 ```
 
 ### 言語の決定順序

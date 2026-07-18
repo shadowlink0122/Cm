@@ -123,23 +123,14 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
                 // 従来は警告のみで logic [31:0] として出力され、演算結果が静かに壊れていた。非対応として明示エラーにする
-                std::cerr << i18n::tr(
-                                 "error[SV004]: floating-point types are not supported on the SV "
-                                 "target: ")
-                          << gv->name
-                          << i18n::tr(
-                                 " (use fixed-point arithmetic or a vendor IP via "
-                                 "extern struct)\n");
+                std::cerr << i18n::msgf(i18n::MsgId::SvSv004FloatingPointTypesAre, gv->name);
                 has_error = true;
                 break;
             case hir::TypeKind::Array:
                 // 動的配列（スライス）は実行時確保が前提のため合成不能。
                 // 従来は無警告で未定義のランタイム関数呼び出しを出力していた
                 if (!gv->type->array_size.has_value() && gv->type->size_param_name.empty()) {
-                    std::cerr << i18n::tr(
-                                     "error[SV006]: dynamic arrays (slices) are not supported on "
-                                     "the SV target: ")
-                              << gv->name << i18n::tr("(use a fixed-size array T[N])\n");
+                    std::cerr << i18n::msgf(i18n::MsgId::SvSv006DynamicArraysSlicesAre, gv->name);
                     has_error = true;
                 }
                 break;
@@ -171,19 +162,15 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                     break;
                 case hir::TypeKind::Float:
                 case hir::TypeKind::Double:
-                    std::cerr << i18n::tr(
-                                     "error[SV004]: floating-point types are not supported on the "
-                                     "SV target: ")
-                              << func->name << "::" << local.name << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::SvSv004FloatingPointTypesAre2, func->name,
+                                            local.name);
                     has_error = true;
                     break;
                 case hir::TypeKind::Array:
                     if (!local.type->array_size.has_value() &&
                         local.type->size_param_name.empty()) {
-                        std::cerr << i18n::tr(
-                                         "error[SV006]: dynamic arrays (slices) are not supported "
-                                         "on the SV target: ")
-                                  << func->name << "::" << local.name << "\n";
+                        std::cerr << i18n::msgf(i18n::MsgId::SvSv006DynamicArraysSlicesAre2,
+                                                func->name, local.name);
                         has_error = true;
                     }
                     break;
@@ -207,7 +194,7 @@ void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) cons
     };
     for (const auto& gv : program.global_vars) {
         if (gv) {
-            check_name(gv->name, i18n::tr("variable"));
+            check_name(gv->name, i18n::msg(i18n::MsgId::SvVariable));
         }
     }
     for (const auto& func : program.functions) {
@@ -230,23 +217,23 @@ void SVCodeGen::validateReservedIdentifiers(const mir::MirProgram& program) cons
         if (is_test_fn) {
             continue;
         }
-        check_name(func->name, i18n::tr("function"));
+        check_name(func->name, i18n::msg(i18n::MsgId::SvFunction));
         for (const auto& local : func->locals) {
             // ユーザー定義のローカル変数のみ（コンパイラ生成の一時変数は対象外）
             if (local.is_user_variable && !local.is_global && !local.name.empty()) {
-                check_name(local.name, i18n::tr("variable"));
+                check_name(local.name, i18n::msg(i18n::MsgId::SvVariable));
             }
         }
     }
     if (!collisions.empty()) {
-        std::string msg = i18n::tr("identifiers conflict with SystemVerilog reserved words: ");
+        std::string msg = i18n::msg(i18n::MsgId::SvIdentifiersConflictWithSystemverilogReserved);
         for (size_t i = 0; i < collisions.size(); ++i) {
             if (i > 0) {
                 msg += ", ";
             }
             msg += collisions[i];
         }
-        msg += i18n::tr("; rename them");
+        msg += i18n::msg(i18n::MsgId::SvRenameThem);
         throw std::runtime_error(msg);
     }
 }
@@ -288,13 +275,8 @@ void SVCodeGen::warnNbaReadback(const mir::MirProgram& program) const {
             }
             const std::string& nm = func->locals[pl->local].name;
             if (warned.insert(nm).second) {
-                std::cerr << i18n::tr("warning: SV target: function '")
-                          << strip_namespace(func->name) << i18n::tr("' assigns state variable '")
-                          << nm
-                          << i18n::tr(
-                                 "' and reads it afterwards; assignments in posedge "
-                                 "functions take effect next cycle (non-blocking), so "
-                                 "this read sees the previous-cycle value\n");
+                std::cerr << i18n::msgf(i18n::MsgId::SvSvTargetFunctionAssignsState,
+                                        strip_namespace(func->name), nm);
             }
         };
         for (const auto& bb : func->basic_blocks) {

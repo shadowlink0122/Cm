@@ -61,19 +61,19 @@ bool BufferedCodeGenerator::check_limits() {
     // 時間制限チェック
     auto elapsed = std::chrono::high_resolution_clock::now() - start_time;
     if (elapsed > limits.max_generation_time) {
-        set_error(i18n::tr("code generation time exceeded the limit"));
+        set_error(i18n::msg(i18n::MsgId::CodegenCodeGenerationTimeExceededThe));
         return false;
     }
 
     // サイズ制限チェック
     if (stats.total_bytes > limits.max_bytes) {
-        set_error(i18n::tr("generated code size exceeded the limit"));
+        set_error(i18n::msg(i18n::MsgId::CodegenGeneratedCodeSizeExceededThe));
         stats.exceeded_limit = true;
         return false;
     }
 
     if (stats.total_lines > limits.max_lines) {
-        set_error(i18n::tr("generated code line count exceeded the limit"));
+        set_error(i18n::msg(i18n::MsgId::CodegenGeneratedCodeLineCountExceeded));
         stats.exceeded_limit = true;
         return false;
     }
@@ -81,8 +81,8 @@ bool BufferedCodeGenerator::check_limits() {
     // 警告閾値チェック
     if (stats.total_bytes > limits.warning_threshold_bytes) {
         if (!stats.exceeded_limit) {  // 一度だけ警告
-            std::cerr << i18n::tr("[CODEGEN] warning: generated code exceeds ")
-                      << (stats.total_bytes / (1024 * 1024)) << i18n::tr(" MB\n");
+            std::cerr << i18n::msgf(i18n::MsgId::CodegenCodegenWarningGeneratedCodeExceeds,
+                                    (stats.total_bytes / (1024 * 1024)));
         }
     }
 
@@ -112,7 +112,7 @@ std::string BufferedCodeGenerator::get_generated_code() {
 void BufferedCodeGenerator::set_error(const std::string& msg) {
     has_error = true;
     error_message = msg;
-    std::cerr << i18n::tr("[CODEGEN] error: ") << msg << "\n";
+    std::cerr << i18n::msgf(i18n::MsgId::CodegenCodegenError, msg);
 }
 
 // ============================================================
@@ -126,8 +126,7 @@ bool TwoPhaseCodeGenerator::add_block(const std::string& name, const std::string
     // 推定サイズチェック
     if (total_estimated_size + size > limits.max_bytes) {
         if (is_critical) {
-            set_error(i18n::tr("required block '") + name +
-                      i18n::tr("' cannot be added (size exceeded)"));
+            set_error(i18n::msgf(i18n::MsgId::CodegenRequiredBlockCannotBeAdded, name));
             return false;
         }
         // 非必須ブロックはスキップ
@@ -149,8 +148,8 @@ std::string TwoPhaseCodeGenerator::generate() {
         }
         if (!append(block.content)) {
             if (block.is_critical) {
-                set_error(i18n::tr("required block '") + block.name +
-                          i18n::tr("' generation failed"));
+                set_error(
+                    i18n::msgf(i18n::MsgId::CodegenRequiredBlockGenerationFailed, block.name));
                 return "";
             }
             // 非必須ブロックはスキップして続行
@@ -177,8 +176,7 @@ ScopedCodeSection::ScopedCodeSection(BufferedCodeGenerator& g, const std::string
 ScopedCodeSection::~ScopedCodeSection() {
     if (!committed) {
         // エラー時はロールバック（概念的に）
-        std::cerr << i18n::tr("[CODEGEN] section '") << section_name
-                  << i18n::tr("' was not committed\n");
+        std::cerr << i18n::msgf(i18n::MsgId::CodegenCodegenSectionWasNotCommitted, section_name);
     }
 }
 

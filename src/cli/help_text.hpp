@@ -1,10 +1,9 @@
 #pragma once
 
-// ヘルプ本文の出力（本文データは src/cli/help_en.txt / help_ja.txt で管理し、
-// ビルド時に生成ヘッダ textdata::kHelpEn / kHelpJa へ埋め込まれる。
-// {version} と {program} のプレースホルダを実行時に置換して出力する）
+// ヘルプ本文の出力（本文データは src/cli/help_<lang>.txt で管理し、ビルド時に生成ヘッダへ埋め込まれる。
+// {version} と {program} のプレースホルダを実行時に置換して出力する。言語選択は i18n::help_text() が行う）
 
-#include "common/text_data.hpp"
+#include "common/i18n.hpp"
 
 #include <iostream>
 #include <string>
@@ -25,20 +24,11 @@ inline std::string replace_all(std::string text, const std::string& key, const s
 
 }  // namespace detail
 
-// ヘルプ本文を言語別テンプレートから出力する
-inline void print_help_text(const char* help_template, const char* program_name,
-                            const std::string& version) {
-    std::string text = detail::replace_all(help_template, "{version}", version);
+// 現在言語のヘルプ本文を出力する
+inline void print_help_text(const char* program_name, const std::string& version) {
+    std::string text = detail::replace_all(i18n::help_text(), "{version}", version);
     text = detail::replace_all(std::move(text), "{program}", program_name);
     std::cout << text;
-}
-
-inline void print_help_en(const char* program_name, const std::string& version) {
-    print_help_text(textdata::kHelpEn, program_name, version);
-}
-
-inline void print_help_ja(const char* program_name, const std::string& version) {
-    print_help_text(textdata::kHelpJa, program_name, version);
 }
 
 }  // namespace cm::cli

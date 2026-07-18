@@ -4,6 +4,7 @@
 // 診断カタログ - 全診断を一元管理
 // ============================================================
 
+#include "../common/messages/message_ids.hpp"
 #include "common/span.hpp"
 #include "levels.hpp"
 
@@ -27,17 +28,17 @@ struct DiagnosticDefinition {
     std::string id;    // "E001", "W001", "L001"
     std::string name;  // "undefined-variable"
     DiagnosticLevel default_level;
-    std::string message_template;  // "{0} is not defined"
+    i18n::MsgId message_id;  // メッセージテンプレートのカタログID（言語別本文は i18n::msg で解決）
     DetectionStage stage;
     bool is_fixable = false;
 
     DiagnosticDefinition() = default;
     DiagnosticDefinition(std::string id_, std::string name_, DiagnosticLevel level_,
-                         std::string msg_, DetectionStage stage_, bool fixable_ = false)
+                         i18n::MsgId msg_, DetectionStage stage_, bool fixable_ = false)
         : id(std::move(id_)),
           name(std::move(name_)),
           default_level(level_),
-          message_template(std::move(msg_)),
+          message_id(msg_),
           stage(stage_),
           is_fixable(fixable_) {}
 };

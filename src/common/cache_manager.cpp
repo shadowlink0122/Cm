@@ -158,7 +158,7 @@ std::vector<std::string> CacheManager::detect_changed_files(
             }
         }
         if (!found) {
-            changed.push_back(prev_file + i18n::tr(" (deleted)"));
+            changed.push_back(i18n::msgf(i18n::MsgId::CacheDeleted, prev_file));
         }
     }
 
@@ -237,7 +237,7 @@ std::vector<std::string> CacheManager::detect_changed_modules(
     // 前回あったが今回ないモジュール（削除）
     for (const auto& [prev_module, _] : best->module_fingerprints) {
         if (current_fps.find(prev_module) == current_fps.end()) {
-            changed.push_back(prev_module + i18n::tr(" (deleted)"));
+            changed.push_back(i18n::msgf(i18n::MsgId::CacheDeleted, prev_module));
         }
     }
 
@@ -288,7 +288,7 @@ bool CacheManager::store(const std::string& fingerprint, const std::filesystem::
         std::filesystem::copy_file(object_file, obj_dest,
                                    std::filesystem::copy_options::overwrite_existing);
     } catch (const std::exception& e) {
-        std::cerr << i18n::tr("cache save error: ") << e.what() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CacheCacheSaveError, e.what());
         return false;
     }
 
@@ -355,7 +355,7 @@ bool CacheManager::store_module_object(const std::string& fingerprint,
 
         return true;
     } catch (const std::exception& e) {
-        std::cerr << i18n::tr("[CACHE] module cache save error: ") << e.what() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CacheCacheModuleCacheSaveError, e.what());
         return false;
     }
 }
@@ -490,7 +490,7 @@ bool CacheManager::clear() {
             return true;
         }
     } catch (const std::exception& e) {
-        std::cerr << i18n::tr("cache clear error: ") << e.what() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CacheCacheClearError, e.what());
     }
     return false;
 }
@@ -544,7 +544,7 @@ bool CacheManager::ensure_cache_dir() {
         std::filesystem::create_directories(objects_dir());
         return true;
     } catch (const std::exception& e) {
-        std::cerr << i18n::tr("cache directory creation error: ") << e.what() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CacheCacheDirectoryCreationError, e.what());
         return false;
     }
 }

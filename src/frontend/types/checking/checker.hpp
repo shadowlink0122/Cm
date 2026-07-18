@@ -4,6 +4,7 @@
 // TypeChecker メインクラス定義
 // ============================================================
 
+#include "../../../common/messages/message_ids.hpp"
 #include "base.hpp"
 
 namespace cm {
@@ -175,8 +176,8 @@ class TypeChecker {
     void check_naming_decl(ast::Decl& decl, bool top_level);
     void check_naming_function(ast::FunctionDecl& func);
     void check_naming_stmts(std::vector<ast::StmtPtr>& stmts);
-    void report_naming(Span span, const std::string& decl_kind, const std::string& name,
-                       const std::string& expected);
+    void report_naming(Span span, i18n::MsgId decl_kind, const std::string& name,
+                       i18n::MsgId expected);
 
     // match式のヘルパー
     void check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr expected_type);

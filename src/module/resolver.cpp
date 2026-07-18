@@ -144,14 +144,14 @@ ModuleInfo* ModuleResolver::load_module(const std::string& module_name) {
     // モジュールファイルを探す
     auto module_path = resolve_module_path(module_name);
     if (module_path.empty()) {
-        std::cerr << i18n::tr("error: module '") << module_name << i18n::tr("' not found\n");
+        std::cerr << i18n::msgf(i18n::MsgId::ModuleModuleNotFound, module_name);
         return nullptr;
     }
 
     // モジュールをパース
     auto hir_program = parse_module_file(module_path);
     if (!hir_program) {
-        std::cerr << i18n::tr("error: module '") << module_name << i18n::tr("' failed to parse\n");
+        std::cerr << i18n::msgf(i18n::MsgId::ModuleModuleFailedToParse, module_name);
         return nullptr;
     }
 

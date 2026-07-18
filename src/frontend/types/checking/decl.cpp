@@ -275,10 +275,8 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             auto [it, inserted] = defined_function_sigs_.emplace(func->name, sig);
             if (!inserted && it->second != sig) {
                 Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
-                error(name_pos, i18n::tr("function '") + func->name +
-                                    i18n::tr("' is already defined with a different signature "
-                                             "(free-function overloading is not supported; "
-                                             "use a different name)"));
+                error(name_pos,
+                      i18n::msgf(i18n::MsgId::TypeFunctionIsAlreadyDefinedWith, func->name));
             }
         }
 
@@ -984,12 +982,12 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     for (const auto& attr : func.attributes) {
         if (attr.name == "test") {
             if (!func.params.empty()) {
-                error(func.name_span, i18n::tr("#[test] function '") + func.name +
-                                          i18n::tr("' cannot take parameters"));
+                error(func.name_span,
+                      i18n::msgf(i18n::MsgId::TypeTestFunctionCannotTakeParameters, func.name));
             }
             if (!func.return_type || func.return_type->kind != ast::TypeKind::Void) {
                 error(func.name_span,
-                      i18n::tr("#[test] function '") + func.name + i18n::tr("' must return void"));
+                      i18n::msgf(i18n::MsgId::TypeTestFunctionMustReturnVoid, func.name));
             }
             break;
         }

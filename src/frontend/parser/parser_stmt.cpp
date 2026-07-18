@@ -19,7 +19,7 @@ ast::StmtPtr Parser::parse_stmt() {
 
     // 再帰深度制限
     if (parse_depth_ > 500) {
-        error(i18n::tr("recursion depth exceeded the limit (500)"));
+        error(i18n::msg(i18n::MsgId::ParseRecursionDepthExceededTheLimit));
         return nullptr;
     }
     debug::par::log(debug::par::Id::Stmt, "", debug::Level::Trace);
@@ -102,7 +102,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 cases.emplace_back(std::move(pattern), std::move(stmts));
             } else if (consume_if(TokenKind::KwElse)) {
                 if (has_else) {
-                    error(i18n::tr("duplicate else clause"));
+                    error(i18n::msg(i18n::MsgId::ParseDuplicateElseClause));
                 }
                 has_else = true;
 
@@ -110,7 +110,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 auto stmts = parse_block();
                 cases.emplace_back(nullptr, std::move(stmts));
             } else {
-                error(i18n::tr("a switch statement requires case or else"));
+                error(i18n::msg(i18n::MsgId::ParseASwitchStatementRequiresCase));
                 // エラー回復: 次のcase/else/}まで進める
                 while (!check(TokenKind::KwCase) && !check(TokenKind::KwElse) &&
                        !check(TokenKind::RBrace) && !is_at_end()) {

@@ -34,15 +34,22 @@ if(CM_VERSION STREQUAL "")
 endif()
 add_compile_definitions(CM_VERSION="${CM_VERSION}")
 
-# ヘルプ本文とメッセージカタログをデータファイルから生成ヘッダへ埋め込む
-# （原本: src/cli/help_{en,ja}.txt / src/common/i18n_ja.tsv。変更時は再configureで追従）
-file(READ "${CMAKE_SOURCE_DIR}/src/cli/help_en.txt" CM_HELP_EN_TEXT)
-file(READ "${CMAKE_SOURCE_DIR}/src/cli/help_ja.txt" CM_HELP_JA_TEXT)
-file(READ "${CMAKE_SOURCE_DIR}/src/common/i18n_ja.tsv" CM_I18N_JA_TSV)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/cli/help_en.txt"
-    "${CMAKE_SOURCE_DIR}/src/cli/help_ja.txt"
-    "${CMAKE_SOURCE_DIR}/src/common/i18n_ja.tsv")
+# ヘルプ本文をデータファイルから生成ヘッダへ埋め込む
+# （原本: src/cli/help_<lang>.txt。変更時は再configureで追従。
+# メッセージカタログはC++側（src/common/messages/ のenum+stringテーブル）で管理する。
+# ヘルプの言語を追加するには CM_LANGS にコードを足し、help_<lang>.txt を置く）
+set(CM_LANGS en ja)
+set(CM_TEXTDATA_DECLS "")
+set(CM_TEXTDATA_TABLE "")
+foreach(_cm_lang IN LISTS CM_LANGS)
+    file(READ "${CMAKE_SOURCE_DIR}/src/cli/help_${_cm_lang}.txt" _cm_lang_help)
+    string(APPEND CM_TEXTDATA_DECLS
+        "inline constexpr const char* kHelp_${_cm_lang} = R\"CMTEXT(${_cm_lang_help})CMTEXT\";\n\n")
+    string(APPEND CM_TEXTDATA_TABLE
+        "    {\"${_cm_lang}\", kHelp_${_cm_lang}},\n")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/cli/help_${_cm_lang}.txt")
+endforeach()
 configure_file("${CMAKE_SOURCE_DIR}/src/common/text_data.hpp.in"
                "${CMAKE_BINARY_DIR}/generated/common/text_data.hpp" @ONLY)
 include_directories("${CMAKE_BINARY_DIR}/generated")

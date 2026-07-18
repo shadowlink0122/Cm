@@ -16,7 +16,7 @@ ast::Program Parser::parse() {
     while (!is_at_end() && iterations < MAX_ITERATIONS) {
         // エラーが蓄積しすぎた場合はコンパイルを中断
         if (diagnostics_.size() > 50) {
-            error(i18n::tr("too many errors; aborting compilation"));
+            error(i18n::msg(i18n::MsgId::ParseTooManyErrorsAbortingCompilation));
             break;
         }
         // 無限ループ検出
@@ -394,7 +394,7 @@ ast::DeclPtr Parser::parse_function(bool is_export, bool is_static, bool is_inli
 
     // main関数はエクスポート不可
     if (is_export && name == "main") {
-        error(i18n::tr("the main function cannot be exported"));
+        error(i18n::msg(i18n::MsgId::ParseTheMainFunctionCannotBe));
     }
 
     expect(TokenKind::LParen);

@@ -604,7 +604,7 @@ void SVCodeGen::emitMemfileIfRequested(const mir::MirGlobalVar& gv,
 
     std::ofstream file(out_path);
     if (!file.is_open()) {
-        std::cerr << i18n::tr("warning: cannot write memfile: ") << out_path.string() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::SvCannotWriteMemfile, out_path.string());
         return;
     }
     for (const auto& elem : (*arr)->elements) {
@@ -879,10 +879,7 @@ std::string SVCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             int k = static_cast<int>(rvalue.kind);
             std::string kind_name = (k >= 0 && k <= 6) ? kRvalueNames[k] : std::to_string(k);
             throw std::runtime_error(
-                i18n::tr("error[SV007]: unsupported expression on the SV target (MirRvalue::") +
-                kind_name +
-                i18n::tr("); references, aggregate construction, and format conversion are not "
-                         "synthesizable"));
+                i18n::msgf(i18n::MsgId::SvSv007UnsupportedExpressionOnThe, kind_name));
         }
     }
 }
@@ -1285,13 +1282,10 @@ std::string SVCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::M
         case mir::MirStatement::Nop:
             return "";  // SVでは不要
         case mir::MirStatement::Asm:
-            throw std::runtime_error(i18n::tr(
-                "error[SV007]: inline assembly (__asm__) is not available on the SV target"));
+            throw std::runtime_error(i18n::msg(i18n::MsgId::SvSv007InlineAssemblyAsmIs));
         default:
-            throw std::runtime_error(
-                i18n::tr(
-                    "error[SV007]: unsupported statement on the SV target (MirStatement kind=") +
-                std::to_string(static_cast<int>(stmt.kind)) + "）");
+            throw std::runtime_error(i18n::msgf(i18n::MsgId::SvSv007UnsupportedStatementOnThe,
+                                                std::to_string(static_cast<int>(stmt.kind))));
     }
 }
 
@@ -1387,7 +1381,7 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
 void SVCodeGen::compile(const mir::MirProgram& program) {
     // 非合成型チェック（エラーがあればコンパイル停止）
     if (!validateSynthesizableTypes(program)) {
-        throw std::runtime_error(i18n::tr("non-synthesizable types detected on the SV target"));
+        throw std::runtime_error(i18n::msg(i18n::MsgId::SvNonSynthesizableTypesDetectedOn));
     }
 
     validateReservedIdentifiers(program);
@@ -1415,10 +1409,10 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
     writeToFile(generated_code_, options_.outputFile);
 
     if (options_.verbose) {
-        std::cout << i18n::tr("✓ SystemVerilog generation complete: ") << options_.outputFile
-                  << "\n";
-        std::cout << i18n::tr("  lines: ") << get_stats().total_lines << "\n";
-        std::cout << i18n::tr("  size: ") << get_stats().total_bytes << " bytes\n";
+        std::cout << i18n::msgf(i18n::MsgId::SvSystemverilogGenerationComplete,
+                                options_.outputFile);
+        std::cout << i18n::msgf(i18n::MsgId::SvLines, get_stats().total_lines);
+        std::cout << i18n::msgf(i18n::MsgId::SvSizeBytes, get_stats().total_bytes);
     }
 
     // テストベンチ自動生成（テスト内容がある場合のみ。
@@ -1451,7 +1445,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
             cst_path = stem + ".cst";
             writeToFile(cst, cst_path);
             if (options_.verbose) {
-                std::cout << i18n::tr("✓ pin constraints generated: ") << cst_path << "\n";
+                std::cout << i18n::msgf(i18n::MsgId::SvPinConstraintsGenerated, cst_path);
             }
         }
         std::string module_name = modules_.empty() ? "top" : modules_[0].name;
@@ -1460,7 +1454,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
             std::string tcl_path = stem + "_build.tcl";
             writeToFile(tcl, tcl_path);
             if (options_.verbose) {
-                std::cout << i18n::tr("✓ project script generated: ") << tcl_path << "\n";
+                std::cout << i18n::msgf(i18n::MsgId::SvProjectScriptGenerated, tcl_path);
             }
         }
     }
@@ -1484,7 +1478,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
 void SVCodeGen::writeToFile(const std::string& content, const std::string& path) {
     std::ofstream ofs(path);
     if (!ofs) {
-        std::cerr << i18n::tr("error: cannot open file '") << path << "'\n";
+        std::cerr << i18n::msgf(i18n::MsgId::SvCannotOpenFile, path);
         return;
     }
     ofs << content;

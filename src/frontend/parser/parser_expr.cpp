@@ -1462,9 +1462,7 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
     // LBrace不在チェック: 'match'がキーワードとして誤認識された場合の保護
     // 例: ulong match = 1; → matchがKwMatchとしてレキシングされ、= がLBraceでないためエラー
     if (!check(TokenKind::LBrace)) {
-        error(
-            i18n::tr("'{' is required after match; 'match' is a reserved word in Cm and "
-                     "cannot be used as a variable name"));
+        error(i18n::msg(i18n::MsgId::ParseIsRequiredAfterMatchMatch));
         // ダミーのmatch式を返して呼び出し元に安全に戻る
         auto match_expr =
             std::make_unique<ast::MatchExpr>(std::move(scrutinee), std::vector<ast::MatchArm>{});
@@ -1482,7 +1480,7 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
     while (!check(TokenKind::RBrace) && !is_at_end() && match_arm_iterations < MAX_MATCH_ARMS) {
         // stuck検出: posが前回と同じ→パーサが進めていない（初回含む）
         if (pos_ == last_pos && match_arm_iterations > 0) {
-            error(i18n::tr("parser stalled while parsing match patterns"));
+            error(i18n::msg(i18n::MsgId::ParseParserStalledWhileParsingMatch));
             // 次のRBraceまでスキップ
             while (!check(TokenKind::RBrace) && !is_at_end()) {
                 advance();

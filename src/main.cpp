@@ -83,7 +83,7 @@ ReadFileResult read_file(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         result.success = false;
-        result.error_message = i18n::tr("error: cannot open file: ") + filename;
+        result.error_message = i18n::msgf(i18n::MsgId::CliCannotOpenFile, filename);
         return result;
     }
 
@@ -164,7 +164,7 @@ int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
 #if defined(_WIN32)
     (void)sv_path;
     (void)quiet;
-    std::cerr << i18n::tr("error: SV test simulation is not supported on Windows\n");
+    std::cerr << i18n::msg(i18n::MsgId::CliSvTestSimulationIsNot);
     return 1;
 #else
     // 子プロセス（iverilog/vvp）の出力と順序が入れ替わらないようフラッシュする
@@ -181,26 +181,25 @@ int run_sv_test_simulation(const std::string& sv_path, bool quiet) {
 
     if (std::system("command -v iverilog >/dev/null 2>&1") != 0 ||
         std::system("command -v vvp >/dev/null 2>&1") != 0) {
-        std::cerr << i18n::tr("error: iverilog / vvp not found (required to run SV tests)\n");
-        std::cerr << i18n::tr(
-            "hint: macOS: brew install icarus-verilog / Ubuntu: sudo apt-get install iverilog\n");
+        std::cerr << i18n::msg(i18n::MsgId::CliIverilogVvpNotFoundRequired);
+        std::cerr << i18n::msg(i18n::MsgId::CliMacosBrewInstallIcarusVerilog);
         return 1;
     }
     if (!fs::exists(tb)) {
-        std::cerr << i18n::tr("error: testbench has not been generated: ") << tb.string() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CliTestbenchHasNotBeenGenerated, tb.string());
         return 1;
     }
     std::string compile_cmd =
         "iverilog -g2012 -o '" + sim.string() + "' '" + sv.string() + "' '" + tb.string() + "'";
     if (std::system(compile_cmd.c_str()) != 0) {
-        std::cerr << i18n::tr("error: iverilog compilation failed\n");
+        std::cerr << i18n::msg(i18n::MsgId::CliIverilogCompilationFailed);
         return 1;
     }
     std::string run_cmd = "cd '" + dir.string() + "' && vvp '" + fs::absolute(sim).string() + "'";
     int rc = std::system(run_cmd.c_str());
     int exit_code = WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
     if (exit_code == 0 && !quiet) {
-        std::cout << i18n::tr("✓ SV test passed\n");
+        std::cout << i18n::msg(i18n::MsgId::CliSvTestPassed);
     }
     return exit_code;
 #endif
@@ -240,7 +239,7 @@ std::vector<std::string> collect_cm_files(const std::vector<std::string>& paths,
         fs::path p(path);
 
         if (!fs::exists(p)) {
-            std::cerr << i18n::tr("error: path does not exist: ") << path << "\n";
+            std::cerr << i18n::msgf(i18n::MsgId::CliPathDoesNotExist, path);
             continue;
         }
 
@@ -345,7 +344,7 @@ void print_hir(const hir::HirProgram& program) {
                 }
             }
             if (has_loop) {
-                std::cout << i18n::tr("  Note: for/while statements are converted to HirLoop\n");
+                std::cout << i18n::msg(i18n::MsgId::CliNoteForWhileStatementsAre);
             }
         }
     }
@@ -386,10 +385,8 @@ int main(int argc, char* argv[]) {
                         debug::set_lang(1);
                     }
                 } else {
-                    std::cerr << i18n::tr(
-                                     "warning: invalid language in .cmconfig.yml "
-                                     "(expected en or ja): ")
-                              << global_config.language() << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliInvalidLanguageInCmconfigYml,
+                                            global_config.language());
                 }
             }
             if (!opts.opt_level_from_cli && global_config.compile_optimization() >= 0) {
@@ -421,7 +418,7 @@ int main(int argc, char* argv[]) {
     // Check/Lintコマンドの複数ファイル処理
     if (opts.command == Command::Check || opts.command == Command::Lint) {
         if (opts.input_files.empty()) {
-            std::cerr << i18n::tr("error: no input file or directory specified\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoInputFileOrDirectory);
             return 1;
         }
 
@@ -429,7 +426,7 @@ int main(int argc, char* argv[]) {
         lint::ConfigLoader config;
         if (config.find_and_load(".")) {
             if (opts.verbose) {
-                std::cout << i18n::tr("config file: ") << config.config_path() << "\n\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliConfigFile, config.config_path());
             }
         }
 
@@ -438,12 +435,12 @@ int main(int argc, char* argv[]) {
                                          config.excludes());
 
         if (cm_files.empty()) {
-            std::cerr << i18n::tr("error: no .cm files found to check\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoCmFilesFoundTo);
             return 1;
         }
 
         if (opts.verbose) {
-            std::cout << i18n::tr("files to check: ") << cm_files.size() << i18n::tr(" file(s)\n");
+            std::cout << i18n::msgf(i18n::MsgId::CliFilesToCheckFileS, cm_files.size());
             for (const auto& f : cm_files) {
                 std::cout << "  - " << f << "\n";
             }
@@ -477,8 +474,8 @@ int main(int argc, char* argv[]) {
                 auto preprocess_result = import_preprocessor.process(code, file);
 
                 if (!preprocess_result.success) {
-                    std::cerr << file << i18n::tr(": preprocessor error: ")
-                              << preprocess_result.error_message << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
+                                            preprocess_result.error_message);
                     total_errors++;
                     continue;
                 }
@@ -636,11 +633,8 @@ int main(int argc, char* argv[]) {
                                     if (std::isalnum(prev) || prev == '_')
                                         continue;
                                 }
-                                std::cerr << file << ":" << line_num << i18n::tr(": warning: '")
-                                          << func
-                                          << i18n::tr(
-                                                 "' is not available in bare-metal environments "
-                                                 "[B001]\n");
+                                std::cerr << i18n::msgf(i18n::MsgId::CliWarningIsNotAvailableIn,
+                                                        file, line_num, func);
                                 total_warnings++;
                             }
                         }
@@ -650,16 +644,15 @@ int main(int argc, char* argv[]) {
                 files_checked++;
 
             } catch (const std::exception& e) {
-                std::cerr << file << i18n::tr(": exception: ") << e.what() << "\n";
+                std::cerr << i18n::msgf(i18n::MsgId::CliException, file, e.what());
                 total_errors++;
             }
         }
 
         // サマリー表示
-        std::cout << i18n::tr("\n=== Check complete ===\n");
-        std::cout << i18n::tr("files: ") << files_checked << "/" << cm_files.size() << "\n";
-        std::cout << i18n::tr("errors: ") << total_errors << i18n::tr(", warnings: ")
-                  << total_warnings << "\n";
+        std::cout << i18n::msg(i18n::MsgId::CliCheckComplete);
+        std::cout << i18n::msgf(i18n::MsgId::CliFiles, files_checked, cm_files.size());
+        std::cout << i18n::msgf(i18n::MsgId::CliSWarnings, total_errors, total_warnings);
 
         return (total_errors > 0) ? 1 : 0;
     }
@@ -667,7 +660,7 @@ int main(int argc, char* argv[]) {
     // Fmtコマンドの複数ファイル処理
     if (opts.command == Command::Fmt) {
         if (opts.input_files.empty()) {
-            std::cerr << i18n::tr("error: no input file or directory specified\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoInputFileOrDirectory);
             return 1;
         }
 
@@ -676,7 +669,7 @@ int main(int argc, char* argv[]) {
         lint::ConfigLoader config;
         if (config.find_and_load(".")) {
             if (opts.verbose) {
-                std::cout << i18n::tr("config file: ") << config.config_path() << "\n\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliConfigFile, config.config_path());
             }
         }
 
@@ -685,12 +678,12 @@ int main(int argc, char* argv[]) {
                                          config.excludes());
 
         if (cm_files.empty()) {
-            std::cerr << i18n::tr("error: no .cm files found to format\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoCmFilesFoundTo2);
             return 1;
         }
 
         if (opts.verbose) {
-            std::cout << i18n::tr("formatting: ") << cm_files.size() << i18n::tr(" file(s)\n");
+            std::cout << i18n::msgf(i18n::MsgId::CliFormattingFileS, cm_files.size());
         }
 
         // 各ファイルをフォーマット
@@ -716,8 +709,8 @@ int main(int argc, char* argv[]) {
                 if (result.modified) {
                     if (opts.fmt_check) {
                         // --check: 書き込まず要整形ファイルとして報告
-                        std::cout << file << i18n::tr(": needs formatting (")
-                                  << result.changes_applied << i18n::tr(" place(s))\n");
+                        std::cout << i18n::msgf(i18n::MsgId::CliNeedsFormattingPlaceS, file,
+                                                result.changes_applied);
                         files_modified++;
                         total_changes += result.changes_applied;
                     } else {
@@ -729,18 +722,18 @@ int main(int argc, char* argv[]) {
                             total_changes += result.changes_applied;
 
                             if (opts.verbose) {
-                                std::cout << file << ": " << result.changes_applied
-                                          << i18n::tr(" place(s) formatted\n");
+                                std::cout << i18n::msgf(i18n::MsgId::CliPlaceSFormatted, file,
+                                                        result.changes_applied);
                             }
                         } else {
-                            std::cerr << i18n::tr("error: cannot write file: ") << file << "\n";
+                            std::cerr << i18n::msgf(i18n::MsgId::CliCannotWriteFile, file);
                             files_failed++;
                         }
                     }
                 }
 
             } catch (const std::exception& e) {
-                std::cerr << i18n::tr("error: ") << file << ": " << e.what() << "\n";
+                std::cerr << i18n::msgf(i18n::MsgId::CliMsg, file, e.what());
                 files_failed++;
             }
         }
@@ -748,17 +741,17 @@ int main(int argc, char* argv[]) {
         // サマリー表示（quietモードでは抑制）
         if (!opts.quiet) {
             if (opts.fmt_check) {
-                std::cout << i18n::tr("\n=== Format check complete ===\n");
-                std::cout << i18n::tr("needs formatting: ") << files_modified << "/"
-                          << cm_files.size() << i18n::tr(" file(s)\n");
+                std::cout << i18n::msg(i18n::MsgId::CliFormatCheckComplete);
+                std::cout << i18n::msgf(i18n::MsgId::CliNeedsFormattingFileS, files_modified,
+                                        cm_files.size());
             } else {
-                std::cout << i18n::tr("\n=== Format complete ===\n");
-                std::cout << i18n::tr("files: ") << files_modified << "/" << cm_files.size()
-                          << i18n::tr(" fixed\n");
-                std::cout << i18n::tr("formatted: ") << total_changes << i18n::tr(" place(s)\n");
+                std::cout << i18n::msg(i18n::MsgId::CliFormatComplete);
+                std::cout << i18n::msgf(i18n::MsgId::CliFilesFixed, files_modified,
+                                        cm_files.size());
+                std::cout << i18n::msgf(i18n::MsgId::CliFormattedPlaceS, total_changes);
             }
             if (files_failed > 0) {
-                std::cout << i18n::tr("failed: ") << files_failed << i18n::tr(" file(s)\n");
+                std::cout << i18n::msgf(i18n::MsgId::CliFailedFileS, files_failed);
             }
         }
 
@@ -777,18 +770,18 @@ int main(int argc, char* argv[]) {
 
         if (opts.cache_subcommand == "clear") {
             if (cache_mgr.clear()) {
-                std::cout << i18n::tr("✓ cache cleared: ") << opts.cache_dir << "\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliCacheCleared, opts.cache_dir);
             } else {
-                std::cout << i18n::tr("cache does not exist: ") << opts.cache_dir << "\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliCacheDoesNotExist, opts.cache_dir);
             }
             return 0;
         } else if (opts.cache_subcommand == "stats") {
             auto stats = cache_mgr.get_stats();
             auto entries = cache_mgr.get_all_entries();
-            std::cout << i18n::tr("=== Cache statistics ===\n");
-            std::cout << i18n::tr("directory: ") << opts.cache_dir << "\n";
-            std::cout << i18n::tr("entries: ") << stats.total_entries << "\n";
-            std::cout << i18n::tr("total size: ") << (stats.total_size_bytes / 1024) << " KB\n";
+            std::cout << i18n::msg(i18n::MsgId::CliCacheStatistics);
+            std::cout << i18n::msgf(i18n::MsgId::CliDirectory, opts.cache_dir);
+            std::cout << i18n::msgf(i18n::MsgId::CliEntries, stats.total_entries);
+            std::cout << i18n::msgf(i18n::MsgId::CliTotalSizeKb, (stats.total_size_bytes / 1024));
             if (!entries.empty()) {
                 // 最古・最新のエントリを表示
                 std::string oldest = entries.begin()->second.created_at;
@@ -802,14 +795,14 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (!oldest.empty()) {
-                    std::cout << i18n::tr("oldest:   ") << oldest << "\n";
-                    std::cout << i18n::tr("newest:   ") << newest << "\n";
+                    std::cout << i18n::msgf(i18n::MsgId::CliOldest, oldest);
+                    std::cout << i18n::msgf(i18n::MsgId::CliNewest, newest);
                 }
             }
             return 0;
         } else {
-            std::cerr << i18n::tr("unknown cache subcommand: ") << opts.cache_subcommand << "\n";
-            std::cerr << i18n::tr("usage: cm cache clear | cm cache stats\n");
+            std::cerr << i18n::msgf(i18n::MsgId::CliUnknownCacheSubcommand, opts.cache_subcommand);
+            std::cerr << i18n::msg(i18n::MsgId::CliUsageCmCacheClearCm);
             return 1;
         }
     }
@@ -817,10 +810,10 @@ int main(int argc, char* argv[]) {
     // run/compileコマンドは単一ファイル
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (argc == 1) {
-            std::cerr << i18n::tr("error: no command specified\n");
-            std::cerr << i18n::tr("run 'cm help' for usage\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoCommandSpecified);
+            std::cerr << i18n::msg(i18n::MsgId::CliRunCmHelpForUsage);
         } else {
-            std::cerr << i18n::tr("error: no input file specified\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliNoInputFileSpecified);
         }
         return 1;
     }
@@ -863,9 +856,8 @@ int main(int argc, char* argv[]) {
             // JITフロー: Runと同じ経路で #[test] 関数を実行
             if (!match_platform_directive(directive, "native") &&
                 !match_platform_directive(directive, "jit")) {
-                std::cerr << i18n::tr("error: test execution for platform '") << directive
-                          << i18n::tr("' is not supported (only sv or native/JIT)\n");
-                std::cerr << i18n::tr("  file: ") << opts.input_file << "\n";
+                std::cerr << i18n::msgf(i18n::MsgId::CliTestExecutionForPlatformIs, directive);
+                std::cerr << i18n::msgf(i18n::MsgId::CliFile, opts.input_file);
                 return 1;
             }
             opts.command = Command::Run;
@@ -885,11 +877,10 @@ int main(int argc, char* argv[]) {
             }
 
             if (!match_platform_directive(directive, current)) {
-                std::cerr << i18n::tr("warning: this file targets platform '") << directive
-                          << i18n::tr("' (current: ") << current << "）\n";
-                std::cerr << i18n::tr("  file: ") << opts.input_file << "\n";
-                std::cerr << i18n::tr("hint: use --target=") << directive
-                          << i18n::tr(" to specify the target platform\n\n");
+                std::cerr << i18n::msgf(i18n::MsgId::CliThisFileTargetsPlatformCurrent, directive,
+                                        current);
+                std::cerr << i18n::msgf(i18n::MsgId::CliFile, opts.input_file);
+                std::cerr << i18n::msgf(i18n::MsgId::CliUseTargetToSpecifyThe, directive);
                 return 1;
             }
         }
@@ -904,15 +895,15 @@ int main(int argc, char* argv[]) {
         if (is_sv_early) {
             auto hres = codegen::sv::process_sv_hierarchy(code, opts.input_file);
             if (!hres.error.empty()) {
-                std::cerr << i18n::tr("SV hierarchy error: ") << hres.error << "\n";
+                std::cerr << i18n::msgf(i18n::MsgId::CliSvHierarchyError, hres.error);
                 return 1;
             }
             if (hres.enabled) {
                 code = hres.transformed_source;
                 sv_hierarchy_submodules = hres.submodule_files;
                 if (opts.verbose && !sv_hierarchy_submodules.empty()) {
-                    std::cout << i18n::tr("SV hierarchy: ") << sv_hierarchy_submodules.size()
-                              << i18n::tr(" submodule(s) detected\n");
+                    std::cout << i18n::msgf(i18n::MsgId::CliSvHierarchySubmoduleSDetected,
+                                            sv_hierarchy_submodules.size());
                 }
             }
         }
@@ -921,13 +912,13 @@ int main(int argc, char* argv[]) {
     if (opts.verbose) {
         switch (opts.command) {
             case Command::Run:
-                std::cout << i18n::tr("running: ") << opts.input_file << "\n\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliRunning, opts.input_file);
                 break;
             case Command::Compile:
-                std::cout << i18n::tr("compiling: ") << opts.input_file << "\n\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliCompiling, opts.input_file);
                 break;
             case Command::Check:
-                std::cout << i18n::tr("checking: ") << opts.input_file << "\n\n";
+                std::cout << i18n::msgf(i18n::MsgId::CliChecking, opts.input_file);
                 break;
             default:
                 break;
@@ -970,14 +961,14 @@ int main(int argc, char* argv[]) {
                     std::filesystem::copy_file(cached_obj, output,
                                                std::filesystem::copy_options::overwrite_existing);
                     if (opts.verbose || !opts.quiet) {
-                        std::cout << i18n::tr("✓ cache hit: ") << output << "\n";
+                        std::cout << i18n::msgf(i18n::MsgId::CliCacheHit, output);
                     }
                     return 0;
                 } catch (const std::exception& e) {
                     // 高速パス失敗 → 通常パスにフォールバック
                     if (opts.verbose) {
-                        std::cout << i18n::tr("fast cache restore failed: ") << e.what()
-                                  << i18n::tr(" -> falling back to normal path\n");
+                        std::cout << i18n::msgf(i18n::MsgId::CliFastCacheRestoreFailedFalling,
+                                                e.what());
                     }
                 }
             }
@@ -994,8 +985,8 @@ int main(int argc, char* argv[]) {
                                        .count();
 
         if (!preprocess_result.success) {
-            std::cerr << i18n::tr("preprocessor error: ") << preprocess_result.error_message
-                      << "\n";
+            std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError2,
+                                    preprocess_result.error_message);
             return 1;
         }
 
@@ -1055,8 +1046,7 @@ int main(int argc, char* argv[]) {
                             auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               hit_end - compile_start)
                                               .count();
-                            std::cout << i18n::tr("✓ cache hit: ") << output << " (" << hit_ms
-                                      << "ms)\n";
+                            std::cout << i18n::msgf(i18n::MsgId::CliCacheHitMs, output, hit_ms);
                         }
                         // 高速キャッシュ判定用の情報を更新（次回は高速パスが使えるように）
                         cache_mgr.save_quick_check(
@@ -1065,8 +1055,8 @@ int main(int argc, char* argv[]) {
                         return 0;
                     } catch (const std::exception& e) {
                         if (opts.verbose) {
-                            std::cout << i18n::tr("cache restore failed: ") << e.what()
-                                      << i18n::tr(" -> recompiling\n");
+                            std::cout << i18n::msgf(i18n::MsgId::CliCacheRestoreFailedRecompiling,
+                                                    e.what());
                         }
                     }
                 } else {
@@ -1097,13 +1087,13 @@ int main(int argc, char* argv[]) {
                         }
                     }
                     if (opts.verbose) {
-                        std::cout << i18n::tr("cache miss: performing full compilation\n");
+                        std::cout << i18n::msg(i18n::MsgId::CliCacheMissPerformingFullCompilation);
                         // 変更ファイルを表示
                         auto changed = cache_mgr.detect_changed_files(
                             preprocess_result.resolved_files, target_key, opts.optimization_level);
                         if (!changed.empty()) {
-                            std::cout << i18n::tr("changes detected (") << changed.size()
-                                      << i18n::tr(" file(s)):\n");
+                            std::cout
+                                << i18n::msgf(i18n::MsgId::CliChangesDetectedFileS, changed.size());
                             for (const auto& f : changed) {
                                 auto name = std::filesystem::path(f).filename().string();
                                 std::cout << "  → " << name << "\n";
@@ -1115,7 +1105,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (opts.debug && !preprocess_result.imported_modules.empty()) {
-            std::cout << i18n::tr("imported modules:\n");
+            std::cout << i18n::msg(i18n::MsgId::CliImportedModules);
             for (const auto& module : preprocess_result.imported_modules) {
                 std::cout << "  - " << module << "\n";
             }
@@ -1150,7 +1140,7 @@ int main(int argc, char* argv[]) {
         }
         code = conditional.process(code);
         if (opts.debug) {
-            std::cout << i18n::tr("defined symbols: ");
+            std::cout << i18n::msg(i18n::MsgId::CliDefinedSymbols);
             for (const auto& def : conditional.definitions()) {
                 std::cout << def << " ";
             }
@@ -1177,7 +1167,7 @@ int main(int argc, char* argv[]) {
         auto tokens = lexer.tokenize();
 
         if (opts.debug)
-            std::cout << i18n::tr("tokens: ") << tokens.size() << "\n\n";
+            std::cout << i18n::msgf(i18n::MsgId::CliTokens, tokens.size());
 
         // ========== Parser ==========
         if (opts.debug)
@@ -1186,7 +1176,7 @@ int main(int argc, char* argv[]) {
         auto program = parser.parse();
 
         if (parser.has_errors()) {
-            std::cerr << i18n::tr("syntax errors occurred\n");
+            std::cerr << i18n::msg(i18n::MsgId::CliSyntaxErrorsOccurred);
             // ソース位置管理を作成
             SourceLocationManager loc_mgr(code, opts.input_file);
 
@@ -1194,15 +1184,15 @@ int main(int argc, char* argv[]) {
             for (const auto& diag : parser.diagnostics()) {
                 // エラーメッセージをフォーマットして表示
                 std::string error_type =
-                    (diag.severity == DiagKind::Error ? i18n::tr("error(s)")
-                                                      : i18n::tr("warning(s)"));
+                    (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
+                                                      : i18n::msg(i18n::MsgId::CliS2));
                 std::cerr << loc_mgr.format_error_location(diag.span,
                                                            error_type + ": " + diag.message);
             }
             return 1;  // エラー時は1で終了
         }
         if (opts.debug)
-            std::cout << i18n::tr("declarations: ") << program.declarations.size() << "\n\n";
+            std::cout << i18n::msgf(i18n::MsgId::CliDeclarations, program.declarations.size());
 
         // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得（lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
         const std::string sv_top_module = codegen::sv::extract_top_module_name(program);
@@ -1299,8 +1289,8 @@ int main(int argc, char* argv[]) {
                         diag.severity == DiagKind::Error ? "error" : "warning");
                 } else {
                     std::string error_type =
-                        (diag.severity == DiagKind::Error ? i18n::tr("error(s)")
-                                                          : i18n::tr("warning(s)"));
+                        (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
+                                                          : i18n::msg(i18n::MsgId::CliS2));
                     std::cerr << loc_mgr.format_error_location(diag.span,
                                                                error_type + ": " + diag.message);
                 }
@@ -1312,12 +1302,12 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (opts.debug)
-            std::cout << i18n::tr("type check: OK\n\n");
+            std::cout << i18n::msg(i18n::MsgId::CliTypeCheckOk);
 
         // チェックコマンドの場合はここで終了
         if (opts.command == Command::Check) {
             if (opts.verbose) {
-                std::cout << i18n::tr("✓ syntax and type check passed\n");
+                std::cout << i18n::msg(i18n::MsgId::CliSyntaxAndTypeCheckPassed);
             }
             return 0;
         }
@@ -1338,7 +1328,7 @@ int main(int argc, char* argv[]) {
             runner.print(source);
 
             if (opts.verbose) {
-                std::cout << i18n::tr("✓ lint complete\n");
+                std::cout << i18n::msg(i18n::MsgId::CliLintComplete);
             }
 
             return (result.error_count > 0) ? 1 : 0;
@@ -1364,7 +1354,7 @@ int main(int argc, char* argv[]) {
                 }
             } else {
                 if (opts.verbose) {
-                    std::cout << i18n::tr("✓ no formatting needed\n");
+                    std::cout << i18n::msg(i18n::MsgId::CliNoFormattingNeeded);
                 }
             }
 
@@ -1381,7 +1371,7 @@ int main(int argc, char* argv[]) {
                                 std::chrono::steady_clock::now() - phase_hir_start)
                                 .count();
         if (opts.debug)
-            std::cout << i18n::tr("HIR declarations: ") << hir.declarations.size() << "\n\n";
+            std::cout << i18n::msgf(i18n::MsgId::CliHirDeclarations, hir.declarations.size());
 
         // HIRを表示
         if (opts.show_hir) {
@@ -1405,12 +1395,12 @@ int main(int argc, char* argv[]) {
                                 .count();
 
         if (opts.debug)
-            std::cout << i18n::tr("MIR functions: ") << mir.functions.size() << "\n\n"
+            std::cout << i18n::msgf(i18n::MsgId::CliMirFunctions, mir.functions.size())
                       << std::flush;
 
         // MIRを表示（最適化前）
         if (opts.show_mir && !opts.show_mir_opt) {
-            std::cout << i18n::tr("=== MIR (before optimization) ===\n");
+            std::cout << i18n::msg(i18n::MsgId::CliMirBeforeOptimization);
             mir::MirPrinter printer;
             printer.print(mir, std::cout);
         }
@@ -1441,7 +1431,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[OPT] Optimization complete" << std::endl;
 
             if (opts.debug)
-                std::cout << i18n::tr("optimization complete\n\n");
+                std::cout << i18n::msg(i18n::MsgId::CliOptimizationComplete);
         }
 
         // SVターゲット: 定数トリップカウントのループを静的展開する（generate/genvar相当。合成ツールは動的whileを展開できないため）
@@ -1480,7 +1470,7 @@ int main(int argc, char* argv[]) {
 
         // MIRを表示（最適化後）
         if (opts.show_mir_opt) {
-            std::cout << i18n::tr("=== MIR (after optimization) ===") << std::endl;
+            std::cout << i18n::msg(i18n::MsgId::CliMirAfterOptimization);
             mir::MirPrinter printer;
             printer.print(mir, std::cout);
             return 0;
@@ -1520,18 +1510,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (has_async || has_await) {
-                    std::cerr << i18n::tr("error: async/await is only supported on the JS target")
-                              << std::endl;
+                    std::cerr << i18n::msg(i18n::MsgId::CliAsyncAwaitIsOnlySupported);
                     if (has_async) {
-                        std::cerr << i18n::tr("  async function detected: ") << async_func_name
-                                  << std::endl;
+                        std::cerr << i18n::msgf(i18n::MsgId::CliAsyncFunctionDetected,
+                                                async_func_name);
                     }
                     if (has_await) {
-                        std::cerr << i18n::tr("  await expression detected (function: ")
-                                  << await_func_name << "）" << std::endl;
+                        std::cerr << i18n::msgf(i18n::MsgId::CliAwaitExpressionDetectedFunction,
+                                                await_func_name);
                     }
-                    std::cerr << i18n::tr("hint: specify the JS target with --target=js")
-                              << std::endl;
+                    std::cerr << i18n::msg(i18n::MsgId::CliSpecifyTheJsTargetWith);
                     return 1;
                 }
             }
@@ -1554,14 +1542,13 @@ int main(int argc, char* argv[]) {
                     cm::codegen::js::JSCodeGen codegen(js_opts);
                     codegen.compile(mir);
                 } catch (const std::exception& e) {
-                    std::cerr << i18n::tr("JavaScript code generation error: ") << e.what() << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliJavascriptCodeGenerationError,
+                                            e.what());
                     return 1;
                 }
                 if (std::system("command -v node > /dev/null 2>&1") != 0) {
-                    std::cerr << i18n::tr("error: node not found (required to run --target=js)\n");
-                    std::cerr << i18n::tr(
-                        "hint: generate .js with \'cm compile --target=js\' and run it with any JS "
-                        "runtime\n");
+                    std::cerr << i18n::msg(i18n::MsgId::CliNodeNotFoundRequiredTo);
+                    std::cerr << i18n::msg(i18n::MsgId::CliGenerateJsWithCmCompile);
                     return 1;
                 }
                 std::string cmd = "node " + js_opts.outputFile;
@@ -1573,17 +1560,13 @@ int main(int argc, char* argv[]) {
 #endif
             }
             if (opts.target == "wasm") {
-                std::cerr << i18n::tr(
-                    "error: cm run does not support direct execution of --target=wasm\n");
-                std::cerr << i18n::tr(
-                    "hint: run \'cm compile --emit-llvm --target=wasm -o out.wasm\' and execute it "
-                    "with wasmtime out.wasm etc.\n");
+                std::cerr << i18n::msg(i18n::MsgId::CliCmRunDoesNotSupport);
+                std::cerr << i18n::msg(i18n::MsgId::CliRunCmCompileEmitLlvm);
                 return 1;
             }
             if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
-                std::cerr << i18n::tr(
-                    "error: cm run does not support direct execution of --target=sv\n");
-                std::cerr << i18n::tr("hint: use \'cm test\' (//! platform: sv) for simulation\n");
+                std::cerr << i18n::msg(i18n::MsgId::CliCmRunDoesNotSupport2);
+                std::cerr << i18n::msg(i18n::MsgId::CliUseCmTestPlatformSv);
                 return 1;
             }
 
@@ -1605,8 +1588,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (test_fns.empty()) {
-                    std::cerr << i18n::tr("error: no #[test] functions found: ") << opts.input_file
-                              << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliNoTestFunctionsFound, opts.input_file);
                     return 1;
                 }
                 // step() はSVプラットフォーム専用（クロック概念が実行系に存在しない）
@@ -1620,13 +1602,9 @@ int main(int argc, char* argv[]) {
                             std::get<mir::MirTerminator::CallData>(block->terminator->data);
                         if (data.func && data.func->kind == mir::MirOperand::FunctionRef &&
                             std::get<std::string>(data.func->data) == "step") {
-                            std::cerr << i18n::tr(
-                                             "error: step() is only available in //! platform: sv "
-                                             "tests (test function: ")
-                                      << fn->name << "）\n";
-                            std::cerr << i18n::tr(
-                                "hint: clock-driven tests require //! platform: sv at the top of "
-                                "the file\n");
+                            std::cerr
+                                << i18n::msgf(i18n::MsgId::CliStepIsOnlyAvailableIn, fn->name);
+                            std::cerr << i18n::msg(i18n::MsgId::CliClockDrivenTestsRequirePlatform);
                             return 1;
                         }
                     }
@@ -1636,13 +1614,13 @@ int main(int argc, char* argv[]) {
                     cm::codegen::jit::JITEngine jit;
                     auto result = jit.execute(mir, fn->name, opts.optimization_level);
                     if (!result.success) {
-                        std::cerr << i18n::tr("JIT execution error (") << fn->name
-                                  << "): " << result.errorMessage << "\n";
+                        std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError, fn->name,
+                                                result.errorMessage);
                         return 1;
                     }
                     std::cout << "[PASS] " << fn->name << "\n";
                 }
-                std::cout << "✓ " << test_fns.size() << i18n::tr(" test(s) passed\n");
+                std::cout << i18n::msgf(i18n::MsgId::CliTestSPassed, test_fns.size());
                 return 0;
             }
 
@@ -1658,7 +1636,7 @@ int main(int argc, char* argv[]) {
                             auto hit_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               hit_end - compile_start)
                                               .count();
-                            std::cout << i18n::tr("✓ JIT cache hit (") << hit_ms << "ms)\n";
+                            std::cout << i18n::msgf(i18n::MsgId::CliJitCacheHitMs, hit_ms);
                         }
                         // キャッシュされたバイナリを直接実行
                         std::string cmd = cached_exec.string();
@@ -1687,7 +1665,7 @@ int main(int argc, char* argv[]) {
             auto result = jit.execute(mir, "main", opts.optimization_level);
 
             if (!result.success) {
-                std::cerr << i18n::tr("JIT execution error: ") << result.errorMessage << std::endl;
+                std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError2, result.errorMessage);
                 return 1;
             }
 
@@ -1695,15 +1673,13 @@ int main(int argc, char* argv[]) {
             // JITキャッシュは「cm compile」で生成されたキャッシュの再利用のみサポート。
 
             if (opts.verbose) {
-                std::cout << i18n::tr("program exit code: ") << result.exitCode << std::endl;
-                std::cout << i18n::tr("✓ JIT execution complete") << std::endl;
+                std::cout << i18n::msgf(i18n::MsgId::CliProgramExitCode, result.exitCode);
+                std::cout << i18n::msg(i18n::MsgId::CliJitExecutionComplete);
             }
 
             return result.exitCode;
 #else
-            std::cerr << i18n::tr(
-                             "error: JIT compiler is disabled; an LLVM-enabled build is required")
-                      << std::endl;
+            std::cerr << i18n::msg(i18n::MsgId::CliJitCompilerIsDisabledAn);
             return 1;
 #endif
         }
@@ -1756,13 +1732,12 @@ int main(int argc, char* argv[]) {
                                 argv[0], opts.input_file, sv_hierarchy_submodules,
                                 sv_opts.outputFile, opts.optimization_level, opts.emit_memfile,
                                 hier_error)) {
-                            std::cerr << i18n::tr("SV hierarchy error: ") << hier_error << "\n";
+                            std::cerr << i18n::msgf(i18n::MsgId::CliSvHierarchyError, hier_error);
                             return 1;
                         }
                         if (!opts.quiet) {
-                            std::cout << i18n::tr("✓ concatenated ")
-                                      << sv_hierarchy_submodules.size()
-                                      << i18n::tr(" submodule(s)\n");
+                            std::cout << i18n::msgf(i18n::MsgId::CliConcatenatedSubmoduleS,
+                                                    sv_hierarchy_submodules.size());
                         }
                     }
 
@@ -1771,8 +1746,8 @@ int main(int argc, char* argv[]) {
                         auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               compile_end - compile_start)
                                               .count();
-                        std::cout << i18n::tr("✓ SystemVerilog generation complete: ")
-                                  << sv_opts.outputFile << " (" << compile_ms << "ms)\n";
+                        std::cout << i18n::msgf(i18n::MsgId::CliSystemverilogGenerationCompleteMs,
+                                                sv_opts.outputFile, compile_ms);
                     }
 
                     // cm test (SVフロー): 生成物をiverilog+vvpでシミュレーション実行
@@ -1780,8 +1755,8 @@ int main(int argc, char* argv[]) {
                         return run_sv_test_simulation(sv_opts.outputFile, opts.quiet);
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << i18n::tr("SystemVerilog code generation error: ") << e.what()
-                              << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliSystemverilogCodeGenerationError,
+                                            e.what());
                     return 1;
                 }
             }
@@ -1810,8 +1785,8 @@ int main(int argc, char* argv[]) {
                     codegen.compile(mir);
 
                     if (opts.verbose) {
-                        std::cout << i18n::tr("✓ JavaScript code generation complete: ")
-                                  << js_opts.outputFile << "\n";
+                        std::cout << i18n::msgf(i18n::MsgId::CliJavascriptCodeGenerationComplete,
+                                                js_opts.outputFile);
                     }
 
                     // インクリメンタルビルド: コンパイル成功後にキャッシュに保存
@@ -1841,8 +1816,8 @@ int main(int argc, char* argv[]) {
 
                         if (cache_mgr.store(cache_fingerprint, js_opts.outputFile, entry)) {
                             if (opts.verbose) {
-                                std::cout << i18n::tr("✓ cache saved: ") << entry.object_file
-                                          << "\n";
+                                std::cout
+                                    << i18n::msgf(i18n::MsgId::CliCacheSaved, entry.object_file);
                             }
                             // 高速キャッシュ判定用の情報を保存
                             std::string target_key = opts.target.empty() ? "native" : opts.target;
@@ -1856,7 +1831,8 @@ int main(int argc, char* argv[]) {
                     // --runオプションがある場合は実行（Node.js）
                     if (opts.run_after_emit && opts.target != "web") {
                         if (opts.verbose) {
-                            std::cout << i18n::tr("running: node ") << js_opts.outputFile << "\n";
+                            std::cout
+                                << i18n::msgf(i18n::MsgId::CliRunningNode, js_opts.outputFile);
                         }
                         std::string cmd = "node " + js_opts.outputFile;
                         int exec_result = std::system(cmd.c_str());
@@ -1867,7 +1843,8 @@ int main(int argc, char* argv[]) {
 #endif
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << i18n::tr("JavaScript code generation error: ") << e.what() << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliJavascriptCodeGenerationError,
+                                            e.what());
                     return 1;
                 }
             } else {
@@ -1898,10 +1875,8 @@ int main(int argc, char* argv[]) {
                     llvm_opts.format =
                         cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::ObjectFile;
                 } else if (!opts.target.empty() && opts.target != "native") {
-                    std::cerr << i18n::tr("error: unknown target '") << opts.target << "'\n";
-                    std::cerr << i18n::tr(
-                        "valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, "
-                        "baremetal-x86, uefi\n");
+                    std::cerr << i18n::msgf(i18n::MsgId::CliUnknownTarget, opts.target);
+                    std::cerr << i18n::msg(i18n::MsgId::CliValidTargetsNativeWasmJs);
                     return 1;
                 } else {
                     llvm_opts.target = cm::codegen::llvm_backend::BuildTarget::Native;
@@ -1983,10 +1958,9 @@ int main(int argc, char* argv[]) {
                         // === モジュール別差分コンパイル ===
                         // 現在無効化中 - フロントエンド差分化後に再有効化予定
                         if (opts.verbose) {
-                            std::cout << i18n::tr("⚡ per-module incremental compilation: ")
-                                      << changed_modules.size() << "/"
-                                      << module_info_pre.module_names.size()
-                                      << i18n::tr(" module(s) recompiled\n");
+                            std::cout << i18n::msgf(
+                                i18n::MsgId::CliPerModuleIncrementalCompilationModule,
+                                changed_modules.size(), module_info_pre.module_names.size());
                         }
 
                         // キャッシュ済みオブジェクトのマップ
@@ -2040,8 +2014,8 @@ int main(int argc, char* argv[]) {
                                 if (mo.from_cache)
                                     cached_count++;
                             }
-                            std::cout << i18n::tr("  cache hits: ") << cached_count << "/"
-                                      << module_objects.size() << i18n::tr(" module(s)\n");
+                            std::cout << i18n::msgf(i18n::MsgId::CliCacheHitsModuleS, cached_count,
+                                                    module_objects.size());
                         }
                     } else {
                         // === 従来の全体コンパイル ===
@@ -2056,7 +2030,7 @@ int main(int argc, char* argv[]) {
 
                     // --lir-opt: 最適化後のLLVM IRを表示
                     if (opts.show_lir_opt) {
-                        std::cout << i18n::tr("=== LLVM IR (after optimization) ===\n");
+                        std::cout << i18n::msg(i18n::MsgId::CliLlvmIrAfterOptimization);
                         std::cout << codegen.getIRString();
                         std::cout << "========================\n";
                         return 0;
@@ -2067,39 +2041,38 @@ int main(int argc, char* argv[]) {
                         auto compile_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               compile_end - compile_start)
                                               .count();
-                        std::cout << i18n::tr("✓ compilation complete: ") << llvm_opts.outputFile
-                                  << " (" << compile_ms << "ms)\n";
+                        std::cout << i18n::msgf(i18n::MsgId::CliCompilationCompleteMs,
+                                                llvm_opts.outputFile, compile_ms);
                         if (opts.verbose) {
                             auto frontend_ms = phase_preprocess_ms + phase_parse_ms +
                                                phase_typecheck_ms + phase_hir_ms + phase_mir_ms +
                                                phase_opt_ms;
-                            std::cout << i18n::tr("  preprocess: ") << phase_preprocess_ms
-                                      << "ms\n";
-                            std::cout << i18n::tr("  parse + type check: ")
-                                      << phase_parse_ms + phase_typecheck_ms << "ms\n";
-                            std::cout << i18n::tr("  HIR + MIR lowering: ")
-                                      << phase_hir_ms + phase_mir_ms << "ms\n";
-                            std::cout << i18n::tr("  MIR optimization: ") << phase_opt_ms << "ms\n";
+                            std::cout
+                                << i18n::msgf(i18n::MsgId::CliPreprocessMs, phase_preprocess_ms);
+                            std::cout << i18n::msgf(i18n::MsgId::CliParseTypeCheckMs,
+                                                    phase_parse_ms + phase_typecheck_ms);
+                            std::cout << i18n::msgf(i18n::MsgId::CliHirMirLoweringMs,
+                                                    phase_hir_ms + phase_mir_ms);
+                            std::cout
+                                << i18n::msgf(i18n::MsgId::CliMirOptimizationMs, phase_opt_ms);
                             std::cout << "  LLVM codegen: " << phase_llvm_ms << "ms\n";
-                            std::cout << i18n::tr("  frontend total: ") << frontend_ms << "ms ("
-                                      << (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0)
-                                      << "%)\n";
+                            std::cout << i18n::msgf(
+                                i18n::MsgId::CliFrontendTotalMs, frontend_ms,
+                                (compile_ms > 0 ? frontend_ms * 100 / compile_ms : 0));
 
                             // モジュール分割情報を表示
                             if (!module_info.module_names.empty()) {
-                                std::cout << i18n::tr("  modules: ")
-                                          << module_info.module_names.size()
-                                          << i18n::tr(" detected");
+                                std::cout << i18n::msgf(i18n::MsgId::CliModulesDetected,
+                                                        module_info.module_names.size());
                                 if (!module_info.changed_modules.empty() &&
                                     module_info.changed_modules.size() <
                                         module_info.module_names.size()) {
-                                    std::cout << " (" << module_info.changed_modules.size()
-                                              << i18n::tr(" changed)");
+                                    std::cout << i18n::msgf(i18n::MsgId::CliChanged,
+                                                            module_info.changed_modules.size());
                                 }
                                 std::cout << "\n";
                                 for (const auto& [name, count] : module_info.module_func_count) {
-                                    std::cout << "    " << name << ": " << count
-                                              << i18n::tr(" function(s)\n");
+                                    std::cout << i18n::msgf(i18n::MsgId::CliFunctionS, name, count);
                                 }
                             }
                         }
@@ -2134,8 +2107,8 @@ int main(int argc, char* argv[]) {
 
                         if (cache_mgr.store(cache_fingerprint, llvm_opts.outputFile, entry)) {
                             if (opts.verbose) {
-                                std::cout << i18n::tr("✓ cache saved: ") << entry.object_file
-                                          << "\n";
+                                std::cout
+                                    << i18n::msgf(i18n::MsgId::CliCacheSaved, entry.object_file);
                             }
                             // 高速キャッシュ判定用の情報を保存
                             std::string target_key = opts.target.empty() ? "native" : opts.target;
@@ -2150,24 +2123,24 @@ int main(int argc, char* argv[]) {
                     if (opts.run_after_emit &&
                         llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native) {
                         if (opts.verbose) {
-                            std::cout << i18n::tr("running: ") << llvm_opts.outputFile << "\n";
+                            std::cout << i18n::msgf(i18n::MsgId::CliRunning2, llvm_opts.outputFile);
                         }
                         int exec_result = std::system(llvm_opts.outputFile.c_str());
                         return WEXITSTATUS(exec_result);
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << i18n::tr("LLVM code generation error: ") << e.what() << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::CliLlvmCodeGenerationError, e.what());
                     return 1;
                 }
 #else
-                std::cerr << i18n::tr("error: the LLVM backend is not enabled\n");
-                std::cerr << i18n::tr("rebuild with -DCM_USE_LLVM=ON in CMake\n");
+                std::cerr << i18n::msg(i18n::MsgId::CliTheLlvmBackendIsNot);
+                std::cerr << i18n::msg(i18n::MsgId::CliRebuildWithDcmUseLlvm);
                 return 1;
 #endif
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << i18n::tr("error: ") << e.what() << "\n";
+        std::cerr << i18n::msgf(i18n::MsgId::CliMsg2, e.what());
         return 1;
     }
 

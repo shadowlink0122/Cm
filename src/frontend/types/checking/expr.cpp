@@ -116,10 +116,9 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             auto variants = ast::union_variant_types(resolved);
             if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
                 error(expr.span,
-                      i18n::tr("'is' can only be used on union-typed values (left-hand type: ") +
-                          (operand_type ? ast::type_to_string(*operand_type)
-                                        : std::string(i18n::tr("unknown"))) +
-                          ")");
+                      i18n::msgf(i18n::MsgId::TypeIsCanOnlyBeUsed,
+                                 (operand_type ? ast::type_to_string(*operand_type)
+                                               : i18n::msg(i18n::MsgId::TypeLabelUnknown))));
             } else if (cast_expr->target_type) {
                 std::string target_name = ast::type_to_string(*cast_expr->target_type);
                 bool found = false;
@@ -130,8 +129,7 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                     }
                 }
                 if (!found) {
-                    error(expr.span, i18n::tr("the target type '") + target_name +
-                                         i18n::tr("' is not a variant of the union"));
+                    error(expr.span, i18n::msgf(i18n::MsgId::TypeTheTargetTypeIsNot, target_name));
                 }
             }
             inferred_type = ast::make_bool();
@@ -636,8 +634,7 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
                 (otype->kind == ast::TypeKind::Struct && (base == "Result" || base == "Option"));
             if (!is_result_like) {
                 error(current_span_,
-                      i18n::tr("'?' can only be used on Result/Option values (target type: ") +
-                          ast::type_to_string(*otype) + ")");
+                      i18n::msgf(i18n::MsgId::TypeCanOnlyBeUsedOn, ast::type_to_string(*otype)));
                 return ast::make_error();
             }
             // 現在の関数の戻り値型も同じ種別（Result?はResult返却関数、Option?はOption返却関数）
@@ -651,11 +648,9 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
             }
             if (ret_base != base) {
                 error(current_span_,
-                      i18n::tr("'?' can only be used inside functions returning ") + base +
-                          i18n::tr(" (current function return type: ") +
-                          (current_return_type_ ? ast::type_to_string(*current_return_type_)
-                                                : std::string(i18n::tr("none"))) +
-                          ")");
+                      i18n::msgf(i18n::MsgId::TypeCanOnlyBeUsedInside, base,
+                                 (current_return_type_ ? ast::type_to_string(*current_return_type_)
+                                                       : i18n::msg(i18n::MsgId::TypeLabelNone))));
             }
             // Ok/Someのペイロード型を返す
             if (!otype->type_args.empty() && otype->type_args[0]) {
@@ -817,18 +812,16 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
             // base は任意の整数式、width は正の整数リテラル
             auto base_type = infer_type(*slice.start);
             if (!base_type || !base_type->is_integer()) {
-                error(current_span_, i18n::tr("the base of a part-select must be an integer type"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeTheBaseOfAPart));
             }
             auto w = lit_value(slice.end);
             if (!w || *w <= 0 || *w > 64) {
-                error(current_span_, i18n::tr("part-select width must be an integer literal from 1 "
-                                              "to 64 (v0.16.0 limitation)"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypePartSelectWidthMustBe));
                 return ast::make_error();
             }
             // スカラーbit（幅1）に幅2以上のパートセレクトは不可
             if (obj_type->kind == ast::TypeKind::Bit && *w != 1) {
-                error(current_span_,
-                      i18n::tr("part-select width on a scalar bit (width 1) must be 1"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypePartSelectWidthOnA));
                 return ast::make_error();
             }
             return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*w));
@@ -837,25 +830,21 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
             auto hi = lit_value(slice.start);
             auto lo = lit_value(slice.end);
             if (!hi || !lo) {
-                error(current_span_, i18n::tr("bit-slice ranges must be integer literals "
-                                              "(v0.16.0 limitation; e.g. x[7:4])"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeBitSliceRangesMustBe));
                 return ast::make_error();
             }
             if (*lo < 0 || *hi < *lo || *hi - *lo + 1 > 64) {
-                error(current_span_,
-                      i18n::tr("invalid bit-slice range (hi >= lo >= 0, width <= 64)"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeInvalidBitSliceRangeHi));
                 return ast::make_error();
             }
             if (obj_type->kind == ast::TypeKind::Array && obj_type->array_size &&
                 *hi >= static_cast<int64_t>(*obj_type->array_size)) {
-                error(current_span_,
-                      i18n::tr("the upper bit of the bit slice exceeds the type width"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeTheUpperBitOfThe));
                 return ast::make_error();
             }
             // スカラーbitは幅1として扱い、[0:0] 以外の範囲はエラー
             if (obj_type->kind == ast::TypeKind::Bit && (*hi != 0 || *lo != 0)) {
-                error(current_span_,
-                      i18n::tr("bit slices on a scalar bit (width 1) must be [0:0]"));
+                error(current_span_, i18n::msg(i18n::MsgId::TypeBitSlicesOnAScalar));
                 return ast::make_error();
             }
             return ast::make_array(ast::make_bit(), static_cast<uint32_t>(*hi - *lo + 1));
@@ -1290,11 +1279,9 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             auto variants = ast::union_variant_types(resolved);
             if (!resolved || resolved->kind != ast::TypeKind::Union || variants.empty()) {
                 error(current_span_,
-                      i18n::tr(
-                          "type patterns can only be used in match on union types (target type: ") +
-                          (expected_type ? ast::type_to_string(*expected_type)
-                                         : std::string(i18n::tr("unknown"))) +
-                          ")");
+                      i18n::msgf(i18n::MsgId::TypeTypePatternsCanOnlyBe,
+                                 (expected_type ? ast::type_to_string(*expected_type)
+                                                : i18n::msg(i18n::MsgId::TypeLabelUnknown))));
             } else if (pattern->type_pattern) {
                 std::string target_name = ast::type_to_string(*pattern->type_pattern);
                 bool found = false;
@@ -1305,8 +1292,8 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
                     }
                 }
                 if (!found) {
-                    error(current_span_, i18n::tr("type pattern '") + target_name +
-                                             i18n::tr("' is not a variant of the union"));
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TypeTypePatternIsNotA, target_name));
                 }
             }
             // 束縛変数をパターン型で登録
