@@ -1,4 +1,5 @@
 # 依存の自動更新設定（GitHub Actionsのアクションと VSCode拡張のnpm依存を週次で監視）
+# CIの多重実行を避けるため、更新はエコシステムごとに1つのPRへグループ化する（Dependabotの仕様上、エコシステム間の統合は不可のため最大2PR/週）
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -7,17 +8,23 @@ updates:
       interval: weekly
     labels:
       - dependencies
+    # 全アクションの更新（major含む）を1つのPRにまとめる
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: /vscode-extension
     schedule:
       interval: weekly
     labels:
       - dependencies
-    # devDependenciesのみのためminor/patchはまとめて1PRに集約する
+    # 全npm依存の更新を1つのPRにまとめる
     groups:
-      dev-dependencies:
+      npm-dependencies:
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
+    ignore:
+      # 型定義のメジャーは実行環境のNodeメジャー（CI/enginesのNode 20）に揃えて手動で上げる
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
