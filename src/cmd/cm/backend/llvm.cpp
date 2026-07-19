@@ -2,7 +2,7 @@
 // モジュール別差分コンパイル（現在は無効）・インクリメンタルキャッシュ保存・--run実行。
 // 例外境界はコード生成呼び出しのtryに限定する
 
-#include "../driver.hpp"
+#include "cmd/cm/driver.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/mir/nodes.hpp"
 #include "internal/mir/passes/validation/no_std_checker.hpp"

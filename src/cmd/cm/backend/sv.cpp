@@ -1,7 +1,7 @@
 // SystemVerilogコード生成バックエンド: SV出力・階層サブモジュール連結・cm testシミュレーション起動。
 // 例外境界はコード生成呼び出しのtryに限定する
 
-#include "../driver.hpp"
+#include "cmd/cm/driver.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"

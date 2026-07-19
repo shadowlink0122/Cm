@@ -133,8 +133,10 @@ if(CM_USE_LLVM)
         
         # CM_NO_CROSS_TARGETSが無効な場合は全ターゲット追加
         if(NOT CM_NO_CROSS_TARGETS)
+            # ARM(32bit)はベアメタル（--target=bm のthumbv7m）に必須。target.cpp の LLVMInitializeARM* と同期
             list(APPEND _cm_llvm_components
                 AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info
+                ARMCodeGen ARMAsmParser ARMDesc ARMInfo
                 WebAssemblyCodeGen WebAssemblyAsmParser WebAssemblyDesc WebAssemblyInfo
             )
         else()

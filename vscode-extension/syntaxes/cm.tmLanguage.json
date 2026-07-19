@@ -444,41 +444,8 @@
               "match": "\\{\\{|\\}\\}"
             },
             {
-              "begin": "\\{",
-              "end": "\\}",
-              "beginCaptures": {
-                "0": {
-                  "name": "punctuation.definition.template-expression.begin.cm"
-                }
-              },
-              "endCaptures": {
-                "0": {
-                  "name": "punctuation.definition.template-expression.end.cm"
-                }
-              },
-              "patterns": [
-                {
-                  "include": "#builtin-functions"
-                },
-                {
-                  "include": "#function-call"
-                },
-                {
-                  "include": "#constants"
-                },
-                {
-                  "include": "#numbers"
-                },
-                {
-                  "include": "#variables"
-                },
-                {
-                  "include": "#operators"
-                },
-                {
-                  "include": "#string-interpolation-punctuation"
-                }
-              ]
+              "name": "constant.other.placeholder.cm",
+              "match": "\\{(:[^{}\"]*)?\\}"
             }
           ]
         },
@@ -747,22 +714,6 @@
         {
           "name": "punctuation.section.parens.end.cm",
           "match": "\\)"
-        }
-      ]
-    },
-    "string-interpolation-punctuation": {
-      "patterns": [
-        {
-          "name": "meta.embedded.punctuation.accessor.cm",
-          "match": "\\.|::"
-        },
-        {
-          "name": "meta.embedded.punctuation.parens.cm",
-          "match": "[()]"
-        },
-        {
-          "name": "meta.embedded.punctuation.brackets.cm",
-          "match": "[\\[\\]]"
         }
       ]
     },

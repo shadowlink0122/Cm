@@ -1,7 +1,7 @@
 // Runコマンドのバックエンド: JIT実行・#[test]テストランナー・JS(node)実行への振り分け。
 // 例外境界はJITエンジン内（resultで返る）とJSコード生成のtryに限定する
 
-#include "../driver.hpp"
+#include "cmd/cm/driver.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/codegen/js/codegen.hpp"
 #include "internal/mir/nodes.hpp"

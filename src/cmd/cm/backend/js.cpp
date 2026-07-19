@@ -1,7 +1,7 @@
 // JavaScriptコード生成バックエンド: JS/web出力・インクリメンタルキャッシュ保存・--runでのnode実行。
 // 例外境界はコード生成呼び出しのtryに限定する
 
-#include "../driver.hpp"
+#include "cmd/cm/driver.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/codegen/js/codegen.hpp"
 #include "internal/mir/nodes.hpp"
