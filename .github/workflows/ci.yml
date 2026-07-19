@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-llvm
         with:
           path: |
@@ -176,7 +176,7 @@ jobs:
       - run: chmod +x build/bin/* cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -220,7 +220,7 @@ jobs:
       - run: chmod +x build/bin/* cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -270,7 +270,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -330,7 +330,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
           key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
@@ -372,7 +372,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -426,7 +426,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
           key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
