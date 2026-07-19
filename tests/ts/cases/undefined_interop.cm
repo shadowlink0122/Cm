@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // undefined相互運用: JS関数が返すundefinedをCm側で受ける（省略可能な値の表現）
 
 use "react" {

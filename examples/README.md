@@ -17,6 +17,9 @@ Cmの機能を示す公式サンプル集です。
 - `move_semantics.cm` - ムーブセマンティクス
 - `borrowing.cm` - 借用と参照
 
+### web-fullstack - フルスタックWeb開発（TypeScriptバックエンド）
+- `src/app.cm` - React SSR + Express + Postgres でタスク管理アプリ（`--target=ts`）
+
 ### 04_memory - メモリ管理
 - `raii_pattern.cm` - RAIIパターン（デストラクタ）
 - `heap_allocation.cm` - ヒープ確保（FFI + RAII）

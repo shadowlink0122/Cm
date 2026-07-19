@@ -1,0 +1,108 @@
+//! platform: ts
+// CmによるフルスタックWeb開発サンプル（TypeScriptバックエンド）。
+// 1つのファイルにドメインモデル・DB層（Postgres）・フロントエンド（React SSR）・サーバ（Express）を
+// 明確なセクションに分けて実装する。静的型付けのCm structが全層で共有される型になる。
+//
+// 実行: このディレクトリで `../vendor` を NODE_PATH にして
+//   NODE_PATH=../vendor cm run --target=ts src/app.cm
+// 本番では vendor/ の代わりに実際の react / react-dom / express / pg を npm install する（README参照）。
+
+// ============================================================
+// ドメインモデル（DB行 = APIレスポンス = フロントのprops）
+// ============================================================
+struct Task {
+    int id;
+    string title;
+    bool done;
+}
+
+// ============================================================
+// データアクセス層（Postgres / pg パッケージ）
+// ============================================================
+// このサンプルの vendor/pg は同期ヘルパーでインメモリのタスクテーブルを模倣する。
+// 本番では: use "pg" { PgClient Client(string); } に加え async client.query("SELECT ...") を使う。
+use "pg" {
+    Task[] allTasks();          // SELECT id, title, done FROM tasks
+    Task addTask(string title);  // INSERT INTO tasks(title) VALUES($1) RETURNING *
+    Task toggleTask(int id);     // UPDATE tasks SET done = NOT done WHERE id = $1 RETURNING *
+}
+
+// ============================================================
+// フロントエンド（React サーバサイドレンダリング）
+// ============================================================
+struct VElement {
+    int handle;
+}
+struct Props {
+    string className;
+}
+use "react" {
+    VElement createElement(string tag, Props props, string text);
+    VElement createElementList(string tag, Props props, VElement[] children);
+}
+use "react-dom/server" {
+    string renderToStaticMarkup(VElement element);
+}
+
+// 1タスク → <li>（完了/未完了でクラスを切り替える）
+VElement task_item(Task t) {
+    Props p = { className: t.done ? "done" : "todo" };
+    return createElement("li", p, t.title);
+}
+
+// タスク配列 → <ul> のReact要素ツリー
+VElement task_list(Task[] tasks) {
+    VElement[] items = [];
+    for (Task t in tasks) {
+        items.push(task_item(t));
+    }
+    Props ul_props = { className: "task-list" };
+    return createElementList("ul", ul_props, items);
+}
+
+// ページ全体をHTML文字列としてSSR
+string render_index(Task[] tasks) {
+    string body = renderToStaticMarkup(task_list(tasks));
+    return "<!doctype html><html><head><title>Cm Tasks</title></head><body><h1>Tasks</h1>{body}</body></html>";
+}
+
+// ============================================================
+// サーバ（Express 相当のルート）
+// ============================================================
+// GET /            : 全タスクをSSRして返す
+// POST /tasks      : タスクを追加して再描画
+// POST /tasks/:id/toggle : 完了状態をトグル
+// このサンプルではルートを直接呼んで動作を確認する（実HTTP起動なし。README参照）。
+
+string get_index() {
+    Task[] tasks = allTasks();
+    return render_index(tasks);
+}
+
+string post_task(string title) {
+    Task created = addTask(title);
+    return "created id={created.id} title={created.title} done={created.done}";
+}
+
+string post_toggle(int id) {
+    Task updated = toggleTask(id);
+    return "toggled id={updated.id} done={updated.done}";
+}
+
+int main() {
+    println("=== GET / ===");
+    println(get_index());
+
+    println("");
+    println("=== POST /tasks (title=write docs) ===");
+    println(post_task("write docs"));
+
+    println("");
+    println("=== POST /tasks/2/toggle ===");
+    println(post_toggle(2));
+
+    println("");
+    println("=== GET / (after changes) ===");
+    println(get_index());
+    return 0;
+}

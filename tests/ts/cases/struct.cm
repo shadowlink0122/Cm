@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // 構造体: export interface 出力とフィールド型注釈。ネスト構造体はリテラルでまとめて初期化する
 struct Point {
     int x;

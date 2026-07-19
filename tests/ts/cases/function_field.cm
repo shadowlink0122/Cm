@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // 関数型フィールド: TS上では (a: number, b: number) => number 注釈
 struct Calc {
     int*(int, int) op;

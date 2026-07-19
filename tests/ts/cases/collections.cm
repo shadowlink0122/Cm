@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // 配列とループ
 int sum_array(int[5] arr) {
     int total = 0;

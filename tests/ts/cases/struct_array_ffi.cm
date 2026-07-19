@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // 任意の構造体の配列をFFI境界で渡す（固定長・スライス両方）
 
 struct Row {

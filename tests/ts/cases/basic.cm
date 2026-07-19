@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // 基本: 関数の引数・戻り値・ローカルの型注釈
 int add(int a, int b) {
     return a + b;

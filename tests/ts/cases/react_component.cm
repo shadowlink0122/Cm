@@ -1,4 +1,4 @@
-//! platform: js
+//! platform: ts
 // Reactスタイル: 構造体をprops、構造体配列をリストとしてコンポーネント合成する
 
 struct VNode {
