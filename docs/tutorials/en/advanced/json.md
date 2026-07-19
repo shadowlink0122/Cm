@@ -64,7 +64,7 @@ println(json_stringify(root));   // {"a":[1,2],"b":"x"}
 
 ## Capacity
 
-The arena holds up to 48 nodes by default (one node per JSON value). This bound keeps the library compiling under every backend's default optimizer; on the LLVM backends (native/jit) a large global aggregate makes optimization/codegen cost explode. Exceeding the bound makes `json_parse` return `-1`. On js/ts there is no such constraint, so a larger arena can be used when needed.
+The arena holds up to 1024 nodes by default (one node per JSON value). Exceeding it makes `json_parse` return `-1`. The bound is just the fixed size of the global node array and can be raised in the source when needed.
 
 ---
 

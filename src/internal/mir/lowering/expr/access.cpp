@@ -329,18 +329,39 @@ bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContex
 // 配列インデックスのlowering
 LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringContext& ctx) {
     // オブジェクトをlowering
-    LocalId array;
+    LocalId array = 0;
+    bool array_is_set = false;
+
+    // インデックス対象の配列を指す「場所（MirPlace）」。可能な限り配列全体のコピーを避ける。
+    // struct.arrayField[i] のようなアクセスで配列フィールド全体をtempへコピーすると、
+    // 固定長配列 [N x T] の巨大なload/storeが生成され、SROA→InstCombineが超線形に膨張する。
+    MirPlace base_place{0};
+    bool have_base_place = false;
 
     // objectが変数参照の場合は直接その変数を使用（配列のコピーを防ぐ）
     if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&index_expr.object->kind)) {
         auto var_id = ctx.resolve_variable((*var_ref)->name);
         if (var_id) {
             array = *var_id;
+            array_is_set = true;
         } else {
             array = lower_expression(*index_expr.object, ctx);
+            array_is_set = true;
+        }
+    } else if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&index_expr.object->kind)) {
+        // struct.arrayField[i]: メンバアクセスの場所を直接取得して配列全体のコピーを避ける
+        MirPlace mp{0};
+        hir::TypePtr mt;
+        if (get_member_place(**mem, ctx, mp, mt)) {
+            base_place = mp;
+            have_base_place = true;
+        } else {
+            array = lower_expression(*index_expr.object, ctx);
+            array_is_set = true;
         }
     } else {
         array = lower_expression(*index_expr.object, ctx);
+        array_is_set = true;
     }
 
     // 多次元配列最適化: indices が設定されている場合、複数のIndex projectionを生成
@@ -402,7 +423,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
          (elem_type->name.length() == 1 && std::isupper(elem_type->name[0]))  // 単一大文字
         );
 
-    if (needs_fallback && array < ctx.func->locals.size()) {
+    if (needs_fallback && array_is_set && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
         if (array_type && (array_type->kind == hir::TypeKind::Array ||
                            array_type->kind == hir::TypeKind::Pointer)) {
@@ -433,8 +454,16 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         }
     }
 
+    // メンバ場所ベースの最適化は固定長配列のみで行う。スライス（fat pointer）はランタイム表現が
+    // 異なり要素アドレス計算がデリファレンスを要するため、既存の値materialize経路へ戻す。
+    if (have_base_place && is_slice) {
+        array = lower_expression(*index_expr.object, ctx);
+        array_is_set = true;
+        have_base_place = false;
+    }
+
     // スライスの場合、HIR型はtypedefエイリアス未解決のことがあるため、解決済みのMIRローカル型がユニオンならそちらを優先する
-    if (is_slice && array < ctx.func->locals.size()) {
+    if (is_slice && array_is_set && array < ctx.func->locals.size()) {
         hir::TypePtr array_type = ctx.func->locals[array].type;
         if (array_type && array_type->kind == hir::TypeKind::Array && array_type->element_type &&
             array_type->element_type->kind == hir::TypeKind::Union) {
@@ -508,7 +537,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
     // 通常の配列インデックス（単一または多次元）
     // 多次元配列最適化: 連続するIndex projectionを生成
     // a[i][j][k] → place.projections = [Index(i), Index(j), Index(k)]
-    MirPlace place{array};
+    // メンバアクセス経由の配列（arena.nodes[i] 等）は取得済みの場所を土台にして、
+    // 配列全体のコピーを挟まず要素だけをコピーする
+    MirPlace place = have_base_place ? base_place : MirPlace{array};
 
     // ポインタ型の「変数」に対するインデックスアクセスの場合、Index前にDerefが必要
     // p[0] → place.projections = [Deref, Index(0)]

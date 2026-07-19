@@ -37,12 +37,9 @@ export struct JsonNode {
 }
 
 // アリーナ（ノードの入れ物）。容量は固定。
-// 容量を大きくするとLLVM（native/jit）バックエンドで巨大なグローバル集約の最適化・コード生成コストが
-// 急増し、複雑度ガードに達するかコンパイルが極端に遅くなる。全バックエンドが既定の最適化設定で扱える
-// 上限として48にしてある（js/tsは制約が無いので用途に応じ拡張可）。JSON値の総数がこの上限を超えると
-// json_parse は -1（エラー）を返す。
+// 容量は固定で1024ノード（JSON値1つにつき1ノード）。総数がこれを超えると json_parse は -1 を返す。
 struct JsonArena {
-    JsonNode[48] nodes;
+    JsonNode[1024] nodes;
     int count;
 }
 
@@ -56,7 +53,7 @@ bool had_error = false;
 
 // 新しいノードを確保して index を返す。容量を超えたらエラーを立てて末尾を返す。
 int alloc_node(JsonKind k) {
-    if (arena.count >= 48) {
+    if (arena.count >= 1024) {
         had_error = true;
         return arena.count - 1;
     }
