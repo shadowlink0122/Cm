@@ -1,0 +1,42 @@
+//! platform: sv
+//! test: a=3, b=5 -> total=8, larger=5
+//! test: a=10, b=2 -> total=12, larger=10
+//! test: a=-4, b=4 -> total=0, larger=4
+
+// interface/implメソッドのSV合成テスト: selfは値渡しへ変換され、メソッド呼び出しはSV functionになる
+
+interface Summable {
+    int total();
+    int larger();
+}
+
+struct Pair {
+    int x;
+    int y;
+}
+
+impl Pair for Summable {
+    int total() {
+        return self.x + self.y;
+    }
+
+    int larger() {
+        if (self.x > self.y) {
+            return self.x;
+        }
+        return self.y;
+    }
+}
+
+#[input]  int a = 0;
+#[input]  int b = 0;
+#[output] int total = 0;
+#[output] int larger = 0;
+
+void compute() {
+    Pair p;
+    p.x = a;
+    p.y = b;
+    total = p.total();
+    larger = p.larger();
+}

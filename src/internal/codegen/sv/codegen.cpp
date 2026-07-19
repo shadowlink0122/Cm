@@ -672,7 +672,20 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                 proj.field_id < io_it->second.size()) {
                 name = io_it->second[proj.field_id];
             } else {
-                name += "[" + std::to_string(proj.field_id) + "]";
+                // データ構造体（typedef struct packed）のフィールドはメンバ名でアクセスする。
+                // [index] はpacked structではビット選択になり誤った値を読むため使用しない
+                const mir::MirStruct* struct_def = nullptr;
+                if (current_type && current_type->kind == hir::TypeKind::Struct) {
+                    auto struct_it = struct_defs_.find(current_type->name);
+                    if (struct_it != struct_defs_.end()) {
+                        struct_def = struct_it->second;
+                    }
+                }
+                if (struct_def && proj.field_id < struct_def->fields.size()) {
+                    name += "." + struct_def->fields[proj.field_id].name;
+                } else {
+                    name += "[" + std::to_string(proj.field_id) + "]";
+                }
             }
         } else if (proj.kind == mir::ProjectionKind::Index) {
             // 配列インデックス: index_localの変数名で添字アクセス
@@ -727,7 +740,19 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                     current_type = nullptr;
                 }
             } else if (proj.kind == mir::ProjectionKind::Field) {
-                current_type = nullptr;
+                // 構造体フィールドの型を追跡する（ネストした構造体のメンバアクセスに必要）
+                const mir::MirStruct* struct_def = nullptr;
+                if (current_type->kind == hir::TypeKind::Struct) {
+                    auto struct_it = struct_defs_.find(current_type->name);
+                    if (struct_it != struct_defs_.end()) {
+                        struct_def = struct_it->second;
+                    }
+                }
+                if (struct_def && proj.field_id < struct_def->fields.size()) {
+                    current_type = struct_def->fields[proj.field_id].type;
+                } else {
+                    current_type = nullptr;
+                }
             }
         }
         first_projection = false;
@@ -1385,6 +1410,14 @@ size_t SVCodeGen::findMergeBlock(const mir::MirFunction& func, size_t then_block
 // === メインコンパイル処理 ===
 
 void SVCodeGen::compile(const mir::MirProgram& program) {
+    // 構造体定義の索引を構築（フィールドのメンバ名アクセスに使用）
+    struct_defs_.clear();
+    for (const auto& st : program.structs) {
+        if (st) {
+            struct_defs_[st->name] = st.get();
+        }
+    }
+
     // 非合成型チェック（エラーがあればコンパイル停止）
     if (!validateSynthesizableTypes(program)) {
         throw std::runtime_error(i18n::msg(i18n::MsgId::SvNonSynthesizableTypesDetectedOn));

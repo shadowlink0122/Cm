@@ -141,3 +141,40 @@ bit[4] nib = word[i*4 +: 4]; // variable base + constant width
 
 <!-- nav -->
 ← Prev: [SV Backend - Control Flow and Loops](control-flow.html) | [Contents](index.html) | Next: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) →
+
+---
+
+## Interfaces and impl methods
+
+Struct methods defined with `interface` / `impl` are synthesized as SV `function automatic`.
+The compiler automatically converts the method's `self` to pass-by-value, so interfaces work on SV even though it has no pointers.
+
+```cm
+interface Summable {
+    int total();
+}
+
+struct Pair {
+    int x;
+    int y;
+}
+
+impl Pair for Summable {
+    int total() {
+        return self.x + self.y;
+    }
+}
+
+void compute() {
+    Pair p;
+    p.x = a;
+    p.y = b;
+    total = p.total();  // becomes a call to the SV function Pair__total(p)
+}
+```
+
+Restrictions (reported as clear diagnostics):
+
+- Methods that write to `self` fields are not supported (`error[SV010]`; pass-by-value would not propagate to the caller)
+- Dynamic dispatch through interface-typed variables is not supported (`error[SV011]`; call through a concrete struct type so the target resolves statically)
+- Escaping the `self` pointer value outside a method call is not supported (`error[SV012]`)

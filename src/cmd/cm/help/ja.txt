@@ -72,7 +72,7 @@ Cm言語コンパイラ v{version}
                                      ランタイム不要）
                           undefined  MIRレベルのCm独自検査: ゼロ除算・剰余と
                                      nullポインタ参照をメッセージ付きpanicで停止
-                                     （native/wasm/jit）
+                                     （native/wasm/jit/js）
 
 その他のオプション:
   --lang=<en|ja>        メッセージ言語（デフォルト: en。CM_LANG環境変数や

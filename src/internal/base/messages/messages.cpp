@@ -279,8 +279,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"error: unknown sanitizer '{0}'\n",
      "エラー: 不明なサニタイザ '{0}'\n"},
     // CliSanitizeValidValues
-    {"valid sanitizers: address/thread (native), memory (native Linux), bounds/undefined (native/wasm/jit)\n",
-     "有効なサニタイザ: address/thread（native）, memory（native Linux）, bounds/undefined（native/wasm/jit）\n"},
+    {"valid sanitizers: address/thread (native), memory (native Linux), bounds (native/wasm/jit), undefined (native/wasm/jit/js)\n",
+     "有効なサニタイザ: address/thread（native）, memory（native Linux）, bounds（native/wasm/jit）, undefined（native/wasm/jit/js）\n"},
     // CliSpecifyTheJsTargetWith
     {"hint: specify the JS target with --target=js\n",
      "ヒント: --target=js オプションでJSターゲットを指定してください\n"},

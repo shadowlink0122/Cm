@@ -32,7 +32,7 @@ cm compile --target=wasm --sanitize=bounds -O0 main.cm -o main.wasm
 | Kind | Detects | native | wasm | jit (cm run) |
 |------|---------|--------|------|--------------|
 | `bounds` | Out-of-bounds access to objects whose size is known at compile time | ○ | ○ | ○ |
-| `undefined` | Division/modulo by zero and null pointer dereference (Cm-specific MIR-level checks) | ○ | ○ | ○ |
+| `undefined` | Division/modulo by zero and null pointer dereference (Cm-specific MIR-level checks; also available on the js target) | ○ | ○ | ○ |
 | `address` | Heap/stack/global out-of-bounds, use-after-free, double free | ○ | × | × |
 | `thread` | Data races (ThreadSanitizer) | ○ | × | × |
 | `memory` | Reads of uninitialized memory (MemorySanitizer, Linux only) | ○ | × | × |
@@ -83,7 +83,7 @@ Only accesses whose object size LLVM can determine statically are checked (parti
 ## undefined: Cm-specific runtime checks
 
 `undefined` is a Cm-specific sanitizer that inserts checks at the MIR (mid-level IR) stage.
-Because the compiler itself instruments the code rather than an LLVM pass, detection behaves identically on native, wasm, and the JIT, and stops with a descriptive panic.
+Because the compiler itself instruments the code rather than an LLVM pass, detection behaves identically on native, wasm, the JIT, and js, and stops with a descriptive panic.
 
 - **Division/modulo by zero**: integer `/` and `%` whose divisor is zero at runtime (floating point is excluded; IEEE 754 defines it)
 - **Null pointer dereference**: reads/writes through a raw pointer (`T*`) that is null

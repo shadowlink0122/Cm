@@ -24,6 +24,24 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine();
     }
 
+    // ポインタ等値比較ヘルパー（null/undefinedを許容し、fat pointerは__arr+__idx、それ以外は参照同一性で比較する）
+    if (needs("__cm_ptr_eq")) {
+        emitter.emitLine("function __cm_ptr_eq(a, b) {");
+        emitter.increaseIndent();
+        emitter.emitLine("if (a == null || b == null || a === 0 || b === 0) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return (a == null || a === 0) && (b == null || b === 0);");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine(
+            "if (a.__arr !== undefined && b.__arr !== undefined) { return a.__arr === b.__arr && "
+            "a.__idx === b.__idx; }");
+        emitter.emitLine("return a === b;");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
     // ポインタ演算ヘルパー
     if (needs("__cm_ptr_add")) {
         emitter.emitLine("function __cm_ptr_add(p, n) {");

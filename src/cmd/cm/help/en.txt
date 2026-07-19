@@ -76,7 +76,7 @@ Sanitizer options (LLVM backends: compile --target=native/wasm, run):
                           undefined  Cm runtime checks at the MIR level:
                                      division/modulo by zero and null pointer
                                      dereference panic with a message
-                                     (native/wasm/jit)
+                                     (native/wasm/jit/js)
 
 Other options:
   --lang=<en|ja>        Message language (default: en; also CM_LANG env var

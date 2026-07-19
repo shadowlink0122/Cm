@@ -1,0 +1,31 @@
+//! platform: sv
+// selfへ書き込むメソッドは値渡しでは呼び出し元へ反映されないため、SVターゲットではSV010エラーになる（.errorマーカーで失敗を期待）
+
+interface Bumpable {
+    void bump();
+    int get();
+}
+
+struct Counter {
+    int value;
+}
+
+impl Counter for Bumpable {
+    void bump() {
+        self.value = self.value + 1;
+    }
+
+    int get() {
+        return self.value;
+    }
+}
+
+#[input]  int a = 0;
+#[output] int result = 0;
+
+void compute() {
+    Counter c;
+    c.value = a;
+    c.bump();
+    result = c.get();
+}

@@ -76,8 +76,8 @@ expect_msg "cli: address is rejected on wasm" "not supported on target 'wasm'" \
     "$CM" compile --target=wasm --sanitize=address "$CASES/ok.cm" -o "$WORK/never"
 expect_msg "cli: address is rejected on jit run" "not supported on target 'jit'" \
     "$CM" run --sanitize=address "$CASES/ok.cm"
-expect_msg "cli: sanitize is rejected on js" "not supported on target" \
-    "$CM" compile --target=js --sanitize=bounds "$CASES/ok.cm" -o "$WORK/never.js"
+expect_msg "cli: address is rejected on js" "not supported on target" \
+    "$CM" compile --target=js --sanitize=address "$CASES/ok.cm" -o "$WORK/never.js"
 expect_msg "cli: ja message" "エラー: 不明なサニタイザ" \
     "$CM" compile --lang=ja --sanitize=foo "$CASES/ok.cm" -o "$WORK/never"
 expect_msg "cli: thread is rejected on jit run" "not supported on target 'jit'" \
@@ -197,6 +197,18 @@ if command -v wasmtime >/dev/null 2>&1; then
     fi
 else
     skip "undefined/wasm: wasmtime not installed"
+fi
+if command -v node >/dev/null 2>&1; then
+    check_panic "undefined/js: division by zero panics" \
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/div_zero.cm"
+    check_panic "undefined/js: null pointer dereference panics" \
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/null_deref.cm"
+    run_expect "undefined/js: in-bounds program runs normally" zero \
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/ok.cm"
+    expect_msg "cli: bounds is rejected on js" "not supported on target 'js'" \
+        "$CM" run --target=js --sanitize=bounds "$CASES/ok.cm"
+else
+    skip "undefined/js: node not installed"
 fi
 
 # ---------- thread: 計装検証 + 正常系プローブ ----------

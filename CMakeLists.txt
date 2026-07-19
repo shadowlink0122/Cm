@@ -424,6 +424,7 @@ list(APPEND CM_SOURCES
 list(APPEND CM_SOURCES
     src/internal/codegen/sv/codegen.cpp
     src/internal/codegen/sv/analyze.cpp
+    src/internal/codegen/sv/self_param.cpp
     src/internal/codegen/sv/emit_control.cpp
     src/internal/codegen/sv/validation.cpp
     src/internal/codegen/sv/testbench.cpp
@@ -791,6 +792,7 @@ if(BUILD_TESTING)
             src/internal/codegen/buffered_codegen.cpp
             src/internal/codegen/sv/codegen.cpp
             src/internal/codegen/sv/analyze.cpp
+            src/internal/codegen/sv/self_param.cpp
             src/internal/codegen/sv/emit_control.cpp
             src/internal/codegen/sv/validation.cpp
             src/internal/codegen/sv/testbench.cpp

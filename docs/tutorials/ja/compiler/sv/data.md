@@ -141,3 +141,40 @@ bit[4] nib = word[i*4 +: 4]; // 可変基点+定数幅（インデックスド�
 
 <!-- nav -->
 ← 前: [SVバックエンド - 制御構文とループ](control-flow.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) →
+
+---
+
+## interfaceとimplメソッド
+
+`interface` / `impl` で定義した構造体メソッドはSVの `function automatic` として合成されます。
+メソッドの `self` はコンパイラが自動的に構造体の値渡しへ変換するため、ポインタ非対応のSVでもそのまま使えます。
+
+```cm
+interface Summable {
+    int total();
+}
+
+struct Pair {
+    int x;
+    int y;
+}
+
+impl Pair for Summable {
+    int total() {
+        return self.x + self.y;
+    }
+}
+
+void compute() {
+    Pair p;
+    p.x = a;
+    p.y = b;
+    total = p.total();  // Pair__total(p) というSV functionの呼び出しになる
+}
+```
+
+制約（明確な診断エラーになります）:
+
+- `self` のフィールドへ書き込むメソッドは未対応（`error[SV010]`。値渡しでは呼び出し元へ反映されないため）
+- interface型変数経由の動的ディスパッチは未対応（`error[SV011]`。呼び出し先が静的に決まる具体型経由の呼び出しを使う）
+- `self` のポインタ値をメソッド呼び出し以外へ持ち出す使い方は未対応（`error[SV012]`）

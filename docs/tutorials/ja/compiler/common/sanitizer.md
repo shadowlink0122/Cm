@@ -32,7 +32,7 @@ cm compile --target=wasm --sanitize=bounds -O0 main.cm -o main.wasm
 | 種類 | 検出内容 | native | wasm | jit（cm run） |
 |------|---------|--------|------|---------------|
 | `bounds` | コンパイル時にサイズが確定するオブジェクトへの境界外アクセス | ○ | ○ | ○ |
-| `undefined` | ゼロ除算・剰余、nullポインタ参照（Cm独自のMIRレベル検査） | ○ | ○ | ○ |
+| `undefined` | ゼロ除算・剰余、nullポインタ参照（Cm独自のMIRレベル検査。jsターゲットでも使用可） | ○ | ○ | ○ |
 | `address` | ヒープ/スタック/グローバルの境界外アクセス・use-after-free・二重解放 | ○ | × | × |
 | `thread` | データ競合（ThreadSanitizer） | ○ | × | × |
 | `memory` | 未初期化メモリの読み取り（MemorySanitizer、Linuxのみ） | ○ | × | × |
@@ -83,7 +83,7 @@ Error: wasm trap: wasm `unreachable` instruction executed
 ## undefined: Cm独自のランタイム検査
 
 `undefined` はMIR（中間表現）レベルで検査コードを挿入するCm独自のサニタイザです。
-LLVMのパスではなくコンパイラ自身が計装するため、native・wasm・JITのすべてで同一の検出動作になり、検出時はメッセージ付きのpanicで停止します。
+LLVMのパスではなくコンパイラ自身が計装するため、native・wasm・JIT・jsのすべてで同一の検出動作になり、検出時はメッセージ付きのpanicで停止します。
 
 - **ゼロ除算・剰余**: 整数の `/` と `%` の除数が実行時に0の場合（浮動小数はIEEE 754で定義されているため対象外）
 - **nullポインタ参照**: 生ポインタ（`T*`）経由の読み書きでポインタがnullの場合

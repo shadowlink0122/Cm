@@ -5,6 +5,7 @@
 #include "internal/base/i18n.hpp"
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"
+#include "internal/codegen/sv/self_param.hpp"
 #include "internal/mir/nodes.hpp"
 
 #include <chrono>
@@ -54,6 +55,17 @@ int emit_sv(BuildContext& ctx, mir::MirProgram& mir) {
         sv_opts.devicePN = dirs.device_pn;
         sv_opts.deviceVersion = dirs.device_version;
         sv_opts.toolOptions = dirs.tool_options;
+    }
+
+    // implメソッドの構造体ポインタ引数（self）を値渡しへ変換する（interface/implのSV対応）
+    {
+        auto self_errors = codegen::sv::lower_self_pointer_params(mir);
+        if (!self_errors.empty()) {
+            for (const auto& err : self_errors) {
+                std::cerr << err << "\n";
+            }
+            return 1;
+        }
     }
 
     // SystemVerilog コード生成

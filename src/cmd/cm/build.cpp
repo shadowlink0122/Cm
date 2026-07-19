@@ -590,14 +590,22 @@ int run_build(cli::Options& opts, const char* argv0) {
     ctx.code = std::move(code);
     ctx.run_sv_sim = run_sv_sim;
     ctx.sv_hierarchy_submodules = std::move(sv_hierarchy_submodules);
-    // --sanitize はLLVM系バックエンド専用。compile の native/wasm と run（JIT、bounds/undefinedのみ）を許可し、js/sv経路はここで弾く
+    // --sanitize の実行系別許可: native/wasm=全種、jit/js=bounds・undefined等のランタイム不要検査のみ、sv=非対応
     if (!opts.sanitizers.empty()) {
-        const bool is_js_or_sv = opts.target == "sv" || opts.target == "verilog" ||
-                                 opts.target == "systemverilog" || opts.target == "js" ||
-                                 opts.target == "web" || opts.emit_js;
+        const bool is_sv =
+            opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog";
+        const bool is_js = opts.target == "js" || opts.target == "web" || opts.emit_js;
         std::string unsupported;
-        if (is_js_or_sv) {
+        if (is_sv) {
             unsupported = opts.sanitizers.front();
+        } else if (is_js) {
+            // JSはMIRレベル計装のundefinedのみ対応（LLVM計装パス・サニタイザランタイムは適用不能）
+            for (const auto& sanitizer : opts.sanitizers) {
+                if (sanitizer != "undefined") {
+                    unsupported = sanitizer;
+                    break;
+                }
+            }
         } else if (opts.command == Command::Run) {
             // JITはcmプロセス内実行のためASan/TSan/MSanランタイムを後付けできない（bounds/undefinedはtrap・panic方式で動作する）
             for (const auto& sanitizer : opts.sanitizers) {
@@ -608,14 +616,15 @@ int run_build(cli::Options& opts, const char* argv0) {
             }
         }
         if (!unsupported.empty()) {
-            std::string target_name =
-                opts.command == Command::Run && !is_js_or_sv ? "jit" : opts.target;
+            std::string target_name = is_sv || is_js
+                                          ? (opts.target.empty() ? "js" : opts.target)
+                                          : (opts.command == Command::Run ? "jit" : opts.target);
             std::cerr << i18n::msgf(i18n::MsgId::CliSanitizeNotSupportedOnTarget, unsupported,
                                     target_name);
             std::cerr << i18n::msg(i18n::MsgId::CliSanitizeValidValues);
             return 1;
         }
-        // undefined: MIRレベルの計装をここで適用する（全LLVM系実行系で共通の検査になる）
+        // undefined: MIRレベルの計装をここで適用する（LLVM系・JSの全実行系で共通の検査になる）
         if (std::find(opts.sanitizers.begin(), opts.sanitizers.end(), "undefined") !=
             opts.sanitizers.end()) {
             mir::opt::instrument_undefined_checks(mir);

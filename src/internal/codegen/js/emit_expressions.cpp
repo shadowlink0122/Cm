@@ -75,14 +75,12 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             auto rhsType = getOperandType(*data.rhs, func);
             if (lhsType && lhsType->kind == TypeKind::Pointer && rhsType &&
                 rhsType->kind == TypeKind::Pointer) {
-                // Eq/Neは__arrも含めて比較（異なる配列上の同一インデックスが等しくなるバグ防止）
+                // Eq/Neはnull安全なヘルパーで比較する（null/undefinedポインタへの.__arrアクセスによるTypeErrorを防ぎ、fat pointerは__arr+__idxで比較して異なる配列上の同一インデックスが等しくなるバグも防止）
                 if (data.op == mir::MirBinaryOp::Eq) {
-                    return "(" + lhs + ".__arr === " + rhs + ".__arr && " + lhs +
-                           ".__idx === " + rhs + ".__idx)";
+                    return "__cm_ptr_eq(" + lhs + ", " + rhs + ")";
                 }
                 if (data.op == mir::MirBinaryOp::Ne) {
-                    return "(" + lhs + ".__arr !== " + rhs + ".__arr || " + lhs +
-                           ".__idx !== " + rhs + ".__idx)";
+                    return "!__cm_ptr_eq(" + lhs + ", " + rhs + ")";
                 }
                 // Lt/Gt/Le/Geは同一配列前提で__idxのみ比較
                 if (data.op == mir::MirBinaryOp::Lt || data.op == mir::MirBinaryOp::Gt ||
