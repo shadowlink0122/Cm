@@ -114,6 +114,20 @@ bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
     return it != struct_map_.end() && it->second && it->second->is_css;
 }
 
+bool JSCodeGen::structIsForeignObject(const std::string& struct_name) const {
+    auto it = struct_map_.find(struct_name);
+    if (it == struct_map_.end() || !it->second) {
+        return false;
+    }
+    // 関数型フィールドを1つでも持つ構造体はJSメソッドを束ねた外部オブジェクトとみなす
+    for (const auto& field : it->second->fields) {
+        if (field.type && field.type->kind == ast::TypeKind::Function) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::unordered_set<std::string> JSCodeGen::collectUsedRuntimeHelpers(
     const std::string& code) const {
     std::unordered_set<std::string> used;

@@ -153,4 +153,4 @@ use "react" {
 構造体をpropsとして `React.createElement` へ渡し、関数型フィールド（[npm連携](npm-interop.html)参照）でメソッドを呼び出すことで、コンポーネントを合成できます。詳細なロードマップ（Promise連携・DOM API・JSXを使わないhyperscript方式）は `docs/design/js_interop_roadmap.md` を参照してください。
 
 <!-- nav -->
-← 前: [コンパイラ編 - JSバックエンド](index.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - SystemVerilogバックエンド](../sv/index.html) →
+← 前: [コンパイラ編 - JSバックエンド](index.html) ｜ [目次](../index.html) ｜ 次: [CmでのWeb開発](web-dev.html) →

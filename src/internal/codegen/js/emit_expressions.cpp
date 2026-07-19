@@ -522,7 +522,8 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
             if (it != inline_values_.end()) {
                 if (operand.kind == mir::MirOperand::Copy && place.local < func.locals.size()) {
                     const auto& local = func.locals[place.local];
-                    if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                    if (local.type && local.type->kind == ast::TypeKind::Struct &&
+                        !structIsForeignObject(local.type->name)) {
                         return "__cm_clone(" + it->second + ")";
                     }
                 }
@@ -535,7 +536,8 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
             // ただしimplメソッドのself引数ソースの場合はスキップ（JSの参照渡しでselfの変更を元変数に伝搬させるため）
             if (place.local < func.locals.size() && place.projections.empty()) {
                 const auto& local = func.locals[place.local];
-                if (local.type && local.type->kind == ast::TypeKind::Struct) {
+                if (local.type && local.type->kind == ast::TypeKind::Struct &&
+                    !structIsForeignObject(local.type->name)) {
                     if (impl_self_sources_.count(place.local) == 0) {
                         return "__cm_clone(" + result + ")";
                     }

@@ -1,38 +1,70 @@
-//! platform: ts
-// ビュー: HTMLの組み立てをCmで行う（React等のJSレンダラは使わない）。
-// 小さなHTMLビルダー el() と、タスクをコンポーネント化する関数で構成する。
+// ビュー層: HTMLを web::html の構造体ビルダーで組み立てる（文字列連結もReact等のJSレンダラも使わない）。
+// li()/ul()/div() などのビルダーはHtml構造体を返し、.class()/.add() で子や属性を積んでいく。
+// ビルダーはselfを変更せず新しいHtmlを返すため、どのバックエンドでも同じHTMLになる。
+//
+// このモジュールはストア・スタイルへの唯一の窓口（ファサード）でもある。
+// サーバはviewだけをimportすれば済み、モジュールの依存が一本道になって二重取り込みが起きない。
 
 module view;
 
 import ./models::{Task};
+import ./store::{task_count, task_at, init_store, add_task, complete_next};
 import ./style::{stylesheet};
+import web::html::*;
 
-// 要素タグを組み立てる小さなHTMLビルダー
-string el(string tag, string attrs, string body) {
-    if (attrs == "") {
-        return "<" + tag + ">" + body + "</" + tag + ">";
-    }
-    return "<" + tag + " " + attrs + ">" + body + "</" + tag + ">";
-}
-
-// 1タスク → <li>（完了状態でクラスを切り替える）
-string task_item(Task t) {
+// 1タスク → <li class="done|todo">title</li>
+Html task_item(Task t) {
     string cls = t.done ? "done" : "todo";
-    return el("li", "class=\"" + cls + "\"", t.title);
+    return li().class(cls).add(text(t.title));
 }
 
-// タスク配列 → <ul>
-string task_list(Task[] tasks) {
-    string items = "";
-    for (Task t in tasks) {
-        items = items + task_item(t);
+// ストアの全タスク → <ul class="task-list">…</ul>
+Html task_list() {
+    Html list = ul().class("task-list");
+    int i = 0;
+    int n = task_count();
+    while (i < n) {
+        list = list.add(task_item(task_at(i)));
+        i = i + 1;
     }
-    return el("ul", "class=\"task-list\"", items);
+    return list;
 }
 
-// ページ全体のHTML（headにCmが生成したCSSを埋め込む）
-export string page(Task[] tasks) {
-    string head = el("head", "", el("style", "", stylesheet()));
-    string body = el("body", "", el("h1", "", "Cm Tasks") + task_list(tasks));
-    return "<!doctype html>" + el("html", "", head + body);
+// 操作リンク（Cmのルータが処理するGETアクション）。
+Html actions() {
+    return div().class("actions")
+        .add(a().set("href", "/add").add(text("Add task")))
+        .add(a().set("href", "/toggle").add(text("Complete next")));
+}
+
+// ページ全体のHTML文字列（headにCmが生成したCSSを埋め込む）。
+export string page() {
+    Html headEl = head()
+        .add(meta().set("charset", "utf-8"))
+        .add(title().add(text("Cm Tasks")))
+        .add(style_tag().add(raw(stylesheet())));
+    Html bodyEl = body()
+        .add(h1().add(text("Cm Tasks")))
+        .add(task_list())
+        .add(actions());
+    return document(html_doc().add(headEl).add(bodyEl));
+}
+
+// ---- サーバ向けファサード（ストア/スタイルへの操作をviewに集約する） ----
+
+// ストアを初期化する。
+export void app_init() {
+    init_store();
+}
+// タスクを1件追加する。
+export void app_add() {
+    add_task("New task");
+}
+// 未完了の先頭タスクを完了にする。
+export void app_complete() {
+    complete_next();
+}
+// スタイルシート文字列を返す。
+export string app_styles() {
+    return stylesheet();
 }

@@ -1,5 +1,4 @@
-//! platform: ts
-// スタイル: with Css でCmの構造体からCSSを生成する（JS/CSSは書かない）。
+// スタイル層: with Css でCmの構造体からCSSを生成する（CSSファイルも文字列手書きもしない）。
 // フィールド名 background_color がCSSプロパティ background-color へ自動変換される。
 
 module style;
@@ -11,31 +10,44 @@ struct BodyStyle with Css {
     string padding;
     string color;
 }
+struct HeadingStyle with Css {
+    string font_size;
+    string color;
+}
 struct DoneStyle with Css {
     string text_decoration;
     string color;
 }
-struct TodoStyle with Css {
-    string font_weight;
+struct ActionStyle with Css {
+    string display;
+    string margin_right;
+    string color;
 }
 
-// スタイルシート全体をCmで組み立てて文字列で返す
+// スタイルシート全体をCmで組み立てて文字列で返す。
 export string stylesheet() {
     BodyStyle body = {
         font_family: "system-ui, sans-serif",
         max_width: "640px",
-        margin: "0 auto",
-        padding: "24px",
+        margin: "40px auto",
+        padding: "0 24px",
         color: "#1f2937"
+    };
+    HeadingStyle heading = {
+        font_size: "1.6rem",
+        color: "#111827"
     };
     DoneStyle done = {
         text_decoration: "line-through",
         color: "#9ca3af"
     };
-    TodoStyle todo = {
-        font_weight: "600"
+    ActionStyle action = {
+        display: "inline-block",
+        margin_right: "12px",
+        color: "#2563eb"
     };
     return "body { " + body.to_css() + "}\n" +
+           "h1 { " + heading.to_css() + "}\n" +
            ".done { " + done.to_css() + "}\n" +
-           ".todo { " + todo.to_css() + "}\n";
+           ".actions a { " + action.to_css() + "}\n";
 }

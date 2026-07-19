@@ -176,6 +176,10 @@ class JSCodeGen {
 
     // ヘルパー: CSS構造体判定とフィールド名変換
     bool isCssStruct(const std::string& struct_name) const;
+    // 関数型フィールドを持つ構造体は外部JSオブジェクト（メソッド束縛）を表すため、
+    // 代入時の深いクローン（__cm_clone）を避けて参照コピーにする。
+    // クローンするとプロトタイプ上のメソッドが失われ this 束縛も壊れる（例: http.Server の listen）。
+    bool structIsForeignObject(const std::string& struct_name) const;
     std::string toKebabCase(const std::string& name) const;
     std::string formatStructFieldKey(const mir::MirStruct& st, const std::string& field_name) const;
     std::string mapExternJsName(const std::string& name) const;

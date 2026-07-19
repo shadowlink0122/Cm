@@ -1,63 +1,63 @@
 //! platform: ts
-// サーバ/ルータ: メソッド・パスで分岐しレスポンスを組み立てる（すべてCm）。
-// FFI（express）はHTTPソケット（listen）だけを担い、分岐・生成はCmが行う。
+// サーバ層: Nodeの組み込み http モジュールだけでHTTPサーバを立てる（vendorも外部JSも不要）。
+// require("http") はNode標準なのでvendor/を用意する必要がなく、cmだけで完結する。
+// メソッド/URLの分岐・状態更新・HTML生成はすべてCmが行い、httpはソケットの受け口だけを担う。
+// 依存は view 一本（view がストア/スタイル/HTMLビルダーを束ねるファサード）。
 //
-// 実行: このディレクトリで
-//   NODE_PATH=vendor cm run --target=ts src/server.cm
+// 実行:
+//   cm compile --target=js src/server.cm -o server.js && node server.js
+//   （その後 http://localhost:8137/ をブラウザ/curlで開く）
 
-import ./models::{Task, Response};
-import ./db::{list_tasks, add_task, toggle_task};
-import ./style::{stylesheet};
-import ./view::{page};
+import ./view::{page, app_init, app_add, app_complete, app_styles};
 
-Response make_response(int status, string content_type, string body) {
-    Response r = { status: status, content_type: content_type, body: body };
-    return r;
+// ---- Node http モジュールのFFIシェイプ（構造体で型付けする） ----
+// req.method / req.url は文字列プロパティ、res.* は関数型フィールド（JSメソッド）。
+struct Req {
+    string method;
+    string url;
+}
+struct Res {
+    int statusCode;
+    void*(string, string) setHeader;
+    void*(string) end;
+}
+struct Server {
+    void*(int) listen;
 }
 
-// ルーティング: Cmがメソッド/パスで分岐する
-Response route(string method, string path, string body) {
-    if (method == "GET" && path == "/") {
-        Task[] tasks = list_tasks();
-        return make_response(200, "text/html", page(tasks));
+use "http" {
+    Server createServer(void*(Req, Res) handler);
+}
+
+// 1リクエストを処理する。ルーティングと状態更新はCmが行う。
+void handle(Req req, Res res) {
+    string url = req.url;
+
+    // スタイルシート（Cmのwith Cssが生成）
+    if (url == "/styles.css") {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/css; charset=utf-8");
+        res.end(app_styles());
+        return;
     }
-    if (method == "GET" && path == "/styles.css") {
-        return make_response(200, "text/css", stylesheet());
+
+    // 状態を変えるアクション（GETで扱えるようにしてブラウザから試せるようにする）
+    if (url == "/add") {
+        app_add();
+    } else if (url == "/toggle") {
+        app_complete();
     }
-    if (method == "POST" && path == "/tasks") {
-        Task created = add_task(body);
-        return make_response(201, "text/plain",
-                             "created id=" + created.id + " title=" + created.title);
-    }
-    if (method == "POST" && path == "/tasks/toggle") {
-        Task updated = toggle_task(2, true);
-        return make_response(200, "text/plain", "toggled id=" + updated.id + " done=" + updated.done);
-    }
-    return make_response(404, "text/plain", "Not Found");
+
+    // それ以外は一覧ページをSSRで返す
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(page());
 }
 
 int main() {
-    // デモ: 各ルートをCmのrouteでハンドリングしてSSR結果を表示する。
-    // 本番では express の app.listen で受けたリクエストを route() へ渡す（README参照）。
-    Response index = route("GET", "/", "");
-    println("=== GET / (status=" + index.status + ", " + index.content_type + ") ===");
-    println(index.body);
-
-    Response css = route("GET", "/styles.css", "");
-    println("");
-    println("=== GET /styles.css (status=" + css.status + ") ===");
-    println(css.body);
-
-    Response created = route("POST", "/tasks", "write Cm docs");
-    println("");
-    println("=== POST /tasks -> " + created.body + " ===");
-
-    Response toggled = route("POST", "/tasks/toggle", "");
-    println("=== POST /tasks/toggle -> " + toggled.body + " ===");
-
-    Response after = route("GET", "/", "");
-    println("");
-    println("=== GET / (after changes) ===");
-    println(after.body);
+    app_init();
+    Server server = createServer(handle);
+    server.listen(8137);
+    println("Cm web server listening on http://localhost:8137");
     return 0;
 }

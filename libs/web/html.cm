@@ -1,0 +1,164 @@
+// web::html - 構造体ベースのHTMLビルダー
+//
+// 文字列連結でHTMLを組み立てる代わりに、Html構造体を使ってツリーを組み立てる。
+// ビルダーメソッドはselfを変更せず新しいHtmlを返す純粋な設計にしてあるため、
+// 値セマンティクス（native/wasm/jit）と参照セマンティクス（js/ts）で挙動が一致する。
+//
+// 使用例:
+//   import web::html::{div, ul, li, h1, text, Html};
+//   string page = div().class("card")
+//       .add(h1().add(text("Cm Tasks")))
+//       .add(ul().add(li().add(text("buy milk"))))
+//       .render();
+
+module web.html;
+
+// HTML要素ノード。attrs/innerは描画済みの文字列断片を保持する（子は追加時に即描画する）。
+export struct Html {
+    string tag;      // 要素名（例: "div"）。テキストノードでは "" を使う
+    string attrs;    // 描画済みの属性文字列（例: ' class="card" id="x"'）
+    string inner;    // 描画済みの内側HTML（子要素・テキストの連結）
+    bool is_void;    // <br> <img> 等の空要素なら true（閉じタグを出さない）
+    bool is_text;    // テキストノードなら true（tagを出さずinnerだけを描画する）
+}
+
+// 部分文字列を全て置換する（組み込みreplaceは最初の1件のみ置換するため）。
+// 注: needle/repl の名前は from/to が予約語のため避けている。
+string replace_all(string s, string needle, string repl) {
+    string out = "";
+    string rest = s;
+    int nlen = needle.len() as int;
+    int idx = rest.indexOf(needle);
+    while (idx >= 0) {
+        out = out + rest.substring(0, idx) + repl;
+        rest = rest.substring(idx + nlen, rest.len() as int);
+        idx = rest.indexOf(needle);
+    }
+    return out + rest;
+}
+
+// HTML特殊文字をエスケープする（テキスト用）。& を最初に処理し二重エスケープを防ぐ。
+// impl/text() が内部で使うため非exportにして、選択的インポート時も必ず一緒に取り込まれるようにする。
+string escape_html(string s) {
+    string out = replace_all(s, "&", "&amp;");
+    out = replace_all(out, "<", "&lt;");
+    out = replace_all(out, ">", "&gt;");
+    return out;
+}
+
+// 属性値をエスケープする（ダブルクォート・アンパサンドを実体参照へ）。impl set() が使う内部関数。
+string escape_attr(string s) {
+    string out = replace_all(s, "&", "&amp;");
+    out = replace_all(out, "\"", "&quot;");
+    return out;
+}
+
+impl Html {
+    // 属性を1つ加えた新しいHtmlを返す（selfは変更しない）。
+    Html set(string name, string value) {
+        Html e = {
+            tag: self.tag,
+            attrs: self.attrs + " " + name + "=\"" + escape_attr(value) + "\"",
+            inner: self.inner,
+            is_void: self.is_void,
+            is_text: self.is_text
+        };
+        return e;
+    }
+
+    // class属性を加える。
+    Html class(string value) {
+        return self.set("class", value);
+    }
+
+    // id属性を加える。
+    Html id(string value) {
+        return self.set("id", value);
+    }
+
+    // 子要素を1つ加えた新しいHtmlを返す（子は即座に描画してinnerへ連結する）。
+    Html add(Html child) {
+        Html e = {
+            tag: self.tag,
+            attrs: self.attrs,
+            inner: self.inner + child.render(),
+            is_void: self.is_void,
+            is_text: self.is_text
+        };
+        return e;
+    }
+
+    // エスケープ済みテキストを子として加える。
+    Html add_text(string content) {
+        Html e = {
+            tag: self.tag,
+            attrs: self.attrs,
+            inner: self.inner + escape_html(content),
+            is_void: self.is_void,
+            is_text: self.is_text
+        };
+        return e;
+    }
+
+    // このノードをHTML文字列へ描画する。
+    string render() {
+        if (self.is_text) {
+            return self.inner;
+        }
+        if (self.is_void) {
+            return "<" + self.tag + self.attrs + ">";
+        }
+        return "<" + self.tag + self.attrs + ">" + self.inner + "</" + self.tag + ">";
+    }
+}
+
+// 任意タグの要素を作る。ショートカット群が内部で使うため非export。
+Html elem(string tag) {
+    Html e = { tag: tag, attrs: "", inner: "", is_void: false, is_text: false };
+    return e;
+}
+
+// 空要素（<br> <img> <input> 等）を作る。ショートカット群が内部で使うため非export。
+Html void_elem(string tag) {
+    Html e = { tag: tag, attrs: "", inner: "", is_void: true, is_text: false };
+    return e;
+}
+
+// エスケープ済みテキストノードを作る。
+export Html text(string content) {
+    Html e = { tag: "", attrs: "", inner: escape_html(content), is_void: false, is_text: true };
+    return e;
+}
+
+// エスケープしない生HTMLノードを作る（信頼できる断片のみに使う）。
+export Html raw(string html) {
+    Html e = { tag: "", attrs: "", inner: html, is_void: false, is_text: true };
+    return e;
+}
+
+// よく使う要素のショートカット。
+export Html html_doc() { return elem("html"); }
+export Html head() { return elem("head"); }
+export Html body() { return elem("body"); }
+export Html title() { return elem("title"); }
+export Html style_tag() { return elem("style"); }
+export Html div() { return elem("div"); }
+export Html span() { return elem("span"); }
+export Html h1() { return elem("h1"); }
+export Html h2() { return elem("h2"); }
+export Html p() { return elem("p"); }
+export Html ul() { return elem("ul"); }
+export Html li() { return elem("li"); }
+export Html a() { return elem("a"); }
+export Html form() { return elem("form"); }
+export Html button() { return elem("button"); }
+export Html input() { return void_elem("input"); }
+export Html br() { return void_elem("br"); }
+export Html meta() { return void_elem("meta"); }
+export Html link() { return void_elem("link"); }
+export Html img() { return void_elem("img"); }
+
+// <!doctype html> を前置してドキュメント全体を描画する。
+export string document(Html root) {
+    return "<!doctype html>" + root.render();
+}

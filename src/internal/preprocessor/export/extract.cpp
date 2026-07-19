@@ -31,9 +31,68 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
     int brace_depth = 0;
     bool found_opening_brace = false;
 
+    // 事前スキャン: フィルタ後も出力に残る型名（非exportのstruct/enum）を集める。
+    // 透過的インポート（別モジュール経由でlibを取り込む）で展開された impl は、対象の型が残る限り
+    // 一緒に残さないと、型は使えるのに .method() が解決できなくなる（web::html の impl Html 等）。
+    std::set<std::string> kept_types(import_items.begin(), import_items.end());
+    {
+        std::stringstream scan(normalize_export_blocks(module_source));
+        std::string sline;
+        const char* type_kws[] = {"struct", "enum"};
+        while (std::getline(scan, sline)) {
+            size_t sp = skip_ws(sline);
+            if (starts_with_keyword(sline, sp, "export"))
+                continue;  // exportされた型は選択対象なので import_items 側の判定に委ねる
+            for (const char* kw : type_kws) {
+                size_t kw_len = std::string(kw).size();
+                if (starts_with_keyword(sline, sp, kw)) {
+                    size_t np = skip_ws(sline, sp + kw_len);
+                    size_t ns = np;
+                    while (
+                        np < sline.size() &&
+                        (std::isalnum(static_cast<unsigned char>(sline[np])) || sline[np] == '_'))
+                        np++;
+                    if (np > ns)
+                        kept_types.insert(sline.substr(ns, np - ns));
+                    break;
+                }
+            }
+        }
+    }
+
+    // 透過的インポート領域の深さ。ネストした import 展開（別モジュール経由で取り込んだlib等）は
+    // このモジュール自身のexportではないので、選択フィルタの対象にせずマーカー内を丸ごと通す。
+    // これをしないと、取り込んだexport関数/structが「未指定のexport」とみなされ落ちてしまう。
+    int nested_import_depth = 0;
+    auto contains = [](const std::string& s, const char* sub) {
+        return s.find(sub) != std::string::npos;
+    };
+
     while (std::getline(input, line)) {
+        // ネストしたインポート展開のマーカーを検出して領域の内側を素通しにする
+        if (contains(line, "===== Wildcard import from") ||
+            contains(line, "===== Selective import from") ||
+            contains(line, "===== Begin module:")) {
+            result << line << "\n";
+            nested_import_depth++;
+            continue;
+        }
+        if (contains(line, "===== End wildcard import") ||
+            contains(line, "===== End selective import") || contains(line, "===== End module:")) {
+            if (nested_import_depth > 0)
+                nested_import_depth--;
+            result << line << "\n";
+            continue;
+        }
+        if (nested_import_depth > 0) {
+            // 透過的に取り込んだ内容はそのまま残す（exportの取捨選択をしない）
+            result << line << "\n";
+            continue;
+        }
+
         // エクスポートされた関数/構造体/定数/implを検出（regexなし）
         bool matched = false;
+        bool matched_is_impl = false;
         size_t pos = skip_ws(line);
 
         // impl パターンを先にチェック: [export] impl Type for Interface
@@ -53,6 +112,7 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                 if (after_impl > name_start) {
                     current_export_name = line.substr(name_start, after_impl - name_start);
                     matched = true;
+                    matched_is_impl = true;
                 }
             }
         }
@@ -161,6 +221,9 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
             // 指定されたアイテムかチェック
             bool is_wanted = std::find(import_items.begin(), import_items.end(),
                                        current_export_name) != import_items.end();
+            // impl は対象型が出力に残るなら（透過的インポート由来でも）一緒に残す
+            if (!is_wanted && matched_is_impl && kept_types.count(current_export_name) > 0)
+                is_wanted = true;
 
             if (is_wanted) {
                 in_wanted_block = true;
