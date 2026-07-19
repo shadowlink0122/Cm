@@ -25,6 +25,38 @@ void print_help(const char* program_name) {
     print_help_text(program_name, get_version());
 }
 
+bool parse_sanitizer_list(const std::string& list, std::vector<std::string>& out,
+                          std::string& error_message) {
+    // カンマ区切りで分割し、既知の値のみ受け付ける（重複は除去する）
+    static const char* kValidSanitizers[] = {"address", "thread", "memory", "bounds", "undefined"};
+    size_t pos = 0;
+    while (true) {
+        size_t comma = list.find(',', pos);
+        std::string value =
+            (comma == std::string::npos) ? list.substr(pos) : list.substr(pos, comma - pos);
+        bool known = false;
+        for (const char* valid : kValidSanitizers) {
+            if (value == valid) {
+                known = true;
+                break;
+            }
+        }
+        if (!known) {
+            error_message = i18n::msgf(i18n::MsgId::CliSanitizeUnknownValue, value) +
+                            i18n::msg(i18n::MsgId::CliSanitizeValidValues);
+            return false;
+        }
+        if (std::find(out.begin(), out.end(), value) == out.end()) {
+            out.push_back(value);
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+    return true;
+}
+
 Options parse_options(int argc, char* argv[]) {
     Options opts;
 
@@ -122,27 +154,10 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg.rfind("--define=", 0) == 0) {
             opts.defines.push_back(arg.substr(9));
         } else if (arg.rfind("--sanitize=", 0) == 0) {
-            // カンマ区切りで分割し、値の妥当性はここで検証する（ターゲットとの組み合わせ検証はバックエンド側で行う）
-            std::string list = arg.substr(11);
-            size_t pos = 0;
-            while (true) {
-                size_t comma = list.find(',', pos);
-                std::string value =
-                    (comma == std::string::npos) ? list.substr(pos) : list.substr(pos, comma - pos);
-                if (value != "address" && value != "bounds") {
-                    opts.has_error = true;
-                    opts.error_message = i18n::msgf(i18n::MsgId::CliSanitizeUnknownValue, value) +
-                                         i18n::msg(i18n::MsgId::CliSanitizeValidValues);
-                    return opts;
-                }
-                if (std::find(opts.sanitizers.begin(), opts.sanitizers.end(), value) ==
-                    opts.sanitizers.end()) {
-                    opts.sanitizers.push_back(value);
-                }
-                if (comma == std::string::npos) {
-                    break;
-                }
-                pos = comma + 1;
+            // 値の妥当性はここで検証する（ターゲットとの組み合わせ検証はバックエンド側で行う）
+            if (!parse_sanitizer_list(arg.substr(11), opts.sanitizers, opts.error_message)) {
+                opts.has_error = true;
+                return opts;
             }
         } else if (arg == "--funroll-loops") {
             opts.unroll_loops = true;

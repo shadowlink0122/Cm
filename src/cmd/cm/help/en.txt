@@ -60,13 +60,23 @@ Optimization options:
                         and low -O levels)
 
 Sanitizer options (LLVM backends: compile --target=native/wasm, run):
-  --sanitize=<list>     Enable runtime memory checks (comma separated):
-                          address  AddressSanitizer: heap/stack/global
-                                   out-of-bounds, use-after-free
-                                   (compile --target=native only)
-                          bounds   Trap on out-of-bounds access to objects
-                                   whose size is known at compile time
-                                   (native/wasm/jit, no runtime required)
+  --sanitize=<list>     Enable runtime checks (comma separated). Also
+                        configurable via compile: sanitize: in .cmconfig.yml
+                        (CLI takes precedence):
+                          address    AddressSanitizer: heap/stack/global
+                                     out-of-bounds, use-after-free
+                                     (compile --target=native only)
+                          thread     ThreadSanitizer: data races
+                                     (compile --target=native only)
+                          memory     MemorySanitizer: uninitialized reads
+                                     (compile --target=native, Linux only)
+                          bounds     Trap on out-of-bounds access to objects
+                                     whose size is known at compile time
+                                     (native/wasm/jit, no runtime required)
+                          undefined  Cm runtime checks at the MIR level:
+                                     division/modulo by zero and null pointer
+                                     dereference panic with a message
+                                     (native/wasm/jit)
 
 Other options:
   --lang=<en|ja>        Message language (default: en; also CM_LANG env var

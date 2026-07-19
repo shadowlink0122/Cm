@@ -104,6 +104,8 @@ enum class MsgId : int {
     CliS,
     CliS2,
     CliSWarnings,
+    CliSanitizeInCmconfigYmlIgnored,
+    CliSanitizeMemoryLinuxOnly,
     CliSanitizeNotSupportedOnTarget,
     CliSanitizeUnknownValue,
     CliSanitizeValidValues,

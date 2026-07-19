@@ -350,30 +350,41 @@ jobs:
 
   # ========================================
   # Tooling Tests - make test に含まれるがバックエンドスイート外のE2E
-  # （cm test コマンド / i18nメッセージ / linter機能テスト）
+  # （cm test コマンド / i18nメッセージ / linter機能テスト / サニタイザ）
+  # サニタイザはOS依存が強い（ASan/TSanランタイム・MSanのLinux限定）ため両OSで検証する
   # ========================================
   tooling-test:
-    name: Tooling (cm test / i18n / lint)
+    name: Tooling (cm test / i18n / lint / sanitize) (${{ matrix.os }})
     needs: build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: cm-build-ubuntu-latest
+          name: cm-build-${{ matrix.os }}
 
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
         uses: actions/cache@v4
         with:
-          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
-          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
+          path: |
+            /usr/lib/llvm-${{ env.LLVM_VERSION }}
+            /opt/homebrew/opt/llvm@${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.os }}
 
       - name: Install LLVM
         run: scripts/ci/install_llvm.sh ${{ env.LLVM_VERSION }}
+
+      # サニタイザE2Eのwasmレグを有効にする（未導入だとSKIPになるため明示的にインストールする）
+      - name: Install wasmtime
+        run: scripts/ci/install_wasmtime.sh
 
       - name: Run cm test command E2E
         run: make test-cm-test

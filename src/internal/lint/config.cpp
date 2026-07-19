@@ -181,6 +181,19 @@ bool ConfigLoader::parse_yaml(const std::string& content) {
                 }
             } else if (trimmed.substr(0, 7) == "target:") {
                 compile_target_ = trim(trimmed.substr(7));
+            } else if (trimmed.substr(0, 9) == "sanitize:") {
+                // カンマ区切り文字列（例: "bounds,undefined"）。YAMLインラインリスト表記 [a, b] の角括弧も許容する
+                std::string value = trim(trimmed.substr(9));
+                if (value.size() >= 2 && value.front() == '[' && value.back() == ']') {
+                    value = trim(value.substr(1, value.size() - 2));
+                }
+                std::string normalized;
+                for (char c : value) {
+                    if (c != ' ') {
+                        normalized += c;
+                    }
+                }
+                compile_sanitize_ = normalized;
             }
         } else if (in_exclude_section && indent >= 4 && trimmed.substr(0, 2) == "- ") {
             // 除外パターン: "- tests/"

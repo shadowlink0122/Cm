@@ -266,6 +266,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliSWarnings
     {"errors: {0}, warnings: {1}\n",
      "エラー: {0}, 警告: {1}\n"},
+    // CliSanitizeInCmconfigYmlIgnored
+    {"warning: invalid compile.sanitize in .cmconfig.yml (ignored): {0}",
+     "警告: .cmconfig.yml の compile.sanitize が不正なため無視します: {0}"},
+    // CliSanitizeMemoryLinuxOnly
+    {"error: sanitizer 'memory' is only supported on Linux (no MemorySanitizer runtime for this OS)\n",
+     "エラー: サニタイザ 'memory' はLinux専用です（このOS向けのMemorySanitizerランタイムが存在しません）\n"},
     // CliSanitizeNotSupportedOnTarget
     {"error: sanitizer '{0}' is not supported on target '{1}'\n",
      "エラー: サニタイザ '{0}' はターゲット '{1}' では使用できません\n"},
@@ -273,8 +279,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"error: unknown sanitizer '{0}'\n",
      "エラー: 不明なサニタイザ '{0}'\n"},
     // CliSanitizeValidValues
-    {"valid sanitizers: address (native only), bounds (native/wasm/jit)\n",
-     "有効なサニタイザ: address（nativeのみ）, bounds（native/wasm/jit）\n"},
+    {"valid sanitizers: address/thread (native), memory (native Linux), bounds/undefined (native/wasm/jit)\n",
+     "有効なサニタイザ: address/thread（native）, memory（native Linux）, bounds/undefined（native/wasm/jit）\n"},
     // CliSpecifyTheJsTargetWith
     {"hint: specify the JS target with --target=js\n",
      "ヒント: --target=js オプションでJSターゲットを指定してください\n"},

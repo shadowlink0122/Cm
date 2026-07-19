@@ -32,9 +32,19 @@ cm compile --target=wasm --sanitize=bounds -O0 main.cm -o main.wasm
 | 種類 | 検出内容 | native | wasm | jit（cm run） |
 |------|---------|--------|------|---------------|
 | `bounds` | コンパイル時にサイズが確定するオブジェクトへの境界外アクセス | ○ | ○ | ○ |
+| `undefined` | ゼロ除算・剰余、nullポインタ参照（Cm独自のMIRレベル検査） | ○ | ○ | ○ |
 | `address` | ヒープ/スタック/グローバルの境界外アクセス・use-after-free・二重解放 | ○ | × | × |
+| `thread` | データ競合（ThreadSanitizer） | ○ | × | × |
+| `memory` | 未初期化メモリの読み取り（MemorySanitizer、Linuxのみ） | ○ | × | × |
 
 複数指定はカンマ区切りです: `--sanitize=address,bounds`
+
+`.cmconfig.yml` でプロジェクト既定値も設定できます（CLIの `--sanitize=` が優先されます）:
+
+```yaml
+compile:
+  sanitize: bounds,undefined
+```
 
 ---
 
@@ -70,6 +80,26 @@ Error: wasm trap: wasm `unreachable` instruction executed
 
 ---
 
+## undefined: Cm独自のランタイム検査
+
+`undefined` はMIR（中間表現）レベルで検査コードを挿入するCm独自のサニタイザです。
+LLVMのパスではなくコンパイラ自身が計装するため、native・wasm・JITのすべてで同一の検出動作になり、検出時はメッセージ付きのpanicで停止します。
+
+- **ゼロ除算・剰余**: 整数の `/` と `%` の除数が実行時に0の場合（浮動小数はIEEE 754で定義されているため対象外）
+- **nullポインタ参照**: 生ポインタ（`T*`）経由の読み書きでポインタがnullの場合
+
+```bash
+$ cm run --sanitize=undefined -O0 divzero.cm
+panic: runtime error: division by zero
+
+$ cm compile --sanitize=undefined -O0 nullderef.cm -o nd && ./nd
+panic: runtime error: null pointer dereference
+```
+
+サニタイザ無しでは同じプログラムがSEGVやゴミ値などの未定義動作になります。
+
+---
+
 ## address: AddressSanitizer
 
 `address` はLLVMの `AddressSanitizerPass` でメモリアクセスを計装し、ASanランタイムをリンクします。
@@ -83,6 +113,21 @@ $ ./oob
 
 ASanランタイムが必要なため `cm compile --target=native` 専用です。
 wasm（wasm32-wasi向けランタイムが存在しない）とJIT（cmプロセス内実行のためランタイムを後付けできない）では使えません。JITで試したい場合は `cm compile --sanitize=address --run main.cm` を使ってください。
+macOSではランタイムをHomebrew LLVMからリンクします。古いLLVM（17系）のランタイムは新しいmacOS（26.x）で動作しないため、`brew install llvm` で新しいLLVMを導入してください（探索は新しい順で自動）。
+
+---
+
+## thread / memory: TSan・MSan
+
+`thread`（ThreadSanitizer）はスレッド間のデータ競合を検出します。`memory`（MemorySanitizer）は未初期化メモリの読み取りを検出します。
+どちらも `cm compile --target=native` 専用で、`memory` はランタイムの制約によりLinuxでのみ使用できます。
+
+```bash
+cm compile --sanitize=thread -O0 main.cm -o main    # データ競合検出
+cm compile --sanitize=memory -O0 main.cm -o main    # 未初期化読み取り検出（Linuxのみ）
+```
+
+既知の制限: CmランタイムのC実装は非計装のため、`memory` はランタイム由来の値に対して誤検出する場合があります。
 
 ---
 

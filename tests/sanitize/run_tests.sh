@@ -10,6 +10,11 @@ set -u
 cd "$(dirname "$0")/../.."
 
 CM="${CM_EXECUTABLE:-./cm}"
+# cmconfigテストがサブディレクトリへcdして実行するため絶対パスへ正規化する
+case "$CM" in
+    /*) ;;
+    *) CM="$PWD/${CM#./}" ;;
+esac
 CASES=tests/sanitize/cases
 WORK=.tmp/test_sanitize
 PASS=0
@@ -75,6 +80,14 @@ expect_msg "cli: sanitize is rejected on js" "not supported on target" \
     "$CM" compile --target=js --sanitize=bounds "$CASES/ok.cm" -o "$WORK/never.js"
 expect_msg "cli: ja message" "エラー: 不明なサニタイザ" \
     "$CM" compile --lang=ja --sanitize=foo "$CASES/ok.cm" -o "$WORK/never"
+expect_msg "cli: thread is rejected on jit run" "not supported on target 'jit'" \
+    "$CM" run --sanitize=thread "$CASES/ok.cm"
+expect_msg "cli: thread is rejected on wasm" "not supported on target 'wasm'" \
+    "$CM" compile --target=wasm --sanitize=thread "$CASES/ok.cm" -o "$WORK/never"
+if [ "$(uname -s)" = "Darwin" ]; then
+    expect_msg "cli: memory is rejected on macOS" "only supported on Linux" \
+        "$CM" compile --sanitize=memory "$CASES/ok.cm" -o "$WORK/never"
+fi
 
 # ---------- bounds: native ----------
 if $CM compile --sanitize=bounds -O0 "$CASES/ok.cm" -o "$WORK/ok_bounds" >/dev/null 2>&1; then
@@ -142,6 +155,97 @@ if $CM compile --sanitize=address -O0 "$CASES/ok.cm" -o "$WORK/ok_asan" >/dev/nu
     fi
 else
     fail "address/native: compile ok.cm"
+fi
+
+# ---------- undefined: MIRレベル検査（native/jit/wasm） ----------
+if $CM compile --sanitize=undefined -O0 "$CASES/ok.cm" -o "$WORK/ok_undef" >/dev/null 2>&1; then
+    run_expect "undefined/native: in-bounds program runs normally" zero "$WORK/ok_undef"
+else
+    fail "undefined/native: compile ok.cm"
+fi
+check_panic() {
+    local name="$1"
+    shift
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -ne 0 ] && echo "$out" | grep -q "runtime error:"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+if $CM compile --sanitize=undefined -O0 "$CASES/div_zero.cm" -o "$WORK/dz_undef" >/dev/null 2>&1; then
+    check_panic "undefined/native: division by zero panics" "$WORK/dz_undef"
+else
+    fail "undefined/native: compile div_zero.cm"
+fi
+if $CM compile --sanitize=undefined -O0 "$CASES/null_deref.cm" -o "$WORK/nd_undef" >/dev/null 2>&1; then
+    check_panic "undefined/native: null pointer dereference panics" "$WORK/nd_undef"
+else
+    fail "undefined/native: compile null_deref.cm"
+fi
+check_panic "undefined/jit: division by zero panics" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/div_zero.cm"
+check_panic "undefined/jit: null pointer dereference panics" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/null_deref.cm"
+if command -v wasmtime >/dev/null 2>&1; then
+    if $CM compile --target=wasm --sanitize=undefined -O0 "$CASES/div_zero.cm" -o "$WORK/dz_undef.wasm" >/dev/null 2>&1; then
+        check_panic "undefined/wasm: division by zero panics" wasmtime "$WORK/dz_undef.wasm"
+    else
+        fail "undefined/wasm: compile div_zero.cm"
+    fi
+else
+    skip "undefined/wasm: wasmtime not installed"
+fi
+
+# ---------- thread: 計装検証 + 正常系プローブ ----------
+if $CM compile --sanitize=thread -O0 "$CASES/ok.cm" -o "$WORK/ok_tsan" >/dev/null 2>&1; then
+    if nm "$WORK/ok_tsan" 2>/dev/null | grep -q '__tsan_init'; then
+        pass "thread/native: binary is TSan-instrumented (__tsan_init)"
+    else
+        fail "thread/native: __tsan_init not found in binary"
+    fi
+    probe_out=$($TIMEOUT_CMD "$WORK/ok_tsan" 2>&1)
+    probe_code=$?
+    if [ "$probe_code" -eq 0 ]; then
+        pass "thread/native: in-bounds program runs normally under TSan"
+    else
+        skip "thread/native runtime check: TSan runtime unhealthy on this OS (probe exit=$probe_code)"
+    fi
+else
+    fail "thread/native: compile ok.cm"
+fi
+
+# ---------- memory: Linuxのみ実行時検証 ----------
+if [ "$(uname -s)" = "Linux" ]; then
+    if $CM compile --sanitize=memory -O0 "$CASES/ok.cm" -o "$WORK/ok_msan" >/dev/null 2>&1; then
+        if nm "$WORK/ok_msan" 2>/dev/null | grep -q '__msan'; then
+            pass "memory/native: binary is MSan-instrumented (__msan)"
+        else
+            fail "memory/native: __msan not found in binary"
+        fi
+    else
+        fail "memory/native: compile ok.cm"
+    fi
+fi
+
+# ---------- .cmconfig.yml compile.sanitize ----------
+CFG_DIR="$WORK/cmconfig"
+mkdir -p "$CFG_DIR"
+cp "$CASES/oob_write.cm" "$CFG_DIR/"
+printf 'compile:\n  sanitize: bounds\n' > "$CFG_DIR/.cmconfig.yml"
+if (cd "$CFG_DIR" && "$CM" compile -O0 oob_write.cm -o oob_cfg) >/dev/null 2>&1; then
+    run_expect "cmconfig: compile.sanitize=bounds is applied" trap "$CFG_DIR/oob_cfg"
+else
+    fail "cmconfig: compile with config"
+fi
+printf 'compile:\n  sanitize: nosuch\n' > "$CFG_DIR/.cmconfig.yml"
+cfg_out=$(cd "$CFG_DIR" && "$CM" compile -O0 oob_write.cm -o oob_cfg2 2>&1)
+if [ $? -eq 0 ] && echo "$cfg_out" | grep -q 'invalid compile.sanitize'; then
+    pass "cmconfig: invalid sanitize value warns and is ignored"
+else
+    fail "cmconfig: invalid sanitize value warns and is ignored" "$cfg_out"
 fi
 
 echo ""

@@ -58,13 +58,21 @@ Cm言語コンパイラ v{version}
                          低い-Oレベルで効果的）
 
 サニタイザオプション（LLVM系バックエンド: compile --target=native/wasm, run）:
-  --sanitize=<list>     実行時メモリ検査を有効化（カンマ区切り）:
-                          address  AddressSanitizer: ヒープ/スタック/グローバル
-                                   の境界外アクセス・use-after-free
-                                   （compile --target=native のみ）
-                          bounds   コンパイル時にサイズが確定するオブジェクトへの
-                                   境界外アクセスをtrapで停止（native/wasm/jit、
-                                   ランタイム不要）
+  --sanitize=<list>     実行時検査を有効化（カンマ区切り）。.cmconfig.yml の
+                        compile: sanitize: でも設定可能（CLIが優先）:
+                          address    AddressSanitizer: ヒープ/スタック/グローバル
+                                     の境界外アクセス・use-after-free
+                                     （compile --target=native のみ）
+                          thread     ThreadSanitizer: データ競合検出
+                                     （compile --target=native のみ）
+                          memory     MemorySanitizer: 未初期化読み取り検出
+                                     （compile --target=native、Linuxのみ）
+                          bounds     コンパイル時にサイズが確定するオブジェクトへの
+                                     境界外アクセスをtrapで停止（native/wasm/jit、
+                                     ランタイム不要）
+                          undefined  MIRレベルのCm独自検査: ゼロ除算・剰余と
+                                     nullポインタ参照をメッセージ付きpanicで停止
+                                     （native/wasm/jit）
 
 その他のオプション:
   --lang=<en|ja>        メッセージ言語（デフォルト: en。CM_LANG環境変数や

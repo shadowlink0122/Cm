@@ -52,9 +52,15 @@ class LLVMCodeGen {
         std::string linkerScript = "";
         bool sanitizeAddress =
             false;  // --sanitize=address: ASan計装+ランタイムリンク（native専用）
+        bool sanitizeThread = false;  // --sanitize=thread: TSan計装+ランタイムリンク（native専用）
+        bool sanitizeMemory =
+            false;  // --sanitize=memory: MSan計装+ランタイムリンク（native Linux専用）
         bool sanitizeBounds =
             false;  // --sanitize=bounds: 境界チェック計装（native/wasm、trap方式）
     };
+
+    /// サニタイザリンク用のclang++ドライバを探索する（新しいLLVMのランタイムを優先）
+    static std::string findSanitizerLinkDriver();
 
    private:
     Options options;

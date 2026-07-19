@@ -71,6 +71,9 @@ class ConfigLoader {
     // 既定のコンパイルターゲット（compile: target: の値。未設定なら空文字列）
     const std::string& compile_target() const { return compile_target_; }
 
+    // 既定のサニタイザ（compile: sanitize: の値。カンマ区切り文字列。未設定なら空文字列）
+    const std::string& compile_sanitize() const { return compile_sanitize_; }
+
     // プリセットを適用
     void apply_preset(Preset preset);
 
@@ -104,6 +107,7 @@ class ConfigLoader {
     std::string language_;           // language: の値（en/ja。未設定なら空）
     int compile_optimization_ = -1;  // compile: optimization: の値（未設定なら-1）
     std::string compile_target_;     // compile: target: の値（未設定なら空）
+    std::string compile_sanitize_;  // compile: sanitize: の値（カンマ区切り。未設定なら空）
     bool loaded_ = false;
     Preset current_preset_ = Preset::None;
 

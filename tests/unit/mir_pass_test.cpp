@@ -11,6 +11,7 @@
 #include "../../src/internal/mir/passes/cleanup/dse.hpp"
 #include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
 #include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
+#include "../../src/internal/mir/passes/instrumentation/undefined.hpp"
 #include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
 #include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
 #include "../../src/internal/mir/passes/loop/const_unroll.hpp"
@@ -690,4 +691,97 @@ TEST(MirPassTest, ProgramDCE_RemovesUnreachableFunction) {
     EXPECT_EQ(find_function(program, "unused_fn"), nullptr);
     EXPECT_NE(find_function(program, "used"), nullptr);
     EXPECT_NE(find_function(program, "main"), nullptr);
+}
+
+// ============================================================
+// UndefinedCheckInstrumentation（--sanitize=undefined）
+// ============================================================
+
+TEST(MirPassTest, UndefinedCheck_InstrumentsIntegerDivision) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId b = f->add_local("b", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Div, use_of(a), use_of(b)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_TRUE(pass.run(*f));
+
+    // 分割で cont + panic + unreachable の3ブロックが追加される
+    EXPECT_EQ(f->basic_blocks.size(), 4u);
+    // 元ブロックのターミネータは除数を判別値とするSwitchIntになり、0でpanicブロックへ分岐する
+    ASSERT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::SwitchInt);
+    const auto& sw = std::get<MirTerminator::SwitchIntData>(f->basic_blocks[0]->terminator->data);
+    ASSERT_EQ(sw.targets.size(), 1u);
+    EXPECT_EQ(sw.targets[0].first, 0);
+    // panicブロックはpanic呼び出しターミネータを持つ
+    const auto* panic_block = f->get_block(sw.targets[0].second);
+    ASSERT_EQ(panic_block->terminator->kind, MirTerminator::Call);
+    const auto& call = std::get<MirTerminator::CallData>(panic_block->terminator->data);
+    EXPECT_EQ(std::get<std::string>(call.func->data), "panic");
+    // 除算文自体はcontブロックへ移動している
+    const auto* cont = f->get_block(sw.otherwise);
+    ASSERT_EQ(cont->statements.size(), 1u);
+    EXPECT_EQ(cont->statements[0]->kind, MirStatement::Assign);
+}
+
+TEST(MirPassTest, UndefinedCheck_SkipsNonZeroConstantDivisor) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Div, use_of(a), cint(2)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+TEST(MirPassTest, UndefinedCheck_SkipsFloatDivision) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_double());
+    LocalId b = f->add_local("b", hir::make_double());
+    LocalId c = f->add_local("c", hir::make_double());
+    emit(*f, 0, c,
+         rv_bin(MirBinaryOp::Div, use_of(a, hir::make_double()), use_of(b, hir::make_double()),
+                hir::make_double()));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+TEST(MirPassTest, UndefinedCheck_InstrumentsNullDeref) {
+    auto f = make_function();
+    auto ptr_type = hir::make_pointer(hir::make_int());
+    LocalId p = f->add_local("p", ptr_type);
+    LocalId v = f->add_local("v", hir::make_int());
+    // v = *p（Deref投影を含むPlaceの読み取り）
+    MirPlace deref_place{p, {PlaceProjection::deref()}};
+    emit(*f, 0, v, rv_use(MirOperand::copy(std::move(deref_place), hir::make_int())));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_TRUE(pass.run(*f));
+
+    // null比較のEq文が元ブロックへ挿入され、SwitchIntで分岐する
+    ASSERT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::SwitchInt);
+    ASSERT_EQ(f->basic_blocks[0]->statements.size(), 1u);
+    const auto& cmp = std::get<MirStatement::AssignData>(f->basic_blocks[0]->statements[0]->data);
+    ASSERT_EQ(cmp.rvalue->kind, MirRvalue::BinaryOp);
+    EXPECT_EQ(std::get<MirRvalue::BinaryOpData>(cmp.rvalue->data).op, MirBinaryOp::Eq);
+}
+
+TEST(MirPassTest, UndefinedCheck_IsIdempotentPerRunOnCleanFunction) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Add, use_of(a), cint(1)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
 }

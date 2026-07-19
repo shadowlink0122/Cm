@@ -13,6 +13,7 @@
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
 #include "internal/mir/passes/core/manager.hpp"
+#include "internal/mir/passes/instrumentation/undefined.hpp"
 #include "internal/mir/passes/loop/const_unroll.hpp"
 #include "internal/mir/passes/scalar/folding.hpp"
 #include "internal/mir/printer.hpp"
@@ -23,6 +24,7 @@
 #include "internal/syntax/parser/parser.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -588,7 +590,7 @@ int run_build(cli::Options& opts, const char* argv0) {
     ctx.code = std::move(code);
     ctx.run_sv_sim = run_sv_sim;
     ctx.sv_hierarchy_submodules = std::move(sv_hierarchy_submodules);
-    // --sanitize はLLVM系バックエンド専用。compile の native/wasm と run（JIT、boundsのみ）を許可し、js/sv経路はここで弾く
+    // --sanitize はLLVM系バックエンド専用。compile の native/wasm と run（JIT、bounds/undefinedのみ）を許可し、js/sv経路はここで弾く
     if (!opts.sanitizers.empty()) {
         const bool is_js_or_sv = opts.target == "sv" || opts.target == "verilog" ||
                                  opts.target == "systemverilog" || opts.target == "js" ||
@@ -597,9 +599,9 @@ int run_build(cli::Options& opts, const char* argv0) {
         if (is_js_or_sv) {
             unsupported = opts.sanitizers.front();
         } else if (opts.command == Command::Run) {
-            // JITはcmプロセス内実行のためASanランタイムを後付けできない（boundsはtrap方式で動作する）
+            // JITはcmプロセス内実行のためASan/TSan/MSanランタイムを後付けできない（bounds/undefinedはtrap・panic方式で動作する）
             for (const auto& sanitizer : opts.sanitizers) {
-                if (sanitizer != "bounds") {
+                if (sanitizer != "bounds" && sanitizer != "undefined") {
                     unsupported = sanitizer;
                     break;
                 }
@@ -612,6 +614,11 @@ int run_build(cli::Options& opts, const char* argv0) {
                                     target_name);
             std::cerr << i18n::msg(i18n::MsgId::CliSanitizeValidValues);
             return 1;
+        }
+        // undefined: MIRレベルの計装をここで適用する（全LLVM系実行系で共通の検査になる）
+        if (std::find(opts.sanitizers.begin(), opts.sanitizers.end(), "undefined") !=
+            opts.sanitizers.end()) {
+            mir::opt::instrument_undefined_checks(mir);
         }
     }
     if (opts.command == Command::Run) {

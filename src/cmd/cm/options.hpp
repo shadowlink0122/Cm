@@ -59,6 +59,11 @@ struct Options {
     bool force_check = false;   // コンパイル時に厳格な型チェックを強制実行
 };
 
+// --sanitize / .cmconfig.yml compile.sanitize の値リストをパースして検証する
+// 成功時はoutへ重複除去済みの値を追加してtrue、未知の値があればerror_messageを設定してfalseを返す
+bool parse_sanitizer_list(const std::string& list, std::vector<std::string>& out,
+                          std::string& error_message);
+
 // バージョン情報を取得（CMakeでコンパイル時に埋め込み）
 std::string get_version();
 

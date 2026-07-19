@@ -12,6 +12,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
 int main(int argc, char* argv[]) {
     using namespace cm;
@@ -60,6 +62,19 @@ int main(int argc, char* argv[]) {
                 !global_config.compile_target().empty() &&
                 global_config.compile_target() != "native") {
                 opts.target = global_config.compile_target();
+            }
+            // サニタイザ既定値（--sanitize がCLIで指定されていない場合のみ適用）。不正値は警告して無視する
+            if (opts.sanitizers.empty() && !global_config.compile_sanitize().empty()) {
+                std::string sanitize_error;
+                std::vector<std::string> config_sanitizers;
+                if (cli::parse_sanitizer_list(global_config.compile_sanitize(), config_sanitizers,
+                                              sanitize_error)) {
+                    opts.sanitizers = std::move(config_sanitizers);
+                } else {
+                    std::cerr << i18n::msgf(i18n::MsgId::CliSanitizeInCmconfigYmlIgnored,
+                                            global_config.compile_sanitize())
+                              << "\n";
+                }
             }
         }
     }

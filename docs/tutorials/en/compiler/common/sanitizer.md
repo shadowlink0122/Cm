@@ -32,9 +32,19 @@ cm compile --target=wasm --sanitize=bounds -O0 main.cm -o main.wasm
 | Kind | Detects | native | wasm | jit (cm run) |
 |------|---------|--------|------|--------------|
 | `bounds` | Out-of-bounds access to objects whose size is known at compile time | ○ | ○ | ○ |
+| `undefined` | Division/modulo by zero and null pointer dereference (Cm-specific MIR-level checks) | ○ | ○ | ○ |
 | `address` | Heap/stack/global out-of-bounds, use-after-free, double free | ○ | × | × |
+| `thread` | Data races (ThreadSanitizer) | ○ | × | × |
+| `memory` | Reads of uninitialized memory (MemorySanitizer, Linux only) | ○ | × | × |
 
 Multiple kinds are comma separated: `--sanitize=address,bounds`
+
+Project defaults can also be set in `.cmconfig.yml` (the CLI `--sanitize=` takes precedence):
+
+```yaml
+compile:
+  sanitize: bounds,undefined
+```
 
 ---
 
@@ -70,6 +80,26 @@ Only accesses whose object size LLVM can determine statically are checked (parti
 
 ---
 
+## undefined: Cm-specific runtime checks
+
+`undefined` is a Cm-specific sanitizer that inserts checks at the MIR (mid-level IR) stage.
+Because the compiler itself instruments the code rather than an LLVM pass, detection behaves identically on native, wasm, and the JIT, and stops with a descriptive panic.
+
+- **Division/modulo by zero**: integer `/` and `%` whose divisor is zero at runtime (floating point is excluded; IEEE 754 defines it)
+- **Null pointer dereference**: reads/writes through a raw pointer (`T*`) that is null
+
+```bash
+$ cm run --sanitize=undefined -O0 divzero.cm
+panic: runtime error: division by zero
+
+$ cm compile --sanitize=undefined -O0 nullderef.cm -o nd && ./nd
+panic: runtime error: null pointer dereference
+```
+
+Without the sanitizer the same programs exhibit undefined behavior such as a SEGV or garbage values.
+
+---
+
 ## address: AddressSanitizer
 
 `address` instruments memory accesses with LLVM's `AddressSanitizerPass` and links the ASan runtime.
@@ -83,6 +113,21 @@ $ ./oob
 
 Because it needs the ASan runtime, it is limited to `cm compile --target=native`.
 It is unavailable on wasm (no wasm32-wasi runtime exists) and the JIT (the runtime cannot be loaded into the running cm process). To try it from a single command, use `cm compile --sanitize=address --run main.cm`.
+On macOS the runtime is linked from Homebrew LLVM. Old LLVM 17-era runtimes do not work on recent macOS (26.x); install a newer LLVM with `brew install llvm` (discovery prefers the newest automatically).
+
+---
+
+## thread / memory: TSan and MSan
+
+`thread` (ThreadSanitizer) detects data races between threads. `memory` (MemorySanitizer) detects reads of uninitialized memory.
+Both are limited to `cm compile --target=native`, and `memory` is Linux-only due to runtime availability.
+
+```bash
+cm compile --sanitize=thread -O0 main.cm -o main    # data race detection
+cm compile --sanitize=memory -O0 main.cm -o main    # uninitialized reads (Linux only)
+```
+
+Known limitation: the Cm runtime (implemented in C) is not instrumented, so `memory` may report false positives for values that originate in the runtime.
 
 ---
 

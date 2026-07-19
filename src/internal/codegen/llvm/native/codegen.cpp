@@ -11,6 +11,8 @@
 #include <iostream>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/BoundsChecking.h>
+#include <llvm/Transforms/Instrumentation/MemorySanitizer.h>
+#include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <map>
 #include <memory>
 #include <set>
@@ -592,26 +594,55 @@ void LLVMCodeGen::optimize() {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimizeEnd);
 }
 
+// サニタイザリンク用のclang++ドライバ探索
+// LLVM計装が参照するランタイム記号（__asan_version_mismatch_check_v8等）を持つHomebrew LLVMのclang++を新しい順に探索する。
+// 古いcompiler-rt（例: LLVM 17）は新しいmacOS（26.x）で初期化に失敗するため、バージョン非固定のllvm（最新）を最優先する
+std::string LLVMCodeGen::findSanitizerLinkDriver() {
+    std::vector<std::string> candidates = {
+        "/opt/homebrew/opt/llvm/bin/clang++",
+        "/usr/local/opt/llvm/bin/clang++",
+        "/opt/homebrew/opt/llvm@17/bin/clang++",
+        "/usr/local/opt/llvm@17/bin/clang++",
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(path)) {
+            return path;
+        }
+    }
+    return "/usr/bin/clang++";
+}
+
 // サニタイザ計装
-// address: 本体を持つ関数へ sanitize_address 属性を付与してから AddressSanitizerPass で計装する（ランタイムはリンク時に -fsanitize=address で解決）
+// address/thread/memory: 本体を持つ関数へ対応する sanitize_* 属性を付与してから各LLVM計装パスを実行する（ランタイムはリンク時に -fsanitize= で解決）
 // bounds: BoundsCheckingPass（clang -fsanitize=local-bounds 相当）で静的にサイズが分かるメモリアクセスへ境界チェックを挿入し、違反時は llvm.trap で即停止する（ランタイム不要のためnative/wasm両対応）
 void LLVMCodeGen::instrumentSanitizers() {
-    if (!options.sanitizeAddress && !options.sanitizeBounds) {
+    const bool needsRuntimeSanitizer =
+        options.sanitizeAddress || options.sanitizeThread || options.sanitizeMemory;
+    if (!needsRuntimeSanitizer && !options.sanitizeBounds) {
         return;
     }
 
-    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
-                            std::string("Sanitizer instrumentation:") +
-                                (options.sanitizeAddress ? " address" : "") +
-                                (options.sanitizeBounds ? " bounds" : ""));
+    cm::debug::codegen::log(
+        cm::debug::codegen::Id::LLVMOptimize,
+        std::string("Sanitizer instrumentation:") + (options.sanitizeAddress ? " address" : "") +
+            (options.sanitizeThread ? " thread" : "") + (options.sanitizeMemory ? " memory" : "") +
+            (options.sanitizeBounds ? " bounds" : ""));
 
-    if (options.sanitizeAddress) {
+    if (needsRuntimeSanitizer) {
         for (auto& func : context->getModule()) {
             // 宣言のみの外部関数と純ASMのNaked関数（prologue/epilogueが無くredzone操作が壊れる）は計装しない
             if (func.isDeclaration() || func.hasFnAttribute(llvm::Attribute::Naked)) {
                 continue;
             }
-            func.addFnAttr(llvm::Attribute::SanitizeAddress);
+            if (options.sanitizeAddress) {
+                func.addFnAttr(llvm::Attribute::SanitizeAddress);
+            }
+            if (options.sanitizeThread) {
+                func.addFnAttr(llvm::Attribute::SanitizeThread);
+            }
+            if (options.sanitizeMemory) {
+                func.addFnAttr(llvm::Attribute::SanitizeMemory);
+            }
         }
     }
 
@@ -632,6 +663,13 @@ void LLVMCodeGen::instrumentSanitizers() {
     }
     if (options.sanitizeAddress) {
         MPM.addPass(llvm::AddressSanitizerPass(llvm::AddressSanitizerOptions()));
+    }
+    if (options.sanitizeThread) {
+        MPM.addPass(llvm::ModuleThreadSanitizerPass());
+        MPM.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::ThreadSanitizerPass()));
+    }
+    if (options.sanitizeMemory) {
+        MPM.addPass(llvm::MemorySanitizerPass(llvm::MemorySanitizerOptions()));
     }
     MPM.run(context->getModule(), MAM);
 }
@@ -729,21 +767,14 @@ void LLVMCodeGen::emitExecutable() {
         std::string runtimePath = findRuntimeLibrary();
 
 #ifdef __APPLE__
+        const bool needsSanitizerRuntime =
+            options.sanitizeAddress || options.sanitizeThread || options.sanitizeMemory;
         std::string linkerDriver = "/usr/bin/clang++";
-        if (options.sanitizeAddress) {
-            // ASan計装（LLVM 17）とAppleランタイムのバージョン記号不一致を避けるため、Homebrew LLVMのclang++を優先する
-            std::vector<std::string> asanClangPaths = {
-                "/opt/homebrew/opt/llvm@17/bin/clang++",
-                "/opt/homebrew/opt/llvm/bin/clang++",
-                "/usr/local/opt/llvm@17/bin/clang++",
-                "/usr/local/opt/llvm/bin/clang++",
-            };
-            for (const auto& path : asanClangPaths) {
-                if (std::filesystem::exists(path)) {
-                    linkerDriver = path;
-                    break;
-                }
-            }
+        if (needsSanitizerRuntime) {
+            // サニタイザランタイムはHomebrew LLVMのclang++でリンクする（新しい順に探索）。
+            // Apple CLTのランタイムはLLVM計装のバージョン記号（__asan_version_mismatch_check_v8等）を持たずリンクできない。
+            // また古いcompiler-rt（LLVM 17）は新しいmacOSで初期化に失敗するため、より新しいLLVMを優先する
+            linkerDriver = findSanitizerLinkDriver();
         }
         linkCmd = linkerDriver + " -mmacosx-version-min=15.0 -Wl,-dead_strip ";
 #ifdef CM_DEFAULT_TARGET_ARCH
@@ -751,6 +782,12 @@ void LLVMCodeGen::emitExecutable() {
 #endif
         if (options.sanitizeAddress) {
             linkCmd += "-fsanitize=address ";
+        }
+        if (options.sanitizeThread) {
+            linkCmd += "-fsanitize=thread ";
+        }
+        if (options.sanitizeMemory) {
+            linkCmd += "-fsanitize=memory ";
         }
         if (context->getTargetConfig().noStd) {
             linkCmd += "-nostdlib ";
@@ -837,6 +874,12 @@ void LLVMCodeGen::emitExecutable() {
         linkCmd = "clang -Wl,--gc-sections ";
         if (options.sanitizeAddress) {
             linkCmd += "-fsanitize=address ";
+        }
+        if (options.sanitizeThread) {
+            linkCmd += "-fsanitize=thread ";
+        }
+        if (options.sanitizeMemory) {
+            linkCmd += "-fsanitize=memory ";
         }
         if (context->getTargetConfig().noStd) {
             linkCmd += "-nostdlib ";
