@@ -3,8 +3,7 @@
 // ConOut.OutputString をインラインASM経由で呼出し
 // ASCII -> UCS-2 変換もASMで実行
 //
-// 注意: string型は関数パラメータとして渡すとデータが壊れるため、
-//       全てのインターフェースは void* + ulong で受け取る
+// 注意: string型は関数パラメータとして渡すとデータが壊れるため、全てのインターフェースは void* + ulong で受け取る
 // 注意: ASMに渡す値は全てulongにキャストすること
 // 注意: 全てのASMブロックはmust{}で囲むこと（最適化除去防止）
 // 注意: ASM内ではvolatileレジスタ(R10,R11,RAX,RCX,RDX,R8,R9)のみ使用
@@ -21,17 +20,17 @@
 export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
     // ConOut取得 (SystemTable + 0x40)
     ulong* st = system_table as ulong*;
-    ulong con_out_addr = *(st + 8);
+    const ulong con_out_addr = *(st + 8);
     void* con_out = con_out_addr as void*;
 
     // ConOut->OutputString 取得 (offset 0x08)
     ulong* co = con_out as ulong*;
-    ulong output_fn_addr = *(co + 1);
+    const ulong output_fn_addr = *(co + 1);
 
     // ASMに渡す前にulongにキャスト
-    ulong fn_val = output_fn_addr as ulong;
-    ulong co_val = con_out as ulong;
-    ulong md_val = msg_data as ulong;
+    const ulong fn_val = output_fn_addr as ulong;
+    const ulong co_val = con_out as ulong;
+    const ulong md_val = msg_data as ulong;
 
     // volatileレジスタのみ使用:
     // fn_val, co_valはcall後に必要→スタックに保存
@@ -66,8 +65,8 @@ export void efi_puts_raw(void* system_table, void* msg_data, ulong msg_len) {
 /// NUL終端文字列の長さを計算（ASM実装）
 /// Cmコンパイラの utiny* デリファレンスバグ回避
 export ulong efi_strlen(void* data) {
-    ulong data_val = data as ulong;
-    ulong result = 0;
+    const ulong data_val = data as ulong;
+    const ulong result = 0;
     // volatileレジスタのみ使用: R10(データポインタ), RCX(カウンタ), EAX(バイト読込)
     must {
         __asm__(`
@@ -88,7 +87,7 @@ export ulong efi_strlen(void* data) {
 
 /// 文字列を出力（長さ自動計算）
 export void efi_print(void* system_table, void* msg_data) {
-    ulong len = efi_strlen(msg_data);
+    const ulong len = efi_strlen(msg_data);
     efi_puts_raw(system_table, msg_data, len);
 }
 
@@ -96,7 +95,7 @@ export void efi_print(void* system_table, void* msg_data) {
 export void efi_println(void* system_table, void* msg_data) {
     efi_print(system_table, msg_data);
     // CR+LF を出力
-    string crlf = "\r\n";
+    const string crlf = "\r\n";
     void* crlf_data = crlf as void*;
     efi_puts_raw(system_table, crlf_data, 2);
 }
@@ -105,16 +104,16 @@ export void efi_println(void* system_table, void* msg_data) {
 export void efi_clear_screen(void* system_table) {
     // ConOut取得 (SystemTable + 0x40)
     ulong* st = system_table as ulong*;
-    ulong con_out_addr = *(st + 8);
+    const ulong con_out_addr = *(st + 8);
     void* con_out = con_out_addr as void*;
 
     // ConOut->ClearScreen 取得 (offset 0x30)
     ulong* co = con_out as ulong*;
-    ulong clear_fn_addr = *(co + 6);
+    const ulong clear_fn_addr = *(co + 6);
 
-    ulong fn_val = clear_fn_addr as ulong;
-    ulong co_val = con_out as ulong;
-    ulong result = 0;
+    const ulong fn_val = clear_fn_addr as ulong;
+    const ulong co_val = con_out as ulong;
+    const ulong result = 0;
     must {
         __asm__(`
             pushq ${r:fn_val};
@@ -132,17 +131,17 @@ export void efi_clear_screen(void* system_table) {
 /// テキスト属性設定（前景色）
 export void efi_set_color(void* system_table, ulong attribute) {
     ulong* st = system_table as ulong*;
-    ulong con_out_addr = *(st + 8);
+    const ulong con_out_addr = *(st + 8);
     void* con_out = con_out_addr as void*;
 
     // ConOut->SetAttribute (offset 0x28)
     ulong* co = con_out as ulong*;
-    ulong set_attr_fn = *(co + 5);
+    const ulong set_attr_fn = *(co + 5);
 
-    ulong fn_val = set_attr_fn as ulong;
-    ulong co_val = con_out as ulong;
-    ulong attr_val = attribute;
-    ulong result = 0;
+    const ulong fn_val = set_attr_fn as ulong;
+    const ulong co_val = con_out as ulong;
+    const ulong attr_val = attribute;
+    const ulong result = 0;
     must {
         __asm__(`
             pushq ${r:fn_val};
@@ -202,9 +201,9 @@ export void efi_print_hex(void* system_table, ulong value) {
     // 16桁を上位から出力
     ulong i = 0;
     while (i < 16) {
-        ulong shift = (15 - i) * 4;
-        ulong mask = 15;
-        ulong nibble = (value >> shift) & mask;
+        const ulong shift = (15 - i) * 4;
+        const ulong mask = 15;
+        const ulong nibble = (value >> shift) & mask;
         efi_put_char(system_table, nibble_to_hex_char(nibble));
         i += 1;
     }
@@ -213,7 +212,7 @@ export void efi_print_hex(void* system_table, ulong value) {
 /// 10進数文字列を出力
 /// 注意: utiny配列のポインタ演算を回避するためefi_put_char方式を使用
 export void efi_print_dec(void* system_table, ulong value) {
-    ulong zero = 0;
+    const ulong zero = 0;
     if (value == zero) {
         efi_put_char(system_table, digit_to_char(0));
         return;
@@ -223,9 +222,9 @@ export void efi_print_dec(void* system_table, ulong value) {
     ushort[21] digits;
     ulong count = 0;
     ulong v = value;
-    ulong ten = 10;
+    const ulong ten = 10;
     while (v > zero) {
-        ulong digit = v % ten;
+        const ulong digit = v % ten;
         digits[count] = digit_to_char(digit);
         count += 1;
         v = v / ten;
@@ -249,12 +248,12 @@ export void efi_print_dec(void* system_table, ulong value) {
 export void efi_put_char(void* system_table, ushort unicode_char) {
     void* con_out = efi_get_con_out(system_table);
     ulong* co = con_out as ulong*;
-    ulong output_fn_addr = *(co + 1);
+    const ulong output_fn_addr = *(co + 1);
 
-    ulong fn_val = output_fn_addr as ulong;
-    ulong co_val = con_out as ulong;
-    ulong ch_val = unicode_char as ulong;
-    ulong r = 0;
+    const ulong fn_val = output_fn_addr as ulong;
+    const ulong co_val = con_out as ulong;
+    const ulong ch_val = unicode_char as ulong;
+    const ulong r = 0;
     must {
         // UCS-2バッファをスタック上に直接構築（Cm配列変換を回避）
         __asm__(`

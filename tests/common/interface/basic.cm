@@ -65,17 +65,17 @@ int main() {
     p.print();
 
     // 2. 明示的selfアクセス
-    int vx = p.get_x();
-    int vy = p.get_y();
-    int vsum = p.get_sum();
+    const int vx = p.get_x();
+    const int vy = p.get_y();
+    const int vsum = p.get_sum();
     println("x={vx}, y={vy}, sum={vsum}");
 
     // 3. 複数メソッド
     Rectangle r;
     r.width = 10;
     r.height = 5;
-    int a = r.area();
-    int per = r.perimeter();
+    const int a = r.area();
+    const int per = r.perimeter();
     println("Area={a}, Perimeter={per}");
 
     return 0;

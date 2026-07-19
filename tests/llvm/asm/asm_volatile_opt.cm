@@ -5,7 +5,7 @@
 import std::io::println;
 
 int add_asm(int a, int b) {
-    int result = 0;
+    const int result = 0;
     #ifdef __x86_64__
         // x86_64: 加算
         __asm__("movl ${r:a}, ${=r:result}");
@@ -21,8 +21,8 @@ int add_asm(int a, int b) {
 // 非ASM参照変数はvolatile化されないことのテスト
 // v0.14.2以前は mid もvolatile化されてコードが肥大化していた
 int compute(int x, int y) {
-    int mid = x + y;  // これはASMで参照されない → volatile不要
-    int result = 0;
+    const int mid = x + y;  // これはASMで参照されない → volatile不要
+    const int result = 0;
     #ifdef __x86_64__
         __asm__("movl ${r:mid}, ${=r:result}");
     #else
@@ -35,15 +35,15 @@ int main() {
     println("=== ASM Volatile Optimization Test ===");
 
     // 基本ASM演算テスト
-    int r1 = add_asm(10, 20);
+    const int r1 = add_asm(10, 20);
     println(r1);
 
     // 非ASM参照変数テスト
-    int r2 = compute(30, 40);
+    const int r2 = compute(30, 40);
     println(r2);
 
     // ネストした呼び出し
-    int r3 = add_asm(add_asm(1, 2), add_asm(3, 4));
+    const int r3 = add_asm(add_asm(1, 2), add_asm(3, 4));
     println(r3);
 
     println("=== Complete ===");

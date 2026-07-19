@@ -41,13 +41,13 @@ int main() {
     p.x = 1.0;
     p.y = 2.0;
 
-    double result = calculate(p.x, p.y);
+    const double result = calculate(p.x, p.y);
     println("Result: {result}");
 
     println("Version: {VERSION}");
 
-    Status s = Status::OK;
-    ID id = 42;
+    const Status _s = Status::OK;
+    const ID _id = 42;
 
     return 0;
 }

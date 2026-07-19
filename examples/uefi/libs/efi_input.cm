@@ -15,19 +15,19 @@
 export ulong efi_read_key(void* system_table, ushort* out_scan, ushort* out_char) {
     // ConIn取得 (SystemTable + 0x30)
     ulong* st = system_table as ulong*;
-    ulong con_in_addr = *(st + 6);  // 6 * 8 = offset 0x30
+    const ulong con_in_addr = *(st + 6);  // 6 * 8 = offset 0x30
     void* con_in = con_in_addr as void*;
 
     // ReadKeyStroke関数取得 (ConIn + 0x08)
     ulong* ci = con_in as ulong*;
-    ulong read_fn_addr = *(ci + 1);
+    const ulong read_fn_addr = *(ci + 1);
 
-    ulong fn_val = read_fn_addr as ulong;
-    ulong ci_val = con_in as ulong;
-    ulong scan_ptr = out_scan as ulong;
-    ulong char_ptr = out_char as ulong;
+    const ulong fn_val = read_fn_addr as ulong;
+    const ulong ci_val = con_in as ulong;
+    const ulong scan_ptr = out_scan as ulong;
+    const ulong char_ptr = out_char as ulong;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         // scan_ptr, char_ptrをスタックに退避（call後に使用）
         // ASMスタック上にEFI_INPUT_KEYバッファを確保
@@ -61,31 +61,31 @@ export ulong efi_read_key(void* system_table, ushort* out_scan, ushort* out_char
 export ulong efi_wait_for_key(void* system_table) {
     // BootServices取得 (SystemTable + 0x60)
     ulong* st = system_table as ulong*;
-    ulong bs_addr = *(st + 12);  // 12 * 8 = offset 0x60
+    const ulong bs_addr = *(st + 12);  // 12 * 8 = offset 0x60
     void* boot_services = bs_addr as void*;
 
     // ConIn取得 (SystemTable + 0x30)
-    ulong con_in_addr = *(st + 6);
+    const ulong con_in_addr = *(st + 6);
     void* con_in = con_in_addr as void*;
 
     // WaitForKey イベント取得 (ConIn + 0x10)
     ulong* ci = con_in as ulong*;
-    ulong wait_event = *(ci + 2);
+    const ulong wait_event = *(ci + 2);
 
     // WaitForEvent: BootServices offset 0x60 = index 12
     ulong* bs = boot_services as ulong*;
-    ulong wait_fn_addr = *(bs + 12);  // 12 * 8 = 0x60 = WaitForEvent
+    const ulong wait_fn_addr = *(bs + 12);  // 12 * 8 = 0x60 = WaitForEvent
 
     // イベント配列とインデックスをスタック上に作成
     ulong event_array = wait_event;
     ulong index = 0;
 
-    ulong fn_val = wait_fn_addr as ulong;
-    ulong num_events = 1;
-    ulong ea_val = (&event_array) as ulong;
-    ulong idx_val = (&index) as ulong;
+    const ulong fn_val = wait_fn_addr as ulong;
+    const ulong num_events = 1;
+    const ulong ea_val = (&event_array) as ulong;
+    const ulong idx_val = (&index) as ulong;
 
-    ulong result = 0;
+    const ulong result = 0;
     must {
         // WaitForEvent(NumberOfEvents=RCX, Event=RDX, Index=R8)
         __asm__(`
@@ -109,9 +109,9 @@ export ulong efi_wait_for_key(void* system_table) {
 
 /// キー入力をブロッキングで読み取り（待機+読み取り）
 export ulong efi_read_key_blocking(void* system_table, ushort* out_scan, ushort* out_char) {
-    ulong status = efi_wait_for_key(system_table);
+    const ulong status = efi_wait_for_key(system_table);
     // エラーチェック（ビット63セット = エラー）
-    long signed_status = status as long;
+    const long signed_status = status as long;
     if (signed_status < 0) {
         return status;
     }

@@ -11,7 +11,7 @@ import std::io::println;
 
 #[test]
 void uses_test_only_symbol() {
-    int x = helper();
+    const int x = helper();
     exit(x);
 }
 

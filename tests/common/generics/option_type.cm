@@ -46,22 +46,22 @@ struct MyOption<T> {
 
 int main() {
     // Some値のテスト
-    MyOption<int> some_int = make_some(42);
-    bool b1 = is_some(some_int);
+    const MyOption<int> some_int = make_some(42);
+    const bool b1 = is_some(some_int);
     println("is_some(some_int) = {b1}");
-    int v1 = unwrap(some_int);
+    const int v1 = unwrap(some_int);
     println("unwrap(some_int) = {v1}");
 
     // None値のテスト（0から型推論）
-    MyOption<int> none_int = make_none_like(0);
-    bool b2 = is_none(none_int);
+    const MyOption<int> none_int = make_none_like(0);
+    const bool b2 = is_none(none_int);
     println("is_none(none_int) = {b2}");
-    int v2 = unwrap_or(none_int, 0);
+    const int v2 = unwrap_or(none_int, 0);
     println("unwrap_or(none_int, 0) = {v2}");
 
     // 文字列オプション
-    MyOption<string> some_str = make_some("Hello");
-    string v3 = unwrap(some_str);
+    const MyOption<string> some_str = make_some("Hello");
+    const string v3 = unwrap(some_str);
     println("unwrap(some_str) = {v3}");
 
     return 0;

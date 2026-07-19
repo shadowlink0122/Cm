@@ -14,14 +14,14 @@ struct Pair<T> {
 int main() {
     // 基本型
     int i = 42;
-    double d = 3.14;
-    bool b = true;
-    char c = 'A';
+    const double d = 3.14;
+    const bool b = true;
+    const char c = 'A';
 
-    string ti = typeof(i);
-    string td = typeof(d);
-    string tb = typeof(b);
-    string tc = typeof(c);
+    const string ti = typeof(i);
+    const string td = typeof(d);
+    const string tb = typeof(b);
+    const string tc = typeof(c);
 
     println("int: {ti}");
     println("double: {td}");
@@ -29,28 +29,28 @@ int main() {
     println("char: {tc}");
 
     // 構造体
-    Point pt = Point{x: 10, y: 20};
-    string tpt = typeof(pt);
+    const Point pt = Point{x: 10, y: 20};
+    const string tpt = typeof(pt);
     println("struct: {tpt}");
 
     // ポインタ
     int* pi = &i;
     int** ppi = &pi;
-    string tpi = typeof(pi);
-    string tppi = typeof(ppi);
+    const string tpi = typeof(pi);
+    const string tppi = typeof(ppi);
     println("pointer: {tpi}");
     println("pointer to pointer: {tppi}");
 
     // 配列
     int[5] arr;
-    string tarr = typeof(arr);
+    const string tarr = typeof(arr);
     println("array: {tarr}");
 
     // ジェネリクス構造体
     Pair<int> pair_int;
     pair_int.first = 1;
     pair_int.second = 2;
-    string tpair = typeof(pair_int);
+    const string tpair = typeof(pair_int);
     println("generic: {tpair}");
 
     return 0;

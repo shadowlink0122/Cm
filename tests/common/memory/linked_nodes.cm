@@ -35,7 +35,7 @@ int main() {
 
     // 値を読み取り
     println("Step 4: Reading values...");
-    int v1 = node1->value;
+    const int v1 = node1->value;
     println("node1->value: {v1}");
 
     // nextを辿る
@@ -45,7 +45,7 @@ int main() {
     // nullチェック
     println("Step 6: Checking if next is valid...");
     if (next != null) {
-        int v2 = next->value;
+        const int v2 = next->value;
         println("next->value: {v2}");
     } else {
         println("next is null!");

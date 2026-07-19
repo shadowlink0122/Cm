@@ -6,17 +6,17 @@ int main() {
     int[5] arr = [10, 20, 30, 40, 50];
 
     // 配列のサイズ
-    int s = arr.size();
+    const int s = arr.size();
     println("Array size: {s}");
 
     // ポインタ経由のアクセス
     int* p = &arr[0];
-    int first = *p;
+    const int first = *p;
     println("First element via pointer: {first}");
 
     // ポインタ演算
     int* p2 = p + 2;
-    int third = *p2;
+    const int third = *p2;
     println("Third element: {third}");
 
     if (s == 5 && first == 10 && third == 30) {

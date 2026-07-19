@@ -1,0 +1,91 @@
+Cm language compiler v{version}
+
+Usage:
+  {program} <command> [options] <file>
+
+Commands:
+  run <file>            Run the program (JIT, default)
+  compile <file>        Compile the program (LLVM)
+  check <file>          Run syntax and type checking only
+  lint <file>           Run static analysis
+  fmt <file>            Format source code
+  test <file>           Run #[test] functions (//! platform: sv runs an
+                        iverilog simulation; otherwise JIT execution)
+  help                  Show this help
+
+Options:
+  -o <file>             Output file name
+  -O<n>                 Optimization level (0-3)
+  --verbose, -v         Verbose output
+  --quiet, -q           Suppress output
+  --debug, -d           Enable debug output
+  -d=<level>            Debug level (trace/debug/info/warn/error)
+  --max-output-size=<n> Maximum output file size (GB, default 16GB)
+  --force-check, --strict Enforce strict type checks/warnings at compile time
+                        check/lint: enable declaration naming checks (L001)
+Compile options:
+  --target=<target>     Compilation target
+                        native:        Native executable (default)
+                        wasm:          WebAssembly
+                        js:            JavaScript (for Node.js)
+                        web:           JavaScript + HTML (for browsers)
+                        baremetal-arm: Bare-metal ARM Cortex-M
+                        baremetal-x86: Bare-metal x86_64
+                        uefi:          UEFI Application
+                        sv:            SystemVerilog (RTL for FPGA)
+                        bm:            Shorthand for baremetal-arm
+  --emit-llvm           Emit LLVM IR
+  --emit-js             Emit JavaScript
+  --emit-memfile        SV: write array literal initializers to .hex files
+  --sv-strict-lint      SV: do not emit lint_off pragmas (show width warnings)
+  --sv-always-ff        SV: keep always_ff/always_comb (default is
+                        Gowin-compatible always @)
+  --sv-warn-nba         SV: warn on reads of state variables assigned in a
+                        posedge function (previous-cycle values)
+  --emit-constraints    SV: generate .cst/.tcl from #[sv::pin] attributes (Gowin)
+  -D <NAME>             Add a conditional-compilation define (for #ifdef)
+  --test                Compile including #[test] functions (defines TEST)
+  --check               fmt: do not rewrite; exit non-zero if formatting is needed
+  --run                 Run after generation
+  --ast                 Show the AST (abstract syntax tree)
+  --hir                 Show the HIR (high-level IR)
+  --mir                 Show the MIR (mid-level IR)
+  --mir-opt             Show the MIR after optimization
+  --lir-opt             Show the LLVM IR after optimization (before codegen)
+
+Optimization options:
+  --funroll-loops[=N]   Statically unroll constant-trip-count loops at the MIR
+                        level (N is the max iterations to unroll, default 64;
+                        speeds up loop checks, especially for the JS target
+                        and low -O levels)
+
+Sanitizer options (LLVM backends: compile --target=native/wasm, run):
+  --sanitize=<list>     Enable runtime checks (comma separated). Also
+                        configurable via compile: sanitize: in .cmconfig.yml
+                        (CLI takes precedence):
+                          address    AddressSanitizer: heap/stack/global
+                                     out-of-bounds, use-after-free
+                                     (compile --target=native only)
+                          thread     ThreadSanitizer: data races
+                                     (compile --target=native only)
+                          memory     MemorySanitizer: uninitialized reads
+                                     (compile --target=native, Linux only)
+                          bounds     Trap on out-of-bounds access to objects
+                                     whose size is known at compile time
+                                     (native/wasm/jit, no runtime required)
+                          undefined  Cm runtime checks at the MIR level:
+                                     division/modulo by zero and null pointer
+                                     dereference panic with a message
+                                     (native/wasm/jit/js)
+
+Other options:
+  --lang=<en|ja>        Message language (default: en; also CM_LANG env var
+                        or 'language:' in .cmconfig.yml)
+  --version             Show version information
+
+Examples:
+  {program} run examples/hello.cm
+  {program} compile -O2 -o output src/main.cm
+  {program} compile --backend=llvm --target=wasm -o app.wasm main.cm
+  {program} compile --backend=llvm --target=bm -o firmware.o main.cm
+  {program} check --verbose src/lib.cm

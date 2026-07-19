@@ -21,7 +21,7 @@ impl Resource {
 }
 
 int main() {
-    Resource r1;
-    Resource r2(42);
+    Resource _r1;
+    const Resource r2(42);
     return 0;
 }

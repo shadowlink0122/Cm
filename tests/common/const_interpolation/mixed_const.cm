@@ -3,7 +3,7 @@ import std::io::println;
 export const int GLOBAL_VERSION = 10;
 export const int GLOBAL_BUILD = 42;
 
-int testMixedConst() {
+int test_mixed_const() {
     // 関数ローカルのconst変数
     const int local_count = 99;
     const int local_status = 1;
@@ -41,6 +41,6 @@ int testMixedConst() {
 }
 
 int main() {
-    int result = testMixedConst();
+    const int result = test_mixed_const();
     return result;
 }

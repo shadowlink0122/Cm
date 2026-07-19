@@ -3,23 +3,23 @@
 // ============================================================
 // 各パスを手組みのMIR（フロントエンド・lowering非依存）に対して
 // 単体で実行し、変換の性質を検証する。
-// パイプライン全体（Cmソース→最適化）の検証は
-// tests/regression/mir_optimization_test.cpp が担う。
+// パイプライン全体（Cmソース→最適化）の検証はtests/regression/mir_optimization_test.cpp が担う。
 // パス⇔テスト対応表は tests/regression/cases/mir_optimization/README.md を参照
 
-#include "../../src/mir/nodes.hpp"
-#include "../../src/mir/passes/cleanup/dce.hpp"
-#include "../../src/mir/passes/cleanup/dse.hpp"
-#include "../../src/mir/passes/cleanup/program_dce.hpp"
-#include "../../src/mir/passes/cleanup/simplify_cfg.hpp"
-#include "../../src/mir/passes/interprocedural/inlining.hpp"
-#include "../../src/mir/passes/interprocedural/tail_call_elimination.hpp"
-#include "../../src/mir/passes/loop/const_unroll.hpp"
-#include "../../src/mir/passes/loop/licm.hpp"
-#include "../../src/mir/passes/redundancy/gvn.hpp"
-#include "../../src/mir/passes/scalar/folding.hpp"
-#include "../../src/mir/passes/scalar/propagation.hpp"
-#include "../../src/mir/passes/scalar/sccp.hpp"
+#include "../../src/internal/mir/nodes.hpp"
+#include "../../src/internal/mir/passes/cleanup/dce.hpp"
+#include "../../src/internal/mir/passes/cleanup/dse.hpp"
+#include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
+#include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
+#include "../../src/internal/mir/passes/instrumentation/undefined.hpp"
+#include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
+#include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
+#include "../../src/internal/mir/passes/loop/const_unroll.hpp"
+#include "../../src/internal/mir/passes/loop/licm.hpp"
+#include "../../src/internal/mir/passes/redundancy/gvn.hpp"
+#include "../../src/internal/mir/passes/scalar/folding.hpp"
+#include "../../src/internal/mir/passes/scalar/propagation.hpp"
+#include "../../src/internal/mir/passes/scalar/sccp.hpp"
 
 #include <functional>
 #include <gtest/gtest.h>
@@ -312,8 +312,7 @@ TEST(MirPassTest, ConstantFolding_FloatIdentityNotSimplified) {
 }
 
 TEST(MirPassTest, ConstantFolding_TerminatorFoldControl) {
-    // 定数discriminantのSwitchIntは既定でGotoへ畳み込まれ、
-    // fold_terminators=false（SVバックエンド用の契約）では保持される
+    // 定数discriminantのSwitchIntは既定でGotoへ畳み込まれ、fold_terminators=false（SVバックエンド用の契約）では保持される
     auto build = [] {
         auto f = make_function();
         BlockId b1 = f->add_block();
@@ -504,8 +503,7 @@ TEST(MirPassTest, SimplifyCFG_CollapsesGotoChain) {
 
     opt::SimplifyControlFlow simplify;
     EXPECT_TRUE(simplify.run(*f));
-    // Goto連鎖はブロックマージで完全に潰れ、b3の内容と終端が
-    // エントリブロックへ取り込まれる
+    // Goto連鎖はブロックマージで完全に潰れ、b3の内容と終端がエントリブロックへ取り込まれる
     EXPECT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::Return);
     EXPECT_EQ(f->basic_blocks[0]->statements.size(), 1u);
 }
@@ -515,8 +513,7 @@ TEST(MirPassTest, SimplifyCFG_CollapsesGotoChain) {
 // ============================================================
 
 TEST(MirPassTest, LICM_HoistsInvariantOutOfHeader) {
-    // 現実装はループヘッダブロック内の文のみを巻き上げ対象とする
-    // （本体ブロックの不変式は対象外。README参照）。
+    // 現実装はループヘッダブロック内の文のみを巻き上げ対象とする（本体ブロックの不変式は対象外。README参照）。
     // ヘッダ内の _inv = _x * _y がプリヘッダへ移動される
     auto f = make_function();
     LocalId x = f->add_local("x", hir::make_int());
@@ -564,8 +561,7 @@ TEST(MirPassTest, LICM_HoistsInvariantOutOfHeader) {
 // ============================================================
 
 TEST(MirPassTest, ConstUnroll_UnrollsConstantTripLoop) {
-    // while (_i < 4) { _acc += _i; _i += 1; } が完全展開され、
-    // 到達可能なCFGからサイクルが消える
+    // while (_i < 4) { _acc += _i; _i += 1; } が完全展開され、到達可能なCFGからサイクルが消える
     auto f = make_function();
     LocalId acc = f->add_local("acc", hir::make_int());
     LocalId i = f->add_local("i", hir::make_int());
@@ -607,8 +603,7 @@ TEST(MirPassTest, ConstUnroll_UnrollsConstantTripLoop) {
 // ============================================================
 
 TEST(MirPassTest, TCE_MarksSelfTailCall) {
-    // 自己再帰の末尾呼び出しが is_tail_call としてマークされる
-    // （LLVMコード生成で tail call 属性になる）
+    // 自己再帰の末尾呼び出しが is_tail_call としてマークされる（LLVMコード生成で tail call 属性になる）
     auto f = make_function("count_down");
     LocalId ret = f->return_local;
     BlockId after = f->add_block();
@@ -638,12 +633,8 @@ TEST(MirPassTest, TCE_IgnoresNonSelfCall) {
 // ============================================================
 
 TEST(MirPassTest, FunctionInlining_CurrentlyDormant) {
-    // 既知の問題を固定するテスト: インライン化パスは呼び出し先を旧形式の
-    // Constant(文字列)として期待するが、現行のMIR loweringはFunctionRefを
-    // 発行するため、実質的に全呼び出しが対象外（パスは休眠状態）。
-    // FunctionRefを認識させて有効化するとperform_inliningの潜在バグ
-    // （デストラクタ順序破壊・SIGSEGV等）が露出するため、有効化は
-    // perform_inliningの再設計とセットで行う（inlining.cppのコメント参照）。
+    // 既知の問題を固定するテスト: インライン化パスは呼び出し先を旧形式のConstant(文字列)として期待するが、現行のMIR loweringはFunctionRefを発行するため、実質的に全呼び出しが対象外（パスは休眠状態）。
+    // FunctionRefを認識させて有効化するとperform_inliningの潜在バグ（デストラクタ順序破壊・SIGSEGV等）が露出するため、有効化はperform_inliningの再設計とセットで行う（inlining.cppのコメント参照）。
     // 有効化された際はこのテストを展開検証（Call終端子の減少）へ書き換えること
     MirProgram program;
     {
@@ -700,4 +691,97 @@ TEST(MirPassTest, ProgramDCE_RemovesUnreachableFunction) {
     EXPECT_EQ(find_function(program, "unused_fn"), nullptr);
     EXPECT_NE(find_function(program, "used"), nullptr);
     EXPECT_NE(find_function(program, "main"), nullptr);
+}
+
+// ============================================================
+// UndefinedCheckInstrumentation（--sanitize=undefined）
+// ============================================================
+
+TEST(MirPassTest, UndefinedCheck_InstrumentsIntegerDivision) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId b = f->add_local("b", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Div, use_of(a), use_of(b)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_TRUE(pass.run(*f));
+
+    // 分割で cont + panic + unreachable の3ブロックが追加される
+    EXPECT_EQ(f->basic_blocks.size(), 4u);
+    // 元ブロックのターミネータは除数を判別値とするSwitchIntになり、0でpanicブロックへ分岐する
+    ASSERT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::SwitchInt);
+    const auto& sw = std::get<MirTerminator::SwitchIntData>(f->basic_blocks[0]->terminator->data);
+    ASSERT_EQ(sw.targets.size(), 1u);
+    EXPECT_EQ(sw.targets[0].first, 0);
+    // panicブロックはpanic呼び出しターミネータを持つ
+    const auto* panic_block = f->get_block(sw.targets[0].second);
+    ASSERT_EQ(panic_block->terminator->kind, MirTerminator::Call);
+    const auto& call = std::get<MirTerminator::CallData>(panic_block->terminator->data);
+    EXPECT_EQ(std::get<std::string>(call.func->data), "panic");
+    // 除算文自体はcontブロックへ移動している
+    const auto* cont = f->get_block(sw.otherwise);
+    ASSERT_EQ(cont->statements.size(), 1u);
+    EXPECT_EQ(cont->statements[0]->kind, MirStatement::Assign);
+}
+
+TEST(MirPassTest, UndefinedCheck_SkipsNonZeroConstantDivisor) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Div, use_of(a), cint(2)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+TEST(MirPassTest, UndefinedCheck_SkipsFloatDivision) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_double());
+    LocalId b = f->add_local("b", hir::make_double());
+    LocalId c = f->add_local("c", hir::make_double());
+    emit(*f, 0, c,
+         rv_bin(MirBinaryOp::Div, use_of(a, hir::make_double()), use_of(b, hir::make_double()),
+                hir::make_double()));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+TEST(MirPassTest, UndefinedCheck_InstrumentsNullDeref) {
+    auto f = make_function();
+    auto ptr_type = hir::make_pointer(hir::make_int());
+    LocalId p = f->add_local("p", ptr_type);
+    LocalId v = f->add_local("v", hir::make_int());
+    // v = *p（Deref投影を含むPlaceの読み取り）
+    MirPlace deref_place{p, {PlaceProjection::deref()}};
+    emit(*f, 0, v, rv_use(MirOperand::copy(std::move(deref_place), hir::make_int())));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_TRUE(pass.run(*f));
+
+    // null比較のEq文が元ブロックへ挿入され、SwitchIntで分岐する
+    ASSERT_EQ(f->basic_blocks[0]->terminator->kind, MirTerminator::SwitchInt);
+    ASSERT_EQ(f->basic_blocks[0]->statements.size(), 1u);
+    const auto& cmp = std::get<MirStatement::AssignData>(f->basic_blocks[0]->statements[0]->data);
+    ASSERT_EQ(cmp.rvalue->kind, MirRvalue::BinaryOp);
+    EXPECT_EQ(std::get<MirRvalue::BinaryOpData>(cmp.rvalue->data).op, MirBinaryOp::Eq);
+}
+
+TEST(MirPassTest, UndefinedCheck_IsIdempotentPerRunOnCleanFunction) {
+    auto f = make_function();
+    LocalId a = f->add_local("a", hir::make_int());
+    LocalId c = f->add_local("c", hir::make_int());
+    emit(*f, 0, c, rv_bin(MirBinaryOp::Add, use_of(a), cint(1)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::UndefinedCheckInstrumentation pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(f->basic_blocks.size(), 1u);
 }

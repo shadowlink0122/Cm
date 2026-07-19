@@ -16,10 +16,10 @@ Cmは pthreadベースの並行処理モジュールを標準ライブラリで�
 
 | モジュール | 用途 | ドキュメント |
 |-----------|------|------------|
-| `std::thread` | スレッド生成・管理 | [スレッド](thread.html) |
-| `std::sync::mutex` | 排他ロック・読み書きロック | [Mutex](mutex.html) |
-| `std::sync::channel` | スレッド間メッセージパッシング | [Channel](channel.html) |
-| `std::sync::atomic` | ロックフリーのアトミック操作 | [Atomic](atomic.html) |
+| `native::thread` | スレッド生成・管理 | [スレッド](thread.html) |
+| `native::sync::mutex` | 排他ロック・読み書きロック | [Mutex](mutex.html) |
+| `native::sync::channel` | スレッド間メッセージパッシング | [Channel](channel.html) |
+| `native::sync::atomic` | ロックフリーのアトミック操作 | [Atomic](atomic.html) |
 
 ---
 
@@ -37,12 +37,12 @@ Cmは pthreadベースの並行処理モジュールを標準ライブラリで�
 ## 基本パターン
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::sync::channel::create;
-import std::sync::channel::send;
-import std::sync::channel::recv;
-import std::sync::channel::destroy;
+import native::thread::spawn;
+import native::thread::join;
+import native::sync::channel::create;
+import native::sync::channel::send;
+import native::sync::channel::recv;
+import native::sync::channel::destroy;
 import std::io::println;
 
 long ch;
@@ -69,4 +69,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [std::net - TCP/UDP通信](../network/tcp.html) ｜ [目次](../index.html) ｜ 次: [std::thread - スレッド管理](thread.html) →
+← 前: [native::net - TCP/UDP通信](../network/tcp.html) ｜ [目次](../index.html) ｜ 次: [native::thread - スレッド管理](thread.html) →

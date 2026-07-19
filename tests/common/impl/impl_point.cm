@@ -9,19 +9,19 @@ struct Point {
 }
 
 impl Point {
-    int getX() {
+    int get_x() {
         return self.x;
     }
 
-    int getY() {
+    int get_y() {
         return self.y;
     }
 
-    void setX(int v) {
+    void set_x(int v) {
         self.x = v;
     }
 
-    void setY(int v) {
+    void set_y(int v) {
         self.y = v;
     }
 
@@ -38,13 +38,13 @@ impl Point {
 int main() {
     Point p = Point { x: 10, y: 20 };
 
-    println(p.getX());  // 10
-    println(p.getY());  // 20
+    println(p.get_x());  // 10
+    println(p.get_y());  // 20
     println(p.sum());   // 30
 
     p.translate(5, 10);
-    println(p.getX());  // 15
-    println(p.getY());  // 30
+    println(p.get_x());  // 15
+    println(p.get_y());  // 30
     println(p.sum());   // 45
 
     return 0;

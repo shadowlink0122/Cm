@@ -22,7 +22,7 @@ int main() {
     println("=== GPU Basic Test ===");
 
     // デバイス作成
-    long device = device_create();
+    const long device = device_create();
     if (device == 0) {
         println("SKIP: Metal device not available");
         return 0;
@@ -39,18 +39,18 @@ int main() {
     long[4] b = [10, 20, 30, 40];
     long[4] result = [0, 0, 0, 0];
 
-    long buf_size = 32;  // 4 x 8bytes = 32bytes
-    long buf_a = buffer_create(device, buf_size);
-    long buf_b = buffer_create(device, buf_size);
-    long buf_out = buffer_create(device, buf_size);
+    const long buf_size = 32;  // 4 x 8bytes = 32bytes
+    const long buf_a = buffer_create(device, buf_size);
+    const long buf_b = buffer_create(device, buf_size);
+    const long buf_out = buffer_create(device, buf_size);
 
     buffer_write_longs(buf_a, &a[0], 4);
     buffer_write_longs(buf_b, &b[0], 4);
 
     // Metal Shader: longベクトル加算
-    string long_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add(device const long* a [[buffer(0)]],\n                       device const long* b [[buffer(1)]],\n                       device long* result [[buffer(2)]],\n                       uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
+    const string long_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add(device const long* a [[buffer(0)]],\n                       device const long* b [[buffer(1)]],\n                       device long* result [[buffer(2)]],\n                       uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
 
-    long kernel1 = kernel_create(device, long_shader, "vector_add");
+    const long kernel1 = kernel_create(device, long_shader, "vector_add");
     if (kernel1 == 0) {
         println("FAIL: long kernel creation failed");
         return 1;
@@ -89,21 +89,26 @@ int main() {
 
     // float値をbit patternに変換して配列リテラルで定義
     long[4] fa = [float_to_bits(1.5), float_to_bits(2.5), float_to_bits(3.5), float_to_bits(4.5)];
-    long[4] fb = [float_to_bits(10.0), float_to_bits(20.0), float_to_bits(30.0), float_to_bits(40.0)];
+    long[4] fb = [
+        float_to_bits(10.0),
+        float_to_bits(20.0),
+        float_to_bits(30.0),
+        float_to_bits(40.0)
+    ];
     long[4] fresult = [0, 0, 0, 0];
 
     // float用バッファ作成 (4個のfloat = 16bytes)
-    long fbuf_a = buffer_create_floats(device, 4);
-    long fbuf_b = buffer_create_floats(device, 4);
-    long fbuf_out = buffer_create_floats(device, 4);
+    const long fbuf_a = buffer_create_floats(device, 4);
+    const long fbuf_b = buffer_create_floats(device, 4);
+    const long fbuf_out = buffer_create_floats(device, 4);
 
     buffer_write_floats(fbuf_a, &fa[0], 4);
     buffer_write_floats(fbuf_b, &fb[0], 4);
 
     // Metal Shader: floatベクトル加算
-    string float_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add_f(device const float* a [[buffer(0)]],\n                         device const float* b [[buffer(1)]],\n                         device float* result [[buffer(2)]],\n                         uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
+    const string float_shader = "#include <metal_stdlib>\nusing namespace metal;\nkernel void vector_add_f(device const float* a [[buffer(0)]],\n                         device const float* b [[buffer(1)]],\n                         device float* result [[buffer(2)]],\n                         uint id [[thread_position_in_grid]]) {\n    result[id] = a[id] + b[id];\n}\n";
 
-    long kernel2 = kernel_create(device, float_shader, "vector_add_f");
+    const long kernel2 = kernel_create(device, float_shader, "vector_add_f");
     if (kernel2 == 0) {
         println("FAIL: float kernel creation failed");
         return 1;
@@ -114,16 +119,16 @@ int main() {
     buffer_read_floats(fbuf_out, &fresult[0], 4);
 
     // floatの結果を表示
-    double r0 = bits_to_float(fresult[0]);
-    double r1 = bits_to_float(fresult[1]);
-    double r2 = bits_to_float(fresult[2]);
-    double r3 = bits_to_float(fresult[3]);
+    const double r0 = bits_to_float(fresult[0]);
+    const double r1 = bits_to_float(fresult[1]);
+    const double r2 = bits_to_float(fresult[2]);
+    const double r3 = bits_to_float(fresult[3]);
 
     // 結果の整数部を取得して表示 (1.5+10.0=11.5, 2.5+20.0=22.5, ...)
-    int ir0 = r0 as int;
-    int ir1 = r1 as int;
-    int ir2 = r2 as int;
-    int ir3 = r3 as int;
+    const int ir0 = r0 as int;
+    const int ir1 = r1 as int;
+    const int ir2 = r2 as int;
+    const int ir3 = r3 as int;
 
     println("float result[0]: {ir0} (expect 11)");
     println("float result[1]: {ir1} (expect 22)");

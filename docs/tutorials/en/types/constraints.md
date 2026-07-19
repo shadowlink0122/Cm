@@ -36,7 +36,7 @@ interface Comparable<T> {
 
 ```cm
 <T: Numeric | Stringable> void display(T value) {
-    println("{}", value);
+    println("{value}");
 }
 ```
 

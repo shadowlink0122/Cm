@@ -15,7 +15,7 @@ namespace M {
     }
 
     export V make(double x, double y) {
-        V r = V { x: x, y: y };
+        const V r = V { x: x, y: y };
         return r;
     }
 

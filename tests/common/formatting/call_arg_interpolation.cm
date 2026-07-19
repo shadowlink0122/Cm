@@ -14,9 +14,9 @@ int add3(int a, int b, int c) {
 }
 
 int main() {
-    int s = 503;
-    int x = 10;
-    int y = 20;
+    const int s = 503;
+    const int x = 10;
+    const int y = 20;
 
     // 変数引数の関数呼び出し補間
     println("var_arg: {is_big(s)}");

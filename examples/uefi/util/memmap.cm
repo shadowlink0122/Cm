@@ -15,7 +15,7 @@ export void dump_memory_map(void* st) {
     efi_println(st, "=== Memory Map ===" as void*);
 
     // バッファ割り当て（32KB）
-    ulong buf_size = 32768;
+    const ulong buf_size = 32768;
     void* buffer = 0 as void*;
     ulong status = efi_alloc_pool(st, buf_size, &buffer);
 
@@ -63,30 +63,30 @@ export void dump_memory_map(void* st) {
     ulong idx = 0;
 
     while (idx < entry_count) {
-        ulong offset = idx * desc_size;
-        ulong desc_addr = buffer as ulong + offset;
+        const ulong offset = idx * desc_size;
+        const ulong desc_addr = buffer as ulong + offset;
 
         // type: uint at offset 0
         ulong* type_ptr = desc_addr as ulong*;
-        ulong type_raw = *type_ptr;
-        ulong type_mask = 4294967295;
-        ulong mem_type = type_raw & type_mask;
+        const ulong type_raw = *type_ptr;
+        const ulong type_mask = 4294967295;
+        const ulong mem_type = type_raw & type_mask;
 
         // physical_start: ulong at offset 8
         ulong* phys_ptr = (desc_addr + 8) as ulong*;
-        ulong phys = *phys_ptr;
+        const ulong phys = *phys_ptr;
 
         // number_of_pages: ulong at offset 24
         ulong* pages_ptr = (desc_addr + 24) as ulong*;
-        ulong pages = *pages_ptr;
+        const ulong pages = *pages_ptr;
 
         total_all += pages;
-        ulong seven = 7;
+        const ulong seven = 7;
         if (mem_type == seven) {
             total_conv += pages;
         }
 
-        string type_name = efi_memory_type_name(mem_type);
+        const string type_name = efi_memory_type_name(mem_type);
         efi_print(st, type_name as void*);
         efi_print(st, " | " as void*);
 
@@ -103,14 +103,14 @@ export void dump_memory_map(void* st) {
     efi_println(st, "" as void*);
     efi_println(st, "--- Summary ---" as void*);
     efi_print(st, "Total:     " as void*);
-    ulong page_size = 4096;
-    ulong mb_div = 1048576;
-    ulong total_mb = (total_all * page_size) / mb_div;
+    const ulong page_size = 4096;
+    const ulong mb_div = 1048576;
+    const ulong total_mb = (total_all * page_size) / mb_div;
     efi_print_dec(st, total_mb);
     efi_println(st, " MB" as void*);
 
     efi_print(st, "Available: " as void*);
-    ulong avail_mb = (total_conv * page_size) / mb_div;
+    const ulong avail_mb = (total_conv * page_size) / mb_div;
     efi_print_dec(st, avail_mb);
     efi_println(st, " MB" as void*);
 

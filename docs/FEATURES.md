@@ -3,7 +3,7 @@ layout: default
 title: Features
 ---
 
-# Cm言語 実装済み機能一覧 (v0.16.0)
+# Cm言語 実装済み機能一覧
 
 Cm言語コンパイラおよびランタイムで現在利用可能な機能の一覧です。
 
@@ -54,15 +54,15 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 
 | モジュール | 状態 | 詳細 |
 |-----------|------|------|
-| **std::io** | ✅ | println/print（Zero-libc実装） |
+| **std::io** | ✅ | println/print（Zero-libc実装）。OS依存機能（ファイルストリーム等）は native::io |
 | **std::fs** | ✅ | ファイル操作（基本API + Result API。Native/JIT。v0.16.0） |
 | **std::math** | ✅ | checked_div / checked_mod（`Option<int>` を返す安全な除算。v0.16.0） |
-| **std::thread** | ✅ | spawn, join, detach, sleep_ms |
-| **std::sync** | ✅ | Mutex, Channel |
+| **native::thread** | ✅ | spawn, join, detach, sleep_ms |
+| **native::sync** | ✅ | Mutex, Channel |
 | **std::collections** | ✅ | Vector\<T\>, Queue\<T\>, HashMap\<K,V\> |
-| **std::gpu** | ✅ | Metal GPU演算（macOS） |
-| **std::net** | ✅ | TCP/UDP通信 |
-| **std::http** | ✅ | HTTP/HTTPS通信 |
+| **native::gpu** | ✅ | Metal GPU演算（macOS） |
+| **native::net** | ✅ | TCP/UDP通信 |
+| **native::http** | ✅ | HTTP/HTTPS通信 |
 
 ## ⚙️ バックエンド
 
@@ -82,9 +82,10 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 
 | 機能 | 状態 | 詳細 |
 |------|------|------|
-| **cm lint** | ✅ | コード品質チェック、診断カタログ |
+| **cm lint** | ✅ | コード品質チェック、診断カタログ、`--strict` で宣言の命名規則チェック（L001） |
 | **cm fmt** | ✅ | コードフォーマッタ（`--check` 対応） |
 | **cm test / #[test]** | ✅ | 統一テスト属性とテストコマンド（SVシミュレーション/JIT実行の自動ディスパッチ。v0.16.0） |
+| **サニタイザ（--sanitize）** | ✅ | address/thread/memory（LLVM計装+ランタイム）・bounds（trap方式）・undefined（MIRレベルのゼロ除算/null参照検査、native/wasm/jit/js）。`.cmconfig.yml` の `compile: sanitize:` でも設定可（v0.16.2） |
 | **MIR最適化** | ✅ | SCCP、定数畳み込み・恒等式簡約、GVN、コピー伝播、DSE、DCE、CFG簡約、LICM、定数ループ展開（MIRインライン化は休眠中の既知の問題。native/JIT/WASMはLLVM側インライナが担当） |
 | **末尾呼び出し最適化** | ✅ | 再帰関数のスタック最適化 |
 | **無限ループ検出** | ✅ | コンパイル時の静的無限ループ解析 |
@@ -105,6 +106,3 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 | **Lintルール** | L200-L402 | スタイル、ベストプラクティス |
 | **SVバックエンド** | SV001-SV007 | 循環モジュール依存、非合成型（ポインタ/浮動小数点/string/動的配列）、非対応構文（インラインアセンブリ等） |
 
----
-
-**最終更新:** 2026年7月14日 **バージョン:** v0.16.0（開発中）

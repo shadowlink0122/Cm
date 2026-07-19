@@ -1,0 +1,10 @@
+void configure_display(
+    uint width,
+    uint height,
+    uint refresh_rate,
+    uint color_depth,
+    bool interlaced,
+    uint pixel_format
+) {
+    return;
+}

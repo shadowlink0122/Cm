@@ -8,9 +8,9 @@ int zero() {
 }
 
 int main() {
-    int a = 10;
-    int z = zero();
-    int r = a / z;
+    const int a = 10;
+    const int z = zero();
+    const int r = a / z;
     println("unreachable {r}");
     return 0;
 }

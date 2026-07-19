@@ -1,5 +1,4 @@
-// Bug#10拡張テスト: ポインタ経由implメソッドのネスト呼出し+malloc+cast
-// ptr->method() で method が self.other_method() を呼ぶパターンの検証
+// Bug#10拡張テスト: ポインタ経由implメソッドのネスト呼出し+malloc+cast ptr->method() で method が self.other_method() を呼ぶパターンの検証
 import std::io::println;
 
 use libc {
@@ -72,8 +71,8 @@ int main() {
     Console* p3 = &c3;
     p3->init(12345, 40);
     p3->write_chars(3);
-    ulong cx = p3->get_cursor_x();
-    ulong cy = p3->get_cursor_y();
+    const ulong cx = p3->get_cursor_x();
+    const ulong cy = p3->get_cursor_y();
     println("p3 getter: {cx},{cy}");
 
     // ケース4: malloc経由ポインタ + impl
@@ -82,8 +81,8 @@ int main() {
     heap_con->init(99999, 80);
     heap_con->write_line(5);
     heap_con->write_chars(2);
-    ulong hx = heap_con->get_cursor_x();
-    ulong hy = heap_con->get_cursor_y();
+    const ulong hx = heap_con->get_cursor_x();
+    const ulong hy = heap_con->get_cursor_y();
     println("heap cursor: {hx},{hy}");
     println("heap fb_addr: {heap_con->fb_addr}");
     free(mem);

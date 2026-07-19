@@ -1,0 +1,15 @@
+// use-after-free: free済み領域の読み取りが --sanitize=address で heap-use-after-free として検出される
+import std::io::println;
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+int main() {
+    void* mem = malloc(4 * sizeof(int));
+    int* arr = mem as int*;
+    arr[0] = 42;
+    free(mem);
+    int v = arr[0];
+    println("v={v}");
+    return 0;
+}

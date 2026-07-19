@@ -69,13 +69,13 @@ int main() {
 
     // テスト2: ポインタ経由のネストメソッド（puts → putc）
     ptr->puts(5);
-    ulong cx = ptr->get_cursor_x();
+    const ulong cx = ptr->get_cursor_x();
     println("cursor_x: {cx}");
 
     // テスト3: getter経由のフィールド取得
-    ulong addr = ptr->get_fb_addr();
+    const ulong addr = ptr->get_fb_addr();
     println("get_fb_addr: {addr}");
-    ulong fh = ptr->get_font_height();
+    const ulong fh = ptr->get_font_height();
     println("get_font_height: {fh}");
 
     return 0;

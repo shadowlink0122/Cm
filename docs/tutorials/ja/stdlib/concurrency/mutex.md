@@ -2,7 +2,7 @@
 title: Mutex / RwLock
 ---
 
-# std::sync::mutex - 排他制御
+# native::sync::mutex - 排他制御
 
 pthreadベースのMutex（排他ロック）とRwLock（読み書きロック）を提供します。
 
@@ -17,10 +17,10 @@ pthreadベースのMutex（排他ロック）とRwLock（読み書きロック�
 ### 基本的な使い方
 
 ```cm
-import std::sync::mutex::mutex_init;
-import std::sync::mutex::mutex_lock;
-import std::sync::mutex::mutex_unlock;
-import std::sync::mutex::mutex_destroy;
+import native::sync::mutex::mutex_init;
+import native::sync::mutex::mutex_lock;
+import native::sync::mutex::mutex_unlock;
+import native::sync::mutex::mutex_destroy;
 
 int main() {
     // 64バイトのバッファにMutexを確保
@@ -68,11 +68,11 @@ if (result == 0) {
 ### 基本的な使い方
 
 ```cm
-import std::sync::mutex::rwlock_init;
-import std::sync::mutex::rwlock_rdlock;
-import std::sync::mutex::rwlock_wrlock;
-import std::sync::mutex::rwlock_unlock;
-import std::sync::mutex::rwlock_destroy;
+import native::sync::mutex::rwlock_init;
+import native::sync::mutex::rwlock_rdlock;
+import native::sync::mutex::rwlock_wrlock;
+import native::sync::mutex::rwlock_unlock;
+import native::sync::mutex::rwlock_destroy;
 
 int main() {
     tiny lock[64];
@@ -118,4 +118,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [std::thread - スレッド管理](thread.html) ｜ [目次](index.html) ｜ 次: [std::sync::channel - メッセージパッシング](channel.html) →
+← 前: [native::thread - スレッド管理](thread.html) ｜ [目次](index.html) ｜ 次: [native::sync::channel - メッセージパッシング](channel.html) →

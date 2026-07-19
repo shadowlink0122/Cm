@@ -41,14 +41,14 @@ int main() {
 
     // ジェネリックメソッドの呼び出し
     c.set(100);
-    int v = c.get();
+    const int v = c.get();
     println("c.get() = {v}");
 
     Container<string> cs;
     cs.value = "Hello";
     cs.print();
     cs.set("World");
-    string sv = cs.get();
+    const string sv = cs.get();
     println("cs.get() = {sv}");
 
     return 0;

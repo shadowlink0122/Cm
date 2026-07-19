@@ -17,20 +17,20 @@ int main() {
     int len = qi.len();
     println("  enqueue 10, 20, 30: len={len}");
 
-    int v1 = qi.dequeue();
-    int v2 = qi.dequeue();
-    int v3 = qi.dequeue();
+    const int v1 = qi.dequeue();
+    const int v2 = qi.dequeue();
+    const int v3 = qi.dequeue();
     println("  dequeue: {v1}, {v2}, {v3}");
 
-    bool empty = qi.is_empty();
+    const bool empty = qi.is_empty();
     println("  is_empty: {empty}");
 
     // 再利用テスト
     qi.enqueue(100);
     qi.enqueue(200);
     len = qi.len();
-    int r1 = qi.dequeue();
-    int r2 = qi.dequeue();
+    const int r1 = qi.dequeue();
+    const int r2 = qi.dequeue();
     println("  reuse: len={len}, dequeue: {r1}, {r2}");
 
     // デストラクタが自動的に呼ばれる
@@ -45,8 +45,8 @@ int main() {
     len = ql.len();
     println("  enqueue 2 items: len={len}");
 
-    long lv1 = ql.dequeue();
-    long lv2 = ql.dequeue();
+    const long lv1 = ql.dequeue();
+    const long lv2 = ql.dequeue();
     println("  dequeue: {lv1}, {lv2}");
 
     // デストラクタが自動的に呼ばれる
@@ -62,9 +62,9 @@ int main() {
     len = qb.len();
     println("  enqueue 3 items: len={len}");
 
-    bool b1 = qb.dequeue();
-    bool b2 = qb.dequeue();
-    bool b3 = qb.dequeue();
+    const bool b1 = qb.dequeue();
+    const bool b2 = qb.dequeue();
+    const bool b3 = qb.dequeue();
     println("  dequeue: {b1}, {b2}, {b3}");
 
     // デストラクタが自動的に呼ばれる

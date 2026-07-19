@@ -1,13 +1,19 @@
 //! platform: sv
 //! test: din=5, cycles=2 -> dout=5
 
-// パラメタライズドサブモジュール（#[sv::parameter]）
+// パラメタライズドサブモジュール（#[sv::parameter] + exportされたIO構造体）。
+// #[sv::param] フィールドはインターフェース契約で、インスタンス側からの上書きを型検査可能にする
 #[sv::parameter] const uint WIDTH = 8;
 
-#[input] posedge clk;
-#[input] bit[WIDTH] din;
-#[output] bit[WIDTH] dout = 0;
+export struct ParamShifterIo {
+    #[sv::param] uint WIDTH = 8;
+    #[input] bool clk;
+    #[input] bit[WIDTH] din;
+    #[output] bit[WIDTH] dout = 0;
+};
+
+ParamShifterIo io;
 
 async void shift(posedge clk) {
-    dout = din;
+    io.dout = io.din;
 }

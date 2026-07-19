@@ -18,17 +18,17 @@ void pq_init(PQ* pq) {
 }
 
 void pq_push(PQ* pq, int dist, int node) {
-    State s = {dist: dist, node: node};
+    const State s = {dist: dist, node: node};
     pq->data[pq->size] = s;
     int i = pq->size;
     pq->size = pq->size + 1;
 
     while (i > 0) {
-        int parent = (i - 1) / 2;
+        const int parent = (i - 1) / 2;
         if (pq->data[parent].dist <= pq->data[i].dist) {
             break;
         }
-        State temp = pq->data[i];
+        const State temp = pq->data[i];
         pq->data[i] = pq->data[parent];
         pq->data[parent] = temp;
         i = parent;
@@ -36,14 +36,14 @@ void pq_push(PQ* pq, int dist, int node) {
 }
 
 State pq_pop(PQ* pq) {
-    State result = pq->data[0];
+    const State result = pq->data[0];
     pq->size = pq->size - 1;
     if (pq->size > 0) {
         pq->data[0] = pq->data[pq->size];
         int i = 0;
         while (true) {
-            int left = 2 * i + 1;
-            int right = 2 * i + 2;
+            const int left = 2 * i + 1;
+            const int right = 2 * i + 2;
             int smallest = i;
             if (left < pq->size && pq->data[left].dist < pq->data[smallest].dist) {
                 smallest = left;
@@ -52,7 +52,7 @@ State pq_pop(PQ* pq) {
                 smallest = right;
             }
             if (smallest == i) { break; }
-            State temp = pq->data[i];
+            const State temp = pq->data[i];
             pq->data[i] = pq->data[smallest];
             pq->data[smallest] = temp;
             i = smallest;
@@ -100,15 +100,15 @@ int main() {
     pq_push(&pq, 0, 0);
 
     while (!pq_empty(&pq)) {
-        State s = pq_pop(&pq);
-        int u = s.node;
+        const State s = pq_pop(&pq);
+        const int u = s.node;
         if (visited[u]) { continue; }
         visited[u] = true;
 
         for (int v = 0; v < 6; v++) {
-            int edge = graph[u*6+v];
+            const int edge = graph[u*6+v];
             if (edge < 999) {
-                int new_dist = dist[u] + edge;
+                const int new_dist = dist[u] + edge;
                 if (new_dist < dist[v]) {
                     dist[v] = new_dist;
                     prev[v] = u;
@@ -133,7 +133,7 @@ int main() {
         cur = prev[cur];
     }
     for (int i = len-1; i >= 0; i--) {
-        int n = path[i];
+        const int n = path[i];
         if (n == 0) { print("A"); }
         if (n == 1) { print("B"); }
         if (n == 2) { print("C"); }

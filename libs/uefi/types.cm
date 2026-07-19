@@ -37,8 +37,7 @@ export struct EfiGuid {
 export const ulong EFI_SUCCESS = 0;
 
 // エラーコードの基底値（実際のエラーはこれにビット63を加算）
-// 注: ビット63セット済みの値はリテラル範囲外のため、
-//     efi_error()は符号付き比較で判定する
+// 注: ビット63セット済みの値はリテラル範囲外のため、efi_error()は符号付き比較で判定する
 export const ulong EFI_LOAD_ERROR       = 1;
 export const ulong EFI_INVALID_PARAMETER = 2;
 export const ulong EFI_UNSUPPORTED      = 3;
@@ -119,6 +118,6 @@ export const ushort SCAN_ESC   = 0x17;
 /// → 符号付き64bit整数として負の値
 export bool efi_error(ulong status) {
     // ビット63がセット = 符号付きで負 → エラー
-    long signed_status = status as long;
+    const long signed_status = status as long;
     return signed_status < 0;
 }

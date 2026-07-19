@@ -50,7 +50,7 @@ int main() {
     c1.g = 128;
     c1.b = 64;
 
-    Color c2 = c1.clone();
+    const Color c2 = c1.clone();
 
     if (c1 == c2) {
         println("c1 == clone: true");

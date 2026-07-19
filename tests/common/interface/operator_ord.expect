@@ -2,4 +2,5 @@ a == c: true
 a != b: true
 a < b: true
 b > a: true
+a <= c: true
 b >= a: true

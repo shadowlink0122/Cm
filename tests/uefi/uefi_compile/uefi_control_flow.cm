@@ -4,7 +4,7 @@
 
 ulong process_status(ulong status) {
     // ビット63チェック（エラーかどうか）
-    long signed_status = status as long;
+    const long signed_status = status as long;
     if (signed_status < 0) {
         return 1;  // エラー
     }
@@ -28,7 +28,7 @@ ulong retry_operation(int max_retries) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    ulong s1 = process_status(0);
-    ulong s2 = retry_operation(4);
+    const ulong s1 = process_status(0);
+    const ulong s2 = retry_operation(4);
     return s1 + s2;
 }

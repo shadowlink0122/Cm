@@ -2,7 +2,7 @@
 title: Channel
 ---
 
-# std::sync::channel - メッセージパッシング
+# native::sync::channel - メッセージパッシング
 
 Go風のバウンデッドチャネルによるスレッド間メッセージパッシング。
 
@@ -15,13 +15,13 @@ Go風のバウンデッドチャネルによるスレッド間メッセージパ
 ## 基本的な使い方
 
 ```cm
-import std::sync::channel::create;
-import std::sync::channel::send;
-import std::sync::channel::recv;
-import std::sync::channel::close;
-import std::sync::channel::destroy;
-import std::thread::spawn;
-import std::thread::join;
+import native::sync::channel::create;
+import native::sync::channel::send;
+import native::sync::channel::recv;
+import native::sync::channel::close;
+import native::sync::channel::destroy;
+import native::thread::spawn;
+import native::thread::join;
 import std::io::println;
 
 long ch;
@@ -56,8 +56,8 @@ int main() {
 ## ノンブロッキング送受信
 
 ```cm
-import std::sync::channel::try_send;
-import std::sync::channel::try_recv;
+import native::sync::channel::try_send;
+import native::sync::channel::try_recv;
 
 // 送信試行
 int result = try_send(ch, 42);
@@ -108,4 +108,4 @@ if (result == 0) {
 ---
 
 <!-- nav -->
-← 前: [std::sync::mutex - 排他制御](mutex.html) ｜ [目次](index.html) ｜ 次: [std::sync::atomic - アトミック操作](atomic.html) →
+← 前: [native::sync::mutex - 排他制御](mutex.html) ｜ [目次](index.html) ｜ 次: [native::sync::atomic - アトミック操作](atomic.html) →

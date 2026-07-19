@@ -1,0 +1,15 @@
+//! platform: sv
+//! test: a=3, b=5 -> sum=8
+
+// C/C++スタイルの構造体宣言＋インスタンスによるIO定義（組み合わせ回路）
+struct AdderIo {
+    #[input] uint a;
+    #[input] uint b;
+    #[output] uint sum;
+};
+
+AdderIo io;
+
+void add() {
+    io.sum = io.a + io.b;
+}

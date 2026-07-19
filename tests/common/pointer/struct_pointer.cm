@@ -14,8 +14,8 @@ int main() {
     Data* p = &d;
 
     // ポインタ経由でフィールドアクセス
-    int x = p->x;
-    int y = p->y;
+    const int x = p->x;
+    const int y = p->y;
     println("Via pointer: x={x}, y={y}");
 
     // ポインタ経由で値を変更

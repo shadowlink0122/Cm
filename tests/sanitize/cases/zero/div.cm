@@ -1,0 +1,8 @@
+// ゼロ除算: 除数を実行時値にして定数畳み込みによる除去を防ぐ（--sanitize=undefined で panic になる）
+int main() {
+    int a = 10;
+    int b = 0;
+    int c = a / b;
+    println("c={c}");
+    return 0;
+}

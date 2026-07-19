@@ -335,10 +335,13 @@ install: release
 	@cp -L $(CM) $(CM_INSTALL_DIR)/bin/cm
 	@cp build/lib/*.o $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
 	@cp build/lib/*.a $(CM_INSTALL_DIR)/lib/ 2>/dev/null || true
+	@rm -rf $(CM_INSTALL_DIR)/libs
+	@cp -R libs $(CM_INSTALL_DIR)/libs
 	@echo ""
 	@echo "✅ インストール完了!"
 	@echo "  バイナリ: $(CM_INSTALL_DIR)/bin/cm"
 	@echo "  ライブラリ: $(CM_INSTALL_DIR)/lib/"
+	@echo "  モジュール: $(CM_INSTALL_DIR)/libs/"
 	@echo ""
 	@if echo "$$PATH" | grep -q "$(CM_INSTALL_DIR)/bin"; then \
 		echo "  PATHは設定済みです"; \
@@ -493,9 +496,21 @@ test-cm-test:
 	@echo "Running cm test command E2E tests..."
 	@tests/test_cm_test.sh
 
+.PHONY: test-i18n
+test-i18n:
+	@echo "Running i18n / error message E2E tests..."
+	@tests/i18n/run_tests.sh
+
+# サニタイザ（--sanitize）のE2Eテスト（native/wasm/jit）
+.PHONY: test-sanitize
+test-sanitize:
+	@echo "Running sanitizer E2E tests..."
+	@chmod +x tests/sanitize/run_tests.sh
+	@tests/sanitize/run_tests.sh
+
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n test-sanitize
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"
@@ -670,23 +685,23 @@ test-all-parallel:
 # キャッシュ無効テスト（並列）
 .PHONY: tipnc tlpnc twpnc tjpnc test-all-parallel-nc
 tipnc: build  ## インタプリタ（パラレル、キャッシュ無効）
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
 
 tlpnc: build  ## LLVM（パラレル、キャッシュ無効）
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
 
 twpnc: build  ## WASM（パラレル、キャッシュ無効）
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
 
 tjpnc: build  ## JavaScript（パラレル、キャッシュ無効）
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
 
 test-all-parallel-nc: build  ## 全バックエンド（パラレル、キャッシュ無効）
 	@echo "Running all tests in parallel (no cache)..."
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p --no-cache
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p --no-cache
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p --no-cache
-	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p --no-cache
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b interpreter -p
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm -p
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b llvm-wasm -p
+	@OPT_LEVEL=3 tests/unified_test_runner.sh -b js -p
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All parallel tests (no cache) completed!"

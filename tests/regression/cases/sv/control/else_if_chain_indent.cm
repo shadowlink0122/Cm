@@ -1,0 +1,22 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+module elif_indent_top;
+
+uint sel = 0;
+uint a = 0;
+uint b = 0;
+
+void tick(posedge clk) {
+    sel = sel + 1;
+    match (sel) {
+        1 => { a = a + 1; }
+        2 => { b = b + 2; }
+        3 => {
+            a = a + 3;
+            b = b + 3;
+        }
+        4 => { out = a + b; }
+        _ => { a = 0; }
+    }
+}

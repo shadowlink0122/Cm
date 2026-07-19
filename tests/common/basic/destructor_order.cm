@@ -16,9 +16,9 @@ impl Item {
 }
 
 int main() {
-    Item a(1);
-    Item b(2);
-    Item c(3);
+    const Item a(1);
+    const Item b(2);
+    const Item c(3);
     println("M");
     return 0;
 }

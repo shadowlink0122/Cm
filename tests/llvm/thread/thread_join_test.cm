@@ -20,7 +20,7 @@ impl BusyCounter {
 void* worker(void* arg) {
     println("Worker: start");
 
-    BusyCounter c = BusyCounter{ loop_count: 0 };
+    const BusyCounter c = BusyCounter{ loop_count: 0 };
 
     int i = 0;
     while (i < 10) {
@@ -36,14 +36,14 @@ void* worker(void* arg) {
 int main() {
     // Test 1: join - スレッド完了まで待機
     println("Test: join");
-    ulong t1 = spawn(worker as void*);
-    int result = join(t1);
+    const ulong t1 = spawn(worker as void*);
+    const int result = join(t1);
     print("Result: ");
     println(result);
 
     // Test 2: detach - スレッドは中断される
     println("Test: detach");
-    ulong t2 = spawn(worker as void*);
+    const ulong t2 = spawn(worker as void*);
     detach(t2);
     sleep_ms(50);
     println("Main: exit");

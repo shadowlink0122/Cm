@@ -23,13 +23,13 @@ int main() {
     }
 
     // 直接デリファレンス
-    int v0 = *arr[0];
-    int v1 = *arr[1];
-    int v2 = *arr[2];
+    const int v0 = *arr[0];
+    const int v1 = *arr[1];
+    const int v2 = *arr[2];
     println("v0 = {v0}, v1 = {v1}, v2 = {v2}");
 
     // 直接デリファレンスで合計
-    int sum = *arr[0] + *arr[1] + *arr[2];
+    const int sum = *arr[0] + *arr[1] + *arr[2];
     println("sum = {sum}");
 
     return 0;

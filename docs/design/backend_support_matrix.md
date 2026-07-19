@@ -27,6 +27,7 @@
 | `#ifdef` 条件付きコンパイル / `-D` 定義 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `#[target(...)]` 宣言フィルタ | ✅ | ✅ | ✅ | ✅ | ―（platform: svで分離） | ✅ | ✅ |
 | `#[test]` / `cm test` | ✅ JIT実行 | ✅ | ✅ | ✅ | ✅ TB生成+iverilog実行 | ― | ― |
+| サニタイザ `--sanitize` | ⚠️ bounds/undefined | ✅ address/thread/bounds/undefined（memoryはLinuxのみ） | ⚠️ bounds/undefined | ⚠️ undefined | ❌ 非対応 | ― | ― |
 | インラインアセンブリ `__asm__` | ✅ | ✅ | ⚠️ WASM命令のみ | ❌ 実行不可 | ― | ✅ | ✅ |
 
 ## 型
@@ -51,9 +52,9 @@
 | std::math / core / iter | ✅ | ✅ | ✅ | ✅ | ⚠️ 合成可能な範囲 | ✅ | ✅ |
 | std::collections | ✅ | ✅ | ✅ | ❌ skip中 | ❌ 動的メモリ | ⚠️ | ⚠️ |
 | std::mem（malloc等） | ✅ | ✅ | ✅ | ⚠️ GCエミュレーション | ― | ❌ no_std検査 | ❌ no_std検査 |
-| std::thread / sync | ✅ | ✅ | ― | ❌ シングルスレッド | ― | ❌ | ❌ |
-| std::net / http | ✅ | ✅ | ― | ❌（今後） | ― | ❌ | ❌ |
-| std::gpu（Metal） | ✅ | ✅ macOSのみ | ― | ❌ | ― | ― | ― |
+| native::thread / sync | ✅ | ✅ | ― | ❌ シングルスレッド | ― | ❌ | ❌ |
+| native::net / http | ✅ | ✅ | ― | ❌（今後） | ― | ❌ | ❌ |
+| native::gpu（Metal） | ✅ | ✅ macOSのみ | ― | ❌ | ― | ― | ― |
 | ファイルI/O | ✅ | ✅ | ⚠️ WASI | ❌（今後） | ―（$readmemhのみ） | ❌ Boot Services経由 | ❌ |
 | js::fetch / timer / console | ― | ― | ― | ✅ | ― | ― | ― |
 | uefi::*（Boot Services） | ― | ― | ― | ― | ― | ✅ | ― |
@@ -65,7 +66,7 @@
 | SV専用キーワード（posedge/negedge/wire/reg/always系/assign/initial/bit） | SVのみ | `//! platform: sv` で字句レベルから有効化。他プラットフォームでは通常の識別子 |
 | `#[input]/#[output]/#[inout]` ポート、`#[sv::*]` 属性群 | SVのみ | pin/param/parameter/sync/tri/bram/lutram/memfile 等 |
 | don't-careビットマッチ `0b1?00` | SVで検証済み | if-elseチェーンに脱糖（意味論は全バックエンド共通の設計だが、テストはSVのみ） |
-| `//! sv: hierarchy` モジュール階層化 | SVのみ | |
+| exportされたIO構造体によるモジュール階層化 | SVのみ | |
 | `module NAME;` トップモジュール名宣言 | SVのみ | 他バックエンドではnamespace相当 |
 | Boot Services（uefi::table等） | UEFIのみ | |
 | `__NO_STD__`/`__BAREMETAL__`/`__UEFI__` 定義 | UEFI/baremetal | no_std検査（println/malloc/ファイルIO/スレッド等の禁止）と対 |
@@ -97,6 +98,9 @@
 |---|---|---|
 | LLVM O3 + Linux x86_64 で到達不能コードの `ud2` によるSIGILL | common/functions/recursive_function、common/interface/operator_explicit をskip | mir_to_llvm.cpp に到達可能性解析の回避策実装済み。macOS/ARM64は影響なし |
 | exportリスト型モジュールの選択的import抽出（`import ./mod::{A, f}` のトップレベルエイリアス生成・export選択コピー時の非公開依存関数の同伴）が未対応 | common/advanced_modules/import_features をskip | namespace内の構造体型・非修飾呼び出しの解決は2026-07-15修正済み（回帰: namespace_struct_resolution）。残りはプリプロセッサのモジュール機能として次バージョン以降 |
+| グローバル配列の初期化子（`const uint[4] T = [5, 6, 7, 8];` 等のトップレベル宣言）がソフトウェア系バックエンド（JITで確認）で反映されず、要素の読み出しが0になる | SVターゲットではinitialブロックとして機能する（CmCPUのprog_rom等）。ソフトウェア系で必要な場合は関数内ローカル配列を使う | 全バックエンド共通のグローバル初期化経路の実装が必要。既存テストにトップレベル配列初期化子のケースはなく未検出だった |
+| 推移的importでexport再宣言が重複して出力される（同一シンボルの宣言が複数回現れる） | コンパイラ側の重複許容・名前デデュープで実害は出ていない | export再宣言の複数行初期化子切り詰め（コメント・文字列リテラル内の `;` `{` `}` 誤検出）は修正済み（回帰: tests/sv/import/multiline_export_array・multiline_export_string） |
+| SVターゲットで要素長が不揃いの文字列配列の文字インデックス（`ARR[i][j]`）が誤った文字を返す（格納幅と実要素長の不一致。要素長が全て同じ場合は正常） | 文字インデックスを使う文字列配列は要素長を揃える（実例: CmCPUのCTRL_ABBREVSは全要素3文字で正常動作） | 文字列配列の格納幅と要素長情報の管理を見直す必要がある。tests/sv/import/multiline_export_string はこの問題を避けてコンパイル検証のみとしている |
 | std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの `void*` 非対応（明示エラー）・53bit精度・ポインタ⇔整数キャスト不可 | libc malloc/free系（collections/std::mem/allocator等）と64bit大値・ptr⇔intキャストのテストを理由付きで個別skip（2026-07-15にカテゴリ一括skipを棚卸しし、動作する26テスト［基本/フィールド/二重ポインタ・impl経由書き戻し等］を有効化） | ポインタはオブジェクト参照で基本対応。void*はJSで表現不能のため明示エラーを維持 |

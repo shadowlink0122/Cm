@@ -36,12 +36,12 @@ int main() {
     Node<Item>* node = mem as Node<Item>*;
 
     // Item構造体を作成してセット
-    Item item = {value: 42};
+    const Item item = {value: 42};
     set_data(node, item);
 
     // 読み取り
-    Item got = get_data(node);
-    int v = got.value;
+    const Item got = get_data(node);
+    const int v = got.value;
     println("got.value = {v}");
 
     free(node as void*);

@@ -5,7 +5,7 @@ int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
     // some: いずれかの要素が条件を満たすか
-    bool has_even = arr.some((int x) => { return x % 2 == 0; });
+    const bool has_even = arr.some((int x) => { return x % 2 == 0; });
     if (has_even) {
         println("has_even: true");
     } else {
@@ -13,7 +13,7 @@ int main() {
     }
 
     // every: すべての要素が条件を満たすか
-    bool all_positive = arr.every((int x) => { return x > 0; });
+    const bool all_positive = arr.every((int x) => { return x > 0; });
     if (all_positive) {
         println("all_positive: true");
     } else {
@@ -21,7 +21,7 @@ int main() {
     }
 
     // findIndex: 条件を満たす最初の要素のインデックス
-    int idx = arr.findIndex((int x) => { return x > 3; });
+    const int idx = arr.findIndex((int x) => { return x > 3; });
     println("first > 3 at index: {idx}");
 
     return 0;

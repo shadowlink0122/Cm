@@ -1,6 +1,5 @@
 // Bug#5回帰テスト: LICM がASM出力変数をループ不変と誤判定しないことを確認
-// LICMパスがASM出力制約(=r, +r)の変数をmodified_localsに追加し、
-// while条件のプレヘッダへの不正ホイストを防ぐことを検証
+// LICMパスがASM出力制約(=r, +r)の変数をmodified_localsに追加し、while条件のプレヘッダへの不正ホイストを防ぐことを検証
 
 import std::io::println;
 

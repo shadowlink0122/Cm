@@ -23,7 +23,7 @@ impl RangeIterator {
     }
 
     int next() {
-        int value = self.current;
+        const int value = self.current;
         self.current = self.current + self.step;
         return value;
     }
@@ -50,7 +50,7 @@ Range range(int start, int end) {
 }
 
 int main() {
-    Range r = range(1, 5);
+    const Range r = range(1, 5);
 
     // for-in + イテレータ: 自動的にiter()/has_next()/next()パターンで展開
     for (int x in r) {

@@ -7,8 +7,8 @@ Integer double_it(Integer x) {
 }
 
 int main() {
-    Integer a = 21;
-    Integer b = double_it(a);
+    const Integer a = 21;
+    const Integer b = double_it(a);
     println("{b}");
     return 0;
 }

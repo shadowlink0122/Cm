@@ -19,39 +19,39 @@ int main() {
 
     // テスト1: typedef unionの基本使用
     println("Test 1: Typedef union with null");
-    MaybeInt x = null;
-    MaybeInt y = 42 as MaybeInt;
+    const MaybeInt _x = null;
+    const MaybeInt _y = 42 as MaybeInt;
     println("  x declared");
     println("  y declared");
 
     // テスト2: typedef union関数呼び出し
     println("Test 2: Function with union return");
-    MaybeInt result1 = get_value(true);
-    MaybeInt result2 = get_value(false);
-    int v1 = result1 as int;
+    const MaybeInt result1 = get_value(true);
+    const MaybeInt _result2 = get_value(false);
+    const int v1 = result1 as int;
     println("  v1={v1}");
 
     // テスト3: 変数でインラインユニオン型宣言
     println("Test 3: Inline union variable");
-    int | null a = null;
-    int | null b = 42;
+    int | null _a = null;
+    int | null _b = 42;
     println("  a declared with null");
     println("  b declared with 42");
 
     // テスト4: 複数型のインラインユニオン
     println("Test 4: Multi-type inline union");
-    int | string | null c = null;
+    int | string | null _c = null;
     println("  c declared");
 
     // テスト5: null型を含むユニオンへのnull代入
     println("Test 5: Null assignment");
-    MaybeInt m = null;
+    const MaybeInt _m = null;
     println("  null assigned to MaybeInt");
 
     // テスト6: null型を含むユニオンへの値代入
     println("Test 6: Value assignment");
-    MaybeInt n = 100 as MaybeInt;
-    int v6 = n as int;
+    const MaybeInt n = 100 as MaybeInt;
+    const int v6 = n as int;
     println("  v6={v6}");
 
     println("=== PASS ===");

@@ -9,7 +9,7 @@ int main() {
         println("=== i,n Constraint Test ===");
 
         // === i制約: macro定数 ===
-        int result1 = 0;
+        const int result1 = 0;
         __asm__("movl ${i:CONST_42}, ${=r:result1}");
 
         if (result1 == 42) {
@@ -19,7 +19,7 @@ int main() {
         }
 
         // === n制約: 別のmacro定数 ===
-        int result2 = 0;
+        const int result2 = 0;
         __asm__("movl ${n:CONST_100}, ${=r:result2}");
 
         if (result2 == 100) {
@@ -30,7 +30,7 @@ int main() {
 
         // === const定数（関数ローカル） ===
         const int LOCAL_CONST = 77;
-        int result3 = 0;
+        const int result3 = 0;
         __asm__("movl ${i:LOCAL_CONST}, ${=r:result3}");
 
         if (result3 == 77) {
@@ -45,7 +45,7 @@ int main() {
         println("=== i,n Constraint Test ===");
 
         // === i制約: macro定数 ===
-        int result1 = 0;
+        const int result1 = 0;
         __asm__("mov ${=r:result1}, ${i:CONST_42}");
 
         if (result1 == 42) {
@@ -55,7 +55,7 @@ int main() {
         }
 
         // === n制約: 別のmacro定数 ===
-        int result2 = 0;
+        const int result2 = 0;
         __asm__("mov ${=r:result2}, ${n:CONST_100}");
 
         if (result2 == 100) {
@@ -66,7 +66,7 @@ int main() {
 
         // === const定数（関数ローカル） ===
         const int LOCAL_CONST = 77;
-        int result3 = 0;
+        const int result3 = 0;
         __asm__("mov ${=r:result3}, ${i:LOCAL_CONST}");
 
         if (result3 == 77) {

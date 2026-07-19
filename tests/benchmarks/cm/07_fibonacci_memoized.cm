@@ -4,7 +4,7 @@
 import std::io;
 
 int main() {
-    int n = 45;  // int範囲内に収まる値
+    const int n = 45;  // int範囲内に収まる値
 
     // 動的計画法でフィボナッチを計算
     if (n <= 0) {

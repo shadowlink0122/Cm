@@ -4,8 +4,7 @@
 #[input] bool clk = false;
 #[output] uint result = 0;
 
-// 非constのstringはlogic [23:0]（3文字）固定のため、
-// 3文字を超える初期値はエラーになる（error[SV005]）
+// 非constのstringはlogic [23:0]（3文字）固定のため、3文字を超える初期値はエラーになる（error[SV005]）
 string message = "hello";
 
 async void update(posedge clk) {

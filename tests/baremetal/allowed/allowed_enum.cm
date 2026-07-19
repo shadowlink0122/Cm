@@ -17,7 +17,7 @@ int get_priority(State s) {
 }
 
 int main() {
-    State s = State::Running;
-    int p = get_priority(s);
+    const State s = State::Running;
+    const int p = get_priority(s);
     return p;
 }

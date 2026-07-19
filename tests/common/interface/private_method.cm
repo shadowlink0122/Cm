@@ -12,14 +12,14 @@ struct MyCalc {
 
 impl MyCalc for Calculator {
     // privateメソッド：impl内からのみ呼び出し可能
-    private int doubleValue(int n) {
+    private int double_value(int n) {
         return n * 2;
     }
 
     // publicメソッド：外部から呼び出し可能
     int calculate(int x) {
         // impl内からprivateメソッドを呼び出し
-        return self.doubleValue(x) + self.multiplier;
+        return self.double_value(x) + self.multiplier;
     }
 }
 
@@ -27,8 +27,8 @@ int main() {
     MyCalc c;
     c.multiplier = 10;
 
-    int result = c.calculate(5);
-    // doubleValue(5) + 10 = 10 + 10 = 20
+    const int result = c.calculate(5);
+    // double_value(5) + 10 = 10 + 10 = 20
 
     println("Result: {result}");
 

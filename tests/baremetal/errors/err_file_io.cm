@@ -7,7 +7,7 @@ use libc {
 }
 
 int main() {
-    int fp = fopen("/tmp/test.txt", "w");
+    const int fp = fopen("/tmp/test.txt", "w");
     fclose(fp);
     return 0;
 }

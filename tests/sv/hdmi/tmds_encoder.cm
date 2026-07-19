@@ -16,18 +16,19 @@ int cnt = 0;
 async void encode(posedge clk) {
     if (de == true) {
         // ポップカウント
-        uint n1 = (data_in & 1) + ((data_in >> 1) & 1) + ((data_in >> 2) & 1) + ((data_in >> 3) & 1)
-            + ((data_in >> 4) & 1) + ((data_in >> 5) & 1) + ((data_in >> 6) & 1) + ((data_in >> 7) & 1);
+        const uint n1 = (data_in & 1) + ((data_in >> 1) & 1) + ((data_in >> 2) & 1)
+            + ((data_in >> 3) & 1) + ((data_in >> 4) & 1) + ((data_in >> 5) & 1)
+            + ((data_in >> 6) & 1) + ((data_in >> 7) & 1);
 
         // ステージ 1: 遷移最小化 (XOR)
-        uint q0 = data_in & 1;
-        uint q1 = ((data_in >> 1) & 1) ^ q0;
-        uint q2 = ((data_in >> 2) & 1) ^ q1;
-        uint q3 = ((data_in >> 3) & 1) ^ q2;
-        uint q4 = ((data_in >> 4) & 1) ^ q3;
-        uint q5 = ((data_in >> 5) & 1) ^ q4;
-        uint q6 = ((data_in >> 6) & 1) ^ q5;
-        uint q7 = ((data_in >> 7) & 1) ^ q6;
+        const uint q0 = data_in & 1;
+        const uint q1 = ((data_in >> 1) & 1) ^ q0;
+        const uint q2 = ((data_in >> 2) & 1) ^ q1;
+        const uint q3 = ((data_in >> 3) & 1) ^ q2;
+        const uint q4 = ((data_in >> 4) & 1) ^ q3;
+        const uint q5 = ((data_in >> 5) & 1) ^ q4;
+        const uint q6 = ((data_in >> 6) & 1) ^ q5;
+        const uint q7 = ((data_in >> 7) & 1) ^ q6;
 
         // 10bit 出力組み立て
         tmds_out = (q0 | (q1 << 1) | (q2 << 2) | (q3 << 3)

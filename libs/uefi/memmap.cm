@@ -80,12 +80,12 @@ export ulong uefi_get_memory_map(
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = get_map_fn as ulong;
-    ulong ms_addr = map_size as ulong;
-    ulong map_addr = map as ulong;
-    ulong mk_addr = map_key as ulong;
-    ulong ds_addr = desc_size as ulong;
-    ulong dv_addr = desc_version as ulong;
+    const ulong fn_addr = get_map_fn as ulong;
+    const ulong ms_addr = map_size as ulong;
+    const ulong map_addr = map as ulong;
+    const ulong mk_addr = map_key as ulong;
+    const ulong ds_addr = desc_size as ulong;
+    const ulong dv_addr = desc_version as ulong;
     return bs_call5(fn_addr, ms_addr, map_addr, mk_addr, ds_addr, dv_addr);
 }
 

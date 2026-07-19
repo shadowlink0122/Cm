@@ -9,7 +9,7 @@ int main() {
     p.print();
     // 暗黙的にエクスポートされたimplのメソッド
 
-    int val = shapes::get_value();
+    const int val = shapes::get_value();
     println("Value: {val}");
     return 0;
 }

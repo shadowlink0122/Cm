@@ -25,7 +25,7 @@ int main() {
         objects.push(TrackedObject { id: 100 });
         objects.push(TrackedObject { id: 200 });
         objects.push(TrackedObject { id: 300 });
-        int len = objects.len();
+        const int len = objects.len();
         println("  objects.len() = {len}");
         println("  Exiting scope - expect destructor calls:");
     }

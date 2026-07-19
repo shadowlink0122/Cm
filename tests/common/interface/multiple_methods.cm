@@ -26,8 +26,8 @@ int main() {
     r.width = 10;
     r.height = 5;
 
-    int a = r.area();
-    int p = r.perimeter();
+    const int a = r.area();
+    const int p = r.perimeter();
     println("Area: {a}");
     println("Perimeter: {p}");
 

@@ -50,7 +50,7 @@ int main() {
 
     // テスト1: 直接的なメソッド呼び出し
     println("\nTest 1: Direct method call on pointer");
-    int v1 = node1->get_value();
+    const int v1 = node1->get_value();
     // node1のメソッド呼び出し
     println("  node1->get_value() = {v1}");
 
@@ -59,7 +59,7 @@ int main() {
     if (node1->next != null) {
         // node1->next はNode*型
         // これがinterfaceメソッドを呼び出せるか？
-        int v2 = node1->next->get_value();
+        const int v2 = node1->next->get_value();
         // ← これが動くか確認！
         println("  node1->next->get_value() = {v2}");
     }
@@ -68,7 +68,7 @@ int main() {
     println("\nTest 3: Set value via pointer member method");
     if (node1->next != null) {
         node1->next->set_value(99);
-        int v3 = node1->next->get_value();
+        const int v3 = node1->next->get_value();
         println("  After set_value(99): node1->next->get_value() = {v3}");
     }
 

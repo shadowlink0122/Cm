@@ -19,8 +19,8 @@ export void keyboard_test(void* st) {
         ushort scan = 0;
         ushort ch = 0;
 
-        ulong status = efi_read_key_blocking(st, &scan, &ch);
-        long s = status as long;
+        const ulong status = efi_read_key_blocking(st, &scan, &ch);
+        const long s = status as long;
         if (s < 0) {
             continue;
         }

@@ -4,18 +4,18 @@ parent: Advanced
 nav_order: 10
 ---
 
-# Threads (std::thread)
+# Threads (native::thread)
 
-Cm uses the `std::thread` module for multi-threaded programming.
+Cm uses the `native::thread` module for multi-threaded programming.
 
 ## Basic Usage
 
 ### Creating and Joining Threads
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 void* worker(void* arg) {
     println("Worker: started");
@@ -79,9 +79,9 @@ Suspends the current thread for the specified milliseconds.
 ## Parallel Processing Example
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 void* calc10(void* arg) {
     sleep_ms(50);
@@ -141,7 +141,7 @@ int main() {
 
 ## Internal Implementation
 
-`std::thread` directly uses POSIX `pthread`:
+`native::thread` directly uses POSIX `pthread`:
 
 - `spawn` → `pthread_create`
 - `join` → `pthread_join`

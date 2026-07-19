@@ -1,8 +1,7 @@
 //! platform: sv
 import std::debug::assert;
 
-// #[test] からDUT内部信号（ポート以外のモジュールレベル信号）を
-// dut. 階層参照で読み取れることを検証する
+// #[test] からDUT内部信号（ポート以外のモジュールレベル信号）をdut. 階層参照で読み取れることを検証する
 
 #[input] posedge clk;
 #[output] bool led = false;

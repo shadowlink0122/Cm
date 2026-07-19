@@ -32,27 +32,44 @@ export ulong make_color(ulong r, ulong g, ulong b) {
 // ============================================================
 
 /// 1ピクセルを描画
-export void draw_pixel(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong color) {
+export void draw_pixel(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong color
+) {
     // 範囲外チェック
     if (x >= width) { return; }
     if (y >= height) { return; }
 
     // フレームバッファへの書き込み
     // offset = (y * stride + x) * 4  (4バイト/ピクセル = BGRA)
-    ulong offset = (y * stride + x) * 4;
+    const ulong offset = (y * stride + x) * 4;
     uint* pixel = (fb + offset) as uint*;
     *pixel = color as uint;
 }
 
 /// 水平線を描画
-export void draw_hline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+export void draw_hline(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong length,
+    ulong color
+) {
     if (y >= height) { return; }
 
     ulong i = 0;
     while (i < length) {
-        ulong px = x + i;
+        const ulong px = x + i;
         if (px >= width) { return; }
-        ulong offset = (y * stride + px) * 4;
+        const ulong offset = (y * stride + px) * 4;
         uint* pixel = (fb + offset) as uint*;
         *pixel = color as uint;
         i += 1;
@@ -60,14 +77,23 @@ export void draw_hline(ulong fb, ulong width, ulong height, ulong stride, ulong 
 }
 
 /// 垂直線を描画
-export void draw_vline(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong length, ulong color) {
+export void draw_vline(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong length,
+    ulong color
+) {
     if (x >= width) { return; }
 
     ulong i = 0;
     while (i < length) {
-        ulong py = y + i;
+        const ulong py = y + i;
         if (py >= height) { return; }
-        ulong offset = (py * stride + x) * 4;
+        const ulong offset = (py * stride + x) * 4;
         uint* pixel = (fb + offset) as uint*;
         *pixel = color as uint;
         i += 1;
@@ -75,7 +101,17 @@ export void draw_vline(ulong fb, ulong width, ulong height, ulong stride, ulong 
 }
 
 /// 任意の直線を描画（Bresenhamアルゴリズム）
-export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x0, ulong y0, ulong x1, ulong y1, ulong color) {
+export void draw_line(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x0,
+    ulong y0,
+    ulong x1,
+    ulong y1,
+    ulong color
+) {
     // 水平・垂直の特殊ケース
     if (y0 == y1) {
         if (x0 <= x1) {
@@ -95,10 +131,10 @@ export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x
     }
 
     // Bresenhamの直線アルゴリズム
-    long sx0 = x0 as long;
-    long sy0 = y0 as long;
-    long sx1 = x1 as long;
-    long sy1 = y1 as long;
+    const long sx0 = x0 as long;
+    const long sy0 = y0 as long;
+    const long sx1 = x1 as long;
+    const long sy1 = y1 as long;
 
     long dx = sx1 - sx0;
     long dy = sy1 - sy0;
@@ -127,7 +163,7 @@ export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x
             }
         }
 
-        long e2 = err * 2;
+        const long e2 = err * 2;
         if (e2 > (0 - dy)) {
             err = err - dy;
             cx = cx + step_x;
@@ -144,7 +180,17 @@ export void draw_line(ulong fb, ulong width, ulong height, ulong stride, ulong x
 // ============================================================
 
 /// 矩形の枠を描画
-export void draw_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+export void draw_rect(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong w,
+    ulong h,
+    ulong color
+) {
     draw_hline(fb, width, height, stride, x, y, w, color);
     draw_hline(fb, width, height, stride, x, y + h - 1, w, color);
     draw_vline(fb, width, height, stride, x, y, h, color);
@@ -152,7 +198,17 @@ export void draw_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x
 }
 
 /// 矩形を塗りつぶし
-export void fill_rect(ulong fb, ulong width, ulong height, ulong stride, ulong x, ulong y, ulong w, ulong h, ulong color) {
+export void fill_rect(
+    ulong fb,
+    ulong width,
+    ulong height,
+    ulong stride,
+    ulong x,
+    ulong y,
+    ulong w,
+    ulong h,
+    ulong color
+) {
     ulong j = 0;
     while (j < h) {
         draw_hline(fb, width, height, stride, x, y + j, w, color);
@@ -173,8 +229,8 @@ export void graphics_demo(void* system_table) {
     ulong stride = 0;
 
     // GOP初期化（ポインタ経由で情報を返す）
-    ulong status = gop_init(system_table, &fb, &w, &h, &stride);
-    long signed_status = status as long;
+    const ulong status = gop_init(system_table, &fb, &w, &h, &stride);
+    const long signed_status = status as long;
     if (signed_status < 0) {
         efi_println(system_table, "Error: GOP not available" as void*);
         return;
@@ -195,8 +251,8 @@ export void graphics_demo(void* system_table) {
     draw_line(fb, w, h, stride, w - 11, 10, 10, h - 11, COLOR_GREEN);
 
     // 3. 十字線（黄色、画面中央）
-    ulong cx = w / 2;
-    ulong cy = h / 2;
+    const ulong cx = w / 2;
+    const ulong cy = h / 2;
     draw_hline(fb, w, h, stride, cx - 50, cy, 100, COLOR_YELLOW);
     draw_vline(fb, w, h, stride, cx, cy - 50, 100, COLOR_YELLOW);
 
@@ -209,7 +265,7 @@ export void graphics_demo(void* system_table) {
     fill_rect(fb, w, h, stride, 550, 50, 80, 60, COLOR_MAGENTA);
 
     // 5. 放射状パターン（中央）
-    ulong r = 80;
+    const ulong r = 80;
     draw_line(fb, w, h, stride, cx, cy, cx + r, cy, COLOR_ORANGE);
     draw_line(fb, w, h, stride, cx, cy, cx + r, cy - r / 2, COLOR_ORANGE);
     draw_line(fb, w, h, stride, cx, cy, cx + r / 2, cy - r, COLOR_ORANGE);
@@ -226,12 +282,12 @@ export void graphics_demo(void* system_table) {
     // 6. ネストした矩形枠
     ulong n = 0;
     while (n < 5) {
-        ulong noff = n * 15;
-        ulong col = make_color(255 - n * 50, n * 50, 128);
-        ulong rx = cx - 100 + noff;
-        ulong ry = cy + 100 + noff;
-        ulong rw = 200 - noff * 2;
-        ulong rh = 100 - noff * 2;
+        const ulong noff = n * 15;
+        const ulong col = make_color(255 - n * 50, n * 50, 128);
+        const ulong rx = cx - 100 + noff;
+        const ulong ry = cy + 100 + noff;
+        const ulong rw = 200 - noff * 2;
+        const ulong rh = 100 - noff * 2;
         draw_rect(fb, w, h, stride, rx, ry, rw, rh, col);
         n += 1;
     }

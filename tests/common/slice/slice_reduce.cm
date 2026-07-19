@@ -13,11 +13,11 @@ int main() {
     int[5] arr = [1, 2, 3, 4, 5];
 
     // 合計
-    int sum = arr.reduce(add, 0);
+    const int sum = arr.reduce(add, 0);
     println("sum: {sum}");
 
     // 積
-    int product = arr.reduce(mul, 1);
+    const int product = arr.reduce(mul, 1);
     println("product: {product}");
 
     return 0;

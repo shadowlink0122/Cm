@@ -2,7 +2,7 @@
 title: HTTP通信
 ---
 
-# std::http - HTTP通信ライブラリ
+# native::http - HTTP通信ライブラリ
 
 Cm標準ライブラリのHTTP通信モジュール。クライアントとサーバの両方をサポートします。
 
@@ -14,7 +14,7 @@ Cm標準ライブラリのHTTP通信モジュール。クライアントとサ�
 
 ## 概要
 
-`std::http` はHTTP/HTTPS通信のための高レベルAPIを提供します。
+`native::http` はHTTP/HTTPS通信のための高レベルAPIを提供します。
 
 - **HttpClient** - RESTクライアント (GET/POST/PUT/DELETE)
 - **HttpRequest** - ビルダーパターンによるカスタムリクエスト
@@ -28,8 +28,8 @@ Cm標準ライブラリのHTTP通信モジュール。クライアントとサ�
 ### 基本的な使い方
 
 ```cm
-import std::http::HttpClient;
-import std::http::HttpResponse;
+import native::http::HttpClient;
+import native::http::HttpResponse;
 import std::io::println;
 
 int main() {
@@ -74,9 +74,9 @@ int main() {
 カスタムヘッダーや認証が必要な場合に使用します。
 
 ```cm
-import std::http::HttpRequest;
-import std::http::HttpResponse;
-import std::http::METHOD_POST;
+import native::http::HttpRequest;
+import native::http::HttpResponse;
+import native::http::METHOD_POST;
 import std::io::println;
 
 int main() {
@@ -128,8 +128,8 @@ int main() {
 シンプルなHTTPサーバを構築できます。
 
 ```cm
-import std::http::HttpServer;
-import std::http::HttpServerRequest;
+import native::http::HttpServer;
+import native::http::HttpServerRequest;
 import std::io::println;
 
 int main() {
@@ -172,8 +172,8 @@ int main() {
 ## URL解析
 
 ```cm
-import std::http::parse_url;
-import std::http::ParsedUrl;
+import native::http::parse_url;
+import native::http::ParsedUrl;
 
 ParsedUrl url = parse_url("https://api.example.com:8080/v1/data");
 // url.scheme = "https"
@@ -197,4 +197,4 @@ ParsedUrl url = parse_url("https://api.example.com:8080/v1/data");
 ---
 
 <!-- nav -->
-← 前: [std::core — コアユーティリティ](core-utils.html) ｜ [目次](index.html) ｜ 次: [std::net - TCP/UDP通信](network/tcp.html) →
+← 前: [std::core — コアユーティリティ](core-utils.html) ｜ [目次](index.html) ｜ 次: [native::net - TCP/UDP通信](network/tcp.html) →

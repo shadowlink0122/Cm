@@ -8,8 +8,8 @@ enum Option {
 }
 
 int main() {
-    Option s = Option::Some(42);
-    Option n = Option::None;
+    const Option s = Option::Some(42);
+    const Option _n = Option::None;
 
     // タグ値の比較（パターンバインディングなし）
     int v1 = 0;

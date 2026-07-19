@@ -17,7 +17,7 @@ parent: Tutorials
 - 高度な最適化
 - デバッグ情報生成
 
-## サポート状況（v0.16.1）
+## サポート状況（v0.16.2）
 
 | 機能 | 状態 |
 |------|------|
@@ -66,4 +66,4 @@ cm compile program.cm -g -o program
 ---
 
 <!-- nav -->
-← 前: [MIR最適化パス](../common/optimization.html) ｜ [目次](../index.html) ｜ 次: [UEFIベアメタル開発チュートリアル](uefi.html) →
+← 前: [サニタイザ](../common/sanitizer.html) ｜ [目次](../index.html) ｜ 次: [UEFIベアメタル開発チュートリアル](uefi.html) →

@@ -7,7 +7,7 @@ ulong efi_main(void* image_handle, void* system_table) {
     b[0] = 0x1111;
     b[1] = 0x2222;
     b[2] = 0x3333;
-    void* b_ptr = &b as void*;
+    void* _b_ptr = &b as void*;
 
     // Bug#17: 大きなスタックフレームで___chkstk_ms
     ulong[512] large;

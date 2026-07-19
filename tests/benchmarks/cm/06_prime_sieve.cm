@@ -36,8 +36,8 @@ int count_primes_sieve(int limit) {
 }
 
 int main() {
-    int limit = 100000;
-    int count = count_primes_sieve(limit);
+    const int limit = 100000;
+    const int count = count_primes_sieve(limit);
 
     println("Prime numbers up to {limit} (sieve): {count}");
     return 0;

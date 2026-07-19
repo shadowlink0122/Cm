@@ -18,14 +18,14 @@ int main() {
     describe(a);
     a = "hello";
     describe(a);
-    Value c = true;
+    const Value c = true;
     describe(c);
 
     // ブロック形式アーム
-    Value d = 7;
+    const Value d = 7;
     match (d) {
         int i => {
-            int doubled = i * 2;
+            const int doubled = i * 2;
             println("block int: {doubled}");
         }
         _ => println("other"),

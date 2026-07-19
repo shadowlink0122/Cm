@@ -2,7 +2,7 @@ import std::io::println;
 
 int main() {
     // Very simple switch test with only integer operations
-    int x = 2;
+    const int x = 2;
     int result = 0;
 
     switch(x) {
@@ -24,7 +24,7 @@ int main() {
     // Should print 20
 
     // Test with else case
-    int y = 5;
+    const int y = 5;
     int result2 = 0;
 
     switch(y) {

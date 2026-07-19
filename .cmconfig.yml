@@ -1,0 +1,29 @@
+# Cmリポジトリのlint設定
+# ディレクトリ走査（-r）からの除外。明示的なファイル指定はこの除外の影響を受けない
+lint:
+  exclude:
+    # lint自身のテストデータ（意図的な命名違反・未使用変数等）
+    - tests/linter/fixtures/
+    - tests/linter/workspace/
+    # i18n E2Eテストデータ（意図的なエラー・命名違反を含む）
+    - tests/i18n/
+    # gtest回帰のケースフィクスチャ（HIR/MIR/フォーマッタ/SV codegenの検証入力。
+    # フォーマッタ期待値や意図的な部分コードを含み、gtest経由で検証される）
+    - tests/regression/cases/
+    # モジュールシステムのフィクスチャ群（import断片・循環import等のネガティブを含む）
+    - tests/common/advanced_modules/
+    # import専用のモジュール集約dialect（module std.core; typedefエイリアス・export <T>等、
+    # importプリプロセッサ経由でのみ解析可能なファイル群）
+    - libs/std/core/
+    - libs/std/io/
+    - libs/std/iter/
+    - libs/std/math/mod.cm
+    - libs/std/mem/
+    - libs/std/collections/mod.cm
+    - libs/native/io/
+    - libs/native/math/
+    - libs/native/sync/mod.cm
+    - libs/uefi/mod.cm
+    # UEFI例のFFI/ユーティリティ断片（use uefi{} dialect。QEMUフローで検証される）
+    - examples/uefi/libs/
+    - examples/uefi/util/

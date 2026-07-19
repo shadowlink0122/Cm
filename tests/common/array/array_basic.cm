@@ -13,11 +13,11 @@ int main() {
     arr[4] = 50;
 
     // 配列からの読み出し
-    int v0 = arr[0];
-    int v1 = arr[1];
-    int v2 = arr[2];
-    int v3 = arr[3];
-    int v4 = arr[4];
+    const int v0 = arr[0];
+    const int v1 = arr[1];
+    const int v2 = arr[2];
+    const int v3 = arr[3];
+    const int v4 = arr[4];
 
     println("arr[0] = {v0}");
     println("arr[1] = {v1}");
@@ -26,7 +26,7 @@ int main() {
     println("arr[4] = {v4}");
 
     // 配列の合計
-    int sum = arr[0] + arr[1] + arr[2] + arr[3] + arr[4];
+    const int sum = arr[0] + arr[1] + arr[2] + arr[3] + arr[4];
     println("sum = {sum}");
 
     return 0;

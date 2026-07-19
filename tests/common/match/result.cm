@@ -64,31 +64,31 @@ MyResult<int, int> safe_get(int index, int max_index) {
 
 int main() {
     // 正常な除算
-    MyResult<int, int> r1 = safe_divide(10, 2);
-    int v1 = unwrap_or_match(r1, -999);
-    int c1 = result_to_code(r1);
+    const MyResult<int, int> r1 = safe_divide(10, 2);
+    const int v1 = unwrap_or_match(r1, -999);
+    const int c1 = result_to_code(r1);
     println("safe_divide(10, 2) = {v1}, code = {c1}");
 
     // ゼロ除算
-    MyResult<int, int> r2 = safe_divide(10, 0);
-    int v2 = unwrap_or_match(r2, -999);
-    int c2 = result_to_code(r2);
+    const MyResult<int, int> r2 = safe_divide(10, 0);
+    const int v2 = unwrap_or_match(r2, -999);
+    const int c2 = result_to_code(r2);
     println("safe_divide(10, 0) = {v2}, code = {c2}");
 
     // 境界チェック - 正常
-    MyResult<int, int> r3 = safe_get(3, 10);
-    int v3 = unwrap_or_match(r3, -999);
+    const MyResult<int, int> r3 = safe_get(3, 10);
+    const int v3 = unwrap_or_match(r3, -999);
     println("safe_get(3, 10) = {v3}");
 
     // 境界チェック - 範囲外
-    MyResult<int, int> r4 = safe_get(15, 10);
-    int v4 = unwrap_or_match(r4, -999);
+    const MyResult<int, int> r4 = safe_get(15, 10);
+    const int v4 = unwrap_or_match(r4, -999);
     println("safe_get(15, 10) = {v4}");
 
     // 連鎖処理のシミュレート
-    MyResult<int, int> step1 = safe_divide(100, 2);
-    MyResult<int, int> step2 = safe_divide(step1.value, 5);
-    int final_result = match (step1.is_ok) {
+    const MyResult<int, int> step1 = safe_divide(100, 2);
+    const MyResult<int, int> step2 = safe_divide(step1.value, 5);
+    const int final_result = match (step1.is_ok) {
         true => match (step2.is_ok) {
             true => step2.value,
             false => -1,

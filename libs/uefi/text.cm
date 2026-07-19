@@ -76,7 +76,7 @@ export ulong uefi_puts(EfiSystemTable* st, string msg) {
 
     int i = 0;
     while (i < 256) {
-        utiny ch = *(src + i);
+        const utiny ch = *(src + i);
         if (ch == 0) {
             break;
         }
@@ -86,10 +86,10 @@ export ulong uefi_puts(EfiSystemTable* st, string msg) {
     buf[i] = 0;
 
     // void* → ulong にキャスト（i64保証でASMに渡す）
-    ulong fn_addr = output_fn as ulong;
-    ulong co_addr = con_out as ulong;
-    ulong buf_addr = buf as ulong;
-    ulong status = win64_call2(fn_addr, co_addr, buf_addr);
+    const ulong fn_addr = output_fn as ulong;
+    const ulong co_addr = con_out as ulong;
+    const ulong buf_addr = buf as ulong;
+    const ulong status = win64_call2(fn_addr, co_addr, buf_addr);
     return status;
 }
 
@@ -109,9 +109,9 @@ export ulong uefi_println(EfiSystemTable* st, string msg) {
     EfiSimpleTextOutputProtocol* con_out = st->con_out;
     void* output_fn = con_out->output_string;
 
-    ulong fn_addr = output_fn as ulong;
-    ulong co_addr = con_out as ulong;
-    ulong nl_addr = newline as ulong;
+    const ulong fn_addr = output_fn as ulong;
+    const ulong co_addr = con_out as ulong;
+    const ulong nl_addr = newline as ulong;
     status = win64_call2(fn_addr, co_addr, nl_addr);
     return status;
 }
@@ -128,8 +128,8 @@ export ulong uefi_clear_screen(EfiSystemTable* st) {
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = clear_fn as ulong;
-    ulong co_addr = con_out as ulong;
+    const ulong fn_addr = clear_fn as ulong;
+    const ulong co_addr = con_out as ulong;
     return win64_call1(fn_addr, co_addr);
 }
 
@@ -145,8 +145,8 @@ export ulong uefi_set_color(EfiSystemTable* st, ulong attribute) {
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = set_attr_fn as ulong;
-    ulong co_addr = con_out as ulong;
+    const ulong fn_addr = set_attr_fn as ulong;
+    const ulong co_addr = con_out as ulong;
     return win64_call2(fn_addr, co_addr, attribute);
 }
 
@@ -194,10 +194,10 @@ export ulong uefi_print_hex(EfiSystemTable* st, ulong value) {
     ulong i = 0;
     while (i < 16) {
         // 上位ニブルから処理
-        ulong shift = (15 - i) * 4;
-        ulong mask = 15;
-        ulong nibble = (value >> shift) & mask;
-        ulong ten = 10;
+        const ulong shift = (15 - i) * 4;
+        const ulong mask = 15;
+        const ulong nibble = (value >> shift) & mask;
+        const ulong ten = 10;
         if (nibble < ten) {
             buf[i + 2] = (nibble + 48) as utiny;  // '0'-'9'
         } else {
@@ -216,7 +216,7 @@ export ulong uefi_print_hex(EfiSystemTable* st, ulong value) {
 export ulong uefi_print_dec(EfiSystemTable* st, ulong value) {
     utiny[21] buf;  // 最大20桁 + null
 
-    ulong zero = 0;
+    const ulong zero = 0;
     if (value == zero) {
         buf[0] = 48;  // '0'
         buf[1] = 0;
@@ -228,10 +228,10 @@ export ulong uefi_print_dec(EfiSystemTable* st, ulong value) {
     ulong pos = 20;
     buf[pos] = 0;
     ulong v = value;
-    ulong ten = 10;
+    const ulong ten = 10;
     while (v > zero) {
         pos -= 1;
-        ulong digit = v % ten;
+        const ulong digit = v % ten;
         buf[pos] = (digit + 48) as utiny;
         v = v / ten;
     }

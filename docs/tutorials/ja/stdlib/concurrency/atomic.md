@@ -2,7 +2,7 @@
 title: Atomic
 ---
 
-# std::sync::atomic - アトミック操作
+# native::sync::atomic - アトミック操作
 
 ロックフリーのアトミック操作。カウンタやフラグなどの単純な共有変数に使用します。
 
@@ -15,11 +15,11 @@ title: Atomic
 ## 基本的な使い方
 
 ```cm
-import std::sync::atomic::store_i32;
-import std::sync::atomic::load_i32;
-import std::sync::atomic::fetch_add_i32;
-import std::thread::spawn;
-import std::thread::join;
+import native::sync::atomic::store_i32;
+import native::sync::atomic::load_i32;
+import native::sync::atomic::fetch_add_i32;
+import native::thread::spawn;
+import native::thread::join;
 import std::io::println;
 
 int counter = 0;
@@ -52,8 +52,8 @@ int main() {
 ロックフリーアルゴリズムの基本操作です。
 
 ```cm
-import std::sync::atomic::compare_exchange_i32;
-import std::sync::atomic::load_i32;
+import native::sync::atomic::compare_exchange_i32;
+import native::sync::atomic::load_i32;
 
 int shared = 0;
 
@@ -109,4 +109,4 @@ void atomic_update(int* ptr, int new_value) {
 ---
 
 <!-- nav -->
-← 前: [std::sync::channel - メッセージパッシング](channel.html) ｜ [目次](index.html) ｜ 次: [std::gpu - GPU計算 (Apple Metal)](../gpu.html) →
+← 前: [native::sync::channel - メッセージパッシング](channel.html) ｜ [目次](index.html) ｜ 次: [native::gpu - GPU計算 (Apple Metal)](../gpu.html) →

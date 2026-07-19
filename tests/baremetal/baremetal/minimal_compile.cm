@@ -4,6 +4,6 @@
 
 int main() {
     // 最小ブートロジック
-    int x = 42;
+    const int x = 42;
     return x;
 }

@@ -20,8 +20,8 @@ struct PtrContainer<T> {
 
 impl PtrContainer<T> {
     void init(int cap) {
-        long elem_size = __sizeof__(T) as long;
-        long alloc_size = (cap as long) * elem_size;
+        const long elem_size = __sizeof__(T) as long;
+        const long alloc_size = (cap as long) * elem_size;
         void* raw = malloc(alloc_size);
         self.data = raw as T*;
         self.size = 0;

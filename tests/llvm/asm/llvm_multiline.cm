@@ -9,7 +9,7 @@ int main() {
 
         // テスト1: バッククォートでの複数行アセンブリ
         println("\n--- Test 1: Multi-line with backtick ---");
-        int val1 = 10;
+        const int val1 = 10;
         __asm__(`
         addl $$5, ${+r:val1}
         sall $$1, ${+r:val1}
@@ -20,7 +20,7 @@ int main() {
 
         // テスト2: より複雑な複数行計算
         println("\n--- Test 2: Complex multi-line ---");
-        int val2 = 100;
+        const int val2 = 100;
         __asm__(`
         subl $$50, ${+r:val2}
         sall $$2, ${+r:val2}
@@ -31,7 +31,7 @@ int main() {
 
         // テスト3: ビット操作の連鎖
         println("\n--- Test 3: Bit operation chain ---");
-        int bits = 0x01;
+        const int bits = 0x01;
         __asm__(`
         sall $$4, ${+r:bits}
         orl $$0x0F, ${+r:bits}
@@ -42,7 +42,7 @@ int main() {
 
         // テスト4: 符号操作
         println("\n--- Test 4: Sign operations ---");
-        int sign = 50;
+        const int sign = 50;
         __asm__(`
         negl ${+r:sign}
         addl $$100, ${+r:sign}
@@ -53,14 +53,14 @@ int main() {
 
         // テスト5: セミコロン区切り（1行形式）
         println("\n--- Test 5: Semicolon separated ---");
-        int seq = 5;
+        const int seq = 5;
         __asm__("addl $$10, ${+r:seq}; sall $$1, ${+r:seq}; subl $$5, ${+r:seq}");
         println("seq (should be 25):");  // (5+10)*2-5 = 25
         println(seq);
 
         // テスト6: 連続した独立した__asm__呼び出し
         println("\n--- Test 6: Sequential separate calls ---");
-        int multi = 8;
+        const int multi = 8;
         __asm__("addl $$2, ${+r:multi}");   // 10
         __asm__("sall $$2, ${+r:multi}");   // 40
         __asm__("subl $$10, ${+r:multi}");  // 30
@@ -74,7 +74,7 @@ int main() {
 
         // テスト1: バッククォートでの複数行アセンブリ
         println("\n--- Test 1: Multi-line with backtick ---");
-        int val1 = 10;
+        const int val1 = 10;
         __asm__(`
         add ${+r:val1}, ${+r:val1}, #5
         lsl ${+r:val1}, ${+r:val1}, #1
@@ -85,7 +85,7 @@ int main() {
 
         // テスト2: より複雑な複数行計算
         println("\n--- Test 2: Complex multi-line ---");
-        int val2 = 100;
+        const int val2 = 100;
         __asm__(`
         sub ${+r:val2}, ${+r:val2}, #50
         lsl ${+r:val2}, ${+r:val2}, #2
@@ -96,7 +96,7 @@ int main() {
 
         // テスト3: ビット操作の連鎖
         println("\n--- Test 3: Bit operation chain ---");
-        int bits = 0x01;
+        const int bits = 0x01;
         __asm__(`
         lsl ${+r:bits}, ${+r:bits}, #4
         orr ${+r:bits}, ${+r:bits}, #0x0F
@@ -107,7 +107,7 @@ int main() {
 
         // テスト4: 符号操作
         println("\n--- Test 4: Sign operations ---");
-        int sign = 50;
+        const int sign = 50;
         __asm__(`
         neg ${+r:sign}, ${+r:sign}
         add ${+r:sign}, ${+r:sign}, #100
@@ -118,7 +118,7 @@ int main() {
 
         // テスト5: セミコロン区切り（1行形式）
         println("\n--- Test 5: Semicolon separated ---");
-        int seq = 5;
+        const int seq = 5;
         // ARM64ではセミコロンがコメント文字のため、改行で区切る
         __asm__(`
         add ${+r:seq}, ${+r:seq}, #10
@@ -130,7 +130,7 @@ int main() {
 
         // テスト6: 連続した独立した__asm__呼び出し
         println("\n--- Test 6: Sequential separate calls ---");
-        int multi = 8;
+        const int multi = 8;
         __asm__("add ${+r:multi}, ${+r:multi}, #2");   // 10
         __asm__("lsl ${+r:multi}, ${+r:multi}, #2");   // 40
         __asm__("sub ${+r:multi}, ${+r:multi}, #10");  // 30

@@ -1,7 +1,6 @@
 // std - Cm言語標準ライブラリ（全バックエンド共通）
 //
-// 全てのバックエンド (JIT, LLVM Native, WASM, Web) で
-// 動作が保証されたライブラリ群。
+// 全てのバックエンド (JIT, LLVM Native, WASM, Web) で動作が保証されたライブラリ群。
 //
 // モジュール構成:
 //   std::io          - 基本入出力 (println, print, input)

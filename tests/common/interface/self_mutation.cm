@@ -37,7 +37,7 @@ int main() {
     c.increment();
     println("After 3rd increment: {c.count}");
 
-    int final_count = c.get_count();
+    const int final_count = c.get_count();
     println("get_count() returns: {final_count}");
 
     println("=== Done ===");

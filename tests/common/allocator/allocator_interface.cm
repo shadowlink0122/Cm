@@ -11,7 +11,7 @@ int main() {
     int* p = raw as int*;
 
     *p = 42;
-    int v = *p;
+    const int v = *p;
 
     if (v == 42) {
         print("int value verified\n");
@@ -34,8 +34,8 @@ int main() {
     *p1 = 100;
     *p2 = 200;
 
-    int v1 = *p1;
-    int v2 = *p2;
+    const int v1 = *p1;
+    const int v2 = *p2;
 
     if (v1 == 100 && v2 == 200) {
         print("multiple values verified\n");

@@ -1,6 +1,5 @@
 // Hazard #45 回帰テスト: パラメータの再代入がcross-blockで参照される場合
-// MIRのパラメータlocalsが再代入されるとき、LLVM IR生成でdomination errorが
-// 発生しないことを確認する
+// MIRのパラメータlocalsが再代入されるとき、LLVM IR生成でdomination errorが発生しないことを確認する
 import std::io::println;
 
 // 関数パラメータを条件分岐で再代入し、後続ブロックで参照
@@ -13,7 +12,7 @@ int process(int value) {
 
 // ポインタパラメータの再代入テスト
 void swap_ptr(int* a, int* b) {
-    int tmp = *a;
+    const int tmp = *a;
     *a = *b;
     *b = tmp;
 }

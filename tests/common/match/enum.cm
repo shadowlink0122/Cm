@@ -9,8 +9,8 @@ enum Status {
 
 int main() {
     // 基本的なリテラルマッチ
-    int x = 3;
-    int result1 = match (x) {
+    const int x = 3;
+    const int result1 = match (x) {
         1 => 100,
         2 => 200,
         3 => 300,
@@ -19,8 +19,8 @@ int main() {
     println("match(3) = {result1}");
 
     // enum値マッチ（整数結果）
-    int status = Status::Error;
-    int code = match (status) {
+    const int status = Status::Error;
+    const int code = match (status) {
         Status::Ok => 0,
         Status::Error => -1,
         Status::Pending => 1,
@@ -29,8 +29,8 @@ int main() {
     println("status code = {code}");
 
     // ワイルドカードパターン
-    int y = 99;
-    int result2 = match (y) {
+    const int y = 99;
+    const int result2 = match (y) {
         1 => 10,
         2 => 20,
         _ => 999,

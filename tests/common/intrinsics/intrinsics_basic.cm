@@ -14,10 +14,10 @@ struct Aligned {
 
 int main() {
     // __sizeof__ テスト
-    int s1 = __sizeof__(int);
-    int s2 = __sizeof__(double);
-    int s3 = __sizeof__(Point);
-    int s4 = __sizeof__(Aligned);
+    const int s1 = __sizeof__(int);
+    const int s2 = __sizeof__(double);
+    const int s3 = __sizeof__(Point);
+    const int s4 = __sizeof__(Aligned);
 
     if (s1 != 4) {
         println("FAIL: __sizeof__(int) expected 4, got {s1}");
@@ -38,9 +38,9 @@ int main() {
     }
 
     // __alignof__ テスト
-    int a1 = __alignof__(int);
-    int a2 = __alignof__(double);
-    int a3 = __alignof__(Aligned);
+    const int a1 = __alignof__(int);
+    const int a2 = __alignof__(double);
+    const int a3 = __alignof__(Aligned);
 
     if (a1 != 4) {
         println("FAIL: __alignof__(int) expected 4, got {a1}");
@@ -56,8 +56,8 @@ int main() {
     }
 
     // __typename__ テスト
-    string t1 = __typename__(int);
-    string t2 = __typename__(Point);
+    const string t1 = __typename__(int);
+    const string t2 = __typename__(Point);
 
     if (t1 != "int") {
         println("FAIL: __typename__(int) expected 'int', got '{t1}'");

@@ -35,11 +35,11 @@ int main() {
 ```cm
 int main() {
     const int x = 42;  // 変更しない値はconstを使用
-    println("The answer is {}", x);
+    println("The answer is {x}");
 
     const string name = "Alice";  // 文字列もconstで不変に
     const int age = 25;           // 年齢も変更しない
-    println("{} is {} years old", name, age);
+    println("{name} is {age} years old");
     return 0;
 }
 ```

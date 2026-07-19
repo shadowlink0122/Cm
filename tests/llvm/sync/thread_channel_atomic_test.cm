@@ -36,13 +36,13 @@ import native::sync::atomic::fetch_add_i64;
 // Producer: IDに基づいた値をchannelに送信
 // argレイアウト: [channel_handle: long][producer_id: int]
 void* producer(void* arg) {
-    long ch = *(arg as long*);
-    int id = *((arg as long + 8) as int*);
+    const long ch = *(arg as long*);
+    const int id = *((arg as long + 8) as int*);
 
     int i = 0;
     while (i < 10) {
         // producer_id * 100 + i を送信
-        long value = (id * 100 + i) as long;
+        const long value = (id * 100 + i) as long;
         send(ch, value);
         i = i + 1;
     }
@@ -75,16 +75,16 @@ void* atomic_worker(void* arg) {
 // ワーカー: タスクchannelから値を受信し、2倍にして結果channelに送信
 // argレイアウト: [task_ch: long][result_ch: long][task_count: int]
 void* fanout_worker(void* arg) {
-    long task_ch = *(arg as long*);
-    long result_ch = *((arg as long + 8) as long*);
-    int task_count = *((arg as long + 16) as int*);
+    const long task_ch = *(arg as long*);
+    const long result_ch = *((arg as long + 8) as long*);
+    const int task_count = *((arg as long + 16) as int*);
 
     int i = 0;
     while (i < task_count) {
         long task = 0;
         recv(task_ch, &task);
         // 処理: 値を2倍にする
-        long result = task * 2;
+        const long result = task * 2;
         send(result_ch, result);
         i = i + 1;
     }
@@ -98,8 +98,8 @@ void* fanout_worker(void* arg) {
 
 // argレイアウト: [flag_ptr: long][counter_ptr: long]
 void* flag_worker(void* arg) {
-    long flag_addr = *(arg as long*);
-    long counter_addr = *((arg as long + 8) as long*);
+    const long flag_addr = *(arg as long*);
+    const long counter_addr = *((arg as long + 8) as long*);
     int* flag = flag_addr as int*;
     int* counter = counter_addr as int*;
 
@@ -124,7 +124,7 @@ int main() {
     // ============================================================
     println("--- Test 1: Producer-Consumer ---");
 
-    long ch1 = create(64);
+    const long ch1 = create(64);
 
     // 3つのProducerスレッドを起動
     // 各Producerに[channel_handle, producer_id]を渡す
@@ -140,9 +140,9 @@ int main() {
     *(p3_arg as long*) = ch1;
     *((p3_arg as long + 8) as int*) = 3;
 
-    ulong t1 = spawn_with_arg(producer as void*, p1_arg);
-    ulong t2 = spawn_with_arg(producer as void*, p2_arg);
-    ulong t3 = spawn_with_arg(producer as void*, p3_arg);
+    const ulong t1 = spawn_with_arg(producer as void*, p1_arg);
+    const ulong t2 = spawn_with_arg(producer as void*, p2_arg);
+    const ulong t3 = spawn_with_arg(producer as void*, p3_arg);
 
     // Consumer: 30個の値を受信
     long total = 0;
@@ -178,16 +178,16 @@ int main() {
     int* shared_counter = alloc(4) as int*;
     store_i32(shared_counter, 0);
 
-    ulong at1 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
-    ulong at2 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
-    ulong at3 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
-    ulong at4 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
+    const ulong at1 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
+    const ulong at2 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
+    const ulong at3 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
+    const ulong at4 = spawn_with_arg(atomic_worker as void*, shared_counter as void*);
     join(at1);
     join(at2);
     join(at3);
     join(at4);
 
-    int counter_result = load_i32(shared_counter);
+    const int counter_result = load_i32(shared_counter);
     println("atomic counter: {counter_result}");
     if (counter_result == 100) {
         println("TEST2: PASS");
@@ -201,8 +201,8 @@ int main() {
     // ============================================================
     println("--- Test 3: Fan-out/Fan-in ---");
 
-    long task_ch = create(64);
-    long result_ch = create(64);
+    const long task_ch = create(64);
+    const long result_ch = create(64);
 
     // 2ワーカー、各5タスク
     void* w1_arg = alloc(24);
@@ -215,8 +215,8 @@ int main() {
     *((w2_arg as long + 8) as long*) = result_ch;
     *((w2_arg as long + 16) as int*) = 5;
 
-    ulong w1 = spawn_with_arg(fanout_worker as void*, w1_arg);
-    ulong w2 = spawn_with_arg(fanout_worker as void*, w2_arg);
+    const ulong w1 = spawn_with_arg(fanout_worker as void*, w1_arg);
+    const ulong w2 = spawn_with_arg(fanout_worker as void*, w2_arg);
 
     // 10個のタスクを配信 (値: 1,2,...,10)
     int ti = 1;
@@ -265,7 +265,7 @@ int main() {
     *(flag_arg as long*) = flag as long;
     *((flag_arg as long + 8) as long*) = flag_counter as long;
 
-    ulong ft = spawn_with_arg(flag_worker as void*, flag_arg);
+    const ulong ft = spawn_with_arg(flag_worker as void*, flag_arg);
 
     // フラグを1にしてワーカーを開始
     sleep_ms(5);
@@ -281,7 +281,7 @@ int main() {
 
     join(ft);
 
-    int flag_result = load_i32(flag_counter);
+    const int flag_result = load_i32(flag_counter);
     if (flag_result > 0) {
         println("TEST4: PASS (flag counter > 0)");
     } else {

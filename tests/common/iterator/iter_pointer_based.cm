@@ -27,7 +27,7 @@ bool has_next(IntIterator* iter) {
 // 次の要素を取得
 int next(IntIterator* iter) {
     int* cur = iter->current;
-    int value = *cur;
+    const int value = *cur;
     iter->current = cur + 1;
     return value;
 }
@@ -52,19 +52,19 @@ int main() {
     IntIterator iter = IntIterator(&arr[0], 5);
 
     // 残り要素数を確認
-    int rem = remaining(&iter);
+    const int rem = remaining(&iter);
     println("remaining: {rem}");
 
     // イテレータで走査
     int sum = 0;
     while (has_next(&iter)) {
-        int val = next(&iter);
+        const int val = next(&iter);
         sum = sum + val;
     }
     println("sum: {sum}");
 
     // 走査後は残り0
-    int rem_after = remaining(&iter);
+    const int rem_after = remaining(&iter);
     println("remaining after: {rem_after}");
 
     return 0;

@@ -30,7 +30,7 @@ int add(const int a, const int b) {  // Parameters won't change, use const
 }
 
 void greet(const string name) {  // name won't be modified
-    println("Hello, {}!", name);
+    println("Hello, {name}!");
 }
 
 int main() {
@@ -66,7 +66,7 @@ void increment(int n) {
 int main() {
     int x = 10;
     increment(x);
-    println("{}", x);  // 10 (Unchanged)
+    println("{x}");  // 10 (Unchanged)
     return 0;
 }
 ```
@@ -83,7 +83,7 @@ void increment(int* n) {
 int main() {
     int x = 10;
     increment(&x);
-    println("{}", x);  // 11 (Changed)
+    println("{x}");  // 11 (Changed)
     return 0;
 }
 ```
@@ -112,7 +112,7 @@ You can set default values for parameters. If omitted during the call, the defau
 
 ```cm
 void log(string message, int level = 1) {
-    println("[Level {}] {}", level, message);
+    println("[Level {level}] {message}");
 }
 
 int main() {
@@ -189,7 +189,7 @@ int factorial(int n) {
 }
 
 int main() {
-    println("5! = {}", factorial(5));
+    println("5! = {factorial(5)}");
     return 0;
 }
 ```

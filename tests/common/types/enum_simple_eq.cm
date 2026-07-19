@@ -1,15 +1,14 @@
 // 単純enum（ペイロードなし・int表現）の == / != 回帰テスト。
-// 旧: 比較のHIR書き換えが挿入する __tag メンバがMIRで未初期化の
-// errorテンポラリになり、変数とバリアントの比較が常に偽だった
+// 旧: 比較のHIR書き換えが挿入する __tag メンバがMIRで未初期化のerrorテンポラリになり、変数とバリアントの比較が常に偽だった
 import std::io::println;
 
 enum Color { Red, Green, Blue }
 
 int main() {
-    Color c = Color::Blue;
+    const Color c = Color::Blue;
 
     // 文としての比較
-    bool eq = c == Color::Blue;
+    const bool eq = c == Color::Blue;
     println("eq: {eq}");
 
     // if条件

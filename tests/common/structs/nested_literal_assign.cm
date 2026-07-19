@@ -42,7 +42,7 @@ int main() {
     println("T3: ({r.pos.x},{r.pos.y}) ({r.size.x},{r.size.y})");
 
     // === T4: 配列フィールドを含む構造体の初期化 ===
-    Container c = {values: [10, 20, 30], count: 3};
+    const Container c = {values: [10, 20, 30], count: 3};
     println("T4: [{c.values[0]},{c.values[1]},{c.values[2]}] count={c.count}");
 
     // === T5: 配列フィールドの再代入 ===
@@ -58,11 +58,13 @@ int main() {
     println("T7: ({points[0].x},{points[0].y}) ({points[1].x},{points[1].y}) ({points[2].x},{points[2].y})");
 
     // === T8: ネスト構造体の配列の初期化 ===
-    Rect[2] rects = [{pos: {x: 0, y: 0}, size: {x: 10, y: 10}}, {pos: {x: 20, y: 20}, size: {x: 30, y: 30}}];
+    Rect[2] rects = [{pos: {x: 0, y: 0}, size: {x: 10, y: 10}},
+        {pos: {x: 20, y: 20}, size: {x: 30, y: 30}}];
     println("T8: r0=({rects[0].pos.x},{rects[0].pos.y},{rects[0].size.x},{rects[0].size.y}) r1=({rects[1].pos.x},{rects[1].pos.y},{rects[1].size.x},{rects[1].size.y})");
 
     // === T9: ネスト構造体の配列の全体再代入 ===
-    rects = [{pos: {x: 100, y: 200}, size: {x: 300, y: 400}}, {pos: {x: 500, y: 600}, size: {x: 700, y: 800}}];
+    rects = [{pos: {x: 100, y: 200}, size: {x: 300, y: 400}},
+        {pos: {x: 500, y: 600}, size: {x: 700, y: 800}}];
     println("T9: r0=({rects[0].pos.x},{rects[0].pos.y},{rects[0].size.x},{rects[0].size.y}) r1=({rects[1].pos.x},{rects[1].pos.y},{rects[1].size.x},{rects[1].size.y})");
 
     // === T10: 2D配列的な構造体の初期化と再代入 ===

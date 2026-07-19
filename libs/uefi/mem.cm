@@ -135,8 +135,8 @@ export ulong uefi_alloc_pool(EfiSystemTable* st, ulong size, void** out_buffer) 
     }
 
     // AllocatePool(PoolType=EFI_LOADER_DATA, Size, *Buffer)
-    ulong fn_addr = alloc_fn as ulong;
-    ulong buf_addr = out_buffer as ulong;
+    const ulong fn_addr = alloc_fn as ulong;
+    const ulong buf_addr = out_buffer as ulong;
     return bs_call3(fn_addr, EFI_LOADER_DATA, size, buf_addr);
 }
 
@@ -152,8 +152,8 @@ export ulong uefi_free_pool(EfiSystemTable* st, void* buffer) {
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = free_fn as ulong;
-    ulong buf_addr = buffer as ulong;
+    const ulong fn_addr = free_fn as ulong;
+    const ulong buf_addr = buffer as ulong;
     return bs_call1(fn_addr, buf_addr);
 }
 
@@ -170,8 +170,8 @@ export ulong uefi_alloc_pages(EfiSystemTable* st, ulong pages, ulong* out_addres
     }
 
     // AllocatePages(AllocateType, MemoryType, Pages, *Memory)
-    ulong fn_addr = alloc_fn as ulong;
-    ulong out_addr = out_address as ulong;
+    const ulong fn_addr = alloc_fn as ulong;
+    const ulong out_addr = out_address as ulong;
     return bs_call4(fn_addr, ALLOCATE_ANY_PAGES, EFI_LOADER_DATA, pages, out_addr);
 }
 
@@ -187,7 +187,7 @@ export ulong uefi_free_pages(EfiSystemTable* st, ulong address, ulong pages) {
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = free_fn as ulong;
+    const ulong fn_addr = free_fn as ulong;
     return bs_call2(fn_addr, address, pages);
 }
 
@@ -203,6 +203,6 @@ export ulong uefi_stall(EfiSystemTable* st, ulong microseconds) {
         return EFI_INVALID_PARAMETER;
     }
 
-    ulong fn_addr = stall_fn as ulong;
+    const ulong fn_addr = stall_fn as ulong;
     return bs_call1(fn_addr, microseconds);
 }

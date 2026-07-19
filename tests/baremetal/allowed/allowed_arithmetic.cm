@@ -13,8 +13,8 @@ int factorial(int n) {
 }
 
 int main() {
-    int x = add(10, 20);
-    int y = factorial(5);
-    int z = x + y;
+    const int x = add(10, 20);
+    const int y = factorial(5);
+    const int z = x + y;
     return z;
 }

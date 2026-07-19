@@ -8,21 +8,21 @@ int main() {
     int* p = &arr[0];
 
     // ポインタ + オフセット
-    int v0 = *p;
-    int v1 = *(p + 1);
-    int v2 = *(p + 2);
-    int v3 = *(p + 3);
-    int v4 = *(p + 4);
+    const int v0 = *p;
+    const int v1 = *(p + 1);
+    const int v2 = *(p + 2);
+    const int v3 = *(p + 3);
+    const int v4 = *(p + 4);
     println("v0={v0}, v1={v1}, v2={v2}, v3={v3}, v4={v4}");
 
     // ポインタを進める
     int* q = p + 2;
-    int qv = *q;
+    const int qv = *q;
     println("*(p+2) = {qv}");
 
     // ポインタを戻す
     int* r = q - 1;
-    int rv = *r;
+    const int rv = *r;
     println("*(q-1) = {rv}");
 
     // ループでポインタ演算

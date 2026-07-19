@@ -4,7 +4,7 @@ import std::io::println;
 import std::debug::assert;
 
 int main() {
-    int x = 5;
+    const int x = 5;
     assert(x == 99, "x should be 99");
     println("unreachable");
     return 0;

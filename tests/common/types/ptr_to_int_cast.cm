@@ -6,10 +6,10 @@ int main() {
     int x = 42;
 
     // 括弧なし: &x as ulong（パーサー優先順位テスト）
-    ulong addr1 = &x as ulong;
+    const ulong addr1 = &x as ulong;
 
     // 括弧あり: (&x) as ulong（明示的グループ化）
-    ulong addr2 = (&x) as ulong;
+    const ulong addr2 = (&x) as ulong;
 
     // 同一変数のアドレスなので一致するはず
     if (addr1 == addr2) {

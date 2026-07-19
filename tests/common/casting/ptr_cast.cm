@@ -11,7 +11,7 @@ int main() {
     void* raw1 = malloc(sizeof(int));
     int* p1 = raw1 as int*;
     *p1 = 42;
-    int v1 = *p1;
+    const int v1 = *p1;
     if (v1 == 42) {
         print("  int cast: PASS\n");
     } else {
@@ -24,7 +24,7 @@ int main() {
     void* raw2 = malloc(sizeof(double));
     double* p2 = raw2 as double*;
     *p2 = 3.14;
-    double v2 = *p2;
+    const double v2 = *p2;
     if (v2 > 3.13 && v2 < 3.15) {
         print("  double cast: PASS\n");
     } else {
@@ -37,7 +37,7 @@ int main() {
     void* raw3 = malloc(sizeof(bool));
     bool* p3 = raw3 as bool*;
     *p3 = true;
-    bool v3 = *p3;
+    const bool v3 = *p3;
     if (v3 == true) {
         print("  bool cast: PASS\n");
     } else {
@@ -50,7 +50,7 @@ int main() {
     void* raw4 = malloc(sizeof(char));
     char* p4 = raw4 as char*;
     *p4 = 'A';
-    char v4 = *p4;
+    const char v4 = *p4;
     if (v4 == 'A') {
         print("  char cast: PASS\n");
     } else {
@@ -66,8 +66,8 @@ int main() {
     int* pb = b as int*;
     *pa = 100;
     *pb = 200;
-    int va = *pa;
-    int vb = *pb;
+    const int va = *pa;
+    const int vb = *pb;
     if (va == 100 && vb == 200) {
         print("  multiple: PASS\n");
     } else {

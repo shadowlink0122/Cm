@@ -2,20 +2,27 @@
 
 // 階層化テスト用のALUサブモジュール（hier_top.cm からインスタンス化される）
 // op: 0=加算, 1=減算, 2=AND, その他=OR
+//
+// exportされたIO構造体がこのモジュールの公開インターフェース契約になる。
+// フィールドがそのままモジュールポートへ展開されるため、個別のポート宣言は不要
 
-#[input] uint a;
-#[input] uint b;
-#[input] utiny op;
-#[output] uint result = 0;
+export struct HierAluIo {
+    #[input] uint a;
+    #[input] uint b;
+    #[input] utiny op;
+    #[output] uint result;
+};
+
+HierAluIo io;
 
 void alu_comb() {
-    if (op == 0) {
-        result = a + b;
-    } else if (op == 1) {
-        result = a - b;
-    } else if (op == 2) {
-        result = a & b;
+    if (io.op == 0) {
+        io.result = io.a + io.b;
+    } else if (io.op == 1) {
+        io.result = io.a - io.b;
+    } else if (io.op == 2) {
+        io.result = io.a & io.b;
     } else {
-        result = a | b;
+        io.result = io.a | io.b;
     }
 }

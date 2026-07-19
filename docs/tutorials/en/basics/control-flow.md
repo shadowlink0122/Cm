@@ -80,7 +80,8 @@ if (age >= 18) {
 ## Ternary Operator
 
 ```cm
-int a = 10, b = 20;
+int a = 10;
+int b = 20;
 int max = (a > b) ? a : b;
 
 string status = (age >= 20) ? "Adult" : "Minor";
@@ -98,7 +99,7 @@ int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 ```cm
 int i = 0;
 while (i < 5) {
-    println("{}", i);
+    println("{i}");
     i++;
 }
 // Output: 0, 1, 2, 3, 4
@@ -109,7 +110,7 @@ while (i < 5) {
 ```cm
 int count = 0;
 while (true) {
-    println("{}", count);
+    println("{count}");
     count++;
     
     if (count >= 10) {
@@ -129,7 +130,7 @@ while (sum < 100) {
     n++;
 }
 
-println("Sum: {}", sum);
+println("Sum: {sum}");
 ```
 
 ---
@@ -141,18 +142,18 @@ println("Sum: {}", sum);
 ```cm
 // Basic
 for (int i = 0; i < 5; i++) {
-    println("{}", i);
+    println("{i}");
 }
 
 // No initializer
 int j = 0;
 for (; j < 5; j++) {
-    println("{}", j);
+    println("{j}");
 }
 
 // Multiple variables
 for (int i = 0, j = 10; i < 5; i++, j--) {
-    println("i={}, j={}", i, j);
+    println("i={i}, j={j}");
 }
 ```
 
@@ -163,12 +164,12 @@ int[5] arr = [1, 2, 3, 4, 5];
 
 // With type
 for (int n in arr) {
-    println("{}", n);
+    println("{n}");
 }
 
 // Type inference (if supported)
 for (n in arr) {
-    println("{}", n);
+    println("{n}");
 }
 ```
 
@@ -187,7 +188,7 @@ int main() {
     points[2] = Point(50, 60);
     
     for (p in points) {
-        println("({}, {})", p.x, p.y);
+        println("({p.x}, {p.y})");
     }
     
     return 0;
@@ -335,7 +336,7 @@ while (true) {
     if (i >= 5) {
         break;
     }
-    println("{}", i);
+    println("{i}");
     i++;
 }
 
@@ -344,7 +345,7 @@ for (int j = 0; j < 10; j++) {
     if (j == 5) {
         break;
     }
-    println("{}", j);
+    println("{j}");
 }
 ```
 
@@ -356,7 +357,7 @@ for (int i = 0; i < 10; i++) {
     if (i % 2 != 0) {
         continue;  // Skip odd numbers
     }
-    println("{}", i);
+    println("{i}");
 }
 
 // while loop
@@ -366,7 +367,7 @@ while (n < 10) {
     if (n % 2 != 0) {
         continue;
     }
-    println("{}", n);
+    println("{n}");
 }
 ```
 
@@ -428,7 +429,7 @@ int divide(int a, int b) {
 for (int i = 1; i <= 9; i++) {
     for (int j = 1; j <= 9; j++) {
         // Implementation needed for no-newline print
-        println("{}", i * j);
+        println("{i * j}");
     }
 }
 ```
@@ -442,7 +443,7 @@ bool found = false;
 for (int i = 0; i < 10 && !found; i++) {
     for (int j = 0; j < 10; j++) {
         if (i * j == 42) {
-            println("Found: {}*{} = 42", i, j);
+            println("Found: {i}*{j} = 42");
             found = true;
             break;  // Breaks inner loop
         }
@@ -515,7 +516,7 @@ switch (x) {
 // Loop condition always true
 int i = 0;
 while (i < 10) {
-    println("{}", i);
+    println("{i}");
     // Forgot i++!
 }
 ```
@@ -526,7 +527,7 @@ while (i < 10) {
 int i = 0;
 while (i < 5);  // Semicolon here!
 {
-    println("{}", i);
+    println("{i}");
     i++;
 }
 // Results in infinite loop
@@ -552,7 +553,7 @@ int main() {
         } else if (i % 5 == 0) {
             println("Buzz");
         } else {
-            println("{}", i);
+            println("{i}");
         }
     }
     return 0;
@@ -576,8 +577,8 @@ int factorial(int n) {
 }
 
 int main() {
-    println("5! = {}", factorial(5));  // 120
-    println("10! = {}", factorial(10)); // 3628800
+    println("5! = {factorial(5)}");  // 120
+    println("10! = {factorial(10)}"); // 3628800
     return 0;
 }
 ```
@@ -607,7 +608,7 @@ bool is_prime(int n) {
 int main() {
     for (int i = 2; i <= 20; i++) {
         if (is_prime(i)) {
-            println("{} is prime", i);
+            println("{i} is prime");
         }
     }
     return 0;

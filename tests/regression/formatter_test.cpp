@@ -1,4 +1,4 @@
-#include "../../src/fmt/formatter.hpp"
+#include "../../src/internal/fmt/formatter.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -10,7 +10,8 @@ using namespace cm::fmt;
 // フォーマッタ統合テスト
 // ============================================================
 // Cmソースは tests/regression/cases/formatter/ の .cm ファイルに分割。
-// - <name>.input.cm + <name>.expected.cm: 整形結果がexpectedに一致すること
+// - <name>.input + <name>.expected.cm: 整形結果がexpectedに一致すること（入力は意図的に未整形のfixtureのため、リポジトリ全体への
+//   cm fmt 一括適用で書き換わらないよう .cm 拡張子を付けない）
 // - <name>.cm: 既に整形済みで、fmtを適用しても変化しないこと（安定ケース）
 // いずれも冪等性（expected/安定ファイルへの再適用で変化なし）を検証する。
 class FormatterIntegrationTest : public ::testing::Test {
@@ -31,7 +32,7 @@ class FormatterIntegrationTest : public ::testing::Test {
 
     // input → expected の整形と、expected の冪等性を検証
     void expect_format_case(const std::string& name) {
-        std::string input = load_case(name + ".input.cm");
+        std::string input = load_case(name + ".input");
         std::string expected = load_case(name + ".expected.cm");
         EXPECT_EQ(format(input), expected) << "ケース: " << name;
         EXPECT_EQ(format(expected), expected) << "冪等性違反: " << name;
@@ -43,6 +44,60 @@ class FormatterIntegrationTest : public ::testing::Test {
         EXPECT_EQ(format(source), source) << "安定ケース: " << name;
     }
 };
+
+// ============================================================
+// 最大行幅（100桁）を超える宣言・式の折り返し
+// ============================================================
+
+// 長い配列リテラルはカンマ位置で折り返す（継続行は1段深いインデント）
+TEST_F(FormatterIntegrationTest, WrapLongArrayLiteral) {
+    expect_format_case("wrap/long_array");
+}
+
+// 長い式は二項演算子の直前で折り返す（継続行が演算子で始まる既存スタイルに一致）
+TEST_F(FormatterIntegrationTest, WrapLongExpression) {
+    expect_format_case("wrap/long_expr");
+}
+
+// {} 内の要素で折り返す場合は全要素を1行ずつに展開する（開き{で改行・1要素1行・閉じ}を独立行に。中途半端な貪欲詰めにしない）
+TEST_F(FormatterIntegrationTest, WrapExplodesBraceList) {
+    expect_format_case("wrap/brace_list");
+}
+
+// 長い関数宣言のパラメータリストも全要素を1行ずつに展開する（閉じ行は ") {"）
+TEST_F(FormatterIntegrationTest, WrapExplodesLongParams) {
+    expect_format_case("wrap/long_params");
+}
+
+// 長い関数呼び出しの引数リストも全要素を1行ずつに展開する（閉じ行は ");"）
+TEST_F(FormatterIntegrationTest, WrapExplodesLongArgs) {
+    expect_format_case("wrap/long_args");
+}
+
+// 1行に詰め込まれた文ブロック（{ 文; 文; }）はブロック展開する（演算子折り返しだと if ヘッダの途中で折れ、`; }` 継続行が次回実行のセミコロン改行で再分割されて冪等性が崩れるため）
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlock) {
+    expect_format_case("wrap/inline_block");
+}
+
+// } else { は同一行に残したままブロック展開する
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockWithElse) {
+    expect_format_case("wrap/inline_block_else");
+}
+
+// 展開後もなお最大幅を超える文は、正規化後のインデント幅を見込んだ上で演算子折り返しが再帰適用される（1回の実行で固定点に到達する）
+TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlockThenWrapsLongStmt) {
+    expect_format_case("wrap/inline_block_long_stmt");
+}
+
+// コードが短く行末コメントだけで幅超過する行は折り返さない
+TEST_F(FormatterIntegrationTest, WrapSkipsCommentOverflow) {
+    expect_stable_case("wrap/comment_overflow");
+}
+
+// 文字列リテラル内に折り返し候補相当の文字があっても分割しない（候補なし→無変更）
+TEST_F(FormatterIntegrationTest, WrapSkipsLongStringLiteral) {
+    expect_stable_case("wrap/long_string");
+}
 
 // ============================================================
 // 条件付きコンパイルブロック（#ifdef〜#end）のインデント

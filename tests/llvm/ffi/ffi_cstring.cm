@@ -5,10 +5,10 @@ use libc {
 }
 
 int main() {
-    cstring msg = "Hello, FFI!";
+    const cstring msg = "Hello, FFI!";
     puts(msg);
 
-    usize len = strlen(msg);
+    const usize len = strlen(msg);
 
     // "Hello, FFI!" is 11 characters
     if (len == 11) {

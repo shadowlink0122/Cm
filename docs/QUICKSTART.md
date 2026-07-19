@@ -81,7 +81,7 @@ node hello.js
 ./cm lint hello.cm
 
 # コードフォーマット
-./cm fmt -w hello.cm
+./cm fmt hello.cm
 ```
 
 > 📖 各ツールの詳細は [Linter](tutorials/ja/compiler/common/linter.html) / [Formatter](tutorials/ja/compiler/common/formatter.html) を参照。
@@ -168,7 +168,7 @@ int main() {
 ## 🧪 テスト実行
 
 ```bash
-# C++ユニットテスト（GTest必須）
+# すべてのテスト（unit・regression・全バックエンドスイート・E2E）
 make test
 
 # JITテスト（並列）

@@ -6,21 +6,21 @@ int main() {
     println("Hello, Cm with format strings!");
 
     // 基本的な位置引数
-    int val = 42;
-    int answer = -123;
+    const int val = 42;
+    const int answer = -123;
     println("The value is: {val}");
     println("The answer is: {answer}");
 
     // 複数の位置引数
-    int x = 10;
-    int y = 20;
-    int z = 30;
+    const int x = 10;
+    const int y = 20;
+    const int z = 30;
     println("{x} + {y} = {z}");
 
     // 異なる型の混在
-    string str = "test";
-    int num = 100;
-    double pi = 3.14;
+    const string str = "test";
+    const int num = 100;
+    const double pi = 3.14;
     println("String: {str}, Int: {num}, Double: {pi}");
 
     return 0;

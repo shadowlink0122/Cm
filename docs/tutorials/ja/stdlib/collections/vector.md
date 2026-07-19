@@ -153,4 +153,4 @@ println("{*v.get(2)}");  // 30
 ---
 
 <!-- nav -->
-← 前: [std::gpu - GPU計算 (Apple Metal)](../gpu.html) ｜ [目次](../index.html) ｜ 次: [std::collections::queue - FIFOキュー](queue.html) →
+← 前: [native::gpu - GPU計算 (Apple Metal)](../gpu.html) ｜ [目次](../index.html) ｜ 次: [std::collections::queue - FIFOキュー](queue.html) →

@@ -4,7 +4,7 @@ export const int VERSION = 1;
 export const int MAJOR = 2;
 export const int MINOR = 3;
 
-int testGlobalConst() {
+int test_global_const() {
     // グローバルconst変数を文字列補間で使用
     string msg = "Version: {VERSION}, Release: {MAJOR}.{MINOR}";
 
@@ -25,6 +25,6 @@ int testGlobalConst() {
 }
 
 int main() {
-    int result = testGlobalConst();
+    const int result = test_global_const();
     return result;
 }

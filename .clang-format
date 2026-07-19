@@ -51,7 +51,8 @@ AlignTrailingComments: true
 PointerAlignment: Left
 ReferenceAlignment: Left
 DerivePointerAlignment: false
-ReflowComments: true
+# コメントは再折返ししない（1文=1行ルール。コメントの手動改行禁止はCLAUDE.md参照）
+ReflowComments: false
 SortUsingDeclarations: true
 
 # C++17 specific

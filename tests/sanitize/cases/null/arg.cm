@@ -1,0 +1,10 @@
+// nullポインタを関数引数で渡し呼び出し先でderef: 関数境界越しでも --sanitize=undefined で panic になる
+import std::io::println;
+int read_it(int* q) {
+    return *q;
+}
+int main() {
+    int* p = null as int*;
+    println("{read_it(p)}");
+    return 0;
+}

@@ -2,12 +2,12 @@
 import std::io::println;
 
 int[] make_slice() {
-    int[] result = [1, 2, 3];
+    const int[] result = [1, 2, 3];
     return result;
 }
 
 int[] double_values(int[] input) {
-    int[] result = [];
+    const int[] result = [];
     for (auto x in input) {
         result.push(x * 2);
     }
@@ -18,7 +18,7 @@ int main() {
     int[] s = make_slice();
     println(s.len());
 
-    int[] doubled = double_values(s);
+    const int[] doubled = double_values(s);
     for (auto x in doubled) {
         println(x);
     }

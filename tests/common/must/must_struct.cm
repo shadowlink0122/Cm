@@ -9,7 +9,7 @@ struct Counter {
 int main() {
     println("=== must struct field ===");
 
-    Counter c = Counter{ value: 0, updates: 0 };
+    const Counter c = Counter{ value: 0, updates: 0 };
 
     // 通常の更新（最適化で削除される可能性あり）
     c.value = 100;

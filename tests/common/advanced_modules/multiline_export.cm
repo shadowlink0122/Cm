@@ -15,9 +15,9 @@ import ./multiline_export/scale as M;
 
 int main() {
     println("twice = {twice(21)}");
-    int c = combine(4, 2);
+    const int c = combine(4, 2);
     println("combine = {c}");
-    int t = M::triple(5);
+    const int t = M::triple(5);
     println("alias triple = {t}");
     return 0;
 }

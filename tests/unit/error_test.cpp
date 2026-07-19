@@ -1,4 +1,4 @@
-#include "../../src/common/error.hpp"
+#include "../../src/internal/base/error.hpp"
 
 #include <gtest/gtest.h>
 #include <sstream>

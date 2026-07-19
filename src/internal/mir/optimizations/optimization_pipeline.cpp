@@ -1,0 +1,18 @@
+#include "internal/mir/passes/core/base.hpp"
+#include "internal/mir/passes/core/manager.hpp"
+
+#include <utility>
+
+namespace cm::mir::opt {
+
+void OptimizationPipeline::add_standard_passes(int optimization_level) {
+    // create_standard_passes 関数を使用して標準パスを作成
+    auto standard_passes = create_standard_passes(optimization_level);
+
+    // 各パスを追加
+    for (auto& pass : standard_passes) {
+        passes.push_back(std::move(pass));
+    }
+}
+
+}  // namespace cm::mir::opt

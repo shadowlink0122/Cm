@@ -11,7 +11,7 @@ int main() {
     void* raw1 = alloc.alloc(sizeof(int));
     int* p1 = raw1 as int*;
     *p1 = 99;
-    int v1 = *p1;
+    const int v1 = *p1;
     if (v1 == 99) {
         print("  int value: PASS (99)\n");
     } else {
@@ -24,7 +24,7 @@ int main() {
     void* raw2 = alloc.alloc(sizeof(double));
     double* p2 = raw2 as double*;
     *p2 = 2.71828;
-    double v2 = *p2;
+    const double v2 = *p2;
     if (v2 > 2.71 && v2 < 2.72) {
         print("  double value: PASS (2.71828)\n");
     } else {
@@ -41,7 +41,7 @@ int main() {
     void* raw4 = alloc.reallocate(raw3, sizeof(int) * 2);
     int* p4 = raw4 as int*;
     *p4 = 456;
-    int v4 = *p4;
+    const int v4 = *p4;
     if (v4 == 456) {
         print("  reallocate: PASS (456)\n");
     } else {

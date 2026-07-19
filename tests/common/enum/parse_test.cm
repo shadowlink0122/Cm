@@ -19,9 +19,9 @@ int main() {
     println("=== Enum Associated Data (Parse Test) ===");
 
     // バリアント作成テスト
-    Message m1 = Message::Quit;
-    Message m2 = Message::Move(Coord { x: 10, y: 20 });
-    Message m3 = Message::Write("hello");
+    const Message _m1 = Message::Quit;
+    const Message _m2 = Message::Move(Coord { x: 10, y: 20 });
+    const Message _m3 = Message::Write("hello");
 
     println("Enum parsed successfully!");
     return 0;

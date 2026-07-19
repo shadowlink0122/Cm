@@ -1,0 +1,9 @@
+// 境界内アクセスのみの正常プログラム（サニタイザ有効でも通常動作することを検証する）
+int main() {
+    int[5] arr;
+    for (int i = 0; i < 5; i++) {
+        arr[i] = i * 10;
+    }
+    println("sum={arr[0] + arr[4]}");
+    return 0;
+}

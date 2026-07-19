@@ -27,7 +27,8 @@ parent: Tutorials
 
 ```cm
 int main() {
-    int a = 10, b = 3;
+    int a = 10;
+    int b = 3;
 
     int sum = a + b;      // 13 (Addition)
     int diff = a - b;     // 7  (Subtraction)
@@ -42,7 +43,8 @@ int main() {
 
 ```cm
 int main() {
-    double x = 10.0, y = 3.0;
+    double x = 10.0;
+    double y = 3.0;
 
     double sum = x + y;   // 13.0
     double quot = x / y;  // 3.333...
@@ -68,7 +70,8 @@ int main() {
 
 ```cm
 int main() {
-    int a = 10, b = 20;
+    int a = 10;
+    int b = 20;
 
     bool eq = (a == b);   // false (Equal)
     bool ne = (a != b);   // true  (Not equal)
@@ -102,7 +105,8 @@ int main() {
 
 ```cm
 int main() {
-    bool a = true, b = false;
+    bool a = true;
+    bool b = false;
     bool result = a && b;  // false
     // True only if both are true
 
@@ -118,7 +122,8 @@ int main() {
 
 ```cm
 int main() {
-    bool a = true, b = false;
+    bool a = true;
+    bool b = false;
     bool result = a || b;  // true
     // True if either is true
 
@@ -251,12 +256,12 @@ int main() {
 int main() {
     // Postfix (Common)
     for (int i = 0; i < 10; i++) {
-        println("{}", i);
+        println("{i}");
     }
 
     // Prefix (Same result)
     for (int i = 0; i < 10; ++i) {
-        println("{}", i);
+        println("{i}");
     }
     return 0;
 }
@@ -304,7 +309,8 @@ int main() {
 
 ```cm
 int main() {
-    int a = 10, b = 20;
+    int a = 10;
+    int b = 20;
     int max = (a > b) ? a : b;
 
     int age = 20;
@@ -362,13 +368,14 @@ Write a function that performs basic arithmetic operations on two numbers.
 
 ```cm
 int main() {
-    int a = 15, b = 4;
+    int a = 15;
+    int b = 4;
     
-    println("{} + {} = {}", a, b, a + b);
-    println("{} - {} = {}", a, b, a - b);
-    println("{} * {} = {}", a, b, a * b);
-    println("{} / {} = {}", a, b, a / b);
-    println("{} % {} = {}", a, b, a % b);
+    println("{a} + {b} = {a + b}");
+    println("{a} - {b} = {a - b}");
+    println("{a} * {b} = {a * b}");
+    println("{a} / {b} = {a / b}");
+    println("{a} % {b} = {a % b}");
     
     return 0;
 }
@@ -389,9 +396,9 @@ bool is_leap_year(int year) {
 int main() {
     int year = 2025;
     if (is_leap_year(year)) {
-        println("{} is a leap year", year);
+        println("{year} is a leap year");
     } else {
-        println("{} is not a leap year", year);
+        println("{year} is not a leap year");
     }
     return 0;
 }

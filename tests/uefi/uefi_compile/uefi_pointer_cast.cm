@@ -17,6 +17,6 @@ ulong efi_main(void* image_handle, void* system_table) {
     ulong dummy = 0;
     ulong* ptr = &dummy;
     void* vptr = ptr as void*;
-    ulong result = read_table_entry(vptr, 0);
+    const ulong result = read_table_entry(vptr, 0);
     return result;
 }

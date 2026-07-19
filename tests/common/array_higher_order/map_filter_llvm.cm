@@ -14,7 +14,7 @@ int main() {
 
     // mapテスト
     int[] mapped = arr.map(double_it);
-    int map_len = mapped.len();
+    const int map_len = mapped.len();
     println("map_len = {map_len}");
     if (map_len != 5) {
         println("FAIL: map");
@@ -23,7 +23,7 @@ int main() {
 
     // filterテスト
     int[] filtered = arr.filter(is_even);
-    int filter_len = filtered.len();
+    const int filter_len = filtered.len();
     println("filter_len = {filter_len}");
     if (filter_len != 2) {
         println("FAIL: filter");

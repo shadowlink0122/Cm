@@ -62,63 +62,78 @@ test_w001_detection() {
     fi
 }
 
-# Test 2: L100 関数名チェック
-test_l100_function_naming() {
+# Test 2: L001 関数名チェック（--strict）
+test_l001_function_naming() {
     echo ""
-    echo "=== Test: L100 Function Naming ==="
+    echo "=== Test: L001 Function Naming (--strict) ==="
     
     local output
-    output=$("$CM" check "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep -q "\[L100\]"; then
-        pass "L100 detected"
+    if echo "$output" | grep "\[L001\]" | grep -q "function name"; then
+        pass "L001 function naming detected"
     else
-        fail "L100 not detected" "$output"
+        fail "L001 function naming not detected" "$output"
     fi
 }
 
-# Test 3: L101 変数名チェック
-test_l101_variable_naming() {
+# Test 3: L001 変数名チェック（--strict）
+test_l001_variable_naming() {
     echo ""
-    echo "=== Test: L101 Variable Naming ==="
+    echo "=== Test: L001 Variable Naming (--strict) ==="
     
     local output
-    output=$("$CM" check "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep -q "\[L101\]"; then
-        pass "L101 detected"
+    if echo "$output" | grep "\[L001\]" | grep -q "variable name"; then
+        pass "L001 variable naming detected"
     else
-        fail "L101 not detected" "$output"
+        fail "L001 variable naming not detected" "$output"
     fi
 }
 
-# Test 4: L102 定数名チェック
-test_l102_constant_naming() {
+# Test 4: L001 定数名チェック（--strict）
+test_l001_constant_naming() {
     echo ""
-    echo "=== Test: L102 Constant Naming ==="
+    echo "=== Test: L001 Constant Naming (--strict) ==="
     
     local output
-    output=$("$CM" check "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep -q "\[L102\]"; then
-        pass "L102 detected"
+    if echo "$output" | grep "\[L001\]" | grep -q "constant name"; then
+        pass "L001 constant naming detected"
     else
-        fail "L102 not detected" "$output"
+        fail "L001 constant naming not detected" "$output"
     fi
 }
 
-# Test 5: L103 型名チェック
-test_l103_type_naming() {
+# Test 5: L001 型名チェック（--strict）
+test_l001_type_naming() {
     echo ""
-    echo "=== Test: L103 Type Naming ==="
+    echo "=== Test: L001 Type Naming (--strict) ==="
+    
+    local output
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    
+    if echo "$output" | grep "\[L001\]" | grep -q "struct name"; then
+        pass "L001 struct naming detected"
+    else
+        fail "L001 struct naming not detected" "$output"
+    fi
+}
+
+# Test 5b: --strict なしでは L001 を報告しない
+test_l001_requires_strict() {
+    echo ""
+    echo "=== Test: L001 Requires --strict ==="
     
     local output
     output=$("$CM" check "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep -q "\[L103\]"; then
-        pass "L103 detected"
+    if echo "$output" | grep -q "\[L001\]"; then
+        fail "L001 should not be reported without --strict" "$output"
     else
-        fail "L103 not detected" "$output"
+        pass "L001 silent without --strict"
     fi
 }
 
@@ -128,10 +143,10 @@ test_valid_code() {
     echo "=== Test: Valid Code (No Warnings) ==="
     
     local output
-    output=$("$CM" check "$FIXTURES_DIR/valid/good_code.cm" 2>&1 || true)
+    output=$("$CM" check --strict "$FIXTURES_DIR/valid/good_code.cm" 2>&1 || true)
     
     # W001, L100-L103 が含まれていないことを確認
-    if echo "$output" | grep -qE "\[(W001|L100|L101|L102|L103)\]"; then
+    if echo "$output" | grep -qE "\[(W001|L001)\]"; then
         fail "Unexpected lint warnings in valid code" "$output"
     else
         pass "No lint warnings in valid code"
@@ -172,10 +187,10 @@ test_config_disable_naming() {
     cp "$FIXTURES_DIR/invalid/bad_naming.cm" "$WORKSPACE_DIR/"
     
     local output
-    output=$(cd "$WORKSPACE_DIR" && "$CM" check bad_naming.cm 2>&1 || true)
+    output=$(cd "$WORKSPACE_DIR" && "$CM" check --strict bad_naming.cm 2>&1 || true)
     
     # L100-L103 が表示されないことを確認
-    if echo "$output" | grep -qE "\[(L100|L101|L102|L103)\]"; then
+    if echo "$output" | grep -q "\[L001\]"; then
         fail "Naming rules should be disabled by config" "$output"
     else
         pass "Naming rules disabled by config"
@@ -188,10 +203,10 @@ test_recursive_check() {
     echo "=== Test: Recursive Check (-r) ==="
     
     local output
-    output=$("$CM" check -r "$FIXTURES_DIR/invalid/" 2>&1 || true)
+    output=$("$CM" check --lang=en -r "$FIXTURES_DIR/invalid/" 2>&1 || true)
     
     # 複数ファイルがチェックされることを確認
-    if echo "$output" | grep -q "ファイル数:"; then
+    if echo "$output" | grep -q "files:"; then
         pass "Recursive check works"
     else
         fail "Recursive check failed" "$output"
@@ -215,10 +230,11 @@ fi
 
 # テスト実行
 test_w001_detection
-test_l100_function_naming
-test_l101_variable_naming
-test_l102_constant_naming
-test_l103_type_naming
+test_l001_function_naming
+test_l001_variable_naming
+test_l001_constant_naming
+test_l001_type_naming
+test_l001_requires_strict
 test_valid_code
 test_config_disable_w001
 test_config_disable_naming

@@ -3,9 +3,9 @@ import std::io::println;
 import ./nested_namespace/utils::{double_value, triple_value};
 
 int main() {
-    int x = 5;
-    int doubled = double_value(x);
-    int tripled = triple_value(x);
+    const int x = 5;
+    const int doubled = double_value(x);
+    const int tripled = triple_value(x);
 
     println("Original: {x}");
     println("Doubled: {doubled}");

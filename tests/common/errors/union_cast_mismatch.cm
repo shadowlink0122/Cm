@@ -4,9 +4,9 @@ import std::io::println;
 typedef Value = int | string;
 
 int main() {
-    Value v = 42 as Value;
+    const Value v = 42 as Value;
     println("before cast");
-    string s = v as string;
+    const string s = v as string;
     println("unreachable: {s}");
     return 0;
 }

@@ -11,7 +11,7 @@ int main() {
     println("=== Struct Slice Test ===");
 
     // テスト1: 構造体リテラル内の配列リテラル初期化
-    Container c = Container{values: [10, 20, 30], name: "test"};
+    const Container c = Container{values: [10, 20, 30], name: "test"};
     println("c.name = {c.name}");
     println("c.values[0] = {c.values[0]}");
     println("c.values[1] = {c.values[1]}");
@@ -26,7 +26,7 @@ int main() {
     println("c.values[3] = {c.values[3]}");
 
     // テスト4: ローカル変数経由でのアクセス
-    int[] v = c.values;
+    const int[] v = c.values;
     println("v.len() = {v.len()}");
 
     println("=== All Tests Passed ===");

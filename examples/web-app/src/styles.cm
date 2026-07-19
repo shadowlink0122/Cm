@@ -156,7 +156,10 @@ int main() {
     // 追加スタイル（ホバー・フォーカス等）
     println("");
     css_rule(".btn:hover", "background-color: #1d4ed8; transform: translateY(-1px); ");
-    css_rule(".input:focus", "outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); ");
+    css_rule(
+        ".input:focus",
+        "outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); "
+    );
     css_rule(".task-item:last-child", "border-bottom: none; ");
 
     return 0;

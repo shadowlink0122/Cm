@@ -3,14 +3,14 @@ import std::io::println;
 int main() {
     // 基本的なif文
     println("Basic if statement:");
-    int x = 10;
+    const int x = 10;
     if (x > 5) {
         println("x is greater than 5");
     }
 
     // if-else文
     println("\nIf-else statement:");
-    int y = 3;
+    const int y = 3;
     if (y % 2 == 0) {
         println("y is even");
     } else {
@@ -19,7 +19,7 @@ int main() {
 
     // if-else if-else連鎖
     println("\nIf-else if-else chain:");
-    int score = 85;
+    const int score = 85;
     if (score >= 90) {
         println("Grade: A");
     } else if (score >= 80) {
@@ -34,8 +34,8 @@ int main() {
 
     // ネストされたif文
     println("\nNested if statements:");
-    int a = 10;
-    int b = 20;
+    const int a = 10;
+    const int b = 20;
     if (a > 0) {
         if (b > 0) {
             println("Both a and b are positive");
@@ -47,13 +47,13 @@ int main() {
 
     // 複雑な条件
     println("\nComplex conditions:");
-    int age = 25;
-    bool hasLicense = true;
-    if (age >= 18 && hasLicense) {
+    const int age = 25;
+    const bool has_license = true;
+    if (age >= 18 && has_license) {
         println("Can drive");
     }
 
-    int temp = 25;
+    const int temp = 25;
     if (temp < 0 || temp > 40) {
         println("Extreme temperature");
     } else {

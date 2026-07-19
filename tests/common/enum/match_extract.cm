@@ -9,8 +9,8 @@ enum Option {
 }
 
 int main() {
-    Option opt1 = Option::Some(42);
-    Option opt2 = Option::None;
+    const Option opt1 = Option::Some(42);
+    const Option opt2 = Option::None;
 
     // matchで値抽出（ステートメント形式）
     int v1 = 0;

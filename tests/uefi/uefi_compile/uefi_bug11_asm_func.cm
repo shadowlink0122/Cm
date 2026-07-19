@@ -32,7 +32,7 @@ export void write_port(ulong port, ulong value) {
 
 // テスト4: 出力operand付きASM（通常ASM）
 export ulong read_value(ulong addr) {
-    ulong result = 0;
+    const ulong result = 0;
     __asm__(`
         movq ${r:addr}, %r10;
         xorq %rax, %rax;
@@ -43,8 +43,8 @@ export ulong read_value(ulong addr) {
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
 
     // テスト1: operand付き + ret のnaked関数呼出
     switch_to(0x80000);
@@ -56,7 +56,7 @@ ulong efi_main(void* image_handle, void* system_table) {
     write_port(0x3F8, 0x48);
 
     // テスト4: 出力operand付きASM関数の呼出
-    ulong val = read_value(0x1000);
+    const ulong val = read_value(0x1000);
 
     while (true) { __asm__("hlt"); }
     return val;

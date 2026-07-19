@@ -31,7 +31,7 @@ int main() {
     v2 = *vi.get(2);
     println("  set(1,99): [{v0}, {v1}, {v2}]");
 
-    int popped = vi.pop();
+    const int popped = vi.pop();
     len = vi.len();
     println("  pop: {popped}, len={len}");
 
@@ -60,8 +60,8 @@ int main() {
     Vector<long> vl();
     vl.push(100000 as long);
     vl.push(200000 as long);
-    long l0 = *vl.get(0);
-    long l1 = *vl.get(1);
+    const long l0 = *vl.get(0);
+    const long l1 = *vl.get(1);
     len = vl.len();
     println("  push: len={len}, [{l0}, {l1}]");
     // デストラクタが自動的に呼ばれる

@@ -47,9 +47,13 @@ extern "C" long cm_http_test_server_start(int port, int max_requests);
 // HTTPメソッド定数
 // ============================================================
 
+// @cm-disable-next-line L001
 export int METHOD_GET()    { return 0; }
+// @cm-disable-next-line L001
 export int METHOD_POST()   { return 1; }
+// @cm-disable-next-line L001
 export int METHOD_PUT()    { return 2; }
+// @cm-disable-next-line L001
 export int METHOD_DELETE() { return 3; }
 
 // ============================================================
@@ -71,7 +75,7 @@ export struct HttpResponse {
 
 HttpResponse build_response(long handle) {
     HttpResponse resp;
-    int is_err = cm_http_response_is_error(handle);
+    const int is_err = cm_http_response_is_error(handle);
     if (is_err == 1) {
         resp.is_ok = 0;
         resp.status = -1;
@@ -107,25 +111,25 @@ export impl HttpClient {
 
     // GETリクエスト
     HttpResponse get(string path) {
-        long handle = cm_http_get(self._host, self._port, path);
+        const long handle = cm_http_get(self._host, self._port, path);
         return build_response(handle);
     }
 
     // POSTリクエスト（JSON bodyあり）
     HttpResponse post(string path, string body) {
-        long handle = cm_http_post(self._host, self._port, path, body);
+        const long handle = cm_http_post(self._host, self._port, path, body);
         return build_response(handle);
     }
 
     // PUTリクエスト
     HttpResponse put(string path, string body) {
-        long handle = cm_http_put(self._host, self._port, path, body);
+        const long handle = cm_http_put(self._host, self._port, path, body);
         return build_response(handle);
     }
 
     // DELETEリクエスト
     HttpResponse delete_req(string path) {
-        long handle = cm_http_delete(self._host, self._port, path);
+        const long handle = cm_http_delete(self._host, self._port, path);
         return build_response(handle);
     }
 }
@@ -169,7 +173,7 @@ export impl HttpRequest {
     // リクエスト実行してHttpResponseを返す
     // 注意: 実行後は_handleが解放されるため、再利用不可
     HttpResponse execute() {
-        long resp_handle = cm_http_execute(self._handle);
+        const long resp_handle = cm_http_execute(self._handle);
         cm_http_request_destroy(self._handle);
         self._handle = 0;
         return build_response(resp_handle);
@@ -230,7 +234,7 @@ export impl HttpServer {
 
     // クライアント接続を受け付けてリクエストを返す（ブロッキング）
     HttpServerRequest accept() {
-        long req_handle = cm_http_server_accept(self._handle);
+        const long req_handle = cm_http_server_accept(self._handle);
         HttpServerRequest req;
         req._handle = req_handle;
         return req;
@@ -312,6 +316,7 @@ extern "C" int cm_http_response_is_redirect(long handle);
 // PATCHメソッド定数
 // ============================================================
 
+// @cm-disable-next-line L001
 export int METHOD_PATCH()  { return 4; }
 
 // ============================================================
@@ -327,7 +332,7 @@ export struct ParsedUrl {
 
 // URLを解析してParsedUrlを返す
 export ParsedUrl parse_url(string url) {
-    long handle = cm_http_parse_url(url);
+    const long handle = cm_http_parse_url(url);
     ParsedUrl parsed;
     parsed.scheme = cm_http_parsed_scheme(handle);
     parsed.host = cm_http_parsed_host(handle);

@@ -3,9 +3,9 @@ import std::io::println;
 
 int main() {
     // 位置引数による補間（現在動作）
-    string name = "Alice";
-    int age = 25;
-    double height = 175.5;
+    const string name = "Alice";
+    const int age = 25;
+    const double height = 175.5;
 
     // 位置引数は動作する
     println("Name: {name}, Age: {age}, Height: {height}");
@@ -15,7 +15,7 @@ int main() {
     println("User: {name}, Years: {age}");
 
     // フォーマット指定子付き
-    int value = 255;
+    const int value = 255;
     println("Hex: {value:x}, Binary: {value:b}");
 
     // エスケープ

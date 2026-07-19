@@ -1,0 +1,6 @@
+// nullポインタへのストア: --sanitize=undefined で panic になる
+int main() {
+    int* p = null as int*;
+    *p = 42;
+    return 0;
+}

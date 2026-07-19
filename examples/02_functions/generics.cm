@@ -12,10 +12,14 @@ int main() {
 
     // 1. ジェネリック構造体
     println("--- Generic struct ---");
-    Pair<int> p = {first: 10, second: 20};
+    Pair<int> p;
+    p.first = 10;
+    p.second = 20;
     println("Pair<int>: ({p.first}, {p.second})");
 
-    Pair<string> sp = {first: "hello", second: "world"};
+    Pair<string> sp;
+    sp.first = "hello";
+    sp.second = "world";
     println("Pair<string>: ({sp.first}, {sp.second})");
 
     // 2. 組み込み関数でmax/min

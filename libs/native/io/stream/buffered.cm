@@ -1,5 +1,4 @@
-// std::io::stream::buffered - バッファリングI/O
-// v0.13.0: BufReader, BufWriter実装
+// std::io::stream::buffered - バッファリングI/O v0.13.0: BufReader, BufWriter実装
 module native.io.stream.buffered;
 
 import native.io.error::{IoResult, IoError, IoErrorKind};

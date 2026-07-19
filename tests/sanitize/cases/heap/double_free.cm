@@ -1,0 +1,11 @@
+// 二重解放: --sanitize=address で double-free として検出される
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+int main() {
+    void* mem = malloc(16);
+    free(mem);
+    free(mem);
+    return 0;
+}

@@ -32,7 +32,6 @@ export void sleep_ms(int ms) {
     // JavaScriptにはsleepがないため、ビジーウェイトで代替
     // 実際のプロダクションでは await + setTimeout を使うべき
     // この関数はテスト・デバッグ用
-    int end = 0;  // Date.now() + ms 相当（簡易実装）
     // ビジーウェイトは非推奨のため、実装せず注意メッセージのみ
     println("警告: sleep_ms()はJSでは非推奨です。async/awaitを使用してください。");
 }

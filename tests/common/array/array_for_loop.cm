@@ -12,7 +12,7 @@ int main() {
     // インデックスベースのforループ
     int sum = 0;
     for (int i = 0; i < 5; i = i + 1) {
-        int val = arr[i];
+        const int val = arr[i];
         println("arr[{i}] = {val}");
         sum = sum + arr[i];
     }
@@ -20,7 +20,7 @@ int main() {
 
     // size()を使ったforループ
     int sum2 = 0;
-    uint size = arr.size();
+    const uint size = arr.size();
     for (int j = 0; j < size; j = j + 1) {
         sum2 = sum2 + arr[j];
     }

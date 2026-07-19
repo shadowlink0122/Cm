@@ -4,18 +4,18 @@ parent: Advanced
 nav_order: 10
 ---
 
-# スレッド (std::thread)
+# スレッド (native::thread)
 
-Cmでは`std::thread`モジュールを使用してマルチスレッドプログラミングを行います。
+Cmでは`native::thread`モジュールを使用してマルチスレッドプログラミングを行います。
 
 ## 基本的な使い方
 
 ### スレッドの生成と待機
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 void* worker(void* arg) {
     println("Worker: 開始");
@@ -79,9 +79,9 @@ void sleep_ms(int ms);
 ## 並列処理の例
 
 ```cm
-import std::thread::spawn;
-import std::thread::join;
-import std::thread::sleep_ms;
+import native::thread::spawn;
+import native::thread::join;
+import native::thread::sleep_ms;
 
 void* calc10(void* arg) {
     sleep_ms(50);
@@ -141,7 +141,7 @@ int main() {
 
 ## 内部実装
 
-`std::thread`はPOSIXの`pthread`を直接使用しています：
+`native::thread`はPOSIXの`pthread`を直接使用しています：
 
 - `spawn` → `pthread_create`
 - `join` → `pthread_join`

@@ -25,7 +25,7 @@ bool is_prime(int n) {
 }
 
 int main() {
-    int limit = 100000;
+    const int limit = 100000;
     int count = 0;
 
     for (int i = 2; i <= limit; i++) {

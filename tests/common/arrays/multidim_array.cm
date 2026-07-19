@@ -3,7 +3,7 @@ import std::io::println;
 
 int main() {
     // 2次元配列（固定サイズ）
-    int[3][3] matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    const int[3][3] matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
 
     // 直接アクセス
     println("matrix[0][0]: {matrix[0][0]}");
@@ -11,9 +11,9 @@ int main() {
     println("matrix[2][2]: {matrix[2][2]}");
 
     // 行を取得（固定サイズ配列からスライスへ）
-    int[] row0 = matrix[0];
-    int[] row1 = matrix[1];
-    int[] row2 = matrix[2];
+    const int[] row0 = matrix[0];
+    const int[] row1 = matrix[1];
+    const int[] row2 = matrix[2];
 
     println("row0: {row0[0]}, {row0[1]}, {row0[2]}");
     println("row1: {row1[0]}, {row1[1]}, {row1[2]}");

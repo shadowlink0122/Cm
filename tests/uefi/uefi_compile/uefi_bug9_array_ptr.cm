@@ -10,14 +10,14 @@ ulong test_array_with_ptr() {
     arr[2] = 0x3333;
 
     // ❌ 以前はこのポインタ変数追加でarr[0]がarr[1]にシフトしていた
-    void* arr_ptr = &arr as void*;
+    void* _arr_ptr = &arr as void*;
 
     // ✅ 修正後はarr[0] == 0x1111が正しく返される
     return arr[0];
 }
 
 ulong efi_main(void* image_handle, void* system_table) {
-    void* ih = image_handle;
-    void* st = system_table;
+    void* _ih = image_handle;
+    void* _st = system_table;
     return test_array_with_ptr();
 }

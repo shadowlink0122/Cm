@@ -24,16 +24,16 @@ int main() {
     Pair* ptr = &p;
 
     // getter: 修正前は不正な値(アドレスの一部)が返された
-    int gx = ptr->get_x();
-    int gy = ptr->get_y();
+    const int gx = ptr->get_x();
+    const int gy = ptr->get_y();
     println("get x: {gx}");
     println("get y: {gy}");
 
     // setter + getter: 修正前はsetter後もgetterが不正値を返した
     ptr->set_x(100);
     ptr->set_y(200);
-    int gx2 = ptr->get_x();
-    int gy2 = ptr->get_y();
+    const int gx2 = ptr->get_x();
+    const int gy2 = ptr->get_y();
     println("after set x: {gx2}");
     println("after set y: {gy2}");
 
@@ -45,7 +45,7 @@ int main() {
     ptr->set_x(1);
     ptr->set_x(2);
     ptr->set_x(3);
-    int final_x = ptr->get_x();
+    const int final_x = ptr->get_x();
     println("chain x: {final_x}");
 
     return 0;

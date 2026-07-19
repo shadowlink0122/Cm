@@ -20,11 +20,11 @@ int main() {
     r.w = 3;
     r.h = 4;
 
-    Shape s1 = c as Shape;
-    Shape s2 = r as Shape;
+    const Shape s1 = c as Shape;
+    const Shape s2 = r as Shape;
 
-    Circle c2 = s1 as Circle;
-    Rect r2 = s2 as Rect;
+    const Circle c2 = s1 as Circle;
+    const Rect r2 = s2 as Rect;
     println("circle radius={c2.radius}");
     println("rect {r2.w}x{r2.h}");
     return 0;

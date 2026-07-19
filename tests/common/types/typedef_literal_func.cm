@@ -40,7 +40,7 @@ StatusCode transform_status(StatusCode code) {
 int main() {
     // テスト1: リテラル型を引数に渡す
     println("Test 1: String literal as argument");
-    HttpMethod m = "GET";
+    const HttpMethod m = "GET";
     print_method(m);
 
     // テスト2: リテラル型を直接引数に渡す
@@ -49,27 +49,27 @@ int main() {
 
     // テスト3: リテラル型の戻り値
     println("Test 3: Literal return value");
-    HttpMethod result = get_default_method();
+    const HttpMethod result = get_default_method();
     println("  result={result}");
 
     // テスト4: 整数リテラル型を引数に渡す
     println("Test 4: Int literal as argument");
-    StatusCode s = 404;
+    const StatusCode s = 404;
     print_status(s);
 
     // テスト5: 整数リテラル型の戻り値
     println("Test 5: Int literal return value");
-    StatusCode code = get_success_code();
+    const StatusCode code = get_success_code();
     println("  code={code}");
 
     // テスト6: リテラル型の変換関数
     println("Test 6: Transform string literal");
-    HttpMethod transformed = transform_method("GET");
+    const HttpMethod transformed = transform_method("GET");
     println("  transformed={transformed}");
 
     // テスト7: 整数リテラル型の変換関数
     println("Test 7: Transform int literal");
-    StatusCode new_code = transform_status(200);
+    const StatusCode new_code = transform_status(200);
     println("  new_code={new_code}");
 
     println("=== PASS ===");

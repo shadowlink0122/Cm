@@ -32,9 +32,10 @@ use js {
 
 // === タスク操作 ===
 
-// タスクを追加
+// タスクを追加（dom_runtime.jsから window['addTask'] で呼ばれるため命名は固定）
+// @cm-disable-next-line L001
 void addTask() {
-    string text = domGetValue("taskInput");
+    const string text = domGetValue("taskInput");
     if (text == "") {
         return;
     }
@@ -44,13 +45,15 @@ void addTask() {
     render();
 }
 
-// タスクの完了状態をトグル
+// タスクの完了状態をトグル（dom_runtime.jsから呼ばれるため命名は固定）
+// @cm-disable-next-line L001
 void toggleTask(int id) {
     storeToggleTask(id);
     render();
 }
 
-// タスクを削除
+// タスクを削除（dom_runtime.jsから呼ばれるため命名は固定）
+// @cm-disable-next-line L001
 void deleteTask(int id) {
     storeDeleteTask(id);
     render();
@@ -60,7 +63,7 @@ void deleteTask(int id) {
 
 // タスクリストを描画
 void render() {
-    int count = storeGetCount();
+    const int count = storeGetCount();
 
     // 空メッセージの表示/非表示
     if (count == 0) {
@@ -73,12 +76,12 @@ void render() {
     string html = "";
     int i = 0;
     while (i < count) {
-        int id = storeGetId(i);
-        string text = storeGetText(i);
-        bool done = storeIsDone(i);
+        const int id = storeGetId(i);
+        const string text = storeGetText(i);
+        const bool done = storeIsDone(i);
 
-        string checkId = "chk-{id}";
-        string delId = "del-{id}";
+        const string check_id = "chk-{id}";
+        const string del_id = "del-{id}";
 
         // チェックボックス属性
         string checked = "";
@@ -87,17 +90,17 @@ void render() {
         }
 
         // テキストスタイル（完了時は取り消し線）
-        string textStyle = "flex: 1;";
+        string text_style = "flex: 1;";
         if (done) {
-            textStyle = "flex: 1; text-decoration: line-through; color: #9ca3af;";
+            text_style = "flex: 1; text-decoration: line-through; color: #9ca3af;";
         }
 
         // タスクアイテムHTML（変数埋め込みで1つの文字列として定義）
-        string item = `
+        const string item = `
             <div class="task-item">
-            <input type="checkbox" id="{checkId}"{checked} style="margin-right: 12px; width: 18px; height: 18px;">
-            <span style="{textStyle}">{text}</span>
-            <button id="{delId}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
+            <input type="checkbox" id="{check_id}"{checked} style="margin-right: 12px; width: 18px; height: 18px;">
+            <span style="{text_style}">{text}</span>
+            <button id="{del_id}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
             </div>
         `;
         html = html + item;
@@ -111,12 +114,12 @@ void render() {
     // イベントバインド（DOM更新後に再登録）
     i = 0;
     while (i < count) {
-        int id = storeGetId(i);
-        string checkId = "chk-{id}";
-        string delId = "del-{id}";
+        const int id = storeGetId(i);
+        const string check_id = "chk-{id}";
+        const string del_id = "del-{id}";
 
-        domBindCheckbox(checkId, id);
-        domBindDelete(delId, id);
+        domBindCheckbox(check_id, id);
+        domBindDelete(del_id, id);
 
         i = i + 1;
     }

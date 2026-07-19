@@ -58,8 +58,8 @@ int main() {
     print_pair(3.14, true);
 
     // ジェネリック関数の複数呼び出し
-    int i = first_of(1, 2, 3);
-    double d = first_of(1.1, 2.2, 3.3);
+    const int i = first_of(1, 2, 3);
+    const double d = first_of(1.1, 2.2, 3.3);
     println("first_of(1, 2, 3) = {i}");
     println("first_of(1.1, 2.2, 3.3) = {d}");
 

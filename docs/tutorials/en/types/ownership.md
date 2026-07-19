@@ -62,8 +62,8 @@ int main() {
     Box a = {value: 10};
     Box b = move a;  // Explicit move
 
-    println("{}", b.value); // OK: b is the owner
-    // println("{}", a.value); // Error: a is moved
+    println("{b.value}"); // OK: b is the owner
+    // println("{a.value}"); // Error: a is moved
 
     return 0;
 }

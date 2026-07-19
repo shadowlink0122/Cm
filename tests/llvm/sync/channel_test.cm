@@ -14,7 +14,7 @@ int main() {
     println("=== Channel Test ===");
 
     // チャネル作成（バッファサイズ4）
-    long ch = create(4);
+    const long ch = create(4);
     println("channel created");
 
     // 基本 send/recv
@@ -23,7 +23,7 @@ int main() {
     send(ch, 30);
     println("sent 3 values");
 
-    int len1 = len(ch);
+    const int len1 = len(ch);
     println("len: {len1}");
 
     long v1 = 0;
@@ -43,7 +43,7 @@ int main() {
 
     // try_send/try_recv
     send(ch, 100);
-    int try_ok = try_send(ch, 200);
+    const int try_ok = try_send(ch, 200);
     if (try_ok == 0) {
         println("try_send: success");
     } else {
@@ -56,14 +56,14 @@ int main() {
 
     // close後のsend
     close(ch);
-    int closed = is_closed(ch);
+    const int closed = is_closed(ch);
     if (closed != 0) {
         println("channel closed: true");
     } else {
         println("channel closed: false");
     }
 
-    int send_ret = send(ch, 999);
+    const int send_ret = send(ch, 999);
     if (send_ret != 0) {
         println("send after close: rejected");
     } else {

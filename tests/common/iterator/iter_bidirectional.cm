@@ -27,7 +27,7 @@ bool has_next(BiIter* iter) {
 
 int next(BiIter* iter) {
     int* cur = iter->current;
-    int value = *cur;
+    const int value = *cur;
     iter->current = cur + 1;
     return value;
 }
@@ -62,23 +62,23 @@ int main() {
     // 前方向に走査
     println("Forward:");
     while (has_next(&iter)) {
-        int v = next(&iter);
+        const int v = next(&iter);
         println("  {v}");
     }
 
     // 現在位置は終端
-    int pos1 = position(&iter);
+    const int pos1 = position(&iter);
     println("position: {pos1}");
 
     // 後方向に走査
     println("Backward:");
     while (has_prev(&iter)) {
-        int v = prev(&iter);
+        const int v = prev(&iter);
         println("  {v}");
     }
 
     // 現在位置は先頭
-    int pos2 = position(&iter);
+    const int pos2 = position(&iter);
     println("position: {pos2}");
 
     return 0;

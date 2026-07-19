@@ -60,8 +60,8 @@ enum Direction {
 
 int main() {
     // 値の確認
-    println("North: {}", (int)Direction::North); // 0
-    println("South: {}", (int)Direction::South); // 10
+    println("North: {Direction::North as int}"); // 0
+    println("South: {Direction::South as int}"); // 10
     return 0;
 }
 ```

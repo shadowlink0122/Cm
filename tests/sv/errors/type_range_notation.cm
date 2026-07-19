@@ -1,0 +1,10 @@
+//! platform: sv
+// 型宣言でのSV範囲表記 [msb:lsb] はエラー（要素数表記 bit[4] に統一。
+// スライス式 x[3:0] と紛らわしいため、明確な診断で誘導する）
+#[input] posedge clk;
+
+bit[3:0] nibble = 0;
+
+async void tick(posedge clk) {
+    nibble = nibble + 1;
+}

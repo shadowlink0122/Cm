@@ -1,0 +1,12 @@
+//! platform: sv
+//! test: a=3, b=5 -> sum=8
+//! test: a=100, b=55 -> sum=155
+
+// //! test: ディレクティブ複数指定の回帰テスト（各ディレクティブがTEST 1/TEST 2として順に実行・検証される）
+#[input] uint a = 0;
+#[input] uint b = 0;
+#[output] uint sum = 0;
+
+void add() {
+    sum = a + b;
+}

@@ -7,11 +7,11 @@ int main() {
 
     // テストフォルダ内のデータファイルを使用
     // 注: テストランナーはテストディレクトリから実行するため、相対パスを使用
-    string data_path = "data/simple_io_data.txt";
-    string content = "Hello from std::io!";
+    const string data_path = "data/simple_io_data.txt";
+    const string content = "Hello from std::io!";
 
     // 1. 書き込み
-    bool ok = write_file(data_path, content);
+    const bool ok = write_file(data_path, content);
     if (ok) {
         println("Write: PASS");
     } else {
@@ -20,7 +20,7 @@ int main() {
     }
 
     // 2. 読み込み
-    string read_content = read_file(data_path);
+    const string read_content = read_file(data_path);
     println("Read: {read_content}");
 
     // 3. 内容確認

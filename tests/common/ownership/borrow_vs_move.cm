@@ -8,8 +8,8 @@ int main() {
     println("  a = {*p}");
 
     // 2. ムーブの場合
-    int x = 100;
-    int y = move x;
+    const int x = 100;
+    const int y = move x;
     println("ムーブテスト:");
     println("  y = {y}");
 

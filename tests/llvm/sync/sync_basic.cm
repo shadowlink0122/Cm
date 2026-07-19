@@ -39,7 +39,7 @@ int main() {
     println("mutex unlocked");
 
     // try_lock テスト（成功するはず）
-    int try_result = mutex_trylock(&mtx);
+    const int try_result = mutex_trylock(&mtx);
     if (try_result == 0) {
         println("mutex try_lock: success");
         mutex_unlock(&mtx);

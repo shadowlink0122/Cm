@@ -17,7 +17,7 @@ int main() {
     println("const GREETING = {GREETING}");
 
     // constを使った計算（読み取りは可能）
-    int doubled = MAX * 2;
+    const int doubled = MAX * 2;
     println("MAX * 2 = {doubled}");
 
     return 0;

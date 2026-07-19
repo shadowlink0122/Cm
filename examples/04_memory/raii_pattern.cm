@@ -24,7 +24,7 @@ int main() {
     // 1. 基本的なRAII
     println("--- Basic RAII ---");
     {
-        Resource res("Basic", 0);
+        const Resource res("Basic", 0);
         println("Using resource...");
     }
     println("After scope");
@@ -33,9 +33,9 @@ int main() {
     println("");
     println("--- Nested scope ---");
     {
-        Resource outer("Outer", 1);
+        const Resource outer("Outer", 1);
         {
-            Resource inner("Inner", 2);
+            const Resource inner("Inner", 2);
             println("Inside inner scope");
         }
         println("Inside outer scope");

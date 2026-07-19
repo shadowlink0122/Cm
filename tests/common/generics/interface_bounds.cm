@@ -19,8 +19,8 @@ struct Color with Eq {
 
 int main() {
     // 単一境界のテスト（プリミティブ型）
-    int x = 10;
-    int y = 10;
+    const int x = 10;
+    const int y = 10;
     if (x == y) {
         println("x == y: true");
     }

@@ -130,7 +130,7 @@ int main() {
     // Iteration
     int* end = arr + 5;
     for (int* iter = arr; iter != end; iter++) {
-        println("{}", *iter);
+        println("{*iter}");
     }
     return 0;
 }
@@ -172,7 +172,7 @@ struct Point { int x; int y; }
 
 impl Point for Printable {
     void print() {
-        println("({}, {})", self.x, self.y);
+        println("({self.x}, {self.y})");
     }
 }
 

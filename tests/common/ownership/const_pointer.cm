@@ -15,8 +15,7 @@ int main() {
 
     // constポインタ - 読み取りのみ
     // 注意: *p2 = value はエラーになる
-    // "Cannot assign through pointer to const"
-    // const int* p2 = &x;
+    // "Cannot assign through pointer to const" const int* p2 = &x;
     // *p2 = 30;  // エラー！
 
     return 0;

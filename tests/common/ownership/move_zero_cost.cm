@@ -2,11 +2,11 @@
 
 int main() {
     // 1. ムーブ前の値
-    int x = 42;
+    const int x = 42;
     println("move前: x={x}");
 
     // 2. ムーブ実行
-    int y = move x;
+    const int y = move x;
     println("move後: y={y}");
 
     // 3. 結果確認

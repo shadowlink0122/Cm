@@ -1,0 +1,8 @@
+module wrap_string;
+
+import std::io::println;
+
+int main() {
+    println("とても長い文字列リテラルは折り返し候補がないためそのまま維持される yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy");
+    return 0;
+}

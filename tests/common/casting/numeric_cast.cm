@@ -4,8 +4,8 @@ int main() {
     print("=== Numeric Cast Test ===\n");
 
     // Test 1: float -> int
-    float f = 3.14;
-    int i = f as int;
+    const float f = 3.14;
+    const int i = f as int;
     if (i == 3) {
         print("  float -> int: PASS\n");
     } else {
@@ -13,8 +13,8 @@ int main() {
     }
 
     // Test 2: int -> double
-    int j = 42;
-    double d = j as double;
+    const int j = 42;
+    const double d = j as double;
     if (d > 41.9 && d < 42.1) {
         print("  int -> double: PASS\n");
     } else {
@@ -22,8 +22,8 @@ int main() {
     }
 
     // Test 3: double -> float
-    double d2 = 1.23456789;
-    float f2 = d2 as float;
+    const double d2 = 1.23456789;
+    const float f2 = d2 as float;
     if (f2 > 1.23 && f2 < 1.24) {
         print("  double -> float: PASS\n");
     } else {
@@ -31,9 +31,9 @@ int main() {
     }
 
     // Test 4: 多重キャスト
-    int k = 100;
-    char c = k as char;
-    int k2 = c as int;
+    const int k = 100;
+    const char c = k as char;
+    const int k2 = c as int;
     if (k2 == 100) {
         print("  int -> char -> int: PASS\n");
     } else {

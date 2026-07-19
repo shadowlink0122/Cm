@@ -1,0 +1,15 @@
+// ヒープ境界外書き込み: --sanitize=address で heap-buffer-overflow として検出される（インデックスは実行時値）
+import std::io::println;
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+int main() {
+    void* mem = malloc(4 * sizeof(int));
+    int* arr = mem as int*;
+    int n = 5;
+    arr[n] = 99;
+    free(mem);
+    println("done");
+    return 0;
+}

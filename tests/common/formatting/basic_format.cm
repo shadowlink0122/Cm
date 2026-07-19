@@ -6,27 +6,27 @@ int main() {
     println("Hello, World!");
 
     // 2. 基本的な位置引数
-    int answer = 42;
+    const int answer = 42;
     println("The answer is: {answer}");
 
     // 3. 複数の位置引数
-    int a = 10;
-    int b = 20;
-    int c = 30;
+    const int a = 10;
+    const int b = 20;
+    const int c = 30;
     println("{a} + {b} = {c}");
 
     // 4. 異なる型の混在
-    int age = 25;
-    double height = 175.5;
-    string name = "Alice";
+    const int age = 25;
+    const double height = 175.5;
+    const string name = "Alice";
     println("Name: {name}, Age: {age}, Height: {height}");
 
     // 5. ブール値のフォーマット
-    bool is_ready = true;
+    const bool is_ready = true;
     println("System ready: {is_ready}");
 
     // 6. 数値フォーマット指定子
-    int n = 255;
+    const int n = 255;
     println("Decimal: {n}");
     println("Hex: {n:x}");
     println("HEX: {n:X}");
@@ -34,7 +34,7 @@ int main() {
     println("Octal: {n:o}");
 
     // 7. 浮動小数点のフォーマット
-    double pi = 3.14159265359;
+    const double pi = 3.14159265359;
     println("Default: {pi}");
     println("2 decimal places: {pi:.2}");
     println("4 decimal places: {pi:.4}");
@@ -42,13 +42,13 @@ int main() {
     println("SCIENTIFIC: {pi:E}");
 
     // 8. 幅指定とアライメント
-    string test = "test";
+    const string test = "test";
     println("Left:   |{test:<10}|");
     println("Right:  |{test:>10}|");
     println("Center: |{test:^10}|");
 
     // 9. ゼロパディング
-    int num = 42;
+    const int num = 42;
     println("Zero padding: {num:0>5}");
 
     // 10. エスケープ

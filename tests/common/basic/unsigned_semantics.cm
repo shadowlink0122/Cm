@@ -1,6 +1,5 @@
 // unsignedセマンティクスのテスト:
-// 回帰: uintの比較・除算・シフトが符号付きで実行され、
-// INT_MAXを超えるuint値で結果が壊れるバグの検証。
+// 回帰: uintの比較・除算・シフトが符号付きで実行され、INT_MAXを超えるuint値で結果が壊れるバグの検証。
 // 関数経由で値を得ることで定数畳み込みされない実行時経路も検証する
 import std::io::println;
 
@@ -18,31 +17,31 @@ utiny max_utiny() {
 
 int main() {
     // 実行時経路（関数呼び出し経由）
-    uint u = big();
+    const uint u = big();
     if (u > 1000) {
         println("cmp: unsigned");
     } else {
         println("cmp: signed(BUG)");
     }
 
-    uint d = u / ten();
+    const uint d = u / ten();
     println("div = {d}");
 
-    uint s = u >> 4;
+    const uint s = u >> 4;
     println("shr = {s}");
 
-    int widened = max_utiny() as int;
+    const int widened = max_utiny() as int;
     println("utiny 255 as int = {widened}");
 
     // 定数畳み込み経路
-    uint cu = 3000000000;
+    const uint cu = 3000000000;
     if (cu > 1000) {
         println("const cmp: unsigned");
     } else {
         println("const cmp: signed(BUG)");
     }
-    utiny ct = 255;
-    int cw = ct as int;
+    const utiny ct = 255;
+    const int cw = ct as int;
     println("const utiny 255 as int = {cw}");
     return 0;
 }

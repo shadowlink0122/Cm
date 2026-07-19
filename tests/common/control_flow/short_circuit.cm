@@ -36,7 +36,7 @@ int main() {
 
     // 複雑な短絡評価
     int y = 0;
-    bool result = (false && (y = y + 1) > 0) || (true && (y = y + 2) > 0);
+    const bool result = (false && (y = y + 1) > 0) || (true && (y = y + 2) > 0);
     println("Complex: y = {y}, result = {result}");
     // y = 2, result = true
 

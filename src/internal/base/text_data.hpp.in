@@ -1,0 +1,21 @@
+#pragma once
+
+// ビルド時に生成されるテキストデータ（CMake configure_file による埋め込み。手編集しない）
+// 原本: src/cli/help_<lang>.txt（メッセージカタログはC++側の src/common/messages/ で管理）
+// 言語の追加は CMakeLists.txt の CM_LANGS にコードを足し、help_<lang>.txt を置く
+
+namespace cm::textdata {
+
+@CM_TEXTDATA_DECLS@
+// ヘルプカタログ（言語コード・本文テンプレート）
+struct LangCatalog {
+    const char* code;
+    const char* help_text;
+};
+
+inline constexpr LangCatalog kCatalogs[] = {
+@CM_TEXTDATA_TABLE@};
+
+inline constexpr int kCatalogCount = static_cast<int>(sizeof(kCatalogs) / sizeof(kCatalogs[0]));
+
+}  // namespace cm::textdata

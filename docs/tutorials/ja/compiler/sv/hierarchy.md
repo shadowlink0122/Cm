@@ -1,37 +1,40 @@
 # SVバックエンド - モジュール階層の保持
 
-既定では `import` は全シンボルをフラット化して単一モジュールに展開しますが、`//! sv: hierarchy` ディレクティブを指定すると、相対importを**別モジュールのインスタンス化**として階層のまま保持できます。
+既定では `import` は全シンボルをフラット化して単一モジュールに展開しますが、import先が**exportされたIO構造体**（方向属性フィールドを持つ `export struct`）を宣言している場合、その相対importは**別モジュールのインスタンス化**として階層のまま保持されます。
 
 ## 使い方
 
-サブモジュール（`alu.cm`）:
+サブモジュール（`alu.cm`）は、公開インターフェース契約となるIO構造体を `export` して宣言します:
 
 ```cm
 //! platform: sv
 
-#[input] uint a;
-#[input] uint b;
-#[input] utiny op;
-#[output] uint result = 0;
+export struct AluIo {
+    #[input] uint a;
+    #[input] uint b;
+    #[input] utiny op;
+    #[output] uint result = 0;
+};
+
+AluIo io;
 
 void alu_comb() {
-    if (op == 0) {
-        result = a + b;
-    } else if (op == 1) {
-        result = a - b;
+    if (io.op == 0) {
+        io.result = io.a + io.b;
+    } else if (io.op == 1) {
+        io.result = io.a - io.b;
     } else {
-        result = a ^ b;
+        io.result = io.a ^ io.b;
     }
 }
 ```
 
-トップモジュール（`top.cm`）:
+トップモジュール（`top.cm`）は、`<モジュール名>::<IO構造体名>` の修飾名でインスタンス化します:
 
 ```cm
 //! platform: sv
-//! sv: hierarchy
 
-import ./alu;   // フラット化されず別モジュールとして保持される
+import ./alu;   // export struct宣言があるため、フラット化されず別モジュールとして保持される
 
 #[input] posedge clk;
 #[input] uint x;
@@ -42,7 +45,7 @@ uint alu_out = 0;
 utiny op_add = 0;
 
 // 構造体リテラルでポートを接続（フィールド名 = サブモジュールのポート名）
-alu alu0 = alu { a: x, b: y, op: op_add, result: alu_out };
+alu::AluIo alu0 = alu::AluIo { a: x, b: y, op: op_add, result: alu_out };
 
 async void update(posedge clk) {
     sum = alu_out;
@@ -67,26 +70,68 @@ module alu ( ... );
 endmodule
 ```
 
+型が通常のモジュールシステムで解決されるため、`cm check` / `cm lint` も特別扱いなしで通ります。
+
+> v0.16.2で `//! sv: hierarchy` ディレクティブは廃止されました。記述されていても単なるコメントとして無視され、exportされたIO構造体を持たない相対importは従来どおりフラット化されます。
+
+## IOの明示的構造体宣言（IOインスタンス）
+
+モジュールのIOはC/C++スタイルの構造体宣言とそのインスタンスで定義します。
+
+```cm
+// alu.cm
+export struct AluIo {
+    #[input] uint a;
+    #[input] uint b;
+    #[output] uint result = 0;
+};
+
+AluIo io;
+
+void alu_comb() {
+    io.result = io.a + io.b;
+}
+```
+
+- `#[input]`/`#[output]` フィールドを持つ構造体のグローバル変数（IOインスタンス）は、フィールドがそのままモジュールポートへ展開されます（ポート名 = フィールド名。個別のポート宣言は不要）
+- モジュール内のアクセスは `io.field` で行い、SV出力ではポート名へフラット化されます
+- `#[output]` フィールドの既定値（`= 0`）はポートの電源投入時初期値になります
+- 構造体宣言の末尾セミコロン（`};`）を許容します（C/C++互換）
+- クロック等の直接ポート宣言（`#[input] posedge clk;`）とは併用できます。階層化の対象にするモジュールでは、クロックも `#[input] bool clk;` としてIO構造体のフィールドで宣言します（`async void f(posedge clk)` のトリガは従来どおり機能します）
+- IO構造体はデータ型（`typedef struct packed`）としては出力されません
+- `#[test]` 関数内でも `io.field` で参照・駆動でき、テストベンチではポート名へフラット化されます
+- 親側のインスタンス接続でも `io.field` を値として指定できます（`alu::AluIo { a: io.x, ... }` → `.a(x)`）
+- フィールドに付与した `#[sv::pin]` 属性はピン制約（.cst/.xdc）へ反映されます
+
 ## 仕組みと制約
 
-- import先のポート宣言（`#[input]`/`#[output]`/`#[inout]`）からextern struct が自動生成され、import文を置換します（インスタンスの型名 = ファイル名のstem。`alu.cm` → `alu`）
+- import先のexportされたIO構造体から extern struct が生成され、import文を置換します（インスタンスの型名 = ファイル名のstem。`alu.cm` → `alu`。親ソース中の `alu::AluIo` は `alu` へ置換されます）
 - import先は個別にSVコンパイルされ、トップの `.sv` に連結されます。ネストした階層import・循環import検出に対応
 - インスタンス出力に接続された信号（上記の `alu_out`）は宣言初期値が出力されません（インスタンスが駆動するため）
 - 対象は単純な相対import（`import ./name;`）のみ。選択import（`::{...}`）やエイリアスは従来どおりフラット化されます
 
 回帰テスト: `tests/sv/hierarchy/hier_top`
 
-## モジュールパラメータ（#[sv::parameter]・v0.16.0）
+## モジュールパラメータ（#[sv::parameter]・#[sv::param]）
 
-サブモジュール側で `#[sv::parameter]` を付けた const は`module #(parameter ...)` として出力され、ポート・内部信号の幅も記号のまま（`[WIDTH-1:0]`）保たれます:
+サブモジュール側で `#[sv::parameter]` を付けた const は `module #(parameter ...)` として出力され、ポート・内部信号の幅も記号のまま（`[WIDTH-1:0]`）保たれます。インターフェース契約としては、IO構造体に `#[sv::param]` フィールドを宣言します（インスタンス側からの上書きを型検査可能にするため）:
 
 ```cm
 // shifter.cm
 #[sv::parameter] const uint WIDTH = 8;
 
-#[input] posedge clk;
-#[input] bit[WIDTH] din;
-#[output] bit[WIDTH] dout = 0;
+export struct ShifterIo {
+    #[sv::param] uint WIDTH = 8;
+    #[input] bool clk;
+    #[input] bit[WIDTH] din;
+    #[output] bit[WIDTH] dout = 0;
+};
+
+ShifterIo io;
+
+async void shift(posedge clk) {
+    io.dout = io.din;
+}
 ```
 
 ```systemverilog
@@ -104,12 +149,11 @@ module shifter #(
 ```cm
 import ./shifter;
 
-shifter sh0 = shifter { WIDTH: 16, clk: clk, din: data_in, dout: wide_out };
+shifter::ShifterIo sh0 = shifter::ShifterIo { WIDTH: 16, clk: clk, din: data_in, dout: wide_out };
 // → shifter #(.WIDTH(16)) sh0 (.clk(clk), ...);
 ```
 
-> パラメータに依存する定数ループ展開や、パラメータ幅のメモリ配列
-> （`bit[WIDTH][DEPTH]`）は未対応です（v0.16.0ロードマップ A5/A6）。
+> パラメータに依存する定数ループ展開や、パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は未対応です（v0.16.0ロードマップ A5/A6）。
 
 
 ---

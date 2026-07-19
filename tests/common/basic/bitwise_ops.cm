@@ -2,29 +2,29 @@ import std::io::println;
 // ビット演算子テスト
 int main() {
     // AND
-    int a = 0b1100;
-    int b = 0b1010;
-    int and_r = a & b;
+    const int a = 0b1100;
+    const int b = 0b1010;
+    const int and_r = a & b;
     println("AND: {and_r}");
 
     // OR
-    int or_r = a | b;
+    const int or_r = a | b;
     println("OR: {or_r}");
 
     // XOR
-    int xor_r = a ^ b;
+    const int xor_r = a ^ b;
     println("XOR: {xor_r}");
 
     // NOT
-    int not_r = ~0;
+    const int not_r = ~0;
     println("NOT ~0: {not_r}");
 
     // 左シフト
-    int left = 1 << 3;
+    const int left = 1 << 3;
     println("1 << 3: {left}");
 
     // 右シフト
-    int right = 16 >> 2;
+    const int right = 16 >> 2;
     println("16 >> 2: {right}");
 
     // 複合代入
@@ -53,7 +53,7 @@ int main() {
     flags = flags & ~(1 << 0);
     println("flags after clear 0: {flags}");
 
-    bool bit2 = (flags & (1 << 2)) != 0;
+    const bool bit2 = (flags & (1 << 2)) != 0;
     if (bit2) {
         println("bit 2 is set");
     }

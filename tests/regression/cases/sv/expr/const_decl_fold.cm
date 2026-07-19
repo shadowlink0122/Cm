@@ -1,0 +1,12 @@
+#[input] bool clk = false;
+#[output] uint out = 0;
+
+module const_decl_fold_top;
+
+const uint FRAME = 800 * 525;
+const uint HALF = FRAME / 2;
+const uint ZERO = '0' as uint;
+
+void tick(posedge clk) {
+    out = FRAME + HALF + ZERO;
+}

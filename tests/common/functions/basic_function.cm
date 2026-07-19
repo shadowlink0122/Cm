@@ -17,15 +17,15 @@ double multiply(double x, double y) {
 }
 
 int main() {
-    int result = add(5, 3);
+    const int result = add(5, 3);
     println(result);
     // 8
 
-    int s = sum3(1, 2, 3);
+    const int s = sum3(1, 2, 3);
     println(s);
     // 6
 
-    double m = multiply(2.5, 4.0);
+    const double m = multiply(2.5, 4.0);
     println(m);
     // 10
 

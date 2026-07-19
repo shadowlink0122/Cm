@@ -4,7 +4,7 @@ import std::io::println;
 
 int main() {
     int x = 42;
-    int y = move x;
+    const int y = move x;
     // xをmove
     x = 99;
     // xに再代入 → moved状態クリア

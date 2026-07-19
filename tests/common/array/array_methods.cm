@@ -19,38 +19,38 @@ int main() {
     arr[4] = 5;
 
     // size/len
-    int size_val = arr.size();
-    int len_val = arr.len();
+    const int size_val = arr.size();
+    const int len_val = arr.len();
     println("size = {size_val}");
     println("len = {len_val}");
 
     // indexOf
-    int idx_3 = arr.indexOf(3);
-    int idx_99 = arr.indexOf(99);
+    const int idx_3 = arr.indexOf(3);
+    const int idx_99 = arr.indexOf(99);
     println("indexOf(3) = {idx_3}");
     println("indexOf(99) = {idx_99}");
 
     // includes
-    bool incl_4 = arr.includes(4);
-    bool incl_99 = arr.includes(99);
+    const bool incl_4 = arr.includes(4);
+    const bool incl_99 = arr.includes(99);
     println("includes(4) = {incl_4}");
     println("includes(99) = {incl_99}");
 
     // some
-    bool some_even = arr.some(is_even);
-    bool some_neg = arr.some(is_negative);
+    const bool some_even = arr.some(is_even);
+    const bool some_neg = arr.some(is_negative);
     println("some(is_even) = {some_even}");
     println("some(is_negative) = {some_neg}");
 
     // every
-    bool every_pos = arr.every(is_positive);
-    bool every_even = arr.every(is_even);
+    const bool every_pos = arr.every(is_positive);
+    const bool every_even = arr.every(is_even);
     println("every(is_positive) = {every_pos}");
     println("every(is_even) = {every_even}");
 
     // findIndex
-    int find_even = arr.findIndex(is_even);
-    int find_gt3 = arr.findIndex(is_greater_than_3);
+    const int find_even = arr.findIndex(is_even);
+    const int find_gt3 = arr.findIndex(is_greater_than_3);
     println("findIndex(is_even) = {find_even}");
     println("findIndex(is_greater_than_3) = {find_gt3}");
 

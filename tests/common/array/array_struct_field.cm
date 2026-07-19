@@ -15,16 +15,16 @@ int main() {
     ];
 
     // サイズ確認
-    int s = items.size();
+    const int s = items.size();
     println("Items size: {s}");
 
     // 各要素のフィールドにアクセス
-    int id0 = items[0].id;
-    int val0 = items[0].value;
+    const int id0 = items[0].id;
+    const int val0 = items[0].value;
     println("items[0]: id={id0}, value={val0}");
 
-    int id2 = items[2].id;
-    int val2 = items[2].value;
+    const int id2 = items[2].id;
+    const int val2 = items[2].value;
     println("items[2]: id={id2}, value={val2}");
 
     // 合計を計算

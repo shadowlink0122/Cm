@@ -65,8 +65,8 @@ interface Queue<T> {
 // 高さを更新
 <T> void update_height(AVLNode<T>* node) {
     if (node != null) {
-        int left_h = node_height(node->left);
-        int right_h = node_height(node->right);
+        const int left_h = node_height(node->left);
+        const int right_h = node_height(node->right);
         if (left_h > right_h) {
             node->height = left_h + 1;
         } else {
@@ -125,7 +125,7 @@ interface Queue<T> {
 
     update_height(node);
 
-    int bf = balance_factor(node);
+    const int bf = balance_factor(node);
 
     // 左左ケース
     if (bf > 1 && node->left != null && value < node->left->value) {
@@ -178,7 +178,7 @@ interface Queue<T> {
 
     update_height(node);
 
-    int bf = balance_factor(node);
+    const int bf = balance_factor(node);
 
     if (bf < -1) {
         if (balance_factor(node->right) <= 0) {
@@ -212,7 +212,7 @@ impl<T> PriorityQueue<T> for Queue<T> {
 
     T pop() {
         if (self.root == null) {
-            T default_val = 0 as T;
+            const T default_val = 0 as T;
             return default_val;
         }
         T result = 0 as T;
@@ -223,7 +223,7 @@ impl<T> PriorityQueue<T> for Queue<T> {
 
     T peek() {
         if (self.root == null) {
-            T default_val = 0 as T;
+            const T default_val = 0 as T;
             return default_val;
         }
         AVLNode<T>* min_node = find_min(self.root);
@@ -258,15 +258,15 @@ int main() {
     pq.push(20);
     pq.push(40);
 
-    int s = pq.get_size();
+    const int s = pq.get_size();
     println("Size: {s}");
 
-    int min_val = pq.peek();
+    const int min_val = pq.peek();
     println("Peek (min): {min_val}");
 
     println("\nPopping (sorted order):");
     while (!pq.is_empty()) {
-        int v = pq.pop();
+        const int v = pq.pop();
         print("  {v}");
     }
     println("");

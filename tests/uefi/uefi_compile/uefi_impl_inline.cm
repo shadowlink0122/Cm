@@ -1,7 +1,6 @@
 //! platform: uefi
 // Bug#13回帰テスト: implメソッド/コンストラクタがefi_mainでインライン展開されない
-// インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が上書きされ、
-// UEFIデータ構造が破壊されて#UD例外が発生していた
+// インライン展開されるとefi_mainの引数レジスタ(rcx/rdx)が上書きされ、UEFIデータ構造が破壊されて#UD例外が発生していた
 // 修正: 全UEFI関数にNoInline属性を付与
 
 struct SerialPort {
@@ -11,7 +10,7 @@ struct SerialPort {
 impl SerialPort {
     void putc(ulong ch) {
         // selfとchを使用するメソッド
-        ulong p = self.port;
+        const ulong p = self.port;
     }
 
     ulong get_port() {

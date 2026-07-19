@@ -16,100 +16,114 @@ Cm has a built-in static analysis tool (Linter). It detects code quality issues 
 
 # Recursively check a directory
 ./cm lint src/
+
+# Enable naming convention checks (L001)
+./cm lint --strict src/main.cm
+./cm check --strict src/main.cm
 ```
 
 ## Check Items
 
-### 1. Naming Conventions
+### 1. Naming Conventions (L001, --strict only)
 
-Cm recommends the following naming conventions:
+`cm check --strict` / `cm lint --strict` verify that every declaration name follows the world-standard (C/C++/Rust) naming conventions:
 
-| Target | Convention | Example |
+| Declaration | Allowed case | Example |
 |--------|------------|---------|
-| Variables/Functions | snake_case | `my_variable`, `calc_sum` |
-| Types/Structs | PascalCase | `MyStruct`, `HttpClient` |
-| Constants | SCREAMING_SNAKE_CASE | `MAX_SIZE`, `PI` |
+| struct / enum / interface / typedef names | PascalCase | `AdderIo`, `HttpClient` |
+| Generic type parameters | PascalCase | `T`, `TKey` |
+| Functions / methods | snake_case | `calc_sum` |
+| Variables / parameters / fields | snake_case | `total_count` |
+| Global constants (const) | UPPER_SNAKE_CASE | `MAX_SIZE`, `CLK_FREQ` |
+| Local constants (const) | snake_case / UPPER_SNAKE_CASE | `base`, `MAX_N` |
+| Enum variants | PascalCase / UPPER_SNAKE_CASE | `North`, `CTRL_00` |
+| Module names | snake_case | `hdmi_out` |
+
+camelCase is not allowed for any declaration. Leading underscores are stripped before checking (`_unused` counts as snake_case).
 
 ```cm
-// ⚠️ Warning: variable names should use snake_case
-int myVariable = 10;  // → my_variable
+// ⚠️ L001: struct name 'bad_struct' does not follow PascalCase
+struct bad_struct {
+    int badField;  // ⚠️ L001: field names use snake_case
+}
 
 // ✅ OK
-int my_variable = 10;
+struct GoodStruct {
+    int good_field;
+}
 ```
 
-### 2. Unused Variables
+Exempt from checks (names fixed externally, etc.):
 
-Detects variables that are not used:
+- `extern struct` and its fields (vendor primitives: `OSC`, `TLVDS_D2`, ...)
+- Functions inside `extern "C"` blocks (C symbol names)
+- `self()` constructors / `~self()` destructors / operator overloads / `main`
+- Standard library namespaces inlined by import (`std` / `native`, ...)
+
+### 2. Unused Variables (W001)
+
+Detects variables that are never used:
 
 ```cm
 int main() {
-    int x = 10;  // ⚠️ Warning: variable 'x' is unused
+    int x = 10;  // ⚠️ W001: variable 'x' is never used
     return 0;
 }
 ```
 
 ### 3. const Suggestions
 
-Suggests `const` for variables that are not modified:
+Recommends `const` for variables that are never modified:
 
 ```cm
 int main() {
-    int size = 100;  // ⚠️ Warning: 'size' can be const
+    int size = 100;  // ⚠️ warning: 'size' can be const
     println("Size: {size}");
     return 0;
 }
 ```
 
-## Configuration File (.cmlint.yml)
+## Configuration File (.cmconfig.yml)
 
-Place `.cmlint.yml` in project root to configure rules:
+Place `.cmconfig.yml` in the project root (or a parent directory) to configure per-rule levels:
 
 ```yaml
-# Enable naming convention checks
-naming:
-  enabled: true
-  variables: snake_case
-  types: PascalCase
+lint:
+  rules:
+    L001: disabled   # disable naming convention checks
+    W001: error      # promote unused variables to errors
+```
 
-# Enable unused variable checks
-unused:
-  enabled: true
-  warn_unused_params: false  # Don't warn about unused parameters
+Use `exclude:` to omit paths from directory scans (`-r`), such as test corpora or import-only module files. Explicitly specified files, or directories under an excluded path given directly, are still linted:
 
-# Disable const suggestions
-const_suggestion:
-  enabled: false
+```yaml
+lint:
+  exclude:
+    - tests/          # exclude the test corpus from scans
+    - libs/std/core/  # import-only module aggregation dialect
+```
+
+Line-level disabling comments are also available:
+
+```cm
+// @cm-disable-next-line L001
+struct legacy_struct {  // L001 is not reported on this line
+    int id;
+}
 ```
 
 ## Output Example
 
 ```
-warning: variable 'myValue' should use snake_case naming
-  --> src/main.cm:5:9
-  |
-5 |     int myValue = 10;
-  |         ^^^^^^^
-  |
-  = help: consider renaming to 'my_value'
-
-warning: unused variable 'x'
-  --> src/main.cm:8:9
-  |
-8 |     int x = 42;
-  |         ^
-  |
+src/main.cm:5:9: warning: 変数名 'myValue' は snake_case 命名規則に従っていません [L001]
+src/main.cm:8:9: warning: Variable 'x' is never used [W001]
 ```
 
-## Related Topics
+## See Also
 
 - [Formatter](formatter.md) - Code formatter
 
 ---
 
-**Last Updated:** 2026-02-08
-
----
-
 <!-- nav -->
-← Prev: [Compiler - Preprocessor (Conditional Compilation)](preprocessor.html) | [Contents](../index.html) | Next: [Formatter (cm fmt)](formatter.html) →
+← Prev: [Compiler - Preprocessor (Conditional Compilation)](preprocessor.html) | [Index](../index.html) | Next: [Formatter (cm fmt)](formatter.html) →

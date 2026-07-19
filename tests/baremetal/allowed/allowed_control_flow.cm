@@ -19,7 +19,7 @@ int max_val(int a, int b) {
 }
 
 int main() {
-    int s = sum_range(10);
-    int m = max_val(s, 100);
+    const int s = sum_range(10);
+    const int m = max_val(s, 100);
     return m;
 }

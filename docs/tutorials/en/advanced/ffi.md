@@ -144,4 +144,4 @@ extern "C" {
 ---
 
 <!-- nav -->
-← Prev: [スライス型](slices.html) | [Contents](index.html) | Next: [Threads (std::thread)](thread.html) →
+← Prev: [スライス型](slices.html) | [Contents](index.html) | Next: [Threads (native::thread)](thread.html) →

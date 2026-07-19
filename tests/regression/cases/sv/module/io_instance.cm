@@ -1,0 +1,16 @@
+#[input] bool clk = false;
+
+module io_instance_top;
+
+// C/C++スタイルの構造体宣言とインスタンスによるIO定義。
+// フィールドがモジュールポートへ展開され、io.field はポート名へ写像される
+struct Io {
+    #[input] uint a;
+    #[output] uint result;
+};
+
+Io io;
+
+void tick(posedge clk) {
+    io.result = io.a;
+}

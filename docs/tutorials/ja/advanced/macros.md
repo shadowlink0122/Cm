@@ -131,4 +131,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [must キーワード](must.html) ｜ [目次](index.html) ｜ 次: [スレッド (std::thread)](thread.html) →
+← 前: [must キーワード](must.html) ｜ [目次](index.html) ｜ 次: [スレッド (native::thread)](thread.html) →

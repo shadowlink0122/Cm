@@ -6,8 +6,8 @@ int main() {
     int x = 42;
     int y = 100;
     double pi = 3.14159;
-    bool flag = true;
-    char ch = 'Z';
+    const bool flag = true;
+    const char ch = 'Z';
 
     println("=== Basic Variable Address Interpolation ===");
     // &variable構文での直接アドレス表示

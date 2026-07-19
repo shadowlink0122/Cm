@@ -7,15 +7,15 @@ async int fetch_value() {
 }
 
 async int compute(int a, int b) {
-    int val = await fetch_value();
+    const int val = await fetch_value();
     return a + b + val;
 }
 
 async int main() {
-    int result = await compute(10, 20);
+    const int result = await compute(10, 20);
     println("Result: {result}");
 
-    int v = await fetch_value();
+    const int v = await fetch_value();
     println("Value: {v}");
 
     return 0;

@@ -25,10 +25,10 @@ int main() {
             break;
         }
     }
-    int v0 = *vi.get(0);
-    int v1 = *vi.get(1);
-    int v2 = *vi.get(2);
-    int v7 = *vi.get(7);
+    const int v0 = *vi.get(0);
+    const int v1 = *vi.get(1);
+    const int v2 = *vi.get(2);
+    const int v7 = *vi.get(7);
     println("  sorted={sorted}");
     println("  [{v0}, {v1}, {v2}, ..., {v7}]");
 
@@ -43,7 +43,7 @@ int main() {
     Vector<int> single();
     single.push(42);
     single.sort();
-    int s0 = *single.get(0);
+    const int s0 = *single.get(0);
     println("  [{s0}]");
 
     // 4. 既にソート済みの配列
@@ -53,9 +53,9 @@ int main() {
     already.push(2);
     already.push(3);
     already.sort();
-    int a0 = *already.get(0);
-    int a1 = *already.get(1);
-    int a2 = *already.get(2);
+    const int a0 = *already.get(0);
+    const int a1 = *already.get(1);
+    const int a2 = *already.get(2);
     println("  [{a0}, {a1}, {a2}]");
 
     // 5. 逆順の配列
@@ -67,9 +67,9 @@ int main() {
     rev.push(2);
     rev.push(1);
     rev.sort();
-    int r0 = *rev.get(0);
-    int r1 = *rev.get(1);
-    int r4 = *rev.get(4);
+    const int r0 = *rev.get(0);
+    const int r1 = *rev.get(1);
+    const int r4 = *rev.get(4);
     println("  [{r0}, {r1}, ..., {r4}]");
 
     // 6. 重複要素
@@ -81,11 +81,11 @@ int main() {
     dup.push(2);
     dup.push(1);
     dup.sort();
-    int d0 = *dup.get(0);
-    int d1 = *dup.get(1);
-    int d2 = *dup.get(2);
-    int d3 = *dup.get(3);
-    int d4 = *dup.get(4);
+    const int d0 = *dup.get(0);
+    const int d1 = *dup.get(1);
+    const int d2 = *dup.get(2);
+    const int d3 = *dup.get(3);
+    const int d4 = *dup.get(4);
     println("  [{d0}, {d1}, {d2}, {d3}, {d4}]");
 
     println("=== PASS ===");

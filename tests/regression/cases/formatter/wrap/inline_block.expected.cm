@@ -1,0 +1,11 @@
+int node_height(int* node) {
+    return 1;
+}
+
+void update_height(int* node) {
+    if (node != null) {
+        const int lh = node_height(node);
+        const int rh = node_height(node);
+        const int h = (lh > rh ? lh : rh) + 1;
+    }
+}

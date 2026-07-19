@@ -37,6 +37,9 @@
       "include": "#asm-block"
     },
     {
+      "include": "#type-declaration"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -441,41 +444,23 @@
               "match": "\\{\\{|\\}\\}"
             },
             {
-              "begin": "\\{",
-              "end": "\\}",
-              "beginCaptures": {
-                "0": {
+              "comment": "補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト",
+              "match": "(\\{)([^{}\"]*)(\\})",
+              "captures": {
+                "1": {
                   "name": "punctuation.definition.template-expression.begin.cm"
-                }
-              },
-              "endCaptures": {
-                "0": {
+                },
+                "2": {
+                  "patterns": [
+                    {
+                      "include": "#interpolation-expression"
+                    }
+                  ]
+                },
+                "3": {
                   "name": "punctuation.definition.template-expression.end.cm"
                 }
-              },
-              "patterns": [
-                {
-                  "include": "#builtin-functions"
-                },
-                {
-                  "include": "#function-call"
-                },
-                {
-                  "include": "#constants"
-                },
-                {
-                  "include": "#numbers"
-                },
-                {
-                  "include": "#variables"
-                },
-                {
-                  "include": "#operators"
-                },
-                {
-                  "include": "#string-interpolation-punctuation"
-                }
-              ]
+              }
             }
           ]
         },
@@ -537,6 +522,22 @@
         }
       ]
     },
+    "type-declaration": {
+      "comment": "型宣言（struct/enum/interface/impl/union/typedef の直後の識別子）を型名として着色する。プリミティブ以外の任意の型はimportのモジュール名と同じ entity.name.type 系スコープになり、変数（variable.other）とは別色になる",
+      "patterns": [
+        {
+          "match": "\\b(struct|enum|interface|impl|union|typedef)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.cm"
+            },
+            "2": {
+              "name": "entity.name.type.cm"
+            }
+          }
+        }
+      ]
+    },
     "types": {
       "patterns": [
         {
@@ -544,6 +545,7 @@
           "match": "\\b(tiny|utiny|short|ushort|int|uint|long|ulong|isize|usize|float|ufloat|double|udouble|char|string|bool|void|bit)\\b"
         },
         {
+          "comment": "型として使用された非プリミティブ識別子（変数宣言の型位置・ポインタ/参照・ジェネリック引数・キャスト先など）。世界標準（C/C++/Rust）に従い型名はPascalCaseのため先頭大文字で判定する",
           "name": "entity.name.type.cm",
           "match": "\\b([A-Z][a-zA-Z0-9_]*)\\b"
         }
@@ -730,7 +732,40 @@
         }
       ]
     },
+    "interpolation-expression": {
+      "comment": "プレースホルダ内の式: トップレベルと同じinclude構成で任意の式（キャスト・namespace参照・ネストした関数呼び出し・演算子等）を通常コードと同様にハイライトする",
+      "patterns": [
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#constants"
+        },
+        {
+          "include": "#builtin-functions"
+        },
+        {
+          "include": "#function-call"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#variables"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#string-interpolation-punctuation"
+        }
+      ]
+    },
     "string-interpolation-punctuation": {
+      "comment": "プレースホルダ内の区切り記号: 文字列外のpunctuationとスコープを分け、テーマの既定色（式と同系色）で表示する",
       "patterns": [
         {
           "name": "meta.embedded.punctuation.accessor.cm",
@@ -743,6 +778,10 @@
         {
           "name": "meta.embedded.punctuation.brackets.cm",
           "match": "[\\[\\]]"
+        },
+        {
+          "name": "meta.embedded.punctuation.comma.cm",
+          "match": ","
         }
       ]
     },

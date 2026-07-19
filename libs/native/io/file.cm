@@ -37,13 +37,13 @@ use libc {
 /// ファイルを読み込み（簡易版、エラー時は空文字列）
 export string read_file(string path) {
     // O_RDONLY = 0
-    int fd = open(path, 0, 0);
+    const int fd = open(path, 0, 0);
     if (fd < 0) {
         return "";
     }
 
     // SEEK_END = 2
-    long size = lseek(fd, 0 as long, 2);
+    const long size = lseek(fd, 0 as long, 2);
     if (size < 0) {
         close(fd);
         return "";
@@ -57,7 +57,7 @@ export string read_file(string path) {
         return "";
     }
 
-    long bytes_read = read(fd, buf, size);
+    const long bytes_read = read(fd, buf, size);
     close(fd);
 
     if (bytes_read < 0) {
@@ -75,13 +75,13 @@ export string read_file(string path) {
 export bool write_file(string path, string content) {
     // O_WRONLY | O_CREAT | O_TRUNC = 0x0601
     // DEFAULT_MODE = 0x1A4 (rw-r--r--)
-    int fd = open(path, 0x0601, 0x1A4);
+    const int fd = open(path, 0x0601, 0x1A4);
     if (fd < 0) {
         return false;
     }
 
-    long len = strlen(content);
-    long bytes_written = write(fd, content as void*, len);
+    const long len = strlen(content);
+    const long bytes_written = write(fd, content as void*, len);
     close(fd);
 
     return bytes_written >= 0;

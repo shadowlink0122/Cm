@@ -2,7 +2,7 @@
   "name": "cm-language",
   "displayName": "Cm Language Support",
   "description": "Syntax highlighting and language support for the Cm programming language",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "publisher": "cm-lang",
   "engines": {
     "vscode": "^1.80.0"
@@ -24,9 +24,12 @@
   "icon": "images/icon.png",
   "scripts": {
     "compile": "tsc -p ./",
+    "build:grammar": "tsc -p ./ && node out/src/grammar/build.js",
+    "verify:grammar": "tsc -p ./ && node out/src/grammar/build.js --check",
+    "test": "tsc -p ./ && node --test out/src/test/*.test.js",
     "update-version": "tsc -p ./ && node out/scripts/update-version.js",
     "verify-version": "tsc -p ./ && node out/scripts/verify-version.js",
-    "prepackage": "npm run verify-version",
+    "prepackage": "npm run verify-version && npm run verify:grammar",
     "package": "pnpm exec vsce package --allow-missing-repository --skip-license",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

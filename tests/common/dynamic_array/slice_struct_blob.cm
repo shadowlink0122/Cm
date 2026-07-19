@@ -21,7 +21,7 @@ int main() {
     // push後の元変数変更はスライスへ波及しない（値セマンティクス）
     a.x = 999;
 
-    Point q = ps[0];
+    const Point q = ps[0];
     println("q=({q.x},{q.y}) len={ps.len()}");
     println("interp=({ps[1].x},{ps[1].y})");
     return 0;

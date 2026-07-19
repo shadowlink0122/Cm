@@ -24,7 +24,7 @@ impl IntArrayIterator {
     }
 
     int next() {
-        int value = *self.current;
+        const int value = *self.current;
         self.current = self.current + 1;
         self.remaining_count = self.remaining_count - 1;
         return value;
@@ -42,19 +42,19 @@ int main() {
     IntArrayIterator iter = IntArrayIterator(&arr[0], 5);
 
     // 残り要素数を確認
-    int rem = iter.remaining();
+    const int rem = iter.remaining();
     println("remaining: {rem}");
 
     // イテレータで走査して合計を計算
     int sum = 0;
     while (iter.has_next()) {
-        int val = iter.next();
+        const int val = iter.next();
         sum = sum + val;
     }
     println("sum: {sum}");
 
     // 走査後は残り0
-    int rem_after = iter.remaining();
+    const int rem_after = iter.remaining();
     println("remaining after: {rem_after}");
 
     return 0;

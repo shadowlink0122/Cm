@@ -16,8 +16,8 @@ int main() {
     println("=== Enum + Match Guard Test ===");
 
     // シンプルenum + guard
-    Status s = Status::Ok;
-    int result1 = match (s) {
+    const Status s = Status::Ok;
+    const int result1 = match (s) {
         Status::Ok if true => 1,
         Status::Error if true => 2,
         _ => 0,
@@ -25,8 +25,8 @@ int main() {
     println(result1);  // 1
 
     // ペイロード付きenum + guard（ペイロード値での条件）
-    Option opt1 = Option::Some(42);
-    int result2 = match (opt1) {
+    const Option opt1 = Option::Some(42);
+    const int result2 = match (opt1) {
         Option::Some(v) if v > 10 => 100,
         Option::Some(v) if v <= 10 => 50,
         _ => 0,
@@ -34,8 +34,8 @@ int main() {
     println(result2);  // 100
 
     // ペイロード値が条件未満
-    Option opt2 = Option::Some(5);
-    int result3 = match (opt2) {
+    const Option opt2 = Option::Some(5);
+    const int result3 = match (opt2) {
         Option::Some(v) if v > 10 => 100,
         Option::Some(v) if v <= 10 => 50,
         _ => 0,
@@ -43,8 +43,8 @@ int main() {
     println(result3);  // 50
 
     // None時にワイルドカードで捕捉
-    Option opt3 = Option::None;
-    int result4 = match (opt3) {
+    const Option opt3 = Option::None;
+    const int result4 = match (opt3) {
         Option::Some(v) if v > 0 => v,
         _ => -1,  // Noneはワイルドカードで捕捉
     };

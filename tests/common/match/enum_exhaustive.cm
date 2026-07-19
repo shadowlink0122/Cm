@@ -8,10 +8,10 @@ enum Color {
 }
 
 int main() {
-    int c = Color::Green;
+    const int c = Color::Green;
 
     // 全てのバリアントをカバー - OK
-    int code1 = match (c) {
+    const int code1 = match (c) {
         Color::Red => 100,
         Color::Green => 200,
         Color::Blue => 300,
@@ -20,8 +20,8 @@ int main() {
     println("code1 = {code1}");
 
     // ワイルドカードでカバー - OK
-    int c2 = Color::Blue;
-    int code2 = match (c2) {
+    const int c2 = Color::Blue;
+    const int code2 = match (c2) {
         Color::Red => 100,
         _ => 0,
     };

@@ -8,10 +8,10 @@ enum Color {
 }
 
 int main() {
-    int c = Color::Red;
+    const int c = Color::Red;
 
     // Blueがないため非網羅的
-    string name = match (c) {
+    const string name = match (c) {
         Color::Red => "赤",
         Color::Green => "緑",
     };

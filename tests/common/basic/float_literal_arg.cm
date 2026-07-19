@@ -16,11 +16,11 @@ float add_f(float a, float b) {
 }
 
 int main() {
-    float h = half(3.0);
+    const float h = half(3.0);
     println("half: {h}");
-    double t = twice(2.5);
+    const double t = twice(2.5);
     println("twice: {t}");
-    float s = add_f(1.5, 2);
+    const float s = add_f(1.5, 2);
     println("add: {s}");
     return 0;
 }

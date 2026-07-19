@@ -9,8 +9,8 @@ int main() {
     println("=== macro test ===");
 
     // オブジェクトマクロの展開
-    int v = VERSION;
-    int m = MAJOR;
+    const int v = VERSION;
+    const int m = MAJOR;
     println(v);
     println(m);
 

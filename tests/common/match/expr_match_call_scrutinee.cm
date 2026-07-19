@@ -1,6 +1,5 @@
 // 式形式matchのscrutineeに関数呼び出しを直接書くケースの回帰テスト:
-// 旧: HIRの三項演算子脱糖がscrutineeをクローンできずダミー値(0)へ
-// フォールバックし、誤った値を返していた（一時変数への退避プリパスで修正）
+// 旧: HIRの三項演算子脱糖がscrutineeをクローンできずダミー値(0)へフォールバックし、誤った値を返していた（一時変数への退避プリパスで修正）
 import std::io::println;
 
 Result<int, string> getv(int a) {
@@ -22,29 +21,29 @@ Option<int> next() {
 
 int main() {
     // Ok経路: 呼び出し結果がそのままmatchできる
-    int x = match (getv(21)) {
+    const int x = match (getv(21)) {
         Result::Ok(v) => v,
         Result::Err(e) => -1,
     };
     println("ok: {x}");
 
     // Err経路
-    int e = match (getv(-1)) {
+    const int e = match (getv(-1)) {
         Result::Ok(v) => v,
         Result::Err(msg) => -99,
     };
     println("err: {e}");
 
     // 副作用のある呼び出しが1回だけ評価される（多重評価ならcounterがずれる）
-    int n1 = match (next()) {
+    const int n1 = match (next()) {
         Option::Some(v) => v,
         Option::None => 0,
     };
-    int n2 = match (next()) {
+    const int n2 = match (next()) {
         Option::Some(v) => v,
         Option::None => 0,
     };
-    int n3 = match (next()) {
+    const int n3 = match (next()) {
         Option::Some(v) => v,
         Option::None => 0,
     };

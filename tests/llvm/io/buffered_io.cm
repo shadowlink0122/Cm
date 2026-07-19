@@ -6,11 +6,11 @@ int main() {
     println("=== Buffered I/O Test ===");
 
     // テストフォルダ内のデータファイルを使用
-    string data_path = "data/buffered_io_data.txt";
+    const string data_path = "data/buffered_io_data.txt";
 
     // 1. 複数行のコンテンツを書き込み
-    string content = "Line 1\nLine 2\nLine 3\n";
-    bool ok = write_file(data_path, content);
+    const string content = "Line 1\nLine 2\nLine 3\n";
+    const bool ok = write_file(data_path, content);
     if (!ok) {
         println("Write failed");
         return 1;
@@ -18,7 +18,7 @@ int main() {
     println("Written");
 
     // 2. 読み込み
-    string read_content = read_file(data_path);
+    const string read_content = read_file(data_path);
     println("Read content");
 
     // 3. 行カウント

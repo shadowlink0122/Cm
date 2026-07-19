@@ -71,7 +71,9 @@ int y = 10;      // Declaration and initialization
 
 ```cm
 int a, b, c;
-int x = 1, y = 2, z = 3;
+int x = 1;
+int y = 2;
+int z = 3;
 ```
 
 **Note:** Cm does not support type inference (e.g., `var` keyword). Types must always be explicitly specified.
@@ -117,7 +119,7 @@ Static variables maintain state within a function.
 void counter() {
     static int count = 0;
     count++;
-    println("Count: {}", count);
+    println("Count: {count}");
 }
 
 int main() {
@@ -152,7 +154,7 @@ double pi = 3.14;
 
 ```cm
 double pi = 3.14159;
-int truncated = (int)pi;  // 3
+int truncated = pi as int;  // 3
 ```
 
 ---
@@ -184,7 +186,7 @@ int truncated = (int)pi;  // 3
 
 ```cm
 int x;
-println("{}", x);  // Warning: Potentially uninitialized
+println("{x}");  // Warning: Potentially uninitialized
 ```
 
 ### ❌ Type Mismatch
@@ -233,7 +235,7 @@ Implement a `counter()` function that increments a count each time it is called.
 void counter() {
     static int count = 0;
     count++;
-    println("Count: {}", count);
+    println("Count: {count}");
 }
 
 int main() {

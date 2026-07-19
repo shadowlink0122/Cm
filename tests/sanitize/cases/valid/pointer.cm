@@ -1,0 +1,10 @@
+// 正常なスタックポインタの読み書き: サニタイザ有効でも偽陽性なく通常動作することを検証する
+import std::io::println;
+int main() {
+    int x = 5;
+    int* p = &x;
+    *p = 10;
+    int v = *p;
+    println("v={v} x={x}");
+    return 0;
+}

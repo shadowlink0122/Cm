@@ -14,7 +14,8 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 - 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript / UEFI / SystemVerilog (FPGA)
 - 🕸️ **WebAssembly対応**: `--target=wasm`で直接WASMバイナリ生成
 - 🎸 **JavaScriptバックエンド**: `--target=js`でJSコード生成、Node.jsで実行可能
-- 🔌 **SystemVerilogバックエンド**: `--target=sv`でFPGA向けRTL生成（モジュールパラメータ・実機I/O属性・ピン制約生成・`#[test]`サイクル精度テストベンチ）
+- 🔌 **SystemVerilogバックエンド**: `--target=sv`でFPGA向けRTL生成（IO構造体宣言・モジュール階層化・interface/implメソッド合成・実機I/O属性・ピン制約生成・`#[test]`サイクル精度テストベンチ）
+- 🧪 **サニタイザ**: `--sanitize=address/thread/memory/bounds/undefined`による実行時メモリ検査（境界外・use-after-free・データ競合・ゼロ除算・null参照を検出）
 - 🖥️ **ベアメタル/UEFI対応**: `--target=uefi`でOS不要のUEFIアプリケーション生成
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
 - ☄️ **インラインユニオン型**: `int | null` のように型を直接結合、null許容型を簡潔に記述
@@ -37,13 +38,14 @@ int add(int a, int b) {
 // フォーマット文字列（変数自動キャプチャ）
 import std::io::println;
 int main() {
-    int x = 10, y = 20;
+    int x = 10;
+    int y = 20;
     println("x = {x}, y = {y}");  // 変数を自動的にキャプチャ
     return 0;
 }
 
-// ジェネリクス
-T identity<T>(T value) {
+// ジェネリクス（型パラメータは戻り値型の前に置く）
+<T> T identity(T value) {
     return value;
 }
 
@@ -56,13 +58,13 @@ struct Point {
 // インターフェースと実装
 interface Printable {
     void print();
-};
+}
 
 impl Point for Printable {
     void print() {
         println("({self.x}, {self.y})");
     }
-};
+}
 
 // 演算子オーバーロード
 impl Point {
@@ -80,14 +82,14 @@ int main() {
 }
 
 // スレッド
-import std::thread::{spawn, join};
+import native::thread::{spawn, join};
 
 void* compute(void* arg) {
     return 42 as void*;
 }
 
 int main() {
-    ulong t = spawn(compute);
+    ulong t = spawn(compute as void*);
     int result = join(t);  // 42
     return 0;
 }
@@ -95,8 +97,8 @@ int main() {
 // パターンマッチ
 int getValue(Option<int> opt) {
     match (opt) {
-        Some(v) => return v;
-        None => return 0;
+        Option::Some(v) => { return v; }
+        Option::None => { return 0; }
     }
 }
 
@@ -138,9 +140,6 @@ Lexer → Parser → AST → TypeCheck → HIR → MIR
 Linux/macOS   macOS   Browser  Firmware   Node.js   FPGA / Verilator
 ```
 
-> **Note**: Rust/TypeScript/C++へのトランスパイル機能は廃止されました。
-> すべてのコード生成はLLVM IR・JS CodeGen・SV CodeGenのいずれかを経由して行われます。
-
 ## エコシステム: gen (弦) — 将来構想
 
 > 💡 Cb/Cmが音楽（コード名）に由来することから、「弦」をモチーフにした
@@ -159,7 +158,7 @@ cm run example.cm --verbose # 詳細表示
 cm compile example.cm                  # ネイティブにコンパイル
 cm compile example.cm -o myprogram     # 出力ファイル名指定
 cm compile example.cm -O3              # 最適化レベル3
-cm compile example.cm --emit=llvm-ir   # LLVM IR出力
+cm compile example.cm --emit-llvm      # LLVM IR出力
 cm compile example.cm --target=wasm    # WebAssembly出力
 cm compile example.cm --target=js      # JavaScript出力
 cm compile example.cm --target=uefi    # UEFIアプリケーション出力
@@ -182,11 +181,9 @@ cm check example.cm        # 型チェックのみ
 cm help                    # ヘルプ表示
 ```
 
-> **Note**: `--emit-rust`、`--emit-ts`、`--emit-cpp` オプションは廃止されました。
-
 ### フォーマット文字列
 
-Rustスタイルのフォーマット文字列をサポートしています：
+変数を自動キャプチャする文字列補間と、Rustスタイルのフォーマット指定子をサポートしています：
 
 ```cm
 import std::io::println;
@@ -194,25 +191,26 @@ import std::io::println;
 int main() {
     int n = 255;
     double pi = 3.14159;
-    
-    // 基本的なフォーマット
-    println("Value: {}", n);           // Value: 255
-    
+    string s = "left";
+
+    // 基本的な補間（変数を自動キャプチャ）
+    println("Value: {n}");             // Value: 255
+
     // 基数変換
-    println("Hex: {:x}", n);           // Hex: ff
-    println("Binary: {:b}", n);        // Binary: 11111111
-    
+    println("Hex: {n:x}");             // Hex: ff
+    println("Binary: {n:b}");          // Binary: 11111111
+
     // 浮動小数点の精度
-    println("Pi: {:.2}", pi);          // Pi: 3.14
-    
+    println("Pi: {pi:.2}");            // Pi: 3.14
+
     // アライメント
-    println("|{:<10}|", "left");       // |left      |
-    println("|{:>10}|", "right");      // |      right|
-    println("|{:^10}|", "center");     // |  center  |
-    
+    println("|{s:<10}|");              // |left      |
+    println("|{s:>10}|");              // |      left|
+    println("|{s:^10}|");              // |   left   |
+
     // ゼロ埋め
-    println("{:0>5}", 42);             // 00042
-    
+    println("{n:0>5}");                // 00255
+
     return 0;
 }
 ```
@@ -261,6 +259,11 @@ make test-llvm-wasm    # LLVM WASM
 make test-js           # JavaScript
 make test-sv           # SystemVerilog（iverilogシミュレーション）
 
+# E2Eスイート
+make test-sanitize     # サニタイザ（--sanitize）
+make test-i18n         # メッセージi18n（英日出力）
+make test-lint         # linter機能テスト
+
 # 個別カテゴリ
 ./tests/unified_test_runner.sh -b jit -c basic
 ./tests/unified_test_runner.sh -b llvm -c generics
@@ -269,22 +272,23 @@ make test-sv           # SystemVerilog（iverilogシミュレーション）
 
 ## ドキュメント
 
+### 入門
+- [クイックスタート](docs/QUICKSTART.md) - インストールと最初のプログラム
+- [チュートリアル（日本語）](docs/tutorials/ja/index.md) / [Tutorials (English)](docs/tutorials/en/index.md) - 言語機能を段階的に学ぶ
+- [実装済み機能一覧](docs/FEATURES.md)
+
+### バックエンド別チュートリアル
+- [ネイティブ/UEFI](docs/tutorials/ja/compiler/native/index.md) - LLVMネイティブコンパイルとUEFIアプリケーション
+- [SystemVerilog](docs/tutorials/ja/compiler/sv/index.md) - FPGA向けRTL生成（実機I/O・モジュール階層・回路検証フレームワーク）
+- [WASM](docs/tutorials/ja/compiler/wasm/index.md) / [JavaScript](docs/tutorials/ja/compiler/js/index.md)
+
 ### 開発者向け
-- [テストガイド](docs/tests/TESTING_GUIDE.md) - テストの作成と実行方法
-- [テスト クイックリファレンス](docs/tests/TEST_QUICK_REFERENCE.md) - よく使うテストコマンド集
-- [設計ドキュメント](docs/design/README.md) - 未実装機能の設計書
-- [アーキテクチャ](docs/design/archive/architecture.md) - システム設計
-- [HIR設計](docs/design/hir.md)
-- [バックエンド](docs/design/backends.md)
-- [SystemVerilogバックエンド](docs/tutorials/ja/compiler/sv/index.md) - FPGA向けRTL生成チュートリアル（実機I/O・回路検証フレームワーク含む）
-- [LLVMバックエンド実装](docs/llvm_backend_implementation.md)
-- [LLVMランタイムライブラリ](docs/LLVM_RUNTIME_LIBRARY.md)
-- [LLVM最適化パイプライン](docs/LLVM_OPTIMIZATION.md)
-- [フォーマット文字列](docs/STRING_INTERPOLATION_LLVM.md)
-- [FFI設計](docs/design/ffi.md)
-- [パッケージマネージャ](docs/design/package_manager.md)
-- [UEFIベアメタル開発](docs/tutorials/ja/compiler/uefi.md) - UEFI Hello World チュートリアル
-- [プロジェクト状況](docs/PROJECT_STATUS.md)
+- [開発環境ガイド](docs/DEVELOPMENT.md) - ビルド・テスト・lint
+- [プロジェクト構造](docs/PROJECT_STRUCTURE.md)
+- [言語仕様](docs/design/CANONICAL_SPEC.md) / [文法定義](docs/design/cm_grammar.md)
+- [バックエンド対応状況](docs/design/backend_support_matrix.md) - 機能×バックエンドのサポート表
+- [コンパイラ内部](docs/tutorials/ja/internals/index.md) - アーキテクチャ・最適化
+- [リリースノート](docs/releases/index.md)
 
 ## 関連プロジェクト
 
@@ -297,5 +301,3 @@ make test-sv           # SystemVerilog（iverilogシミュレーション）
 ---
 
 © 2025-2026 Cm言語プロジェクト
-
-**最終更新:** 2026-07-16
