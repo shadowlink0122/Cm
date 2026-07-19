@@ -1,0 +1,7 @@
+// ゼロ剰余: --sanitize=undefined で modulo by zero の panic になる
+int main() {
+    int a = 7;
+    int b = 0;
+    int c = a % b;
+    return c;
+}

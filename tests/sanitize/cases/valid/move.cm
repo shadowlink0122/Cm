@@ -1,0 +1,14 @@
+// moveセマンティクスを使う正常プログラム: サニタイザのガード挿入（Move→Copy複製）が挙動を変えないことを検証する
+import std::io::println;
+import std::collections::vector::*;
+
+int main() {
+    Vector<int> inner();
+    inner.push(10);
+    inner.push(20);
+    Vector<Vector<int>> outer();
+    outer.push(move inner);
+    int olen = outer.len();
+    println("olen={olen}");
+    return 0;
+}

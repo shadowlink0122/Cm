@@ -71,31 +71,31 @@ echo "=== Sanitizer E2E tests ==="
 
 # ---------- CLI検証 ----------
 expect_msg "cli: unknown sanitizer value" "unknown sanitizer 'foo'" \
-    "$CM" compile --sanitize=foo "$CASES/ok.cm" -o "$WORK/never"
+    "$CM" compile --sanitize=foo "$CASES/valid/ok.cm" -o "$WORK/never"
 expect_msg "cli: address is rejected on wasm" "not supported on target 'wasm'" \
-    "$CM" compile --target=wasm --sanitize=address "$CASES/ok.cm" -o "$WORK/never"
+    "$CM" compile --target=wasm --sanitize=address "$CASES/valid/ok.cm" -o "$WORK/never"
 expect_msg "cli: address is rejected on jit run" "not supported on target 'jit'" \
-    "$CM" run --sanitize=address "$CASES/ok.cm"
+    "$CM" run --sanitize=address "$CASES/valid/ok.cm"
 expect_msg "cli: address is rejected on js" "not supported on target" \
-    "$CM" compile --target=js --sanitize=address "$CASES/ok.cm" -o "$WORK/never.js"
+    "$CM" compile --target=js --sanitize=address "$CASES/valid/ok.cm" -o "$WORK/never.js"
 expect_msg "cli: ja message" "エラー: 不明なサニタイザ" \
-    "$CM" compile --lang=ja --sanitize=foo "$CASES/ok.cm" -o "$WORK/never"
+    "$CM" compile --lang=ja --sanitize=foo "$CASES/valid/ok.cm" -o "$WORK/never"
 expect_msg "cli: thread is rejected on jit run" "not supported on target 'jit'" \
-    "$CM" run --sanitize=thread "$CASES/ok.cm"
+    "$CM" run --sanitize=thread "$CASES/valid/ok.cm"
 expect_msg "cli: thread is rejected on wasm" "not supported on target 'wasm'" \
-    "$CM" compile --target=wasm --sanitize=thread "$CASES/ok.cm" -o "$WORK/never"
+    "$CM" compile --target=wasm --sanitize=thread "$CASES/valid/ok.cm" -o "$WORK/never"
 if [ "$(uname -s)" = "Darwin" ]; then
     expect_msg "cli: memory is rejected on macOS" "only supported on Linux" \
-        "$CM" compile --sanitize=memory "$CASES/ok.cm" -o "$WORK/never"
+        "$CM" compile --sanitize=memory "$CASES/valid/ok.cm" -o "$WORK/never"
 fi
 
 # ---------- bounds: native ----------
-if $CM compile --sanitize=bounds -O0 "$CASES/ok.cm" -o "$WORK/ok_bounds" >/dev/null 2>&1; then
+if $CM compile --sanitize=bounds -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_bounds" >/dev/null 2>&1; then
     run_expect "bounds/native: in-bounds program runs normally" zero "$WORK/ok_bounds"
 else
     fail "bounds/native: compile ok.cm"
 fi
-if $CM compile --sanitize=bounds -O0 "$CASES/oob_write.cm" -o "$WORK/oob_bounds" >/dev/null 2>&1; then
+if $CM compile --sanitize=bounds -O0 "$CASES/oob/write.cm" -o "$WORK/oob_bounds" >/dev/null 2>&1; then
     run_expect "bounds/native: out-of-bounds write traps" trap "$WORK/oob_bounds"
 else
     fail "bounds/native: compile oob_write.cm"
@@ -103,14 +103,14 @@ fi
 
 # ---------- bounds: jit ----------
 run_expect "bounds/jit: in-bounds program runs normally" zero \
-    "$CM" run --sanitize=bounds -O0 "$CASES/ok.cm"
+    "$CM" run --sanitize=bounds -O0 "$CASES/valid/ok.cm"
 run_expect "bounds/jit: out-of-bounds write traps" trap \
-    "$CM" run --sanitize=bounds -O0 "$CASES/oob_write.cm"
+    "$CM" run --sanitize=bounds -O0 "$CASES/oob/write.cm"
 
 # ---------- bounds: wasm ----------
 if command -v wasmtime >/dev/null 2>&1; then
-    if $CM compile --target=wasm --sanitize=bounds -O0 "$CASES/ok.cm" -o "$WORK/ok_bounds.wasm" >/dev/null 2>&1 &&
-        $CM compile --target=wasm --sanitize=bounds -O0 "$CASES/oob_write.cm" -o "$WORK/oob_bounds.wasm" >/dev/null 2>&1; then
+    if $CM compile --target=wasm --sanitize=bounds -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_bounds.wasm" >/dev/null 2>&1 &&
+        $CM compile --target=wasm --sanitize=bounds -O0 "$CASES/oob/write.cm" -o "$WORK/oob_bounds.wasm" >/dev/null 2>&1; then
         run_expect "bounds/wasm: in-bounds program runs normally" zero wasmtime "$WORK/ok_bounds.wasm"
         run_expect "bounds/wasm: out-of-bounds write traps" trap wasmtime "$WORK/oob_bounds.wasm"
     else
@@ -121,7 +121,7 @@ else
 fi
 
 # ---------- address: 計装検証（シンボルレベル。全環境で実施） ----------
-if $CM compile --sanitize=address -O0 "$CASES/oob_write.cm" -o "$WORK/oob_asan" >/dev/null 2>&1; then
+if $CM compile --sanitize=address -O0 "$CASES/oob/write.cm" -o "$WORK/oob_asan" >/dev/null 2>&1; then
     if nm "$WORK/oob_asan" 2>/dev/null | grep -q '__asan_init'; then
         pass "address/native: binary is ASan-instrumented (__asan_init)"
     else
@@ -138,7 +138,7 @@ fi
 
 # ---------- address: 実行時検証（ランタイムが動作する環境のみ） ----------
 # プローブ: 正常プログラムのASanビルドが正常終了するかでランタイムの健全性を判定する
-if $CM compile --sanitize=address -O0 "$CASES/ok.cm" -o "$WORK/ok_asan" >/dev/null 2>&1; then
+if $CM compile --sanitize=address -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_asan" >/dev/null 2>&1; then
     probe_out=$($TIMEOUT_CMD "$WORK/ok_asan" 2>&1)
     probe_code=$?
     if [ "$probe_code" -eq 0 ]; then
@@ -150,6 +150,36 @@ if $CM compile --sanitize=address -O0 "$CASES/ok.cm" -o "$WORK/ok_asan" >/dev/nu
         else
             fail "address/native: out-of-bounds write is reported" "exit=$oob_code out=$(echo "$oob_out" | head -3)"
         fi
+
+        # ヒープ系（malloc/free）の検出と正常系の無影響
+        check_asan() {
+            local name="$1" case_file="$2" needle="$3" bin="$WORK/asan_$(basename "$case_file" .cm)"
+            if ! $CM compile --sanitize=address -O0 "$case_file" -o "$bin" >/dev/null 2>&1; then
+                fail "$name" "compile failed"
+                return
+            fi
+            local out code
+            out=$($TIMEOUT_CMD "$bin" 2>&1)
+            code=$?
+            if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
+                pass "$name"
+            else
+                fail "$name" "exit=$code out=$(echo "$out" | head -3)"
+            fi
+        }
+        check_asan "address/native: heap buffer overflow is reported" "$CASES/heap/oob.cm" "heap-buffer-overflow"
+        check_asan "address/native: use-after-free is reported" "$CASES/heap/use_after_free.cm" "heap-use-after-free"
+        check_asan "address/native: double free is reported" "$CASES/heap/double_free.cm" "double-free"
+        if $CM compile --sanitize=address -O0 "$CASES/valid/heap.cm" -o "$WORK/asan_heap_ok" >/dev/null 2>&1; then
+            run_output "address/native: valid malloc/free has no false positive" "sum=30" "$WORK/asan_heap_ok"
+        else
+            fail "address/native: compile heap_ok.cm"
+        fi
+        if $CM compile --sanitize=address -O0 "$CASES/valid/move.cm" -o "$WORK/asan_move_ok" >/dev/null 2>&1; then
+            run_output "address/native: move semantics program runs correctly" "olen=1" "$WORK/asan_move_ok"
+        else
+            fail "address/native: compile move_ok.cm"
+        fi
     else
         skip "address/native runtime checks: ASan runtime unhealthy on this OS (probe exit=$probe_code)"
     fi
@@ -158,7 +188,7 @@ else
 fi
 
 # ---------- undefined: MIRレベル検査（native/jit/wasm） ----------
-if $CM compile --sanitize=undefined -O0 "$CASES/ok.cm" -o "$WORK/ok_undef" >/dev/null 2>&1; then
+if $CM compile --sanitize=undefined -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_undef" >/dev/null 2>&1; then
     run_expect "undefined/native: in-bounds program runs normally" zero "$WORK/ok_undef"
 else
     fail "undefined/native: compile ok.cm"
@@ -175,22 +205,22 @@ check_panic() {
         fail "$name" "exit=$code out=$out"
     fi
 }
-if $CM compile --sanitize=undefined -O0 "$CASES/div_zero.cm" -o "$WORK/dz_undef" >/dev/null 2>&1; then
+if $CM compile --sanitize=undefined -O0 "$CASES/zero/div.cm" -o "$WORK/dz_undef" >/dev/null 2>&1; then
     check_panic "undefined/native: division by zero panics" "$WORK/dz_undef"
 else
     fail "undefined/native: compile div_zero.cm"
 fi
-if $CM compile --sanitize=undefined -O0 "$CASES/null_deref.cm" -o "$WORK/nd_undef" >/dev/null 2>&1; then
+if $CM compile --sanitize=undefined -O0 "$CASES/null/deref.cm" -o "$WORK/nd_undef" >/dev/null 2>&1; then
     check_panic "undefined/native: null pointer dereference panics" "$WORK/nd_undef"
 else
     fail "undefined/native: compile null_deref.cm"
 fi
 check_panic "undefined/jit: division by zero panics" \
-    "$CM" run --sanitize=undefined -O0 "$CASES/div_zero.cm"
+    "$CM" run --sanitize=undefined -O0 "$CASES/zero/div.cm"
 check_panic "undefined/jit: null pointer dereference panics" \
-    "$CM" run --sanitize=undefined -O0 "$CASES/null_deref.cm"
+    "$CM" run --sanitize=undefined -O0 "$CASES/null/deref.cm"
 if command -v wasmtime >/dev/null 2>&1; then
-    if $CM compile --target=wasm --sanitize=undefined -O0 "$CASES/div_zero.cm" -o "$WORK/dz_undef.wasm" >/dev/null 2>&1; then
+    if $CM compile --target=wasm --sanitize=undefined -O0 "$CASES/zero/div.cm" -o "$WORK/dz_undef.wasm" >/dev/null 2>&1; then
         check_panic "undefined/wasm: division by zero panics" wasmtime "$WORK/dz_undef.wasm"
     else
         fail "undefined/wasm: compile div_zero.cm"
@@ -200,19 +230,75 @@ else
 fi
 if command -v node >/dev/null 2>&1; then
     check_panic "undefined/js: division by zero panics" \
-        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/div_zero.cm"
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/zero/div.cm"
     check_panic "undefined/js: null pointer dereference panics" \
-        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/null_deref.cm"
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/null/deref.cm"
     run_expect "undefined/js: in-bounds program runs normally" zero \
-        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/ok.cm"
+        "$CM" run --target=js --sanitize=undefined -O0 "$CASES/valid/ok.cm"
     expect_msg "cli: bounds is rejected on js" "not supported on target 'js'" \
-        "$CM" run --target=js --sanitize=bounds "$CASES/ok.cm"
+        "$CM" run --target=js --sanitize=bounds "$CASES/valid/ok.cm"
 else
     skip "undefined/js: node not installed"
 fi
 
+# run_output <名前> <出力に含むべき文字列> <コマンド...>（正常終了 + 出力内容も検証し、ガード挿入による誤計算を検出する）
+run_output() {
+    local name="$1" needle="$2"
+    shift 2
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -eq 0 ] && echo "$out" | grep -qF "$needle"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+
+# check_panic_msg <名前> <panicメッセージに含むべき文字列> <コマンド...>
+check_panic_msg() {
+    local name="$1" needle="$2"
+    shift 2
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+
+# ---------- undefined: ポインタ・剰余の複雑ケース ----------
+run_output "undefined: valid stack pointer has no false positive" "v=10 x=10" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/valid/pointer.cm"
+run_output "undefined: valid heap (malloc/free) has no false positive" "sum=30" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/valid/heap.cm"
+check_panic "undefined/jit: store through null pointer panics" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/null/store.cm"
+check_panic "undefined/jit: null pointer passed to function panics on deref" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/null/arg.cm"
+check_panic_msg "undefined/jit: modulo by zero panics with its own message" "modulo by zero" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/zero/mod.cm"
+if $CM compile --sanitize=undefined -O0 "$CASES/null/store.cm" -o "$WORK/ns_undef" >/dev/null 2>&1; then
+    check_panic "undefined/native: store through null pointer panics" "$WORK/ns_undef"
+else
+    fail "undefined/native: compile null_store.cm"
+fi
+
+# ---------- bounds: 読み取りOOBとmoveの無影響 ----------
+if $CM compile --sanitize=bounds -O0 "$CASES/oob/read.cm" -o "$WORK/oob_read_b" >/dev/null 2>&1; then
+    run_expect "bounds/native: out-of-bounds read traps" trap "$WORK/oob_read_b"
+else
+    fail "bounds/native: compile oob_read.cm"
+fi
+run_output "bounds/jit: move semantics program runs correctly" "olen=1" \
+    "$CM" run --sanitize=bounds -O0 "$CASES/valid/move.cm"
+run_output "undefined/jit: move semantics program runs correctly" "olen=1" \
+    "$CM" run --sanitize=undefined -O0 "$CASES/valid/move.cm"
+
 # ---------- thread: 計装検証 + 正常系プローブ ----------
-if $CM compile --sanitize=thread -O0 "$CASES/ok.cm" -o "$WORK/ok_tsan" >/dev/null 2>&1; then
+if $CM compile --sanitize=thread -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_tsan" >/dev/null 2>&1; then
     if nm "$WORK/ok_tsan" 2>/dev/null | grep -q '__tsan_init'; then
         pass "thread/native: binary is TSan-instrumented (__tsan_init)"
     else
@@ -231,7 +317,7 @@ fi
 
 # ---------- memory: Linuxのみ実行時検証 ----------
 if [ "$(uname -s)" = "Linux" ]; then
-    if $CM compile --sanitize=memory -O0 "$CASES/ok.cm" -o "$WORK/ok_msan" >/dev/null 2>&1; then
+    if $CM compile --sanitize=memory -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_msan" >/dev/null 2>&1; then
         if nm "$WORK/ok_msan" 2>/dev/null | grep -q '__msan'; then
             pass "memory/native: binary is MSan-instrumented (__msan)"
         else
@@ -245,7 +331,7 @@ fi
 # ---------- .cmconfig.yml compile.sanitize ----------
 CFG_DIR="$WORK/cmconfig"
 mkdir -p "$CFG_DIR"
-cp "$CASES/oob_write.cm" "$CFG_DIR/"
+cp "$CASES/oob/write.cm" "$CFG_DIR/"
 printf 'compile:\n  sanitize: bounds\n' > "$CFG_DIR/.cmconfig.yml"
 if (cd "$CFG_DIR" && "$CM" compile -O0 oob_write.cm -o oob_cfg) >/dev/null 2>&1; then
     run_expect "cmconfig: compile.sanitize=bounds is applied" trap "$CFG_DIR/oob_cfg"

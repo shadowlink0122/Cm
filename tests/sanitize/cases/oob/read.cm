@@ -1,0 +1,12 @@
+// 境界外読み取り: --sanitize=bounds でtrapになる（書き込みだけでなく読み取りも検査されることの検証）
+import std::io::println;
+int main() {
+    int[4] arr;
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i;
+    }
+    int n = 4;
+    int v = arr[n];
+    println("v={v}");
+    return 0;
+}

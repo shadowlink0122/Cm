@@ -1,0 +1,17 @@
+// 正常なmalloc/free使用: address/undefined 有効でも偽陽性なく通常動作することを検証する
+import std::io::println;
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+int main() {
+    void* mem = malloc(4 * sizeof(int));
+    int* arr = mem as int*;
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i * 10;
+    }
+    int sum = arr[0] + arr[3];
+    free(mem);
+    println("sum={sum}");
+    return 0;
+}

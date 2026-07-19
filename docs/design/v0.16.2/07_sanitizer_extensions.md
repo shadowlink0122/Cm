@@ -54,3 +54,12 @@ compile:
 - ユニット（`tests/unit/mir_pass_test.cpp`）: 手組みMIRで整数除算の計装（ブロック分割・SwitchInt・panic呼び出し）、非0定数除数と浮動小数の非計装、null参照のEq比較挿入を検証
 - E2E（`tests/sanitize/run_tests.sh`）: undefined（native/jit/wasmでpanic）、thread（計装+プローブ）、memory（Linux計装 / macOS拒否）、cmconfig（適用・CLI優先・不正値警告）を追加
 - CI: Toolingジョブを `ubuntu-latest` + `macos-15` のマトリクスへ拡大し、wasmtimeをインストールしてwasmレグもCIで実行する
+
+### 複雑ケースの網羅（malloc/free・move・ポインタ）
+
+実務的なメモリバグを検出できることを保証するため、E2Eへ以下を追加する（計44ケース）:
+
+- **ヒープ系（ASan）**: `use libc { malloc/free }` によるヒープ確保に対し、境界外書き込み（heap-buffer-overflow）・use-after-free・二重解放（double-free）が検出され、正常なmalloc/freeは偽陽性を出さないことを検証する。ASanランタイムが健全な環境でのみ実行時レポートを検証し、不健全環境では計装（`__asan_init`）のシンボル検証に留める
+- **ポインタ系（undefined）**: 正常なスタックポインタ読み書きの無影響、nullへのストア、null引数を関数へ渡し呼び出し先でderef、ゼロ剰余（`modulo by zero`）を検証する。native/jit/wasm/jsの各実行系で確認する
+- **moveセマンティクス**: `move` を含む正常プログラム（ネストVectorの所有権移動）が、計装のガード挿入（Move→Copy複製）で挙動を変えないことをbounds/undefined/addressの各サニタイザで検証する（偽陽性・誤計算の回帰防止）
+- **読み取り境界（bounds）**: 書き込みだけでなく読み取りの境界外アクセスもtrapになることを検証する
