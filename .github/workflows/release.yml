@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: バージョン整合チェック
         run: scripts/ci/check_release_version.sh "${{ inputs.version }}"
@@ -48,7 +48,7 @@ jobs:
     runs-on: ${{ inputs.arch == 'arm64' && 'macos-14' || 'ubuntu-22.04' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install LLVM
         run: scripts/ci/install_llvm.sh ${{ env.LLVM_VERSION }}
@@ -66,7 +66,7 @@ jobs:
 
       # VSCode拡張パッケージング
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -79,7 +79,7 @@ jobs:
 
       # アーティファクトアップロード
       - name: アーティファクトアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cm-v${{ inputs.version }}-${{ runner.os }}-${{ inputs.arch }}
           path: |
