@@ -250,8 +250,13 @@ set(CM_I18N_SOURCES
 )
 set(CM_PARSER_SOURCES
     src/internal/syntax/parser/parser_stmt.cpp
-    src/internal/syntax/parser/parser_expr.cpp
-    src/internal/syntax/parser/parser_module.cpp
+    src/internal/syntax/parser/expr/binary.cpp
+    src/internal/syntax/parser/expr/postfix.cpp
+    src/internal/syntax/parser/expr/primary.cpp
+    src/internal/syntax/parser/expr/match.cpp
+    src/internal/syntax/parser/module/decl.cpp
+    src/internal/syntax/parser/module/attribute.cpp
+    src/internal/syntax/parser/module/toplevel.cpp
     src/internal/syntax/parser/parser_decl.cpp
     src/internal/syntax/parser/parser_type.cpp
 )
@@ -275,15 +280,28 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/auto_impl_css.cpp
     src/internal/mir/lowering/auto_impl_debug.cpp
     src/internal/mir/lowering/impl.cpp
-    src/internal/mir/lowering/monomorphization_impl.cpp
+    src/internal/mir/lowering/mono/scan.cpp
+    src/internal/mir/lowering/mono/specialize.cpp
+    src/internal/mir/lowering/mono/rewrite.cpp
+    src/internal/mir/lowering/mono/driver.cpp
+    src/internal/mir/lowering/mono/typeinfo.cpp
     src/internal/mir/lowering/mono_internal.cpp
     src/internal/mir/lowering/mono_structs.cpp
     src/internal/mir/lowering/monomorphization_utils.cpp
     # src/internal/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
-    src/internal/mir/lowering/stmt.cpp
+    src/internal/mir/lowering/stmt/lower.cpp
+    src/internal/mir/lowering/stmt/let.cpp
+    src/internal/mir/lowering/stmt/assign.cpp
+    src/internal/mir/lowering/stmt/control.cpp
+    src/internal/mir/lowering/stmt/scope.cpp
+    src/internal/mir/lowering/stmt/asm.cpp
     src/internal/mir/lowering/expr.cpp
-    src/internal/mir/lowering/expr_basic.cpp
-    src/internal/mir/lowering/expr_ops.cpp
+    src/internal/mir/lowering/expr/basic.cpp
+    src/internal/mir/lowering/expr/access.cpp
+    src/internal/mir/lowering/expr/construct.cpp
+    src/internal/mir/lowering/expr/cast.cpp
+    src/internal/mir/lowering/expr/binary.cpp
+    src/internal/mir/lowering/expr/unary.cpp
     src/internal/mir/lowering/expr_call.cpp
     src/internal/mir/lowering/expr_interp.cpp
     src/internal/mir/lowering/expr_println.cpp
@@ -333,14 +351,25 @@ set(CM_SOURCES
     src/internal/types/generic_context.cpp
     src/internal/types/checking/decl.cpp
     src/internal/types/checking/stmt.cpp
-    src/internal/types/checking/expr.cpp
-    src/internal/types/checking/call.cpp
+    src/internal/types/checking/expr/primary.cpp
+    src/internal/types/checking/expr/operator.cpp
+    src/internal/types/checking/expr/match.cpp
+    src/internal/types/checking/expr/lambda.cpp
+    src/internal/types/checking/call/function.cpp
+    src/internal/types/checking/call/method.cpp
     src/internal/types/checking/generic.cpp
     src/internal/types/checking/auto_impl.cpp
-    src/internal/types/checking/utils.cpp
+    src/internal/types/checking/utils/compat.cpp
+    src/internal/types/checking/utils/interp.cpp
+    src/internal/types/checking/utils/diagnostics.cpp
+    src/internal/types/checking/utils/naming.cpp
+    src/internal/types/checking/utils/eval.cpp
     src/internal/types/checking/match_hoist.cpp
-    src/internal/preprocessor/import.cpp
-    src/internal/preprocessor/export_filter.cpp
+    src/internal/preprocessor/import/setup.cpp
+    src/internal/preprocessor/import/expand.cpp
+    src/internal/preprocessor/import/parse.cpp
+    src/internal/preprocessor/export/extract.cpp
+    src/internal/preprocessor/export/rewrite.cpp
     src/internal/preprocessor/module_resolve.cpp
     src/internal/preprocessor/conditional.cpp
     src/internal/module/resolver.cpp
@@ -411,15 +440,25 @@ if(CM_USE_LLVM)
         # LLVM core (shared between native and wasm)
         src/internal/codegen/llvm/core/context.cpp
         src/internal/codegen/llvm/core/mir_to_llvm.cpp
+        src/internal/codegen/llvm/core/translate/program.cpp
+        src/internal/codegen/llvm/core/translate/signature.cpp
+        src/internal/codegen/llvm/core/translate/function.cpp
         src/internal/codegen/llvm/core/statement.cpp
+        src/internal/codegen/llvm/core/statement/assign.cpp
+        src/internal/codegen/llvm/core/statement/asm.cpp
         src/internal/codegen/llvm/core/rvalue.cpp
         src/internal/codegen/llvm/core/operand.cpp
         src/internal/codegen/llvm/core/interface.cpp
         src/internal/codegen/llvm/core/terminator.cpp
+        src/internal/codegen/llvm/core/terminator/dispatch.cpp
+        src/internal/codegen/llvm/core/terminator/call.cpp
+        src/internal/codegen/llvm/core/terminator/invoke.cpp
         src/internal/codegen/llvm/core/print_codegen.cpp
         src/internal/codegen/llvm/core/types.cpp
         src/internal/codegen/llvm/core/operators.cpp
         src/internal/codegen/llvm/core/utils.cpp
+        src/internal/codegen/llvm/core/runtime/builtins.cpp
+        src/internal/codegen/llvm/core/runtime/system.cpp
         src/internal/codegen/llvm/core/intrinsics.cpp
         # LLVM optimizations
         src/internal/codegen/llvm/optimizations/optimization_manager.cpp
@@ -845,8 +884,8 @@ if(BUILD_TESTING)
         #     tests/regression/mir_interpreter_test.cpp
         #     src/internal/syntax/lexer/token.cpp
         #     src/internal/syntax/parser/parser_stmt.cpp
-        #     src/internal/syntax/parser/parser_expr.cpp
-        #     src/internal/syntax/parser/parser_module.cpp
+        #     src/internal/syntax/parser/expr/*.cpp
+        #     src/internal/syntax/parser/module/*.cpp
         # )
         # target_link_libraries(mir_interpreter_test GTest::gtest_main cm_frontend)
         # gtest_discover_tests(mir_interpreter_test PROPERTIES LABELS "unit")

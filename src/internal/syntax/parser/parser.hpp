@@ -64,7 +64,7 @@ class Parser {
     void error(const std::string& msg);
     void synchronize();
 
-    // グローバル変数宣言のパース（parser_module.cppで実装）
+    // グローバル変数宣言のパース（module/toplevel.cppで実装）
     ast::DeclPtr parse_global_var_decl(bool is_export,
                                        std::vector<ast::AttributeNode> attributes = {});
 
@@ -78,7 +78,7 @@ class Parser {
     std::unique_ptr<ast::Pattern> parse_pattern_element();
 
     // ============================================================
-    // 式パース（parser_expr.cppで実装）
+    // 式パース（expr/ 配下で実装）
     // ============================================================
     ast::ExprPtr parse_expr();
     ast::ExprPtr parse_assignment();
@@ -116,7 +116,7 @@ class Parser {
     bool is_type_start();
 
     // ============================================================
-    // モジュール関連パーサ（parser_module.cppで実装）
+    // モジュール関連パーサ（module/ 配下で実装）
     // ============================================================
     ast::DeclPtr parse_module();
     ast::DeclPtr parse_namespace();

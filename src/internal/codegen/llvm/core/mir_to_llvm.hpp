@@ -111,8 +111,26 @@ class MIRToLLVM {
     /// ステートメント変換
     void convertStatement(const mir::MirStatement& stmt);
 
+    /// Assign文変換（statement/assign.cpp）
+    void convertAssignStatement(const mir::MirStatement::AssignData& assign);
+
+    /// インラインアセンブリ文変換（statement/asm.cpp）
+    void convertAsmStatement(const mir::MirStatement::AsmData& asmData);
+
     /// ターミネータ変換
     void convertTerminator(const mir::MirTerminator& term);
+
+    /// Callターミネータ変換（terminator/call.cpp）
+    void convertCallTerminator(const mir::MirTerminator::CallData& callData);
+
+    /// インターフェース/プリミティブimplのメソッド呼び出しディスパッチ（terminator/dispatch.cpp、処理した場合はtrue）
+    bool generateMethodCallDispatch(const mir::MirTerminator::CallData& callData,
+                                    std::vector<llvm::Value*>& args);
+
+    /// 通常の直接/間接関数呼び出し生成（terminator/invoke.cpp）
+    void generateRegularCall(const mir::MirTerminator::CallData& callData,
+                             const std::string& funcName, bool isIndirectCall,
+                             llvm::Value* funcPtrValue, std::vector<llvm::Value*>& args);
 
     /// 右辺値変換
     llvm::Value* convertRvalue(const mir::MirRvalue& rvalue);
@@ -148,6 +166,12 @@ class MIRToLLVM {
 
     /// 外部関数宣言
     llvm::Function* declareExternalFunction(const std::string& name);
+
+    /// 組み込みランタイム関数宣言: print/型変換/文字列/スライス/配列系（runtime/builtins.cpp、該当しない場合はnullptr）
+    llvm::Function* declareBuiltinRuntimeFunction(const std::string& name);
+
+    /// システムランタイム関数宣言: net/atomic/channel/thread/http系（runtime/system.cpp、該当しない場合はnullptr）
+    llvm::Function* declareSystemRuntimeFunction(const std::string& name);
 
     /// 組み込み関数呼び出し
     llvm::Value* callIntrinsic(const std::string& name, llvm::ArrayRef<llvm::Value*> args);
