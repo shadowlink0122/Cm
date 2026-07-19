@@ -61,9 +61,20 @@ std::string JSCodeGen::tsType(const hir::Type* type) const {
             sig += type->return_type ? tsType(type->return_type.get()) : "void";
             return sig;
         }
-        case TypeKind::Struct:
+        case TypeKind::Struct: {
+            // export interface を実際に出力した素の構造体のみ型名として使う。
+            // コンパイラ内部型（__TaggedUnion_*）・ジェネリックのマングリング名（Foo__int）・
+            // ジェネリックパラメータ名（T等でstruct_map_に無いもの）はinterface宣言が無いためanyにする
+            if (!type->name.empty() && struct_map_.count(type->name) > 0) {
+                return sanitizeIdentifier(type->name);
+            }
+            return "any";
+        }
         case TypeKind::Interface:
-            return type->name.empty() ? "any" : sanitizeIdentifier(type->name);
+            // interface型はfat object {data, vtable}のランタイム表現でinterface宣言も出力しないためany
+            return "any";
+        case TypeKind::Generic:
+            return "any";
         case TypeKind::TypeAlias:
             return type->element_type
                        ? tsType(type->element_type.get())

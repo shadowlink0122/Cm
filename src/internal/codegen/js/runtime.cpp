@@ -25,6 +25,28 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
     }
 
     // ポインタ等値比較ヘルパー（null/undefinedを許容し、fat pointerは__arr+__idx、それ以外は参照同一性で比較する）
+    // fat pointer先への書き込み。fat pointerなら指し先へ、構造体直接参照ならObject.assignで各フィールドを更新する（TS上は (p: any, v: any)）
+    if (needs("__cm_deref_set")) {
+        emitter.emitLine("function __cm_deref_set(p, v) {");
+        emitter.increaseIndent();
+        emitter.emitLine(
+            "if (p && p.__arr !== undefined) { p.__arr[p.__idx] = v; } else { Object.assign(p, v); "
+            "}");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
+    // fat pointer（{__arr, __idx}）の間接参照。生値・構造体直接参照はそのまま返す（TS上は (p: any) => any）
+    if (needs("__cm_deref")) {
+        emitter.emitLine("function __cm_deref(p) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p;");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
     if (needs("__cm_ptr_eq")) {
         emitter.emitLine("function __cm_ptr_eq(a, b) {");
         emitter.increaseIndent();

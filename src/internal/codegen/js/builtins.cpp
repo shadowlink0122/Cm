@@ -183,18 +183,20 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // exit(code): Node.jsでは process.exit、ブラウザ等では例外で停止する
+    // 末尾の undefined 返却は、戻り値が型付き一時変数へ代入されるTS出力で void 型不一致にならないようにするため（JSでは実際には到達前に停止する）
     if (name == "exit") {
         std::string code = argStrs.empty() ? "0" : argStrs[0];
-        return "((typeof process !== \"undefined\") ? process.exit(" + code +
-               ") : (() => { throw new Error(\"exit(\" + (" + code + ") + \")\"); })())";
+        return "((c) => { if (typeof process !== \"undefined\") process.exit(c); "
+               "throw new Error(\"exit(\" + c + \")\"); return undefined; })(" +
+               code + ")";
     }
 
     // panic(msg): "panic: <msg>" を出力して異常終了する（Result/Optionのunwrap等で使用。
     // ネイティブランタイムの__cm_panicと同じ形式・終了コード134）
     if (name == "panic") {
         std::string msg = argStrs.empty() ? "\"panic\"" : argStrs[0];
-        return "((m) => { console.log(\"panic: \" + m); ((typeof process !== \"undefined\") ? "
-               "process.exit(134) : (() => { throw new Error(\"panic: \" + m); })()); })(" +
+        return "((m) => { console.log(\"panic: \" + m); if (typeof process !== \"undefined\") "
+               "process.exit(134); throw new Error(\"panic: \" + m); return undefined; })(" +
                msg + ")";
     }
 
@@ -440,9 +442,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
     if (name == "cm_slice_push_blob" && argStrs.size() >= 2) {
         // blob push: 参照が {__arr, __idx} 形式（ユニオン等のboxed値）なら指し先を、オブジェクト直接参照（構造体ローカルの&）ならそのままpushする
-        return "__cm_unwrap(" + argStrs[0] +
-               ").push(((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" + argStrs[1] +
-               "))";
+        return "__cm_unwrap(" + argStrs[0] + ").push(__cm_deref(" + argStrs[1] + "))";
     }
     if (name == "cm_slice_get_element_ptr" && argStrs.size() >= 2) {
         // 要素へのポインタオブジェクトを返す（デリファレンス構文 __arr[__idx] で要素を読む）

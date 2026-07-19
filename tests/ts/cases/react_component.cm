@@ -1,0 +1,23 @@
+//! platform: js
+// Reactスタイル: 構造体をprops、構造体配列をリストとしてコンポーネント合成する
+
+struct VNode {
+    string tag;
+}
+struct Item {
+    string label;
+}
+
+use "react" {
+    string renderList(Item[] items);
+}
+
+int main() {
+    Item[3] items;
+    items[0].label = "apple";
+    items[1].label = "banana";
+    items[2].label = "cherry";
+    string html = renderList(items);
+    println("{html}");
+    return 0;
+}

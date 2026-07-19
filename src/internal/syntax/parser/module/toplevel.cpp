@@ -451,6 +451,22 @@ ast::TypePtr Parser::parse_extern_type() {
         base_type = ast::make_pointer(std::move(base_type));
     }
 
+    // 後置配列型: T[]（スライス）/ T[N]（固定長）。FFI宣言で構造体配列等を受け渡すため
+    while (check(TokenKind::LBracket)) {
+        advance();  // consume [
+        if (check(TokenKind::IntLiteral)) {
+            uint32_t size = static_cast<uint32_t>(current().get_int());
+            advance();
+            base_type = ast::make_array(std::move(base_type), size);
+        } else {
+            // 要素数なし → 動的配列（スライス）
+            base_type = ast::make_array(std::move(base_type));
+        }
+        if (!consume_if(TokenKind::RBracket)) {
+            break;
+        }
+    }
+
     return base_type;
 }
 

@@ -108,5 +108,48 @@ See `docs/design/js_interop_roadmap.md` for the roadmap covering TypeScript type
 
 ---
 
+---
+
+## Frontend development (React interop)
+
+The TS backend can interoperate with frontend frameworks like React. Structs serve as props and struct arrays as lists.
+
+### Passing struct arrays to FFI (list rendering)
+
+`use` declarations accept fixed-size array `T[N]` and slice `T[]` parameters. Cm struct arrays are passed as JS object arrays directly.
+
+```cm
+//! platform: js
+struct Item {
+    string label;
+}
+use "react" {
+    string renderList(Item[] items);
+}
+int main() {
+    Item[3] items;
+    items[0].label = "apple";
+    items[1].label = "banana";
+    items[2].label = "cherry";
+    println("{renderList(items)}");  // <ul><li>apple</li>...</ul>
+    return 0;
+}
+```
+
+### undefined interop
+
+`undefined` returned by a JS function can be received directly in Cm (for optional values).
+
+```cm
+use "react" {
+    string maybeValue(bool flag);
+}
+// maybeValue(false) returns undefined
+```
+
+### Composing components
+
+Pass a struct as props to `React.createElement`, and call methods via function-typed fields (see [npm interop](npm-interop.html)) to compose components. See `docs/design/js_interop_roadmap.md` for the roadmap (Promise interop, DOM API, JSX-free hyperscript).
+
 <!-- nav -->
 ← Prev: [Compiler - JS Backend](index.html) | [Contents](../index.html) | Next: [Compiler - SystemVerilog Backend](../sv/index.html) →

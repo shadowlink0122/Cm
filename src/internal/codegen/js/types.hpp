@@ -121,6 +121,8 @@ inline std::string jsDefaultValue(const hir::Type& type) {
         case TypeKind::Bool:
             return "false";
         case TypeKind::Char:
+            // charはランタイム上は数値（文字コード）表現。既定値も数値0にする（TS注釈のnumberと一致させる）
+            return "0";
         case TypeKind::String:
         case TypeKind::CString:
             return "\"\"";

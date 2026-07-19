@@ -137,10 +137,7 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                      lt->element_type->kind == TypeKind::Union)) {
                     std::string base = getLocalVarName(func, target_local);
                     std::string rv = emitRvalue(*data.rvalue, func);
-                    emitter_.emitLine(
-                        "((p, v) => { if (p && p.__arr !== undefined) { "
-                        "p.__arr[p.__idx] = v; } else { Object.assign(p, v); } })(" +
-                        base + ", " + rv + ");");
+                    emitter_.emitLine("__cm_deref_set(" + base + ", " + rv + ");");
                     break;
                 }
             }

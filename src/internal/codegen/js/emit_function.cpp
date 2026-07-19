@@ -322,8 +322,9 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
         std::string varName = sanitizeIdentifier(local.name) + "_" + std::to_string(local.id);
 
         if (boxed_locals_.count(local.id)) {
-            // ボックス化変数（アドレス取得される変数）はTS上では要素型の1要素配列。any[]で近似する
-            std::string boxAnn = options_.emitTypeScript ? ": any[]" : "";
+            // ボックス化変数（アドレス取得される変数）は1要素配列に __boxed フラグを付ける。
+            // TS上は配列にプロパティを足すためany（any[]だと.__boxedが型エラーになる）
+            std::string boxAnn = options_.emitTypeScript ? ": any" : "";
             emitter_.emitLine("let " + varName + boxAnn + " = [" + defaultVal + "];");
             emitter_.emitLine(varName + ".__boxed = true;");
             declared_any = true;

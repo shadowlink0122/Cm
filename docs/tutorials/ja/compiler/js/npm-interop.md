@@ -108,5 +108,48 @@ TypeScript型定義（.d.ts）の出力・Promise連携・React/DOM対応のロ�
 
 ---
 
+---
+
+## フロントエンド開発（React連携）
+
+TSバックエンドはReact等のフロントエンドフレームワークと連携できます。構造体をprops、構造体配列をリストとして扱えます。
+
+### 構造体配列をFFIへ渡す（リストレンダリング）
+
+`use` 宣言の引数に固定長配列 `T[N]` / スライス `T[]` を書けます。Cmの構造体配列はJSのオブジェクト配列としてそのまま渡ります。
+
+```cm
+//! platform: js
+struct Item {
+    string label;
+}
+use "react" {
+    string renderList(Item[] items);
+}
+int main() {
+    Item[3] items;
+    items[0].label = "apple";
+    items[1].label = "banana";
+    items[2].label = "cherry";
+    println("{renderList(items)}");  // <ul><li>apple</li>...</ul>
+    return 0;
+}
+```
+
+### undefinedの相互運用
+
+JS関数が返す `undefined` はCm側でそのまま受け取れます（省略可能な値の表現）。
+
+```cm
+use "react" {
+    string maybeValue(bool flag);
+}
+// maybeValue(false) は undefined を返す
+```
+
+### コンポーネントの合成
+
+構造体をpropsとして `React.createElement` へ渡し、関数型フィールド（[npm連携](npm-interop.html)参照）でメソッドを呼び出すことで、コンポーネントを合成できます。詳細なロードマップ（Promise連携・DOM API・JSXを使わないhyperscript方式）は `docs/design/js_interop_roadmap.md` を参照してください。
+
 <!-- nav -->
 ← 前: [コンパイラ編 - JSバックエンド](index.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - SystemVerilogバックエンド](../sv/index.html) →

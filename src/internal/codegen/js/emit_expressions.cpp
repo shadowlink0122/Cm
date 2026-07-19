@@ -411,8 +411,10 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                         // 構造体変種等: 生値はtypeofで判別できないため無検査で通す
                         raw_branch = "v";
                     }
-                    return "((v) => " + unionBoxedCheck("v") + " ? " + boxed_branch + " : " +
-                           raw_branch + ")(" + operand + ")";
+                    // TS出力: union値（タグ付きオブジェクト or 生値）を受けるため引数はany注釈にする
+                    std::string vParam = options_.emitTypeScript ? "(v: any)" : "(v)";
+                    return "(" + vParam + " => " + unionBoxedCheck("v") + " ? " + boxed_branch +
+                           " : " + raw_branch + ")(" + operand + ")";
                 }
             }
 
@@ -644,8 +646,7 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
                            currentType->element_type->kind == ast::TypeKind::Struct) {
                     // 構造体ポインタ: オブジェクト直接参照ならno-op、ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
                     // 指し先を取り出す（実行時判定の両対応）
-                    result = "((p) => (p && p.__arr !== undefined) ? p.__arr[p.__idx] : p)(" +
-                             result + ")";
+                    result = "__cm_deref(" + result + ")";
                 } else {
                     // その他: ボックス配列の[0]でアクセス
                     result += "[0]";
