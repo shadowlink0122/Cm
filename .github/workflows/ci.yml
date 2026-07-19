@@ -61,6 +61,13 @@ jobs:
       - name: Prettier format check
         run: npm run format:check
 
+      # 文法JSONがsrc/grammar/のソースから生成された最新状態であることを検証
+      - name: Grammar sync check
+        run: npm run verify:grammar
+
+      - name: Unit tests
+        run: npm test
+
   # ========================================
   # Build - 全テスト共通（OS別1回のみ）
   # ========================================

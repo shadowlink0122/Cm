@@ -16,7 +16,7 @@
 1. **実装計画（docs）作成** — `docs/design/v<バージョン>/` に実装設計文書を作成（構文例・出力例・設計方針・段階分割・テスト計画を含む）
 2. **実装** — テスト（ユニット + 該当バックエンドスイート + 回帰テスト追加）込み。コミット前に `make format && make lint` と `make test` を実行
 3. **チュートリアル追加** — `docs/tutorials/{ja,en}/` の該当ページを更新または新設（日英両方。セクションindexへの掲載と前後ナビの整合を保つ）
-4. **VSCode拡張を更新** — 新しい構文・キーワード・属性・組み込み関数を `vscode-extension/syntaxes/cm.tmLanguage.json` に反映
+4. **VSCode拡張を更新** — 新しい構文・キーワード・属性・組み込み関数を文法ソース `vscode-extension/src/grammar/`（語彙は `terms.ts`）に反映し、`npm run build:grammar` で `syntaxes/cm.tmLanguage.json` を再生成する（生成JSONは手編集しない）
 5. **リリースノート作成** — `docs/releases/v<バージョン>.md` の変更履歴に追記
 
 機能が5ステップの一部に該当しない場合（例: 純リファクタリングでチュートリアル変更なし）は、該当しない理由をコミットメッセージに明記する。
