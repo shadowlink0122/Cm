@@ -159,6 +159,8 @@ string[] names = people
 // ["Alice", "Carol"]
 ```
 
+> バックエンド注記: 構造体スライスの高階メソッド（filter/map/indexOf/includes/pop）や、グローバル・構造体メンバのスライスへのミューテーションは js/ts バックエンドで動作します（JS配列に対応）。native/jit では基本操作（push/len/添字/for-in/引数・戻り値/要素フィールド更新）に限られます。可変長データを扱うWeb開発等では `--target=ts` を使ってください。
+
 ---
 
 ## ユニオン型のスライス

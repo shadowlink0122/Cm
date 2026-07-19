@@ -7,7 +7,7 @@
 | ファイル | 役割 | 実装 |
 |---------|------|------|
 | `src/models.cm` | ドメインモデル | `struct Task` を各層で共有（バックエンド非依存） |
-| `src/store.cm` | データ層 | タスクをメモリ上に保持するインメモリストア（グローバル構造体、FFIなし） |
+| `src/store.cm` | データ層 | タスクを可変長スライスで保持するインメモリストア（FFIなし） |
 | `src/style.cm` | CSS | `with Css` でCmの構造体からスタイルシートを生成（CSSを手書きしない） |
 | `src/view.cm` | HTML/ファサード | `web::html` の構造体ビルダーでHTMLを組み立て、ストア/スタイルを束ねる |
 | `src/server.cm` | サーバ/ルータ | Node組み込み `http` でサーバを立て、分岐・状態更新・SSRをCmで行う |
@@ -18,7 +18,7 @@
 
 - **HTML**: `libs/web/html.cm` の構造体ビルダーを使う。`div().class("card").add(h1().add(text("Cm Tasks")))` のようにHtmlを積む。テキスト・属性は自動でHTMLエスケープされる
 - **CSS**: `with Css` 構造体からCSSを生成する。フィールド名 `background_color` がCSSプロパティ `background-color` へ自動変換される
-- **DB**: グローバル構造体のインメモリストア。`init_store()` でseedし、`add_task()`/`complete_next()` で状態を更新する
+- **DB**: 可変長スライス（`Task[]`）のインメモリストア。`add_task()` はスライスへpushし、`complete_next()` が要素を更新する
 - **ルーティング**: `req.method`/`req.url` で分岐し、`Response` をCmで組み立てる
 - **HTTP**: Node組み込み `http` の `createServer` にCmの関数をハンドラとして渡す。`req`/`res` は構造体で型付けし、`res.setHeader`/`res.end` は関数型フィールド（JSメソッド）として呼ぶ
 

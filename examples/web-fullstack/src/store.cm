@@ -6,39 +6,37 @@ module store;
 
 import ./models::{Task};
 
-// 固定容量の配列＋件数でストアを表す。グローバル構造体はどのバックエンドでも保持される。
+// タスクを保持するインメモリストア。件数を固定せず可変長スライスで持つ。
+// TSバックエンドではスライスがJS配列に対応し、push/len/要素更新がそのまま動く。
 struct Store {
-    Task[32] items;
-    int count;
+    Task[] items;
     int next_id;
 }
 
 // グローバルなストア本体。初期値はinit_store()で明示的に設定する。
-Store db = { count: 0, next_id: 0 };
+Store db = { next_id: 0 };
 
 // ストアを初期化してseedデータを投入する（サーバ起動時に一度だけ呼ぶ）。
 export void init_store() {
-    db.count = 0;
+    db.items = [];
     db.next_id = 1;
     add_task("Write the Cm tutorial");
     add_task("Ship v0.17.0");
     add_task("Review pull requests");
 }
 
-// タスクを1件追加する。
+// タスクを1件追加する（スライス末尾へpush）。
 export void add_task(string title) {
-    if (db.count >= 32) {
-        return;
-    }
-    db.items[db.count] = { id: db.next_id, title: title, done: false };
-    db.count = db.count + 1;
+    Task t = { id: db.next_id, title: title, done: false };
+    db.items.push(t);
     db.next_id = db.next_id + 1;
 }
 
 // 未完了の先頭タスクを完了に切り替える（「次のタスクを完了」アクション用）。
 export void complete_next() {
     int i = 0;
-    while (i < db.count) {
+    int n = db.items.len() as int;
+    while (i < n) {
         if (!db.items[i].done) {
             db.items[i].done = true;
             return;
@@ -49,7 +47,7 @@ export void complete_next() {
 
 // 保持しているタスク数。
 export int task_count() {
-    return db.count;
+    return db.items.len() as int;
 }
 
 // i番目のタスクを返す（値コピー）。

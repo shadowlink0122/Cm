@@ -18,7 +18,8 @@ Cmの機能を示す公式サンプル集です。
 - `borrowing.cm` - 借用と参照
 
 ### web-fullstack - フルスタックWeb開発（TypeScriptバックエンド）
-- `src/app.cm` - React SSR + Express + Postgres でタスク管理アプリ（`--target=ts`）
+- Cmだけで完結するタスク管理Webアプリ（`--target=ts`）。HTML/CSS/ルーティング/インメモリDBをすべてCmで書き、FFIはNode組み込み `http` のみ（vendor JSなし）
+- `src/store.cm` - 可変長スライスによるインメモリストア、`src/style.cm` - `with Css`、`src/view.cm` - `web::html` ビルダー、`src/server.cm` - Node `http` サーバ
 
 ### 04_memory - メモリ管理
 - `raii_pattern.cm` - RAIIパターン（デストラクタ）
@@ -37,11 +38,6 @@ Cmの機能を示す公式サンプル集です。
 - `memory_test.cm` - メモリ管理テスト（AllocatePool/FreePool）
 - `libs/` - UEFI低レベルライブラリ（SystemTable、テキスト出力）
 
-### web-app - Web アプリケーション
-- `src/app.cm` - `with Css` によるCSS自動生成
-- `public/index.html` - Todoアプリフロントエンド
-- ビルド: `pnpm install && ./build.sh`
-
 ## 実行方法
 
 ```bash
@@ -54,8 +50,8 @@ cm run -t llvm examples/06_algorithms/dijkstra.cm
 # UEFI（要 lld-link, QEMU）
 cd examples/uefi && make && make run
 
-# Webアプリ（要 pnpm, Node.js）
-cd examples/web-app && pnpm install && ./build.sh
+# フルスタックWebアプリ（要 Node.js。npm install不要）
+cm compile --target=js examples/web-fullstack/src/server.cm -o server.js && node server.js
 ```
 
 ## 機能カバレッジ
@@ -71,5 +67,5 @@ cd examples/web-app && pnpm install && ./build.sh
 | FFI | heap_allocation.cm, linked_list.cm, priority_queue.cm |
 | メモ化DP | memoization_dp.cm |
 | グラフ探索 | dijkstra.cm |
-| with Css | web-app/src/app.cm |
+| with Css | web-fullstack/src/style.cm |
 | UEFIベアメタル | uefi/hello_world.cm |

@@ -159,6 +159,8 @@ string[] names = people
 // ["Alice", "Carol"]
 ```
 
+> Backend note: higher-order methods on struct slices (filter/map/indexOf/includes/pop) and mutation of global or struct-member slices work on the js/ts backends (they map to JS arrays). On native/jit only the basic operations are supported (push/len/indexing/for-in/passing as argument or return value/updating an element field). Use `--target=ts` for growable data such as web development.
+
 ---
 
 ## Slices of Union Types

@@ -1,0 +1,32 @@
+//! platform: ts
+// 構造体スライス（可変長 Task[]）と構造体メンバスライスのTS出力・型検査・実行を検証する。
+// スライスは T[] としてTS出力され、push/len/filter/要素更新がそのまま型付けで通る。
+
+struct Task {
+    int id;
+    string title;
+    bool done;
+}
+
+struct Board {
+    string name;
+    Task[] tasks;
+}
+
+bool is_done(Task t) { return t.done; }
+
+int main() {
+    Board b = { name: "sprint", tasks: [] };
+    int i = 0;
+    while (i < 3) {
+        Task t = { id: i + 1, title: "task", done: false };
+        b.tasks.push(t);
+        i = i + 1;
+    }
+    // 要素フィールド更新
+    b.tasks[0].done = true;
+    // 高階メソッド（構造体スライス）
+    Task[] done = b.tasks.filter(is_done);
+    println("board=" + b.name + " total=" + b.tasks.len() + " done=" + done.len());
+    return 0;
+}
