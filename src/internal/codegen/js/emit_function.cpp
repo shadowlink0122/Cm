@@ -177,11 +177,27 @@ void JSCodeGen::emitFunctionSignature(const mir::MirFunction& func) {
         mir::LocalId argId = func.arg_locals[i];
         if (argId < func.locals.size()) {
             emitter_.stream() << sanitizeIdentifier(func.locals[argId].name);
+            emitter_.stream() << tsAnnotation(func.locals[argId].type.get());
         } else {
             emitter_.stream() << "arg" << i;
         }
     }
     emitter_.stream() << ")";
+
+    // TypeScript出力: 戻り値型注釈
+    // 戻り値ローカルの宣言型を型の権威として優先する（isVoidReturnはJSコード生成でreturn文を出すかの最適化ヒューリスティックで、
+    // 自動生成メソッド等では実際の戻り値型と一致しないことがあるため型注釈の判断には使わない）
+    if (options_.emitTypeScript) {
+        hir::TypePtr ret_type;
+        if (func.return_local < func.locals.size()) {
+            ret_type = func.locals[func.return_local].type;
+        }
+        // 宣言型が無い/voidの場合のみvoid扱い
+        std::string ret_ann =
+            (ret_type && ret_type->kind != hir::TypeKind::Void) ? tsType(ret_type.get()) : "void";
+        // async関数の戻り値はPromiseで包む
+        emitter_.stream() << ": " << (func.is_async ? "Promise<" + ret_ann + ">" : ret_ann);
+    }
 }
 
 bool JSCodeGen::isVoidReturn(const mir::MirFunction& func) const {
@@ -306,11 +322,14 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
         std::string varName = sanitizeIdentifier(local.name) + "_" + std::to_string(local.id);
 
         if (boxed_locals_.count(local.id)) {
-            emitter_.emitLine("let " + varName + " = [" + defaultVal + "];");
+            // ボックス化変数（アドレス取得される変数）はTS上では要素型の1要素配列。any[]で近似する
+            std::string boxAnn = options_.emitTypeScript ? ": any[]" : "";
+            emitter_.emitLine("let " + varName + boxAnn + " = [" + defaultVal + "];");
             emitter_.emitLine(varName + ".__boxed = true;");
             declared_any = true;
         } else {
-            emitter_.emitLine("let " + varName + " = " + defaultVal + ";");
+            emitter_.emitLine("let " + varName + tsAnnotation(local.type.get()) + " = " +
+                              defaultVal + ";");
             declared_any = true;
         }
     }

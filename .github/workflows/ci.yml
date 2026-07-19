@@ -354,7 +354,7 @@ jobs:
   # サニタイザはOS依存が強い（ASan/TSanランタイム・MSanのLinux限定）ため両OSで検証する
   # ========================================
   tooling-test:
-    name: Tooling (cm test / i18n / lint / sanitize) (${{ matrix.os }})
+    name: Tooling (cm test / i18n / lint / sanitize / ts) (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
@@ -397,6 +397,15 @@ jobs:
 
       - name: Run sanitizer E2E
         run: make test-sanitize
+
+      # TypeScriptバックエンドE2E: npx経由でtypescript(tsc)を取得し型検査まで実行する（Node.jsはbuildアーティフォクトのjobに既にセットアップ不要、npxはNode同梱）
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Run TypeScript backend E2E
+        run: make test-ts
 
   # ========================================
   # Benchmark - パフォーマンスベンチマーク

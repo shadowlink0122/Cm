@@ -536,7 +536,8 @@ int run_build(cli::Options& opts, const char* argv0) {
         // ========== async/awaitバリデーション ==========
         // 非JSターゲットでasync/awaitが使用されている場合はエラー
         {
-            bool is_js_target = (opts.target == "js" || opts.target == "web" || opts.emit_js);
+            bool is_js_target = (opts.target == "js" || opts.target == "web" ||
+                                 opts.target == "ts" || opts.emit_js);
             bool is_sv_target =
                 (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog");
             if (!is_js_target && !is_sv_target) {
@@ -594,7 +595,8 @@ int run_build(cli::Options& opts, const char* argv0) {
     if (!opts.sanitizers.empty()) {
         const bool is_sv =
             opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog";
-        const bool is_js = opts.target == "js" || opts.target == "web" || opts.emit_js;
+        const bool is_js =
+            opts.target == "js" || opts.target == "web" || opts.target == "ts" || opts.emit_js;
         std::string unsupported;
         if (is_sv) {
             unsupported = opts.sanitizers.front();
@@ -637,7 +639,7 @@ int run_build(cli::Options& opts, const char* argv0) {
         if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
             return emit_sv(ctx, mir);
         }
-        if (opts.target == "js" || opts.target == "web" || opts.emit_js) {
+        if (opts.target == "js" || opts.target == "web" || opts.target == "ts" || opts.emit_js) {
             return emit_js(ctx, mir);
         }
         return emit_llvm(ctx, mir);

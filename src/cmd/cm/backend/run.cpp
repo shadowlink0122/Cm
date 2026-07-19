@@ -31,8 +31,8 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
 
     // ========== --target指定時のディスパッチ ==========
     // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
-    if (opts.target == "js" || opts.target == "web") {
-        // JS生成 → Node.jsで実行
+    if (opts.target == "js" || opts.target == "web" || opts.target == "ts") {
+        // JS生成 → Node.jsで実行（tsターゲットも実行は型注釈を除去したJSで行う。TSは同一コード生成結果へstripされる）
         cm::codegen::js::JSCodeGenOptions js_opts;
         js_opts.outputFile =
             opts.output_file.empty()

@@ -15,6 +15,8 @@ parent: Compiler
 
 ## Overview
 
+> The examples on this page work with both `--target=js` and `--target=ts`. In a TS project, use `--target=ts` to get typed output.
+
 On the JS target, `use "package" { declarations }` gives access to npm packages and Node built-in modules.
 The generated code emits `const pkg = require("package")` and declared functions are called as `pkg.func(args)`.
 

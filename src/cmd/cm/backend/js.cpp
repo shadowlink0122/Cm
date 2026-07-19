@@ -27,9 +27,12 @@ int emit_js(BuildContext& ctx, mir::MirProgram& mir) {
     // JavaScript バックエンドオプション設定
     cm::codegen::js::JSCodeGenOptions js_opts;
 
+    // TypeScript出力（--target=ts）: 型注釈とstruct interfaceを付与する
+    js_opts.emitTypeScript = (opts.target == "ts");
+
     // 出力ファイル設定
     if (opts.output_file.empty()) {
-        js_opts.outputFile = "output.js";
+        js_opts.outputFile = js_opts.emitTypeScript ? "output.ts" : "output.js";
     } else {
         js_opts.outputFile = opts.output_file;
     }
@@ -49,10 +52,20 @@ int emit_js(BuildContext& ctx, mir::MirProgram& mir) {
 
         // --runオプションがある場合は実行（Node.js）
         if (opts.run_after_emit && opts.target != "web") {
-            if (opts.verbose) {
-                std::cout << i18n::msgf(i18n::MsgId::CliRunningNode, js_opts.outputFile);
+            std::string run_file = js_opts.outputFile;
+            // TS出力はnodeが直接実行できるとは限らない（v23.6未満）ため、型注釈を除去したJSツイン（TSと同一のコード生成結果）を生成して実行する
+            if (js_opts.emitTypeScript) {
+                cm::codegen::js::JSCodeGenOptions twin_opts = js_opts;
+                twin_opts.emitTypeScript = false;
+                twin_opts.outputFile = js_opts.outputFile + ".run.js";
+                cm::codegen::js::JSCodeGen twin(twin_opts);
+                twin.compile(mir);
+                run_file = twin_opts.outputFile;
             }
-            std::string cmd = "node " + js_opts.outputFile;
+            if (opts.verbose) {
+                std::cout << i18n::msgf(i18n::MsgId::CliRunningNode, run_file);
+            }
+            std::string cmd = "node " + run_file;
             int exec_result = std::system(cmd.c_str());
 #if defined(_WIN32)
             return exec_result;  // Windowsでは直接終了コードを返す

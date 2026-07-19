@@ -351,8 +351,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"hint: use --target={0} to specify the target platform\n\n",
      "ヒント: --target={0} オプションで対象プラットフォームを指定してください\n\n"},
     // CliValidTargetsNativeWasmJs
-    {"valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n",
-     "valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n"},
+    {"valid targets: native, wasm, js, ts, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n",
+     "valid targets: native, wasm, js, ts, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n"},
     // CliWarningIsNotAvailableIn
     {"{0}:{1}: warning: '{2}' is not available in bare-metal environments [B001]\n",
      "{0}:{1}: warning: ベアメタル環境では '{2}' は使用できません [B001]\n"},

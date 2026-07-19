@@ -72,6 +72,7 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 | **LLVM (Native)** | ✅ | ネイティブ実行ファイル生成 (x86_64, ARM64) |
 | **LLVM (WASM)** | ✅ | WebAssembly出力、ブラウザ/WASI実行 |
 | **JavaScript** | ✅ | Node.js/ブラウザ向けJS生成（ポインタ・64bit精度に制限あり） |
+| **TypeScript出力** | ✅ | `--target=ts` で型注釈付きTS出力（struct→export interface・関数/変数の型注釈。tscで型検査可。v0.17.0） |
 | **SystemVerilog** | ✅ | FPGA向けSV生成（合成可能サブセット。v0.16.0で大幅拡充） |
 | **UEFI** | ✅ | UEFIアプリケーション（Boot Servicesライブラリ、no_std） |
 | **baremetal** | ✅ | ベアメタル（ARM/x86、no_std） |

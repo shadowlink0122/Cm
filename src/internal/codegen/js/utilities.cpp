@@ -12,6 +12,92 @@ namespace cm::codegen::js {
 
 using ast::TypeKind;
 
+// Cmの型をTypeScriptの型注釈へ写像する。
+// 数値は全てnumber、charも数値表現（ランタイムのchar表現に一致）、stringはstring、boolはboolean、
+// 構造体・enumは名前（interface宣言を別途出力）、関数型は (a: number, ...) => R、配列はT[]、ポインタ/参照は指す先の型で近似する。
+std::string JSCodeGen::tsType(const hir::Type* type) const {
+    if (!type) {
+        return "any";
+    }
+    switch (type->kind) {
+        case TypeKind::Void:
+            return "void";
+        case TypeKind::Bool:
+            return "boolean";
+        case TypeKind::Tiny:
+        case TypeKind::Short:
+        case TypeKind::Int:
+        case TypeKind::Long:
+        case TypeKind::UTiny:
+        case TypeKind::UShort:
+        case TypeKind::UInt:
+        case TypeKind::ULong:
+        case TypeKind::ISize:
+        case TypeKind::USize:
+        case TypeKind::Float:
+        case TypeKind::Double:
+        case TypeKind::UFloat:
+        case TypeKind::UDouble:
+        case TypeKind::Char:
+            return "number";
+        case TypeKind::String:
+        case TypeKind::CString:
+            return "string";
+        case TypeKind::Pointer:
+        case TypeKind::Reference:
+            // JS/TSにポインタは無い。ランタイム表現はfat pointerオブジェクト・配列decay・構造体参照が混在し単一の型に定まらないためanyで安全側に倒す
+            return "any";
+        case TypeKind::Array:
+            return type->element_type ? (tsType(type->element_type.get()) + "[]") : "any[]";
+        case TypeKind::Function: {
+            std::string sig = "(";
+            for (size_t i = 0; i < type->param_types.size(); ++i) {
+                if (i > 0) {
+                    sig += ", ";
+                }
+                sig += "a" + std::to_string(i) + ": " + tsType(type->param_types[i].get());
+            }
+            sig += ") => ";
+            sig += type->return_type ? tsType(type->return_type.get()) : "void";
+            return sig;
+        }
+        case TypeKind::Struct:
+        case TypeKind::Interface:
+            return type->name.empty() ? "any" : sanitizeIdentifier(type->name);
+        case TypeKind::TypeAlias:
+            return type->element_type
+                       ? tsType(type->element_type.get())
+                       : (type->name.empty() ? "any" : sanitizeIdentifier(type->name));
+        case TypeKind::Null:
+            return "null";
+        default:
+            // Generic/Union/LiteralUnion/Inferred/Error等はanyで安全側に倒す
+            return "any";
+    }
+}
+
+std::string JSCodeGen::tsAnnotation(const hir::Type* type) const {
+    if (!options_.emitTypeScript) {
+        return "";
+    }
+    return ": " + tsType(type);
+}
+
+void JSCodeGen::emitStructInterface(const mir::MirStruct& st) {
+    if (!options_.emitTypeScript) {
+        return;
+    }
+    emitter_.emitLine("export interface " + sanitizeIdentifier(st.name) + " {");
+    emitter_.increaseIndent();
+    for (const auto& field : st.fields) {
+        emitter_.emitLine(formatStructFieldKey(st, field.name) + tsAnnotation(field.type.get()) +
+                          ";");
+    }
+    emitter_.decreaseIndent();
+    emitter_.emitLine("}");
+    emitter_.emitLine();
+}
+
 bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
     auto it = struct_map_.find(struct_name);
     return it != struct_map_.end() && it->second && it->second->is_css;

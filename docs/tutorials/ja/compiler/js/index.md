@@ -25,6 +25,38 @@ Cmコンパイラは、CmソースコードをJavaScriptに変換するバック
 node output.js
 ```
 
+## TypeScript出力（推奨）
+
+Cmは静的型付け言語のため、型情報を保った **TypeScript出力**（`--target=ts`）を推奨します。
+`--target=ts` は `--target=js` と同一のコードを生成した上で、関数シグネチャ・ローカル変数・構造体に型注釈を付け、`struct` を `export interface` として出力します。
+
+```bash
+# TypeScript出力（output.ts）
+./cm compile --target=ts hello.cm -o app.ts
+
+# 型検査
+npx tsc --noEmit --lib es2018 app.ts
+
+# 実行（型注釈を除去したJSとして実行される）
+./cm run --target=ts hello.cm
+```
+
+出力例（`struct Point { int x; int y; }`）:
+
+```ts
+export interface Point {
+    x: number;
+    y: number;
+}
+
+function origin(): Point {
+    let p: Point = { x: 0, y: 0 };
+    return p;
+}
+```
+
+TSとJSはランタイム挙動が同一です（TSは型注釈を除去すると生成JSに一致する）。TSプロジェクトへ組み込む場合は `--target=ts`、素のNode/ブラウザで実行するだけなら `--target=js` を使います。
+
 ## 対応機能
 
 CmのJSバックエンドは以下の機能に対応しています:

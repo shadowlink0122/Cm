@@ -15,6 +15,8 @@ parent: Compiler
 
 ## 概要
 
+> このページの例は `--target=js` / `--target=ts` の両方で動作します。TSプロジェクトでは `--target=ts` を使うと型注釈付きの出力が得られます。
+
 JSターゲットでは `use "パッケージ名" { 宣言 }` でnpmパッケージやNode組み込みモジュールを利用できます。
 生成コードには `const pkg = require("パッケージ名")` が出力され、宣言した関数は `pkg.func(args)` として呼ばれます。
 

@@ -508,9 +508,16 @@ test-sanitize:
 	@chmod +x tests/sanitize/run_tests.sh
 	@tests/sanitize/run_tests.sh
 
+# TypeScriptバックエンド（--target=ts）のE2Eテスト（型注釈生成・tsc型検査・実行）
+.PHONY: test-ts
+test-ts:
+	@echo "Running TypeScript backend E2E tests..."
+	@chmod +x tests/ts/run_tests.sh
+	@tests/ts/run_tests.sh
+
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n test-sanitize
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n test-sanitize test-ts
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"

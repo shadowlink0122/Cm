@@ -1,0 +1,24 @@
+//! platform: js
+// 構造体: export interface 出力とフィールド型注釈
+struct Point {
+    int x;
+    int y;
+}
+struct Line {
+    Point start;
+    Point end;
+}
+int manhattan(Line l) {
+    int dx = l.end.x - l.start.x;
+    int dy = l.end.y - l.start.y;
+    return dx + dy;
+}
+int main() {
+    Line l;
+    l.start.x = 1;
+    l.start.y = 2;
+    l.end.x = 4;
+    l.end.y = 6;
+    println("d={manhattan(l)}");
+    return 0;
+}

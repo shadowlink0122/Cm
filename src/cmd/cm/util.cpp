@@ -85,10 +85,12 @@ bool match_platform_directive(const std::string& directive, const std::string& c
     }
 
     // OR形式: js|web
+    // TSターゲットはJSプラットフォーム（//! platform: js）として扱う（同一のNode実行系・同一のコード生成経路のため）
+    std::string normalized_target = (current_target == "ts") ? "js" : current_target;
     std::istringstream ss(directive);
     std::string token;
     while (std::getline(ss, token, '|')) {
-        if (token == current_target) {
+        if (token == normalized_target) {
             return true;
         }
     }

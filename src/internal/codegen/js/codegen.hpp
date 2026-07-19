@@ -22,7 +22,8 @@ struct JSCodeGenOptions {
     bool verbose = false;       // 詳細出力
     bool useStrictMode = true;  // "use strict" を追加
     bool esModule = false;      // ES モジュール形式で出力
-    int indentSpaces = 4;       // インデント幅
+    bool emitTypeScript = false;  // TypeScript出力（--target=ts）: 型注釈とstruct interfaceを付与
+    int indentSpaces = 4;  // インデント幅
 };
 
 // JavaScript コードジェネレータ
@@ -85,6 +86,13 @@ class JSCodeGen {
 
     // 構造体
     void emitStruct(const mir::MirStruct& st);
+
+    // TypeScript出力用: Cm型をTypeScriptの型注釈へ写像する（emitTypeScript有効時のみ使用）
+    std::string tsType(const hir::Type* type) const;
+    // ": <型>" を返す（型がnullや未対応なら空文字列。JS出力時は常に空）
+    std::string tsAnnotation(const hir::Type* type) const;
+    // struct → export interface 宣言を出力する（TypeScript出力時のみ）
+    void emitStructInterface(const mir::MirStruct& st);
 
     // 関数
     void emitFunction(const mir::MirFunction& func, const mir::MirProgram& program);

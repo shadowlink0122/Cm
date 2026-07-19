@@ -71,6 +71,15 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
     // グローバル変数をモジュールレベルで宣言（関数間で共有）
     emitGlobalVars(program);
 
+    // TypeScript出力: struct interface宣言（コンストラクタ関数より前に出力し、以降の型注釈から参照できるようにする）
+    if (options_.emitTypeScript) {
+        for (const auto& st : program.structs) {
+            if (st) {
+                emitStructInterface(*st);
+            }
+        }
+    }
+
     // 構造体コンストラクタ
     for (const auto& st : program.structs) {
         if (st) {
@@ -159,6 +168,15 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
 void JSCodeGen::emitPreamble() {
     if (options_.useStrictMode) {
         emitter_.emitLine("\"use strict\";");
+        emitter_.emitLine();
+    }
+    // TypeScript出力: @types/nodeへ依存せず型検査を通すため、ランタイムが使うNodeグローバルをambient宣言する
+    // （require/process/module は生成コードとランタイムヘルパーが参照する。tscのlibはes2017以降を想定）
+    if (options_.emitTypeScript) {
+        emitter_.emitLine("declare function require(name: string): any;");
+        emitter_.emitLine("declare const process: any;");
+        emitter_.emitLine("declare const module: any;");
+        emitter_.emitLine("declare const console: any;");
         emitter_.emitLine();
     }
 }
