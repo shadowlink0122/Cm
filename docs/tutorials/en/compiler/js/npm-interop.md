@@ -127,10 +127,11 @@ use "react" {
     string renderList(Item[] items);
 }
 int main() {
-    Item[3] items;
-    items[0].label = "apple";
-    items[1].label = "banana";
-    items[2].label = "cherry";
+    Item[3] items = [
+        { label: "apple" },
+        { label: "banana" },
+        { label: "cherry" }
+    ];
     println("{renderList(items)}");  // <ul><li>apple</li>...</ul>
     return 0;
 }

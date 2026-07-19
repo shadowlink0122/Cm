@@ -12,9 +12,7 @@ use "cmtestpkg" {
 }
 
 int main() {
-    Point p;
-    p.x = 3;
-    p.y = 4;
+    Point p = { x: 3, y: 4 };
     Point q = scale(p, 10);
     println("{describe(q)}");
     println("qx={q.x} qy={q.y}");

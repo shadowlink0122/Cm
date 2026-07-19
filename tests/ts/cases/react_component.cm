@@ -13,10 +13,11 @@ use "react" {
 }
 
 int main() {
-    Item[3] items;
-    items[0].label = "apple";
-    items[1].label = "banana";
-    items[2].label = "cherry";
+    Item[3] items = [
+        { label: "apple" },
+        { label: "banana" },
+        { label: "cherry" }
+    ];
     string html = renderList(items);
     println("{html}");
     return 0;
