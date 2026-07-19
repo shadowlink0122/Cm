@@ -1,0 +1,38 @@
+//! platform: ts
+// ビュー: HTMLの組み立てをCmで行う（React等のJSレンダラは使わない）。
+// 小さなHTMLビルダー el() と、タスクをコンポーネント化する関数で構成する。
+
+module view;
+
+import ./models::{Task};
+import ./style::{stylesheet};
+
+// 要素タグを組み立てる小さなHTMLビルダー
+string el(string tag, string attrs, string body) {
+    if (attrs == "") {
+        return "<" + tag + ">" + body + "</" + tag + ">";
+    }
+    return "<" + tag + " " + attrs + ">" + body + "</" + tag + ">";
+}
+
+// 1タスク → <li>（完了状態でクラスを切り替える）
+string task_item(Task t) {
+    string cls = t.done ? "done" : "todo";
+    return el("li", "class=\"" + cls + "\"", t.title);
+}
+
+// タスク配列 → <ul>
+string task_list(Task[] tasks) {
+    string items = "";
+    for (Task t in tasks) {
+        items = items + task_item(t);
+    }
+    return el("ul", "class=\"task-list\"", items);
+}
+
+// ページ全体のHTML（headにCmが生成したCSSを埋め込む）
+export string page(Task[] tasks) {
+    string head = el("head", "", el("style", "", stylesheet()));
+    string body = el("body", "", el("h1", "", "Cm Tasks") + task_list(tasks));
+    return "<!doctype html>" + el("html", "", head + body);
+}

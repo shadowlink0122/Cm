@@ -134,6 +134,14 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                     while (p < line.size() && line[p] == '*')
                         p++;
                 }
+                // 配列戻り値型の後置サフィックス（Point[] / int[3] 等）をスキップする。
+                // これを扱わないと export Point[] all() の型名解析が [ で止まり、export関数が抽出漏れして落ちる
+                while (p < line.size() && line[p] == '[') {
+                    auto close = line.find(']', p);
+                    if (close == std::string::npos)
+                        break;
+                    p = close + 1;
+                }
                 if (p > type_start) {
                     p = skip_ws(line, p);
                     // 名前を取得
@@ -440,11 +448,14 @@ std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
             // キーワードブロック（interface/struct/impl/enum等）内の行はスキップ
             // これらのブロック内の宣言（void print(); 等）は関数定義ではない
             if (pos < line.size() && line[pos] != '/' && line[pos] != '#') {
+                // use "pkg" { 宣言... } / use js { ... } のFFIブロックもブロック全体をスキップする。
+                // 行だけスキップするとブロック本体の宣言と閉じ括弧が非exportコードとして誤処理され、ブレース深度がずれて後続のexport定義が壊れる
                 bool is_excluded_block = starts_with_keyword(line, pos, "impl") ||
                                          starts_with_keyword(line, pos, "struct") ||
                                          starts_with_keyword(line, pos, "interface") ||
                                          starts_with_keyword(line, pos, "typedef") ||
-                                         starts_with_keyword(line, pos, "enum");
+                                         starts_with_keyword(line, pos, "enum") ||
+                                         starts_with_keyword(line, pos, "use");
                 if (is_excluded_block) {
                     // ブロック全体をスキップ
                     int skip_depth = 0;

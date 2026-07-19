@@ -1,0 +1,13 @@
+//! platform: js
+// 配列・構造体配列を返すexport関数のimport回帰。
+// FFI/構造体を含むモジュールで use ブロックや配列戻り値型があっても
+// export関数の抽出が漏れないことを検証する（プリプロセッサのexport抽出修正）。
+import ./array_export/provider::{Item, make_numbers, make_items};
+
+int main() {
+    int[] nums = make_numbers();
+    println("nums.len={nums.len()} first={nums[0]} last={nums[2]}");
+    Item[] items = make_items();
+    println("items.len={items.len()} id0={items[0].id} id1={items[1].id}");
+    return 0;
+}

@@ -1,25 +1,14 @@
-// このサンプル用の最小Express互換実装（本番では実際の express パッケージを使う）。
-// get登録・listen・text()レスポンスをサポートし、テスト用に __handle(method, path) で実行できる。
-function express() {
-    const routes = { GET: {}, POST: {} };
-    const app = {
-        get(path, handler) { routes.GET[path] = handler; return app; },
-        post(path, handler) { routes.POST[path] = handler; return app; },
-        listen(port, cb) { if (cb) cb(); return { close() {} }; },
-        // テスト/デモ用: 実際のHTTPサーバを起動せずにルートを直接呼ぶ
-        __handle(method, path) {
-            const handler = (routes[method] || {})[path];
-            if (!handler) return "404";
-            let out = "";
-            const res = {
-                send(body) { out = String(body); return res; },
-                type() { return res; },
-                status() { return res; },
-            };
-            handler({ params: {}, body: {} }, res);
-            return out;
-        },
-    };
-    return app;
+// このサンプル用の最小Express互換（本番では実際の express を使う）。
+// アプリのロジック（分岐・HTML/CSS生成・レスポンス組み立て）はCm側のroute()が行い、
+// このFFIはHTTPソケット（listen・リクエスト受信）だけを担う薄い境界。
+// このデモではroute()をmainから直接呼ぶため未使用だが、実サーバ起動の雛形として置く。
+const http = require("http");
+function createServer(onRequest) {
+    return http.createServer((req, res) => {
+        const result = onRequest(req.method, req.url, "");
+        res.statusCode = result.status || 200;
+        res.setHeader("content-type", result.content_type || "text/plain");
+        res.end(result.body || "");
+    });
 }
-module.exports = express;
+module.exports = { createServer };

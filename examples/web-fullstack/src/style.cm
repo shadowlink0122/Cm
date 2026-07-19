@@ -1,0 +1,41 @@
+//! platform: ts
+// スタイル: with Css でCmの構造体からCSSを生成する（JS/CSSは書かない）。
+// フィールド名 background_color がCSSプロパティ background-color へ自動変換される。
+
+module style;
+
+struct BodyStyle with Css {
+    string font_family;
+    string max_width;
+    string margin;
+    string padding;
+    string color;
+}
+struct DoneStyle with Css {
+    string text_decoration;
+    string color;
+}
+struct TodoStyle with Css {
+    string font_weight;
+}
+
+// スタイルシート全体をCmで組み立てて文字列で返す
+export string stylesheet() {
+    BodyStyle body = {
+        font_family: "system-ui, sans-serif",
+        max_width: "640px",
+        margin: "0 auto",
+        padding: "24px",
+        color: "#1f2937"
+    };
+    DoneStyle done = {
+        text_decoration: "line-through",
+        color: "#9ca3af"
+    };
+    TodoStyle todo = {
+        font_weight: "600"
+    };
+    return "body { " + body.to_css() + "}\n" +
+           ".done { " + done.to_css() + "}\n" +
+           ".todo { " + todo.to_css() + "}\n";
+}

@@ -1,0 +1,26 @@
+//! platform: ts
+// データアクセス層: SQLと行→structマッピングはCmで書く。
+// FFI（pg）は汎用SQLエグゼキュータのみを提供し、アプリ固有ロジックは持たない。
+// 本番では実際の pg で `await client.query("SELECT ...")` を使う（README参照）。
+
+module db;
+
+import ./models::{Task};
+
+use "pg" {
+    Task[] query(string sql);       // SELECT ... → Task[]
+    Task insert(string title);       // INSERT ... RETURNING *
+    Task update(int id, bool done);  // UPDATE ... RETURNING *
+}
+
+export Task[] list_tasks() {
+    return query("SELECT id, title, done FROM tasks ORDER BY id");
+}
+
+export Task add_task(string title) {
+    return insert(title);
+}
+
+export Task toggle_task(int id, bool done) {
+    return update(id, done);
+}

@@ -1,0 +1,16 @@
+// 配列・構造体配列を返すexport関数を提供するモジュール
+module provider;
+
+export struct Item {
+    int id;
+}
+
+export int[] make_numbers() {
+    int[3] arr = [10, 20, 30];
+    return arr;
+}
+
+export Item[] make_items() {
+    Item[2] items = [{ id: 1 }, { id: 2 }];
+    return items;
+}

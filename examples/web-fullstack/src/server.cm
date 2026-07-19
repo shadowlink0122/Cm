@@ -1,0 +1,63 @@
+//! platform: ts
+// サーバ/ルータ: メソッド・パスで分岐しレスポンスを組み立てる（すべてCm）。
+// FFI（express）はHTTPソケット（listen）だけを担い、分岐・生成はCmが行う。
+//
+// 実行: このディレクトリで
+//   NODE_PATH=vendor cm run --target=ts src/server.cm
+
+import ./models::{Task, Response};
+import ./db::{list_tasks, add_task, toggle_task};
+import ./style::{stylesheet};
+import ./view::{page};
+
+Response make_response(int status, string content_type, string body) {
+    Response r = { status: status, content_type: content_type, body: body };
+    return r;
+}
+
+// ルーティング: Cmがメソッド/パスで分岐する
+Response route(string method, string path, string body) {
+    if (method == "GET" && path == "/") {
+        Task[] tasks = list_tasks();
+        return make_response(200, "text/html", page(tasks));
+    }
+    if (method == "GET" && path == "/styles.css") {
+        return make_response(200, "text/css", stylesheet());
+    }
+    if (method == "POST" && path == "/tasks") {
+        Task created = add_task(body);
+        return make_response(201, "text/plain",
+                             "created id=" + created.id + " title=" + created.title);
+    }
+    if (method == "POST" && path == "/tasks/toggle") {
+        Task updated = toggle_task(2, true);
+        return make_response(200, "text/plain", "toggled id=" + updated.id + " done=" + updated.done);
+    }
+    return make_response(404, "text/plain", "Not Found");
+}
+
+int main() {
+    // デモ: 各ルートをCmのrouteでハンドリングしてSSR結果を表示する。
+    // 本番では express の app.listen で受けたリクエストを route() へ渡す（README参照）。
+    Response index = route("GET", "/", "");
+    println("=== GET / (status=" + index.status + ", " + index.content_type + ") ===");
+    println(index.body);
+
+    Response css = route("GET", "/styles.css", "");
+    println("");
+    println("=== GET /styles.css (status=" + css.status + ") ===");
+    println(css.body);
+
+    Response created = route("POST", "/tasks", "write Cm docs");
+    println("");
+    println("=== POST /tasks -> " + created.body + " ===");
+
+    Response toggled = route("POST", "/tasks/toggle", "");
+    println("=== POST /tasks/toggle -> " + toggled.body + " ===");
+
+    Response after = route("GET", "/", "");
+    println("");
+    println("=== GET / (after changes) ===");
+    println(after.body);
+    return 0;
+}

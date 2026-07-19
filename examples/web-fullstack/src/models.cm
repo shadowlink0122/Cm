@@ -1,0 +1,18 @@
+//! platform: ts
+// ドメインモデル: DB層・ビュー・ルータで共有する型。
+// 静的型付けのCm structが全層を貫く型になり、--target=ts 出力では export interface Task になる。
+
+module models;
+
+export struct Task {
+    int id;
+    string title;
+    bool done;
+}
+
+// HTTPレスポンス（ルータがCmで組み立てる）
+export struct Response {
+    int status;
+    string content_type;
+    string body;
+}
