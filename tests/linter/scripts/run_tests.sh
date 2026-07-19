@@ -68,9 +68,9 @@ test_l001_function_naming() {
     echo "=== Test: L001 Function Naming (--strict) ==="
     
     local output
-    output=$("$CM" check --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep "\[L001\]" | grep -q "関数名"; then
+    if echo "$output" | grep "\[L001\]" | grep -q "function name"; then
         pass "L001 function naming detected"
     else
         fail "L001 function naming not detected" "$output"
@@ -83,9 +83,9 @@ test_l001_variable_naming() {
     echo "=== Test: L001 Variable Naming (--strict) ==="
     
     local output
-    output=$("$CM" check --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep "\[L001\]" | grep -q "変数名"; then
+    if echo "$output" | grep "\[L001\]" | grep -q "variable name"; then
         pass "L001 variable naming detected"
     else
         fail "L001 variable naming not detected" "$output"
@@ -98,9 +98,9 @@ test_l001_constant_naming() {
     echo "=== Test: L001 Constant Naming (--strict) ==="
     
     local output
-    output=$("$CM" check --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep "\[L001\]" | grep -q "定数名"; then
+    if echo "$output" | grep "\[L001\]" | grep -q "constant name"; then
         pass "L001 constant naming detected"
     else
         fail "L001 constant naming not detected" "$output"
@@ -113,9 +113,9 @@ test_l001_type_naming() {
     echo "=== Test: L001 Type Naming (--strict) ==="
     
     local output
-    output=$("$CM" check --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
+    output=$("$CM" check --lang=en --strict "$FIXTURES_DIR/invalid/bad_naming.cm" 2>&1 || true)
     
-    if echo "$output" | grep "\[L001\]" | grep -q "構造体名"; then
+    if echo "$output" | grep "\[L001\]" | grep -q "struct name"; then
         pass "L001 struct naming detected"
     else
         fail "L001 struct naming not detected" "$output"
@@ -203,10 +203,10 @@ test_recursive_check() {
     echo "=== Test: Recursive Check (-r) ==="
     
     local output
-    output=$("$CM" check -r "$FIXTURES_DIR/invalid/" 2>&1 || true)
+    output=$("$CM" check --lang=en -r "$FIXTURES_DIR/invalid/" 2>&1 || true)
     
     # 複数ファイルがチェックされることを確認
-    if echo "$output" | grep -q "ファイル数:"; then
+    if echo "$output" | grep -q "files:"; then
         pass "Recursive check works"
     else
         fail "Recursive check failed" "$output"
