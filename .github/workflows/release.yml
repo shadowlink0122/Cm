@@ -79,7 +79,7 @@ jobs:
 
       # アーティファクトアップロード
       - name: アーティファクトアップロード
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cm-v${{ inputs.version }}-${{ runner.os }}-${{ inputs.arch }}
           path: |
