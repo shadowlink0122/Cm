@@ -936,6 +936,53 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             }
         }
 
+        // 関数型フィールドの呼び出し（obj.field(args)）: implメソッドではなく関数値を保持するフィールドを起動する
+        // （JSオブジェクトのメソッド等。呼び出し先はメンバ式のまま保持し、JSバックエンドでのthis束縛を保てるようにする）
+        if (obj_type && obj_type->kind == ast::TypeKind::Struct) {
+            // 構造体フィールドの解決: 通常経路はstruct_defs_、文字列補間ミニパイプラインではseeded_struct_fields_を参照する
+            std::vector<std::pair<std::string, TypePtr>> field_types;
+            auto struct_it = struct_defs_.find(obj_type->name);
+            if (struct_it != struct_defs_.end() && struct_it->second) {
+                for (const auto& field : struct_it->second->fields) {
+                    field_types.emplace_back(field.name, field.type);
+                }
+            } else {
+                auto seeded_it = seeded_struct_fields_.find(obj_type->name);
+                if (seeded_it != seeded_struct_fields_.end()) {
+                    field_types = seeded_it->second;
+                }
+            }
+            {
+                for (const auto& [field_name, raw_field_type] : field_types) {
+                    // 構造化束縛はラムダでキャプチャできないため通常変数へ写す
+                    const std::string& fname = field_name;
+                    const TypePtr& ftype = raw_field_type;
+                    struct FieldView {
+                        const std::string& name;
+                        const TypePtr& type;
+                    } field{fname, ftype};
+                    if (field.name != mem.member || !field.type ||
+                        field.type->kind != ast::TypeKind::Function) {
+                        continue;
+                    }
+                    auto field_call = std::make_unique<HirCall>();
+                    field_call->func_name = mem.member;
+                    field_call->is_indirect = true;
+                    auto member_access = std::make_unique<HirMember>();
+                    member_access->object = std::move(obj_hir);
+                    member_access->member = mem.member;
+                    field_call->indirect_callee =
+                        std::make_unique<HirExpr>(std::move(member_access), field.type);
+                    for (auto& arg : mem.args) {
+                        field_call->args.push_back(lower_expr(*arg));
+                    }
+                    TypePtr ret_type =
+                        field.type->return_type ? field.type->return_type : ast::make_void();
+                    return std::make_unique<HirExpr>(std::move(field_call), ret_type);
+                }
+            }
+        }
+
         auto hir = std::make_unique<HirCall>();
         hir->func_name = method_type_name + "__" + mem.member;
 

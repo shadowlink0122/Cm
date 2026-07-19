@@ -230,7 +230,25 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     MirOperandPtr func_operand;
     std::vector<MirOperandPtr> capture_args;  // クロージャのキャプチャ引数
 
-    if (call.is_indirect) {
+    if (call.indirect_callee) {
+        // 関数型フィールド等、式の値を呼び出す。メンバ式ならPlace（obj.field）のまま呼び出し先にし、
+        // JSバックエンドが obj.field(args) を直接出力してthis束縛を保持できるようにする
+        bool lowered_as_place = false;
+        if (auto member_ptr =
+                std::get_if<std::unique_ptr<hir::HirMember>>(&call.indirect_callee->kind)) {
+            MirPlace callee_place{0};
+            hir::TypePtr callee_type;
+            if (get_member_place(**member_ptr, ctx, callee_place, callee_type)) {
+                func_operand =
+                    MirOperand::copy(std::move(callee_place), call.indirect_callee->type);
+                lowered_as_place = true;
+            }
+        }
+        if (!lowered_as_place) {
+            LocalId callee_local = lower_expression(*call.indirect_callee, ctx);
+            func_operand = MirOperand::copy(MirPlace{callee_local}, call.indirect_callee->type);
+        }
+    } else if (call.is_indirect) {
         // 関数ポインタ経由の呼び出し: 変数から関数ポインタを取得
         auto var_id = ctx.resolve_variable(call.func_name);
         if (var_id) {

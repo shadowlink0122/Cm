@@ -257,6 +257,39 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             }
         }
 
+        // 関数型フィールドの呼び出し（obj.field(args)）: JSオブジェクトのメソッド等、関数値を保持するフィールドをメソッド呼び出し構文で起動できるようにする
+        if (obj_type->kind == ast::TypeKind::Struct) {
+            if (const ast::StructDecl* struct_decl = get_struct(obj_type->name)) {
+                for (const auto& field : struct_decl->fields) {
+                    if (field.name != member.member) {
+                        continue;
+                    }
+                    auto field_type = resolve_typedef(field.type);
+                    if (!field_type || field_type->kind != ast::TypeKind::Function) {
+                        break;
+                    }
+                    if (member.args.size() != field_type->param_types.size()) {
+                        error(current_span_, "Function field '" + member.member + "' expects " +
+                                                 std::to_string(field_type->param_types.size()) +
+                                                 " arguments, got " +
+                                                 std::to_string(member.args.size()));
+                        return ast::make_error();
+                    }
+                    for (size_t i = 0; i < member.args.size(); ++i) {
+                        auto arg_type = infer_type(*member.args[i]);
+                        if (!types_compatible(field_type->param_types[i], arg_type)) {
+                            error(current_span_,
+                                  "Argument type mismatch in function field call '" +
+                                      member.member + "': expected " +
+                                      ast::type_to_string(*field_type->param_types[i]) + ", got " +
+                                      ast::type_to_string(*arg_type));
+                        }
+                    }
+                    return field_type->return_type ? field_type->return_type : ast::make_void();
+                }
+            }
+        }
+
         error(current_span_, "Unknown method '" + member.member + "' for type '" + type_name + "'");
         return ast::make_error();
     }

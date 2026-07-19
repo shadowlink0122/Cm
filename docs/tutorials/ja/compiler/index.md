@@ -45,6 +45,7 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 | タイトル | 難易度 | 内容 |
 |---------|--------|------|
 | [JSバックエンド](js/index.html) | 🟡 中級 | JavaScript出力 |
+| [npmパッケージ連携](js/npm-interop.html) | 🟡 中級 | use "package"・構造体互換・コールバック・メソッドthis束縛 |
 
 ## SystemVerilog / FPGA（sv/）
 

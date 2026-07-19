@@ -45,6 +45,7 @@ Pages are organized by backend: `common/` (shared tools), `native/` (LLVM native
 | Title | Level | Contents |
 |-------|-------|----------|
 | [JS backend](js/index.html) | 🟡 Intermediate | JavaScript output |
+| [npm Package Interop](js/npm-interop.html) | 🟡 Intermediate | use "package", struct interop, callbacks, method this-binding |
 
 ## SystemVerilog / FPGA (sv/)
 

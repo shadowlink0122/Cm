@@ -35,6 +35,8 @@ Thumbs.db
 deps/
 cm_modules/
 node_modules/
+# JS FFIテストのフィクスチャパッケージはコミット対象（tests/runnerがNODE_PATHで解決する）
+!tests/js/ffi/node_modules/
 
 # Test artifacts
 *.log

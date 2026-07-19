@@ -105,6 +105,9 @@ struct HirCall {
     bool is_indirect = false;               // 関数ポインタ経由の呼び出し
     bool is_closure = false;                // クロージャ呼び出しか
     bool is_awaited = false;                // await式で呼び出されているか
+    // 関数型フィールドの呼び出し（obj.field(args)）: 関数値を評価する式。設定時はfunc_nameを使わずこの式の値を呼び出す
+    // （JSバックエンドではメンバPlaceのまま呼び出すことでthis束縛を保持する）
+    HirExprPtr indirect_callee;
 };
 
 // 配列アクセス

@@ -229,8 +229,9 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
 
     if (rvalue) {
         // 関数参照の特別処理
-        // bool isFunctionValue = false;
-        if (llvm::isa<llvm::Function>(rvalue)) {
+        // 投影がある場合（構造体の関数型フィールドへの代入 ops.apply = f 等）はこのショートカットを使わず、
+        // 通常のstore経路で関数ポインタをフィールドへ書き込む（ここでlocalsを上書きすると構造体ローカルのスロット自体が関数値に化けて後続のフィールドアクセスが壊れる）
+        if (llvm::isa<llvm::Function>(rvalue) && assign.place.projections.empty()) {
             // Function*の場合、直接localsに格納（allocaせずにSSA形式で扱う）
             locals[assign.place.local] = rvalue;
             // 確認: 実際に格納されたか

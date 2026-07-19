@@ -366,8 +366,9 @@ PY
 
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 # Node.jsで実行
+                # NODE_PATH: 生成JSは.tmp配下に置かれるため、テストディレクトリ同梱のnode_modules（FFIフィクスチャ）をフォールバック解決させる
                 if command -v node >/dev/null 2>&1; then
-                    run_with_timeout node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    run_with_timeout env NODE_PATH="$test_dir/node_modules" node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                 else
                     # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
                     echo -e "${RED}[FAIL]${NC} $category/$test_name - Node.js not found"

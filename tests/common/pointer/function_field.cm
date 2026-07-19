@@ -1,0 +1,30 @@
+import std::io::println;
+// 構造体の関数型フィールド: 代入・メソッド構文での呼び出し・差し替え（JSオブジェクトメソッド連携の基盤）
+
+struct Ops {
+    int value;
+    int*(int, int) apply;
+}
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int mul(int a, int b) {
+    return a * b;
+}
+
+int use_ops(Ops o, int x, int y) {
+    return o.apply(x, y);
+}
+
+int main() {
+    Ops ops;
+    ops.value = 1;
+    ops.apply = add;
+    println("add: {ops.apply(3, 4)}");
+    ops.apply = mul;
+    println("mul: {ops.apply(3, 4)}");
+    println("arg: {use_ops(ops, 5, 6)}");
+    return 0;
+}

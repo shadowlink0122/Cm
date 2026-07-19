@@ -378,7 +378,8 @@ PY
             fi
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
-                    run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    # NODE_PATH: テストディレクトリ同梱のnode_modules（FFIフィクスチャ）を解決させる（直列実行側と同一の挙動）
+                    run_with_timeout_silent env NODE_PATH="$test_dir/node_modules" node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                     # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
                     kill %% 2>/dev/null || true
                 else

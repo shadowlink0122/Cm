@@ -1,18 +1,24 @@
 //! platform: js
-// JS FFI テスト: use "package" でnode_modulesパッケージを利用
-// JSターゲット専用
-
-use "lodash" {
-    int add(int a, int b);
-}
+// use "package" によるnode_modulesパッケージFFI: 組み込みモジュール（path）とローカルfixtureの両方を解決する
 
 use "path" {
     string join(string a, string b);
+    string basename(string p);
+}
+
+use "cmtestpkg" {
+    int applyTwice(int*(int) fn, int v);
+}
+
+int inc(int x) {
+    return x + 1;
 }
 
 int main() {
-    // lodashのadd関数（テスト用の仮定）
-    const int result = add(10, 20);
-    println("add result: {result}");
+    string joined = join("foo", "bar");
+    string base = basename("/a/b/c.txt");
+    println("{joined}");
+    println("{base}");
+    println("{applyTwice(inc, 40)}");
     return 0;
 }
