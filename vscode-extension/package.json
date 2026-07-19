@@ -89,14 +89,14 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@vscode/vsce": "^3.7.1",
+    "@vscode/vsce": "^3.9.2",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
-    "prettier": "^3.4.0",
+    "prettier": "^3.9.5",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.0.0",
+    "typescript-eslint": "^8.64.0",
     "@eslint/js": "^9.0.0",
-    "@types/vscode": "^1.80.0"
+    "@types/vscode": "^1.125.0"
   },
   "main": "./out/src/extension.js",
   "activationEvents": [
