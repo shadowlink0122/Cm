@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -12,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
 
 namespace cm::codegen::js {
 

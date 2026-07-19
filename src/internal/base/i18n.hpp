@@ -15,6 +15,7 @@
 
 #include <cstring>
 #include <string>
+#include <utility>
 
 namespace cm::i18n {
 

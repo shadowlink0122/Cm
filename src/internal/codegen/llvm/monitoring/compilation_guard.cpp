@@ -6,6 +6,8 @@
 
 #include <iomanip>
 #include <iostream>
+#include <memory>
+#include <string>
 
 namespace cm::codegen {
 

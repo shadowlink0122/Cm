@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <string>
 
 #if !defined(_WIN32)
 #include <sys/wait.h>

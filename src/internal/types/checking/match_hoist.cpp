@@ -18,6 +18,11 @@
 #include "internal/syntax/ast/module.hpp"
 #include "internal/syntax/ast/stmt.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 namespace {

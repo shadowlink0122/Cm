@@ -1,5 +1,9 @@
 #include "program_dce.hpp"
 
+#include <set>
+#include <string>
+#include <unordered_map>
+
 namespace cm::mir::opt {
 
 bool ProgramDeadCodeElimination::run(MirProgram& program) {

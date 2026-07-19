@@ -11,6 +11,7 @@
 #include <llvm/Transforms/Utils/LoopSimplify.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 

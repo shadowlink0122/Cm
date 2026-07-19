@@ -3,6 +3,9 @@
 
 #include "runtime_functions.hpp"
 
+#include <string>
+#include <vector>
+
 namespace cm::codegen::common {
 
 RuntimeFunctions::RuntimeFunctions(llvm::Module& mod, llvm::LLVMContext& context)

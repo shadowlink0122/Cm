@@ -14,6 +14,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #if !defined(_WIN32)
 #include <sys/wait.h>

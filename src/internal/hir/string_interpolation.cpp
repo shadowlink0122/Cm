@@ -5,6 +5,10 @@
 #include "string_interpolation.hpp"
 
 #include <functional>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::hir {
 

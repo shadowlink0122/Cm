@@ -1,6 +1,8 @@
 #pragma once
 
+#include <iostream>
 #include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
+#include <string>
 
 // LLVM_VERSION_MAJORが定義されていることを確認
 #ifndef LLVM_VERSION_MAJOR

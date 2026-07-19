@@ -8,6 +8,14 @@
 #include "internal/mir/mir_splitter.hpp"
 #include "pass_debugger.hpp"
 
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::codegen::llvm_backend {
 
 // MIRプログラムをコンパイル

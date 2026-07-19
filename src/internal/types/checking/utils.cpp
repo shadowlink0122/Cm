@@ -9,7 +9,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <regex>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm {
 

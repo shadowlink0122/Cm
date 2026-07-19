@@ -5,6 +5,9 @@
 #include "internal/base/i18n.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <optional>
+#include <string>
+
 namespace cm {
 
 // モノモーフ化されたenum型名からベース名を抽出

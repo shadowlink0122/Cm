@@ -1,5 +1,10 @@
 #include "generic_context.hpp"
 
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace cm {
 
 void GenericContext::add_type_param(const std::string& name,

@@ -6,8 +6,13 @@
 #include "internal/types/type_checker.hpp"
 
 #include <algorithm>
+#include <memory>
+#include <optional>
 #include <regex>
 #include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace cm {
 

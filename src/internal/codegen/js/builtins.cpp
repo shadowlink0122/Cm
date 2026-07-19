@@ -1,7 +1,9 @@
 // JS組み込み関数の実装
 #include "builtins.hpp"
 
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace cm::codegen::js {
 

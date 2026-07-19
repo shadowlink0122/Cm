@@ -5,6 +5,8 @@
 #include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <memory>
+#include <string>
 #if LLVM_VERSION_MAJOR >= 16
 #include <llvm/TargetParser/Host.h>
 #else

@@ -1,5 +1,12 @@
 #include "inlining.hpp"
 
+#include <iostream>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool FunctionInlining::run_on_program(MirProgram& program) {

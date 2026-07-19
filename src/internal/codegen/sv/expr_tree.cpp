@@ -1,5 +1,8 @@
 #include "expr_tree.hpp"
 
+#include <string>
+#include <utility>
+
 namespace cm::codegen::sv {
 
 // IEEE 1800-2017 Table 11-2 の演算子優先順位（大きいほど強く結合）

@@ -4,6 +4,13 @@
 
 #include <algorithm>   // std::reverse用
 #include <functional>  // sizeof複合ジェネリック判定の再帰ラムダ用
+#include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace cm::hir {
 

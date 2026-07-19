@@ -3,6 +3,12 @@
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir {
 
 LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypePtr& expr_type,

@@ -2,6 +2,11 @@
 
 #include "const_eval.hpp"
 
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
 namespace cm::mir::opt {
 
 bool ConstantFolding::run(MirFunction& func) {

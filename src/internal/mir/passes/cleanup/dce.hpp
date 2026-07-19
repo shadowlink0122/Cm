@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <queue>
 #include <set>
+#include <string>
 
 namespace cm::mir::opt {
 

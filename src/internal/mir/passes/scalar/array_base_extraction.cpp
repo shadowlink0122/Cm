@@ -1,5 +1,10 @@
 #include "array_base_extraction.hpp"
 
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool ArrayBaseExtraction::run(MirFunction& func) {

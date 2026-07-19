@@ -4,9 +4,12 @@
 #include "internal/base/debug.hpp"
 
 #include <map>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace cm::mir {
 

@@ -3,6 +3,7 @@
 #include "nodes.hpp"
 
 #include <sstream>
+#include <string>
 #include <unordered_set>
 
 namespace cm::mir {

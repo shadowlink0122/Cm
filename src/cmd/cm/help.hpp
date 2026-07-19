@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 
 namespace cm::cli {
 

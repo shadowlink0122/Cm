@@ -1,7 +1,12 @@
 #include "macro_parser.hpp"
 
 #include <fmt/format.h>
+#include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::parser {
 

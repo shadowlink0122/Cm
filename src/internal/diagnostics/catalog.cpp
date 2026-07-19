@@ -8,6 +8,9 @@
 #include "internal/diagnostics/definitions/lints.hpp"
 #include "internal/diagnostics/definitions/warnings.hpp"
 
+#include <string>
+#include <vector>
+
 namespace cm {
 namespace diagnostics {
 

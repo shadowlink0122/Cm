@@ -5,7 +5,10 @@
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
+#include <memory>
+#include <string>
 #include <variant>
+#include <vector>
 
 namespace cm::codegen::llvm_backend {
 

@@ -7,9 +7,11 @@
 #include "internal/syntax/ast/typedef.hpp"
 
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
+#include <vector>
 
 namespace cm::mir {
 

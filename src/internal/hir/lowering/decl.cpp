@@ -1,6 +1,11 @@
 // lowering_decl.cpp - 宣言のlowering
 #include "fwd.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::hir {
 
 // 宣言の変換

@@ -6,7 +6,12 @@
 #include "lowering.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <numeric>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::mir {
 

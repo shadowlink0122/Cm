@@ -5,9 +5,11 @@
 #include "internal/mir/nodes.hpp"
 
 #include <fstream>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace cm::codegen::js {
 

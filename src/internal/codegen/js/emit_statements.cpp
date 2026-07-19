@@ -3,6 +3,8 @@
 #include "types.hpp"
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 namespace cm::codegen::js {
 

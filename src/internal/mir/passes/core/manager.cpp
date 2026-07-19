@@ -14,6 +14,11 @@
 #include "internal/mir/passes/scalar/propagation.hpp"
 #include "internal/mir/passes/scalar/sccp.hpp"
 
+#include <iostream>
+#include <memory>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(

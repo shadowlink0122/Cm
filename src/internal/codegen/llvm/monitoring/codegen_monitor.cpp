@@ -5,6 +5,8 @@
 #include "codegen_monitor.hpp"
 
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace cm::codegen {
 

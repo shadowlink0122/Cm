@@ -1,5 +1,11 @@
 #include "gvn.hpp"
 
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
 namespace cm::mir::opt {
 
 bool GVN::run(MirFunction& func) {

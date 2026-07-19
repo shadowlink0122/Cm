@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../lexer/token.hpp"
+#include "internal/syntax/lexer/token.hpp"
 
 #include <atomic>
 #include <map>

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 // ============================================================
 // 単相化内部ヘルパー（monomorphization_impl / mono_structs で共有）
 // ============================================================

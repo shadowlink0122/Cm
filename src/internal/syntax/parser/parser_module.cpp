@@ -3,7 +3,12 @@
 #include "internal/syntax/ast/module.hpp"
 #include "parser.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace cm {
 

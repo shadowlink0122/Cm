@@ -2,6 +2,12 @@
 #include "internal/base/debug/par.hpp"
 #include "parser.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 // ジェネリックパラメータ（<T>, <T: Interface>, <T: I + J>, <T: I | J>, <T, U>）をパース

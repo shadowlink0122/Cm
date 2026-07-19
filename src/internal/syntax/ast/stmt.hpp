@@ -3,6 +3,11 @@
 #include "expr.hpp"
 #include "nodes.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::ast {
 
 // ============================================================

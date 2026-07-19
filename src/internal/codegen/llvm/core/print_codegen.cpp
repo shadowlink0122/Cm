@@ -7,6 +7,9 @@
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::codegen::llvm_backend {
 

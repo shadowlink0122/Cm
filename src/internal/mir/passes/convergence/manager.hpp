@@ -5,6 +5,7 @@
 #include <deque>
 #include <functional>
 #include <sstream>
+#include <string>
 #include <unordered_set>
 #include <vector>
 

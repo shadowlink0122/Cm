@@ -4,7 +4,11 @@
 
 #include "internal/types/type_checker.hpp"
 
+#include <memory>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm {
 

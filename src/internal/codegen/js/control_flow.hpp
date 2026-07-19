@@ -3,7 +3,9 @@
 #include "internal/mir/nodes.hpp"
 
 #include <map>
+#include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace cm::codegen::js {

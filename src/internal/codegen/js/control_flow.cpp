@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <queue>
+#include <set>
+#include <vector>
 
 namespace cm::codegen::js {
 

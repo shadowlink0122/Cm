@@ -2,6 +2,7 @@
 
 #include "internal/mir/passes/core/base.hpp"
 
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>

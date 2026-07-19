@@ -1,6 +1,12 @@
 // スコープ管理の実装
 #include "scope.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 // シンボル登録

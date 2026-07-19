@@ -5,6 +5,8 @@
 
 #include "internal/base/debug.hpp"
 
+#include <memory>
+
 namespace cm::mir {
 
 // 式のlowering（結果を一時変数に格納して返す）

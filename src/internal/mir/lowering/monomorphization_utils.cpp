@@ -2,6 +2,13 @@
 
 #include "internal/base/debug.hpp"
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
 namespace cm::mir {
 
 // ヘルパー関数：MirOperandのクローン

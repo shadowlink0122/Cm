@@ -3,6 +3,7 @@
 #include "internal/base/i18n.hpp"
 
 #include <set>
+#include <string>
 
 namespace cm::mir::opt {
 

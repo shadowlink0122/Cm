@@ -1,7 +1,10 @@
 #include "dominators.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <queue>
+#include <set>
+#include <vector>
 
 namespace cm::mir {
 

@@ -3,6 +3,7 @@
 #include "internal/mir/passes/core/base.hpp"
 
 #include <queue>
+#include <string>
 #include <unordered_set>
 #include <vector>
 

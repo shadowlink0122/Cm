@@ -1,5 +1,10 @@
 #include "licm.hpp"
 
+#include <memory>
+#include <set>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool LoopInvariantCodeMotion::run(MirFunction& func) {

@@ -1,5 +1,8 @@
 #include "smart.hpp"
 
+#include <sstream>
+#include <string>
+
 namespace cm::mir::optimizations {
 
 SmartConvergenceManager::State SmartConvergenceManager::add_iteration(int change_count) {

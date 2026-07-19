@@ -8,9 +8,12 @@
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::codegen::sv {
 

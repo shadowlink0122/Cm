@@ -1,6 +1,10 @@
 // ターゲットマネージャ実装
 #include "target.hpp"
 
+#include <fstream>
+#include <iostream>
+#include <string>
+
 namespace cm::codegen::llvm_backend {
 
 // コンストラクタ（BuildTarget指定）

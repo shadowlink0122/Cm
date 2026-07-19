@@ -13,6 +13,9 @@
 #include <llvm/IR/Dominators.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace cm::codegen::llvm_backend::optimizations {
 

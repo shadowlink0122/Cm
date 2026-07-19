@@ -2,6 +2,12 @@
 #include "internal/base/debug.hpp"
 #include "lowering.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir {
 
 // 演算子実装のlowering

@@ -3,6 +3,11 @@
 #include "internal/base/target.hpp"
 #include "internal/syntax/ast/typedef.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::hir {
 
 // メインエントリポイント

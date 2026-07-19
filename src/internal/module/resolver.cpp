@@ -8,7 +8,11 @@
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>

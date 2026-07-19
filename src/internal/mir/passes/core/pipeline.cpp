@@ -1,6 +1,8 @@
 #include "base.hpp"
 #include "manager.hpp"
 
+#include <utility>
+
 namespace cm::mir::opt {
 
 void OptimizationPipeline::add_standard_passes(int optimization_level) {

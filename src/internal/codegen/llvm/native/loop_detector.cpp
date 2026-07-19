@@ -1,6 +1,10 @@
 // 無限ループ検出とモジュール検証の実装
 #include "loop_detector.hpp"
 
+#include <iostream>
+#include <map>
+#include <set>
+
 namespace cm::codegen::llvm_backend {
 
 // モジュール全体の無限ループリスクを評価

@@ -2,6 +2,7 @@
 
 #include "emitter.hpp"
 
+#include <string>
 #include <unordered_set>
 
 namespace cm::codegen::js {

@@ -6,6 +6,8 @@
 
 #include "nodes.hpp"
 
+#include <string>
+
 namespace cm::mir {
 
 // ============================================================

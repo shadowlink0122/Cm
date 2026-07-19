@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <string>
 
 namespace cm::codegen::wasm {
 

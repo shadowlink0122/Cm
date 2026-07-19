@@ -7,6 +7,7 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Value.h>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>

@@ -2,6 +2,11 @@
 
 #include "const_eval.hpp"
 
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 namespace {

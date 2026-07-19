@@ -1,6 +1,10 @@
 #include "base.hpp"
 
 #include <chrono>
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace cm::mir::opt {
 

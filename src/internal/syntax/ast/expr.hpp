@@ -3,8 +3,13 @@
 #include "internal/syntax/lexer/token.hpp"
 #include "nodes.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <variant>
+#include <vector>
 
 namespace cm::ast {
 

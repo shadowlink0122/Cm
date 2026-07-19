@@ -1,5 +1,8 @@
 #include "simplify_cfg.hpp"
 
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool SimplifyControlFlow::run(MirFunction& func) {

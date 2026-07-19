@@ -10,6 +10,8 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
+#include <unordered_set>
 
 namespace cm::codegen::js {
 

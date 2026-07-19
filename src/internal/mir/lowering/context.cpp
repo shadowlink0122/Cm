@@ -4,6 +4,12 @@
 
 #include "internal/base/target.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir {
 
 // 新しいブロックを作成

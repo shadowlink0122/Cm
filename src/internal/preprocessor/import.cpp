@@ -10,6 +10,10 @@
 #include <regex>
 #include <set>
 #include <sstream>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 #ifdef __APPLE__
 #include <limits.h>

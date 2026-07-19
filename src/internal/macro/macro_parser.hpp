@@ -1,10 +1,11 @@
 #pragma once
 
-#include "../lexer/token.hpp"
-#include "../utils/error.hpp"
+#include "internal/base/error.hpp"
+#include "internal/syntax/lexer/token.hpp"
 #include "token_tree.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 

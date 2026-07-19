@@ -7,8 +7,13 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace cm::codegen::js {
 

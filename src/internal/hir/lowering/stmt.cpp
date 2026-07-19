@@ -2,6 +2,11 @@
 #include "fwd.hpp"
 #include "internal/base/text_utils.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::hir {
 
 // 文の変換

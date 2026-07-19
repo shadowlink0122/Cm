@@ -8,6 +8,7 @@
 #include <llvm/IR/Module.h>
 #include <map>
 #include <set>
+#include <string>
 
 namespace cm::codegen::llvm_backend {
 

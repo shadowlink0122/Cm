@@ -12,6 +12,9 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::codegen::sv {
 

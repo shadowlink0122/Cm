@@ -1,5 +1,9 @@
 #include "dce.hpp"
 
+#include <set>
+#include <string>
+#include <variant>
+
 namespace cm::mir::opt {
 
 bool DeadCodeElimination::run(MirFunction& func) {

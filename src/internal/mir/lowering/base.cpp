@@ -2,6 +2,11 @@
 
 #include "base.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
 namespace cm::mir {
 
 // 構造体を登録

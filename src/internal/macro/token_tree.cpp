@@ -1,5 +1,8 @@
 #include "token_tree.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace cm::macro {
 
 // TokenTreeのコピーコンストラクタ（深いコピー）

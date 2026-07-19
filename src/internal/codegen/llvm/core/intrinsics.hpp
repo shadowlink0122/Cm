@@ -5,6 +5,8 @@
 #include <llvm/Config/llvm-config.h>  // LLVM_VERSION_MAJOR を定義（最初にインクルード）
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Intrinsics.h>
+#include <string>
+#include <unordered_map>
 
 namespace cm::codegen::llvm_backend {
 

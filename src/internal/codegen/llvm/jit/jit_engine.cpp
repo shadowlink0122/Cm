@@ -16,6 +16,9 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <memory>
+#include <string>
+#include <utility>
 
 // LLVM 14-16: レガシーPassManager (PassManagerBuilderが存在)
 // LLVM 17+: 新PassManager のみ (PassManagerBuilder削除)

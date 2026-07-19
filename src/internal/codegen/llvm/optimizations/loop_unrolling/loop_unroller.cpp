@@ -1,10 +1,12 @@
 #include "loop_unroller.hpp"
 
+#include <functional>
 #include <llvm/Analysis/AssumptionCache.h>
 #include <llvm/Analysis/LoopPass.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <vector>
 
 namespace cm::codegen::llvm_backend::optimizations {
 

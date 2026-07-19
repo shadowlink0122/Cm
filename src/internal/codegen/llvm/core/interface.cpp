@@ -4,6 +4,9 @@
 #include "internal/base/debug/codegen.hpp"
 #include "mir_to_llvm.hpp"
 
+#include <string>
+#include <vector>
+
 namespace cm::codegen::llvm_backend {
 
 // インターフェース用のfat pointer型を取得

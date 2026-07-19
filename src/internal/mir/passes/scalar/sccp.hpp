@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <queue>
+#include <string>
 #include <vector>
 
 namespace cm::mir::opt {

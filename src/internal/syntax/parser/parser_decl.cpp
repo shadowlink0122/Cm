@@ -2,6 +2,12 @@
 #include "internal/base/i18n.hpp"
 #include "parser.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 // プログラム全体を解析

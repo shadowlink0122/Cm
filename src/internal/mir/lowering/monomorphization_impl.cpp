@@ -9,6 +9,15 @@ namespace cm::mir {
 // デバッグ出力用
 #ifdef CM_DEBUG_MONOMORPHIZATION
 #include <iostream>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 #define MONO_DEBUG(msg) std::cerr << "[MONO] " << msg << std::endl
 #else
 #define MONO_DEBUG(msg)

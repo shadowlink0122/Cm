@@ -1,5 +1,9 @@
 #include "dse.hpp"
 
+#include <unordered_map>
+#include <unordered_set>
+#include <variant>
+
 namespace cm::mir::opt {
 
 bool DeadStoreElimination::run(MirFunction& func) {

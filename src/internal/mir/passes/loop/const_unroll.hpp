@@ -2,6 +2,8 @@
 
 #include "internal/mir/passes/core/base.hpp"
 
+#include <string>
+
 namespace cm::mir::opt {
 
 // ============================================================

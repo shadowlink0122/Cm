@@ -20,6 +20,9 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils.h>
 #include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace cm::codegen::llvm_backend {
 

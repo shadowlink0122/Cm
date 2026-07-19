@@ -6,6 +6,9 @@
 #include "fwd.hpp"
 
 #include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace cm::hir {
 

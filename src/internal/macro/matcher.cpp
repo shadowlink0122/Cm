@@ -1,7 +1,12 @@
 #include "matcher.hpp"
 
 #include <fmt/format.h>
+#include <map>
+#include <optional>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::macro {
 

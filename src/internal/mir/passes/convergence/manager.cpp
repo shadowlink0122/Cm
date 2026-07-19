@@ -1,6 +1,8 @@
 #include "manager.hpp"
 
 #include <algorithm>
+#include <sstream>
+#include <string>
 
 namespace cm::mir::optimizations {
 

@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <string>
 #include <type_traits>
 #include <variant>
+#include <vector>
 
 namespace cm::codegen::js {
 

@@ -1,11 +1,13 @@
 #include "vectorizer.hpp"
 
+#include <functional>
 #include <llvm/Analysis/AssumptionCache.h>
 #include <llvm/Analysis/LoopPass.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IntrinsicsX86.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
+#include <vector>
 
 namespace cm::codegen::llvm_backend::optimizations {
 

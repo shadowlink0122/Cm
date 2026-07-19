@@ -2,6 +2,11 @@
 #include "internal/base/i18n.hpp"
 #include "parser.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 // ============================================================

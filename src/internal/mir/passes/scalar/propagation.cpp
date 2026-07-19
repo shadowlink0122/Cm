@@ -1,5 +1,10 @@
 #include "propagation.hpp"
 
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool CopyPropagation::run(MirFunction& func) {

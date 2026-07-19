@@ -5,6 +5,8 @@
 #include "source_location.hpp"
 
 #include <sstream>
+#include <string>
+#include <unordered_map>
 
 namespace cm {
 

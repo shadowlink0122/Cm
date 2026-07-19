@@ -6,7 +6,12 @@
 #include "internal/base/debug.hpp"
 
 #include <algorithm>
+#include <iostream>
+#include <memory>
 #include <numeric>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace cm::mir {
 

@@ -2,6 +2,8 @@
 
 #include <fmt/format.h>
 #include <iostream>
+#include <memory>
+#include <string>
 
 namespace cm::macro {
 

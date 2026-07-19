@@ -4,9 +4,13 @@
 #include "internal/hir/nodes.hpp"
 #include "internal/syntax/ast/decl.hpp"
 
+#include <memory>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace cm::hir {
 

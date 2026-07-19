@@ -1,6 +1,8 @@
 #include "loop_analysis.hpp"
 
+#include <memory>
 #include <queue>
+#include <vector>
 
 namespace cm::mir {
 

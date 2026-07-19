@@ -3,8 +3,12 @@
 #include "mir_splitter.hpp"
 
 #include <algorithm>
+#include <map>
 #include <set>
+#include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace cm::mir {
 

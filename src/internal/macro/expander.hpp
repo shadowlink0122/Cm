@@ -1,12 +1,13 @@
 #pragma once
 
-#include "../lexer/token.hpp"
 #include "hygiene.hpp"
+#include "internal/syntax/lexer/token.hpp"
 #include "matcher.hpp"
 #include "token_tree.hpp"
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 

@@ -7,7 +7,12 @@
 #include "match_hoist.hpp"
 
 #include <algorithm>
+#include <memory>
+#include <optional>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm {
 

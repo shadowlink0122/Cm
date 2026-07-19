@@ -2,6 +2,10 @@
 
 #include "printer.hpp"
 
+#include <sstream>
+#include <string>
+#include <variant>
+
 namespace cm::mir {
 
 // MIRプログラムを文字列に変換

@@ -1,6 +1,9 @@
 // JSランタイムヘルパーの実装
 #include "runtime.hpp"
 
+#include <string>
+#include <unordered_set>
+
 namespace cm::codegen::js {
 
 // ランタイムヘルパーコードを出力

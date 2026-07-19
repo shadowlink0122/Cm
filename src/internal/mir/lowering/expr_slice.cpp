@@ -6,6 +6,12 @@
 #include "internal/base/debug.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir {
 
 // スライスbuiltinを処理した場合はローカルIDを、対象外ならnulloptを返す

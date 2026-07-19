@@ -3,6 +3,10 @@
 
 #include "internal/base/debug/lex.hpp"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm {
 
 // トークン化（メインループ）

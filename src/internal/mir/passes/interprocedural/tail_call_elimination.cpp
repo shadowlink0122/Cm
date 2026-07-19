@@ -1,5 +1,10 @@
 #include "tail_call_elimination.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace cm::mir::opt {
 
 bool TailCallElimination::run(MirFunction& func) {

@@ -12,7 +12,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #if !defined(_WIN32)
 #include <sys/wait.h>

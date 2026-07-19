@@ -3,6 +3,7 @@
 #include "internal/mir/passes/core/base.hpp"
 
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 

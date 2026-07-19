@@ -4,6 +4,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace cm::codegen::llvm_backend::optimizations {

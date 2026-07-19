@@ -3,6 +3,8 @@
 
 #include "type_converter.hpp"
 
+#include <string>
+
 namespace cm::codegen::common {
 
 void TypeConverter::initBasicTypes() {

@@ -8,6 +8,11 @@
 #include "interp_internal.hpp"
 
 #include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace cm::mir {
 

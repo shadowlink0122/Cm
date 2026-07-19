@@ -10,6 +10,7 @@
 #include <llvm/IR/Module.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace cm::codegen::common {
 

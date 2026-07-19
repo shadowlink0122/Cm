@@ -5,15 +5,19 @@
 #include "internal/codegen/llvm/monitoring/compilation_guard.hpp"
 #include "mir_to_llvm.hpp"
 
+#include <iostream>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace cm::codegen::llvm_backend {
 

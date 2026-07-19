@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <utility>
+
 // ============================================================
 // HIR式lowering内部ヘルパー（expr / expr_member / expr_match で共有）
 // ============================================================

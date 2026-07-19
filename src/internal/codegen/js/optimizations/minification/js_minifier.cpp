@@ -4,6 +4,7 @@
 #include <cctype>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 namespace cm::codegen::js::optimizations {
 

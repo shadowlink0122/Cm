@@ -7,6 +7,8 @@
 #include "internal/base/i18n.hpp"
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 namespace cm {
 namespace diagnostics {

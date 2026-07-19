@@ -1,5 +1,9 @@
 #include "generator.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 namespace cm::mir {
 
 // ============================================================

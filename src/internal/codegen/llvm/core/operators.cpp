@@ -4,6 +4,7 @@
 #include "mir_to_llvm.hpp"
 
 #include <functional>
+#include <string>
 
 namespace cm::codegen::llvm_backend {
 
