@@ -27,6 +27,7 @@
 | `#ifdef` 条件付きコンパイル / `-D` 定義 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `#[target(...)]` 宣言フィルタ | ✅ | ✅ | ✅ | ✅ | ―（platform: svで分離） | ✅ | ✅ |
 | `#[test]` / `cm test` | ✅ JIT実行 | ✅ | ✅ | ✅ | ✅ TB生成+iverilog実行 | ― | ― |
+| サニタイザ `--sanitize` | ⚠️ bounds/undefined | ✅ address/thread/bounds/undefined（memoryはLinuxのみ） | ⚠️ bounds/undefined | ⚠️ undefined | ❌ 非対応 | ― | ― |
 | インラインアセンブリ `__asm__` | ✅ | ✅ | ⚠️ WASM命令のみ | ❌ 実行不可 | ― | ✅ | ✅ |
 
 ## 型

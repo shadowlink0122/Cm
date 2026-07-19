@@ -14,7 +14,8 @@ Cm（シーマイナー）は、[Cb言語](https://github.com/shadowlink0122/Cb)
 - 🌐 **対応プラットフォーム**: macOS (ARM64) / Ubuntu (x86_64) / WASM / JavaScript / UEFI / SystemVerilog (FPGA)
 - 🕸️ **WebAssembly対応**: `--target=wasm`で直接WASMバイナリ生成
 - 🎸 **JavaScriptバックエンド**: `--target=js`でJSコード生成、Node.jsで実行可能
-- 🔌 **SystemVerilogバックエンド**: `--target=sv`でFPGA向けRTL生成（モジュールパラメータ・実機I/O属性・ピン制約生成・`#[test]`サイクル精度テストベンチ）
+- 🔌 **SystemVerilogバックエンド**: `--target=sv`でFPGA向けRTL生成（IO構造体宣言・モジュール階層化・interface/implメソッド合成・実機I/O属性・ピン制約生成・`#[test]`サイクル精度テストベンチ）
+- 🧪 **サニタイザ**: `--sanitize=address/thread/memory/bounds/undefined`による実行時メモリ検査（境界外・use-after-free・データ競合・ゼロ除算・null参照を検出）
 - 🖥️ **ベアメタル/UEFI対応**: `--target=uefi`でOS不要のUEFIアプリケーション生成
 - 🚀 **C++風構文**: 馴染みやすい構文、モダンな言語機能
 - ☄️ **インラインユニオン型**: `int | null` のように型を直接結合、null許容型を簡潔に記述
@@ -257,6 +258,11 @@ make test-llvm         # LLVMネイティブ
 make test-llvm-wasm    # LLVM WASM
 make test-js           # JavaScript
 make test-sv           # SystemVerilog（iverilogシミュレーション）
+
+# E2Eスイート
+make test-sanitize     # サニタイザ（--sanitize）
+make test-i18n         # メッセージi18n（英日出力）
+make test-lint         # linter機能テスト
 
 # 個別カテゴリ
 ./tests/unified_test_runner.sh -b jit -c basic

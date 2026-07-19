@@ -17,6 +17,7 @@ language: en          # メッセージ言語（en | ja、省略時はen）
 compile:
   optimization: 2     # -O未指定時の既定最適化レベル（0-3）
   target: native      # --target未指定時の既定ターゲット（native/sv/js等）
+  sanitize: bounds    # --sanitize未指定時の既定サニタイザ（カンマ区切り。[bounds, undefined] のリスト表記も可）
 
 lint:
   preset: recommended # ルールプリセット（minimal | recommended | strict）
@@ -58,6 +59,7 @@ compile:
 
 - `optimization` は0-3の整数のみ有効です。不正な値は無視され、組み込みデフォルト（-O3）が使われます
 - `target` は `--target=` と同じ値（native/wasm/js/web/sv/uefi等）を指定します
+- `sanitize` は `--sanitize=` と同じ値（address/thread/memory/bounds/undefined）をカンマ区切りで指定します。不正な値は警告して無視されます。詳細は[サニタイザ](sanitizer.html)を参照してください
 
 ## lintルール設定（lint）
 

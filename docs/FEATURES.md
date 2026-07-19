@@ -85,6 +85,7 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 | **cm lint** | ✅ | コード品質チェック、診断カタログ、`--strict` で宣言の命名規則チェック（L001） |
 | **cm fmt** | ✅ | コードフォーマッタ（`--check` 対応） |
 | **cm test / #[test]** | ✅ | 統一テスト属性とテストコマンド（SVシミュレーション/JIT実行の自動ディスパッチ。v0.16.0） |
+| **サニタイザ（--sanitize）** | ✅ | address/thread/memory（LLVM計装+ランタイム）・bounds（trap方式）・undefined（MIRレベルのゼロ除算/null参照検査、native/wasm/jit/js）。`.cmconfig.yml` の `compile: sanitize:` でも設定可（v0.16.2） |
 | **MIR最適化** | ✅ | SCCP、定数畳み込み・恒等式簡約、GVN、コピー伝播、DSE、DCE、CFG簡約、LICM、定数ループ展開（MIRインライン化は休眠中の既知の問題。native/JIT/WASMはLLVM側インライナが担当） |
 | **末尾呼び出し最適化** | ✅ | 再帰関数のスタック最適化 |
 | **無限ループ検出** | ✅ | コンパイル時の静的無限ループ解析 |

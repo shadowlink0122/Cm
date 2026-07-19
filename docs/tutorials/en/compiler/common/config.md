@@ -17,6 +17,7 @@ language: en          # Message language (en | ja; default: en)
 compile:
   optimization: 2     # Default optimization level when -O is not given (0-3)
   target: native      # Default target when --target is not given (native/sv/js, etc.)
+  sanitize: bounds    # Default sanitizers when --sanitize is not given (comma separated; the inline list form [bounds, undefined] also works)
 
 lint:
   preset: recommended # Rule preset (minimal | recommended | strict)
@@ -58,6 +59,7 @@ compile:
 
 - `optimization` accepts only integers 0-3. Invalid values are ignored and the built-in default (-O3) is used
 - `target` takes the same values as `--target=` (native/wasm/js/web/sv/uefi, etc.)
+- `sanitize` takes the same values as `--sanitize=` (address/thread/memory/bounds/undefined), comma separated. Invalid values are warned about and ignored. See [Sanitizers](sanitizer.html) for details
 
 ## Lint rule settings (lint)
 
