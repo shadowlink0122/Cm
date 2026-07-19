@@ -158,7 +158,7 @@ make tjp
 node output.js
 ```
 
-### v0.16.2 Test Results
+### v0.17.0 Test Results
 
 | Item | Value |
 |------|-------|
@@ -198,4 +198,4 @@ Structs are converted to JavaScript objects, and enums to tagged objects.
 ---
 
 <!-- nav -->
-← Prev: [Compiler - WASM Backend](../wasm/index.html) | [Contents](../index.html) | Next: [Compiler - SystemVerilog Backend](../sv/index.html) →
+← Prev: [Compiler - WASM Backend](../wasm/index.html) | [Contents](../index.html) | Next: [npm Package Interop](npm-interop.html) →

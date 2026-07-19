@@ -159,7 +159,7 @@ make tjp
 node output.js
 ```
 
-### v0.16.2 テスト結果
+### v0.17.0 テスト結果
 
 | 項目 | 値 |
 |------|-----|
@@ -199,4 +199,4 @@ main();
 ---
 
 <!-- nav -->
-← 前: [コンパイラ編 - WASMバックエンド](../wasm/index.html) ｜ [目次](../index.html) ｜ 次: [コンパイラ編 - SystemVerilogバックエンド](../sv/index.html) →
+← 前: [コンパイラ編 - WASMバックエンド](../wasm/index.html) ｜ [目次](../index.html) ｜ 次: [npmパッケージ連携](npm-interop.html) →

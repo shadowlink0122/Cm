@@ -7,10 +7,10 @@ has_children: true
 
 [日本語](../ja/)
 
-# Cm Language Tutorials v0.16.2
+# Cm Language Tutorials v0.17.0
 
-**Target Version:** v0.16.2  
-**Last Updated:** v0.16.2 (2026-07-16)
+**Target Version:** v0.17.0  
+**Last Updated:** v0.17.0 (2026-07-19)
 
 A comprehensive collection of tutorials to learn all features of the Cm language step-by-step.
 
@@ -128,11 +128,11 @@ Estimated Time: 3 hours
 
 **Total Tutorials:** 43 files  
 **Estimated Time:** 18-22 hours  
-**Target Version:** v0.16.2
+**Target Version:** v0.17.0
 
 ---
 
-**Last Updated:** v0.16.2 (2026-07-16)  
+**Last Updated:** v0.17.0 (2026-07-19)  
 **Author:** Cm Language Development Team
 
 
