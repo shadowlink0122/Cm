@@ -57,7 +57,7 @@ compile:
 
 ### 複雑ケースの網羅（malloc/free・move・ポインタ）
 
-実務的なメモリバグを検出できることを保証するため、E2Eへ以下を追加する（計44ケース）:
+実務的なメモリバグを検出できることを保証するため、E2Eへ以下を追加する（計46ケース）:
 
 - **ヒープ系（ASan）**: `use libc { malloc/free }` によるヒープ確保に対し、境界外書き込み（heap-buffer-overflow）・use-after-free・二重解放（double-free）が検出され、正常なmalloc/freeは偽陽性を出さないことを検証する。ASanランタイムが健全な環境でのみ実行時レポートを検証し、不健全環境では計装（`__asan_init`）のシンボル検証に留める
 - **ポインタ系（undefined）**: 正常なスタックポインタ読み書きの無影響、nullへのストア、null引数を関数へ渡し呼び出し先でderef、ゼロ剰余（`modulo by zero`）を検証する。native/jit/wasm/jsの各実行系で確認する

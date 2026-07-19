@@ -21,6 +21,8 @@ PASS=0
 FAIL=0
 SKIP=0
 
+# 前回実行の残骸による偽PASSを防ぐため作業ディレクトリは毎回作り直す
+rm -rf "$WORK"
 mkdir -p "$WORK"
 
 # タイムアウトコマンド（ASanランタイムがハングする環境向け）
@@ -67,6 +69,70 @@ expect_msg() {
     fi
 }
 
+# check_panic <名前> <コマンド...>（非0終了 + "runtime error:" を含むpanic出力を要求）
+check_panic() {
+    local name="$1"
+    shift
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -ne 0 ] && echo "$out" | grep -q "runtime error:"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+
+# check_panic_msg <名前> <panicメッセージに含むべき文字列> <コマンド...>
+check_panic_msg() {
+    local name="$1" needle="$2"
+    shift 2
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+
+# run_output <名前> <出力に含むべき文字列> <コマンド...>（正常終了 + 出力内容も検証し、ガード挿入による誤計算を検出する）
+run_output() {
+    local name="$1" needle="$2"
+    shift 2
+    local out code
+    out=$($TIMEOUT_CMD "$@" 2>&1)
+    code=$?
+    if [ "$code" -eq 0 ] && echo "$out" | grep -qF "$needle"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$out"
+    fi
+}
+
+# check_asan <名前> <ケースファイル> <ASanレポートに含むべき文字列>
+# 注意: localの1行複数代入で前の変数を参照するとbash 5.x（set -u）で未束縛エラーになるため行を分ける
+check_asan() {
+    local name="$1"
+    local case_file="$2"
+    local needle="$3"
+    local bin
+    bin="$WORK/asan_$(basename "$case_file" .cm)"
+    if ! $CM compile --sanitize=address -O0 "$case_file" -o "$bin" >/dev/null 2>&1; then
+        fail "$name" "compile failed"
+        return
+    fi
+    local out code
+    out=$($TIMEOUT_CMD "$bin" 2>&1)
+    code=$?
+    if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
+        pass "$name"
+    else
+        fail "$name" "exit=$code out=$(echo "$out" | head -3)"
+    fi
+}
+
 echo "=== Sanitizer E2E tests ==="
 
 # ---------- CLI検証 ----------
@@ -98,7 +164,7 @@ fi
 if $CM compile --sanitize=bounds -O0 "$CASES/oob/write.cm" -o "$WORK/oob_bounds" >/dev/null 2>&1; then
     run_expect "bounds/native: out-of-bounds write traps" trap "$WORK/oob_bounds"
 else
-    fail "bounds/native: compile oob_write.cm"
+    fail "bounds/native: compile oob/write.cm"
 fi
 
 # ---------- bounds: jit ----------
@@ -128,7 +194,7 @@ if $CM compile --sanitize=address -O0 "$CASES/oob/write.cm" -o "$WORK/oob_asan" 
         fail "address/native: __asan_init not found in binary"
     fi
 else
-    fail "address/native: compile oob_write.cm"
+    fail "address/native: compile oob/write.cm"
 fi
 if nm "$WORK/oob_bounds" 2>/dev/null | grep -q '__asan'; then
     fail "bounds/native: bounds binary must not link ASan"
@@ -152,21 +218,6 @@ if $CM compile --sanitize=address -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_asan" >/
         fi
 
         # ヒープ系（malloc/free）の検出と正常系の無影響
-        check_asan() {
-            local name="$1" case_file="$2" needle="$3" bin="$WORK/asan_$(basename "$case_file" .cm)"
-            if ! $CM compile --sanitize=address -O0 "$case_file" -o "$bin" >/dev/null 2>&1; then
-                fail "$name" "compile failed"
-                return
-            fi
-            local out code
-            out=$($TIMEOUT_CMD "$bin" 2>&1)
-            code=$?
-            if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
-                pass "$name"
-            else
-                fail "$name" "exit=$code out=$(echo "$out" | head -3)"
-            fi
-        }
         check_asan "address/native: heap buffer overflow is reported" "$CASES/heap/oob.cm" "heap-buffer-overflow"
         check_asan "address/native: use-after-free is reported" "$CASES/heap/use_after_free.cm" "heap-use-after-free"
         check_asan "address/native: double free is reported" "$CASES/heap/double_free.cm" "double-free"
@@ -193,18 +244,6 @@ if $CM compile --sanitize=undefined -O0 "$CASES/valid/ok.cm" -o "$WORK/ok_undef"
 else
     fail "undefined/native: compile ok.cm"
 fi
-check_panic() {
-    local name="$1"
-    shift
-    local out code
-    out=$($TIMEOUT_CMD "$@" 2>&1)
-    code=$?
-    if [ "$code" -ne 0 ] && echo "$out" | grep -q "runtime error:"; then
-        pass "$name"
-    else
-        fail "$name" "exit=$code out=$out"
-    fi
-}
 if $CM compile --sanitize=undefined -O0 "$CASES/zero/div.cm" -o "$WORK/dz_undef" >/dev/null 2>&1; then
     check_panic "undefined/native: division by zero panics" "$WORK/dz_undef"
 else
@@ -240,34 +279,6 @@ if command -v node >/dev/null 2>&1; then
 else
     skip "undefined/js: node not installed"
 fi
-
-# run_output <名前> <出力に含むべき文字列> <コマンド...>（正常終了 + 出力内容も検証し、ガード挿入による誤計算を検出する）
-run_output() {
-    local name="$1" needle="$2"
-    shift 2
-    local out code
-    out=$($TIMEOUT_CMD "$@" 2>&1)
-    code=$?
-    if [ "$code" -eq 0 ] && echo "$out" | grep -qF "$needle"; then
-        pass "$name"
-    else
-        fail "$name" "exit=$code out=$out"
-    fi
-}
-
-# check_panic_msg <名前> <panicメッセージに含むべき文字列> <コマンド...>
-check_panic_msg() {
-    local name="$1" needle="$2"
-    shift 2
-    local out code
-    out=$($TIMEOUT_CMD "$@" 2>&1)
-    code=$?
-    if [ "$code" -ne 0 ] && echo "$out" | grep -qF "$needle"; then
-        pass "$name"
-    else
-        fail "$name" "exit=$code out=$out"
-    fi
-}
 
 # ---------- undefined: ポインタ・剰余の複雑ケース ----------
 run_output "undefined: valid stack pointer has no false positive" "v=10 x=10" \
@@ -331,15 +342,15 @@ fi
 # ---------- .cmconfig.yml compile.sanitize ----------
 CFG_DIR="$WORK/cmconfig"
 mkdir -p "$CFG_DIR"
-cp "$CASES/oob/write.cm" "$CFG_DIR/"
+cp "$CASES/oob/write.cm" "$CFG_DIR/write.cm"
 printf 'compile:\n  sanitize: bounds\n' > "$CFG_DIR/.cmconfig.yml"
-if (cd "$CFG_DIR" && "$CM" compile -O0 oob_write.cm -o oob_cfg) >/dev/null 2>&1; then
+if (cd "$CFG_DIR" && "$CM" compile -O0 write.cm -o oob_cfg) >/dev/null 2>&1; then
     run_expect "cmconfig: compile.sanitize=bounds is applied" trap "$CFG_DIR/oob_cfg"
 else
     fail "cmconfig: compile with config"
 fi
 printf 'compile:\n  sanitize: nosuch\n' > "$CFG_DIR/.cmconfig.yml"
-cfg_out=$(cd "$CFG_DIR" && "$CM" compile -O0 oob_write.cm -o oob_cfg2 2>&1)
+cfg_out=$(cd "$CFG_DIR" && "$CM" compile -O0 write.cm -o oob_cfg2 2>&1)
 if [ $? -eq 0 ] && echo "$cfg_out" | grep -q 'invalid compile.sanitize'; then
     pass "cmconfig: invalid sanitize value warns and is ignored"
 else
