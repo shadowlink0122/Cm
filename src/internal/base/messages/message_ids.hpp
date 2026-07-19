@@ -1,8 +1,8 @@
 #pragma once
 
-// メッセージID・言語の列挙（本文は messages.hpp の table[メッセージ][言語] で管理）
-// メッセージ追加は、ここへIDを1つ追加し、messages.hpp の同じ位置へ {英語, 日本語} の行を追加する
-// （行の過不足はコンパイル時に検出される。言語追加は Lang と messages.hpp の列 + i18n.hpp の言語処理へ1つずつ）
+// メッセージID・言語の列挙（本文は messages.cpp の table[メッセージ][言語] で管理）
+// メッセージ追加は、ここへIDを1つ追加し、messages.cpp の同じ位置へ {英語, 日本語} の行を追加する
+// （行の過不足はコンパイル時に検出される。言語追加は Lang と messages.cpp の列 + i18n.hpp の言語処理へ1つずつ）
 
 #include <cstddef>
 

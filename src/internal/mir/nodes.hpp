@@ -67,51 +67,15 @@ struct PlaceProjection {
     hir::TypePtr result_type;   // 投影後の型
     hir::TypePtr pointee_type;  // Derefの場合のpointee type
 
-    // 既存の互換性のためのファクトリメソッド
-    static PlaceProjection field(FieldId id) {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Field;
-        p.field_id = id;
-        return p;
-    }
+    // 既存の互換性のためのファクトリメソッド（実装は nodes.cpp）
+    static PlaceProjection field(FieldId id);
+    static PlaceProjection index(LocalId local);
+    static PlaceProjection deref();
 
-    static PlaceProjection index(LocalId local) {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Index;
-        p.index_local = local;
-        return p;
-    }
-
-    static PlaceProjection deref() {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Deref;
-        return p;
-    }
-
-    // 型情報を持つ新しいファクトリメソッド
-    static PlaceProjection field(FieldId id, hir::TypePtr result_type) {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Field;
-        p.field_id = id;
-        p.result_type = result_type;
-        return p;
-    }
-
-    static PlaceProjection index(LocalId local, hir::TypePtr result_type) {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Index;
-        p.index_local = local;
-        p.result_type = result_type;
-        return p;
-    }
-
-    static PlaceProjection deref(hir::TypePtr result_type, hir::TypePtr pointee_type) {
-        PlaceProjection p;
-        p.kind = ProjectionKind::Deref;
-        p.result_type = result_type;
-        p.pointee_type = pointee_type;
-        return p;
-    }
+    // 型情報を持つ新しいファクトリメソッド（実装は nodes.cpp）
+    static PlaceProjection field(FieldId id, hir::TypePtr result_type);
+    static PlaceProjection index(LocalId local, hir::TypePtr result_type);
+    static PlaceProjection deref(hir::TypePtr result_type, hir::TypePtr pointee_type);
 };
 
 struct MirPlace {
@@ -124,21 +88,9 @@ struct MirPlace {
     MirPlace(LocalId l) : local(l) {}
     MirPlace(LocalId l, std::vector<PlaceProjection> p) : local(l), projections(std::move(p)) {}
 
-    // 型情報を持つコンストラクタ
-    MirPlace(LocalId l, hir::TypePtr t) : local(l), type(t) {
-        // ポインタ型の場合、pointee_typeを設定
-        if (t && t->kind == hir::TypeKind::Pointer) {
-            pointee_type = t->element_type;
-        }
-    }
-
-    MirPlace(LocalId l, std::vector<PlaceProjection> p, hir::TypePtr t)
-        : local(l), projections(std::move(p)), type(t) {
-        // ポインタ型の場合、pointee_typeを設定
-        if (t && t->kind == hir::TypeKind::Pointer) {
-            pointee_type = t->element_type;
-        }
-    }
+    // 型情報を持つコンストラクタ（ポインタ型なら pointee_type も設定する。実装は nodes.cpp）
+    MirPlace(LocalId l, hir::TypePtr t);
+    MirPlace(LocalId l, std::vector<PlaceProjection> p, hir::TypePtr t);
 };
 
 // ============================================================
@@ -167,55 +119,15 @@ struct MirOperand {
     // デフォルトコンストラクタ
     MirOperand() : kind(Constant), data(MirConstant{}) {}
 
-    // 既存の互換性のためのファクトリメソッド（型なし）
-    static MirOperandPtr move(MirPlace place) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = Move;
-        op->data = std::move(place);
-        return op;
-    }
+    // 既存の互換性のためのファクトリメソッド（型なし。実装は nodes.cpp）
+    static MirOperandPtr move(MirPlace place);
+    static MirOperandPtr copy(MirPlace place);
 
-    static MirOperandPtr copy(MirPlace place) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = Copy;
-        op->data = std::move(place);
-        return op;
-    }
-
-    // 型情報を持つ新しいファクトリメソッド
-    static MirOperandPtr move(MirPlace place, hir::TypePtr type) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = Move;
-        op->data = std::move(place);
-        op->type = type;
-        return op;
-    }
-
-    static MirOperandPtr copy(MirPlace place, hir::TypePtr type) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = Copy;
-        op->data = std::move(place);
-        op->type = type;
-        return op;
-    }
-
-    static MirOperandPtr constant(MirConstant c) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = Constant;
-        // Constantの場合、MirConstant自体に型情報があるので、それを使用。
-        // move後の c.type は nullptr になるため、move前に取得する
-        op->type = c.type;
-        op->data = std::move(c);
-        return op;
-    }
-
-    static MirOperandPtr function_ref(std::string func_name, hir::TypePtr type = nullptr) {
-        auto op = std::make_unique<MirOperand>();
-        op->kind = FunctionRef;
-        op->data = std::move(func_name);
-        op->type = type;
-        return op;
-    }
+    // 型情報を持つ新しいファクトリメソッド（実装は nodes.cpp）
+    static MirOperandPtr move(MirPlace place, hir::TypePtr type);
+    static MirOperandPtr copy(MirPlace place, hir::TypePtr type);
+    static MirOperandPtr constant(MirConstant c);
+    static MirOperandPtr function_ref(std::string func_name, hir::TypePtr type = nullptr);
 };
 
 // ============================================================
@@ -325,49 +237,15 @@ struct MirRvalue {
                  FormatConvertData>
         data;
 
-    static MirRvaluePtr use(MirOperandPtr op) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = Use;
-        rv->data = UseData{std::move(op)};
-        return rv;
-    }
-
+    // ファクトリメソッド（実装は nodes.cpp）
+    static MirRvaluePtr use(MirOperandPtr op);
     static MirRvaluePtr binary(MirBinaryOp op, MirOperandPtr lhs, MirOperandPtr rhs,
-                               hir::TypePtr result_type = nullptr) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = BinaryOp;
-        rv->data = BinaryOpData{op, std::move(lhs), std::move(rhs), std::move(result_type)};
-        return rv;
-    }
-
-    static MirRvaluePtr unary(MirUnaryOp op, MirOperandPtr operand) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = UnaryOp;
-        rv->data = UnaryOpData{op, std::move(operand)};
-        return rv;
-    }
-
-    static MirRvaluePtr format_convert(MirOperandPtr op, const std::string& format_spec) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = FormatConvert;
-        rv->data = FormatConvertData{std::move(op), format_spec};
-        return rv;
-    }
-
-    static MirRvaluePtr ref(MirPlace place, bool is_mutable) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = Ref;
-        rv->data = RefData{is_mutable ? BorrowKind::Mutable : BorrowKind::Shared, std::move(place)};
-        return rv;
-    }
-
+                               hir::TypePtr result_type = nullptr);
+    static MirRvaluePtr unary(MirUnaryOp op, MirOperandPtr operand);
+    static MirRvaluePtr format_convert(MirOperandPtr op, const std::string& format_spec);
+    static MirRvaluePtr ref(MirPlace place, bool is_mutable);
     static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type,
-                             bool check_only = false) {
-        auto rv = std::make_unique<MirRvalue>();
-        rv->kind = Cast;
-        rv->data = CastData{std::move(operand), target_type, check_only};
-        return rv;
-    }
+                             bool check_only = false);
 };
 
 // ============================================================
@@ -428,40 +306,15 @@ struct MirStatement {
                  AssignData, StorageData, AsmData>
         data;
 
-    static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {}) {
-        auto stmt = std::make_unique<MirStatement>();
-        stmt->kind = Assign;
-        stmt->span = s;
-        stmt->data = AssignData{std::move(place), std::move(rvalue)};
-        return stmt;
-    }
+    // ファクトリメソッド（実装は nodes.cpp）
+    static MirStatementPtr assign(MirPlace place, MirRvaluePtr rvalue, Span s = {});
+    static MirStatementPtr storage_live(LocalId local, Span s = {});
+    static MirStatementPtr storage_dead(LocalId local, Span s = {});
 
-    static MirStatementPtr storage_live(LocalId local, Span s = {}) {
-        auto stmt = std::make_unique<MirStatement>();
-        stmt->kind = StorageLive;
-        stmt->span = s;
-        stmt->data = StorageData{local};
-        return stmt;
-    }
-
-    static MirStatementPtr storage_dead(LocalId local, Span s = {}) {
-        auto stmt = std::make_unique<MirStatement>();
-        stmt->kind = StorageDead;
-        stmt->span = s;
-        stmt->data = StorageData{local};
-        return stmt;
-    }
-
-    // インラインアセンブリ用
+    // インラインアセンブリ用（実装は nodes.cpp）
     static MirStatementPtr asm_stmt(std::string code, bool is_must = true,
                                     std::vector<MirAsmOperand> operands = {},
-                                    std::vector<std::string> clobbers = {}, Span s = {}) {
-        auto stmt = std::make_unique<MirStatement>();
-        stmt->kind = Asm;
-        stmt->span = s;
-        stmt->data = AsmData{std::move(code), is_must, std::move(clobbers), std::move(operands)};
-        return stmt;
-    }
+                                    std::vector<std::string> clobbers = {}, Span s = {});
 };
 
 // ============================================================
@@ -515,37 +368,13 @@ struct MirTerminator {
                  GotoData, SwitchIntData, CallData>
         data;
 
-    static MirTerminatorPtr goto_block(BlockId target, Span s = {}) {
-        auto term = std::make_unique<MirTerminator>();
-        term->kind = Goto;
-        term->span = s;
-        term->data = GotoData{target};
-        return term;
-    }
-
-    static MirTerminatorPtr return_value(Span s = {}) {
-        auto term = std::make_unique<MirTerminator>();
-        term->kind = Return;
-        term->span = s;
-        return term;
-    }
-
-    static MirTerminatorPtr unreachable(Span s = {}) {
-        auto term = std::make_unique<MirTerminator>();
-        term->kind = Unreachable;
-        term->span = s;
-        return term;
-    }
-
+    // ファクトリメソッド（実装は nodes.cpp）
+    static MirTerminatorPtr goto_block(BlockId target, Span s = {});
+    static MirTerminatorPtr return_value(Span s = {});
+    static MirTerminatorPtr unreachable(Span s = {});
     static MirTerminatorPtr switch_int(MirOperandPtr discriminant,
                                        std::vector<std::pair<int64_t, BlockId>> targets,
-                                       BlockId otherwise, Span s = {}) {
-        auto term = std::make_unique<MirTerminator>();
-        term->kind = SwitchInt;
-        term->span = s;
-        term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise};
-        return term;
-    }
+                                       BlockId otherwise, Span s = {});
 };
 
 // ============================================================
@@ -565,10 +394,8 @@ struct BasicBlock {
 
     void add_statement(MirStatementPtr stmt) { statements.push_back(std::move(stmt)); }
 
-    void set_terminator(MirTerminatorPtr term) {
-        terminator = std::move(term);
-        update_successors();
-    }
+    // ターミネータを設定しsuccessorsを更新する（実装は nodes.cpp）
+    void set_terminator(MirTerminatorPtr term);
 
     // ターミネータからsuccessorsを再計算する（実装は nodes.cpp）
     void update_successors();
@@ -627,35 +454,16 @@ struct MirFunction {
     std::vector<BasicBlockPtr> basic_blocks;
     BlockId entry_block = ENTRY_BLOCK;
 
-    // ローカル変数の追加
+    // ローカル変数の追加（実装は nodes.cpp）
     LocalId add_local(std::string name, hir::TypePtr type, bool is_mutable = true,
-                      bool is_user = true, bool is_static = false, bool is_global = false) {
-        LocalId id = locals.size();
-        locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user, is_static,
-                            is_global);
-        return id;
-    }
+                      bool is_user = true, bool is_static = false, bool is_global = false);
 
-    // 基本ブロックの追加
-    BlockId add_block() {
-        BlockId id = basic_blocks.size();
-        basic_blocks.push_back(std::make_unique<BasicBlock>(id));
-        return id;
-    }
+    // 基本ブロックの追加（実装は nodes.cpp）
+    BlockId add_block();
 
-    BasicBlock* get_block(BlockId id) {
-        if (id < basic_blocks.size()) {
-            return basic_blocks[id].get();
-        }
-        return nullptr;
-    }
-
-    const BasicBlock* get_block(BlockId id) const {
-        if (id < basic_blocks.size()) {
-            return basic_blocks[id].get();
-        }
-        return nullptr;
-    }
+    // 基本ブロックの取得（範囲外は nullptr。実装は nodes.cpp）
+    BasicBlock* get_block(BlockId id);
+    const BasicBlock* get_block(BlockId id) const;
 
     // CFGの構築（predecessorの計算、実装は nodes.cpp）
     void build_cfg();
@@ -710,14 +518,8 @@ struct MirEnum {
     bool is_export = false;
     std::vector<MirEnumMember> members;
 
-    // Tagged Unionかどうか（dataを持つメンバーがあるか）
-    bool is_tagged_union() const {
-        for (const auto& m : members) {
-            if (m.has_data())
-                return true;
-        }
-        return false;
-    }
+    // Tagged Unionかどうか（dataを持つメンバーがあるか。実装は nodes.cpp）
+    bool is_tagged_union() const;
 
     // 最大ペイロードサイズを計算（Tagged Union用、実装は nodes.cpp）
     uint32_t max_payload_size() const;

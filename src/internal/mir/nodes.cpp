@@ -11,8 +11,253 @@
 namespace cm::mir {
 
 // ============================================================
+// PlaceProjection
+// ============================================================
+
+PlaceProjection PlaceProjection::field(FieldId id) {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Field;
+    p.field_id = id;
+    return p;
+}
+
+PlaceProjection PlaceProjection::index(LocalId local) {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Index;
+    p.index_local = local;
+    return p;
+}
+
+PlaceProjection PlaceProjection::deref() {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Deref;
+    return p;
+}
+
+PlaceProjection PlaceProjection::field(FieldId id, hir::TypePtr result_type) {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Field;
+    p.field_id = id;
+    p.result_type = result_type;
+    return p;
+}
+
+PlaceProjection PlaceProjection::index(LocalId local, hir::TypePtr result_type) {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Index;
+    p.index_local = local;
+    p.result_type = result_type;
+    return p;
+}
+
+PlaceProjection PlaceProjection::deref(hir::TypePtr result_type, hir::TypePtr pointee_type) {
+    PlaceProjection p;
+    p.kind = ProjectionKind::Deref;
+    p.result_type = result_type;
+    p.pointee_type = pointee_type;
+    return p;
+}
+
+// ============================================================
+// MirPlace
+// ============================================================
+
+MirPlace::MirPlace(LocalId l, hir::TypePtr t) : local(l), type(t) {
+    // ポインタ型の場合、pointee_typeを設定
+    if (t && t->kind == hir::TypeKind::Pointer) {
+        pointee_type = t->element_type;
+    }
+}
+
+MirPlace::MirPlace(LocalId l, std::vector<PlaceProjection> p, hir::TypePtr t)
+    : local(l), projections(std::move(p)), type(t) {
+    // ポインタ型の場合、pointee_typeを設定
+    if (t && t->kind == hir::TypeKind::Pointer) {
+        pointee_type = t->element_type;
+    }
+}
+
+// ============================================================
+// MirOperand
+// ============================================================
+
+MirOperandPtr MirOperand::move(MirPlace place) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = Move;
+    op->data = std::move(place);
+    return op;
+}
+
+MirOperandPtr MirOperand::copy(MirPlace place) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = Copy;
+    op->data = std::move(place);
+    return op;
+}
+
+MirOperandPtr MirOperand::move(MirPlace place, hir::TypePtr type) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = Move;
+    op->data = std::move(place);
+    op->type = type;
+    return op;
+}
+
+MirOperandPtr MirOperand::copy(MirPlace place, hir::TypePtr type) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = Copy;
+    op->data = std::move(place);
+    op->type = type;
+    return op;
+}
+
+MirOperandPtr MirOperand::constant(MirConstant c) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = Constant;
+    // Constantの場合、MirConstant自体に型情報があるので、それを使用。
+    // move後の c.type は nullptr になるため、move前に取得する
+    op->type = c.type;
+    op->data = std::move(c);
+    return op;
+}
+
+MirOperandPtr MirOperand::function_ref(std::string func_name, hir::TypePtr type) {
+    auto op = std::make_unique<MirOperand>();
+    op->kind = FunctionRef;
+    op->data = std::move(func_name);
+    op->type = type;
+    return op;
+}
+
+// ============================================================
+// MirRvalue
+// ============================================================
+
+MirRvaluePtr MirRvalue::use(MirOperandPtr op) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = Use;
+    rv->data = UseData{std::move(op)};
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::binary(MirBinaryOp op, MirOperandPtr lhs, MirOperandPtr rhs,
+                               hir::TypePtr result_type) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = BinaryOp;
+    rv->data = BinaryOpData{op, std::move(lhs), std::move(rhs), std::move(result_type)};
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::unary(MirUnaryOp op, MirOperandPtr operand) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = UnaryOp;
+    rv->data = UnaryOpData{op, std::move(operand)};
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::format_convert(MirOperandPtr op, const std::string& format_spec) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = FormatConvert;
+    rv->data = FormatConvertData{std::move(op), format_spec};
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::ref(MirPlace place, bool is_mutable) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = Ref;
+    rv->data = RefData{is_mutable ? BorrowKind::Mutable : BorrowKind::Shared, std::move(place)};
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::cast(MirOperandPtr operand, hir::TypePtr target_type, bool check_only) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = Cast;
+    rv->data = CastData{std::move(operand), target_type, check_only};
+    return rv;
+}
+
+// ============================================================
+// MirStatement
+// ============================================================
+
+MirStatementPtr MirStatement::assign(MirPlace place, MirRvaluePtr rvalue, Span s) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = Assign;
+    stmt->span = s;
+    stmt->data = AssignData{std::move(place), std::move(rvalue)};
+    return stmt;
+}
+
+MirStatementPtr MirStatement::storage_live(LocalId local, Span s) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = StorageLive;
+    stmt->span = s;
+    stmt->data = StorageData{local};
+    return stmt;
+}
+
+MirStatementPtr MirStatement::storage_dead(LocalId local, Span s) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = StorageDead;
+    stmt->span = s;
+    stmt->data = StorageData{local};
+    return stmt;
+}
+
+MirStatementPtr MirStatement::asm_stmt(std::string code, bool is_must,
+                                       std::vector<MirAsmOperand> operands,
+                                       std::vector<std::string> clobbers, Span s) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = Asm;
+    stmt->span = s;
+    stmt->data = AsmData{std::move(code), is_must, std::move(clobbers), std::move(operands)};
+    return stmt;
+}
+
+// ============================================================
+// MirTerminator
+// ============================================================
+
+MirTerminatorPtr MirTerminator::goto_block(BlockId target, Span s) {
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = Goto;
+    term->span = s;
+    term->data = GotoData{target};
+    return term;
+}
+
+MirTerminatorPtr MirTerminator::return_value(Span s) {
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = Return;
+    term->span = s;
+    return term;
+}
+
+MirTerminatorPtr MirTerminator::unreachable(Span s) {
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = Unreachable;
+    term->span = s;
+    return term;
+}
+
+MirTerminatorPtr MirTerminator::switch_int(MirOperandPtr discriminant,
+                                           std::vector<std::pair<int64_t, BlockId>> targets,
+                                           BlockId otherwise, Span s) {
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = SwitchInt;
+    term->span = s;
+    term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise};
+    return term;
+}
+
+// ============================================================
 // BasicBlock
 // ============================================================
+
+void BasicBlock::set_terminator(MirTerminatorPtr term) {
+    terminator = std::move(term);
+    update_successors();
+}
 
 void BasicBlock::update_successors() {
     successors.clear();
@@ -50,6 +295,34 @@ void BasicBlock::update_successors() {
 // MirFunction
 // ============================================================
 
+LocalId MirFunction::add_local(std::string name, hir::TypePtr type, bool is_mutable, bool is_user,
+                               bool is_static, bool is_global) {
+    LocalId id = locals.size();
+    locals.emplace_back(id, std::move(name), std::move(type), is_mutable, is_user, is_static,
+                        is_global);
+    return id;
+}
+
+BlockId MirFunction::add_block() {
+    BlockId id = basic_blocks.size();
+    basic_blocks.push_back(std::make_unique<BasicBlock>(id));
+    return id;
+}
+
+BasicBlock* MirFunction::get_block(BlockId id) {
+    if (id < basic_blocks.size()) {
+        return basic_blocks[id].get();
+    }
+    return nullptr;
+}
+
+const BasicBlock* MirFunction::get_block(BlockId id) const {
+    if (id < basic_blocks.size()) {
+        return basic_blocks[id].get();
+    }
+    return nullptr;
+}
+
 void MirFunction::build_cfg() {
     // まずすべてのpredecessorをクリア
     for (auto& block : basic_blocks) {
@@ -75,6 +348,14 @@ void MirFunction::build_cfg() {
 // ============================================================
 // MirEnum
 // ============================================================
+
+bool MirEnum::is_tagged_union() const {
+    for (const auto& m : members) {
+        if (m.has_data())
+            return true;
+    }
+    return false;
+}
 
 uint32_t MirEnum::max_payload_size() const {
     uint32_t maxSize = 0;

@@ -240,6 +240,14 @@ set(CM_LEXER_SOURCES
     src/internal/syntax/lexer/token.cpp
     src/internal/syntax/lexer/lexer.cpp
 )
+# AST型ノード（型ヘルパー・型文字列化の実装）
+set(CM_AST_SOURCES
+    src/internal/syntax/ast/types.cpp
+)
+# メッセージi18nカタログ本文テーブル（i18n::msg/msgf を使うターゲットは必ずリンクする）
+set(CM_I18N_SOURCES
+    src/internal/base/messages/messages.cpp
+)
 set(CM_PARSER_SOURCES
     src/internal/syntax/parser/parser_stmt.cpp
     src/internal/syntax/parser/parser_expr.cpp
@@ -268,6 +276,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/auto_impl_debug.cpp
     src/internal/mir/lowering/impl.cpp
     src/internal/mir/lowering/monomorphization_impl.cpp
+    src/internal/mir/lowering/mono_internal.cpp
     src/internal/mir/lowering/mono_structs.cpp
     src/internal/mir/lowering/monomorphization_utils.cpp
     # src/internal/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
@@ -315,7 +324,9 @@ set(CM_SOURCES
     src/cmd/cm/backend/js.cpp
     src/cmd/cm/backend/llvm.cpp
     ${CM_LEXER_SOURCES}
+    ${CM_AST_SOURCES}
     ${CM_PARSER_SOURCES}
+    ${CM_I18N_SOURCES}
     # Type checking (分割済み)
     src/cmd/cm/options.cpp
     src/internal/types/scope.cpp
@@ -680,8 +691,10 @@ if(BUILD_TESTING)
         add_executable(hir_lowering_test
             tests/regression/hir_lowering_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(hir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_compile_definitions(hir_lowering_test PRIVATE
@@ -695,9 +708,11 @@ if(BUILD_TESTING)
         add_executable(mir_lowering_test
             tests/regression/mir_lowering_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(mir_lowering_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_compile_definitions(mir_lowering_test PRIVATE
@@ -711,9 +726,11 @@ if(BUILD_TESTING)
         add_executable(mir_optimization_test
             tests/regression/mir_optimization_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(mir_optimization_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_compile_definitions(mir_optimization_test PRIVATE
@@ -726,9 +743,11 @@ if(BUILD_TESTING)
         add_executable(sv_codegen_test
             tests/regression/sv_codegen_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
+            ${CM_I18N_SOURCES}
             src/internal/codegen/buffered_codegen.cpp
             src/internal/codegen/sv/codegen.cpp
             src/internal/codegen/sv/analyze.cpp
@@ -751,6 +770,7 @@ if(BUILD_TESTING)
         add_executable(formatter_test
             tests/regression/formatter_test.cpp
             src/internal/fmt/formatter.cpp
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(formatter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_compile_definitions(formatter_test PRIVATE
@@ -772,6 +792,7 @@ if(BUILD_TESTING)
         # Unit tests - メッセージi18nカタログ（en/ja切替・フォールバック）
         add_executable(i18n_test
             tests/unit/i18n_test.cpp
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(i18n_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(i18n_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
@@ -792,6 +813,7 @@ if(BUILD_TESTING)
         # フロントエンド・lowering非依存のため、パス実装+ノード+解析のみをリンクする）
         set(CM_MIR_PASS_SOURCES
             src/internal/mir/nodes.cpp
+            ${CM_AST_SOURCES}
             src/internal/mir/analysis/dominators.cpp
             src/internal/mir/analysis/loop_analysis.cpp
             src/internal/mir/passes/core/base.cpp
