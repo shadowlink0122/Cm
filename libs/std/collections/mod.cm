@@ -1,7 +1,8 @@
 // std::collections - コレクション型
-// v0.13.0: Vector, HashMap, Queue
+// Vector, HashMap, Queue, TreeMap（平衡二分探索木・O(log n)）
 module std.collections;
 
 export import std.collections.vector;
 export import std.collections.hashmap;
 export import std.collections.queue;
+export import std.collections.treemap;

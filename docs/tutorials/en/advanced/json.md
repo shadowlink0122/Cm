@@ -69,4 +69,4 @@ The arena holds up to 1024 nodes by default (one node per JSON value). Exceeding
 ---
 
 <!-- nav -->
-← Prev: [Advanced - Testing](testing.html) | [Contents](../index.html) | Next: [Types](../types/index.html) →
+← Prev: [Advanced - Testing](testing.html) | [Contents](../index.html) | Next: [Advanced - TreeMap](treemap.html) →

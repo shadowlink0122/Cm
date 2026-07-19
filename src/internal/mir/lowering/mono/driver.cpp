@@ -53,11 +53,12 @@ void Monomorphization::monomorphize(
         debug_msg("MONO", "Generic func in set: " + gf);
     }
 
-    // 効率的なモノモーフィゼーション（最大2パス）
-    // 1パス目: 全関数をスキャン
-    // 2パス目: 1パス目で新規生成された特殊化関数のみスキャン（ネストジェネリクス対応）
+    // モノモーフィゼーションを不動点まで反復する。
+    // 1パス目: 全関数をスキャン。以降のパス: 直前に新規生成された特殊化関数のみスキャンし、
+    // その本体から芋づる式に必要になる特殊化を生成する（メソッドチェーン A->B->C... の深さに依らず全て生成）。
+    // 新規特殊化が無くなれば下の new_needed.empty() で抜ける。上限は暴走防止の安全弁（実コードのネスト深度を大きく超える）。
     std::unordered_set<std::string> all_generated;
-    const int MAX_PASSES = 2;
+    const int MAX_PASSES = 64;
 
     for (int pass = 0; pass < MAX_PASSES; ++pass) {
         std::map<std::pair<std::string, std::vector<std::string>>,

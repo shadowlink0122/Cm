@@ -1,0 +1,190 @@
+// std::collections::treemap - ジェネリックな平衡二分探索木マップ（AVL木）
+//
+// キーの順序（<）で要素を平衡木に保持し、探索・挿入を O(log n) で行う（線形探索の連想配列より効率的）。
+// 木は「固定容量アリーナ＋インデックス」で表現し、ポインタもmallocも使わないため
+// 全バックエンド（jit/native/wasm/js/ts）で同じ動作をする。挿入ごとにAVL回転で高さを平衡に保つ。
+//
+// 制約:
+//   - キー型 K は順序比較が必要（< と ==）。int/string等は組み込み、構造体は `with Ord, Eq` を付ける。
+//     順序を持たない型はキーにできない（その用途はハッシュマップ向き）。値型 V は任意。
+//   - 容量は固定（下記 CAP）。要素数がこれを超える put は無視される（is_full で確認可能）。
+//     容量を上げるとLLVM（native）のローカル集約が大きくなりコンパイルが重くなるトレードオフがある。
+//
+// 使用例:
+//   import std::collections::treemap::*;
+//   TreeMap<string, int> m();
+//   m.put("apple", 1); m.put("banana", 2);
+//   if (m.contains("apple")) { println(m.get("apple")); }  // 1
+
+module std.collections.treemap;
+
+// アリーナ容量（固定）。要素数の上限。コンパイル時定数。
+// 注: nativeバックエンドでは容量に比例してAOT最適化（-O2/-O3）のコンパイル時間が増える
+// （インライン配列をSROAが要素展開するため）。jit/js/ts にはこのコストは無い。大きなマップが
+// 必要なら値を増やす（nativeのコンパイル時間とトレードオフ、または jit/js/ts を使う）。
+const int CAP = 128;
+
+// ジェネリック平衡二分探索木マップ。
+// ノードはパラレル配列（keys/vals/left/right/height）＋インデックスで表す。
+export struct TreeMap<K, V> {
+    K[128] keys;       // ノードのキー
+    V[128] vals;       // ノードの値
+    int[128] left;     // 左の子のindex（-1で無し）
+    int[128] right;    // 右の子のindex（-1で無し）
+    int[128] height;   // 部分木の高さ（AVL平衡用）
+    int count;         // 確保済みノード数
+    int root;          // 根のindex（-1で空）
+}
+
+export impl<K, V> TreeMap<K, V> {
+    // 空のマップを作る。
+    self() {
+        self.count = 0;
+        self.root = -1;
+    }
+
+    // ---- 内部ヘルパ ----
+
+    // ノードの高さ（無しは0）。
+    int node_height(int node) {
+        if (node < 0) {
+            return 0;
+        }
+        return self.height[node];
+    }
+
+    // ノードの高さを子から再計算する。
+    void update_height(int node) {
+        int hl = self.node_height(self.left[node]);
+        int hr = self.node_height(self.right[node]);
+        int m = hl;
+        if (hr > hl) {
+            m = hr;
+        }
+        self.height[node] = m + 1;
+    }
+
+    // 平衡係数（左の高さ - 右の高さ）。
+    int balance_factor(int node) {
+        return self.node_height(self.left[node]) - self.node_height(self.right[node]);
+    }
+
+    // 右回転して新しい部分木の根indexを返す。
+    int rotate_right(int y) {
+        int x = self.left[y];
+        self.left[y] = self.right[x];
+        self.right[x] = y;
+        self.update_height(y);
+        self.update_height(x);
+        return x;
+    }
+
+    // 左回転して新しい部分木の根indexを返す。
+    int rotate_left(int x) {
+        int y = self.right[x];
+        self.right[x] = self.left[y];
+        self.left[y] = x;
+        self.update_height(x);
+        self.update_height(y);
+        return y;
+    }
+
+    // 新しいノードを確保してindexを返す。
+    int alloc_node(K k, V v) {
+        int idx = self.count;
+        self.keys[idx] = k;
+        self.vals[idx] = v;
+        self.left[idx] = -1;
+        self.right[idx] = -1;
+        self.height[idx] = 1;
+        self.count = self.count + 1;
+        return idx;
+    }
+
+    // node を根とする部分木へ (k, v) を挿入し、平衡化後の新しい根indexを返す。
+    int insert_at(int node, K k, V v) {
+        if (node < 0) {
+            return self.alloc_node(k, v);
+        }
+        if (k < self.keys[node]) {
+            self.left[node] = self.insert_at(self.left[node], k, v);
+        } else if (self.keys[node] < k) {
+            self.right[node] = self.insert_at(self.right[node], k, v);
+        } else {
+            // 既存キーは値を更新
+            self.vals[node] = v;
+            return node;
+        }
+
+        self.update_height(node);
+        int b = self.balance_factor(node);
+
+        // 左に偏り（Left-Left / Left-Right）
+        if (b > 1) {
+            if (k < self.keys[self.left[node]]) {
+                return self.rotate_right(node);
+            }
+            self.left[node] = self.rotate_left(self.left[node]);
+            return self.rotate_right(node);
+        }
+        // 右に偏り（Right-Right / Right-Left）
+        if (b < -1) {
+            if (self.keys[self.right[node]] < k) {
+                return self.rotate_left(node);
+            }
+            self.right[node] = self.rotate_right(self.right[node]);
+            return self.rotate_left(node);
+        }
+        return node;
+    }
+
+    // キーに対応するノードindexを返す（無ければ -1）。O(log n)。
+    int find_index(K k) {
+        int cur = self.root;
+        while (cur >= 0) {
+            if (k == self.keys[cur]) {
+                return cur;
+            }
+            if (k < self.keys[cur]) {
+                cur = self.left[cur];
+            } else {
+                cur = self.right[cur];
+            }
+        }
+        return -1;
+    }
+
+    // ---- 公開API ----
+
+    // 容量に達しているか。
+    bool is_full() {
+        return self.count >= CAP;
+    }
+
+    // (key, val) を挿入する。既存キーなら値を更新。容量超過時は何もしない。O(log n)。
+    void put(K key, V val) {
+        if (self.is_full() && self.find_index(key) < 0) {
+            return;
+        }
+        self.root = self.insert_at(self.root, key, val);
+    }
+
+    // キーが存在するか。O(log n)。
+    bool contains(K key) {
+        return self.find_index(key) >= 0;
+    }
+
+    // キーに対応する値を返す。存在しないキーの戻り値は未規定なので、事前に contains で確認すること。O(log n)。
+    V get(K key) {
+        int idx = self.find_index(key);
+        if (idx < 0) {
+            idx = 0;
+        }
+        return self.vals[idx];
+    }
+
+    // 保持している要素数。
+    int size() {
+        return self.count;
+    }
+}

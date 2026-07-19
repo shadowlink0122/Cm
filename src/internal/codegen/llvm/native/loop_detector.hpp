@@ -17,9 +17,9 @@ namespace cm::codegen::llvm_backend {
 
 // 無限ループ検出定数
 namespace loop_detector_limits {
-constexpr size_t MAX_COMPLEXITY_SCORE = 100000;
-constexpr size_t MAX_INSTRUCTION_COUNT = 10000;
-constexpr size_t HUGE_FUNCTION_LIMIT = 5;
+constexpr size_t MAX_COMPLEXITY_SCORE = 2000000;
+constexpr size_t MAX_INSTRUCTION_COUNT = 100000;
+constexpr size_t HUGE_FUNCTION_LIMIT = 32;
 }  // namespace loop_detector_limits
 
 // 無限ループ検出クラス

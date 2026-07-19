@@ -32,6 +32,7 @@ Cm言語の強力な高度機能を学ぶチュートリアル集です。推定
 | [マクロ](macros.html) | 🟡 中級 | 条件付きコンパイル |
 | [テスト](testing.html) | 🟢 初級 | `#[test]`・`cm test`・ライブラリのテスト |
 | [JSON](json.html) | 🟡 中級 | `std::json` でのパースと直列化 |
+| [TreeMap](treemap.html) | 🟡 中級 | 順序付きマップ（平衡BST・O(log n)） |
 | [スレッド](thread.html) | 🔴 上級 | 並行処理 |
 
 ---

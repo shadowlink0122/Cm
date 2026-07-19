@@ -69,4 +69,4 @@ println(json_stringify(root));   // {"a":[1,2],"b":"x"}
 ---
 
 <!-- nav -->
-← 前: [応用編 - テスト](testing.html) ｜ [目次](../index.html) ｜ 次: [型システム編](../types/index.html) →
+← 前: [応用編 - テスト](testing.html) ｜ [目次](../index.html) ｜ 次: [応用編 - TreeMap](treemap.html) →

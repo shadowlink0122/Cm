@@ -54,11 +54,10 @@ size_t InfiniteLoopDetector::analyzeFunction(llvm::Function& F) {
         complexity += bb_complexity;
     }
 
-    size_t loop_depth = estimateMaxLoopDepth(F);
-    if (loop_depth > 0) {
-        complexity *= (1 + loop_depth);
-    }
-
+    // 注: 以前はループ深度で複雑度を乗算していたが、ループの実行回数はコード生成のコストとは無関係
+    // （コード生成コストは静的な命令数にほぼ比例する）。この乗算は estimateMaxLoopDepth の
+    // PHI数ヒューリスティックと相まって、多数の関数を持つ正当なコード（ジェネリック展開等）で
+    // 複雑度を過大評価し誤検出していたため撤去。真の暴走はコード生成の30秒タイムアウトで捕捉する。
     return complexity;
 }
 

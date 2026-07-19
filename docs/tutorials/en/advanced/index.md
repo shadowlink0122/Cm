@@ -31,6 +31,7 @@ Tutorials covering Cm's powerful advanced features. Estimated time: 5-6 hours.
 | [Macros](macros.html) | 🟡 Intermediate | Conditional compilation |
 | [Testing](testing.html) | 🟢 Beginner | `#[test]`, `cm test`, library tests |
 | [JSON](json.html) | 🟡 Intermediate | Parsing and serializing with `std::json` |
+| [TreeMap](treemap.html) | 🟡 Intermediate | Ordered map (balanced BST, O(log n)) |
 
 ---
 
