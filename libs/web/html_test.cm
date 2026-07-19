@@ -1,0 +1,62 @@
+// web::html の単体テスト（テスト対象と同じディレクトリに置く）。
+// #[test] 属性の付いた関数を `cm test` が実行する。ランナーは tests/libs/run.sh。
+
+import std::debug::assert;
+import web::html::*;
+
+#[test]
+void renders_simple_element() {
+    string got = div().render();
+    assert(got == "<div></div>", "empty div");
+}
+
+#[test]
+void renders_attributes_in_order() {
+    string got = div().id("main").class("card").render();
+    assert(got == "<div id=\"main\" class=\"card\"></div>", "id then class");
+}
+
+#[test]
+void escapes_text() {
+    string got = span().add(text("a<b>&\"c")).render();
+    assert(got == "<span>a&lt;b&gt;&amp;\"c</span>", "text escaping");
+}
+
+#[test]
+void escapes_attribute_values() {
+    string got = div().set("data-x", "a\"b&c").render();
+    assert(got == "<div data-x=\"a&quot;b&amp;c\"></div>", "attr escaping");
+}
+
+#[test]
+void nests_children() {
+    string got = ul().add(li().add(text("one"))).add(li().add(text("two"))).render();
+    assert(got == "<ul><li>one</li><li>two</li></ul>", "nested list");
+}
+
+#[test]
+void void_elements_have_no_close_tag() {
+    string got = meta().set("charset", "utf-8").render();
+    assert(got == "<meta charset=\"utf-8\">", "void element");
+}
+
+#[test]
+void raw_is_not_escaped() {
+    string got = div().add(raw("<b>bold</b>")).render();
+    assert(got == "<div><b>bold</b></div>", "raw html");
+}
+
+#[test]
+void document_prepends_doctype() {
+    string got = document(html_doc().add(body()));
+    assert(got == "<!doctype html><html><body></body></html>", "document doctype");
+}
+
+#[test]
+void builder_is_pure_no_mutation() {
+    // set/add はselfを変更せず新しいHtmlを返す。元のノードは空のまま。
+    Html base = div();
+    Html withId = base.id("x");
+    assert(base.render() == "<div></div>", "base unchanged");
+    assert(withId.render() == "<div id=\"x\"></div>", "derived has id");
+}

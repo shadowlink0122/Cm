@@ -38,6 +38,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_uint_to_string",
         "cm_double_to_string",
         "cm_bool_to_string",
+        "cm_char_to_string",
         "cm_format_int",
         "cm_format_long",
         "cm_format_ulong",
@@ -268,6 +269,11 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "(" + argStrs[0] + " ? \"true\" : \"false\")";
     }
     if (name == "cm_format_char" && argStrs.size() >= 1) {
+        return "String.fromCharCode(" + argStrs[0] + ")";
+    }
+    // char を string へ変換する組み込み（string + char の連結でloweringが挿入する）。
+    // JSではcharは数値表現なので文字コードから文字列を作る。定義しないと未定義参照で落ちる
+    if (name == "cm_char_to_string" && argStrs.size() >= 1) {
         return "String.fromCharCode(" + argStrs[0] + ")";
     }
 

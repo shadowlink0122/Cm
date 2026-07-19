@@ -354,7 +354,12 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
     }
 
     // 関数参照の場合（関数ポインタ用）
-    if (var.is_function_ref) {
+    // ただし同名のローカル変数・引数があればそれを優先する（シャドーイング）。
+    // HIR lowering はローカルスコープを持たず func_defs_ の有無だけで is_function_ref を立てるため、
+    // 引数 title が import した title() 関数と同名だと関数参照とみなされてしまう。
+    // ここでスコープを先に引き、ローカルが見つかれば関数参照ではなく変数読み出しへ倒す
+    // （倒さないと native/jit で関数ポインタが値として渡り不正な結果になる。js/tsはJSのスコープで偶然正しくなる）
+    if (var.is_function_ref && !ctx.resolve_variable(var.name)) {
         // 式の型（関数ポインタ型）を使用
         hir::TypePtr func_ptr_type =
             expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});

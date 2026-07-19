@@ -36,6 +36,18 @@ bool is_sized_literal_quote(const std::string& s, size_t i) {
     return std::isalnum(static_cast<unsigned char>(s[i + 2])) != 0;
 }
 
+// s[i] の直前に連続するバックスラッシュ数が奇数なら s[i] はエスケープされている。
+// 単純な s[i-1] == '\\' 判定では '\\'（エスケープされたバックスラッシュ）の後ろの引用符を
+// 誤ってエスケープ扱いし、in_char/in_string が閉じずに括弧カウントが狂う。
+inline bool is_escaped_char(const std::string& s, size_t i) {
+    size_t backslashes = 0;
+    while (i > 0 && s[i - 1] == '\\') {
+        backslashes++;
+        i--;
+    }
+    return (backslashes % 2) == 1;
+}
+
 // 1行に詰め込まれた文ブロック（{ 文; 文; }）の展開位置（wrap_long_linesの補助）
 struct BlockExpansionStart {
     size_t pos;  // 新しい行の開始位置（行内絶対位置）
@@ -413,9 +425,9 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                         continue;
 
                     char prev = (i > 0) ? content[i - 1] : 0;
-                    if (!in_char && c == '"' && prev != '\\')
+                    if (!in_char && c == '"' && !is_escaped_char(content, i))
                         in_string = !in_string;
-                    if (!in_string && c == '\'' && prev != '\\' &&
+                    if (!in_string && c == '\'' && !is_escaped_char(content, i) &&
                         !is_sized_literal_quote(content, i))
                         in_char = !in_char;
                     if (!in_string && !in_char) {
@@ -567,11 +579,11 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             }
 
             // 文字列リテラル
-            if (!in_char && !in_comment && c == '"' && prev != '\\') {
+            if (!in_char && !in_comment && c == '"' && !is_escaped_char(content, i)) {
                 in_string = !in_string;
             }
             // 文字リテラル（SV幅付きリテラルの ' は除外）
-            if (!in_string && !in_comment && c == '\'' && prev != '\\' &&
+            if (!in_string && !in_comment && c == '\'' && !is_escaped_char(content, i) &&
                 !is_sized_literal_quote(content, i)) {
                 in_char = !in_char;
             }
@@ -644,12 +656,12 @@ std::string Formatter::normalize_operator_spacing(const std::string& code, size_
 
         // 文字列リテラルの検出
         if (!in_line_comment && !in_block_comment && !in_char && !in_backtick && c == '"' &&
-            prev_char != '\\') {
+            !is_escaped_char(code, i)) {
             in_string = !in_string;
         }
         // 文字リテラルの検出（SV幅付きリテラルの ' は除外）
         if (!in_line_comment && !in_block_comment && !in_string && !in_backtick && c == '\'' &&
-            prev_char != '\\' && !is_sized_literal_quote(code, i)) {
+            !is_escaped_char(code, i) && !is_sized_literal_quote(code, i)) {
             in_char = !in_char;
         }
         // 行コメントの検出
@@ -737,12 +749,12 @@ std::string Formatter::enforce_semicolon_newline(const std::string& code, size_t
         }
 
         // 文字列リテラルの検出（変数埋め込み{...}内も考慮）
-        if (!in_line_comment && !in_char && !in_backtick && c == '"' && prev_char != '\\') {
+        if (!in_line_comment && !in_char && !in_backtick && c == '"' && !is_escaped_char(code, i)) {
             in_string = !in_string;
         }
         // 文字リテラルの検出（SV幅付きリテラルの ' は除外）
-        if (!in_line_comment && !in_string && !in_backtick && c == '\'' && prev_char != '\\' &&
-            !is_sized_literal_quote(code, i)) {
+        if (!in_line_comment && !in_string && !in_backtick && c == '\'' &&
+            !is_escaped_char(code, i) && !is_sized_literal_quote(code, i)) {
             in_char = !in_char;
         }
         // 行コメントの検出
@@ -876,10 +888,11 @@ std::string Formatter::align_inline_comments(const std::string& code, size_t& ch
             char c = line[j];
             char prev = (j > 0) ? line[j - 1] : 0;
 
-            if (!in_char && c == '"' && prev != '\\') {
+            if (!in_char && c == '"' && !is_escaped_char(line, j)) {
                 in_string = !in_string;
             }
-            if (!in_string && c == '\'' && prev != '\\' && !is_sized_literal_quote(line, j)) {
+            if (!in_string && c == '\'' && !is_escaped_char(line, j) &&
+                !is_sized_literal_quote(line, j)) {
                 in_char = !in_char;
             }
 

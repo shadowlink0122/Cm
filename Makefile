@@ -501,6 +501,13 @@ test-i18n:
 	@echo "Running i18n / error message E2E tests..."
 	@tests/i18n/run_tests.sh
 
+# libs 自体の単体テスト（libs/**/*_test.cm の #[test] 関数を cm test で実行）
+.PHONY: test-libs
+test-libs:
+	@echo "Running libs unit tests..."
+	@chmod +x tests/libs/run.sh
+	@tests/libs/run.sh
+
 # サニタイザ（--sanitize）のE2Eテスト（native/wasm/jit）
 .PHONY: test-sanitize
 test-sanitize:
@@ -517,7 +524,7 @@ test-ts:
 
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n test-sanitize test-ts
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-libs test-i18n test-sanitize test-ts
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"

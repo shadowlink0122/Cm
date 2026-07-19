@@ -1,0 +1,75 @@
+// std::json の単体テスト（テスト対象と同じディレクトリに置く）。
+// #[test] 属性の付いた関数を `cm test` が実行する。ランナーは tests/libs/run.sh。
+
+import std::debug::assert;
+import std::json::*;
+
+#[test]
+void parses_scalars() {
+    int t = json_parse("true");
+    assert(t >= 0, "true parses");
+    assert(json_kind(t) == JsonKind::Bool, "true is bool");
+    assert(json_bool(t), "true value");
+
+    int n = json_parse("null");
+    assert(json_is_null(n), "null value");
+
+    int num = json_parse("-12.5");
+    assert(json_kind(num) == JsonKind::Number, "number kind");
+    assert(json_number(num) == -12.5, "number value");
+
+    int s = json_parse("\"hi\\nthere\"");
+    assert(json_string(s) == "hi\nthere", "string with escape");
+}
+
+#[test]
+void parses_array() {
+    int a = json_parse("[10, 20, 30]");
+    assert(json_kind(a) == JsonKind::Array, "array kind");
+    assert(json_array_len(a) == 3, "array length");
+    assert(json_int(json_array_get(a, 0)) == 10, "elem 0");
+    assert(json_int(json_array_get(a, 2)) == 30, "elem 2");
+    assert(json_array_get(a, 3) < 0, "out of range");
+}
+
+#[test]
+void parses_object() {
+    int o = json_parse("{\"name\":\"Cm\",\"age\":3}");
+    assert(json_kind(o) == JsonKind::Object, "object kind");
+    assert(json_object_has(o, "name"), "has name");
+    assert(json_string(json_object_get(o, "name")) == "Cm", "name value");
+    assert(json_int(json_object_get(o, "age")) == 3, "age value");
+    assert(json_object_get(o, "missing") < 0, "missing key");
+}
+
+#[test]
+void parses_nested() {
+    int root = json_parse("{\"items\":[{\"id\":1},{\"id\":2}],\"ok\":true}");
+    int items = json_object_get(root, "items");
+    assert(json_array_len(items) == 2, "two items");
+    int first = json_array_get(items, 0);
+    assert(json_int(json_object_get(first, "id")) == 1, "first id");
+    int second = json_array_get(items, 1);
+    assert(json_int(json_object_get(second, "id")) == 2, "second id");
+    assert(json_bool(json_object_get(root, "ok")), "ok flag");
+}
+
+#[test]
+void reports_error_on_malformed() {
+    assert(json_parse("{bad") < 0, "unterminated object");
+    assert(json_parse("[1,2") < 0, "unterminated array");
+    assert(json_parse("nul") < 0, "bad literal");
+}
+
+#[test]
+void stringify_roundtrips() {
+    string input = "{\"a\":[1,2],\"b\":\"x\",\"c\":true,\"d\":null}";
+    int root = json_parse(input);
+    assert(json_stringify(root) == input, "stringify roundtrip");
+}
+
+#[test]
+void ignores_surrounding_whitespace() {
+    int a = json_parse("  [ 1 , 2 ]  ");
+    assert(json_array_len(a) == 2, "whitespace tolerant");
+}

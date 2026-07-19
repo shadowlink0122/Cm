@@ -1,0 +1,529 @@
+// std::json - 純粋なCmで書いたJSONパーサ／シリアライザ
+//
+// 再帰的なJSONツリーを、固定容量のアリーナ（ノード配列＋インデックス）で表現する。
+// 再帰的なデータ型やポインタを使わないため、全バックエンド（jit/native/wasm/js/ts）で同じ動作をする。
+// パーサ本体は再帰下降だが、状態はモジュールグローバルに置く（1度に1つのパースを扱う）。
+//
+// 使用例:
+//   import std::json::*;
+//   int root = json_parse("{\"name\":\"Cm\",\"nums\":[1,2,3],\"ok\":true}");
+//   int name = json_object_get(root, "name");
+//   println(json_string(name));            // Cm
+//   int nums = json_object_get(root, "nums");
+//   println(json_array_len(nums));         // 3
+//   println(json_stringify(root));
+
+module std.json;
+
+// JSON値の種別。
+export enum JsonKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object
+}
+
+// アリーナ上の1ノード。子は first_child → next_sibling の連結リストで辿る。
+export struct JsonNode {
+    JsonKind kind;
+    bool bool_val;     // Boolのとき有効
+    double num_val;    // Numberのとき有効
+    string str_val;    // Stringのとき有効
+    string key;        // 親がObjectのとき、このノードのキー
+    int first_child;   // 最初の子ノードのindex（-1で無し）
+    int next_sibling;  // 次の兄弟ノードのindex（-1で無し）
+}
+
+// アリーナ（ノードの入れ物）。容量は固定。
+// 容量を大きくするとLLVM（native/jit）バックエンドで巨大なグローバル集約の最適化・コード生成コストが
+// 急増し、複雑度ガードに達するかコンパイルが極端に遅くなる。全バックエンドが既定の最適化設定で扱える
+// 上限として48にしてある（js/tsは制約が無いので用途に応じ拡張可）。JSON値の総数がこの上限を超えると
+// json_parse は -1（エラー）を返す。
+struct JsonArena {
+    JsonNode[48] nodes;
+    int count;
+}
+
+// パーサ状態（モジュールグローバル）。
+JsonArena arena = { count: 0 };
+string src = "";
+int pos = 0;
+bool had_error = false;
+
+// ---- アリーナ操作 ----
+
+// 新しいノードを確保して index を返す。容量を超えたらエラーを立てて末尾を返す。
+int alloc_node(JsonKind k) {
+    if (arena.count >= 48) {
+        had_error = true;
+        return arena.count - 1;
+    }
+    int idx = arena.count;
+    arena.nodes[idx] = {
+        kind: k,
+        bool_val: false,
+        num_val: 0.0,
+        str_val: "",
+        key: "",
+        first_child: -1,
+        next_sibling: -1
+    };
+    arena.count = arena.count + 1;
+    return idx;
+}
+
+// parent の子リスト末尾に child を追加する。
+void append_child(int parent, int child) {
+    if (arena.nodes[parent].first_child < 0) {
+        arena.nodes[parent].first_child = child;
+        return;
+    }
+    int cur = arena.nodes[parent].first_child;
+    while (arena.nodes[cur].next_sibling >= 0) {
+        cur = arena.nodes[cur].next_sibling;
+    }
+    arena.nodes[cur].next_sibling = child;
+}
+
+// ---- 字句操作 ----
+
+// 現在位置の文字を返す（終端では '\0'）。
+char peek() {
+    if (pos >= src.len() as int) {
+        return '\0';
+    }
+    return src.charAt(pos as uint);
+}
+
+// 1文字進める。
+void advance() {
+    pos = pos + 1;
+}
+
+// 空白（スペース・タブ・改行・復帰）を読み飛ばす。
+void skip_ws() {
+    while (pos < src.len() as int) {
+        char c = peek();
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            advance();
+        } else {
+            return;
+        }
+    }
+}
+
+// ---- パース本体（再帰下降。関数は定義順に依存せず相互参照できる） ----
+
+// バックスラッシュ直後のエスケープ文字を対応する文字列へ変換する。
+string decode_escape(char e) {
+    if (e == '"') {
+        return "\"";
+    }
+    if (e == '\\') {
+        return "\\";
+    }
+    if (e == '/') {
+        return "/";
+    }
+    if (e == 'n') {
+        return "\n";
+    }
+    if (e == 't') {
+        return "\t";
+    }
+    if (e == 'r') {
+        return "\r";
+    }
+    if (e == 'b') {
+        return "\b";
+    }
+    if (e == 'f') {
+        return "\f";
+    }
+    // \uXXXX 等は簡易にその文字のまま返す。
+    string one = "";
+    return one + e;
+}
+
+// 文字列リテラルを読み、内容（エスケープ解決済み）を返す。開始の " 位置にいる前提。
+string parse_string_raw() {
+    string out = "";
+    advance();  // 開始の " を消費
+    while (pos < src.len() as int) {
+        char c = peek();
+        if (c == '"') {
+            advance();
+            return out;
+        }
+        if (c == '\\') {
+            advance();
+            out = out + decode_escape(peek());
+            advance();
+        } else {
+            out = out + c;
+            advance();
+        }
+    }
+    had_error = true;
+    return out;
+}
+
+// 数値リテラルを読み double を返す。
+double parse_number_raw() {
+    bool neg = false;
+    if (peek() == '-') {
+        neg = true;
+        advance();
+    }
+
+    double int_part = 0.0;
+    while (pos < src.len() as int) {
+        char c = peek();
+        if (c >= '0' && c <= '9') {
+            int digit = (c as int) - ('0' as int);
+            int_part = int_part * 10.0 + (digit as double);
+            advance();
+        } else {
+            break;
+        }
+    }
+
+    double frac = 0.0;
+    if (peek() == '.') {
+        advance();
+        double scale = 0.1;
+        while (pos < src.len() as int) {
+            char c = peek();
+            if (c >= '0' && c <= '9') {
+                int digit = (c as int) - ('0' as int);
+                frac = frac + (digit as double) * scale;
+                scale = scale * 0.1;
+                advance();
+            } else {
+                break;
+            }
+        }
+    }
+
+    double value = int_part + frac;
+
+    // 指数部 e/E
+    if (peek() == 'e' || peek() == 'E') {
+        advance();
+        bool exp_neg = false;
+        if (peek() == '+') {
+            advance();
+        } else if (peek() == '-') {
+            exp_neg = true;
+            advance();
+        }
+        int exp = 0;
+        while (pos < src.len() as int) {
+            char c = peek();
+            if (c >= '0' && c <= '9') {
+                exp = exp * 10 + ((c as int) - ('0' as int));
+                advance();
+            } else {
+                break;
+            }
+        }
+        int e = 0;
+        while (e < exp) {
+            if (exp_neg) {
+                value = value / 10.0;
+            } else {
+                value = value * 10.0;
+            }
+            e = e + 1;
+        }
+    }
+
+    if (neg) {
+        value = -value;
+    }
+    return value;
+}
+
+// 指定文字列にマッチすれば消費して true。
+bool match_literal(string lit) {
+    int n = lit.len() as int;
+    if (pos + n > src.len() as int) {
+        return false;
+    }
+    string sub = src.substring(pos, pos + n);
+    if (sub == lit) {
+        pos = pos + n;
+        return true;
+    }
+    return false;
+}
+
+// 配列をパースして index を返す。開始の [ 位置にいる前提。
+int parse_array() {
+    int node = alloc_node(JsonKind::Array);
+    advance();  // [
+    skip_ws();
+    if (peek() == ']') {
+        advance();
+        return node;
+    }
+    while (pos < src.len() as int) {
+        skip_ws();
+        int child = parse_value();
+        append_child(node, child);
+        skip_ws();
+        char c = peek();
+        if (c == ',') {
+            advance();
+        } else if (c == ']') {
+            advance();
+            return node;
+        } else {
+            had_error = true;
+            return node;
+        }
+    }
+    had_error = true;
+    return node;
+}
+
+// オブジェクトをパースして index を返す。開始の { 位置にいる前提。
+int parse_object() {
+    int node = alloc_node(JsonKind::Object);
+    advance();  // {
+    skip_ws();
+    if (peek() == '}') {
+        advance();
+        return node;
+    }
+    while (pos < src.len() as int) {
+        skip_ws();
+        if (peek() != '"') {
+            had_error = true;
+            return node;
+        }
+        string k = parse_string_raw();
+        skip_ws();
+        if (peek() != ':') {
+            had_error = true;
+            return node;
+        }
+        advance();  // :
+        skip_ws();
+        int child = parse_value();
+        arena.nodes[child].key = k;
+        append_child(node, child);
+        skip_ws();
+        char c = peek();
+        if (c == ',') {
+            advance();
+        } else if (c == '}') {
+            advance();
+            return node;
+        } else {
+            had_error = true;
+            return node;
+        }
+    }
+    had_error = true;
+    return node;
+}
+
+// 1つのJSON値をパースして index を返す。
+int parse_value() {
+    skip_ws();
+    char c = peek();
+    if (c == '{') {
+        return parse_object();
+    }
+    if (c == '[') {
+        return parse_array();
+    }
+    if (c == '"') {
+        int node = alloc_node(JsonKind::String);
+        arena.nodes[node].str_val = parse_string_raw();
+        return node;
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) {
+        int node = alloc_node(JsonKind::Number);
+        arena.nodes[node].num_val = parse_number_raw();
+        return node;
+    }
+    if (match_literal("true")) {
+        int node = alloc_node(JsonKind::Bool);
+        arena.nodes[node].bool_val = true;
+        return node;
+    }
+    if (match_literal("false")) {
+        int node = alloc_node(JsonKind::Bool);
+        arena.nodes[node].bool_val = false;
+        return node;
+    }
+    if (match_literal("null")) {
+        return alloc_node(JsonKind::Null);
+    }
+    had_error = true;
+    return alloc_node(JsonKind::Null);
+}
+
+// ---- 公開API ----
+
+// JSON文字列をパースする。成功時ルートノードのindex、失敗時 -1 を返す。
+export int json_parse(string text) {
+    arena.count = 0;
+    src = text;
+    pos = 0;
+    had_error = false;
+    int root = parse_value();
+    skip_ws();
+    if (had_error) {
+        return -1;
+    }
+    return root;
+}
+
+// ノードの種別を返す。
+export JsonKind json_kind(int node) {
+    return arena.nodes[node].kind;
+}
+
+export bool json_is_null(int node) {
+    return arena.nodes[node].kind == JsonKind::Null;
+}
+
+// Bool値を返す。
+export bool json_bool(int node) {
+    return arena.nodes[node].bool_val;
+}
+
+// Number値をdoubleで返す。
+export double json_number(int node) {
+    return arena.nodes[node].num_val;
+}
+
+// Number値をintで返す。
+export int json_int(int node) {
+    return arena.nodes[node].num_val as int;
+}
+
+// String値を返す。
+export string json_string(int node) {
+    return arena.nodes[node].str_val;
+}
+
+// 配列の要素数を返す。
+export int json_array_len(int node) {
+    int n = 0;
+    int cur = arena.nodes[node].first_child;
+    while (cur >= 0) {
+        n = n + 1;
+        cur = arena.nodes[cur].next_sibling;
+    }
+    return n;
+}
+
+// 配列のi番目の要素ノードindexを返す（範囲外は -1）。
+export int json_array_get(int node, int i) {
+    int cur = arena.nodes[node].first_child;
+    int k = 0;
+    while (cur >= 0) {
+        if (k == i) {
+            return cur;
+        }
+        k = k + 1;
+        cur = arena.nodes[cur].next_sibling;
+    }
+    return -1;
+}
+
+// オブジェクトから key に対応する値ノードindexを返す（無ければ -1）。
+export int json_object_get(int node, string key) {
+    int cur = arena.nodes[node].first_child;
+    while (cur >= 0) {
+        if (arena.nodes[cur].key == key) {
+            return cur;
+        }
+        cur = arena.nodes[cur].next_sibling;
+    }
+    return -1;
+}
+
+// オブジェクトが key を持つか。
+export bool json_object_has(int node, string key) {
+    return json_object_get(node, key) >= 0;
+}
+
+// 文字列をJSONエスケープする。
+string escape_json(string s) {
+    string out = "";
+    int i = 0;
+    int n = s.len() as int;
+    while (i < n) {
+        char c = s.charAt(i as uint);
+        if (c == '"') {
+            out = out + "\\\"";
+        } else if (c == '\\') {
+            out = out + "\\\\";
+        } else if (c == '\n') {
+            out = out + "\\n";
+        } else if (c == '\t') {
+            out = out + "\\t";
+        } else if (c == '\r') {
+            out = out + "\\r";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ノードをJSON文字列へ直列化する（コンパクト表現）。
+export string json_stringify(int node) {
+    JsonKind k = arena.nodes[node].kind;
+    if (k == JsonKind::Null) {
+        return "null";
+    }
+    if (k == JsonKind::Bool) {
+        if (arena.nodes[node].bool_val) {
+            return "true";
+        }
+        return "false";
+    }
+    if (k == JsonKind::Number) {
+        return "" + arena.nodes[node].num_val;
+    }
+    if (k == JsonKind::String) {
+        return "\"" + escape_json(arena.nodes[node].str_val) + "\"";
+    }
+    if (k == JsonKind::Array) {
+        string arr_out = "[";
+        int arr_cur = arena.nodes[node].first_child;
+        bool arr_first = true;
+        while (arr_cur >= 0) {
+            if (!arr_first) {
+                arr_out = arr_out + ",";
+            }
+            arr_out = arr_out + json_stringify(arr_cur);
+            arr_first = false;
+            arr_cur = arena.nodes[arr_cur].next_sibling;
+        }
+        return arr_out + "]";
+    }
+    // Object
+    string obj_out = "{";
+    int obj_cur = arena.nodes[node].first_child;
+    bool obj_first = true;
+    while (obj_cur >= 0) {
+        if (!obj_first) {
+            obj_out = obj_out + ",";
+        }
+        obj_out = obj_out + "\"" + escape_json(arena.nodes[obj_cur].key) + "\":" +
+            json_stringify(obj_cur);
+        obj_first = false;
+        obj_cur = arena.nodes[obj_cur].next_sibling;
+    }
+    return obj_out + "}";
+}

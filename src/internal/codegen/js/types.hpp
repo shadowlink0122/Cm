@@ -138,8 +138,10 @@ inline std::string jsDefaultValue(const hir::Type& type) {
                 if (type.element_type->kind == TypeKind::Struct ||
                     type.element_type->kind == TypeKind::Array) {
                     // 構造体・配列（多次元）の要素：要素ごとに新しいインスタンスを生成（fillは同一参照を共有するため多次元で全行がエイリアスになる）
-                    return "Array.from({length: " + std::to_string(*type.array_size) + "}, () => " +
-                           elemDefault + ")";
+                    // 要素は必ず括弧で包む: () => {} はアロー本体の空ブロックと解釈されundefinedを返すため、
+                    // 構造体配列の各要素がundefinedになりフィールド代入(nodes[i].x=...)が落ちる
+                    return "Array.from({length: " + std::to_string(*type.array_size) +
+                           "}, () => (" + elemDefault + "))";
                 } else {
                     // プリミティブ型の配列：fillで初期化
                     return "Array(" + std::to_string(*type.array_size) + ").fill(" + elemDefault +
