@@ -25,6 +25,7 @@ Pages are organized by backend: `common/` (shared tools), `native/` (LLVM native
 | [Formatter](common/formatter.html) | 🟢 Beginner | Code formatting (cm fmt) |
 | [Configuration file](common/config.html) | 🟢 Beginner | .cmconfig.yml (language, compile defaults, lint settings) |
 | [Optimization](common/optimization.html) | 🔴 Advanced | O0-O3, --funroll-loops, tail calls |
+| [Sanitizers](common/sanitizer.html) | 🟡 Intermediate | Runtime memory checks with --sanitize (address/bounds) |
 
 ## Native (native/)
 

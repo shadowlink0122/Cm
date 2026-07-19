@@ -501,9 +501,16 @@ test-i18n:
 	@echo "Running i18n / error message E2E tests..."
 	@tests/i18n/run_tests.sh
 
+# サニタイザ（--sanitize）のE2Eテスト（native/wasm/jit）
+.PHONY: test-sanitize
+test-sanitize:
+	@echo "Running sanitizer E2E tests..."
+	@chmod +x tests/sanitize/run_tests.sh
+	@tests/sanitize/run_tests.sh
+
 # 全テスト実行（unit + integration）- 並列実行
 .PHONY: test
-test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n
+test: test-unit test-regression test-interpreter-parallel test-llvm-parallel test-llvm-wasm-parallel test-js-parallel test-sv-parallel test-cm-test test-i18n test-sanitize
 	@echo ""
 	@echo "=========================================="
 	@echo "✅ All tests completed!"

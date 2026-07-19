@@ -65,4 +65,4 @@ cm compile program.cm -g -o program
 ---
 
 <!-- nav -->
-← Prev: [MIR最適化パス](../common/optimization.html) | [Contents](../index.html) | Next: [UEFI Bare-Metal Development Tutorial](uefi.html) →
+← Prev: [Sanitizers](../common/sanitizer.html) | [Contents](../index.html) | Next: [UEFI Bare-Metal Development Tutorial](uefi.html) →

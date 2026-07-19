@@ -9,6 +9,8 @@
 #include "pass_debugger.hpp"
 
 #include <iostream>
+#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
+#include <llvm/Transforms/Instrumentation/BoundsChecking.h>
 #include <map>
 #include <memory>
 #include <set>
@@ -67,6 +69,9 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
 
     // 4. 最適化
     optimize();
+
+    // 4.5. サニタイザ計装（最適化後に実行することで冗長な検査の重複挿入を避ける。O0でも動作する）
+    instrumentSanitizers();
 
     // 5. 出力
     emit();
@@ -587,6 +592,50 @@ void LLVMCodeGen::optimize() {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimizeEnd);
 }
 
+// サニタイザ計装
+// address: 本体を持つ関数へ sanitize_address 属性を付与してから AddressSanitizerPass で計装する（ランタイムはリンク時に -fsanitize=address で解決）
+// bounds: BoundsCheckingPass（clang -fsanitize=local-bounds 相当）で静的にサイズが分かるメモリアクセスへ境界チェックを挿入し、違反時は llvm.trap で即停止する（ランタイム不要のためnative/wasm両対応）
+void LLVMCodeGen::instrumentSanitizers() {
+    if (!options.sanitizeAddress && !options.sanitizeBounds) {
+        return;
+    }
+
+    cm::debug::codegen::log(cm::debug::codegen::Id::LLVMOptimize,
+                            std::string("Sanitizer instrumentation:") +
+                                (options.sanitizeAddress ? " address" : "") +
+                                (options.sanitizeBounds ? " bounds" : ""));
+
+    if (options.sanitizeAddress) {
+        for (auto& func : context->getModule()) {
+            // 宣言のみの外部関数と純ASMのNaked関数（prologue/epilogueが無くredzone操作が壊れる）は計装しない
+            if (func.isDeclaration() || func.hasFnAttribute(llvm::Attribute::Naked)) {
+                continue;
+            }
+            func.addFnAttr(llvm::Attribute::SanitizeAddress);
+        }
+    }
+
+    llvm::PassBuilder passBuilder(targetManager ? targetManager->getTargetMachine() : nullptr);
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    llvm::ModulePassManager MPM;
+    if (options.sanitizeBounds) {
+        MPM.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::BoundsCheckingPass()));
+    }
+    if (options.sanitizeAddress) {
+        MPM.addPass(llvm::AddressSanitizerPass(llvm::AddressSanitizerOptions()));
+    }
+    MPM.run(context->getModule(), MAM);
+}
+
 // 出力
 void LLVMCodeGen::emit() {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMEmit, options.outputFile);
@@ -680,10 +729,29 @@ void LLVMCodeGen::emitExecutable() {
         std::string runtimePath = findRuntimeLibrary();
 
 #ifdef __APPLE__
-        linkCmd = "/usr/bin/clang++ -mmacosx-version-min=15.0 -Wl,-dead_strip ";
+        std::string linkerDriver = "/usr/bin/clang++";
+        if (options.sanitizeAddress) {
+            // ASan計装（LLVM 17）とAppleランタイムのバージョン記号不一致を避けるため、Homebrew LLVMのclang++を優先する
+            std::vector<std::string> asanClangPaths = {
+                "/opt/homebrew/opt/llvm@17/bin/clang++",
+                "/opt/homebrew/opt/llvm/bin/clang++",
+                "/usr/local/opt/llvm@17/bin/clang++",
+                "/usr/local/opt/llvm/bin/clang++",
+            };
+            for (const auto& path : asanClangPaths) {
+                if (std::filesystem::exists(path)) {
+                    linkerDriver = path;
+                    break;
+                }
+            }
+        }
+        linkCmd = linkerDriver + " -mmacosx-version-min=15.0 -Wl,-dead_strip ";
 #ifdef CM_DEFAULT_TARGET_ARCH
         linkCmd += "-arch " + std::string(CM_DEFAULT_TARGET_ARCH) + " ";
 #endif
+        if (options.sanitizeAddress) {
+            linkCmd += "-fsanitize=address ";
+        }
         if (context->getTargetConfig().noStd) {
             linkCmd += "-nostdlib ";
         }
@@ -767,6 +835,9 @@ void LLVMCodeGen::emitExecutable() {
         linkCmd += " -o " + options.outputFile;
 #else
         linkCmd = "clang -Wl,--gc-sections ";
+        if (options.sanitizeAddress) {
+            linkCmd += "-fsanitize=address ";
+        }
         if (context->getTargetConfig().noStd) {
             linkCmd += "-nostdlib ";
         }

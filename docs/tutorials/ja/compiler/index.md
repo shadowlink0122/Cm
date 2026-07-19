@@ -25,6 +25,7 @@ Cm言語コンパイラの使い方とバックエンドを学ぶチュートリ
 | [Formatter](common/formatter.html) | 🟢 初級 | コードフォーマット（cm fmt） |
 | [設定ファイル](common/config.html) | 🟢 初級 | .cmconfig.yml（言語・コンパイル既定値・lint設定） |
 | [最適化](common/optimization.html) | 🔴 上級 | O0-O3、--funroll-loops、末尾呼び出し最適化 |
+| [サニタイザ](common/sanitizer.html) | 🟡 中級 | --sanitize（address/bounds）による実行時メモリ検査 |
 
 ## ネイティブ（native/）
 

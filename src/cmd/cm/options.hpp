@@ -51,6 +51,8 @@ struct Options {
     // ユーザ指定のMIR最適化オプション
     bool unroll_loops = false;  // --funroll-loops: 定数ループの静的展開
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数
+    // サニタイザ（--sanitize=address,bounds。native/wasmのLLVMバックエンド専用）
+    std::vector<std::string> sanitizers;
     // エラー処理
     bool has_error = false;     // パースエラーフラグ
     std::string error_message;  // エラーメッセージ

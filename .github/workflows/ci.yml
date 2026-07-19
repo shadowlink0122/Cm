@@ -384,6 +384,9 @@ jobs:
       - name: Run linter functional tests
         run: make test-lint
 
+      - name: Run sanitizer E2E
+        run: make test-sanitize
+
   # ========================================
   # Benchmark - パフォーマンスベンチマーク
   # ========================================

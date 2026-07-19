@@ -588,6 +588,32 @@ int run_build(cli::Options& opts, const char* argv0) {
     ctx.code = std::move(code);
     ctx.run_sv_sim = run_sv_sim;
     ctx.sv_hierarchy_submodules = std::move(sv_hierarchy_submodules);
+    // --sanitize はLLVM系バックエンド専用。compile の native/wasm と run（JIT、boundsのみ）を許可し、js/sv経路はここで弾く
+    if (!opts.sanitizers.empty()) {
+        const bool is_js_or_sv = opts.target == "sv" || opts.target == "verilog" ||
+                                 opts.target == "systemverilog" || opts.target == "js" ||
+                                 opts.target == "web" || opts.emit_js;
+        std::string unsupported;
+        if (is_js_or_sv) {
+            unsupported = opts.sanitizers.front();
+        } else if (opts.command == Command::Run) {
+            // JITはcmプロセス内実行のためASanランタイムを後付けできない（boundsはtrap方式で動作する）
+            for (const auto& sanitizer : opts.sanitizers) {
+                if (sanitizer != "bounds") {
+                    unsupported = sanitizer;
+                    break;
+                }
+            }
+        }
+        if (!unsupported.empty()) {
+            std::string target_name =
+                opts.command == Command::Run && !is_js_or_sv ? "jit" : opts.target;
+            std::cerr << i18n::msgf(i18n::MsgId::CliSanitizeNotSupportedOnTarget, unsupported,
+                                    target_name);
+            std::cerr << i18n::msg(i18n::MsgId::CliSanitizeValidValues);
+            return 1;
+        }
+    }
     if (opts.command == Command::Run) {
         return emit_jit_run(ctx, mir);
     }

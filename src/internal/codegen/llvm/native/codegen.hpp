@@ -50,6 +50,10 @@ class LLVMCodeGen {
         bool useCustomOptimizations = false;
         std::string customTriple = "";
         std::string linkerScript = "";
+        bool sanitizeAddress =
+            false;  // --sanitize=address: ASan計装+ランタイムリンク（native専用）
+        bool sanitizeBounds =
+            false;  // --sanitize=bounds: 境界チェック計装（native/wasm、trap方式）
     };
 
    private:
@@ -116,6 +120,9 @@ class LLVMCodeGen {
 
     /// 最適化
     void optimize();
+
+    /// サニタイザ計装（--sanitize指定時のみ。optimize()と独立にO0でも実行する）
+    void instrumentSanitizers();
 
     /// 出力
     void emit();

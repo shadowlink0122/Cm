@@ -57,6 +57,15 @@ Cm言語コンパイラ v{version}
                          ループ判定の削減による高速化。特にJSターゲットや
                          低い-Oレベルで効果的）
 
+サニタイザオプション（LLVM系バックエンド: compile --target=native/wasm, run）:
+  --sanitize=<list>     実行時メモリ検査を有効化（カンマ区切り）:
+                          address  AddressSanitizer: ヒープ/スタック/グローバル
+                                   の境界外アクセス・use-after-free
+                                   （compile --target=native のみ）
+                          bounds   コンパイル時にサイズが確定するオブジェクトへの
+                                   境界外アクセスをtrapで停止（native/wasm/jit、
+                                   ランタイム不要）
+
 その他のオプション:
   --lang=<en|ja>        メッセージ言語（デフォルト: en。CM_LANG環境変数や
                         .cmconfig.yml の language: でも指定可能）

@@ -266,6 +266,15 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliSWarnings
     {"errors: {0}, warnings: {1}\n",
      "エラー: {0}, 警告: {1}\n"},
+    // CliSanitizeNotSupportedOnTarget
+    {"error: sanitizer '{0}' is not supported on target '{1}'\n",
+     "エラー: サニタイザ '{0}' はターゲット '{1}' では使用できません\n"},
+    // CliSanitizeUnknownValue
+    {"error: unknown sanitizer '{0}'\n",
+     "エラー: 不明なサニタイザ '{0}'\n"},
+    // CliSanitizeValidValues
+    {"valid sanitizers: address (native only), bounds (native/wasm/jit)\n",
+     "有効なサニタイザ: address（nativeのみ）, bounds（native/wasm/jit）\n"},
     // CliSpecifyTheJsTargetWith
     {"hint: specify the JS target with --target=js\n",
      "ヒント: --target=js オプションでJSターゲットを指定してください\n"},

@@ -87,6 +87,31 @@ int emit_llvm(BuildContext& ctx, mir::MirProgram& mir) {
     llvm_opts.verbose = opts.verbose || opts.debug;
     llvm_opts.verifyIR = true;
 
+    // サニタイザ設定（値の妥当性はCLIパースで検証済み。ここではターゲットとの組み合わせを検証する）
+    for (const auto& sanitizer : opts.sanitizers) {
+        const bool is_native = llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native;
+        const bool is_wasm = llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Wasm;
+        if (sanitizer == "address") {
+            // ASanランタイムはネイティブ環境専用（wasm32-wasi向けが存在しない）
+            if (!is_native) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliSanitizeNotSupportedOnTarget, sanitizer,
+                                        opts.target.empty() ? "native" : opts.target);
+                std::cerr << i18n::msg(i18n::MsgId::CliSanitizeValidValues);
+                return 1;
+            }
+            llvm_opts.sanitizeAddress = true;
+        } else if (sanitizer == "bounds") {
+            // trap方式でランタイム不要のためnative/wasm両対応（baremetal/uefiは対象外）
+            if (!is_native && !is_wasm) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliSanitizeNotSupportedOnTarget, sanitizer,
+                                        opts.target);
+                std::cerr << i18n::msg(i18n::MsgId::CliSanitizeValidValues);
+                return 1;
+            }
+            llvm_opts.sanitizeBounds = true;
+        }
+    }
+
     // LLVM コード生成
     try {
         // CompilationGuardの設定

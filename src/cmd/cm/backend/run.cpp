@@ -10,6 +10,7 @@
 #include "internal/codegen/llvm/jit/jit_engine.hpp"
 #endif
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -108,9 +109,12 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
             }
         }
         std::setvbuf(stdout, nullptr, _IONBF, 0);
+        const bool sanitize_bounds_tests = std::find(opts.sanitizers.begin(), opts.sanitizers.end(),
+                                                     "bounds") != opts.sanitizers.end();
         for (const auto* fn : test_fns) {
             cm::codegen::jit::JITEngine jit;
-            auto result = jit.execute(mir, fn->name, opts.optimization_level);
+            auto result =
+                jit.execute(mir, fn->name, opts.optimization_level, sanitize_bounds_tests);
             if (!result.success) {
                 std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError, fn->name,
                                         result.errorMessage);
@@ -134,7 +138,9 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
     // JIT実行時はstdoutをアンバッファにして即時出力されるようにする
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
-    auto result = jit.execute(mir, "main", opts.optimization_level);
+    const bool sanitize_bounds = std::find(opts.sanitizers.begin(), opts.sanitizers.end(),
+                                           "bounds") != opts.sanitizers.end();
+    auto result = jit.execute(mir, "main", opts.optimization_level, sanitize_bounds);
 
     if (!result.success) {
         std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError2, result.errorMessage);

@@ -59,6 +59,15 @@ Optimization options:
                         speeds up loop checks, especially for the JS target
                         and low -O levels)
 
+Sanitizer options (LLVM backends: compile --target=native/wasm, run):
+  --sanitize=<list>     Enable runtime memory checks (comma separated):
+                          address  AddressSanitizer: heap/stack/global
+                                   out-of-bounds, use-after-free
+                                   (compile --target=native only)
+                          bounds   Trap on out-of-bounds access to objects
+                                   whose size is known at compile time
+                                   (native/wasm/jit, no runtime required)
+
 Other options:
   --lang=<en|ja>        Message language (default: en; also CM_LANG env var
                         or 'language:' in .cmconfig.yml)

@@ -15,6 +15,7 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/Instrumentation/BoundsChecking.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <memory>
 #include <string>
@@ -179,7 +180,7 @@ void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
 }
 
 JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& entryPoint,
-                             int optLevel) {
+                             int optLevel, bool sanitizeBounds) {
     JITResult result;
 
     // JIT初期化
@@ -213,6 +214,23 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
 
     // LLVM最適化パスを適用
     optimizeModule(*clonedModule, optLevel);
+
+    // --sanitize=bounds: 静的にサイズが分かるメモリアクセスへ境界チェックを挿入する（違反時は llvm.trap → SIGILL相当で即時停止。ランタイム不要のためJITでも動作する）
+    if (sanitizeBounds) {
+        llvm::LoopAnalysisManager sanLAM;
+        llvm::FunctionAnalysisManager sanFAM;
+        llvm::CGSCCAnalysisManager sanCGAM;
+        llvm::ModuleAnalysisManager sanMAM;
+        llvm::PassBuilder sanPB;
+        sanPB.registerModuleAnalyses(sanMAM);
+        sanPB.registerCGSCCAnalyses(sanCGAM);
+        sanPB.registerFunctionAnalyses(sanFAM);
+        sanPB.registerLoopAnalyses(sanLAM);
+        sanPB.crossRegisterProxies(sanLAM, sanFAM, sanCGAM, sanMAM);
+        llvm::ModulePassManager sanMPM;
+        sanMPM.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::BoundsCheckingPass()));
+        sanMPM.run(*clonedModule, sanMAM);
+    }
 
     auto tsm = llvm::orc::ThreadSafeModule(std::move(clonedModule), *tsContext_);
     if (auto err = jit_->addIRModule(std::move(tsm))) {
