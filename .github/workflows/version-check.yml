@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: VERSIONファイルとブランチ名の整合チェック
         run: scripts/ci/check_version_branch.sh
