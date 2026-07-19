@@ -19,6 +19,9 @@ on:
           - x86_64
         default: 'arm64'
 
+permissions:
+  contents: read
+
 env:
   LLVM_VERSION: "17"
 
@@ -29,6 +32,7 @@ jobs:
   verify:
     name: バージョン検証
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 

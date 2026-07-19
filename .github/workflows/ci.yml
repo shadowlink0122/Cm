@@ -10,6 +10,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# GITHUB_TOKENは読み取り専用で十分（最小権限の原則）
+permissions:
+  contents: read
+
+# 同一ブランチへの連続pushでは古い実行をキャンセルし、フルマトリクスの二重実行を防ぐ（mainは履歴保全のためキャンセルしない）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   BUILD_TYPE: Debug
   LLVM_VERSION: "17"
@@ -21,6 +30,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +48,7 @@ jobs:
   extension-lint:
     name: Extension Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: vscode-extension
@@ -83,6 +94,7 @@ jobs:
           - os: macos-15
             arch: arm64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +119,16 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install googletest
 
+      # C++の再コンパイルをOS別キャッシュで短縮する（cmakeはCMAKE_*_COMPILER_LAUNCHER環境変数をconfigure時に取り込む）
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: cm-ci-${{ matrix.os }}
+
       - name: Build compiler
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: scripts/ci/build_compiler.sh ${{ env.BUILD_TYPE }} ${{ matrix.arch }} --testing
 
       - name: Build runtime libraries
@@ -143,6 +164,7 @@ jobs:
         # コンパイラ単体機能のテスト（tests/unit/。単一ビルドオブジェクト単位）
         test_bin: [lexer_test, error_test, mir_pass_test]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -186,6 +208,7 @@ jobs:
           - sv_codegen_test
           - formatter_test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -232,7 +255,10 @@ jobs:
           - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
           - { id: sv-o0,   name: "SV生成テスト O0",       target: tsvp0,  backend: sv,        needs_node: false }
           - { id: sv-o3,   name: "SV生成テスト O3",       target: tsvp3,  backend: sv,        needs_node: false }
+          # make test（ローカル既定）に含まれるinterpreterスイートをCIでも検証する
+          - { id: interp-o3, name: "インタプリタ実行 O3",  target: tip3,   backend: interpreter, needs_node: false }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -293,6 +319,7 @@ jobs:
     name: Baremetal / UEFI
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -317,6 +344,46 @@ jobs:
       - name: Run UEFI compile tests
         run: make test-uefi
 
+      # リリースtarballに同梱されるexamplesが現行コンパイラで検査を通ることを保証する
+      - name: Check examples compile
+        run: scripts/ci/check_examples.sh
+
+  # ========================================
+  # Tooling Tests - make test に含まれるがバックエンドスイート外のE2E
+  # （cm test コマンド / i18nメッセージ / linter機能テスト）
+  # ========================================
+  tooling-test:
+    name: Tooling (cm test / i18n / lint)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cm-build-ubuntu-latest
+
+      - run: chmod +x cm 2>/dev/null || true
+
+      - name: Cache LLVM
+        uses: actions/cache@v4
+        with:
+          path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
+          key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
+
+      - name: Install LLVM
+        run: scripts/ci/install_llvm.sh ${{ env.LLVM_VERSION }}
+
+      - name: Run cm test command E2E
+        run: make test-cm-test
+
+      - name: Run i18n message E2E
+        run: make test-i18n
+
+      - name: Run linter functional tests
+        run: make test-lint
+
   # ========================================
   # Benchmark - パフォーマンスベンチマーク
   # ========================================
@@ -324,6 +391,7 @@ jobs:
     name: Benchmark
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4

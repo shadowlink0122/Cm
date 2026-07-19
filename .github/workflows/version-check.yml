@@ -10,10 +10,18 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version-check:
     name: VERSION一致チェック
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
