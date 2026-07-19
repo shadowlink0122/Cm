@@ -716,7 +716,13 @@ if(BUILD_TESTING)
     set(GTEST_INCLUDE_DIR "${GTEST_SRC_DIR}/googletest/include")
     
     include(GoogleTest)
-        
+
+    # テスト一覧の検出をビルド時（POST_BUILD）ではなくctest実行時（PRE_TEST）に行う。
+    # POST_BUILDだと並列makeの最中に各テストバイナリを実行してJSONを生成するため、CI高負荷時に
+    # 出力の取りこぼしで "string(JSON ...) failed parsing" （空/不正JSON）が散発する。
+    # PRE_TESTなら検出はctest時に移り、ビルド自体はバイナリを実行しないので安定する。
+    set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+
         # Unit tests - Lexer
         add_executable(lexer_test
             tests/unit/lexer_test.cpp

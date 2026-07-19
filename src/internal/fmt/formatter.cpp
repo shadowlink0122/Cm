@@ -423,8 +423,6 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                     }
                     if (!past_backtick)
                         continue;
-
-                    char prev = (i > 0) ? content[i - 1] : 0;
                     if (!in_char && c == '"' && !is_escaped_char(content, i))
                         in_string = !in_string;
                     if (!in_string && c == '\'' && !is_escaped_char(content, i) &&
@@ -540,7 +538,6 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
         size_t comment_pos = std::string::npos;  // 行末コメントの開始位置
         for (size_t i = 0; i < content.size(); ++i) {
             char c = content[i];
-            char prev = (i > 0) ? content[i - 1] : 0;
 
             // コメント検出
             if (!in_string && !in_char && c == '/' && i + 1 < content.size() &&
@@ -737,7 +734,6 @@ std::string Formatter::enforce_semicolon_newline(const std::string& code, size_t
     bool in_line_comment = false;
     int paren_depth = 0;  // ()の深さ
     int brace_depth = 0;  // {}の深さ（1行クロージャ対応）
-    char prev_char = 0;
 
     for (size_t i = 0; i < code.size(); ++i) {
         char c = code[i];
@@ -770,7 +766,6 @@ std::string Formatter::enforce_semicolon_newline(const std::string& code, size_t
         // リテラルやコメント内は変更しない
         if (in_string || in_char || in_backtick || in_line_comment) {
             result += c;
-            prev_char = c;
             continue;
         }
 
@@ -814,12 +809,10 @@ std::string Formatter::enforce_semicolon_newline(const std::string& code, size_t
                     }
                 }
             }
-            prev_char = c;
             continue;
         }
 
         result += c;
-        prev_char = c;
     }
 
     return result;
@@ -886,7 +879,6 @@ std::string Formatter::align_inline_comments(const std::string& code, size_t& ch
 
         for (size_t j = 0; j < line.size(); ++j) {
             char c = line[j];
-            char prev = (j > 0) ? line[j - 1] : 0;
 
             if (!in_char && c == '"' && !is_escaped_char(line, j)) {
                 in_string = !in_string;
