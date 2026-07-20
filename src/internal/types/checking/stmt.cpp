@@ -20,6 +20,105 @@ static std::string get_enum_base_name(const std::string& name) {
     return name;
 }
 
+// 文列が「その先へフォールスルーしない」ことを構造的に判定する（H6）。
+// for_function=trueは関数からの脱出（return/exit/無限ループ）のみを数え、
+// falseは分岐からの脱出（break/continueを含む）も数える
+bool cm_stmts_terminate(const std::vector<ast::StmtPtr>& stmts, bool for_function);
+
+namespace {
+
+// ループ本体に（ネストしたループへ降りずに）breakが含まれるか
+bool contains_loop_break(const std::vector<ast::StmtPtr>& stmts) {
+    for (const auto& s : stmts) {
+        if (!s)
+            continue;
+        if (s->as<ast::BreakStmt>())
+            return true;
+        if (auto* ifs = s->as<ast::IfStmt>()) {
+            if (contains_loop_break(ifs->then_block) || contains_loop_break(ifs->else_block))
+                return true;
+        } else if (auto* blk = s->as<ast::BlockStmt>()) {
+            if (contains_loop_break(blk->stmts))
+                return true;
+        } else if (auto* sw = s->as<ast::SwitchStmt>()) {
+            for (const auto& c : sw->cases) {
+                if (contains_loop_break(c.stmts))
+                    return true;
+            }
+        }
+        // While/For/ForIn配下のbreakはそのループを抜けるだけなので降りない
+    }
+    return false;
+}
+
+// 単一文の終端判定（cm_stmts_terminateの下請け）
+bool stmt_terminates(const ast::StmtPtr& s, bool for_function) {
+    if (!s)
+        return false;
+    if (s->as<ast::ReturnStmt>())
+        return true;
+    if (!for_function && (s->as<ast::BreakStmt>() || s->as<ast::ContinueStmt>()))
+        return true;
+    if (auto* es = s->as<ast::ExprStmt>()) {
+        // exit(code) はプロセスを終了する
+        if (es->expr) {
+            if (auto* call = es->expr->as<ast::CallExpr>()) {
+                if (call->callee) {
+                    if (auto* id = call->callee->as<ast::IdentExpr>()) {
+                        if (id->name == "exit")
+                            return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    if (auto* ifs = s->as<ast::IfStmt>()) {
+        return !ifs->else_block.empty() && cm_stmts_terminate(ifs->then_block, for_function) &&
+               cm_stmts_terminate(ifs->else_block, for_function);
+    }
+    if (auto* blk = s->as<ast::BlockStmt>()) {
+        return cm_stmts_terminate(blk->stmts, for_function);
+    }
+    if (auto* sw = s->as<ast::SwitchStmt>()) {
+        // else/defaultケースを持ち、全ケースが終端する場合のみ
+        bool has_default = false;
+        for (const auto& c : sw->cases) {
+            if (!c.pattern)
+                has_default = true;
+            if (!cm_stmts_terminate(c.stmts, for_function))
+                return false;
+        }
+        return has_default;
+    }
+    if (auto* ws = s->as<ast::WhileStmt>()) {
+        // while(true)でbreakを持たない無限ループは終端扱い（イベントループ等。H13と整合）
+        if (ws->condition) {
+            if (auto* lit = ws->condition->as<ast::LiteralExpr>()) {
+                if (auto* b = std::get_if<bool>(&lit->value)) {
+                    if (*b && !contains_loop_break(ws->body))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+    if (auto* mb = s->as<ast::MustBlockStmt>()) {
+        return cm_stmts_terminate(mb->body, for_function);
+    }
+    return false;
+}
+
+}  // namespace
+
+bool cm_stmts_terminate(const std::vector<ast::StmtPtr>& stmts, bool for_function) {
+    for (const auto& s : stmts) {
+        if (stmt_terminates(s, for_function))
+            return true;  // 以降の文は到達不能
+    }
+    return false;
+}
+
 void TypeChecker::check_statement(ast::Stmt& stmt) {
     debug::tc::log(debug::tc::Id::CheckStmt, "", debug::Level::Trace);
 
@@ -370,18 +469,46 @@ void TypeChecker::check_if(ast::IfStmt& if_stmt) {
               "If condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
     }
 
+    // H6: 確定代入のfork/join。分岐内の初期化は「生き残る全経路で初期化」された場合のみ
+    // 合流後へ伝える（従来はフラット集合で、片側分岐だけの初期化が合流後も初期化済みと誤認された）
+    auto before_init = initialized_variables_;
+
     scopes_.push();
     for (auto& s : if_stmt.then_block) {
         check_statement(*s);
     }
     scopes_.pop();
+    auto then_init = initialized_variables_;
+    bool then_terminates = cm_stmts_terminate(if_stmt.then_block, false);
+    initialized_variables_ = before_init;
 
+    bool else_terminates = false;
+    auto else_init = before_init;
     if (!if_stmt.else_block.empty()) {
         scopes_.push();
         for (auto& s : if_stmt.else_block) {
             check_statement(*s);
         }
         scopes_.pop();
+        else_init = initialized_variables_;
+        else_terminates = cm_stmts_terminate(if_stmt.else_block, false);
+        initialized_variables_ = before_init;
+    }
+
+    // 合流: return等で終端した分岐は合流に参加しない
+    if (then_terminates && else_terminates) {
+        initialized_variables_ = before_init;
+    } else if (then_terminates) {
+        initialized_variables_ = else_init;
+    } else if (else_terminates) {
+        initialized_variables_ = then_init;
+    } else {
+        initialized_variables_.clear();
+        for (const auto& name : then_init) {
+            if (else_init.count(name) > 0) {
+                initialized_variables_.insert(name);
+            }
+        }
     }
 }
 

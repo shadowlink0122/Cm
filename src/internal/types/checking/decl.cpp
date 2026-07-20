@@ -17,6 +17,9 @@
 
 namespace cm {
 
+// 文列の終端判定（実装はstmt.cpp。H6のreturn網羅解析で使用）
+bool cm_stmts_terminate(const std::vector<ast::StmtPtr>& stmts, bool for_function);
+
 TypeChecker::TypeChecker() {
     register_builtin_interfaces();
     register_builtin_types();  // Result<T, E>, Option<T> 組み込み型
@@ -1075,6 +1078,16 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
 
         // 未使用変数チェック (W001)
         check_unused_variables();
+
+        // H6: return網羅解析。非void関数の一部経路が値を返さずに末尾へ到達する場合を警告する
+        // （従来は無診断で、下流バックエンドが未定義値を返していた。段階導入のためまず警告）
+        bool is_non_void = func.return_type && func.return_type->kind != ast::TypeKind::Void &&
+                           func.return_type->kind != ast::TypeKind::Inferred;
+        bool exempt = func.is_extern || func.is_always || func.is_async || func.body.empty() ||
+                      func.name == "main";
+        if (is_non_void && !exempt && !cm_stmts_terminate(func.body, true)) {
+            warning(func.name_span, i18n::msgf(i18n::MsgId::TypeNotAllPathsReturn, func.name));
+        }
     }
 
     // 初期化追跡をクリア（次の関数用）

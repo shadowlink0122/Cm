@@ -1,16 +1,11 @@
----
-title: 数値出力精度とfloat→intキャスト挙動のバックエンド統一
-parent: v0.17.0 Design
----
-
-# 数値出力精度とfloat→intキャスト挙動のバックエンド統一
+# 数値出力精度とfloat→intキャスト挙動のバックエンド統一（実装済み）
 
 ## 対象所見
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| M8 | バックエンド | double出力がjit/native=6有効桁（123456789.5→123457000と桁化け）・js/ts=round-trip精度で分裂 | 未着手 |
-| M9 | バックエンド | 範囲外float→intキャストがnative=飽和・他=ラップで分裂 | 未着手 |
+| M8 | バックエンド | double出力がjit/native=6有効桁（123456789.5→123457000と桁化け）・js/ts=round-trip精度で分裂 | 実装済み（native/wasmのデフォルトdouble出力を最短round-trip・JS互換整形へ統一。float(32bit)拡張値はfloat精度でのround-tripを採用。wasmに欠落していたcm_double_to_string実体を追加） |
+| M9 | バックエンド | 範囲外float→intキャストがnative=飽和・他=ラップで分裂 | 実装済み（LLVM系はllvm.fptosi.sat/fptoui.satへ置換、js/tsは範囲クランプ+NaN→0、MIR定数畳み込みも同一の飽和セマンティクスへ統一） |
 
 ## 背景と根本原因
 
@@ -144,3 +139,12 @@ fn main() {
 - 監査レポート: `docs/design/v0.17.0/large-scale-bottleneck-audit.md`（M8、M9、テーマ2「ランタイム重複実装」、C15 wasm println double）
 - 関連所見: C15（wasm `println(double)`切り捨て）— 同じdouble出力経路、M4（縮小整数キャスト無警告）— `as`キャスト挙動の仕様統合
 - 主要ファイル: `src/internal/codegen/llvm/native/runtime_format.c`, `src/internal/codegen/llvm/wasm/runtime_format.c`, `src/internal/codegen/llvm/core/rvalue.cpp`, `src/internal/codegen/js/builtins.cpp`, `src/internal/codegen/js/emit_expressions.cpp`, `src/internal/mir/lowering/expr/cast.cpp`
+
+## 実装記録
+
+- native `cm_dtoa_buf` のprecision<0経路を `cm_dtoa_shortest`（%.*e + strtod/strtofの往復検証で最小桁を選択、JSのNumber→String整形規則で出力）へ置換。
+- wasm `cm_format_double` をlibc非依存の同等実装（pow10テーブル+u64桁列生成+往復検証）へ置換し、`cm_double_to_string` を追加。
+- float(32bit)から拡張された値はfloat精度での往復を採用し、`3.14f` が `3.140000104904175` と冗長表示になるのを防ぐ（printlnはfloatをdoubleへ拡張して渡すため）。
+- LLVMコア `rvalue.cpp` のfloat→int castを飽和intrinsicへ、jsバックエンドはMath.trunc+範囲クランプへ、MIR定数畳み込み（folding.cpp）のDouble→Intも同一の飽和へ統一。
+- テスト: `tests/common/formatting/double_roundtrip.cm`・`tests/common/casting/float_int_saturation.cm`（全バックエンド一致）。既存期待値5件をround-trip値へ更新し、全バックエンド一致になった`.expect.js`/`.expect.llvm-wasm`バリアント4件を削除。
+- 残課題: 明示精度指定（`{x:.2}`等）・scientific表記の整形はバックエンド間で微差が残る（本設計のスコープ外。ランタイム共通コア化のロードマップ項目で扱う）。wasmはlibc非依存の自前実装のため、16桁以上の有効桁を要する値で最終桁が1ulp分ずれることがある（`ufloat_udouble.expect.llvm-wasm`で吸収。完全一致にはRyu等の最短変換アルゴリズム導入が必要）。

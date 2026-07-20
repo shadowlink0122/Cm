@@ -12,8 +12,8 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H6 | 言語 | 未初期化変数の読み取り・非void関数のreturn漏れが無警告（definite assignment解析なし） | 未着手 |
-| L4 | 言語 | lintは未使用変数・const提案等のスタイル系のみで、正当性系（未初期化・return漏れ・恒真条件・縮小キャスト）が無い | 未着手 |
+| H6 | 言語 | 未初期化変数の読み取り・非void関数のreturn漏れが無警告（definite assignment解析なし） | 段階1実装済み（型検査のif/else確定代入をfork/join化し片側分岐初期化の合流後使用を警告。return網羅は構造的終端判定`cm_stmts_terminate`で警告。いずれもlint警告有効時のみで、エラー昇格・ループのフロー精密化・MIR CFGベース化は残課題） |
+| L4 | 言語 | lintは未使用変数・const提案等のスタイル系のみで、正当性系（未初期化・return漏れ・恒真条件・縮小キャスト）が無い | 一部実装（未初期化のフロー考慮・return漏れ・縮小キャスト(M4)・境界なし演算子(L8)が揃った。恒真条件は未着手） |
 
 ## 背景と根本原因
 
@@ -150,3 +150,14 @@ if (true) { ... }  // 将来的に W: 条件が常に真です（本設計では
 - 監査レポート: `docs/design/v0.17.0/large-scale-bottleneck-audit.md`（H6・L4、推奨対応ロードマップ第3段の「definite assignment/return網羅解析」）
 - 関連所見H13（`while(true)`の複雑度ガード誤検出）とは無限ループの扱いで接点があり、return網羅解析の偽陽性除外設計を共有する。
 - 実コード: src/internal/mir/nodes.hpp, src/internal/mir/analysis/（dominators, loop_analysis）, src/internal/types/checking/utils/diagnostics.cpp, src/internal/types/checking/stmt.cpp
+
+## 実装記録（段階1）
+
+設計ではMIR CFG上のデータフロー解析を提示したが、段階1は型検査（AST）上のfork/joinとして実装した。
+既存の`initialized_variables_`集合・診断基盤・Span解決をそのまま使え、警告位置と変数名がソースの語彙で出せるためである。
+
+- `check_if`で分岐前の集合を保存し、then/elseそれぞれの結果を積集合で合流する。returnやbreak等で終端した分岐は合流に参加しない（`int v; if (!ok) { return -1; } else { v = ...; }` の後続使用を誤検出しない）。
+- return網羅は`cm_stmts_terminate`（構造的終端判定。if/else両終端・else付き全ケース終端switch・while(true)無break・exit()を終端と見なす）で非void関数の末尾フォールスルーを警告する。
+- ループ本体の初期化は従来どおりフラット扱い（ループ内初期化を合流後も初期化済みとみなす）。C#型の厳密なDAへ寄せるとループ経由初期化の既存コードが大量に警告されるため、段階1では偽陰性側に倒した。
+
+残課題: ループ・switchの合流精密化、警告→エラー昇格、MIR CFGベースへの移行（ジェネリック実体単位の解析）、恒真条件検出。
