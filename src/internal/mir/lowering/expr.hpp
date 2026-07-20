@@ -48,6 +48,10 @@ class ExprLowering : public MirLoweringBase {
     bool get_member_place(const hir::HirMember& mem, LoweringContext& ctx, MirPlace& out_place,
                           hir::TypePtr& out_type);
 
+    // メソッドレシーバの場所を解決する（VarRef/Member/固定長配列のIndexチェーン。H10）
+    bool resolve_receiver_place(const hir::HirExpr* expr, LoweringContext& ctx, MirPlace& out_place,
+                                hir::TypePtr& out_type);
+
     // 文字列補間の処理
     LocalId process_string_interpolation(const std::string& format_str,
                                          const std::vector<LocalId>& args, LoweringContext& ctx);

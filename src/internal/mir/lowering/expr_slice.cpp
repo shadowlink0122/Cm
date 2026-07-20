@@ -25,23 +25,17 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (!call.args.empty()) {
             auto slice_expr = call.args[0].get();
 
-            // スライス変数を解決（変数参照またはメンバアクセス）
+            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。H10）
             MirPlace slice_place{0};
             hir::TypePtr slice_type = nullptr;
-            bool resolved = false;
+            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
 
-            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
-                auto slice_local_opt = ctx.resolve_variable((*var)->name);
-                if (slice_local_opt.has_value()) {
-                    slice_place = MirPlace{*slice_local_opt};
-                    resolved = true;
-                }
-            } else if (auto* mem =
-                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
-                // メンバアクセス（c.values のような形式）- 直接参照を取得
-                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
-                    resolved = true;
-                }
+            // 場所を持たない式（make_slice().len() 等の呼び出し戻り値）は一時ローカルへ
+            // 実体化して読み取る（H10: 従来は診断なしで空tempを返し黙って欠落していた）
+            if (!resolved) {
+                LocalId materialized = lower_expression(*slice_expr, ctx);
+                slice_place = MirPlace{materialized};
+                resolved = true;
             }
 
             if (resolved) {
@@ -76,27 +70,10 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (call.args.size() >= 2) {
             auto slice_expr = call.args[0].get();
 
-            // スライス変数を解決（変数参照またはメンバアクセス）
+            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。H10）
             MirPlace slice_place{0};
             hir::TypePtr slice_type = nullptr;
-            bool resolved = false;
-
-            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
-                auto slice_local_opt = ctx.resolve_variable((*var)->name);
-                if (slice_local_opt) {
-                    slice_place = MirPlace{*slice_local_opt};
-                    resolved = true;
-                    if (*slice_local_opt < ctx.func->locals.size()) {
-                        slice_type = ctx.func->locals[*slice_local_opt].type;
-                    }
-                }
-            } else if (auto* mem =
-                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
-                // メンバアクセス（c.values のような形式）- 直接参照を取得
-                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
-                    resolved = true;
-                }
-            }
+            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
 
             if (resolved) {
                 LocalId value_local = lower_expression(*call.args[1], ctx);
@@ -156,6 +133,11 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                 ctx.switch_to_block(success_block);
                 return ctx.new_temp(hir::make_void());
             }
+
+            // 黙殺禁止: レシーバを解決できない場合は診断を出す（H10。従来pushは診断なしで
+            // 文ごと欠落していた）
+            debug::log(debug::Stage::Mir, debug::Level::Error,
+                       "slice push(): レシーバのスライス場所を解決できませんでした");
         }
         return ctx.new_temp(hir::make_void());
     }
@@ -164,25 +146,10 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (!call.args.empty()) {
             auto slice_expr = call.args[0].get();
 
-            // スライス変数を解決（変数参照またはメンバアクセス。C11）
+            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
             MirPlace slice_place{0};
             hir::TypePtr slice_type = nullptr;
-            bool resolved = false;
-            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
-                auto slice_local_opt = ctx.resolve_variable((*var)->name);
-                if (slice_local_opt.has_value()) {
-                    slice_place = MirPlace{*slice_local_opt};
-                    resolved = true;
-                    if (*slice_local_opt < ctx.func->locals.size()) {
-                        slice_type = ctx.func->locals[*slice_local_opt].type;
-                    }
-                }
-            } else if (auto* mem =
-                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
-                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
-                    resolved = true;
-                }
-            }
+            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
 
             if (resolved) {
                 std::string pop_func = "cm_slice_pop_i32";
@@ -233,22 +200,10 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (call.args.size() >= 2) {
             auto slice_expr = call.args[0].get();
 
-            // スライス変数を解決（変数参照またはメンバアクセス。C11）
+            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
             MirPlace slice_place{0};
             hir::TypePtr slice_type = nullptr;
-            bool resolved = false;
-            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
-                auto slice_local_opt = ctx.resolve_variable((*var)->name);
-                if (slice_local_opt.has_value()) {
-                    slice_place = MirPlace{*slice_local_opt};
-                    resolved = true;
-                }
-            } else if (auto* mem =
-                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
-                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
-                    resolved = true;
-                }
-            }
+            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
 
             if (resolved) {
                 LocalId index_local = lower_expression(*call.args[1], ctx);
@@ -285,22 +240,10 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (!call.args.empty()) {
             auto slice_expr = call.args[0].get();
 
-            // スライス変数を解決（変数参照またはメンバアクセス。C11）
+            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
             MirPlace slice_place{0};
             hir::TypePtr slice_type = nullptr;
-            bool resolved = false;
-            if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&slice_expr->kind)) {
-                auto slice_local_opt = ctx.resolve_variable((*var)->name);
-                if (slice_local_opt.has_value()) {
-                    slice_place = MirPlace{*slice_local_opt};
-                    resolved = true;
-                }
-            } else if (auto* mem =
-                           std::get_if<std::unique_ptr<hir::HirMember>>(&slice_expr->kind)) {
-                if (get_member_place(**mem, ctx, slice_place, slice_type)) {
-                    resolved = true;
-                }
-            }
+            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
 
             if (resolved) {
                 BlockId success_block = ctx.new_block();

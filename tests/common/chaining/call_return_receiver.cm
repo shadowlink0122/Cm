@@ -1,0 +1,27 @@
+// H10回帰: 呼び出し戻り値レシーバ（make_slice().len()等）が黙って欠落せず、
+// 一時ローカルへ実体化されて正しい値を返すことを検証する
+// （従来は診断なしで空tempを返し、長さが常に0になる誤コンパイルだった）
+import std::io::println;
+
+int[] make_slice() {
+    int[] s;
+    s.push(1);
+    s.push(2);
+    s.push(3);
+    return s;
+}
+
+int[] empty_slice() {
+    int[] s;
+    return s;
+}
+
+int main() {
+    const int n = make_slice().len() as int;
+    println(n);
+    const int c = make_slice().cap() as int;
+    println(c >= 3);
+    const int z = empty_slice().len() as int;
+    println(z);
+    return 0;
+}

@@ -256,6 +256,69 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 }
 
 // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
+// メソッドレシーバの場所を解決する（H10: 従来はVarRef/Memberのみで、m[0].push(x)のような
+// 添字レシーバが黙って欠落していた）。固定長配列のIndexはindexプロジェクションで場所化する
+bool ExprLowering::resolve_receiver_place(const hir::HirExpr* expr, LoweringContext& ctx,
+                                          MirPlace& out_place, hir::TypePtr& out_type) {
+    if (!expr)
+        return false;
+
+    if (auto* var = std::get_if<std::unique_ptr<hir::HirVarRef>>(&expr->kind)) {
+        auto local_opt = ctx.resolve_variable((*var)->name);
+        if (!local_opt)
+            return false;
+        out_place = MirPlace{*local_opt};
+        out_type =
+            (*local_opt < ctx.func->locals.size()) ? ctx.func->locals[*local_opt].type : nullptr;
+        return true;
+    }
+
+    if (auto* mem = std::get_if<std::unique_ptr<hir::HirMember>>(&expr->kind)) {
+        return get_member_place(**mem, ctx, out_place, out_type);
+    }
+
+    if (auto* idx = std::get_if<std::unique_ptr<hir::HirIndex>>(&expr->kind)) {
+        // ベース（変数・メンバ・ネストした添字）を再帰的に場所化する
+        MirPlace base{0};
+        hir::TypePtr base_type = nullptr;
+        if (!resolve_receiver_place((*idx)->object.get(), ctx, base, base_type))
+            return false;
+        auto resolved = base_type ? ctx.resolve_typedef(base_type) : nullptr;
+        if (!resolved || resolved->kind != hir::TypeKind::Array)
+            return false;
+        // サイズ既知の固定長配列のみindexプロジェクションで場所化できる。
+        // スライス（可変長）要素の場所化はランタイム経由のアドレス取得が必要なため未対応
+        // （黙殺せず呼び出し側の診断で停止する）
+        if (!resolved->array_size.has_value() && resolved->dimensions.empty())
+            return false;
+
+        // 添字を適用（多次元はindicesを順に適用）
+        auto apply_index = [&](const hir::HirExprPtr& index_expr) -> bool {
+            if (!index_expr || !resolved || resolved->kind != hir::TypeKind::Array)
+                return false;
+            LocalId iv = lower_expression(*index_expr, ctx);
+            base.projections.push_back(PlaceProjection::index(iv));
+            resolved =
+                resolved->element_type ? ctx.resolve_typedef(resolved->element_type) : nullptr;
+            return true;
+        };
+        if (!(*idx)->indices.empty()) {
+            for (const auto& ie : (*idx)->indices) {
+                if (!apply_index(ie))
+                    return false;
+            }
+        } else {
+            if (!apply_index((*idx)->index))
+                return false;
+        }
+        out_place = base;
+        out_type = resolved;
+        return true;
+    }
+
+    return false;
+}
+
 bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContext& ctx,
                                     MirPlace& out_place, hir::TypePtr& out_type) {
     // ネストしたメンバーアクセスを検出して、プロジェクションを連結する
