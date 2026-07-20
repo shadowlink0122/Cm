@@ -87,7 +87,10 @@ export struct RawMutex {
 }
 
 export struct RawRwLock {
-    long[8] _opaque;
+    // pthread_rwlock_t は macOS で200バイト（Linuxは56バイト）。
+    // long[8]=64バイトでは macOS でrwlock_init/lockがバッファ外へ書き込みstackを破壊しSIGILLになるため、
+    // 全プラットフォームの最大に余裕を持たせた256バイトを確保する。
+    long[32] _opaque;
 }
 
 // ============================================================
