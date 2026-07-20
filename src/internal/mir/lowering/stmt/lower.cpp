@@ -47,6 +47,8 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
                     for (const auto* defer_stmt : defers) {
                         lower_statement(*defer_stmt, ctx);
                     }
+                    // ループボディスコープのデストラクタを実行してから脱出する（C13）
+                    emit_scope_destructors(ctx);
                     auto term = MirTerminator::goto_block(loop->exit);
                     ctx.set_terminator(std::move(term));
                     ctx.switch_to_block(ctx.new_block());
@@ -59,6 +61,8 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
                     for (const auto* defer_stmt : defers) {
                         lower_statement(*defer_stmt, ctx);
                     }
+                    // ループボディスコープのデストラクタを実行してから次の周期へ進む（C13）
+                    emit_scope_destructors(ctx);
                     // forループの場合は更新ブロックへ、whileループの場合はヘッダーへ
                     auto term = MirTerminator::goto_block(loop->update);
                     ctx.set_terminator(std::move(term));

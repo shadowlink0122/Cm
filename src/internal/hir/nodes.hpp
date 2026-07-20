@@ -39,6 +39,9 @@ struct HirVarRef {
     std::string name;
     bool is_function_ref = false;  // 関数名への参照（関数ポインタ用）
     bool is_closure = false;       // クロージャ（キャプチャあり）か
+    // move式のオペランドとして所有権を手放した参照か。
+    // MIR loweringがデストラクタ登録を解除し、moved-out変数の二重解放を防ぐ
+    bool is_moved_from = false;
 
     // クロージャ用：キャプチャされた変数の情報
     struct CapturedVar {

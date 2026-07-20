@@ -1,0 +1,20 @@
+// H12回帰: フィールド経由のmove（move obj.field）後に基底変数を使用するとエラーになることを検証する
+import std::io::println;
+import std::collections::vector::*;
+
+struct Holder {
+    Vector<int> items;
+}
+
+void consume(Vector<int> v) {
+    const int n = v.len();
+    println(n);
+}
+
+int main() {
+    Holder h;
+    consume(move h.items);
+    const int n = h.items.len();
+    println(n);
+    return 0;
+}

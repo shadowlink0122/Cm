@@ -322,7 +322,16 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
         // move式: move x は x そのものを返す（所有権移動、ゼロコスト）
         debug::hir::log(debug::hir::Id::ExprLower, "Lowering move expression", debug::Level::Debug);
         // moveは単にオペランドを返す - 所有権追跡は型チェッカーで行われている
-        return lower_expr(*move_expr->operand);
+        auto moved = lower_expr(*move_expr->operand);
+        // 変数参照のmoveはMIRへ伝搬し、moved-out変数のデストラクタ登録を解除させる
+        // （これが無いと move で所有権を渡した変数がスコープ終了時にも解放され二重解放になる）
+        if (moved) {
+            if (auto* var_ref = std::get_if<std::unique_ptr<HirVarRef>>(&moved->kind)) {
+                if (*var_ref)
+                    (*var_ref)->is_moved_from = true;
+            }
+        }
+        return moved;
     } else if (auto* await_expr = expr.as<ast::AwaitExpr>()) {
         // await式: オペランドを評価し、is_awaitedフラグを設定
         debug::hir::log(debug::hir::Id::ExprLower, "Lowering await expression",

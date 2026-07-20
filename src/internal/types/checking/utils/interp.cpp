@@ -199,6 +199,8 @@ void TypeChecker::check_interpolation_scope(const std::string& format_str) {
                 if (scopes_.current().lookup(name)) {
                     // 補間内の参照は変数の使用としてマークする（W001誤検出防止）
                     scopes_.current().mark_used(name);
+                    // 補間経由のmove後使用を診断する（H12: 従来は補間内がすり抜けていた）
+                    check_use_after_move(name, current_span_);
                     continue;
                 }
                 if (enum_names_.count(name) || struct_defs_.count(name) ||

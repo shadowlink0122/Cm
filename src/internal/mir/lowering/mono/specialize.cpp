@@ -520,6 +520,22 @@ void Monomorphization::generate_generic_specializations(
                 }
             }
 
+            // M15: 要素型自身がジェネリック特殊化（Vector__int等）の場合、その特殊化デストラクタは
+            // この時点では未生成のことがある。基底のジェネリックデストラクタ（Vector<T>__dtor）が
+            // 存在すれば呼び出しを挿入してよい（不動点ループが本関数の呼び出しをスキャンして
+            // 特殊化を連鎖生成するため、多段ネストの各段で要素データが解放される）
+            if (!has_element_dtor && element_type.find("__") != std::string::npos) {
+                std::string elem_base = element_type.substr(0, element_type.find("__"));
+                for (const auto& func : program.functions) {
+                    if (func && func->name.rfind(elem_base + "<", 0) == 0 &&
+                        func->name.size() > 6 &&
+                        func->name.substr(func->name.size() - 6) == "__dtor") {
+                        has_element_dtor = true;
+                        break;
+                    }
+                }
+            }
+
             // デストラクタがある場合のみループを挿入
             if (has_element_dtor) {
                 debug_msg("MONO", "Inserting destructor loop for " + specialized_name +

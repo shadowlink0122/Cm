@@ -448,6 +448,12 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
 
     LocalId local = *local_opt;
 
+    // move式で所有権を手放した変数はデストラクタ登録を解除する
+    // （moved-out変数がスコープ終了時にも解放されると、移動先と二重解放になる）
+    if (var.is_moved_from) {
+        ctx.unregister_destructor_var(local);
+    }
+
     // 変数の型を取得
     hir::TypePtr var_type = hir::make_int();  // デフォルト
     if (local < ctx.func->locals.size()) {

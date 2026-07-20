@@ -233,6 +233,32 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                                "Marked variable '" + ident->name + "' as moved",
                                debug::Level::Debug);
             }
+            // フィールド経由のmove（move obj.field）は基底変数を移動済み扱いにする
+            // （H12: 従来はASTパターン不一致でマークされず、move後使用がすり抜けていた）
+            else if (auto* member = move_expr->operand->as<ast::MemberExpr>()) {
+                const ast::Expr* base = member->object.get();
+                while (base) {
+                    if (const auto* inner = base->as<ast::MemberExpr>()) {
+                        base = inner->object.get();
+                    } else {
+                        break;
+                    }
+                }
+                if (base) {
+                    if (const auto* base_ident = base->as<ast::IdentExpr>()) {
+                        if (scopes_.current().is_borrowed(base_ident->name)) {
+                            error(current_span_,
+                                  "Cannot move '" + base_ident->name + "' while it is borrowed");
+                            return ast::make_error();
+                        }
+                        mark_variable_moved(base_ident->name);
+                        debug::tc::log(
+                            debug::tc::Id::CheckExpr,
+                            "Marked variable '" + base_ident->name + "' as moved (field move)",
+                            debug::Level::Debug);
+                    }
+                }
+            }
         } else {
             inferred_type = ast::make_error();
         }
@@ -427,7 +453,7 @@ void TypeChecker::check_use_after_move(const std::string& name, Span span) {
     // Symbolのis_movedフラグをチェック
     auto sym = scopes_.current().lookup(name);
     if (sym && sym->is_moved) {
-        error(span, "Variable '" + name + "' used after move");
+        error(span, i18n::msgf(i18n::MsgId::TypeUseAfterMove, name));
     }
 }
 

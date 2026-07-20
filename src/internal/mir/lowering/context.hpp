@@ -169,6 +169,8 @@ class LoweringContext {
 
     // デストラクタ変数管理
     void register_destructor_var(LocalId id, const std::string& type_name);
+    // move済み変数のデストラクタ登録を全スコープから解除する（moved-outの二重解放防止）
+    void unregister_destructor_var(LocalId id);
     std::vector<std::pair<LocalId, std::string>> get_all_destructor_vars();
     std::vector<std::pair<LocalId, std::string>> get_current_scope_destructor_vars();
 

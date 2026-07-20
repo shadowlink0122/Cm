@@ -1,0 +1,30 @@
+// M15回帰: Vector<Vector<TrackedItem>>の多段ネストで、内側Vectorの要素まで
+// 全段のデストラクタが呼ばれることを検証する（従来は1段しか降りず内側がリークした）
+import std::io::println;
+import std::collections::vector::*;
+
+struct TrackedItem {
+    int id;
+}
+
+impl TrackedItem {
+    ~self() {
+        println("~item {self.id}");
+    }
+}
+
+int main() {
+    println("start");
+    {
+        Vector<Vector<TrackedItem>> outer();
+        Vector<TrackedItem> inner();
+        inner.push(TrackedItem { id: 1 });
+        inner.push(TrackedItem { id: 2 });
+        outer.push(move inner);
+        const int olen = outer.len();
+        println("outer.len() = {olen}");
+        println("scope end:");
+    }
+    println("done");
+    return 0;
+}

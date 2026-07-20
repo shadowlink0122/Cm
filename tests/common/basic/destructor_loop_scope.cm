@@ -1,0 +1,32 @@
+import std::io::println;
+// C13回帰: while/forループ本体で束縛したRAII変数のデストラクタが毎周期実行されることを検証する
+// （従来は関数終了まで解放されず、ループ内のリソースが反復ごとにリークしていた）
+struct Obj {
+    int id;
+}
+
+impl Obj {
+    self(int i) {
+        self.id = i;
+        println("C{self.id}");
+    }
+
+    ~self() {
+        println("D{self.id}");
+    }
+}
+
+int main() {
+    int i = 0;
+    while (i < 2) {
+        const Obj w(i);
+        i = i + 1;
+    }
+
+    for (int j = 10; j < 12; j = j + 1) {
+        const Obj f(j);
+    }
+
+    println("end");
+    return 0;
+}

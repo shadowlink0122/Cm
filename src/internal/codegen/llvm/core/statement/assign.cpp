@@ -372,6 +372,17 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
                     // rvalueがポインタ値（nullポインタを含む）の場合はloadしてはいけない
                     bool isRvalueAlloca = llvm::isa<llvm::AllocaInst>(rvalue);
                     if (sourceType->isPointerTy() && targetType->isStructTy() && isRvalueAlloca) {
+                        // C14: しきい値超の集約はload/storeの第一級集約コピーにせずmemcpyで転写する
+                        // （第一級集約コピーはO2のSROA/instcombineが全要素をSSA展開し、
+                        // int[16384]フィールドで24秒/6.4GBに達する二次爆発の原因だった）
+                        const auto& dataLayout = module->getDataLayout();
+                        const uint64_t copySize = dataLayout.getTypeAllocSize(targetType);
+                        constexpr uint64_t kAggregateMemcpyThreshold = 128;
+                        if (copySize >= kAggregateMemcpyThreshold && addr != rvalue) {
+                            builder->CreateMemCpy(addr, llvm::MaybeAlign(), rvalue,
+                                                  llvm::MaybeAlign(), copySize);
+                            return;
+                        }
                         // ポインタからロードして構造体値を取得
                         rvalue = builder->CreateLoad(targetType, rvalue, "struct_load");
                         sourceType = rvalue->getType();

@@ -136,6 +136,19 @@ void LoweringContext::register_destructor_var(LocalId id, const std::string& typ
     }
 }
 
+// move済み変数のデストラクタ登録を全スコープから解除する（moved-outの二重解放防止）
+void LoweringContext::unregister_destructor_var(LocalId id) {
+    for (auto& scope_vars : destructor_vars) {
+        for (auto it = scope_vars.begin(); it != scope_vars.end();) {
+            if (it->first == id) {
+                it = scope_vars.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
 // 全スコープのデストラクタ変数を取得（内側から外側へ、逆順）
 std::vector<std::pair<LocalId, std::string>> LoweringContext::get_all_destructor_vars() {
     std::vector<std::pair<LocalId, std::string>> result;

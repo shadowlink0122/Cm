@@ -13,9 +13,9 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| C14 | コンパイル時間 | 固定長配列を持つ構造体の代入・値渡しがO2で二次爆発（`int[16384]`フィールドで24秒/6.4GB、コピーがmemcpyでなく全要素SSA展開） | 未着手 |
+| C14 | コンパイル時間 | 固定長配列を持つ構造体の代入・値渡しがO2で二次爆発（`int[16384]`フィールドで24秒/6.4GB、コピーがmemcpyでなく全要素SSA展開） | Phase 1実装済み（`assign.cpp`の構造体コピーで128バイト以上の集約を`CreateMemCpy`化。`tests/common/structs/big_struct_copy.cm`で内容保存を回帰固定。byval/sretは未着手） |
 | M12 | コンパイル時間 | 構造体代入が一時変数経由で二重コピーされC14を増幅（コピー省略なし） | 未着手 |
-| M13 | 型システム | MIR側の手計算レイアウト（base.cpp:443・mono_structs.cpp:271）がArray/ネスト構造体/スライスをdefault 8/8で誤計算（現在は未参照のデッドコードだが、参照した瞬間に壊れる地雷、正しい`layout_size`と二重管理） | 未着手 |
+| M13 | 型システム | MIR側の手計算レイアウト（base.cpp:443・mono_structs.cpp:271）がArray/ネスト構造体/スライスをdefault 8/8で誤計算（現在は未参照のデッドコードだが、参照した瞬間に壊れる地雷、正しい`layout_size`と二重管理） | 一部対応（mono_structs.cpp側は型同一性リファクタリングで`calculate_specialized_type_size`の再帰計算へ置換済み。base.cpp側の一本化は未着手） |
 
 ## 背景と根本原因
 

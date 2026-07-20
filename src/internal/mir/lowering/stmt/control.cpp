@@ -172,6 +172,9 @@ void StmtLowering::lower_while(const hir::HirWhile& while_stmt, LoweringContext&
     for (const auto* defer_stmt : defers) {
         lower_statement(*defer_stmt, ctx);
     }
+    // ループボディスコープのデストラクタを毎周期実行する（C13: 明示ブロックと同一順序に揃える。
+    // これが無いとループ内のVector等が関数終了まで解放されず反復ごとにリークしていた）
+    emit_scope_destructors(ctx);
     ctx.pop_scope();
     ctx.pop_loop();
     if (!ctx.get_current_block()->terminator) {
@@ -236,6 +239,9 @@ void StmtLowering::lower_for(const hir::HirFor& for_stmt, LoweringContext& ctx) 
     for (const auto* defer_stmt : defers) {
         lower_statement(*defer_stmt, ctx);
     }
+
+    // ループボディスコープのデストラクタを毎周期実行する（C13: whileと同一の順序規約）
+    emit_scope_destructors(ctx);
 
     ctx.pop_scope();
 
