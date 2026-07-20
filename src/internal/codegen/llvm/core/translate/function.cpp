@@ -454,9 +454,22 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         locals[i] = alloca;
                         allocatedLocals.insert(i);  // allocaされた変数を記録
 
-                        // Tagged Union型のallocaをゼロ初期化
-                        // ペイロードフィールド(i8[N])の未使用バイトにゴミが残るのを防止
-                        if (local.type && local.type->name.find("__TaggedUnion_") == 0) {
+                        // 集約型（構造体・ユニオン・固定長配列）のallocaをゼロ初期化する（H4）。
+                        // 未初期化フィールド/要素がnative/jitでスタックゴミを返し、wasm/js（ゼロ初期化）と
+                        // 挙動が分裂していたのを、全バックエンドでゼロ初期化に統一する。
+                        // 後続で個別に初期化されるフィールド（スライスメンバのcm_slice_new等）は
+                        // このmemsetの後に上書きされるため順序上の問題はない。
+                        bool zeroInitAggregate = false;
+                        if (local.type) {
+                            if (local.type->kind == hir::TypeKind::Struct ||
+                                local.type->kind == hir::TypeKind::Union) {
+                                zeroInitAggregate = true;
+                            } else if (local.type->kind == hir::TypeKind::Array &&
+                                       local.type->array_size.has_value()) {
+                                zeroInitAggregate = true;
+                            }
+                        }
+                        if (zeroInitAggregate) {
                             auto dataLayout = module->getDataLayout();
                             auto allocSize = dataLayout.getTypeAllocSize(llvmType);
                             builder->CreateMemSet(alloca,

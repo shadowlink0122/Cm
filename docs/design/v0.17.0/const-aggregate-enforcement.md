@@ -12,7 +12,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| M3 | 型システム | `const`構造体のフィールド代入が`--strict`でも検出されず実行される（constが集約に対して浅い） | 未着手 |
+| M3 | 型システム | `const`構造体のフィールド代入が`--strict`でも検出されず実行される（constが集約に対して浅い） | 保留（破壊的変更のため。実装試行で既存テスト6件が壊れることを確認） |
 
 ## 背景と根本原因
 
@@ -144,7 +144,8 @@ q.x = 99;              // 非const → 従来通り許可
 
 ## リスクと非互換性
 
-- **後方非互換**: 従来const集約のフィールド/要素へ代入していたコードがコンパイルエラーになる。これは本来のconstセマンティクスであり意図的な修正だが、標準ライブラリ・tests/commonがこのパターンに依存していないか事前に全数調査する。依存があれば段階移行（Warning先行）を検討する。
+- **後方非互換（実測で確認）**: 実装を試行したところ、`const Outer o = {...}; o.inner = {a: 1000, b: 2000};` のように**const集約のフィールドへ意図的に代入する既存テストが多数存在**し、深いconstを強制すると `tests/common/structs/struct_literal`・`nested_literal_assign`・`struct_multidim_member`・`struct_nested_deep`・`must/must_struct`・`llvm/thread/thread_join_test` の6件が壊れることを確認した。つまりCmの現行仕様では「const変数の集約フィールドは代入可能（浅いconst）」が事実上の確立された挙動であり、M3の強制は破壊的変更になる。このため単純な追加検査としては実装せず**保留**した。
+- **移行方針**: 実装するなら (1) まずWarningで先行し既存コードを移行、(2) 標準ライブラリ・tests/commonのconst集約フィールド代入を全て洗い出して修正、(3) その後にerror化、という段階が必須。あるいは `struct S { const int id; }` のようなフィールド単位constを先に導入し、変数レベルの深いconstは別キーワード（`readonly`等）で opt-in する案も検討する。
 - **const推奨lintとの相互作用**: 現状のconst推奨警告（src/internal/types/checking/utils/diagnostics.cpp:32-49、非変更変数へのconst提案）が、深いconst導入で「実は変更されている」と判定される集約を非変更扱いしないよう、`mark_variable_modified`の基底変数マーク（operator.cpp:53-60）との整合を確認する。
 - **型修飾の共有破壊**: `TypePtr`はshared_ptrで共有されるため、const伝播で修飾を付ける際にコピーせず書き換えると、同じ型を参照する非const箇所へ波及する恐れがある。伝播時は必ずコピーしてから修飾する。
 - **フィールド単位constの将来拡張**: 本設計は「変数がconstならその集約全体が深くconst」という浅い起点からの深い伝播であり、構造体宣言でのフィールド単位const（`struct S { const int id; }`）は対象外。将来対応できるよう`is_place_const`はフィールド型修飾も見られる形にしておく。

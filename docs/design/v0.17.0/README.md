@@ -34,6 +34,7 @@ C1・C2・C3・C4・C5・C10・C11・C15・H13・M4・M5・M11・M16、および
 - [集約に入るインターフェイス値](interface-values-in-aggregates.md) — H1 / H2
 - [JS/TSの値セマンティクスとBigInt](js-ts-value-semantics.md) — H3 / H5
 - [数値出力とキャストの一貫性](numeric-output-and-cast-consistency.md) — M8 / M9
+- [未初期化構造体フィールドのゼロ初期化](uninitialized-struct-fields.md) — H4（実装済み）
 
 ### ランタイム・コレクション・文字列・ビルド
 - [コレクションのOption返しAPIとエラー処理](collections-option-api-and-errors.md) — H8 / M17

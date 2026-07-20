@@ -1,0 +1,41 @@
+import std::io::println;
+// uninitialized_fields.cm - H4回帰: 未初期化の構造体フィールド・配列がゼロ初期化されること
+// 以前はnative/jit=スタックゴミ・wasm/js=ゼロで挙動が分裂していた
+
+struct Data {
+    int a;
+    int b;
+    int c;
+}
+
+struct Nested {
+    Data d;
+    int[3] arr;
+    int tag;
+}
+
+int main() {
+    // 未初期化フィールド
+    Data d;
+    d.a = 1;
+    println("d: a={d.a} b={d.b} c={d.c}");
+
+    // ネスト構造体・配列フィールドの未初期化要素
+    Nested n;
+    n.tag = 7;
+    n.d.a = 5;
+    const int n_da = n.d.a;
+    const int n_db = n.d.b;
+    const int arr0 = n.arr[0];
+    const int arr2 = n.arr[2];
+    println("n: d.a={n_da} d.b={n_db} arr0={arr0} arr2={arr2} tag={n.tag}");
+
+    // 固定長配列ローカルの未初期化要素
+    int[4] local_arr;
+    local_arr[1] = 99;
+    const int la0 = local_arr[0];
+    const int la1 = local_arr[1];
+    const int la3 = local_arr[3];
+    println("arr: [0]={la0} [1]={la1} [3]={la3}");
+    return 0;
+}
