@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/slice_dispatch.hpp"
 
 #include <functional>
 #include <memory>
@@ -124,15 +125,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
 
             // push関数名を決定
             std::string push_func = "cm_slice_push_i32";
-            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                push_func = "cm_slice_push_i8";
-            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
-                push_func = "cm_slice_push_i64";
-            } else if (elem_kind == hir::TypeKind::Double) {
-                push_func = "cm_slice_push_f64";
-            } else if (elem_kind == hir::TypeKind::Float) {
-                push_func = "cm_slice_push_f32";
+            if (auto info = slice_scalar_info(elem_kind)) {
+                // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
+                push_func = std::string("cm_slice_push_") + info->width;
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 push_func = "cm_slice_push_ptr";

@@ -1,0 +1,46 @@
+import std::io::println;
+// slice_short_large.cm - C4回帰: short/ushortスライスが大サイズでもstride不整合なく正しく動作すること
+// 以前はelem_size=2に対しpush/getが4バイト関数へ落ちてヒープ破壊していた
+
+int main() {
+    // short: 2000要素を格納し、複数回の容量拡張をまたいで全要素を検証する
+    short[] ss = [];
+    int i = 0;
+    while (i < 2000) {
+        ss.push(((i % 100) - 50) as short);
+        i = i + 1;
+    }
+    int j = 0;
+    bool short_ok = true;
+    while (j < 2000) {
+        if ((ss[j] as int) != ((j % 100) - 50)) {
+            short_ok = false;
+        }
+        j = j + 1;
+    }
+    // 補間経路の読み出しも検証（別のget選択箇所）
+    const int s1999 = ss[1999] as int;
+    println("short_ok={short_ok} len={ss.len()} last={s1999}");
+
+    // ushort: 32767を超える値（符号なし2バイト）を含めて検証する
+    ushort[] us = [];
+    int k = 0;
+    while (k < 3000) {
+        us.push(((k * 31) % 65000) as ushort);
+        k = k + 1;
+    }
+    int m = 0;
+    bool ushort_ok = true;
+    while (m < 3000) {
+        if ((us[m] as int) != ((m * 31) % 65000)) {
+            ushort_ok = false;
+        }
+        m = m + 1;
+    }
+    println("ushort_ok={ushort_ok} len={us.len()} u2999={us[2999]}");
+
+    // popで末尾から取り出しても2バイト幅で正しく読めること
+    const short popped = ss.pop();
+    println("pop={popped} len={ss.len()}");
+    return 0;
+}

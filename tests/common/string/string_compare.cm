@@ -1,0 +1,37 @@
+import std::io::println;
+// string_compare.cm - C2回帰: 文字列の < > <= >= が内容比較（strcmp）であること
+// 以前はLt/Le/Gt/Geにstrcmp分岐が無く、アドレス比較になりレイアウト依存で非決定的だった
+
+int main() {
+    const string a = "apple";
+    const string b = "banana";
+    const string a2 = "apple";
+
+    // 辞書順で a < b
+    const bool lt = a < b;
+    const bool gt = a > b;
+    const bool le = a <= a2;
+    const bool ge = b >= a;
+    println("lt={lt} gt={gt} le={le} ge={ge}");
+
+    // 等しい文字列の大小
+    const bool eq_lt = a < a2;
+    const bool eq_le = a <= a2;
+    const bool eq_ge = a >= a2;
+    println("eq_lt={eq_lt} eq_le={eq_le} eq_ge={eq_ge}");
+
+    // 接頭辞関係（"app" < "apple"）
+    const string p = "app";
+    const bool pre = p < a;
+    println("prefix={pre}");
+
+    // ソートの根拠として大小関係の推移性を確認
+    const string x = "cat";
+    const string y = "dog";
+    const string z = "cow";
+    const bool xy = x < y;
+    const bool xz = x < z;
+    const bool zy = z < y;
+    println("xy={xy} xz={xz} zy={zy}");
+    return 0;
+}

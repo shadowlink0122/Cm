@@ -94,6 +94,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
     // 比較の result_type は bool になるため、オペランド型も参照する
     const bool operands_unsigned =
         isUnsignedType(lhs_type) || isUnsignedType(rhs_type) || isUnsignedType(result_type);
+    // 文字列比較の判定: LLVM上はstringも他のポインタも同じptr型のため、
+    // オペランドのCm型がstring/cstringのときだけ内容比較（cm_strcmp）にする。
+    // これを見ないと int* 同士の順序/等値比較までstrcmpになりポインタ演算が壊れる（C2の回帰防止）。
+    auto is_string_type = [](const hir::TypePtr& t) {
+        return t && (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString);
+    };
+    const bool string_compare = is_string_type(lhs_type) || is_string_type(rhs_type);
     switch (op) {
         // 算術演算
         case mir::MirBinaryOp::Add: {
@@ -409,6 +416,8 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             // ポインタ同士の比較は文字列比較として扱う
+            // Eq/Neのポインタ→strcmpは既存挙動（派生Eqの構造体/配列フィールド比較が依存）のため
+            // string_compareでゲートしない。順序比較(Lt/Le/Gt/Ge)のみ文字列に限定する（C2）。
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",
@@ -448,6 +457,7 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             // ポインタ同士の比較は文字列比較として扱う
+            // Eq/Neのポインタ→strcmpは既存挙動のためstring_compareでゲートしない（C2）。
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",
@@ -483,6 +493,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOLT(lhs, rhs, "flt");
             }
+            // 文字列比較（ポインタ同士）は内容比較にする（C2）
+            if (string_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
+                return builder->CreateICmpSLT(cmpResult,
+                                              llvm::ConstantInt::get(ctx.getI32Type(), 0), "strlt");
+            }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
@@ -503,6 +523,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOLE(lhs, rhs, "fle");
+            }
+            // 文字列比較（ポインタ同士）は内容比較にする（C2）
+            if (string_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
+                return builder->CreateICmpSLE(cmpResult,
+                                              llvm::ConstantInt::get(ctx.getI32Type(), 0), "strle");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
@@ -525,6 +555,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOGT(lhs, rhs, "fgt");
             }
+            // 文字列比較（ポインタ同士）は内容比較にする（C2）
+            if (string_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
+                return builder->CreateICmpSGT(cmpResult,
+                                              llvm::ConstantInt::get(ctx.getI32Type(), 0), "strgt");
+            }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
@@ -545,6 +585,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (lhs->getType()->isFloatingPointTy() || rhs->getType()->isFloatingPointTy()) {
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOGE(lhs, rhs, "fge");
+            }
+            // 文字列比較（ポインタ同士）は内容比較にする（C2）
+            if (string_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto strcmpFunc = module->getOrInsertFunction(
+                    "cm_strcmp",
+                    llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto cmpResult = builder->CreateCall(strcmpFunc, {lhs, rhs}, "cm_strcmp");
+                return builder->CreateICmpSGE(cmpResult,
+                                              llvm::ConstantInt::get(ctx.getI32Type(), 0), "strge");
             }
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();

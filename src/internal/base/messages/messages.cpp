@@ -870,6 +870,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeUnusedResultValueTheError
     {"unused Result value; the error is ignored. Handle it with match, is_ok(), unwrap(), etc., or assign it to a variable explicitly [must_use]",
      "unused Result value; the error is ignored. Handle it with match, is_ok(), unwrap(), etc., or assign it to a variable explicitly [must_use]"},
+    // TypeCannotCastNumericToString
+    {"cannot cast numeric type '{0}' to string with 'as'; use string interpolation or a to-string conversion instead",
+     "数値型 '{0}' を 'as' で string にキャストすることはできません（文字列補間または文字列化関数を使用してください）"},
 };
 // clang-format on
 

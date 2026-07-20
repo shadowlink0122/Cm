@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/slice_dispatch.hpp"
 
 #include <functional>
 #include <memory>
@@ -493,15 +494,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             get_func = "cm_slice_get_subslice";
         } else if (elem_type) {
             auto elem_kind = elem_type->kind;
-            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                get_func = "cm_slice_get_i8";
-            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
-                get_func = "cm_slice_get_i64";
-            } else if (elem_kind == hir::TypeKind::Double) {
-                get_func = "cm_slice_get_f64";
-            } else if (elem_kind == hir::TypeKind::Float) {
-                get_func = "cm_slice_get_f32";
+            if (auto info = slice_scalar_info(elem_kind)) {
+                // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
+                get_func = std::string("cm_slice_get_") + info->width;
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 get_func = "cm_slice_get_ptr";
             } else if (elem_kind == hir::TypeKind::Union || elem_kind == hir::TypeKind::Struct) {

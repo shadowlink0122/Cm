@@ -106,6 +106,7 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_filter_closure",
         // スライス操作
         "cm_slice_get_i8",
+        "cm_slice_get_i16",
         "cm_slice_get_i32",
         "cm_slice_get_i64",
         "cm_slice_get_f64",
@@ -115,6 +116,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_last_i32",
         "cm_slice_last_i64",
         "cm_slice_push_i8",
+        "cm_slice_push_i16",
         "cm_slice_push_i32",
         "cm_slice_push_i64",
         "cm_slice_push_f32",
@@ -122,6 +124,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_push_ptr",
         "cm_slice_push_blob",
         "cm_slice_get_element_ptr",
+        "cm_slice_pop_i16",
         "cm_slice_pop_i32",
         "cm_slice_pop_i64",
         "cm_slice_pop_f32",
@@ -140,6 +143,17 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_make_slice",
         "cm_slice_get_subslice",
         "cm_slice_sort",
+        "cm_slice_sort_i8",
+        "cm_slice_sort_u8",
+        "cm_slice_sort_i16",
+        "cm_slice_sort_u16",
+        "cm_slice_sort_i32",
+        "cm_slice_sort_u32",
+        "cm_slice_sort_i64",
+        "cm_slice_sort_u64",
+        "cm_slice_sort_f32",
+        "cm_slice_sort_f64",
+        "cm_slice_sort_str",
         "cm_slice_reverse",
         "cm_slice_first",
         "cm_slice_last",
@@ -424,8 +438,8 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // スライス操作
-    if ((name == "cm_slice_get_i8" || name == "cm_slice_get_i32" || name == "cm_slice_get_i64" ||
-         name == "cm_slice_get_f64" || name == "cm_slice_get_ptr") &&
+    if ((name == "cm_slice_get_i8" || name == "cm_slice_get_i16" || name == "cm_slice_get_i32" ||
+         name == "cm_slice_get_i64" || name == "cm_slice_get_f64" || name == "cm_slice_get_ptr") &&
         argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "]";
     }
@@ -435,9 +449,9 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     if ((name == "cm_slice_last_i32" || name == "cm_slice_last_i64") && argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ")[__cm_unwrap(" + argStrs[0] + ").length - 1]";
     }
-    if ((name == "cm_slice_push_i8" || name == "cm_slice_push_i32" || name == "cm_slice_push_i64" ||
-         name == "cm_slice_push_f32" || name == "cm_slice_push_f64" ||
-         name == "cm_slice_push_ptr") &&
+    if ((name == "cm_slice_push_i8" || name == "cm_slice_push_i16" || name == "cm_slice_push_i32" ||
+         name == "cm_slice_push_i64" || name == "cm_slice_push_f32" ||
+         name == "cm_slice_push_f64" || name == "cm_slice_push_ptr") &&
         argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ").push(" + argStrs[1] + ")";
     }
@@ -454,8 +468,8 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         // 要素へのポインタオブジェクトを返す（デリファレンス構文 __arr[__idx] で要素を読む）
         return "({__arr: __cm_unwrap(" + argStrs[0] + "), __idx: " + argStrs[1] + "})";
     }
-    if ((name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
-         name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") &&
+    if ((name == "cm_slice_pop_i16" || name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" ||
+         name == "cm_slice_pop_f32" || name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") &&
         argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ").pop()";
     }
@@ -503,7 +517,16 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     if (name == "cm_slice_get_subslice" && argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "]";
     }
-    if (name == "cm_slice_sort" && argStrs.size() >= 1) {
+    if (name == "cm_slice_sort_str" && argStrs.size() >= 1) {
+        // 文字列スライスは辞書順で安定ソートする（C5）
+        return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))";
+    }
+    if ((name == "cm_slice_sort" || name == "cm_slice_sort_i8" || name == "cm_slice_sort_u8" ||
+         name == "cm_slice_sort_i16" || name == "cm_slice_sort_u16" ||
+         name == "cm_slice_sort_i32" || name == "cm_slice_sort_u32" ||
+         name == "cm_slice_sort_i64" || name == "cm_slice_sort_u64" ||
+         name == "cm_slice_sort_f32" || name == "cm_slice_sort_f64") &&
+        argStrs.size() >= 1) {
         return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => a - b)";
     }
     if (name == "cm_slice_reverse" && argStrs.size() >= 1) {

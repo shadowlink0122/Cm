@@ -1,0 +1,18 @@
+import std::io::println;
+// println_float_literal.cm - C15回帰: 浮動小数のprintlnが小数部を保持し、リテラルもコンパイルできること
+// 以前はwasmで(int)value切り捨て、かつdoubleリテラルはLLVM系3バックエンドでcm_println_int誤ディスパッチ→検証失敗だった
+
+int main() {
+    // 変数経由
+    const double d = 3.14159;
+    println(d);
+    // リテラル直接（以前はコンパイル失敗）
+    println(2.5);
+    println(10.0);
+    // float
+    const float f = 1.75;
+    println(f);
+    // 補間経由（従来から正しい）との一致確認
+    println("interp={d}");
+    return 0;
+}

@@ -707,7 +707,52 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "sort") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "cm_slice_sort";
+                // 要素型に応じてソート関数を選択する（符号・浮動小数・文字列を正しく比較。C5）
+                std::string sort_suffix = "_i32";
+                if (obj_type->element_type) {
+                    switch (obj_type->element_type->kind) {
+                        case ast::TypeKind::Bool:
+                        case ast::TypeKind::Char:
+                        case ast::TypeKind::UTiny:
+                            sort_suffix = "_u8";
+                            break;
+                        case ast::TypeKind::Tiny:
+                            sort_suffix = "_i8";
+                            break;
+                        case ast::TypeKind::Short:
+                            sort_suffix = "_i16";
+                            break;
+                        case ast::TypeKind::UShort:
+                            sort_suffix = "_u16";
+                            break;
+                        case ast::TypeKind::UInt:
+                            sort_suffix = "_u32";
+                            break;
+                        case ast::TypeKind::Long:
+                        case ast::TypeKind::ISize:
+                            sort_suffix = "_i64";
+                            break;
+                        case ast::TypeKind::ULong:
+                        case ast::TypeKind::USize:
+                            sort_suffix = "_u64";
+                            break;
+                        case ast::TypeKind::Float:
+                        case ast::TypeKind::UFloat:
+                            sort_suffix = "_f32";
+                            break;
+                        case ast::TypeKind::Double:
+                        case ast::TypeKind::UDouble:
+                            sort_suffix = "_f64";
+                            break;
+                        case ast::TypeKind::String:
+                            sort_suffix = "_str";
+                            break;
+                        default:
+                            sort_suffix = "_i32";
+                            break;
+                    }
+                }
+                hir->func_name = "cm_slice_sort" + sort_suffix;
                 hir->args.push_back(std::move(obj_hir));
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin sort()",
                                 debug::Level::Debug);

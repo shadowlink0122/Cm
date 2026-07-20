@@ -5,6 +5,7 @@
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/hir/lowering/fwd.hpp"
+#include "slice_dispatch.hpp"
 
 #include <memory>
 #include <optional>
@@ -599,18 +600,10 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
 
                                             std::string get_func = "cm_slice_get_i32";
                                             auto elem_kind = elem_type->kind;
-                                            if (elem_kind == hir::TypeKind::Char ||
-                                                elem_kind == hir::TypeKind::Bool ||
-                                                elem_kind == hir::TypeKind::Tiny ||
-                                                elem_kind == hir::TypeKind::UTiny) {
-                                                get_func = "cm_slice_get_i8";
-                                            } else if (elem_kind == hir::TypeKind::Long ||
-                                                       elem_kind == hir::TypeKind::ULong) {
-                                                get_func = "cm_slice_get_i64";
-                                            } else if (elem_kind == hir::TypeKind::Double) {
-                                                get_func = "cm_slice_get_f64";
-                                            } else if (elem_kind == hir::TypeKind::Float) {
-                                                get_func = "cm_slice_get_f32";
+                                            if (auto info = slice_scalar_info(elem_kind)) {
+                                                // スカラ型: 幅をslice_dispatchから取得（C4）
+                                                get_func =
+                                                    std::string("cm_slice_get_") + info->width;
                                             } else if (elem_kind == hir::TypeKind::Pointer ||
                                                        elem_kind == hir::TypeKind::String) {
                                                 get_func = "cm_slice_get_ptr";
@@ -1479,22 +1472,12 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                         // cm_slice_get_*関数を決定
                                                         std::string get_func = "cm_slice_get_i32";
                                                         auto elem_kind = elem_type->kind;
-                                                        if (elem_kind == hir::TypeKind::Char ||
-                                                            elem_kind == hir::TypeKind::Bool ||
-                                                            elem_kind == hir::TypeKind::Tiny ||
-                                                            elem_kind == hir::TypeKind::UTiny) {
-                                                            get_func = "cm_slice_get_i8";
-                                                        } else if (elem_kind ==
-                                                                       hir::TypeKind::Long ||
-                                                                   elem_kind ==
-                                                                       hir::TypeKind::ULong) {
-                                                            get_func = "cm_slice_get_i64";
-                                                        } else if (elem_kind ==
-                                                                   hir::TypeKind::Double) {
-                                                            get_func = "cm_slice_get_f64";
-                                                        } else if (elem_kind ==
-                                                                   hir::TypeKind::Float) {
-                                                            get_func = "cm_slice_get_f32";
+                                                        if (auto info =
+                                                                slice_scalar_info(elem_kind)) {
+                                                            // スカラ型: 幅をslice_dispatchから取得（C4）
+                                                            get_func =
+                                                                std::string("cm_slice_get_") +
+                                                                info->width;
                                                         } else if (elem_kind ==
                                                                        hir::TypeKind::Pointer ||
                                                                    elem_kind ==
@@ -2095,8 +2078,13 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                 if (arg_local < ctx.func->locals.size() && ctx.func->locals[arg_local].type) {
                     lit_type = ctx.func->locals[arg_local].type;
                 }
-                if (lit_type && (lit_type->kind == hir::TypeKind::Long ||
-                                 lit_type->kind == hir::TypeKind::ISize)) {
+                if (lit_type && (lit_type->kind == hir::TypeKind::Float ||
+                                 lit_type->kind == hir::TypeKind::Double)) {
+                    // 浮動小数リテラル（println(1.0)等）はcm_println_doubleへ。
+                    // これを見落とすとdoubleがcm_println_int（i32）に渡りLLVM検証エラーになる（C15）。
+                    runtime_func = "cm_println_double";
+                } else if (lit_type && (lit_type->kind == hir::TypeKind::Long ||
+                                        lit_type->kind == hir::TypeKind::ISize)) {
                     runtime_func = "cm_println_long";
                 } else if (lit_type && (lit_type->kind == hir::TypeKind::ULong ||
                                         lit_type->kind == hir::TypeKind::USize)) {

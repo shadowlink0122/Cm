@@ -102,6 +102,21 @@ void cm_slice_push_i8(void* slice_ptr, int8_t value) {
     slice->len++;
 }
 
+// i16要素をpush（short/ushort用）
+void cm_slice_push_i16(void* slice_ptr, int16_t value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    int16_t* data = (int16_t*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
 // i32要素をpush
 void cm_slice_push_i32(void* slice_ptr, int32_t value) {
     if (!slice_ptr)
@@ -163,6 +178,8 @@ void cm_slice_push_f32(void* slice_ptr, float value) {
 }
 
 // ポインタ要素をpush
+// wasmではポインタは4バイトだがスライスのelem_sizeは8。sort/reverse/subslice/delete/equalなど
+// elem_size駆動の処理とstrideを一致させるため、8バイトスロットへゼロ拡張して格納する。
 void cm_slice_push_ptr(void* slice_ptr, void* value) {
     if (!slice_ptr)
         return;
@@ -172,8 +189,8 @@ void cm_slice_push_ptr(void* slice_ptr, void* value) {
         cm_slice_grow(slice);
     }
 
-    void** data = (void**)slice->data;
-    data[slice->len] = value;
+    unsigned char* slot = (unsigned char*)slice->data + slice->len * slice->elem_size;
+    *(uint64_t*)slot = (uint64_t)(uintptr_t)value;
     slice->len++;
 }
 
@@ -222,6 +239,20 @@ int8_t cm_slice_pop_i8(void* slice_ptr) {
 
     slice->len--;
     int8_t* data = (int8_t*)slice->data;
+    return data[slice->len];
+}
+
+// i16要素をpop（short/ushort用）
+int16_t cm_slice_pop_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0;
+
+    slice->len--;
+    int16_t* data = (int16_t*)slice->data;
     return data[slice->len];
 }
 
@@ -291,8 +322,8 @@ void* cm_slice_pop_ptr(void* slice_ptr) {
         return NULL;
 
     slice->len--;
-    void** data = (void**)slice->data;
-    return data[slice->len];
+    unsigned char* slot = (unsigned char*)slice->data + slice->len * slice->elem_size;
+    return (void*)(uintptr_t) * (uint64_t*)slot;
 }
 
 // i8要素を取得（char/bool用）
@@ -305,6 +336,19 @@ int8_t cm_slice_get_i8(void* slice_ptr, int64_t index) {
         return 0;
 
     int8_t* data = (int8_t*)slice->data;
+    return data[index];
+}
+
+// i16要素を取得（short/ushort用）
+int16_t cm_slice_get_i16(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0;
+
+    int16_t* data = (int16_t*)slice->data;
     return data[index];
 }
 
@@ -369,8 +413,8 @@ void* cm_slice_get_ptr(void* slice_ptr, int64_t index) {
     if (index < 0 || index >= slice->len)
         return NULL;
 
-    void** data = (void**)slice->data;
-    return data[index];
+    unsigned char* slot = (unsigned char*)slice->data + index * slice->elem_size;
+    return (void*)(uintptr_t) * (uint64_t*)slot;
 }
 
 // 要素を削除
@@ -807,13 +851,6 @@ void* cm_slice_reverse(void* slice_ptr) {
     return result;
 }
 
-// スライスをソートしたコピーを返す（int32用）
-static int cm_compare_i32(const void* a, const void* b) {
-    int32_t ia = *(const int32_t*)a;
-    int32_t ib = *(const int32_t*)b;
-    return (ia > ib) - (ia < ib);
-}
-
 // 自前のクイックソート実装（WASM用）
 static void cm_qsort_swap(char* a, char* b, size_t size) {
     for (size_t i = 0; i < size; i++) {
@@ -869,7 +906,45 @@ void cm_qsort(void* base, size_t nmemb, size_t size, int (*compar)(const void*, 
     cm_qsort_impl((char*)base, nmemb, size, compar);
 }
 
-void* cm_slice_sort(void* slice_ptr) {
+// 要素型ごとの比較関数（符号・浮動小数・文字列を正しく区別する）
+#define CM_DEFINE_CMP(suffix, ctype)                                \
+    static int cm_slice_cmp_##suffix(const void* a, const void* b) { \
+        ctype x = *(const ctype*)a;                                \
+        ctype y = *(const ctype*)b;                                \
+        return (x > y) - (x < y);                                  \
+    }
+
+CM_DEFINE_CMP(i8, int8_t)
+CM_DEFINE_CMP(u8, uint8_t)
+CM_DEFINE_CMP(i16, int16_t)
+CM_DEFINE_CMP(u16, uint16_t)
+CM_DEFINE_CMP(i32, int32_t)
+CM_DEFINE_CMP(u32, uint32_t)
+CM_DEFINE_CMP(i64, int64_t)
+CM_DEFINE_CMP(u64, uint64_t)
+CM_DEFINE_CMP(f32, float)
+CM_DEFINE_CMP(f64, double)
+#undef CM_DEFINE_CMP
+
+// 文字列（char*）要素の比較（cm_strcmpに依存せず自前でバイト比較する）
+static int cm_slice_cmp_str(const void* a, const void* b) {
+    const char* sa = *(const char* const*)a;
+    const char* sb = *(const char* const*)b;
+    if (sa == sb)
+        return 0;
+    if (!sa)
+        return -1;
+    if (!sb)
+        return 1;
+    while (*sa && (*sa == *sb)) {
+        sa++;
+        sb++;
+    }
+    return (int)(unsigned char)*sa - (int)(unsigned char)*sb;
+}
+
+// 与えられた比較関数でソートしたコピーを返す共通処理
+static void* cm_slice_sort_with(void* slice_ptr, int (*cmp)(const void*, const void*)) {
     if (!slice_ptr)
         return NULL;
     CmSlice* slice = (CmSlice*)slice_ptr;
@@ -892,18 +967,38 @@ void* cm_slice_sort(void* slice_ptr) {
         return NULL;
     }
 
-    // データをコピー
+    // データをコピーしてからソート（要素サイズは実際のelem_sizeに従う）
     memcpy(result->data, slice->data, slice->len * slice->elem_size);
-
-    // ソート（現在はint32のみ対応）
-    if (slice->elem_size == sizeof(int32_t)) {
-        cm_qsort(result->data, slice->len, slice->elem_size, cm_compare_i32);
-    }
+    cm_qsort(result->data, slice->len, slice->elem_size, cmp);
 
     result->len = slice->len;
     result->cap = slice->len;
     result->elem_size = slice->elem_size;
     return result;
+}
+
+// 要素型別のソートラッパー（呼び出し側が要素型サフィックスで選択）
+#define CM_DEFINE_SORT(suffix)                                  \
+    void* cm_slice_sort_##suffix(void* slice_ptr) {            \
+        return cm_slice_sort_with(slice_ptr, cm_slice_cmp_##suffix); \
+    }
+
+CM_DEFINE_SORT(i8)
+CM_DEFINE_SORT(u8)
+CM_DEFINE_SORT(i16)
+CM_DEFINE_SORT(u16)
+CM_DEFINE_SORT(i32)
+CM_DEFINE_SORT(u32)
+CM_DEFINE_SORT(i64)
+CM_DEFINE_SORT(u64)
+CM_DEFINE_SORT(f32)
+CM_DEFINE_SORT(f64)
+CM_DEFINE_SORT(str)
+#undef CM_DEFINE_SORT
+
+// 後方互換: 型情報なしのcm_slice_sortはint32として扱う
+void* cm_slice_sort(void* slice_ptr) {
+    return cm_slice_sort_with(slice_ptr, cm_slice_cmp_i32);
 }
 
 // 固定サイズ配列からスライスを作成

@@ -139,24 +139,38 @@ void cm_println_ulong(unsigned long long value) {
 // ============================================================
 // Floating Point Output (simplified)
 // ============================================================
+// cm_format_double は runtime_format.c で定義（このTUより前にインクルードされる）
+char* cm_format_double(double value);
+
 void cm_print_double(double value) {
-    int int_value = (int)value;
-    cm_print_int(int_value);
+    // 小数部を切り捨てず、補間 {} と同じcm_format_doubleで整形する（C15）
+    char* str = cm_format_double(value);
+    if (str) {
+        wasm_write_stdout(str, wasm_strlen(str));
+    }
 }
 
 void cm_println_double(double value) {
-    int int_value = (int)value;
-    cm_println_int(int_value);
+    char* str = cm_format_double(value);
+    if (str) {
+        wasm_write_stdout(str, wasm_strlen(str));
+    }
+    wasm_write_stdout("\n", 1);
 }
 
 void cm_print_float(float value) {
-    int int_value = (int)value;
-    cm_print_int(int_value);
+    char* str = cm_format_double((double)value);
+    if (str) {
+        wasm_write_stdout(str, wasm_strlen(str));
+    }
 }
 
 void cm_println_float(float value) {
-    int int_value = (int)value;
-    cm_println_int(int_value);
+    char* str = cm_format_double((double)value);
+    if (str) {
+        wasm_write_stdout(str, wasm_strlen(str));
+    }
+    wasm_write_stdout("\n", 1);
 }
 
 // ============================================================

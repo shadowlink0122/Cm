@@ -1,0 +1,24 @@
+import std::io::println;
+// derive_ord_string.cm - C3回帰: with Ord のstringフィールド比較が内容比較（strcmp）であること
+// 以前は派生Ord本体がstringフィールドをアドレス比較しており、キー順序が非決定的だった
+
+struct Person with Ord {
+    string name;
+    int age;
+}
+
+int main() {
+    const Person a = Person { name: "alice", age: 30 };
+    const Person b = Person { name: "bob", age: 25 };
+    const Person a2 = Person { name: "alice", age: 99 };
+
+    // nameで辞書順比較（alice < bob）
+    const bool lt = a < b;
+    const bool gt = a > b;
+    println("lt={lt} gt={gt}");
+
+    // 同名の場合は第2フィールドageで比較（age 30 < 99）
+    const bool tie = a < a2;
+    println("tie_by_age={tie}");
+    return 0;
+}

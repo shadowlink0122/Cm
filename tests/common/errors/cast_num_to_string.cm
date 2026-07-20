@@ -1,0 +1,10 @@
+// cast_num_to_string.cm - C10回帰: 数値スカラ→string の as キャストは型検査で拒否される
+// 以前は型検査を通過し、jit/native=SIGSEGV・wasm=空文字・js/ts=正常の5分裂だった
+import std::io::println;
+
+int main() {
+    const int n = 42;
+    const string s = n as string;
+    println("unreachable: {s}");
+    return 0;
+}

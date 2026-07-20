@@ -141,6 +141,41 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             // ターゲット型を返す
             inferred_type = cast_expr->target_type;
+            // 不正な as キャストを拒否する（C10）。
+            // 数値スカラ → string はビット再解釈になりクラッシュ・空文字化の原因のため型検査で弾く。
+            // ユニオン downcast（union as variant）やポインタ/cstring → string は正当なので対象外。
+            auto rop = resolve_typedef(operand_type);
+            auto rtgt = resolve_typedef(cast_expr->target_type);
+            if (rop && rtgt &&
+                (rtgt->kind == ast::TypeKind::String || rtgt->kind == ast::TypeKind::CString)) {
+                bool operand_is_numeric = false;
+                switch (rop->kind) {
+                    case ast::TypeKind::Bool:
+                    case ast::TypeKind::Tiny:
+                    case ast::TypeKind::Short:
+                    case ast::TypeKind::Int:
+                    case ast::TypeKind::Long:
+                    case ast::TypeKind::UTiny:
+                    case ast::TypeKind::UShort:
+                    case ast::TypeKind::UInt:
+                    case ast::TypeKind::ULong:
+                    case ast::TypeKind::ISize:
+                    case ast::TypeKind::USize:
+                    case ast::TypeKind::Float:
+                    case ast::TypeKind::Double:
+                    case ast::TypeKind::UFloat:
+                    case ast::TypeKind::UDouble:
+                    case ast::TypeKind::Char:
+                        operand_is_numeric = true;
+                        break;
+                    default:
+                        break;
+                }
+                if (operand_is_numeric) {
+                    error(expr.span, i18n::msgf(i18n::MsgId::TypeCannotCastNumericToString,
+                                                ast::type_to_string(*rop)));
+                }
+            }
         }
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: オペランドの型を推論し、変数をmoved状態にマーク

@@ -1,6 +1,7 @@
 // MIR lowering - let文（定数畳み込みヘルパーと配列/スライス初期化を含む変数宣言の展開）
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
 
@@ -225,14 +226,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         // 要素サイズを取得
         int64_t elem_size = 4;  // デフォルトはint
         auto elem_kind = elem_type->kind;
-        if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-            elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-            elem_size = 1;
-        } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
-            elem_size = 2;
-        } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
-                   elem_kind == hir::TypeKind::Double) {
-            elem_size = 8;
+        if (auto info = slice_scalar_info(elem_kind)) {
+            // スカラ型: elem_sizeをslice_dispatchから取得（アクセス幅と整合。C4）
+            elem_size = info->elem_size;
         } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
             elem_size = 8;
         } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
@@ -348,16 +344,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     // 要素サイズを取得
                     int64_t elem_size = 4;  // デフォルトはint
                     auto elem_kind = elem_type->kind;
-                    if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                        elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                        elem_size = 1;
-                    } else if (elem_kind == hir::TypeKind::Short ||
-                               elem_kind == hir::TypeKind::UShort) {
-                        elem_size = 2;
-                    } else if (elem_kind == hir::TypeKind::Long ||
-                               elem_kind == hir::TypeKind::ULong ||
-                               elem_kind == hir::TypeKind::Double) {
-                        elem_size = 8;
+                    if (auto info = slice_scalar_info(elem_kind)) {
+                        // スカラ型: elem_sizeをslice_dispatchから取得（アクセス幅と整合。C4）
+                        elem_size = info->elem_size;
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String) {
                         elem_size = 8;
@@ -410,16 +399,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
                     // push関数名を決定
                     std::string push_func = "cm_slice_push_i32";
-                    if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                        elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                        push_func = "cm_slice_push_i8";
-                    } else if (elem_kind == hir::TypeKind::Long ||
-                               elem_kind == hir::TypeKind::ULong) {
-                        push_func = "cm_slice_push_i64";
-                    } else if (elem_kind == hir::TypeKind::Double) {
-                        push_func = "cm_slice_push_f64";
-                    } else if (elem_kind == hir::TypeKind::Float) {
-                        push_func = "cm_slice_push_f32";
+                    if (auto info = slice_scalar_info(elem_kind)) {
+                        // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
+                        push_func = std::string("cm_slice_push_") + info->width;
                     } else if (elem_kind == hir::TypeKind::Pointer ||
                                elem_kind == hir::TypeKind::String) {
                         push_func = "cm_slice_push_ptr";
@@ -447,18 +429,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             int64_t inner_elem_size = 4;  // デフォルトはint
                             if (elem->type->element_type) {
                                 auto inner_elem_kind = elem->type->element_type->kind;
-                                if (inner_elem_kind == hir::TypeKind::Long ||
-                                    inner_elem_kind == hir::TypeKind::ULong ||
-                                    inner_elem_kind == hir::TypeKind::Double) {
-                                    inner_elem_size = 8;
-                                } else if (inner_elem_kind == hir::TypeKind::Char ||
-                                           inner_elem_kind == hir::TypeKind::Bool ||
-                                           inner_elem_kind == hir::TypeKind::Tiny ||
-                                           inner_elem_kind == hir::TypeKind::UTiny) {
-                                    inner_elem_size = 1;
-                                } else if (inner_elem_kind == hir::TypeKind::Short ||
-                                           inner_elem_kind == hir::TypeKind::UShort) {
-                                    inner_elem_size = 2;
+                                if (auto info = slice_scalar_info(inner_elem_kind)) {
+                                    // スカラ型: elem_sizeをslice_dispatchから取得（C4）
+                                    inner_elem_size = info->elem_size;
                                 } else if (inner_elem_kind == hir::TypeKind::Pointer ||
                                            inner_elem_kind == hir::TypeKind::String) {
                                     inner_elem_size = 8;
@@ -578,12 +551,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                         auto resolved_ek = ctx.resolve_typedef(let.init->type->element_type);
                         auto ek =
                             resolved_ek ? resolved_ek->kind : let.init->type->element_type->kind;
-                        if (ek == hir::TypeKind::Char || ek == hir::TypeKind::Bool ||
-                            ek == hir::TypeKind::Tiny || ek == hir::TypeKind::UTiny) {
-                            elem_size = 1;
-                        } else if (ek == hir::TypeKind::Long || ek == hir::TypeKind::ULong ||
-                                   ek == hir::TypeKind::Double) {
-                            elem_size = 8;
+                        if (auto info = slice_scalar_info(ek)) {
+                            // スカラ型: elem_sizeをslice_dispatchから取得（short/ushort欠落を解消。C4）
+                            elem_size = info->elem_size;
                         } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
                             elem_size = 8;
                         } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {

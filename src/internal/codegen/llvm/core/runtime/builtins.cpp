@@ -196,14 +196,17 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
-    } else if (name == "cm_slice_push_i8" || name == "cm_slice_push_i32" ||
-               name == "cm_slice_push_i64" || name == "cm_slice_push_f32" ||
-               name == "cm_slice_push_f64" || name == "cm_slice_push_ptr" ||
-               name == "cm_slice_push_slice" || name == "cm_slice_push_blob") {
+    } else if (name == "cm_slice_push_i8" || name == "cm_slice_push_i16" ||
+               name == "cm_slice_push_i32" || name == "cm_slice_push_i64" ||
+               name == "cm_slice_push_f32" || name == "cm_slice_push_f64" ||
+               name == "cm_slice_push_ptr" || name == "cm_slice_push_slice" ||
+               name == "cm_slice_push_blob") {
         // void cm_slice_push_*(i8* slice, value)
         llvm::Type* valType = ctx.getI32Type();
         if (name == "cm_slice_push_i8")
             valType = ctx.getI8Type();
+        else if (name == "cm_slice_push_i16")
+            valType = ctx.getI16Type();
         else if (name == "cm_slice_push_i64")
             valType = ctx.getI64Type();
         else if (name == "cm_slice_push_f32")
@@ -218,13 +221,16 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType(), valType}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
-    } else if (name == "cm_slice_pop_i8" || name == "cm_slice_pop_i32" ||
-               name == "cm_slice_pop_i64" || name == "cm_slice_pop_f32" ||
-               name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") {
+    } else if (name == "cm_slice_pop_i8" || name == "cm_slice_pop_i16" ||
+               name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" ||
+               name == "cm_slice_pop_f32" || name == "cm_slice_pop_f64" ||
+               name == "cm_slice_pop_ptr") {
         // value cm_slice_pop_*(i8* slice)
         llvm::Type* retType = ctx.getI32Type();
         if (name == "cm_slice_pop_i8")
             retType = ctx.getI8Type();
+        else if (name == "cm_slice_pop_i16")
+            retType = ctx.getI16Type();
         else if (name == "cm_slice_pop_i64")
             retType = ctx.getI64Type();
         else if (name == "cm_slice_pop_f32")
@@ -251,6 +257,12 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         // i8 cm_slice_get_i8(i8* slice, i64 index)
         auto funcType =
             llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_slice_get_i16" || name == "cm_slice_get_i16") {
+        // i16 cm_slice_get_i16(i8* slice, i64 index)
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI16Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "__builtin_slice_get_i32" || name == "cm_slice_get_i32") {
@@ -303,8 +315,14 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
-    } else if (name == "cm_slice_reverse" || name == "cm_slice_sort") {
-        // void* cm_slice_reverse(void* slice) / cm_slice_sort(void* slice)
+    } else if (name == "cm_slice_reverse" || name == "cm_slice_sort" ||
+               name == "cm_slice_sort_i8" || name == "cm_slice_sort_u8" ||
+               name == "cm_slice_sort_i16" || name == "cm_slice_sort_u16" ||
+               name == "cm_slice_sort_i32" || name == "cm_slice_sort_u32" ||
+               name == "cm_slice_sort_i64" || name == "cm_slice_sort_u64" ||
+               name == "cm_slice_sort_f32" || name == "cm_slice_sort_f64" ||
+               name == "cm_slice_sort_str") {
+        // void* cm_slice_reverse(void* slice) / cm_slice_sort_*(void* slice)
         auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());

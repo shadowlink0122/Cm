@@ -312,6 +312,7 @@ enum class MsgId : int {
     TypeTypePatternIsNotA,
     TypeTypePatternsCanOnlyBe,
     TypeUnusedResultValueTheError,
+    TypeCannotCastNumericToString,
     Count,
 };
 

@@ -1,0 +1,5 @@
+long=10000000000,20000000000,30000000000
+double=1.25,2.75,3.5
+short=-3,0,5
+int=7,19,42
+string=apple,banana,cherry
