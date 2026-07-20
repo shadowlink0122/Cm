@@ -166,11 +166,21 @@ export impl<K, V> TreeMap<K, V> {
         return self.find_index(key) >= 0;
     }
 
-    // キーに対応する値を返す。存在しないキーの戻り値は未規定なので、事前に contains で確認すること。O(log n)。
-    V get(K key) {
-        int idx = self.find_index(key);
+    // キーに対応する値を返す（H8: 不在を型で表現するOption返しAPI）。O(log n)。
+    // 旧実装は不在時にidxを0へ丸めて根ノードの値を返す危険な契約だった
+    Option<V> get(K key) {
+        const int idx = self.find_index(key);
         if (idx < 0) {
-            idx = 0;
+            return Option::None;
+        }
+        return Option::Some(self.vals[idx]);
+    }
+
+    // キーに対応する値、不在時はdefault_valを返す（デフォルト値を明示する非Option版）。O(log n)。
+    V get_or(K key, V default_val) {
+        const int idx = self.find_index(key);
+        if (idx < 0) {
+            return default_val;
         }
         return self.vals[idx];
     }

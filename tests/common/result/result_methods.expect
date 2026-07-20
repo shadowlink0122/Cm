@@ -1,4 +1,4 @@
-=== CmResult Test ===
+=== Result Test ===
 r1 is_ok: true
 r2 is_ok: false
 r1 unwrap: 5

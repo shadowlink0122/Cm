@@ -10,7 +10,7 @@ has_children: true
 
 ## 対応済み（リリースノート参照）
 
-C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C13・C14(Phase1)・C15・C16・H4・H11・H13・H15・L8・M4・M5・M8・M9・M11・M15・M16、およびスライス要素型ディスパッチの一元化は実装・テスト済み。実装完了した設計文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（H4: uninitialized-struct-fields、C7/C8/C9: type-identity-recursive-keys、C16: mangling-collision-detection、H15/L8: generic-instantiation-diagnostics、M8/M9: numeric-output-and-cast-consistency）。
+C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C13・C14(Phase1)・C15・C16・H4・H8・H11・H13・H15・L8・M4・M5・M8・M9・M11・M15・M16・M17、およびスライス要素型ディスパッチの一元化は実装・テスト済み。実装完了した設計文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（H4: uninitialized-struct-fields、C7/C8/C9: type-identity-recursive-keys、C16: mangling-collision-detection、H15/L8: generic-instantiation-diagnostics、M8/M9: numeric-output-and-cast-consistency、H8/M17: collections-option-api-and-errors）。
 
 ## 残りの設計文書（テーマ別）
 
@@ -33,7 +33,6 @@ C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C13・C14(Phase1)・C15・C1
 - [JS/TSの値セマンティクスとBigInt](js-ts-value-semantics.md) — H3 / H5
 
 ### ランタイム・コレクション・文字列・ビルド
-- [コレクションのOption返しAPIとエラー処理](collections-option-api-and-errors.md) — H8 / M17
 - [文字列のUTF-8対応とStringBuilder](strings-utf8-and-stringbuilder.md) — H9
 - [チェーンレシーバの解決](chain-receiver-resolution.md) — H10
 - [インクリメンタルビルドと並列コード生成](incremental-build-and-parallel-codegen.md) — H14 / M6 / M10

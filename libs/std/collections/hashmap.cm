@@ -62,8 +62,26 @@ export impl<K, V> HashMap<K, V> {
         }
     }
 
-    // 取得
-    V get(K key) {
+    // 取得（H8: 不在を型で表現するOption返しAPI。存在すればSome(値)、不在ならNone）
+    Option<V> get(K key) {
+        int h = key as int;
+        if (h < 0) { h = 0 - h; }
+        const int idx = h % self.cap;
+
+        for (int i = 0; i < self.cap; i++) {
+            const int pos = (idx + i) % self.cap;
+            if (self.entries[pos].occupied && self.entries[pos].key == key) {
+                return Option::Some(self.entries[pos].value);
+            }
+            if (!self.entries[pos].occupied) {
+                break;
+            }
+        }
+        return Option::None;
+    }
+
+    // 取得（デフォルト値を明示する非Option版。不在時はdefault_valを返す）
+    V get_or(K key, V default_val) {
         int h = key as int;
         if (h < 0) { h = 0 - h; }
         const int idx = h % self.cap;
@@ -77,8 +95,6 @@ export impl<K, V> HashMap<K, V> {
                 break;
             }
         }
-        // デフォルト値（型に依存）
-        V default_val;
         return default_val;
     }
 

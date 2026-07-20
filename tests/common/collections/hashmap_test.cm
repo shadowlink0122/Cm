@@ -1,4 +1,4 @@
-// std::collections::HashMap<K, V>テスト
+// std::collections::HashMap<K, V>テスト（getはOption返し、既存キーの読み出しはget_orを使用）
 // import std::collections::hashmap を使用
 // HashMap<K, V>は両方がジェネリック
 import std::io::println;
@@ -17,9 +17,9 @@ int main() {
     int len = m1.len();
     println("  insert 3 items: len={len}");
 
-    const int v1 = m1.get(1);
-    int v2 = m1.get(2);
-    const int v3 = m1.get(3);
+    const int v1 = m1.get_or(1, 0);
+    int v2 = m1.get_or(2, 0);
+    const int v3 = m1.get_or(3, 0);
     println("  get: 1->{v1}, 2->{v2}, 3->{v3}");
 
     bool has1 = m1.contains(1);
@@ -27,7 +27,7 @@ int main() {
     println("  contains: 1={has1}, 99={has99}");
 
     m1.insert(2, 999);
-    v2 = m1.get(2);
+    v2 = m1.get_or(2, 0);
     println("  update 2->999: get(2)={v2}");
 
     m1.remove(1);
@@ -42,8 +42,8 @@ int main() {
     m1.insert(10, 1000);
     m1.insert(20, 2000);
     len = m1.len();
-    const int v10 = m1.get(10);
-    const int v20 = m1.get(20);
+    const int v10 = m1.get_or(10, 0);
+    const int v20 = m1.get_or(20, 0);
     println("  reuse: len={len}, 10->{v10}, 20->{v20}");
 
     // デストラクタが自動的に呼ばれる
@@ -58,8 +58,8 @@ int main() {
     len = m2.len();
     println("  insert 2 items: len={len}");
 
-    const long lv1 = m2.get(1);
-    const long lv2 = m2.get(2);
+    const long lv1 = m2.get_or(1, 0 as long);
+    const long lv2 = m2.get_or(2, 0 as long);
     println("  get: 1->{lv1}, 2->{lv2}");
 
     // デストラクタが自動的に呼ばれる
@@ -75,9 +75,9 @@ int main() {
     len = m3.len();
     println("  insert 3 items: len={len}");
 
-    const bool b1 = m3.get(1);
-    const bool b2 = m3.get(2);
-    const bool b3 = m3.get(3);
+    const bool b1 = m3.get_or(1, false);
+    const bool b2 = m3.get_or(2, false);
+    const bool b3 = m3.get_or(3, false);
     println("  get: 1->{b1}, 2->{b2}, 3->{b3}");
 
     // デストラクタが自動的に呼ばれる

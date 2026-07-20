@@ -1,0 +1,32 @@
+// H8回帰: HashMapのgetがOption返しになり、不在キーで未初期化メモリでなくNoneを返すことを検証する
+// negative check: 不在時に他の値が返らないこと（unwrap_or/get_orのデフォルト経路）を含む
+import std::io::println;
+import std::collections::hashmap::*;
+
+int main() {
+    HashMap<int, int> m();
+    m.insert(1, 100);
+    m.insert(2, 200);
+
+    // 存在キー: Some(値)
+    Option<int> v1 = m.get(1);
+    println(v1.is_some());
+    println(v1.unwrap());
+
+    // 不在キー: None（旧実装は未初期化ローカルを返していた）
+    Option<int> missing = m.get(99);
+    println(missing.is_none());
+    println(missing.unwrap_or(-1));
+
+    // get_or: 存在キーは実値、不在キーはデフォルト
+    println(m.get_or(2, -1));
+    println(m.get_or(42, -1));
+
+    // 空マップの不在検索
+    HashMap<int, int> empty();
+    Option<int> e = empty.get(1);
+    println(e.is_none());
+    println(empty.get_or(1, -7));
+
+    return 0;
+}

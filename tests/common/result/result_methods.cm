@@ -1,45 +1,45 @@
-// result_methods.cm - CmResult型のimportテスト
-// std::core::resultからインポートして使用
+// result_methods.cm - 組み込みResult<T, E>のメソッドテスト
+// （M17: 旧std::core::resultのCmResult（is_okを検査しないunwrapを持つstruct方式）は
+// 組み込みResultへ統合して撤去した。エラー処理は組み込みResult/Option+?の1系統に揃う）
 import std::io::println;
-import std::core::result::*;
 
-CmResult<int, string> safe_divide(int a, int b) {
+Result<int, string> safe_divide(int a, int b) {
     if (b == 0) {
-        return make_err(0, "Division by zero");
+        return Result::Err("Division by zero");
     }
-    return make_ok(a / b, "");
+    return Result::Ok(a / b);
 }
 
 int main() {
-    println("=== CmResult Test ===");
+    println("=== Result Test ===");
 
     // is_ok テスト
-    const CmResult<int, string> r1 = safe_divide(10, 2);
-    const bool b1 = r1.is_ok;
+    Result<int, string> r1 = safe_divide(10, 2);
+    const bool b1 = r1.is_ok();
     println("r1 is_ok: {b1}");
 
-    const CmResult<int, string> r2 = safe_divide(10, 0);
-    const bool b2 = r2.is_ok;
+    Result<int, string> r2 = safe_divide(10, 0);
+    const bool b2 = r2.is_ok();
     println("r2 is_ok: {b2}");
 
-    // unwrap テスト
-    const int v1 = result_unwrap(r1);
+    // unwrap テスト（is_okを確認する安全な契約）
+    const int v1 = r1.unwrap();
     println("r1 unwrap: {v1}");
 
     // unwrap_or テスト
-    const int v2 = result_unwrap_or(r2, -1);
+    const int v2 = r2.unwrap_or(-1);
     println("r2 unwrap_or: {v2}");
 
     // unwrap_err テスト
-    const string e1 = result_unwrap_err(r2);
+    const string e1 = r2.unwrap_err();
     println("r2 unwrap_err: {e1}");
 
     // チェイン テスト
-    const CmResult<int, string> r3 = safe_divide(100, 5);
-    if (r3.is_ok) {
-        const int v3 = result_unwrap(r3);
-        const CmResult<int, string> r4 = safe_divide(v3, 2);
-        const int v4 = result_unwrap(r4);
+    Result<int, string> r3 = safe_divide(100, 5);
+    if (r3.is_ok()) {
+        const int v3 = r3.unwrap();
+        Result<int, string> r4 = safe_divide(v3, 2);
+        const int v4 = r4.unwrap();
         println("100 / 5 / 2 = {v4}");
     }
 

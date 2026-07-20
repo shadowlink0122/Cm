@@ -123,3 +123,9 @@ error: メソッドレシーバの場所を解決できません: この式は�
 - 場所解決: src/internal/mir/lowering/expr/access.cpp:259-338（get_member_place）, :341（lower_index）
 - スライスbuiltin: src/internal/mir/lowering/expr_slice.cpp:19（try_lower_slice_builtin）
 - HIR脱糖: src/internal/hir/lowering/expr_member.cpp:43-51, :597-639
+
+## 追加対応（H8実装時に発見・修正済み）
+
+enum（Tagged Union）メソッドの呼び出し戻り値レシーバのチェーン（`map.get(k).is_none()`・`parse_int(s).unwrap_or(0)` 等）が誤った値を返していた。
+組み込みResult/Optionメソッドの脱糖がレシーバをclone_hir_exprで複製するため、呼び出しレシーバではタグ比較とペイロード取得が別評価になっていた。
+matchのscrutinee退避と同じASTプリパス（match_hoist.cpp）で、呼び出しを含むレシーバを一時変数へ退避して単一評価を保証するよう修正した。

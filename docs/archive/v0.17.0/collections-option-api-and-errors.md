@@ -1,16 +1,11 @@
----
-title: コレクションのOption返しAPIとエラー型統合
-parent: v0.17.0 Design
----
-
-# コレクションのOption返しAPIとエラー型統合
+# コレクションのOption返しAPIとエラー型統合（実装済み）
 
 ## 対象所見
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H8 | 言語 | HashMap/TreeMapの`get`がキー不在時に未初期化メモリまたは無関係な値を返す（Option返しAPIが無い）、stdの`CmResult`は`unwrap`が`is_ok`を確認しない | 未着手 |
-| M17 | 言語 | エラー処理が三重分裂（組み込み`Result`/`Option`+`?`は健全だが、stdはHazard #34回避のため`unwrap`が`is_ok`を見ない別物`CmResult`を出荷、ioはさらに別方式） | 未着手 |
+| H8 | 言語 | HashMap/TreeMapの`get`がキー不在時に未初期化メモリまたは無関係な値を返す（Option返しAPIが無い）、stdの`CmResult`は`unwrap`が`is_ok`を確認しない | 実装済み（`get -> Option<V>` + `get_or(key, default)`へ変更。TreeMapの「不在時に根ノードの値を返す」危険な契約を廃止） |
+| M17 | 言語 | エラー処理が三重分裂（組み込み`Result`/`Option`+`?`は健全だが、stdはHazard #34回避のため`unwrap`が`is_ok`を見ない別物`CmResult`を出荷、ioはさらに別方式） | 実装済み（Hazard #34の解消を確認し`CmResult`を撤去、ioのパース関数を`Option`返しへ移行。エラー処理は組み込み`Result`/`Option`+`?`の1系統に統合） |
 
 ## 背景と根本原因
 
@@ -149,3 +144,11 @@ TreeMapも同一のAPI形状に揃える（`get -> Option<V>`, `get_or`, `contai
 - 監査レポート: docs/design/v0.17.0/large-scale-bottleneck-audit.md（H8, M17, および関連するH4未初期化フィールド分裂）
 - 組み込みOption/Result登録: src/internal/types/checking/auto_impl.cpp:470-513, src/internal/types/checking/decl.cpp:27-56
 - 対象std実装: libs/std/collections/hashmap.cm, libs/std/collections/treemap.cm, libs/std/core/result.cm, libs/std/io/console/input.cm
+
+## 実装記録
+
+- HashMap/TreeMapの`get`を`Option<V>`返しへ変更し、`get_or(key, default)`を追加。既存テストは`get_or`へ移行。
+- Hazard #34（ジェネリックenumのmatch内型解決）は解消済みであることをプロトタイプで確認し（ジェネリックimplメソッドからの`Option<T>`返却がjit/native/wasm/jsで健全）、`libs/std/core/result.cm`（`CmResult`と`is_ok`を見ない`result_unwrap`）を撤去。`tests/common/result/result_methods.cm`は組み込み`Result`のメソッドテストへ書き換え。
+- ioのパース関数を`export Option<T>`返しへ移行（`parse_int`/`parse_long`/`parse_double`、新規`parse_bool`）。空文字列・非数字先頭はNone。`input_int`等の公開関数は`unwrap_or`の糖衣として契約を維持。あわせて`input.cm`の潜在構文エラー（`as double * fraction`の優先順位）を修正。
+- 実装中に、組み込みResult/Optionメソッドの脱糖がレシーバを複製するため`map.get(k).is_none()`のような呼び出しレシーバのチェーンで多重評価により誤った値を返す欠陥を発見。matchのscrutinee退避プリパス（match_hoist.cpp）を拡張し、呼び出しを含むレシーバを一時変数へ退避して修正した。
+- テスト: `hashmap_option_get_test.cm`・`treemap_option_get_test.cm`（不在キーのnegative check含む）・`std/parse_option_test.cm`（チェーン形レシーバ検証含む）。
