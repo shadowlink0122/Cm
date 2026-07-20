@@ -564,6 +564,17 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
             if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
                 enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
                 generic_context_.has_type_param(type->name)) {
+                // ジェネリック型引数の個数を検証する（H15）。
+                // 型引数が明示されているのに定義のジェネリックパラメータ数と食い違う場合は診断を出す。
+                // （型引数なしの使用は推論の余地があるため対象外にして誤検出を避ける）
+                auto sd_it = struct_defs_.find(type->name);
+                if (sd_it != struct_defs_.end() && sd_it->second && !type->type_args.empty() &&
+                    type->type_args.size() != sd_it->second->generic_params.size()) {
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TypeGenericArgumentCountMismatch, type->name,
+                                     std::to_string(sd_it->second->generic_params.size()),
+                                     std::to_string(type->type_args.size())));
+                }
                 return true;
             }
             // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする

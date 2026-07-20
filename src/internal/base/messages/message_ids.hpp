@@ -314,6 +314,7 @@ enum class MsgId : int {
     TypeUnusedResultValueTheError,
     TypeCannotCastNumericToString,
     TypeIntegerLiteralNarrowingTruncates,
+    TypeGenericArgumentCountMismatch,
     Count,
 };
 

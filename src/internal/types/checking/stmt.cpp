@@ -95,6 +95,19 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     // エラー表示用に文のSpanを保存
     Span stmt_span = current_span_;
 
+    // ジェネリック型引数の個数を検証する（H15。ローカル変数宣言はis_valid_typeを通らないためここで検査）
+    if (let.type) {
+        auto rt = resolve_typedef(let.type);
+        const auto& ct = rt ? rt : let.type;
+        auto sd_it = struct_defs_.find(ct->name);
+        if (sd_it != struct_defs_.end() && sd_it->second && !ct->type_args.empty() &&
+            ct->type_args.size() != sd_it->second->generic_params.size()) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TypeGenericArgumentCountMismatch, ct->name,
+                                            std::to_string(sd_it->second->generic_params.size()),
+                                            std::to_string(ct->type_args.size())));
+        }
+    }
+
     // const変数の値を評価（配列サイズ等で使用）
     std::optional<int64_t> const_int_value = std::nullopt;
     if (let.is_const && let.init) {

@@ -876,6 +876,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeIntegerLiteralNarrowingTruncates
     {"integer literal {0} does not fit in target type '{1}' and will be truncated",
      "整数リテラル {0} は変換先の型 '{1}' に収まらず切り捨てられます"},
+    // TypeGenericArgumentCountMismatch
+    {"generic type '{0}' expects {1} type argument(s) but {2} were provided",
+     "ジェネリック型 '{0}' は型引数を {1} 個必要としますが {2} 個指定されています"},
 };
 // clang-format on
 

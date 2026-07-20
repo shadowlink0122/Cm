@@ -1,0 +1,14 @@
+// generic_arg_count.cm - H15回帰: ジェネリック型引数の個数不一致を型検査で拒否する
+// 以前は Box<int, string> のような不正なインスタンス化が無診断で通過していた
+import std::io::println;
+
+struct Box<T> {
+    T value;
+}
+
+int main() {
+    Box<int, string> b;
+    b.value = 1;
+    println("unreachable");
+    return 0;
+}
