@@ -1,15 +1,10 @@
----
-title: 配列・スライスの境界チェック統一ポリシー
-parent: v0.17.0 Design
----
-
-# 配列・スライスの境界チェック統一ポリシー
+# 配列・スライスの境界チェック統一ポリシー（実装済み）
 
 ## 対象所見
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| M1 | スライス/バックエンド | OOB読みはjit/native/wasm=0・js/ts=undefinedのセンチネル分裂、OOB書きはjit/native=SIGSEGV・wasm=不定書き込み・js=配列自動拡張と4分裂（境界トラップはどこにも無い、`--sanitize=bounds`はスライス非対応） | 未着手 |
+| M1 | スライス/バックエンド | OOB読みはjit/native/wasm=0・js/ts=undefinedのセンチネル分裂、OOB書きはjit/native=SIGSEGV・wasm=不定書き込み・js=配列自動拡張と4分裂（境界トラップはどこにも無い、`--sanitize=bounds`はスライス非対応） | 実装済み（`cm_bounds_error`トラップをnative/wasm/jsへ新設し、MIRレベルの計装パス`instrument_bounds_checks`でスライスアクセス（get系・element_ptr経由の書き込み・delete）へ`0 <= index < len`検査を挿入。jit/native/wasm/jsの全実行系で同一メッセージ「error: index out of bounds: index N, length M」・終了コード1に統一。jsの`--sanitize=bounds`も新たに許可） |
 
 ## 背景と根本原因
 
@@ -124,3 +119,11 @@ sanitize無効時（既定）は従来通り性能優先だが、OOB書きの最
 - ランタイム: src/internal/codegen/llvm/native/runtime_slice.c:321-405,:728, wasm/runtime_slice.c:743-752
 - sanitize: src/cmd/cm/options.cpp:28-31,:156-158, src/cmd/cm/backend/llvm.cpp:117-125, src/internal/codegen/llvm/native/codegen.cpp:617-662, src/cmd/cm/build.cpp:594-634
 - panic/trap: src/internal/codegen/llvm/core/context.cpp:159, utils.cpp:167, js/builtins.cpp:211-214,:441-445,:491-495
+
+## 実装記録
+
+- `cm_bounds_error(index, len)` をnative（runtime_print.c）・wasm（runtime_wasm.c、libc非依存のi64出力）・js（builtins.cppのインライン発行）へ追加。全実行系で同一メッセージ・終了コード1。
+- `src/internal/mir/passes/instrumentation/bounds.cpp` に計装パスを新設。`--sanitize=undefined`と同じ「MIR最適化後に1回適用」の方式で、スライスアクセス呼び出しのブロックを分割し `cm_slice_len` 取得→負判定→範囲判定→`cm_bounds_error` の連鎖を挿入する。LLVM系に依存しないためjsでも同一動作。
+- 固定長配列は既存のLLVM `BoundsCheckingPass` を継続利用（build.cpp）。
+- テスト: `tests/sanitize/cases/oob/slice_read.cm`・`slice_write.cm` を追加し、native/jit/wasm/jsでメッセージ付きトラップと、sanitize無効時の既定挙動維持をE2E検証（52ケース全緑）。
+- 残課題: 固定長配列のLLVM `BoundsCheckingPass` はシグナルトラップでありスライスのメッセージ形式と未統一。既定ビルド（sanitize無効時）のOOB書きトラップ化（第5段）は性能トレードオフの検討事項として残す。

@@ -13,6 +13,7 @@
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
 #include "internal/mir/passes/core/manager.hpp"
+#include "internal/mir/passes/instrumentation/bounds.hpp"
 #include "internal/mir/passes/instrumentation/undefined.hpp"
 #include "internal/mir/passes/loop/const_unroll.hpp"
 #include "internal/mir/passes/scalar/folding.hpp"
@@ -601,9 +602,9 @@ int run_build(cli::Options& opts, const char* argv0) {
         if (is_sv) {
             unsupported = opts.sanitizers.front();
         } else if (is_js) {
-            // JSはMIRレベル計装のundefinedのみ対応（LLVM計装パス・サニタイザランタイムは適用不能）
+            // JSはMIRレベル計装のundefined/boundsのみ対応（LLVM計装パス・サニタイザランタイムは適用不能）
             for (const auto& sanitizer : opts.sanitizers) {
-                if (sanitizer != "undefined") {
+                if (sanitizer != "undefined" && sanitizer != "bounds") {
                     unsupported = sanitizer;
                     break;
                 }
@@ -630,6 +631,13 @@ int run_build(cli::Options& opts, const char* argv0) {
         if (std::find(opts.sanitizers.begin(), opts.sanitizers.end(), "undefined") !=
             opts.sanitizers.end()) {
             mir::opt::instrument_undefined_checks(mir);
+        }
+        // bounds: スライスアクセスのMIRレベル境界検査（M1）。
+        // LLVMのBoundsCheckingPass（固定長配列専用）と補完関係で、スライスは
+        // ランタイム関数呼び出し越しのアクセスのためMIRで明示検査を挿入する
+        if (!is_sv && std::find(opts.sanitizers.begin(), opts.sanitizers.end(), "bounds") !=
+                          opts.sanitizers.end()) {
+            mir::opt::instrument_bounds_checks(mir);
         }
     }
     if (opts.command == Command::Run) {

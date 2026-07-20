@@ -1,0 +1,12 @@
+// スライスの境界外読み（M1: --sanitize=boundsでcm_bounds_errorトラップ、無効時はセンチネル0）
+import std::io::println;
+
+int main() {
+    int[] a;
+    a.push(1);
+    a.push(2);
+    a.push(3);
+    const int bad = a[10];
+    println(bad);
+    return 0;
+}

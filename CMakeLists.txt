@@ -309,6 +309,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/expr_slice.cpp
     # MIR passes (最適化パス実装)
     src/internal/mir/passes/instrumentation/undefined.cpp
+    src/internal/mir/passes/instrumentation/bounds.cpp
     src/internal/mir/passes/scalar/sccp.cpp
     src/internal/mir/passes/scalar/folding.cpp
     src/internal/mir/passes/scalar/propagation.cpp
@@ -879,6 +880,7 @@ if(BUILD_TESTING)
             src/internal/mir/passes/core/base.cpp
             src/internal/mir/passes/convergence/manager.cpp
             src/internal/mir/passes/instrumentation/undefined.cpp
+            src/internal/mir/passes/instrumentation/bounds.cpp
             src/internal/mir/passes/scalar/sccp.cpp
             src/internal/mir/passes/scalar/folding.cpp
             src/internal/mir/passes/scalar/propagation.cpp

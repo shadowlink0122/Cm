@@ -196,6 +196,12 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_bounds_error") {
+        // void cm_bounds_error(i64 index, i64 len) — --sanitize=boundsの境界トラップ（M1）
+        auto funcType =
+            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI64Type(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_slice_push_i8" || name == "cm_slice_push_i16" ||
                name == "cm_slice_push_i32" || name == "cm_slice_push_i64" ||
                name == "cm_slice_push_f32" || name == "cm_slice_push_f64" ||

@@ -252,3 +252,11 @@ void cm_println_char(char value) {
     cm_write_stdout("\n", 1);
 #endif
 }
+
+// 境界外アクセスのトラップ（--sanitize=bounds。M1）。
+// wasm/jsランタイムと同一メッセージを出力して終了コード1で停止する
+__attribute__((noreturn)) void cm_bounds_error(long long index, long long len) {
+    printf("error: index out of bounds: index %lld, length %lld\n", index, len);
+    fflush(stdout);
+    exit(1);
+}

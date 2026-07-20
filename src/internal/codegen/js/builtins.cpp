@@ -133,6 +133,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_delete",
         "cm_slice_clear",
         "cm_slice_len",
+        "cm_bounds_error",
         "cm_slice_cap",
         "cm_slice_subslice",
         "cm_slice_set_i32",
@@ -204,6 +205,17 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "((c) => { if (typeof process !== \"undefined\") process.exit(c); "
                "throw new Error(\"exit(\" + c + \")\"); return undefined; })(" +
                code + ")";
+    }
+
+    // 境界外アクセスのトラップ（--sanitize=bounds。M1。native/wasmのcm_bounds_errorと同一メッセージ・終了コード1）
+    if (name == "cm_bounds_error") {
+        std::string idx = argStrs.empty() ? "0" : argStrs[0];
+        std::string len = argStrs.size() > 1 ? argStrs[1] : "0";
+        return "((i, l) => { console.log(\"error: index out of bounds: index \" + i + \", length "
+               "\" + "
+               "l); if (typeof process !== \"undefined\") process.exit(1); throw new "
+               "Error(\"index out of bounds\"); return undefined; })(" +
+               idx + ", " + len + ")";
     }
 
     // panic(msg): "panic: <msg>" を出力して異常終了する（Result/Optionのunwrap等で使用。

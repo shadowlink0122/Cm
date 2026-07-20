@@ -113,6 +113,49 @@ __attribute__((noreturn)) void __cm_panic(const char* message) {
     panic(message);
 }
 
+// 境界外アクセスのトラップ（--sanitize=bounds。M1）。
+// native/jsランタイムと同一メッセージを出力して終了コード1で停止する
+__attribute__((noreturn)) void cm_bounds_error(long long index, long long len) {
+    // i64を10進文字列化して出力する（wasmランタイムはlibc非依存のため自前実装）
+    char buf[21];
+    wasm_write_stdout("error: index out of bounds: index ", 34);
+    {
+        long long v = index;
+        int neg = v < 0;
+        unsigned long long u = neg ? (unsigned long long)(-(v + 1)) + 1ull : (unsigned long long)v;
+        int n = 0;
+        do {
+            buf[n++] = (char)('0' + (int)(u % 10ull));
+            u /= 10ull;
+        } while (u > 0 && n < 20);
+        if (neg)
+            buf[n++] = '-';
+        while (n > 0) {
+            n--;
+            wasm_write_stdout(&buf[n], 1);
+        }
+    }
+    wasm_write_stdout(", length ", 9);
+    {
+        long long v = len;
+        int neg = v < 0;
+        unsigned long long u = neg ? (unsigned long long)(-(v + 1)) + 1ull : (unsigned long long)v;
+        int n = 0;
+        do {
+            buf[n++] = (char)('0' + (int)(u % 10ull));
+            u /= 10ull;
+        } while (u > 0 && n < 20);
+        if (neg)
+            buf[n++] = '-';
+        while (n > 0) {
+            n--;
+            wasm_write_stdout(&buf[n], 1);
+        }
+    }
+    wasm_write_stdout("\n", 1);
+    __wasi_proc_exit(1);
+}
+
 // strlen - 標準ライブラリ互換のシグネチャ
 size_t strlen(const char* s) {
     if (!s)
