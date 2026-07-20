@@ -120,7 +120,20 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateSIToFP(value, targetType, "sitofp");
             }
             if (sourceType->isFloatingPointTy() && targetType->isIntegerTy()) {
-                return builder->CreateFPToSI(value, targetType, "fptosi");
+                // M9: 生のfptosiは範囲外がpoison（ターゲット依存でINT_MIN/トラップに分裂）のため、
+                // 飽和intrinsicへ統一する（範囲外は型の最大/最小へclamp、NaNは0。全ターゲット共通）
+                bool target_unsigned = false;
+                if (castData.target_type) {
+                    auto k = castData.target_type->kind;
+                    target_unsigned = (k == hir::TypeKind::UTiny || k == hir::TypeKind::UShort ||
+                                       k == hir::TypeKind::UInt || k == hir::TypeKind::ULong ||
+                                       k == hir::TypeKind::USize || k == hir::TypeKind::Bool ||
+                                       k == hir::TypeKind::Char);
+                }
+                llvm::Intrinsic::ID sat_id =
+                    target_unsigned ? llvm::Intrinsic::fptoui_sat : llvm::Intrinsic::fptosi_sat;
+                return builder->CreateIntrinsic(sat_id, {targetType, sourceType}, {value}, nullptr,
+                                                "fptoint_sat");
             }
 
             // int サイズ変換

@@ -897,6 +897,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeUseAfterMove
     {"variable '{0}' used after move",
      "move後の変数 '{0}' を使用しています"},
+    // TypeNotAllPathsReturn
+    {"non-void function '{0}' has a path that falls off the end without returning a value",
+     "非void関数 '{0}' に値を返さずに終了する経路があります"},
 };
 // clang-format on
 

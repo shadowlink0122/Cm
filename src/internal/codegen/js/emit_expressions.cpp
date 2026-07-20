@@ -421,6 +421,52 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             // 型変換
             if (data.target_type) {
                 if (data.target_type->is_integer()) {
+                    // M9: 範囲外float→intはバックエンドで挙動が分裂していたため、
+                    // LLVM系のfptosi.sat/fptoui.satと同じ飽和（範囲外はclamp、NaNは0）に統一する
+                    hir::TypePtr src_type = getOperandType(*data.operand, func);
+                    if (src_type && src_type->is_floating()) {
+                        const char* min_lit = "-2147483648";
+                        const char* max_lit = "2147483647";
+                        switch (data.target_type->kind) {
+                            case TypeKind::Tiny:
+                                min_lit = "-128";
+                                max_lit = "127";
+                                break;
+                            case TypeKind::UTiny:
+                                min_lit = "0";
+                                max_lit = "255";
+                                break;
+                            case TypeKind::Short:
+                                min_lit = "-32768";
+                                max_lit = "32767";
+                                break;
+                            case TypeKind::UShort:
+                                min_lit = "0";
+                                max_lit = "65535";
+                                break;
+                            case TypeKind::UInt:
+                                min_lit = "0";
+                                max_lit = "4294967295";
+                                break;
+                            case TypeKind::Long:
+                            case TypeKind::ISize:
+                                min_lit = "-9223372036854775808";
+                                max_lit = "9223372036854775807";
+                                break;
+                            case TypeKind::ULong:
+                            case TypeKind::USize:
+                                min_lit = "0";
+                                max_lit = "18446744073709551615";
+                                break;
+                            default:
+                                break;
+                        }
+                        std::string vp = options_.emitTypeScript ? "(v: number)" : "(v)";
+                        return "(" + vp +
+                               " => { const t = Math.trunc(v); return Number.isNaN(t) ? 0 : "
+                               "Math.min(" +
+                               max_lit + ", Math.max(" + min_lit + ", t)); })(" + operand + ")";
+                    }
                     return "Math.trunc(" + operand + ")";
                 } else if (data.target_type->kind == TypeKind::Bool) {
                     return "Boolean(" + operand + ")";

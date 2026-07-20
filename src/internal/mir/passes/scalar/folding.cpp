@@ -513,10 +513,21 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
         }
     }
 
-    // Double -> Int
+    // Double -> Int（M9: 範囲外はintの最大/最小へ飽和、NaNは0。実行時のfptosi.satと同一挙動）
     if (target_type->kind == hir::TypeKind::Int) {
         if (auto* double_val = std::get_if<double>(&operand.value)) {
-            result.value = static_cast<int64_t>(*double_val);
+            double d = *double_val;
+            int64_t v;
+            if (d != d) {
+                v = 0;
+            } else if (d >= 2147483647.0) {
+                v = 2147483647;
+            } else if (d <= -2147483648.0) {
+                v = -2147483648LL;
+            } else {
+                v = static_cast<int64_t>(d);
+            }
+            result.value = v;
             return result;
         }
     }

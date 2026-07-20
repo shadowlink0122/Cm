@@ -321,6 +321,7 @@ enum class MsgId : int {
     TypeGenericFunctionArgumentCountMismatch,
     TypeGenericBoundMissing,
     TypeUseAfterMove,
+    TypeNotAllPathsReturn,
     Count,
 };
 

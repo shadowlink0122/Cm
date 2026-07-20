@@ -41,28 +41,54 @@ uint64_t __builtin_string_len(const char* str) {
 }
 
 // ============================================================
-// Memory Allocator (bump allocator with linear-memory growth)
+// Memory Allocator (segregated free list with linear-memory growth)
 // ============================================================
-// 初期は静的プールから配り、使い切ったら wasm の線形メモリを memory.grow で拡張し
-// 拡張領域から配り続ける。以前はプールを使い切ると pool_offset を0へ巻き戻して
-// 「生きている割り当て」を上書きしていた（構造体フィールドやスライスヘッダが壊れ、
-// スライスを多用する再帰処理が一定サイズで崩壊した）。巻き戻しは行わず必ず新しい領域を返す。
-static char memory_pool[65536];  // 初期プール（64KB）: 小さなプログラムはmemory.grow不要
+// H11対応: 従来は解放不可能な単調バンプで、論理的に解放しても実メモリが返らず
+// 長時間実行プログラムは総確保量に比例して線形メモリが増え続けた。
+// 各割り当ての直前に8バイトヘッダ（サイズ+マジック）を置き、解放されたブロックを
+// サイズクラス別フリーリストへ返却して再利用する。マジック検証により、ヒープ由来で
+// ないポインタ（文字列リテラル・スタック等）のfreeは安全に無視する。
+// 確保はフリーリスト→初期プール→memory.growの順で行い、生存中の割り当てを
+// 上書きしない性質は従来どおり維持する。
+
+// ヘッダ: [uint32_t 使用可能サイズ][uint32_t マジック]。本体は直後（8バイト整列）
+#define WASM_HEAP_MAGIC 0xC3A110C8u
+#define WASM_HEAP_FREED 0xF4EEF4EEu
+
+// サイズクラス: 8, 16, 32, ..., 65536（2のべき乗、14クラス）。超過分はラージリスト
+#define WASM_NUM_CLASSES 14
+#define WASM_MAX_CLASS_SIZE 65536u
+
+typedef struct WasmFreeBlock {
+    struct WasmFreeBlock* next;
+} WasmFreeBlock;
+
+static WasmFreeBlock* free_lists[WASM_NUM_CLASSES];
+static WasmFreeBlock* large_free_list;  // WASM_MAX_CLASS_SIZE超のブロック（先頭適合探索）
+
+__attribute__((aligned(8))) static char
+    memory_pool[65536];  // 初期プール（64KB）: 小さなプログラムはmemory.grow不要
 static size_t pool_offset = 0;
 static int use_grown_heap = 0;  // プール枯渇後は拡張領域から配る
-static size_t grown_ptr = 0;    // 拡張領域の次アドレス（線形メモリ先頭からのバイトオフセット）
+static size_t grown_ptr = 0;  // 拡張領域の次アドレス（線形メモリ先頭からのバイトオフセット）
 
-// Non-static for use in runtime_slice.c
-void* wasm_alloc(size_t size) {
-    // 8バイト境界に整列（誤整列アクセス回避）
-    size = (size + 7u) & ~(size_t)7u;
-    if (size == 0)
-        size = 8;
+// サイズ（8整列済み）→サイズクラスindex。8→0, 16→1, ..., 65536→13
+static int wasm_size_class(size_t size) {
+    int cls = 0;
+    size_t c = 8;
+    while (c < size) {
+        c <<= 1;
+        cls++;
+    }
+    return cls;
+}
 
+// バンプ確保（ヘッダ込みの生バイト列を切り出す。フリーリストに無い場合のフォールバック）
+static void* wasm_bump_alloc(size_t total) {
     // 高速パス: 初期プールに収まる間はプールから配る
-    if (!use_grown_heap && pool_offset + size <= sizeof(memory_pool)) {
+    if (!use_grown_heap && pool_offset + total <= sizeof(memory_pool)) {
         void* ptr = &memory_pool[pool_offset];
-        pool_offset += size;
+        pool_offset += total;
         return ptr;
     }
 
@@ -73,7 +99,7 @@ void* wasm_alloc(size_t size) {
         grown_ptr = (size_t)__builtin_wasm_memory_size(0) << 16;
     }
     size_t addr = grown_ptr;
-    size_t end = addr + size;
+    size_t end = addr + total;
     size_t mem_bytes = (size_t)__builtin_wasm_memory_size(0) << 16;
     if (end > mem_bytes) {
         size_t need = end - mem_bytes;
@@ -84,6 +110,83 @@ void* wasm_alloc(size_t size) {
     }
     grown_ptr = end;
     return (void*)addr;
+}
+
+// Non-static for use in runtime_slice.c
+void* wasm_alloc(size_t size) {
+    // 8バイト境界に整列（誤整列アクセス回避）
+    size = (size + 7u) & ~(size_t)7u;
+    if (size == 0)
+        size = 8;
+
+    uint32_t* header;
+    if (size <= WASM_MAX_CLASS_SIZE) {
+        // サイズクラスへ切り上げ、フリーリストを先に探す
+        int cls = wasm_size_class(size);
+        size_t class_size = (size_t)8 << cls;
+        WasmFreeBlock* block = free_lists[cls];
+        if (block) {
+            free_lists[cls] = block->next;
+            header = (uint32_t*)((char*)block - 8);
+            header[1] = WASM_HEAP_MAGIC;  // 再利用: FREED→MAGICへ戻す
+            return (void*)block;
+        }
+        header = (uint32_t*)wasm_bump_alloc(class_size + 8);
+        if (!header)
+            return 0;
+        header[0] = (uint32_t)class_size;
+        header[1] = WASM_HEAP_MAGIC;
+        return (void*)((char*)header + 8);
+    }
+
+    // ラージブロック: フリーリストを先頭適合で探索（サイズが足りる最初のブロックを再利用）
+    WasmFreeBlock** prev = &large_free_list;
+    for (WasmFreeBlock* block = large_free_list; block; block = block->next) {
+        uint32_t* bh = (uint32_t*)((char*)block - 8);
+        if ((size_t)bh[0] >= size) {
+            *prev = block->next;
+            bh[1] = WASM_HEAP_MAGIC;
+            return (void*)block;
+        }
+        prev = &block->next;
+    }
+    header = (uint32_t*)wasm_bump_alloc(size + 8);
+    if (!header)
+        return 0;
+    header[0] = (uint32_t)size;
+    header[1] = WASM_HEAP_MAGIC;
+    return (void*)((char*)header + 8);
+}
+
+// 解放: ヘッダのマジックを検証し、該当サイズクラスのフリーリストへ返す。
+// ヒープ由来でないポインタ（リテラル・スタック・二重解放）は安全に無視する
+void wasm_free(void* ptr) {
+    if (!ptr)
+        return;
+    uint32_t* header = (uint32_t*)((char*)ptr - 8);
+    if (header[1] != WASM_HEAP_MAGIC)
+        return;  // ヒープ由来でない、または二重解放
+    header[1] = WASM_HEAP_FREED;
+    size_t block_size = header[0];
+    WasmFreeBlock* block = (WasmFreeBlock*)ptr;
+    if (block_size <= WASM_MAX_CLASS_SIZE) {
+        int cls = wasm_size_class(block_size);
+        block->next = free_lists[cls];
+        free_lists[cls] = block;
+    } else {
+        block->next = large_free_list;
+        large_free_list = block;
+    }
+}
+
+// ヒープ由来ブロックの使用可能サイズ（reallocの正確なコピーに使用。非ヒープは0）
+size_t wasm_alloc_size(const void* ptr) {
+    if (!ptr)
+        return 0;
+    const uint32_t* header = (const uint32_t*)((const char*)ptr - 8);
+    if (header[1] != WASM_HEAP_MAGIC)
+        return 0;
+    return header[0];
 }
 
 // ============================================================
@@ -597,75 +700,230 @@ char* cm_format_char(char value) {
     return buffer;
 }
 
+// ============================================================
+// double→最短round-trip文字列（M8: 5桁固定を撤廃し全バックエンドの出力を統一）
+// ============================================================
+// libc（snprintf/strtod）が無いため、桁列生成と復元検証を自前実装する。
+// JSのNumber→String規則と整合: 小数点位置nが(-6, 21]は10進表記、それ以外は指数表記。
+
+// 10^n をdoubleで返す（1e0..1e22は正確、超過分は分割乗算）
+static double wasm_pow10d(int n) {
+    static const double exact[23] = {1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,
+                                     1e8,  1e9,  1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+                                     1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
+    if (n >= 0) {
+        double r = 1.0;
+        while (n > 22) {
+            r *= 1e22;
+            n -= 22;
+        }
+        return r * exact[n];
+    }
+    double r = 1.0;
+    while (n < -22) {
+        r /= 1e22;
+        n += 22;
+    }
+    return r / exact[-n];
+}
+
+// valueの10進指数（floor(log10(value))）を求める（value > 0 前提）
+static int wasm_exp10_of(double value) {
+    int e = 0;
+    // 粗い範囲寄せ（大きなステップで反復回数を抑える）
+    while (value >= 1e22) {
+        value /= 1e22;
+        e += 22;
+    }
+    while (value < 1e-22) {
+        value *= 1e22;
+        e -= 22;
+    }
+    while (value >= 10.0) {
+        value /= 10.0;
+        e += 1;
+    }
+    while (value < 1.0) {
+        value *= 10.0;
+        e -= 1;
+    }
+    return e;
+}
+
+// 有効桁p（1..17）でvalueを桁列へ変換し、10進指数を返す（value > 0 前提）
+static void wasm_dtoa_prec(double value, int p, char* digits, int* exp10_out) {
+    int e = wasm_exp10_of(value);
+    // 仮数を [10^(p-1), 10^p) のu64へスケーリング（四捨五入）
+    double scaled = value / wasm_pow10d(e - p + 1);
+    unsigned long long m = (unsigned long long)(scaled + 0.5);
+    unsigned long long lo = 1;
+    for (int i = 1; i < p; ++i)
+        lo *= 10ull;
+    unsigned long long hi = lo * 10ull;
+    if (m >= hi) {
+        m /= 10ull;
+        e += 1;
+    }
+    if (p > 1 && m < lo) {
+        m = lo;  // スケーリング誤差の下振れ補正（round-trip検証で棄却される）
+    }
+    for (int i = p - 1; i >= 0; --i) {
+        digits[i] = (char)('0' + (int)(m % 10ull));
+        m /= 10ull;
+    }
+    digits[p] = 0;
+    *exp10_out = e;
+}
+
+// 桁列+指数をdoubleへ戻す（round-trip検証用）
+static double wasm_atod_digits(const char* digits, int nd, int exp10) {
+    unsigned long long m = 0;
+    for (int i = 0; i < nd; ++i)
+        m = m * 10ull + (unsigned long long)(digits[i] - '0');
+    int k = exp10 - nd + 1;
+    double md = (double)m;
+    if (k >= 0)
+        return md * wasm_pow10d(k);
+    // 負の指数は除算の方が正確（10^|k|が正確な範囲で正しく丸む）
+    return md / wasm_pow10d(-k);
+}
+
+// double値のビット表現比較（round-trip判定。==はNaNや-0.0で不適切）
+static int wasm_double_bits_equal(double a, double b) {
+    union {
+        double d;
+        unsigned long long u;
+    } ua, ub;
+    ua.d = a;
+    ub.d = b;
+    return ua.u == ub.u;
+}
+
 char* cm_format_double(double value) {
     char* buffer = (char*)wasm_alloc(64);
-    
+
+    // NaN/Inf/0（従来トークンを維持）
+    if (value != value) {
+        buffer[0] = 'n';
+        buffer[1] = 'a';
+        buffer[2] = 'n';
+        buffer[3] = 0;
+        return buffer;
+    }
     int is_negative = 0;
     if (value < 0) {
         is_negative = 1;
         value = -value;
     }
-    
-    // 整数と同じ値の場合は整数として出力
-    long long int_val = (long long)value;
-    if (value == (double)int_val && value > -1e15 && value < 1e15) {
+    if (value > 1.7976931348623157e308) {
         size_t len = 0;
-        if (is_negative) {
+        if (is_negative)
             buffer[len++] = '-';
-        }
-        char int_buffer[32];
-        size_t int_len;
-        wasm_int_to_str((int)int_val, int_buffer, &int_len);
-        for (size_t i = 0; i < int_len; i++) {
-            buffer[len++] = int_buffer[i];
-        }
-        buffer[len] = '\0';
+        buffer[len++] = 'i';
+        buffer[len++] = 'n';
+        buffer[len++] = 'f';
+        buffer[len] = 0;
         return buffer;
     }
-    
-    value += 0.000005;  // Rounding
-    
-    int int_part = (int)value;
-    double frac_part = value - int_part;
-
-    size_t len = 0;
-    if (is_negative) {
-        buffer[len++] = '-';
-    }
-    
-    char int_buffer[32];
-    size_t int_len;
-    wasm_int_to_str(int_part, int_buffer, &int_len);
-    for (size_t i = 0; i < int_len; i++) {
-        buffer[len++] = int_buffer[i];
+    if (value == 0.0) {
+        buffer[0] = '0';
+        buffer[1] = 0;
+        return buffer;
     }
 
-    buffer[len++] = '.';
-
-    int frac_int = (int)(frac_part * 100000);
-    int temp = frac_int;
-    int trailing_zeros = 0;
-    if (temp == 0) {
-        trailing_zeros = 5;
-    } else {
-        while (temp % 10 == 0) {
-            trailing_zeros++;
-            temp /= 10;
+    // round-tripする最小桁数の桁列を選ぶ。
+    // float(32bit)から拡張された値はfloat精度でのround-tripを採用する（native実装と同一規則）
+    char digits[24];
+    int exp10 = 0;
+    int nd = 17;
+    int found = 0;
+    if ((double)(float)value == value) {
+        for (int p = 1; p <= 9; ++p) {
+            wasm_dtoa_prec(value, p, digits, &exp10);
+            if ((double)(float)wasm_atod_digits(digits, p, exp10) == value) {
+                nd = p;
+                found = 1;
+                break;
+            }
         }
     }
-
-    int num_digits = 5 - trailing_zeros;
-    if (num_digits < 1) num_digits = 1;
-    if (num_digits > 5) num_digits = 5;
-
-    int divisor = 10000;
-    for (int i = 0; i < num_digits; i++) {
-        buffer[len++] = '0' + ((frac_int / divisor) % 10);
-        divisor /= 10;
+    if (!found) {
+        for (int p = 1; p <= 17; ++p) {
+            wasm_dtoa_prec(value, p, digits, &exp10);
+            if (wasm_double_bits_equal(wasm_atod_digits(digits, p, exp10), value)) {
+                nd = p;
+                found = 1;
+                break;
+            }
+        }
     }
+    if (!found) {
+        wasm_dtoa_prec(value, 17, digits, &exp10);
+        nd = 17;
+    }
+    // 末尾の0を除去
+    while (nd > 1 && digits[nd - 1] == '0')
+        nd--;
 
-    buffer[len] = '\0';
+    // JS互換の整形: n = 小数点の位置
+    int n = exp10 + 1;
+    size_t len = 0;
+    if (is_negative)
+        buffer[len++] = '-';
+
+    if (n >= 1 && n <= 21) {
+        if (nd <= n) {
+            for (int i = 0; i < nd; ++i)
+                buffer[len++] = digits[i];
+            for (int i = 0; i < n - nd; ++i)
+                buffer[len++] = '0';
+        } else {
+            for (int i = 0; i < n; ++i)
+                buffer[len++] = digits[i];
+            buffer[len++] = '.';
+            for (int i = n; i < nd; ++i)
+                buffer[len++] = digits[i];
+        }
+    } else if (n <= 0 && n > -6) {
+        buffer[len++] = '0';
+        buffer[len++] = '.';
+        for (int i = 0; i < -n; ++i)
+            buffer[len++] = '0';
+        for (int i = 0; i < nd; ++i)
+            buffer[len++] = digits[i];
+    } else {
+        buffer[len++] = digits[0];
+        if (nd > 1) {
+            buffer[len++] = '.';
+            for (int i = 1; i < nd; ++i)
+                buffer[len++] = digits[i];
+        }
+        buffer[len++] = 'e';
+        int ev = n - 1;
+        if (ev >= 0) {
+            buffer[len++] = '+';
+        } else {
+            buffer[len++] = '-';
+            ev = -ev;
+        }
+        char eb[8];
+        int el = 0;
+        if (ev == 0)
+            eb[el++] = '0';
+        while (ev > 0) {
+            eb[el++] = (char)('0' + ev % 10);
+            ev /= 10;
+        }
+        while (el > 0)
+            buffer[len++] = eb[--el];
+    }
+    buffer[len] = 0;
     return buffer;
+}
+
+// 明示stringキャスト用（M8: 従来wasmに実体が無くリンク切れの危険があった）
+char* cm_double_to_string(double value) {
+    return cm_format_double(value);
 }
 
 char* cm_format_double_precision(double value, int precision) {

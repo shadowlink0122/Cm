@@ -82,6 +82,8 @@ static void cm_slice_grow(CmSlice* slice) {
                 dst[i] = src[i];
             }
         }
+        // H11: 旧データブロックをフリーリストへ返して再利用可能にする
+        cm_free(slice->data);
         slice->data = new_data;
         slice->cap = new_cap;
     }

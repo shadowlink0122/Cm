@@ -198,16 +198,19 @@ void* malloc(size_t size) {
     return wasm_alloc(size);
 }
 
+// フリーリストアロケータの解放関数（実装はruntime_format.c。H11）
+extern void wasm_free(void* ptr);
+extern size_t wasm_alloc_size(const void* ptr);
+
 void free(void* ptr) {
-    // Simple allocator doesn't support free
-    (void)ptr;
+    // H11: 解放ブロックをサイズクラス別フリーリストへ返して再利用する
+    // （ヒープ由来でないポインタはマジック検証で安全に無視される）
+    wasm_free(ptr);
 }
 
-// cm_free: Cmランタイムの解放関数。WASMのバンプアロケータは解放を行わないためno-op。
-// runtime_slice.c 等が参照する（従来は runtime_platform.c 側の定義に依存していたが、
-// それはWASMのTUに含まれず、参照が最適化で消えている間だけ偶然リンクできていた）。
+// cm_free: Cmランタイムの解放関数。runtime_slice.c 等が参照する
 void cm_free(void* ptr) {
-    (void)ptr;
+    wasm_free(ptr);
 }
 
 void* calloc(size_t nmemb, size_t size) {
@@ -223,16 +226,22 @@ void* calloc(size_t nmemb, size_t size) {
 }
 
 void* realloc(void* ptr, size_t size) {
-    // Simple implementation: allocate new, copy old data
-    // Note: This doesn't actually free the old memory
+    // H11: 旧ブロックサイズをヘッダから取得して正確にコピーし、旧ブロックを解放する
+    if (!ptr)
+        return wasm_alloc(size);
+    size_t old_size = wasm_alloc_size(ptr);
+    if (old_size >= size)
+        return ptr;  // 既存ブロックで足りる（サイズクラス切り上げの余裕を活用）
     void* new_ptr = wasm_alloc(size);
-    if (new_ptr && ptr) {
-        // Copy minimum possible (we don't know old size)
+    if (new_ptr) {
+        // 旧サイズが分かる場合は旧サイズ分、不明（非ヒープ由来）の場合は要求サイズ分コピー
+        size_t copy = (old_size > 0 && old_size < size) ? old_size : size;
         char* src = (char*)ptr;
         char* dst = (char*)new_ptr;
-        for (size_t i = 0; i < size; i++) {
+        for (size_t i = 0; i < copy; i++) {
             dst[i] = src[i];
         }
+        wasm_free(ptr);
     }
     return new_ptr;
 }

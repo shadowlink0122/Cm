@@ -472,10 +472,141 @@ static inline double cm_pow10(int n) {
     return result;
 }
 
+// 最短round-trip表現でのdouble→文字列変換（M8: 有効桁6固定の桁化けを撤廃）
+// JSのNumber→String規則と整合させる: 小数点位置nが(-6, 21]は10進表記、それ以外は指数表記。
+// 桁数を1から増やしながらstrtodで元の値へ戻る最小の表現を選ぶ（精度喪失なし）
+static inline int cm_dtoa_shortest(double value, char* buf, size_t bufsize) {
+    if (!buf || bufsize == 0)
+        return 0;
+
+    // NaN/Inf/0は従来トークンを維持する
+    if (value != value) {
+        int n = snprintf(buf, bufsize, "nan");
+        return n > 0 ? n : 0;
+    }
+    if (value > 1.7976931348623157e308) {
+        int n = snprintf(buf, bufsize, "inf");
+        return n > 0 ? n : 0;
+    }
+    if (value < -1.7976931348623157e308) {
+        int n = snprintf(buf, bufsize, "-inf");
+        return n > 0 ? n : 0;
+    }
+    if (value == 0.0) {
+        int n = snprintf(buf, bufsize, "0");
+        return n > 0 ? n : 0;
+    }
+
+    // 指数表記（%.*e）でround-tripする最小桁数を求め、桁列と10進指数を得る。
+    // float(32bit)から拡張された値（float精度で正確に表現できる値）はfloat精度での
+    // round-tripを採用する（printlnはfloatをdoubleへ拡張して渡すため、doubleとしての
+    // 最短表現だと 3.14f が 3.140000104904175 のような冗長表現になってしまう）
+    char tmp[64];
+    int digits_count = 17;
+    int found = 0;
+    if ((double)(float)value == value) {
+        for (int p = 1; p <= 9; ++p) {
+            snprintf(tmp, sizeof(tmp), "%.*e", p - 1, value);
+            if ((double)strtof(tmp, NULL) == value) {
+                digits_count = p;
+                found = 1;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        for (int p = 1; p <= 17; ++p) {
+            snprintf(tmp, sizeof(tmp), "%.*e", p - 1, value);
+            if (strtod(tmp, NULL) == value) {
+                digits_count = p;
+                break;
+            }
+        }
+    }
+    snprintf(tmp, sizeof(tmp), "%.*e", digits_count - 1, value);
+
+    // "-d.ddddde±xx" をパース: 桁列（dotなし）と指数
+    char digits[24];
+    int nd = 0;
+    bool negative = false;
+    int exp10 = 0;
+    {
+        const char* s = tmp;
+        if (*s == '-') {
+            negative = true;
+            s++;
+        }
+        for (; *s && *s != 'e' && *s != 'E'; ++s) {
+            if (*s >= '0' && *s <= '9' && nd < 20)
+                digits[nd++] = *s;
+        }
+        if (*s == 'e' || *s == 'E')
+            exp10 = (int)strtol(s + 1, NULL, 10);
+    }
+    // 末尾の0を除去（%.*eは指定桁まで0詰めするため）
+    while (nd > 1 && digits[nd - 1] == '0')
+        nd--;
+
+    // JS互換の整形: n = 小数点の位置（桁列の先頭からn桁が整数部）
+    int n = exp10 + 1;
+    int pos = 0;
+    if (negative && pos < (int)bufsize - 1)
+        buf[pos++] = '-';
+
+    if (n >= 1 && n <= 21) {
+        if (nd <= n) {
+            // 整数のみ: 桁列 + (n-nd)個の0
+            for (int i = 0; i < nd && pos < (int)bufsize - 1; ++i)
+                buf[pos++] = digits[i];
+            for (int i = 0; i < n - nd && pos < (int)bufsize - 1; ++i)
+                buf[pos++] = '0';
+        } else {
+            // 整数部n桁 + '.' + 残り
+            for (int i = 0; i < n && pos < (int)bufsize - 1; ++i)
+                buf[pos++] = digits[i];
+            if (pos < (int)bufsize - 1)
+                buf[pos++] = '.';
+            for (int i = n; i < nd && pos < (int)bufsize - 1; ++i)
+                buf[pos++] = digits[i];
+        }
+    } else if (n <= 0 && n > -6) {
+        // 0.00...桁列
+        if (pos < (int)bufsize - 2) {
+            buf[pos++] = '0';
+            buf[pos++] = '.';
+        }
+        for (int i = 0; i < -n && pos < (int)bufsize - 1; ++i)
+            buf[pos++] = '0';
+        for (int i = 0; i < nd && pos < (int)bufsize - 1; ++i)
+            buf[pos++] = digits[i];
+    } else {
+        // 指数表記: d[.ddd]e±(n-1)
+        if (pos < (int)bufsize - 1)
+            buf[pos++] = digits[0];
+        if (nd > 1) {
+            if (pos < (int)bufsize - 1)
+                buf[pos++] = '.';
+            for (int i = 1; i < nd && pos < (int)bufsize - 1; ++i)
+                buf[pos++] = digits[i];
+        }
+        int written = snprintf(buf + pos, bufsize - pos, "e%+d", n - 1);
+        if (written > 0)
+            pos += written;
+    }
+    buf[pos] = '\0';
+    return pos;
+}
+
 // 簡易double→文字列変換（丸め処理付き、%gスタイル）
 static inline int cm_dtoa_buf(double value, char* buf, size_t bufsize, int precision) {
     if (!buf || bufsize == 0)
         return 0;
+
+    // M8: 精度未指定（precision<0）は最短round-trip表現で出力する
+    // （従来の有効桁6固定は123456789.5→123457000のような桁化けを起こしていた）
+    if (precision < 0) {
+        return cm_dtoa_shortest(value, buf, bufsize);
+    }
 
     int pos = 0;
 

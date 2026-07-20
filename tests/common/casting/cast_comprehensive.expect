@@ -9,7 +9,7 @@
   float 2.5 -> int: 2
   int 7 -> double: 7
   int 7 -> float: 7
-  double 1.23456789 -> float: 1.23457
+  double 1.23456789 -> float: 1.2345679
   float 9.87 -> double: 9.87
 3. Bool/Int casts:
   true -> int: 1

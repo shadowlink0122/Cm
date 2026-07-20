@@ -61,17 +61,6 @@ void cm_reset_allocator(void) {
 }
 
 // ============================================================
-// Temporary String Pool
-// ============================================================
-
-// Global temporary string pool instance
-static CmTempStringPool cm_global_temp_pool = {{NULL}, 0};
-
-CmTempStringPool* cm_get_temp_pool(void) {
-    return &cm_global_temp_pool;
-}
-
-// ============================================================
 // Legacy API Compatibility
 // ============================================================
 // These functions maintain compatibility with existing code
