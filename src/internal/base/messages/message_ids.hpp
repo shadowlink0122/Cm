@@ -315,6 +315,12 @@ enum class MsgId : int {
     TypeCannotCastNumericToString,
     TypeIntegerLiteralNarrowingTruncates,
     TypeGenericArgumentCountMismatch,
+    TypeMangledSymbolCollision,
+    TypeGenericTypeRequiresArguments,
+    TypeUnknownTypeArgument,
+    TypeGenericFunctionArgumentCountMismatch,
+    TypeGenericBoundMissing,
+    TypeUseAfterMove,
     Count,
 };
 

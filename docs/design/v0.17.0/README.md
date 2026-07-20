@@ -10,13 +10,12 @@ has_children: true
 
 ## 対応済み（リリースノート参照）
 
-C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C15・H4・H13・M4・M5・M11・M16、およびスライス要素型ディスパッチの一元化は実装・テスト済み。H4の設計文書は [archive/v0.17.0/uninitialized-struct-fields.md](../../archive/v0.17.0/uninitialized-struct-fields.md)、C7/C8/C9（型同一性の構造化）は [archive/v0.17.0/type-identity-recursive-keys.md](../../archive/v0.17.0/type-identity-recursive-keys.md) へ移動済み。
+C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C15・C16・H4・H13・H15・L8・M4・M5・M11・M16、およびスライス要素型ディスパッチの一元化は実装・テスト済み。実装完了した設計文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（H4: uninitialized-struct-fields、C7/C8/C9: type-identity-recursive-keys、C16: mangling-collision-detection、H15/L8: generic-instantiation-diagnostics）。
 
 ## 残りの設計文書（テーマ別）
 
 ### 型システム・ジェネリクス
-- [マングリング衝突検出](mangling-collision-detection.md) — C16
-- [ジェネリックインスタンス化の診断](generic-instantiation-diagnostics.md) — H15（個数検証はPhase 1実装済み）/ L8
+（すべて実装済み・archiveへ移動）
 
 ### メモリ管理
 - [drop パスと寿命管理](memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15
@@ -44,4 +43,4 @@ C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C15・H4・H13・M4・M5・M
 
 ## 着手順の推奨
 
-型同一性の構造化（C7/C8/C9）は実装済み。次はマングリング衝突検出（C16）が同じ名前空間の防波堤として費用対効果が高く、dropパス（C12/C13）と集約コピー（C14）がコンパイル時間・メモリ実測値に直結する。
+型システム・ジェネリクス群（C7/C8/C9・C16・H15/L8）は実装済み。次はdropパス（C12/C13）と集約コピー（C14）がコンパイル時間・メモリ実測値に直結する。

@@ -1,0 +1,13 @@
+// H15回帰: ジェネリック型を型引数なしで変数宣言に使うとコンパイルエラーになることを検証する
+import std::io::println;
+
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+int main() {
+    Pair q;
+    println("unreachable");
+    return 0;
+}

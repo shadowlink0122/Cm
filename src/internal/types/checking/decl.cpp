@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/base/mangle.hpp"
 #include "internal/types/type_checker.hpp"
 #include "match_hoist.hpp"
 
@@ -233,6 +234,21 @@ void TypeChecker::check_namespace(ast::ModuleDecl& mod, const std::string& paren
     current_namespace_ = saved_namespace;
 }
 
+// マングル名をシンボルテーブルへ登録し、別由来・別シグネチャの同名があればエラーを発行する（C16）
+// モジュールflatten等による同一定義の再出現（由来・シグネチャが完全一致）は許容する
+void TypeChecker::register_mangled_symbol(const std::string& name, const std::string& origin,
+                                          const std::string& sig, Span span) {
+    auto [it, inserted] = mangled_symbols_.emplace(name, MangledSymbolInfo{origin, sig, span});
+    if (inserted) {
+        return;
+    }
+    if (it->second.origin == origin && it->second.sig == sig) {
+        return;
+    }
+    error(span,
+          i18n::msgf(i18n::MsgId::TypeMangledSymbolCollision, name, it->second.origin, origin));
+}
+
 void TypeChecker::register_declaration(ast::Decl& decl) {
     if (auto* mod = decl.as<ast::ModuleDecl>()) {
         register_namespace(*mod, "");
@@ -247,6 +263,8 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                            "Generic function: " + func->name + " with " +
                                std::to_string(func->generic_params.size()) + " type params",
                            debug::Level::Debug);
+            // L8: 本体が要求する演算子能力（< 等）に対して境界が全く宣言されていない場合を検出する
+            check_generic_operator_bounds(*func);
         }
 
         std::vector<ast::TypePtr> param_types;
@@ -283,6 +301,12 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                 error(name_pos,
                       i18n::msgf(i18n::MsgId::TypeFunctionIsAlreadyDefinedWith, func->name));
             }
+
+            // C16: 自由関数のマングル名（モジュール修飾は::→__へフラット化）を単一シンボル
+            // テーブルへ登録し、メソッド等の別由来と同名へ縮退する場合をハードエラー化する
+            Span name_pos = func->name_span.is_empty() ? decl.span : func->name_span;
+            register_mangled_symbol(mangle::flatten_qualified(func->name),
+                                    "function '" + func->name + "'", sig, name_pos);
         }
 
         // L100: 関数名はsnake_caseであるべき
@@ -603,22 +627,24 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
     // コンストラクタ/デストラクタの登録（is_ctor_implの場合）
     if (impl.is_ctor_impl) {
         for (const auto& ctor : impl.constructors) {
-            std::string mangled_name = type_name + "__ctor";
-            if (ctor->is_overload) {
-                mangled_name += "_" + std::to_string(ctor->params.size());
-            }
+            std::string mangled_name =
+                mangle::ctor_name(type_name, ctor->is_overload, ctor->params.size());
             std::vector<ast::TypePtr> param_types;
             param_types.push_back(impl.target_type);
             for (const auto& param : ctor->params) {
                 param_types.push_back(param.type);
             }
+            register_mangled_symbol(mangled_name, "constructor of '" + type_name + "'",
+                                    std::to_string(ctor->params.size()), ctor->name_span);
             scopes_.global().define_function(mangled_name, std::move(param_types),
                                              ast::make_void());
         }
         if (impl.destructor) {
-            std::string mangled_name = type_name + "__dtor";
+            std::string mangled_name = mangle::dtor_name(type_name);
             std::vector<ast::TypePtr> param_types;
             param_types.push_back(impl.target_type);
+            register_mangled_symbol(mangled_name, "destructor of '" + type_name + "'", "",
+                                    impl.destructor->name_span);
             scopes_.global().define_function(mangled_name, std::move(param_types),
                                              ast::make_void());
         }
@@ -716,12 +742,16 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
         }
         type_methods_[type_name][method->name] = std::move(info);
 
-        std::string mangled_name = type_name + "__" + method->name;
+        std::string mangled_name = mangle::method_name(type_name, method->name);
         std::vector<ast::TypePtr> all_param_types;
         all_param_types.push_back(impl.target_type);
         for (const auto& param : method->params) {
             all_param_types.push_back(param.type);
         }
+        // C16: メソッドのマングル名を単一シンボルテーブルへ登録し、
+        // 同名へ縮退する自由関数等があればハードエラー化する
+        register_mangled_symbol(mangled_name, "method '" + type_name + "." + method->name + "'", "",
+                                method->name_span);
         scopes_.global().define_function(mangled_name, std::move(all_param_types),
                                          method->return_type);
     }

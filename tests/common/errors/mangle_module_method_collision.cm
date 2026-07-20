@@ -1,0 +1,13 @@
+// C16回帰: モジュールholder2の関数method(holder2::method)とユーザーが定義する自由関数
+// holder2__methodは同一マングル名へ縮退するため、コンパイルエラーになることを検証する
+import std::io::println;
+import ./mangle_mod/holder2;
+
+int holder2__method() {
+    return 1;
+}
+
+int main() {
+    println(holder2__method());
+    return 0;
+}

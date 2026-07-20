@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "fwd.hpp"
+#include "internal/base/mangle.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -1029,7 +1030,7 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         }
 
         auto hir = std::make_unique<HirCall>();
-        hir->func_name = method_type_name + "__" + mem.member;
+        hir->func_name = mangle::method_name(method_type_name, mem.member);
 
         // 固定長配列→スライス変換が必要な場合、cm_array_to_sliceで変換
         if (needs_array_to_slice && obj_type->element_type) {

@@ -1,5 +1,6 @@
 // lowering_decl.cpp - 宣言のlowering
 #include "fwd.hpp"
+#include "internal/base/mangle.hpp"
 
 #include <memory>
 #include <string>
@@ -273,10 +274,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {
             auto hir_func = std::make_unique<HirFunction>();
-            std::string mangled_name = hir_impl->target_type + "__ctor";
-            if (!ctor->params.empty()) {
-                mangled_name += "_" + std::to_string(ctor->params.size());
-            }
+            std::string mangled_name = mangle::ctor_name(
+                hir_impl->target_type, !ctor->params.empty(), ctor->params.size());
             hir_func->name = mangled_name;
             hir_func->return_type = ast::make_void();
             hir_func->is_constructor = true;
@@ -301,7 +300,7 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         // デストラクタをlower
         if (impl.destructor) {
             auto hir_func = std::make_unique<HirFunction>();
-            hir_func->name = hir_impl->target_type + "__dtor";
+            hir_func->name = mangle::dtor_name(hir_impl->target_type);
             hir_func->return_type = ast::make_void();
             hir_func->is_destructor = true;
 
@@ -335,10 +334,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         bool is_ctor = (method->name == target_base_name);
         if (is_ctor) {
             // コンストラクタとして__ctor_N形式にマングリング
-            std::string mangled_name = hir_impl->target_type + "__ctor";
-            if (!method->params.empty()) {
-                mangled_name += "_" + std::to_string(method->params.size());
-            }
+            std::string mangled_name = mangle::ctor_name(
+                hir_impl->target_type, !method->params.empty(), method->params.size());
             hir_func->name = mangled_name;
             hir_func->is_constructor = true;
         } else {

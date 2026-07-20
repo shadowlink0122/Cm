@@ -106,6 +106,22 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                             std::to_string(sd_it->second->generic_params.size()),
                                             std::to_string(ct->type_args.size())));
         }
+        // H15: ジェネリック型を型引数なしで宣言に使うのはエラー（Pair p; 等。推論の材料が無い）
+        else if (sd_it != struct_defs_.end() && sd_it->second &&
+                 !sd_it->second->generic_params.empty() && ct->type_args.empty() &&
+                 ct->name.find("__") == std::string::npos) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TypeGenericTypeRequiresArguments, ct->name,
+                                            std::to_string(sd_it->second->generic_params.size())));
+        }
+        // H15: 各型引数の存在を検証する（Pair<int, Nope> の Nope 等を検出）
+        if (sd_it != struct_defs_.end() && sd_it->second) {
+            for (const auto& arg : ct->type_args) {
+                if (arg && !is_valid_type(arg)) {
+                    error(current_span_, i18n::msgf(i18n::MsgId::TypeUnknownTypeArgument,
+                                                    ast::type_to_string(*arg), ct->name));
+                }
+            }
+        }
     }
 
     // const変数の値を評価（配列サイズ等で使用）

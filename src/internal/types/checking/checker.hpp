@@ -247,6 +247,21 @@ class TypeChecker {
     // 本体を持つ非ジェネリック関数の定義済みシグネチャ（重複定義検出用）
     std::unordered_map<std::string, std::string> defined_function_sigs_;
 
+    // マングル名の単一シンボルテーブル（C16: メソッド・自由関数・ctor/dtor・モジュール修飾名の衝突検出）
+    struct MangledSymbolInfo {
+        std::string origin;  // 由来の表示名（"method Type.name" / "function name" 等）
+        std::string sig;     // シグネチャ（同一定義の再登録許容の判定用）
+        Span span;
+    };
+    std::unordered_map<std::string, MangledSymbolInfo> mangled_symbols_;
+
+    // マングル名をシンボルテーブルへ登録し、別由来・別シグネチャの同名があればエラーを発行する
+    void register_mangled_symbol(const std::string& name, const std::string& origin,
+                                 const std::string& sig, Span span);
+
+    // ジェネリック本体が要求する演算子能力と宣言境界の突き合わせ（L8。実装はgeneric/bounds.cpp）
+    void check_generic_operator_bounds(ast::FunctionDecl& func);
+
     // ジェネリック関数の制約情報（関数名 → GenericParamリスト）
     std::unordered_map<std::string, std::vector<ast::GenericParam>> generic_function_constraints_;
 

@@ -1,5 +1,6 @@
 #include "context.hpp"
 #include "internal/base/debug.hpp"
+#include "internal/base/mangle.hpp"
 #include "lowering.hpp"
 
 #include <memory>
@@ -69,10 +70,10 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     }
 
     debug::log(debug::Stage::Mir, debug::Level::Info,
-               "Lowering operator: " + type_name + "__" + op_name);
+               "Lowering operator: " + mangle::method_name(type_name, op_name));
 
     auto mir_func = std::make_unique<MirFunction>();
-    mir_func->name = type_name + "__" + op_name;
+    mir_func->name = mangle::method_name(type_name, op_name);
 
     // 戻り値用のローカル変数
     mir_func->return_local = 0;
@@ -359,8 +360,8 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
             if (method->is_constructor || method->is_destructor) {
                 mir_func->name = method->name;
             } else {
-                // 通常のメソッドは type__method_name 形式にする
-                mir_func->name = type_name + "__" + method->name;
+                // 通常のメソッドは type__method_name 形式にする（規則はmangle.hppへ集約）
+                mir_func->name = mangle::method_name(type_name, method->name);
             }
 
             // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。

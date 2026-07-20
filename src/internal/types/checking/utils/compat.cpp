@@ -575,6 +575,13 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
                                      std::to_string(sd_it->second->generic_params.size()),
                                      std::to_string(type->type_args.size())));
                 }
+                // H15: 各型引数の存在を再帰検証する（Pair<int, Nope> の Nope 等を検出）
+                for (const auto& arg : type->type_args) {
+                    if (arg && !is_valid_type(arg)) {
+                        error(current_span_, i18n::msgf(i18n::MsgId::TypeUnknownTypeArgument,
+                                                        ast::type_to_string(*arg), type->name));
+                    }
+                }
                 return true;
             }
             // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする

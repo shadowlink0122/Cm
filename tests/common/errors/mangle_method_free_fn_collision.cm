@@ -1,0 +1,25 @@
+// C16回帰: メソッドStruct.methodと自由関数Struct__methodは同一マングル名へ縮退するため、
+// 黙って一方が消えるのではなくコンパイルエラーになることを検証する
+import std::io::println;
+
+struct Holder {
+    int x;
+}
+
+impl Holder {
+    int method() {
+        return self.x;
+    }
+}
+
+int Holder__method() {
+    return -1;
+}
+
+int main() {
+    Holder s;
+    s.x = 7;
+    const int v = s.method();
+    println(v);
+    return 0;
+}

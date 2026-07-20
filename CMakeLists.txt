@@ -360,6 +360,7 @@ set(CM_SOURCES
     src/internal/types/checking/call/function.cpp
     src/internal/types/checking/call/method.cpp
     src/internal/types/checking/generic.cpp
+    src/internal/types/checking/generic/bounds.cpp
     src/internal/types/checking/auto_impl.cpp
     src/internal/types/checking/utils/compat.cpp
     src/internal/types/checking/utils/interp.cpp

@@ -1,0 +1,6 @@
+// C16回帰用の補助モジュール: Holder2::method は Holder2__method へフラット化される
+module holder2;
+
+export int method() {
+    return -1;
+}

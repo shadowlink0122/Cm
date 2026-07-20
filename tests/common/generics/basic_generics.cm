@@ -7,7 +7,7 @@ import std::io::println;
 }
 
 // ジェネリック最大値関数
-<T> T max(T a, T b) {
+<T: Ord> T max(T a, T b) {
     if (a > b) {
         return a;
     }

@@ -879,6 +879,24 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeGenericArgumentCountMismatch
     {"generic type '{0}' expects {1} type argument(s) but {2} were provided",
      "ジェネリック型 '{0}' は型引数を {1} 個必要としますが {2} 個指定されています"},
+    // TypeMangledSymbolCollision
+    {"symbol '{0}' is defined more than once: {1} conflicts with {2} (both lower to the same linkage name)",
+     "シンボル '{0}' が重複しています: {1} と {2} が同一のリンケージ名に縮退します"},
+    // TypeGenericTypeRequiresArguments
+    {"generic type '{0}' requires {1} type argument(s) (e.g. {0}<...>)",
+     "ジェネリック型 '{0}' には型引数が {1} 個必要です（例: {0}<...>）"},
+    // TypeUnknownTypeArgument
+    {"unknown type '{0}' in type argument of '{1}'",
+     "'{1}' の型引数に未定義の型 '{0}' が指定されています"},
+    // TypeGenericFunctionArgumentCountMismatch
+    {"generic function '{0}' expects {1} type argument(s) but {2} were provided",
+     "ジェネリック関数 '{0}' は型引数を {1} 個必要としますが {2} 個指定されています"},
+    // TypeGenericBoundMissing
+    {"type parameter '{0}' uses operator '{1}' but no interface bound is declared (declare <{0}: {2}>)",
+     "型パラメータ '{0}' は演算子 '{1}' を使用していますが、インターフェース境界が宣言されていません（<{0}: {2}> と宣言してください）"},
+    // TypeUseAfterMove
+    {"variable '{0}' used after move",
+     "move後の変数 '{0}' を使用しています"},
 };
 // clang-format on
 

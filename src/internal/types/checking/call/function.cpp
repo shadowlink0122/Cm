@@ -113,6 +113,14 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     explicit_type_args.push_back(ast::make_named(type_arg_name));
                 }
 
+                // H15: 明示的型引数の個数がジェネリックパラメータ数と一致するか検証する
+                if (explicit_type_args.size() != base_gen_it->second.size()) {
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TypeGenericFunctionArgumentCountMismatch,
+                                     base_name, std::to_string(base_gen_it->second.size()),
+                                     std::to_string(explicit_type_args.size())));
+                }
+
                 // 明示的型引数を設定
                 call.ordered_type_args = explicit_type_args;
                 std::unordered_map<std::string, ast::TypePtr> inferred;

@@ -1,0 +1,13 @@
+// H15回帰: 型引数に未定義の型名を指定するとコンパイルエラーになることを検証する
+import std::io::println;
+
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+int main() {
+    Pair<int, Nope> r;
+    println("unreachable");
+    return 0;
+}
