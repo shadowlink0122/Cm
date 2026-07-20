@@ -1,0 +1,22 @@
+// C8回帰: ユーザー定義のBox__intとジェネリック特殊化Box<int>が同一プログラム内で
+// 別の型として独立に動作することを検証する（特殊化キーの名前空間分離）
+struct Box<T> {
+    T value;
+}
+
+struct Box__int {
+    int raw;
+    int extra;
+}
+
+int main() {
+    Box<int> a;
+    a.value = 10;
+
+    Box__int c;
+    c.raw = 20;
+    c.extra = 30;
+
+    println("{a.value} {c.raw} {c.extra}");
+    return 0;
+}

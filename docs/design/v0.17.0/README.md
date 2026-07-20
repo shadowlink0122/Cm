@@ -10,12 +10,11 @@ has_children: true
 
 ## 対応済み（リリースノート参照）
 
-C1・C2・C3・C4・C5・C10・C11・C15・H4・H13・M4・M5・M11・M16、およびスライス要素型ディスパッチの一元化は実装・テスト済み。H4の設計文書は実装完了のため [archive/v0.17.0/uninitialized-struct-fields.md](../../archive/v0.17.0/uninitialized-struct-fields.md) へ移動済み。
+C1・C2・C3・C4・C5・C7・C8・C9・C10・C11・C15・H4・H13・M4・M5・M11・M16、およびスライス要素型ディスパッチの一元化は実装・テスト済み。H4の設計文書は [archive/v0.17.0/uninitialized-struct-fields.md](../../archive/v0.17.0/uninitialized-struct-fields.md)、C7/C8/C9（型同一性の構造化）は [archive/v0.17.0/type-identity-recursive-keys.md](../../archive/v0.17.0/type-identity-recursive-keys.md) へ移動済み。
 
 ## 残りの設計文書（テーマ別）
 
 ### 型システム・ジェネリクス
-- [型同一性の構造化（再帰的型キー）](type-identity-recursive-keys.md) — C7 / C8 / C9
 - [マングリング衝突検出](mangling-collision-detection.md) — C16
 - [ジェネリックインスタンス化の診断](generic-instantiation-diagnostics.md) — H15（個数検証はPhase 1実装済み）/ L8
 
@@ -45,4 +44,4 @@ C1・C2・C3・C4・C5・C10・C11・C15・H4・H13・M4・M5・M11・M16、お�
 
 ## 着手順の推奨
 
-型同一性の構造化（C7/C8/C9）はマングリング衝突（C16）・import重複排除（M7）と根が近く、最初のまとまった基盤リファクタリングとして費用対効果が高い。次いでdropパス（C12/C13）と集約コピー（C14）がコンパイル時間・メモリ実測値に直結する。
+型同一性の構造化（C7/C8/C9）は実装済み。次はマングリング衝突検出（C16）が同じ名前空間の防波堤として費用対効果が高く、dropパス（C12/C13）と集約コピー（C14）がコンパイル時間・メモリ実測値に直結する。

@@ -150,6 +150,18 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                         const auto* struct_def = ctx.struct_defs->at(inner_type->name);
                         if (*field_idx < struct_def->fields.size()) {
                             typ = struct_def->fields[*field_idx].type;
+                            // フィールド型がジェネリックパラメータの場合、type_argsから置換
+                            // 注: HIRでTがStruct扱いになる場合があるため、generic_params名で照合する
+                            if (typ && !inner_type->type_args.empty()) {
+                                for (size_t i = 0; i < struct_def->generic_params.size() &&
+                                                   i < inner_type->type_args.size();
+                                     ++i) {
+                                    if (struct_def->generic_params[i].name == typ->name) {
+                                        typ = inner_type->type_args[i];
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }

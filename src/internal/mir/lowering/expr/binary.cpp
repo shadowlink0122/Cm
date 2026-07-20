@@ -125,8 +125,8 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
 
                                 // フィールド型がジェネリックパラメータの場合、type_argsから置換
                                 // 例: Node<Item>のfield "data: T" → T=Item
-                                if (field_type && field_type->kind == hir::TypeKind::Generic &&
-                                    !inner_type->type_args.empty()) {
+                                // 注: HIRでTがStruct扱いになる場合があるため、kindではなくgeneric_params名で照合する
+                                if (field_type && !inner_type->type_args.empty()) {
                                     // ジェネリックパラメータ名を型引数にマッピング
                                     for (size_t i = 0; i < struct_def->generic_params.size() &&
                                                        i < inner_type->type_args.size();

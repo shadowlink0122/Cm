@@ -285,6 +285,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp
+    src/internal/mir/lowering/mono/typekey.cpp
     src/internal/mir/lowering/mono_internal.cpp
     src/internal/mir/lowering/mono_structs.cpp
     src/internal/mir/lowering/monomorphization_utils.cpp
@@ -855,6 +856,16 @@ if(BUILD_TESTING)
         target_include_directories(naming_rules_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
         target_link_libraries(naming_rules_test gtest_main)
         gtest_discover_tests(naming_rules_test PROPERTIES LABELS "unit")
+
+        # Unit tests - 型キー可逆エンコーディング（単相化の型同一性。C7/C8/C9）
+        add_executable(typekey_test
+            tests/unit/typekey_test.cpp
+            src/internal/mir/lowering/mono/typekey.cpp
+        )
+        set_target_properties(typekey_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(typekey_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(typekey_test gtest_main)
+        gtest_discover_tests(typekey_test PROPERTIES LABELS "unit")
 
         # Unit tests - MIR最適化パス
         # （手組みMIRに対して各パスの.cppを単体で検証。

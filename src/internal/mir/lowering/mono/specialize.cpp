@@ -184,25 +184,26 @@ void Monomorphization::generate_generic_specializations(
                         if (t->kind == hir::TypeKind::Pointer && t->element_type) {
                             target = t->element_type;
                         }
-                        // 構造体型でマングリング済みの名前（__を含む）を持つ場合
+                        // 型引数ツリーを持つ場合はそのまま特殊化を生成（C7: 再パース不要）
                         if (target && target->kind == hir::TypeKind::Struct &&
-                            target->name.find("__") != std::string::npos) {
-                            // 基本名と型引数を抽出
+                            !target->type_args.empty() && !tree_has_generic_param(target)) {
+                            std::string base = target->name;
+                            auto lt = base.find('<');
+                            if (lt != std::string::npos)
+                                base = base.substr(0, lt);
+                            generate_specialized_struct(program, base, target->type_args);
+                        }
+                        // 構造体型でマングリング済みの名前（__を含む）を持つ場合
+                        // （ユーザー定義に同名の構造体がある場合は特殊化と混同しない。C8）
+                        else if (target && target->kind == hir::TypeKind::Struct &&
+                                 target->name.find("__") != std::string::npos &&
+                                 (!hir_struct_defs ||
+                                  hir_struct_defs->find(target->name) == hir_struct_defs->end())) {
+                            // 基本名と型引数を抽出（1パラメータ基底はセグメントを結合）
                             auto pos = target->name.find("__");
                             std::string base_name = target->name.substr(0, pos);
-                            std::vector<std::string> struct_type_args;
-                            std::string remainder = target->name.substr(pos + 2);
-                            size_t arg_pos = 0;
-                            while (arg_pos < remainder.size()) {
-                                auto next = remainder.find("__", arg_pos);
-                                if (next == std::string::npos) {
-                                    struct_type_args.push_back(remainder.substr(arg_pos));
-                                    break;
-                                }
-                                struct_type_args.push_back(
-                                    remainder.substr(arg_pos, next - arg_pos));
-                                arg_pos = next + 2;
-                            }
+                            std::vector<hir::TypePtr> struct_type_args =
+                                parse_flat_type_args(base_name, target->name.substr(pos + 2));
                             // 構造体特殊化を生成
                             if (!struct_type_args.empty()) {
                                 generate_specialized_struct(program, base_name, struct_type_args);

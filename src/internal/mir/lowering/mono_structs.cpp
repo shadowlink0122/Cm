@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "mono_internal.hpp"
 #include "monomorphization.hpp"
 #include "monomorphization_utils.hpp"
@@ -24,8 +25,8 @@ void Monomorphization::monomorphize_structs(MirProgram& program) {
         return;
 
     // 必要な構造体特殊化を収集
-    // key: 特殊化構造体名, value: (基本名, 型引数リスト)
-    std::map<std::string, std::pair<std::string, std::vector<std::string>>> needed;
+    // key: 特殊化構造体名, value: (基本名, 型引数ツリーのリスト)
+    std::map<std::string, std::pair<std::string, std::vector<hir::TypePtr>>> needed;
 
     collect_struct_specializations(program, needed);
 
@@ -49,20 +50,18 @@ void Monomorphization::monomorphize_structs(MirProgram& program) {
 // MIR内の全型を走査し、必要な構造体特殊化を収集
 void Monomorphization::collect_struct_specializations(
     MirProgram& program,
-    std::map<std::string, std::pair<std::string, std::vector<std::string>>>& needed) {
+    std::map<std::string, std::pair<std::string, std::vector<hir::TypePtr>>>& needed) {
     if (!hir_struct_defs || !hir_funcs)
         return;
 
     // ジェネリック構造体のリストを作成
     std::unordered_set<std::string> generic_structs;
-    // 全ジェネリック型パラメータ名を収集
-    std::unordered_set<std::string> all_generic_params;
 
     for (const auto& [name, st] : *hir_struct_defs) {
         if (st && !st->generic_params.empty()) {
             generic_structs.insert(name);
             for (const auto& param : st->generic_params) {
-                all_generic_params.insert(param.name);
+                all_generic_param_names.insert(param.name);
             }
             debug_msg("MONO", "Found generic struct: " + name + " with " +
                                   std::to_string(st->generic_params.size()) + " type params");
@@ -75,7 +74,7 @@ void Monomorphization::collect_struct_specializations(
         if (func && !func->generic_params.empty()) {
             generic_func_names.insert(name);
             for (const auto& param : func->generic_params) {
-                all_generic_params.insert(param.name);
+                all_generic_param_names.insert(param.name);
             }
         }
     }
@@ -97,28 +96,17 @@ void Monomorphization::collect_struct_specializations(
             if (!local.type)
                 continue;
 
-            // 構造体型でtype_argsがある場合
+            // 構造体型でtype_argsがある場合（型引数ツリーを直接引き渡す。C7: 再パース廃止）
             if ((local.type->kind == hir::TypeKind::Struct ||
                  local.type->kind == hir::TypeKind::TypeAlias) &&
                 !local.type->type_args.empty() && generic_structs.count(local.type->name) > 0) {
-                auto type_args = extract_type_args_strings(local.type);
-                if (type_args.empty())
+                // 未解決のジェネリック型パラメータが残っている場合はスキップ
+                if (tree_has_generic_param(local.type))
                     continue;
 
-                // type_argsにジェネリック型パラメータが含まれている場合はスキップ
-                bool has_generic_param = false;
-                for (const auto& arg : type_args) {
-                    if (all_generic_params.count(arg) > 0) {
-                        has_generic_param = true;
-                        break;
-                    }
-                }
-                if (has_generic_param)
-                    continue;
-
-                std::string spec_name = make_specialized_struct_name(local.type->name, type_args);
+                std::string spec_name = struct_symbol_key(local.type->name, local.type->type_args);
                 if (needed.find(spec_name) == needed.end()) {
-                    needed[spec_name] = {local.type->name, type_args};
+                    needed[spec_name] = {local.type->name, local.type->type_args};
                     debug_msg("MONO", "Need struct specialization: " + spec_name);
                 }
             }
@@ -126,28 +114,18 @@ void Monomorphization::collect_struct_specializations(
             // 既にマングリング済みの構造体名（Node__intなど）を検出
             if ((local.type->kind == hir::TypeKind::Struct ||
                  local.type->kind == hir::TypeKind::TypeAlias) &&
-                local.type->name.find("__") != std::string::npos) {
+                local.type->name.find("__") != std::string::npos &&
+                hir_struct_defs->find(local.type->name) == hir_struct_defs->end()) {
+                // ユーザー定義に同名の構造体がある場合は特殊化と混同しない（C8）
                 // 基本名を抽出（Node__int -> Node）
                 auto pos = local.type->name.find("__");
                 std::string base_name = local.type->name.substr(0, pos);
 
                 // 基本名がジェネリック構造体かチェック
                 if (generic_structs.count(base_name) > 0) {
-                    // 型引数を抽出（Node__int -> ["int"]）
-                    std::vector<std::string> type_args;
-                    std::string remainder = local.type->name.substr(pos + 2);
-
-                    // __で区切られた型引数を抽出
-                    size_t arg_pos = 0;
-                    while (arg_pos < remainder.size()) {
-                        auto next_pos = remainder.find("__", arg_pos);
-                        if (next_pos == std::string::npos) {
-                            type_args.push_back(remainder.substr(arg_pos));
-                            break;
-                        }
-                        type_args.push_back(remainder.substr(arg_pos, next_pos - arg_pos));
-                        arg_pos = next_pos + 2;
-                    }
+                    // 型引数を抽出（Node__int -> [int]、Vector__Vector__int -> [Vector__int]）
+                    std::vector<hir::TypePtr> type_args =
+                        parse_flat_type_args(base_name, local.type->name.substr(pos + 2));
 
                     if (!type_args.empty()) {
                         std::string spec_name = local.type->name;
@@ -161,28 +139,14 @@ void Monomorphization::collect_struct_specializations(
     }
 }
 
-// 特殊化構造体を生成
+// 特殊化構造体を生成（型引数はhir::Typeツリー。ネストした特殊化も再帰的に生成する）
 void Monomorphization::generate_specialized_struct(MirProgram& program,
                                                    const std::string& base_name,
-                                                   const std::vector<std::string>& type_args_raw) {
+                                                   const std::vector<hir::TypePtr>& type_args) {
     if (!hir_struct_defs)
         return;
 
-    // type_argsを正規化（カンマ区切りの1要素を分割）
-    // 例: ["int, int"] -> ["int", "int"]
-    std::vector<std::string> type_args;
-    for (const auto& arg : type_args_raw) {
-        if (arg.find(',') != std::string::npos) {
-            auto split_args = split_type_args(arg);
-            for (const auto& split_arg : split_args) {
-                type_args.push_back(split_arg);
-            }
-        } else {
-            type_args.push_back(arg);
-        }
-    }
-
-    std::string spec_name = make_specialized_struct_name(base_name, type_args);
+    std::string spec_name = struct_symbol_key(base_name, type_args);
 
     // 既に生成済みならスキップ
     if (generated_struct_specializations.count(spec_name) > 0) {
@@ -198,12 +162,16 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
 
     const hir::HirStruct* base_struct = it->second;
 
-    // 型パラメータ→具体的な型のマッピングを作成
+    // 再帰的なネスト生成での無限ループを防ぐため先に登録する
+    generated_struct_specializations.insert(spec_name);
+
+    // 型パラメータ→具体的な型のマッピングを作成（ツリーを直接使用）
     std::unordered_map<std::string, hir::TypePtr> type_subst;
     for (size_t i = 0; i < base_struct->generic_params.size() && i < type_args.size(); ++i) {
         const auto& param_name = base_struct->generic_params[i].name;
-        type_subst[param_name] = make_type_from_name(type_args[i]);
-        debug_msg("MONO", "Struct type substitution: " + param_name + " -> " + type_args[i]);
+        type_subst[param_name] = type_args[i];
+        debug_msg("MONO", "Struct type substitution: " + param_name + " -> " +
+                              typekey::display_name(type_args[i]));
     }
 
     // 特殊化構造体を生成
@@ -220,60 +188,19 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
         MirStructField mir_field;
         mir_field.name = field.name;
 
-        // フィールドの型を置換（再帰的に適用）
-        hir::TypePtr field_type = field.type;
-        if (field_type) {
-            // ✅ substitute_type_in_typeを使用して再帰的に型を置換
-            // これによりT=ItemのようなStruct型も正しく置換される
-            field_type = substitute_type_in_type(field_type, type_subst, this);
+        // 構造を保ったまま型パラメータを置換し、レイアウトはこのツリーで計算する
+        hir::TypePtr size_tree = substitute_type_tree(field.type, type_subst);
 
-            // ポインタ型のelement_typeのtype_argsをクリア（二重マングリング防止）
-            if (field_type && field_type->kind == hir::TypeKind::Pointer &&
-                field_type->element_type && !field_type->element_type->type_args.empty()) {
-                field_type->element_type->type_args.clear();
-            }
+        // レイアウトは自然アライメントのCレイアウトで統一計算する（C9: 独自switchとの二重管理を廃止。
+        // 配列フィールドT[N]も要素型の再帰計算でstride不一致を根絶する）
+        uint32_t size = 8, align = 8;
+        if (size_tree) {
+            size = static_cast<uint32_t>(calculate_specialized_type_size(size_tree));
+            align = static_cast<uint32_t>(calculate_specialized_type_align(size_tree));
         }
-        mir_field.type = field_type;
 
-        // 型のサイズとアライメントを取得
-        uint32_t size = 8, align = 8;  // デフォルト
-        if (field_type) {
-            switch (field_type->kind) {
-                case hir::TypeKind::Bool:
-                case hir::TypeKind::Tiny:
-                case hir::TypeKind::UTiny:
-                case hir::TypeKind::Char:
-                    size = 1;
-                    align = 1;
-                    break;
-                case hir::TypeKind::Short:
-                case hir::TypeKind::UShort:
-                    size = 2;
-                    align = 2;
-                    break;
-                case hir::TypeKind::Int:
-                case hir::TypeKind::UInt:
-                case hir::TypeKind::Float:
-                    size = 4;
-                    align = 4;
-                    break;
-                case hir::TypeKind::Long:
-                case hir::TypeKind::ULong:
-                case hir::TypeKind::Double:
-                case hir::TypeKind::Pointer:
-                    size = 8;
-                    align = 8;
-                    break;
-                case hir::TypeKind::String:
-                    size = 16;
-                    align = 8;
-                    break;
-                default:
-                    size = 8;
-                    align = 8;
-                    break;
-            }
-        }
+        // ネストしたジェネリックインスタンスの特殊化を生成し、シンボル名参照へ正規化する
+        mir_field.type = to_symbol_type(program, size_tree);
 
         // アライメント調整
         if (current_offset % align != 0) {
@@ -284,9 +211,9 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
         if (align > max_align)
             max_align = align;
 
-        mir_struct->fields.push_back(std::move(mir_field));
         debug_msg("MONO", "  Field: " + field.name + " -> " +
-                              (field_type ? hir::type_to_string(*field_type) : "unknown"));
+                              (mir_field.type ? hir::type_to_string(*mir_field.type) : "unknown"));
+        mir_struct->fields.push_back(std::move(mir_field));
     }
 
     // 最終的なサイズとアライメントを設定
@@ -298,11 +225,77 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
 
     // プログラムに追加
     program.structs.push_back(std::move(mir_struct));
-    generated_struct_specializations.insert(spec_name);
 
     debug_msg("MONO", "Generated specialized struct: " + spec_name +
                           " (size=" + std::to_string(current_offset) +
                           ", align=" + std::to_string(max_align) + ")");
+}
+
+// 置換済みツリー内のジェネリックインスタンスを特殊化生成し、シンボル名参照へ書き換える
+hir::TypePtr Monomorphization::to_symbol_type(MirProgram& program, const hir::TypePtr& type) {
+    if (!type)
+        return nullptr;
+
+    // ポインタ・参照・配列は要素型を再帰的に正規化する
+    if (type->kind == hir::TypeKind::Pointer || type->kind == hir::TypeKind::Reference ||
+        type->kind == hir::TypeKind::Array) {
+        auto elem = to_symbol_type(program, type->element_type);
+        if (elem == type->element_type)
+            return type;
+        auto result = std::make_shared<hir::Type>(*type);
+        result->element_type = elem;
+        if (type->kind == hir::TypeKind::Pointer)
+            result->name = "ptr_" + get_type_name(elem);
+        return result;
+    }
+
+    // ジェネリックインスタンス（type_argsあり）はシンボルキーへ正規化する
+    if ((type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::Generic ||
+         type->kind == hir::TypeKind::TypeAlias) &&
+        !type->type_args.empty()) {
+        // 未解決の型パラメータが残る場合はそのまま（関数特殊化時に解決される）
+        if (tree_has_generic_param(type))
+            return type;
+
+        std::string base = type->name;
+        auto lt = base.find('<');
+        if (lt != std::string::npos)
+            base = base.substr(0, lt);
+
+        // 既にマングリング済みの名前はそのままシンボルとし、特殊化の存在のみ保証する
+        if (base.find("__") != std::string::npos || base.find('$') != std::string::npos) {
+            if (hir_struct_defs && hir_struct_defs->find(base) == hir_struct_defs->end()) {
+                std::string flat_base = base.substr(0, base.find("__"));
+                auto def_it = hir_struct_defs->find(flat_base);
+                if (def_it != hir_struct_defs->end() && def_it->second &&
+                    !def_it->second->generic_params.empty()) {
+                    auto parsed =
+                        parse_flat_type_args(flat_base, base.substr(flat_base.size() + 2));
+                    if (!parsed.empty())
+                        generate_specialized_struct(program, flat_base, parsed);
+                }
+            }
+            auto result = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            result->name = base;
+            return result;
+        }
+
+        // 基底がジェネリック構造体なら特殊化を生成する（ネスト分の再帰）
+        if (hir_struct_defs) {
+            auto def_it = hir_struct_defs->find(base);
+            if (def_it != hir_struct_defs->end() && def_it->second &&
+                !def_it->second->generic_params.empty()) {
+                generate_specialized_struct(program, base, type->type_args);
+            }
+        }
+
+        auto result = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+        result->name = struct_symbol_key(base, type->type_args);
+        // シンボル名に型引数を埋め込んだためtype_argsは保持しない（二重マングリング防止）
+        return result;
+    }
+
+    return type;
 }
 
 // MIR内の型参照を更新（Pair → Pair__int など）
@@ -425,23 +418,22 @@ void Monomorphization::update_type_references(MirProgram& program) {
             continue;
 
         // まず、どの特殊化構造体が使用されているかを追跡
-        // localId -> (base_struct_name, type_args)
-        std::unordered_map<LocalId, std::pair<std::string, std::vector<std::string>>> struct_info;
+        // localId -> (base_struct_name, 型引数ツリー)
+        std::unordered_map<LocalId, std::pair<std::string, std::vector<hir::TypePtr>>> struct_info;
 
         for (size_t i = 0; i < func->locals.size(); ++i) {
             auto& local = func->locals[i];
             if (!local.type)
                 continue;
 
-            // ジェネリック構造体型の場合
+            // ジェネリック構造体型の場合（型引数ツリーからシンボルキーを生成。C7）
             if ((local.type->kind == hir::TypeKind::Struct ||
                  local.type->kind == hir::TypeKind::TypeAlias) &&
                 !local.type->type_args.empty() && generic_structs.count(local.type->name) > 0) {
-                auto type_args = extract_type_args_strings(local.type);
-                if (!type_args.empty()) {
+                if (!tree_has_generic_param(local.type)) {
                     std::string spec_name =
-                        make_specialized_struct_name(local.type->name, type_args);
-                    struct_info[i] = {local.type->name, type_args};
+                        struct_symbol_key(local.type->name, local.type->type_args);
+                    struct_info[i] = {local.type->name, local.type->type_args};
 
                     // 型名を更新（type_argsはクリア）
                     local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
@@ -515,7 +507,7 @@ void Monomorphization::update_type_references(MirProgram& program) {
 
                     // struct_infoにある場合とない場合で分岐
                     std::string base_name;
-                    std::vector<std::string> type_args;
+                    std::vector<hir::TypePtr> type_args;
                     bool has_struct_info = false;
 
                     if (info_it != struct_info.end()) {
@@ -524,29 +516,30 @@ void Monomorphization::update_type_references(MirProgram& program) {
                         type_args = info_it->second.second;
                     } else {
                         // struct_infoにないが、マングリング済み構造体名を持つローカルの場合
-                        // 例: _4: Iterator__int
+                        // 例: _4: Iterator__int / Box$1$3$int
                         if (source_local < func->locals.size()) {
                             auto& local_type = func->locals[source_local].type;
-                            if (local_type && local_type->kind == hir::TypeKind::Struct) {
+                            if (local_type && local_type->kind == hir::TypeKind::Struct &&
+                                hir_struct_defs->find(local_type->name) == hir_struct_defs->end()) {
                                 std::string type_name = local_type->name;
-                                size_t pos = type_name.find("__");
-                                if (pos != std::string::npos) {
-                                    base_name = type_name.substr(0, pos);
-                                    // 型引数を抽出
-                                    std::string remainder = type_name.substr(pos + 2);
-                                    size_t arg_pos = 0;
-                                    while (arg_pos < remainder.size()) {
-                                        auto next_pos = remainder.find("__", arg_pos);
-                                        if (next_pos == std::string::npos) {
-                                            type_args.push_back(remainder.substr(arg_pos));
-                                            break;
-                                        }
-                                        type_args.push_back(
-                                            remainder.substr(arg_pos, next_pos - arg_pos));
-                                        arg_pos = next_pos + 2;
-                                    }
-                                    if (generic_structs.count(base_name) > 0) {
+                                if (typekey::is_encoded_key(type_name)) {
+                                    // '$'エンコード名から基底名と型引数を復元
+                                    base_name = typekey::base_name_of(type_name);
+                                    type_args = typekey::decode_type_args(type_name);
+                                    if (!type_args.empty() &&
+                                        generic_structs.count(base_name) > 0) {
                                         has_struct_info = true;
+                                    }
+                                } else {
+                                    size_t pos = type_name.find("__");
+                                    if (pos != std::string::npos) {
+                                        base_name = type_name.substr(0, pos);
+                                        // 型引数を抽出（1パラメータ基底はセグメントを結合）
+                                        type_args = parse_flat_type_args(base_name,
+                                                                         type_name.substr(pos + 2));
+                                        if (generic_structs.count(base_name) > 0) {
+                                            has_struct_info = true;
+                                        }
                                     }
                                 }
                             }
@@ -558,8 +551,20 @@ void Monomorphization::update_type_references(MirProgram& program) {
                         // 例: node.data.value → Node.data(=T→Item) → Item.value(=int)
                         hir::TypePtr current_field_type = nullptr;
                         std::string current_struct_name = base_name;
-                        std::vector<std::string> current_type_args = type_args;
+                        std::vector<hir::TypePtr> current_type_args = type_args;
                         bool is_final_type_resolved = false;
+
+                        // 具体型ツリーへ遷移する際に基底名と型引数を更新する共通処理
+                        auto descend_into = [&](const hir::TypePtr& t) {
+                            if (!t || t->kind != hir::TypeKind::Struct)
+                                return;
+                            std::string next_base = t->name;
+                            auto lt = next_base.find('<');
+                            if (lt != std::string::npos)
+                                next_base = next_base.substr(0, lt);
+                            current_struct_name = next_base;
+                            current_type_args = t->type_args;
+                        };
 
                         for (const auto& proj : place->projections) {
                             if (proj.kind != ProjectionKind::Field)
@@ -586,18 +591,11 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                 for (size_t pi = 0;
                                      pi < params_it->second.size() && pi < current_type_args.size();
                                      ++pi) {
-                                    // 直接型パラメータ名と一致する場合
+                                    // 直接型パラメータ名と一致する場合（実引数ツリーをそのまま採用）
                                     if (field_type->name == params_it->second[pi]) {
-                                        // 型パラメータを具体型に置換
-                                        current_field_type =
-                                            make_type_from_name(current_type_args[pi]);
+                                        current_field_type = current_type_args[pi];
                                         // 置換後の型が構造体の場合、次のフィールドアクセスのために情報を更新
-                                        if (current_field_type &&
-                                            current_field_type->kind == hir::TypeKind::Struct) {
-                                            current_struct_name = current_field_type->name;
-                                            current_type_args
-                                                .clear();  // 具体型なのでtype_argsはクリア
-                                        }
+                                        descend_into(current_field_type);
                                         is_final_type_resolved = true;
                                         break;
                                     }
@@ -606,9 +604,8 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                         field_type->element_type &&
                                         field_type->element_type->name == params_it->second[pi]) {
                                         // ポインタ要素型を置換
-                                        auto concrete_elem =
-                                            make_type_from_name(current_type_args[pi]);
-                                        current_field_type = hir::make_pointer(concrete_elem);
+                                        current_field_type =
+                                            hir::make_pointer(current_type_args[pi]);
                                         is_final_type_resolved = true;
                                         break;
                                     }
@@ -619,20 +616,21 @@ void Monomorphization::update_type_references(MirProgram& program) {
                             if (!is_final_type_resolved || current_field_type == nullptr) {
                                 current_field_type = field_type;
                                 if (field_type->kind == hir::TypeKind::Struct) {
-                                    current_struct_name = field_type->name;
-                                    // type_argsを抽出
-                                    current_type_args = extract_type_args_strings(field_type);
+                                    descend_into(field_type);
                                 }
                             }
                             is_final_type_resolved = false;  // 次のプロジェクションのためにリセット
                         }
 
                         // 最終的なフィールド型が得られた場合、dest_localの型を更新
+                        // （ジェネリックインスタンスは特殊化を生成してシンボル名参照へ正規化する）
                         if (current_field_type) {
-                            func->locals[dest_local].type = current_field_type;
-                            debug_msg("MONO", "Updated field access type in " + func->name + ": " +
-                                                  func->locals[dest_local].name + " -> " +
-                                                  hir::type_to_string(*current_field_type));
+                            func->locals[dest_local].type =
+                                to_symbol_type(program, current_field_type);
+                            debug_msg("MONO",
+                                      "Updated field access type in " + func->name + ": " +
+                                          func->locals[dest_local].name + " -> " +
+                                          hir::type_to_string(*func->locals[dest_local].type));
                         }
                     }
                 }
