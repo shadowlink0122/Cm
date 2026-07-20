@@ -69,8 +69,19 @@ static void cm_slice_grow(CmSlice* slice) {
     if (new_cap < 4)
         new_cap = 4;
 
-    void* new_data = realloc(slice->data, (uint64_t)(new_cap * slice->elem_size));
+    // WASMの汎用realloc（runtime_wasm.c）は旧ブロックのサイズを知らず、
+    // 新サイズ分だけ旧ブロックからコピーするため旧ブロック末尾を超えて読み出してしまう。
+    // ここでは旧要素数ぶん（len*elem_size）だけを確実にコピーする（cap分の未使用領域は不要）。
+    int64_t old_bytes = slice->len * slice->elem_size;
+    void* new_data = wasm_alloc((uint64_t)(new_cap * slice->elem_size));
     if (new_data) {
+        if (slice->data && old_bytes > 0) {
+            char* src = (char*)slice->data;
+            char* dst = (char*)new_data;
+            for (int64_t i = 0; i < old_bytes; i++) {
+                dst[i] = src[i];
+            }
+        }
         slice->data = new_data;
         slice->cap = new_cap;
     }

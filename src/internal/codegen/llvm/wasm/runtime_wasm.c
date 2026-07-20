@@ -203,6 +203,13 @@ void free(void* ptr) {
     (void)ptr;
 }
 
+// cm_free: Cmランタイムの解放関数。WASMのバンプアロケータは解放を行わないためno-op。
+// runtime_slice.c 等が参照する（従来は runtime_platform.c 側の定義に依存していたが、
+// それはWASMのTUに含まれず、参照が最適化で消えている間だけ偶然リンクできていた）。
+void cm_free(void* ptr) {
+    (void)ptr;
+}
+
 void* calloc(size_t nmemb, size_t size) {
     size_t total = nmemb * size;
     void* ptr = wasm_alloc(total);

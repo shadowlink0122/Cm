@@ -1,0 +1,66 @@
+// 構造体フィールドの動的配列の回帰テスト
+// 1) implメソッド経由の self.items.push(x) がフィールドへ書き戻されること（以前はMIRから黙って欠落）
+// 2) 初期容量を超えるpushで容量が自動拡張されること（Go同様の2倍拡張）
+// 3) ジェネリック構造体のスライスフィールド T[] の要素型が置換されること（以前はblob扱いでstrideが食い違い）
+import std::io::println;
+
+struct Store {
+    int[] items;
+    int count;
+}
+
+impl Store {
+    self() {
+        self.items = [];
+        self.count = 0;
+    }
+    void add(int x) {
+        self.items.push(x);
+        self.count = self.count + 1;
+    }
+    int size() {
+        return self.items.len() as int;
+    }
+    int at(int i) {
+        return self.items[i];
+    }
+}
+
+struct Box<T> {
+    T[] vals;
+}
+
+impl<T> Box<T> {
+    self() {
+        self.vals = [];
+    }
+    void put(T v) {
+        self.vals.push(v);
+    }
+    T get(int i) {
+        return self.vals[i];
+    }
+    int size() {
+        return self.vals.len() as int;
+    }
+}
+
+int main() {
+    Store s();
+    int i = 0;
+    while (i < 20) {
+        s.add(i * i);
+        i = i + 1;
+    }
+    println("size=" + s.size() + " count=" + s.count);
+    println("at0=" + s.at(0) + " at19=" + s.at(19));
+
+    Box<int> b();
+    i = 0;
+    while (i < 10) {
+        b.put(i * 7);
+        i = i + 1;
+    }
+    println("b.size=" + b.size() + " b3=" + b.get(3) + " b9=" + b.get(9));
+    return 0;
+}

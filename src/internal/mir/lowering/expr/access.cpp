@@ -284,12 +284,22 @@ bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContex
             obj_type = ctx.func->locals[object].type;
         }
 
+        // フィールドチェーンを逆順にしてプロジェクションを構築
+        out_place = MirPlace{object};
+
+        // implメソッド内の self は *Struct（構造体へのポインタ）で渡される。
+        // その場合はまず Deref を挟み、pointee の構造体型を基点にフィールドを辿る。
+        // これがないと self.items のようなメンバスライスの場所が解決できず、push等が黙って捨てられる。
+        if (obj_type && obj_type->kind == hir::TypeKind::Pointer && obj_type->element_type &&
+            obj_type->element_type->kind == hir::TypeKind::Struct) {
+            out_place.projections.push_back(PlaceProjection::deref());
+            obj_type = obj_type->element_type;
+        }
+
         if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
             return false;
         }
 
-        // フィールドチェーンを逆順にしてプロジェクションを構築
-        out_place = MirPlace{object};
         hir::TypePtr current_type = obj_type;
 
         for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {

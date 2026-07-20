@@ -153,6 +153,21 @@ hir::TypePtr substitute_type_in_type(
         }
     }
 
+    // 2.5 配列/スライス型の場合（K[] → int[]、T[N] → int[N]）
+    // element_type を再帰的に置換する。これがないとジェネリックなスライス/配列フィールドの
+    // 要素型が未解決（K のまま）で残り、要素サイズ計算が誤る（例: int を12バイトblobとして扱う）。
+    // その結果 push/index の stride が食い違い、確保バッファに余裕のないwasmで木構造が壊れる。
+    if (type->kind == hir::TypeKind::Array && type->element_type) {
+        auto substituted_elem = substitute_type_in_type(type->element_type, type_subst, mono);
+        if (substituted_elem && (substituted_elem != type->element_type ||
+                                 substituted_elem->name != type->element_type->name)) {
+            // 元の型の他フィールド（array_size 等）を保ったまま element_type だけ差し替える
+            auto new_arr_type = std::make_shared<hir::Type>(*type);
+            new_arr_type->element_type = substituted_elem;
+            return new_arr_type;
+        }
+    }
+
     // 3. 構造体名に型パラメータが埋め込まれている場合（Container__T → Container__int）
     if (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) {
         std::string type_name = type->name;

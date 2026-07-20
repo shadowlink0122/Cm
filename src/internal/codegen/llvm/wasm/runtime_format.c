@@ -41,19 +41,49 @@ uint64_t __builtin_string_len(const char* str) {
 }
 
 // ============================================================
-// Memory Allocator (Static Pool)
+// Memory Allocator (bump allocator with linear-memory growth)
 // ============================================================
-static char memory_pool[65536];  // 64KB
+// 初期は静的プールから配り、使い切ったら wasm の線形メモリを memory.grow で拡張し
+// 拡張領域から配り続ける。以前はプールを使い切ると pool_offset を0へ巻き戻して
+// 「生きている割り当て」を上書きしていた（構造体フィールドやスライスヘッダが壊れ、
+// スライスを多用する再帰処理が一定サイズで崩壊した）。巻き戻しは行わず必ず新しい領域を返す。
+static char memory_pool[65536];  // 初期プール（64KB）: 小さなプログラムはmemory.grow不要
 static size_t pool_offset = 0;
+static int use_grown_heap = 0;  // プール枯渇後は拡張領域から配る
+static size_t grown_ptr = 0;    // 拡張領域の次アドレス（線形メモリ先頭からのバイトオフセット）
 
 // Non-static for use in runtime_slice.c
 void* wasm_alloc(size_t size) {
-    if (pool_offset + size > sizeof(memory_pool)) {
-        pool_offset = 0;  // Simple GC: reset pool
+    // 8バイト境界に整列（誤整列アクセス回避）
+    size = (size + 7u) & ~(size_t)7u;
+    if (size == 0)
+        size = 8;
+
+    // 高速パス: 初期プールに収まる間はプールから配る
+    if (!use_grown_heap && pool_offset + size <= sizeof(memory_pool)) {
+        void* ptr = &memory_pool[pool_offset];
+        pool_offset += size;
+        return ptr;
     }
-    void* ptr = &memory_pool[pool_offset];
-    pool_offset += size;
-    return ptr;
+
+    // プール枯渇: 以降は線形メモリを伸ばして拡張領域から配る（巻き戻さない）
+    use_grown_heap = 1;
+    if (grown_ptr == 0) {
+        // 現在のメモリ末尾（=全静的データ・スタックの上）から開始する
+        grown_ptr = (size_t)__builtin_wasm_memory_size(0) << 16;
+    }
+    size_t addr = grown_ptr;
+    size_t end = addr + size;
+    size_t mem_bytes = (size_t)__builtin_wasm_memory_size(0) << 16;
+    if (end > mem_bytes) {
+        size_t need = end - mem_bytes;
+        size_t pages = (need + 65535u) >> 16;  // 64KBページ単位で切り上げ
+        if ((size_t)__builtin_wasm_memory_grow(0, (int)pages) == (size_t)-1) {
+            return 0;  // メモリ拡張失敗
+        }
+    }
+    grown_ptr = end;
+    return (void*)addr;
 }
 
 // ============================================================

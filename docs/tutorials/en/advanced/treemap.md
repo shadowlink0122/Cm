@@ -14,7 +14,7 @@ parent: Advanced Features
 
 ## Overview
 
-`TreeMap<K, V>` is a generic associative container backed by a **self-balancing binary search tree (AVL)**. Lookups and insertions are **O(log n)** — unlike a linear-search map, performance stays good as the number of elements grows. The tree is stored in a fixed-capacity arena of nodes referenced by index (no pointers, no `malloc`), so it behaves identically on every backend (jit/native/wasm/js/ts).
+`TreeMap<K, V>` is a generic associative container backed by a **self-balancing binary search tree (AVL)**. Lookups and insertions are **O(log n)** — unlike a linear-search map, performance stays good as the number of elements grows. The tree is stored in an arena of nodes referenced by index rather than by pointer, so it behaves identically on every backend (jit/native/wasm/js/ts). The arena is a dynamic array (slice), so capacity grows automatically and there is no upper bound on the number of entries.
 
 Keys are kept in sorted order, so the key type `K` must be comparable (`<` and `==`). Built-in types like `int` and `string` work directly; structs need `with Ord, Eq`. The value type `V` can be anything.
 
@@ -50,7 +50,6 @@ int main() {
 | `get(key) -> V` | Value for a key (check `contains` first; missing key returns an unspecified value) |
 | `contains(key) -> bool` | Whether the key is present. O(log n) |
 | `size() -> int` | Number of entries |
-| `is_full() -> bool` | Whether the fixed capacity is reached |
 
 ---
 
@@ -75,7 +74,7 @@ releases.put(Version { major: 2, minor: 1 }, "latest");
 
 Every insert rebalances the tree with AVL rotations, so even inserting already-sorted keys keeps the height logarithmic (100 sorted inserts → height ≈ 7, not 100).
 
-The arena has a fixed capacity (`CAP`, default 128). Exceeding it makes `put` a no-op (check `is_full`). On the native backend, AOT optimization time grows with the capacity (the inline arrays are scalarized by SROA); the jit/js/ts backends have no such cost, so raise `CAP` there when you need larger maps.
+The node arena is a dynamic array (slice), so whenever `put` runs out of room the capacity doubles automatically, just like a Go slice. There is no fixed upper bound on the number of entries, and because no fixed-size arrays are used the native AOT optimization time does not scale with the number of entries.
 
 ---
 

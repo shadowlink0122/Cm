@@ -1,14 +1,15 @@
 // std::collections::treemap - ジェネリックな平衡二分探索木マップ（AVL木）
 //
 // キーの順序（<）で要素を平衡木に保持し、探索・挿入を O(log n) で行う（線形探索の連想配列より効率的）。
-// 木は「固定容量アリーナ＋インデックス」で表現し、ポインタもmallocも使わないため
+// 木は「動的配列（スライス）アリーナ＋インデックス」で表現し、ノード参照はポインタでなくindexで持つため
 // 全バックエンド（jit/native/wasm/js/ts）で同じ動作をする。挿入ごとにAVL回転で高さを平衡に保つ。
+//
+// 容量はスライスにより自動拡張される（push時にGoと同様、容量が2倍ずつ伸びる）ため、要素数の上限は無い。
+// 固定サイズ配列を使わないので native の AOT 最適化コンパイル時間も要素数に依存しない。
 //
 // 制約:
 //   - キー型 K は順序比較が必要（< と ==）。int/string等は組み込み、構造体は `with Ord, Eq` を付ける。
 //     順序を持たない型はキーにできない（その用途はハッシュマップ向き）。値型 V は任意。
-//   - 容量は固定（下記 CAP）。要素数がこれを超える put は無視される（is_full で確認可能）。
-//     容量を上げるとLLVM（native）のローカル集約が大きくなりコンパイルが重くなるトレードオフがある。
 //
 // 使用例:
 //   import std::collections::treemap::*;
@@ -18,27 +19,26 @@
 
 module std.collections.treemap;
 
-// アリーナ容量（固定）。要素数の上限。コンパイル時定数。
-// 注: nativeバックエンドでは容量に比例してAOT最適化（-O2/-O3）のコンパイル時間が増える
-// （インライン配列をSROAが要素展開するため）。jit/js/ts にはこのコストは無い。大きなマップが
-// 必要なら値を増やす（nativeのコンパイル時間とトレードオフ、または jit/js/ts を使う）。
-const int CAP = 128;
-
 // ジェネリック平衡二分探索木マップ。
-// ノードはパラレル配列（keys/vals/left/right/height）＋インデックスで表す。
+// ノードはパラレルな動的配列（keys/vals/left/right/height）＋indexで表す。容量はpushで自動拡張される。
 export struct TreeMap<K, V> {
-    K[128] keys;       // ノードのキー
-    V[128] vals;       // ノードの値
-    int[128] left;     // 左の子のindex（-1で無し）
-    int[128] right;    // 右の子のindex（-1で無し）
-    int[128] height;   // 部分木の高さ（AVL平衡用）
-    int count;         // 確保済みノード数
-    int root;          // 根のindex（-1で空）
+    K[] keys;      // ノードのキー
+    V[] vals;      // ノードの値
+    int[] left;    // 左の子のindex（-1で無し）
+    int[] right;   // 右の子のindex（-1で無し）
+    int[] height;  // 部分木の高さ（AVL平衡用）
+    int count;     // 確保済みノード数
+    int root;      // 根のindex（-1で空）
 }
 
 export impl<K, V> TreeMap<K, V> {
     // 空のマップを作る。
     self() {
+        self.keys = [];
+        self.vals = [];
+        self.left = [];
+        self.right = [];
+        self.height = [];
         self.count = 0;
         self.root = -1;
     }
@@ -89,14 +89,14 @@ export impl<K, V> TreeMap<K, V> {
         return y;
     }
 
-    // 新しいノードを確保してindexを返す。
+    // 新しいノードを確保してindexを返す。スライスへpushするので容量は自動拡張される。
     int alloc_node(K k, V v) {
         int idx = self.count;
-        self.keys[idx] = k;
-        self.vals[idx] = v;
-        self.left[idx] = -1;
-        self.right[idx] = -1;
-        self.height[idx] = 1;
+        self.keys.push(k);
+        self.vals.push(v);
+        self.left.push(-1);
+        self.right.push(-1);
+        self.height.push(1);
         self.count = self.count + 1;
         return idx;
     }
@@ -156,16 +156,8 @@ export impl<K, V> TreeMap<K, V> {
 
     // ---- 公開API ----
 
-    // 容量に達しているか。
-    bool is_full() {
-        return self.count >= CAP;
-    }
-
-    // (key, val) を挿入する。既存キーなら値を更新。容量超過時は何もしない。O(log n)。
+    // (key, val) を挿入する。既存キーなら値を更新。容量はスライスが自動拡張するので上限は無い。O(log n)。
     void put(K key, V val) {
-        if (self.is_full() && self.find_index(key) < 0) {
-            return;
-        }
         self.root = self.insert_at(self.root, key, val);
     }
 
