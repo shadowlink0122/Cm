@@ -53,18 +53,51 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
             size_t end = pos + 1;
             // :: は変数名の一部として扱う（enum値のため）。
             // [] / () 内の ':' はビットスライス（x[3:0]）等の式の一部であり
-            // フォーマット指定子ではない
+            // フォーマット指定子ではない。
+            // L2: ネストした波括弧（構造体リテラル Key{id: 1} 等）と文字列リテラル内の
+            // } { : は式の一部として扱い、深度0・引用符外の } のみを終端とする
             int fspec_depth = 0;
-            while (end < format_str.length() && format_str[end] != '}') {
+            int brace_depth = 0;
+            bool in_quotes = false;
+            while (end < format_str.length()) {
                 char fc = format_str[end];
+                if (in_quotes) {
+                    if (fc == '\\' && end + 1 < format_str.length()) {
+                        end += 2;
+                        continue;
+                    }
+                    if (fc == '"') {
+                        in_quotes = false;
+                    }
+                    end++;
+                    continue;
+                }
+                if (fc == '"') {
+                    in_quotes = true;
+                    end++;
+                    continue;
+                }
+                if (fc == '{') {
+                    brace_depth++;
+                    end++;
+                    continue;
+                }
+                if (fc == '}') {
+                    if (brace_depth == 0) {
+                        break;  // プレースホルダの終端
+                    }
+                    brace_depth--;
+                    end++;
+                    continue;
+                }
                 if (fc == '[' || fc == '(') {
                     fspec_depth++;
                 }
                 if (fc == ']' || fc == ')') {
                     fspec_depth--;
                 }
-                // フォーマット指定子のコロンをチェック（:: ではなく、括弧の外）
-                if (fc == ':' && fspec_depth == 0 &&
+                // フォーマット指定子のコロンをチェック（:: ではなく、括弧・ネスト波括弧の外）
+                if (fc == ':' && fspec_depth == 0 && brace_depth == 0 &&
                     (end + 1 >= format_str.length() || format_str[end + 1] != ':')) {
                     break;  // フォーマット指定子の開始
                 }
@@ -78,13 +111,37 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
             if (end < format_str.length() || end == format_str.length()) {
                 std::string content = format_str.substr(pos + 1, end - pos - 1);
 
-                // フォーマット指定子を探す（:: と括弧内はスキップ）
+                // フォーマット指定子を探す（:: と括弧・ネスト波括弧・引用符内はスキップ。L2）
                 size_t colon_pos = std::string::npos;
                 int cdepth = 0;
+                int cbrace = 0;
+                bool cquotes = false;
                 for (size_t i = pos + 1; i < format_str.length(); ++i) {
                     char cc = format_str[i];
+                    if (cquotes) {
+                        if (cc == '\\' && i + 1 < format_str.length()) {
+                            i++;
+                            continue;
+                        }
+                        if (cc == '"') {
+                            cquotes = false;
+                        }
+                        continue;
+                    }
+                    if (cc == '"') {
+                        cquotes = true;
+                        continue;
+                    }
+                    if (cc == '{') {
+                        cbrace++;
+                        continue;
+                    }
                     if (cc == '}') {
-                        break;
+                        if (cbrace == 0) {
+                            break;
+                        }
+                        cbrace--;
+                        continue;
                     }
                     if (cc == '[' || cc == '(') {
                         cdepth++;
@@ -101,7 +158,16 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         i++;  // :: をスキップ
                     }
                 }
-                size_t close_pos = format_str.find('}', pos + 1);
+                // プレースホルダの終端は深度考慮の走査結果を使う（find('}')はネストで壊れる）。
+                // フォーマット指定子がある場合、指定子部分に波括弧は現れないためコロン以降のfindで良い
+                size_t close_pos;
+                if (colon_pos != std::string::npos) {
+                    close_pos = format_str.find('}', colon_pos);
+                } else {
+                    close_pos = (end < format_str.length() && format_str[end] == '}')
+                                    ? end
+                                    : std::string::npos;
+                }
 
                 if (close_pos != std::string::npos) {
                     if (colon_pos != std::string::npos && colon_pos < close_pos) {

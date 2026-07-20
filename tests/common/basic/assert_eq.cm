@@ -1,0 +1,20 @@
+// L6回帰: assert_eq/assert_neが成功時に何も出力せず通過することを検証する
+import std::io::println;
+import std::debug::{assert_eq, assert_ne};
+
+struct P with Eq {
+    int x;
+    int y;
+}
+
+int main() {
+    assert_eq(2 + 3, 5);
+    assert_ne(1, 2);
+    assert_eq("abc", "abc");
+    assert_ne("abc", "abd");
+    P a = { x: 1, y: 2 };
+    P b = { x: 1, y: 2 };
+    assert_eq(a, b);
+    println("pass");
+    return 0;
+}

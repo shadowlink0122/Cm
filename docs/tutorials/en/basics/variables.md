@@ -76,7 +76,13 @@ int y = 2;
 int z = 3;
 ```
 
-**Note:** Cm does not support type inference (e.g., `var` keyword). Types must always be explicitly specified.
+**Type inference (auto / var):** Use `auto` (or its alias `var`) to infer the type from the initializer. Explicit type annotations remain fully supported.
+
+```cm
+auto x = 42;        // inferred as int
+var name = "Cm";    // inferred as string (var is an alias of auto)
+auto pi = 3.14;     // inferred as double
+```
 
 ---
 

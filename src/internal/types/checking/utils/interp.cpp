@@ -54,12 +54,45 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
             pos++;
             continue;
         }
-        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する
+        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する。
+        // L2: ネストした波括弧（構造体リテラル）と文字列リテラル内の } { : は式の一部として
+        // 扱い、深度0・引用符外の } のみを終端とする（MIRのexpr_interpと同一規則）
         size_t end = pos + 1;
         size_t colon_pos = std::string::npos;
         int depth = 0;
-        while (end < format_str.length() && format_str[end] != '}') {
+        int brace_depth = 0;
+        bool in_quotes = false;
+        while (end < format_str.length()) {
             char c = format_str[end];
+            if (in_quotes) {
+                if (c == '\\' && end + 1 < format_str.length()) {
+                    end += 2;
+                    continue;
+                }
+                if (c == '"') {
+                    in_quotes = false;
+                }
+                end++;
+                continue;
+            }
+            if (c == '"') {
+                in_quotes = true;
+                end++;
+                continue;
+            }
+            if (c == '{') {
+                brace_depth++;
+                end++;
+                continue;
+            }
+            if (c == '}') {
+                if (brace_depth == 0) {
+                    break;  // プレースホルダの終端
+                }
+                brace_depth--;
+                end++;
+                continue;
+            }
             if (c == '[' || c == '(') {
                 depth++;
             }
@@ -70,7 +103,7 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
                 end += 2;  // ::はパス区切りとしてスキップ
                 continue;
             }
-            if (c == ':' && depth == 0 && colon_pos == std::string::npos) {
+            if (c == ':' && depth == 0 && brace_depth == 0 && colon_pos == std::string::npos) {
                 colon_pos = end;
             }
             end++;

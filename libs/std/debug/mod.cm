@@ -34,3 +34,28 @@ export void panic(string msg) {
     println("panic: {msg}");
     exit(1);
 }
+
+/// 等値アサーション: left == right でなければ両値を表示して異常終了する（L6）。
+/// 失敗時は期待値・実測値の差分を表示するため、素のassertより原因特定が速い
+export <T: Eq> void assert_eq(T left, T right) {
+    if (!(left == right)) {
+        println("assertion failed: assert_eq (left != right)");
+        println("left:");
+        println(left);
+        println("right:");
+        println(right);
+        exit(1);
+    }
+}
+
+/// 非等値アサーション: left != right でなければ両値を表示して異常終了する（L6）
+export <T: Eq> void assert_ne(T left, T right) {
+    if (left == right) {
+        println("assertion failed: assert_ne (left == right)");
+        println("left:");
+        println(left);
+        println("right:");
+        println(right);
+        exit(1);
+    }
+}

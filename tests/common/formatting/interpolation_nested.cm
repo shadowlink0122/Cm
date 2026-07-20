@@ -1,0 +1,19 @@
+// L2回帰: 補間プレースホルダ内のネストした波括弧（構造体リテラル）・引用符が
+// 誤パースされず、式全体が正しく評価されることを検証する
+import std::io::println;
+
+struct Key with Ord, Eq {
+    int id;
+}
+
+int key_id(Key k) {
+    return k.id;
+}
+
+int main() {
+    println("id={key_id(Key{id: 42})}");
+    const string t = "a}b";
+    println("t={t}");
+    println("esc={{literal}}");
+    return 0;
+}

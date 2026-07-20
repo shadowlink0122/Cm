@@ -53,6 +53,12 @@ class JSCodeGen {
     // static変数: 関数名_変数名 -> 初期値
     std::unordered_map<std::string, std::string> static_vars_;
 
+    // グローバル変数の一意id（L1: sanitizeIdentifierの多対一縮退による衝突を宣言順の連番で防ぐ）
+    std::unordered_map<std::string, size_t> global_name_ids_;
+
+    // グローバル変数の一意なJS識別子を返す（宣言・参照の両方がこの命名を共有する）
+    std::string globalVarName(const std::string& name);
+
     // インターフェース名のセット（型のチェック用）
     std::unordered_set<std::string> interface_names_;
 

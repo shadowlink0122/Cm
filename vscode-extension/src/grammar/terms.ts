@@ -63,6 +63,7 @@ export const MODIFIER_KEYWORDS = [
   'from',
   'where',
   'auto',
+  'var',
 ] as const;
 export const SIZEOF_KEYWORDS = ['sizeof', 'typeof', 'typename'] as const;
 export const INTRINSIC_KEYWORDS = [

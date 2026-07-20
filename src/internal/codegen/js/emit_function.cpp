@@ -395,7 +395,7 @@ std::string JSCodeGen::getLocalVarName(const mir::MirFunction& func, mir::LocalI
 
     // グローバル変数はモジュールレベルの共有名を返す
     if (local.is_global) {
-        return "__global_" + sanitizeIdentifier(local.name);
+        return globalVarName(local.name);
     }
 
     // 引数の場合は名前のみ、それ以外はIDサフィックス付き

@@ -73,6 +73,8 @@ void Lexer::init_keywords() {
         {"as", TokenKind::KwAs},
         {"async", TokenKind::KwAsync},
         {"auto", TokenKind::KwAuto},
+        // varはautoの別名（L3: 他言語からの移行者向け。従来は未解決型名エラーになっていた）
+        {"var", TokenKind::KwAuto},
         {"await", TokenKind::KwAwait},
         {"break", TokenKind::KwBreak},
         {"case", TokenKind::KwCase},

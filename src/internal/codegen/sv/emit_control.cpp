@@ -587,6 +587,18 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 }
                 // 成功ブロックに続行
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            } else if (func_name == "println" || func_name == "print" ||
+                       func_name.rfind("cm_println", 0) == 0 ||
+                       func_name.rfind("cm_print", 0) == 0 ||
+                       func_name.rfind("cm_format", 0) == 0) {
+                // M18: 合成モジュール内のprintln等のI/O組み込みは合成不能。
+                // 従来は未定義関数としてそのまま出力され診断が一切なかった（黙殺）。
+                // 未定義関数の無言emitをやめ、警告してスキップする（シミュレーション出力は
+                // #[test] 関数内でのみ$displayへ変換される。段階導入のためまず警告）
+                std::cerr << "警告[SV008]: 合成モジュール内の '" << func_name
+                          << "' は合成不能のためスキップします（println等の出力は #[test] "
+                             "関数内でのみ使用できます）\n";
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
             } else {
                 // 一般的な関数呼び出し: result = func_name(arg1, arg2, ...);
                 // ノンブロッキング代入の判定

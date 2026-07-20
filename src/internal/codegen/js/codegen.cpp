@@ -22,6 +22,12 @@ using ast::TypeKind;
 JSCodeGen::JSCodeGen(const JSCodeGenOptions& options)
     : options_(options), emitter_(options.indentSpaces) {}
 
+// グローバル変数の一意なJS識別子（L1: sanitizeIdentifierの多対一縮退による衝突を宣言順の連番で防ぐ）
+std::string JSCodeGen::globalVarName(const std::string& name) {
+    auto [it, inserted] = global_name_ids_.emplace(name, global_name_ids_.size());
+    return "__global_" + sanitizeIdentifier(name) + "_g" + std::to_string(it->second);
+}
+
 void JSCodeGen::compile(const mir::MirProgram& program) {
     // 出力クリア
     emitter_.clear();
@@ -393,7 +399,7 @@ void JSCodeGen::emitGlobalVars(const mir::MirProgram& program) {
             emitter_.emitLine("// Global variables");
             emitted_any = true;
         }
-        emitter_.emitLine("let __global_" + sanitizeIdentifier(gv->name) + " = " + initVal + ";");
+        emitter_.emitLine("let " + globalVarName(gv->name) + " = " + initVal + ";");
     }
     if (emitted_any) {
         emitter_.emitLine();
