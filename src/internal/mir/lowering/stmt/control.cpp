@@ -20,10 +20,28 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         // 戻り値をlowering
         LocalId return_value = expr_lowering->lower_expression(*ret.value, ctx);
 
+        // return self のように、戻り値のローカルがポインタで戻り値型が非ポインタの集約型のとき、
+        // ポインタのビットをそのまま構造体値として返してしまう（C1）。
+        // pointeeが戻り値型と一致する場合はデリファレンスを挟んで値を返す。
+        MirPlace return_src{return_value};
+        if (return_value < ctx.func->locals.size() &&
+            ctx.func->return_local < ctx.func->locals.size()) {
+            const auto& rv_type = ctx.func->locals[return_value].type;
+            const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+            if (rv_type && rv_type->kind == hir::TypeKind::Pointer && rv_type->element_type &&
+                ret_type && ret_type->kind != hir::TypeKind::Pointer &&
+                (ret_type->kind == hir::TypeKind::Struct ||
+                 ret_type->kind == hir::TypeKind::Union)) {
+                const auto& pointee = rv_type->element_type;
+                if (pointee->kind == ret_type->kind && pointee->name == ret_type->name) {
+                    return_src.projections.push_back(PlaceProjection::deref(ret_type, pointee));
+                }
+            }
+        }
+
         // 戻り値をreturn用ローカル変数に代入
-        ctx.push_statement(
-            MirStatement::assign(MirPlace{ctx.func->return_local},
-                                 MirRvalue::use(MirOperand::copy(MirPlace{return_value}))));
+        ctx.push_statement(MirStatement::assign(MirPlace{ctx.func->return_local},
+                                                MirRvalue::use(MirOperand::copy(return_src))));
     }
 
     // 現在のスコープのdefer文を実行（逆順）
@@ -144,9 +162,17 @@ void StmtLowering::lower_while(const hir::HirWhile& while_stmt, LoweringContext&
     // ループボディ
     ctx.switch_to_block(loop_body);
     ctx.push_loop(loop_header, loop_exit);
+    // ループボディ用のスコープを作成（各反復でdefer文を実行。forと対称にする。M16）
+    ctx.push_scope();
     for (const auto& stmt : while_stmt.body) {
         lower_statement(*stmt, ctx);
     }
+    // ループボディ終了時にdefer文を実行（逆順）
+    auto defers = ctx.get_defer_stmts();
+    for (const auto* defer_stmt : defers) {
+        lower_statement(*defer_stmt, ctx);
+    }
+    ctx.pop_scope();
     ctx.pop_loop();
     if (!ctx.get_current_block()->terminator) {
         ctx.set_terminator(MirTerminator::goto_block(loop_header));

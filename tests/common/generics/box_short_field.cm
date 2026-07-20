@@ -1,0 +1,16 @@
+import std::io::println;
+// box_short_field.cm - M11回帰: ジェネリックのshort型引数がStruct誤分類されず配列フィールドが正しく動くこと
+// 単相化の型引数kind復元テーブルにShort/UShort等が欠落していた
+struct Box<T> {
+    T[3] items;
+}
+int main() {
+    Box<short> b;
+    b.items[0] = 10 as short;
+    b.items[1] = 20 as short;
+    b.items[2] = 30 as short;
+    const int a = b.items[0] as int;
+    const int c = b.items[2] as int;
+    println("a={a} c={c}");
+    return 0;
+}

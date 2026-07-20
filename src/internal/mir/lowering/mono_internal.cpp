@@ -5,7 +5,46 @@
 
 #include "mono_internal.hpp"
 
+#include <optional>
+
 namespace cm::mir {
+
+// マングルされた型引数名（"int"/"short"/"double"等）からプリミティブTypeKindを復元する。
+// 単相化で型引数の種別を復元する2箇所で共有する。short/ushort/tiny/utiny/isize/usizeを
+// 取りこぼすとStruct扱いになり、Box<short>の配列フィールドが消える等の実害が出る（M11）。
+static std::optional<hir::TypeKind> primitive_kind_from_name(const std::string& p) {
+    if (p == "int")
+        return hir::TypeKind::Int;
+    if (p == "uint")
+        return hir::TypeKind::UInt;
+    if (p == "tiny")
+        return hir::TypeKind::Tiny;
+    if (p == "utiny")
+        return hir::TypeKind::UTiny;
+    if (p == "short")
+        return hir::TypeKind::Short;
+    if (p == "ushort")
+        return hir::TypeKind::UShort;
+    if (p == "long")
+        return hir::TypeKind::Long;
+    if (p == "ulong")
+        return hir::TypeKind::ULong;
+    if (p == "isize")
+        return hir::TypeKind::ISize;
+    if (p == "usize")
+        return hir::TypeKind::USize;
+    if (p == "float")
+        return hir::TypeKind::Float;
+    if (p == "double")
+        return hir::TypeKind::Double;
+    if (p == "bool")
+        return hir::TypeKind::Bool;
+    if (p == "char")
+        return hir::TypeKind::Char;
+    if (p == "string")
+        return hir::TypeKind::String;
+    return std::nullopt;
+}
 
 // 型内の型パラメータを再帰的に置換するヘルパー関数
 hir::TypePtr substitute_type_in_type(
@@ -214,25 +253,9 @@ hir::TypePtr substitute_type_in_type(
                     // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
                     auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                     arg_type->name = p;
-                    // プリミティブ型の場合はTypeKindを設定
-                    if (p == "int")
-                        arg_type->kind = hir::TypeKind::Int;
-                    else if (p == "uint")
-                        arg_type->kind = hir::TypeKind::UInt;
-                    else if (p == "long")
-                        arg_type->kind = hir::TypeKind::Long;
-                    else if (p == "ulong")
-                        arg_type->kind = hir::TypeKind::ULong;
-                    else if (p == "float")
-                        arg_type->kind = hir::TypeKind::Float;
-                    else if (p == "double")
-                        arg_type->kind = hir::TypeKind::Double;
-                    else if (p == "bool")
-                        arg_type->kind = hir::TypeKind::Bool;
-                    else if (p == "char")
-                        arg_type->kind = hir::TypeKind::Char;
-                    else if (p == "string")
-                        arg_type->kind = hir::TypeKind::String;
+                    // プリミティブ型の場合はTypeKindを復元（M11）
+                    if (auto k = primitive_kind_from_name(p))
+                        arg_type->kind = *k;
                     resolved_type_args.push_back(arg_type);
                 }
 
@@ -301,25 +324,9 @@ hir::TypePtr substitute_type_in_type(
                         // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
                         auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                         arg_type->name = p;
-                        // プリミティブ型の場合はTypeKindを設定
-                        if (p == "int")
-                            arg_type->kind = hir::TypeKind::Int;
-                        else if (p == "uint")
-                            arg_type->kind = hir::TypeKind::UInt;
-                        else if (p == "long")
-                            arg_type->kind = hir::TypeKind::Long;
-                        else if (p == "ulong")
-                            arg_type->kind = hir::TypeKind::ULong;
-                        else if (p == "float")
-                            arg_type->kind = hir::TypeKind::Float;
-                        else if (p == "double")
-                            arg_type->kind = hir::TypeKind::Double;
-                        else if (p == "bool")
-                            arg_type->kind = hir::TypeKind::Bool;
-                        else if (p == "char")
-                            arg_type->kind = hir::TypeKind::Char;
-                        else if (p == "string")
-                            arg_type->kind = hir::TypeKind::String;
+                        // プリミティブ型の場合はTypeKindを復元（M11）
+                        if (auto k = primitive_kind_from_name(p))
+                            arg_type->kind = *k;
                         resolved_type_args.push_back(arg_type);
                     }
 

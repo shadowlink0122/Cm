@@ -15,35 +15,32 @@ ast::Program Parser::parse() {
     debug::par::log(debug::par::Id::Start);
 
     ast::Program program;
-    int iterations = 0;
-    const int MAX_ITERATIONS = 10000;
+    // 宣言数の固定上限は設けない（M5）。無限ループは pos_ が進まないことの検出で防ぐ。
+    // 機械生成コードのように宣言数が多くても、進捗がある限り最後まで解析する。
+    bool is_first = true;
     size_t last_pos = pos_;
 
-    while (!is_at_end() && iterations < MAX_ITERATIONS) {
+    while (!is_at_end()) {
         // エラーが蓄積しすぎた場合はコンパイルを中断
         if (diagnostics_.size() > 50) {
             error(i18n::msg(i18n::MsgId::ParseTooManyErrorsAbortingCompilation));
             break;
         }
-        // 無限ループ検出
-        if (pos_ == last_pos && iterations > 0) {
+        // 無限ループ検出（進捗が無い場合のみ強制的に進める）
+        if (pos_ == last_pos && !is_first) {
             error("Parser stuck - no progress made");
             if (!is_at_end()) {
                 advance();  // 強制的に進める
             }
         }
         last_pos = pos_;
+        is_first = false;
 
         if (auto decl = parse_top_level()) {
             program.declarations.push_back(std::move(decl));
         } else {
             synchronize();
         }
-        iterations++;
-    }
-
-    if (iterations >= MAX_ITERATIONS) {
-        error("Parser exceeded maximum iteration limit");
     }
 
     debug::par::log(debug::par::Id::End,
@@ -977,12 +974,12 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
     expect(TokenKind::LBrace);
 
     std::vector<ast::StmtPtr> stmts;
-    int iterations = 0;
-    const int MAX_BLOCK_ITERATIONS = 1000;
+    // 1ブロックあたりの文数の固定上限は設けない（M5）。無限ループは進捗検出で防ぐ。
+    bool is_first = true;
     size_t last_pos = pos_;
 
-    while (!check(TokenKind::RBrace) && !is_at_end() && iterations < MAX_BLOCK_ITERATIONS) {
-        if (pos_ == last_pos && iterations > 0) {
+    while (!check(TokenKind::RBrace) && !is_at_end()) {
+        if (pos_ == last_pos && !is_first) {
             error("Parser stuck in block - no progress made");
             while (!is_at_end() && current().kind != TokenKind::Semicolon &&
                    current().kind != TokenKind::RBrace) {
@@ -996,6 +993,7 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
             }
         }
         last_pos = pos_;
+        is_first = false;
 
         if (auto stmt = parse_stmt()) {
             stmts.push_back(std::move(stmt));
@@ -1004,11 +1002,6 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
                 advance();
             }
         }
-        iterations++;
-    }
-
-    if (iterations >= MAX_BLOCK_ITERATIONS) {
-        error("Block parsing exceeded maximum iteration limit");
     }
 
     expect(TokenKind::RBrace);

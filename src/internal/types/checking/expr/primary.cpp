@@ -176,6 +176,46 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                                                 ast::type_to_string(*rop)));
                 }
             }
+            // 整数リテラルの縮小キャストで値が収まらない場合は警告する（M4）。
+            // 例: 300 as tiny は 44 に切り捨てられるが以前は無警告だった。
+            if (rtgt && cast_expr->operand) {
+                if (auto* lit = cast_expr->operand->as<ast::LiteralExpr>()) {
+                    if (std::holds_alternative<int64_t>(lit->value)) {
+                        int64_t v = std::get<int64_t>(lit->value);
+                        bool has_range = true;
+                        bool fits = true;
+                        switch (rtgt->kind) {
+                            case ast::TypeKind::Tiny:
+                                fits = (v >= -128 && v <= 127);
+                                break;
+                            case ast::TypeKind::UTiny:
+                            case ast::TypeKind::Char:
+                                fits = (v >= 0 && v <= 255);
+                                break;
+                            case ast::TypeKind::Short:
+                                fits = (v >= -32768 && v <= 32767);
+                                break;
+                            case ast::TypeKind::UShort:
+                                fits = (v >= 0 && v <= 65535);
+                                break;
+                            case ast::TypeKind::Int:
+                                fits = (v >= -2147483648LL && v <= 2147483647LL);
+                                break;
+                            case ast::TypeKind::UInt:
+                                fits = (v >= 0 && v <= 4294967295LL);
+                                break;
+                            default:
+                                has_range = false;
+                                break;
+                        }
+                        if (has_range && !fits) {
+                            warning(expr.span,
+                                    i18n::msgf(i18n::MsgId::TypeIntegerLiteralNarrowingTruncates,
+                                               std::to_string(v), ast::type_to_string(*rtgt)));
+                        }
+                    }
+                }
+            }
         }
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: オペランドの型を推論し、変数をmoved状態にマーク

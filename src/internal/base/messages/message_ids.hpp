@@ -313,6 +313,7 @@ enum class MsgId : int {
     TypeTypePatternsCanOnlyBe,
     TypeUnusedResultValueTheError,
     TypeCannotCastNumericToString,
+    TypeIntegerLiteralNarrowingTruncates,
     Count,
 };
 

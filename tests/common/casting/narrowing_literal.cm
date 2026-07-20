@@ -1,0 +1,14 @@
+import std::io::println;
+// narrowing_literal.cm - M4関連: 整数リテラルの縮小キャストの切り捨て値が全バックエンドで一致すること
+// (型検査は範囲外リテラルに警告を出すが、実行は従来通り切り捨てて継続する)
+
+int main() {
+    const tiny a = 300 as tiny;
+    const short b = 70000 as short;
+    const tiny ok = 100 as tiny;
+    const int a_i = a as int;
+    const int b_i = b as int;
+    const int ok_i = ok as int;
+    println("a={a_i} b={b_i} ok={ok_i}");
+    return 0;
+}

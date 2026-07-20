@@ -873,6 +873,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeCannotCastNumericToString
     {"cannot cast numeric type '{0}' to string with 'as'; use string interpolation or a to-string conversion instead",
      "数値型 '{0}' を 'as' で string にキャストすることはできません（文字列補間または文字列化関数を使用してください）"},
+    // TypeIntegerLiteralNarrowingTruncates
+    {"integer literal {0} does not fit in target type '{1}' and will be truncated",
+     "整数リテラル {0} は変換先の型 '{1}' に収まらず切り捨てられます"},
 };
 // clang-format on
 
