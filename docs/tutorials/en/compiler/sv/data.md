@@ -117,7 +117,7 @@ utiny ch = TITLE[i] as utiny;
 
 ### Limitations
 
-- **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**. Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants (typed string lengths are being considered in the [v0.16.0 roadmap](../../../../design/v0.16.0/roadmap.html)).
+- **Non-const string variables, function arguments, and return values are fixed at `logic [23:0]` (3 characters)**. Passing a string longer than 3 characters truncates it. Avoid using strings outside of const constants (typed string lengths are being considered in the [v0.16.0 roadmap](../../../../archive/v0.16.0/roadmap.html)).
 
 ## Bit slices (v0.16.0)
 

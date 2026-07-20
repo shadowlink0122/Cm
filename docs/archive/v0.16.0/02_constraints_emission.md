@@ -1,6 +1,6 @@
 # v0.16.0 実装設計 2: 物理制約ファイル生成（#[sv::pin] / --emit-constraints）
 
-優先度: 2関連: [roadmap.md](../../design/v0.16.0/roadmap.html) §2（tcl/cst統合・ハイブリッド案）
+優先度: 2関連: [roadmap.md](roadmap.html) §2（tcl/cst統合・ハイブリッド案）
 
 ## 目標
 
