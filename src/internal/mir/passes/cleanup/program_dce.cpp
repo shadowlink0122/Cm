@@ -66,6 +66,7 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
                                                    "cm_format_double",
                                                    "cm_format_char",
                                                    "cm_string_concat",
+                                                   "cm_string_free",
                                                    "strcmp",
                                                    "strlen",
                                                    "malloc",

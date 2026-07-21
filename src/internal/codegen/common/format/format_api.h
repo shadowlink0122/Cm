@@ -52,6 +52,7 @@ char* cm_format_double_scientific(double value, int uppercase);
 // ============================================================
 
 char* cm_string_concat(const char* left, const char* right);
+void cm_string_free(char* str);
 char* cm_int_to_string(int value);
 char* cm_uint_to_string(unsigned int value);
 char* cm_char_to_string(char value);

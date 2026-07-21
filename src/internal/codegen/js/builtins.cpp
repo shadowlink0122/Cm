@@ -32,6 +32,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_print_char",
         "cm_print_format",
         "cm_string_concat",
+        "cm_string_free",
         "cm_int_to_string",
         "cm_long_to_string",
         "cm_ulong_to_string",
@@ -267,6 +268,11 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
             return "(" + argStrs[0] + " + " + argStrs[1] + ")";
         }
         return "\"\"";
+    }
+
+    if (name == "cm_string_free") {
+        // JS/TSはGC管理のため解放は不要（C12 dropパスのno-op）
+        return "void 0";
     }
 
     // 型変換

@@ -1864,6 +1864,13 @@ char* cm_string_concat(const char* left, const char* right) {
     return result;
 }
 
+// 文一時文字列の解放（C12 dropパス）。cm_string_concat・cm_*_to_string等が返した無名一時の解放に使う。NULLは無視する
+void cm_string_free(char* str) {
+    if (str) {
+        cm_dealloc(str);
+    }
+}
+
 // Type to string conversion aliases
 char* cm_int_to_string(int value) {
     return cm_format_int(value);

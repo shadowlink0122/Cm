@@ -587,6 +587,9 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 }
                 // 成功ブロックに続行
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
+            } else if (func_name == "cm_string_free" || func_name == "cm_slice_free") {
+                // C12 dropパスのメモリ解放呼び出しはSVでは意味を持たないため黙ってスキップする
+                emitBlockRecursive(func, cd.success, visited, ss, merge_block);
             } else if (func_name == "println" || func_name == "print" ||
                        func_name.rfind("cm_println", 0) == 0 ||
                        func_name.rfind("cm_print", 0) == 0 ||

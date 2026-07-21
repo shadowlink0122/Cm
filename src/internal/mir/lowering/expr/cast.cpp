@@ -74,6 +74,9 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
     ctx.set_terminator(std::move(conv_call_term));
     ctx.switch_to_block(conv_success);
 
+    // 変換結果は新規確保された無名一時。文末のdropパス対象として登録する（C12）
+    ctx.note_string_temp(str_result);
+
     return str_result;
 }
 

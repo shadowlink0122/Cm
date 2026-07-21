@@ -486,6 +486,9 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     ctx.set_terminator(
         MirTerminator::switch_int(MirOperand::copy(MirPlace{cond}), {{1, then_block}}, else_block));
 
+    // then/else部は条件付き実行のため、内側で確保される文字列一時は文末dropの対象外にする（C12）
+    ctx.conditional_expr_depth++;
+
     // then部
     ctx.switch_to_block(then_block);
     LocalId then_value = lower_expression(*ternary.then_expr, ctx);
@@ -499,6 +502,8 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{else_value}))));
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
+
+    ctx.conditional_expr_depth--;
 
     // マージポイント
     ctx.switch_to_block(merge_block);

@@ -329,9 +329,11 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         ctx.set_terminator(
             MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}), {{1, eval_rhs}}, skip_rhs));
 
-        // 右辺を評価するブロック
+        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12）
         ctx.switch_to_block(eval_rhs);
+        ctx.conditional_expr_depth++;
         LocalId rhs = lower_expression(*bin.rhs, ctx);
+        ctx.conditional_expr_depth--;
         // 結果は右辺の値（左辺は既にtrue）
         ctx.push_statement(MirStatement::assign(MirPlace{result},
                                                 MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
@@ -380,9 +382,11 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                                                 MirRvalue::use(MirOperand::constant(true_const))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
-        // 右辺を評価するブロック
+        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12）
         ctx.switch_to_block(eval_rhs);
+        ctx.conditional_expr_depth++;
         LocalId rhs = lower_expression(*bin.rhs, ctx);
+        ctx.conditional_expr_depth--;
         // 結果は右辺の値（左辺は既にfalse）
         ctx.push_statement(MirStatement::assign(MirPlace{result},
                                                 MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
@@ -658,6 +662,9 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                                                              false};  // 通常の関数呼び出し
             ctx.set_terminator(std::move(concat_call_term));
             ctx.switch_to_block(concat_success);
+
+            // concat結果は新規確保された無名一時。文末のdropパス対象として登録する（C12）
+            ctx.note_string_temp(result);
 
             return result;
         }

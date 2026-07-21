@@ -245,6 +245,28 @@ set(CM_AST_SOURCES
     src/internal/syntax/ast/types.cpp
 )
 # メッセージi18nカタログ本文テーブル（i18n::msg/msgf を使うターゲットは必ずリンクする）
+# 型検査（cm本体と回帰テストターゲットで共有。型情報に依存するMIR loweringの検証に必要）
+set(CM_TYPECHECK_SOURCES
+    src/internal/types/scope.cpp
+    src/internal/types/generic_context.cpp
+    src/internal/types/checking/decl.cpp
+    src/internal/types/checking/stmt.cpp
+    src/internal/types/checking/expr/primary.cpp
+    src/internal/types/checking/expr/operator.cpp
+    src/internal/types/checking/expr/match.cpp
+    src/internal/types/checking/expr/lambda.cpp
+    src/internal/types/checking/call/function.cpp
+    src/internal/types/checking/call/method.cpp
+    src/internal/types/checking/generic.cpp
+    src/internal/types/checking/generic/bounds.cpp
+    src/internal/types/checking/auto_impl.cpp
+    src/internal/types/checking/utils/compat.cpp
+    src/internal/types/checking/utils/interp.cpp
+    src/internal/types/checking/utils/diagnostics.cpp
+    src/internal/types/checking/utils/naming.cpp
+    src/internal/types/checking/utils/eval.cpp
+    src/internal/types/checking/match_hoist.cpp
+)
 set(CM_I18N_SOURCES
     src/internal/base/messages/messages.cpp
 )
@@ -295,6 +317,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/stmt/assign.cpp
     src/internal/mir/lowering/stmt/control.cpp
     src/internal/mir/lowering/stmt/scope.cpp
+    src/internal/mir/lowering/stmt/temp_drop.cpp
     src/internal/mir/lowering/stmt/asm.cpp
     src/internal/mir/lowering/expr.cpp
     src/internal/mir/lowering/expr/basic.cpp
@@ -350,25 +373,7 @@ set(CM_SOURCES
     ${CM_I18N_SOURCES}
     # Type checking (分割済み)
     src/cmd/cm/options.cpp
-    src/internal/types/scope.cpp
-    src/internal/types/generic_context.cpp
-    src/internal/types/checking/decl.cpp
-    src/internal/types/checking/stmt.cpp
-    src/internal/types/checking/expr/primary.cpp
-    src/internal/types/checking/expr/operator.cpp
-    src/internal/types/checking/expr/match.cpp
-    src/internal/types/checking/expr/lambda.cpp
-    src/internal/types/checking/call/function.cpp
-    src/internal/types/checking/call/method.cpp
-    src/internal/types/checking/generic.cpp
-    src/internal/types/checking/generic/bounds.cpp
-    src/internal/types/checking/auto_impl.cpp
-    src/internal/types/checking/utils/compat.cpp
-    src/internal/types/checking/utils/interp.cpp
-    src/internal/types/checking/utils/diagnostics.cpp
-    src/internal/types/checking/utils/naming.cpp
-    src/internal/types/checking/utils/eval.cpp
-    src/internal/types/checking/match_hoist.cpp
+    ${CM_TYPECHECK_SOURCES}
     src/internal/preprocessor/import/setup.cpp
     src/internal/preprocessor/import/expand.cpp
     src/internal/preprocessor/import/parse.cpp
@@ -760,6 +765,7 @@ if(BUILD_TESTING)
             ${CM_LEXER_SOURCES}
             ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             ${CM_I18N_SOURCES}

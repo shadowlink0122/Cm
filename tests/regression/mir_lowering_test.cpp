@@ -2,6 +2,7 @@
 #include "../../src/internal/mir/lowering/lowering.hpp"
 #include "../../src/internal/syntax/lexer/lexer.hpp"
 #include "../../src/internal/syntax/parser/parser.hpp"
+#include "../../src/internal/types/checking/checker.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -41,8 +42,31 @@ class MirLoweringTest : public ::testing::Test {
         return std::make_unique<mir::MirProgram>(std::move(mir));
     }
 
+    // 型検査を通してからloweringする（式の型情報に依存するケース用。実コンパイルと同じ順序）
+    std::unique_ptr<mir::MirProgram> check_and_lower(const std::string& code) {
+        Lexer lex(code);
+        std::vector<Token> tokens = lex.tokenize();
+        Parser p(tokens);
+        auto ast = p.parse();
+
+        TypeChecker checker;
+        EXPECT_TRUE(checker.check(ast));
+
+        hir::HirLowering hir_lowering;
+        auto hir = hir_lowering.lower(ast);
+
+        mir::MirLowering mir_lowering;
+        auto mir = mir_lowering.lower(hir);
+
+        return std::make_unique<mir::MirProgram>(std::move(mir));
+    }
+
     std::unique_ptr<mir::MirProgram> lower_case(const std::string& name) {
         return parse_and_lower(load_case(name));
+    }
+
+    std::unique_ptr<mir::MirProgram> check_and_lower_case(const std::string& name) {
+        return check_and_lower(load_case(name));
     }
 
     // 基本ブロックの数をカウント
@@ -222,6 +246,52 @@ TEST_F(MirLoweringTest, LocalVariableScope) {
 
     // ブロックスコープ内の変数も正しく処理される
     EXPECT_GE(func.locals.size(), 3u);  // _0, x, y
+}
+
+// ============================================================
+// 文単位一時文字列のdropパス（C12）
+// ============================================================
+namespace {
+// 関数のMIR全体から指定関数の呼び出し回数を数える
+int count_calls(const mir::MirFunction& func, const std::string& callee) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (!block->terminator || block->terminator->kind != mir::MirTerminator::Call) {
+            continue;
+        }
+        const auto& call = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+        if (call.func && call.func->kind == mir::MirOperand::FunctionRef &&
+            std::get<std::string>(call.func->data) == callee) {
+            count++;
+        }
+    }
+    return count;
+}
+}  // namespace
+
+TEST_F(MirLoweringTest, TempStringDropExprStmt) {
+    // println(a + " " + b) の式文では中間concatとprintln引数の両一時が解放される
+    auto mir = check_and_lower_case("temp_string_drop_expr_stmt");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 2);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 2);
+}
+
+TEST_F(MirLoweringTest, TempStringDropLetEscape) {
+    // let束縛へエスケープした一時は解放されない（println(s)のsは名前付き変数）
+    auto mir = check_and_lower_case("temp_string_drop_let_escape");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 1);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 0);
+}
+
+TEST_F(MirLoweringTest, TempStringDropTernaryArm) {
+    // 三項演算子の腕で確保された一時は条件付き実行のため解放対象にしない
+    // （文末で未初期化ポインタをfreeする危険を避ける）
+    auto mir = check_and_lower_case("temp_string_drop_ternary_arm");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 2);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 0);
 }
 
 // ============================================================

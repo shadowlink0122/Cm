@@ -123,6 +123,31 @@ class LoweringContext {
     // must{}ブロック内かどうか（最適化禁止フラグ）
     bool in_must_block = false;
 
+    // ============================================================
+    // 文単位一時オブジェクトのトラッキング（C12 dropパス）
+    // コンパイラが生成する無名文字列一時（concat・型変換の結果）を文ごとに記録し、
+    // 文の評価完了後にエスケープしなかったものをcm_string_freeで解放する
+    // ============================================================
+    struct StmtTempScope {
+        bool active = false;      // 単純文（let/assign/式文）のlowering中のみtrue
+        BlockId start_block = 0;  // 文開始時のカレントブロック（スキャン起点）
+        size_t start_stmt_index = 0;  // 文開始時のstart_block内statement数
+        size_t start_block_count = 0;  // 文開始時のブロック総数（以降のブロックが対象）
+        std::vector<LocalId> string_temps;  // 文中で新規確保された文字列一時
+    };
+    StmtTempScope stmt_temp_scope;
+
+    // 条件付き実行の腕（三項演算子・短絡評価の右辺）の内側では一時を追跡しない。
+    // 文末尾の解放地点で未初期化ポインタをfreeする危険があるため、深度>0の間は登録を抑止する
+    int conditional_expr_depth = 0;
+
+    // 文字列一時を現在の文スコープへ登録する（スコープ非アクティブ・条件腕内では何もしない）
+    void note_string_temp(LocalId id) {
+        if (stmt_temp_scope.active && conditional_expr_depth == 0) {
+            stmt_temp_scope.string_temps.push_back(id);
+        }
+    }
+
     // const変数の値のキャッシュ
     std::unordered_map<std::string, MirConstant> const_values;
 

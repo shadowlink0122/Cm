@@ -56,6 +56,10 @@ class StmtLowering : public MirLoweringBase {
     // スコープ終了時のデストラクタ呼び出しを生成
     void emit_scope_destructors(LoweringContext& ctx);
 
+    // 文単位一時オブジェクトのトラッキング開始/終了（C12 dropパス、実装はstmt/temp_drop.cpp）
+    void begin_stmt_temp_scope(LoweringContext& ctx);
+    void end_stmt_temp_scope(LoweringContext& ctx, bool was_active);
+
     // インラインアセンブリのlowering
     void lower_asm(const hir::HirAsm& asm_stmt, LoweringContext& ctx);
 
