@@ -54,6 +54,16 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (auto* base_ident = base->as<ast::IdentExpr>()) {
                 // 要素・フィールドへの書き込みも基底変数の初期化・変更として扱う（名前空間内の非修飾参照は先に修飾名へ解決してからマークする）
                 lookup_var_ident(*base_ident);
+                // M3: const集約のフィールド・要素への代入は現行仕様では浅いconstとして素通りする。
+                // 既存コードが依存しているため破壊的変更を避け、check/lint時の警告として段階導入する（将来エラー化）
+                if (base != binary.left.get() && enable_lint_warnings_) {
+                    auto base_sym = scopes_.current().lookup(base_ident->name);
+                    if (base_sym && base_sym->is_const) {
+                        // MemberExpr/IndexExprのspanは未設定のことがあるため基底式のspanを使う
+                        warning(base->span, i18n::msgf(i18n::MsgId::TypeAssignToConstAggregate,
+                                                       base_ident->name));
+                    }
+                }
                 mark_variable_initialized(base_ident->name);
                 mark_variable_modified(base_ident->name);
             }

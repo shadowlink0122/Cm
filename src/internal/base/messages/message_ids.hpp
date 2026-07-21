@@ -322,6 +322,7 @@ enum class MsgId : int {
     TypeGenericBoundMissing,
     TypeUseAfterMove,
     TypeNotAllPathsReturn,
+    TypeAssignToConstAggregate,
     Count,
 };
 

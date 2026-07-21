@@ -71,6 +71,16 @@ check "en: naming violation"       "variable name 'badCamelName' does not follow
 check "ja: naming violation"       "変数名 'badCamelName' は snake_case 命名規則に従っていません [L001]" \
     "$CM" check --strict --lang=ja "$DIR/bad_naming.cm"
 
+# ---------- const集約への代入警告（M3・checkモード限定の段階導入） ----------
+check "en: const aggregate field warn" "assignment to a field or element of const value 'p'" \
+    "$CM" check "$DIR/const_aggregate_assign.cm"
+check "en: const aggregate elem warn"  "assignment to a field or element of const value 'a'" \
+    "$CM" check "$DIR/const_aggregate_assign.cm"
+check "ja: const aggregate field warn" "const値 'p' のフィールド/要素へ代入しています" \
+    "$CM" check --lang=ja "$DIR/const_aggregate_assign.cm"
+check_absent "const aggregate warn: non-const is silent" "const value 'q'" \
+    "$CM" check "$DIR/const_aggregate_assign.cm"
+
 # ---------- no_stdチェッカー（B001・複数プレースホルダ） ----------
 check "en: nostd exit"             "error: function 'main' uses 'exit'; process control is not available in bare-metal environments" \
     "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null

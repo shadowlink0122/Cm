@@ -900,6 +900,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeNotAllPathsReturn
     {"non-void function '{0}' has a path that falls off the end without returning a value",
      "非void関数 '{0}' に値を返さずに終了する経路があります"},
+    // TypeAssignToConstAggregate
+    {"assignment to a field or element of const value '{0}' (const is currently shallow for aggregates; this will become an error in a future version)",
+     "const値 '{0}' のフィールド/要素へ代入しています（集約のconstは現在浅い扱いですが、将来のバージョンでエラーになります）"},
 };
 // clang-format on
 

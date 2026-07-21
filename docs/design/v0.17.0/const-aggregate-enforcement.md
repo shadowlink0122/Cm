@@ -12,7 +12,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| M3 | 型システム | `const`構造体のフィールド代入が`--strict`でも検出されず実行される（constが集約に対して浅い） | 保留（破壊的変更のため。実装試行で既存テスト6件が壊れることを確認） |
+| M3 | 型システム | `const`構造体のフィールド代入が`--strict`でも検出されず実行される（constが集約に対して浅い） | 警告として段階導入済み（check/lint時にconst集約のフィールド・要素代入を警告する。既存コードが浅いconstに依存するためエラー化は将来のバージョンで実施。メッセージはi18n化済み: TypeAssignToConstAggregate） |
 
 ## 背景と根本原因
 
@@ -128,7 +128,7 @@ q.x = 99;              // 非const → 従来通り許可
 
 ## 実装の段階分割
 
-1. 段階1: `is_place_const`ヘルパを追加し、`infer_binary`の代入ケース（operator.cpp:99-140）をplaceベースの拒否に拡張する。まずフィールド代入（MemberExpr）を対象にする。
+1. 段階1: `is_place_const`ヘルパを追加し、`infer_binary`の代入ケース（operator.cpp:99-140）をplaceベースの拒否に拡張する。まずフィールド代入（MemberExpr）を対象にする。（実装済み・ただし拒否でなく警告として導入: 既存の基底変数探索でMember/Index/Slice連鎖の基底identを辿り、基底シンボルがconstならcheck/lint時に警告する。テストはtests/i18n/const_aggregate_assign.cm）
 2. 段階2: `IndexExpr`・`SliceExpr`の要素代入へ対象を拡張する。
 3. 段階3: `infer_index`・`infer_member`にconst修飾伝播を追加し、const集約から派生した部分式のポインタ化・エイリアスでも深いconstが効くようにする。
 4. 段階4: 診断メッセージのi18n対応（`kMessages`テーブルへの追加、MEMORY.mdのcm-i18n-architecture準拠。断片連結を避け完成文で登録する）。
