@@ -104,7 +104,9 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_forEach_i64",
         // クロージャー版
         "__builtin_array_map_closure",
+        "__builtin_array_map_i64_closure",
         "__builtin_array_filter_closure",
+        "__builtin_array_filter_i64_closure",
         // スライス操作
         "cm_slice_get_i8",
         "cm_slice_get_i16",
@@ -445,14 +447,20 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => " + argStrs[2] + "(a, b))";
     }
 
-    // クロージャー版
-    if (name == "__builtin_array_map_closure" && argStrs.size() >= 4) {
-        return "__cm_unwrap(" + argStrs[0] + ").map((x) => " + argStrs[2] + "(x, " + argStrs[3] +
-               "))";
-    }
-    if (name == "__builtin_array_filter_closure" && argStrs.size() >= 4) {
-        return "__cm_unwrap(" + argStrs[0] + ").filter((x) => " + argStrs[2] + "(x, " + argStrs[3] +
-               "))";
+    // クロージャー版（C6: 生成ラムダのパラメータは[キャプチャ..., 要素]の並び。
+    // 従来はargStrs[3]の1個だけを要素の後ろに渡しており、2個目以降のキャプチャが
+    // 黙って落ち、引数順も逆で可換演算のときだけ偶然正しかった）
+    if ((name == "__builtin_array_map_closure" || name == "__builtin_array_map_i64_closure" ||
+         name == "__builtin_array_filter_closure" ||
+         name == "__builtin_array_filter_i64_closure") &&
+        argStrs.size() >= 4) {
+        std::string caps;
+        for (size_t i = 3; i < argStrs.size(); ++i) {
+            caps += argStrs[i] + ", ";
+        }
+        const bool isFilter = name.find("filter") != std::string::npos;
+        return "__cm_unwrap(" + argStrs[0] + ")." + (isFilter ? "filter" : "map") + "((x) => " +
+               argStrs[2] + "(" + caps + "x))";
     }
 
     // スライス操作

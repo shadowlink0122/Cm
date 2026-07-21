@@ -414,9 +414,17 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
             }
 
+            // 64bit整数要素はランタイムのi64変種を使う（従来は常にi32版が選ばれ、
+            // long配列のmap/filterがstride不一致で黙って壊れていた）
+            const bool elem_is_i64 =
+                obj_type->element_type && (obj_type->element_type->kind == ast::TypeKind::Long ||
+                                           obj_type->element_type->kind == ast::TypeKind::ULong ||
+                                           obj_type->element_type->kind == ast::TypeKind::ISize ||
+                                           obj_type->element_type->kind == ast::TypeKind::USize);
+
             if (mem.member == "map") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_map";
+                hir->func_name = elem_is_i64 ? "__builtin_array_map_i64" : "__builtin_array_map";
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
@@ -432,7 +440,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "filter") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_filter";
+                hir->func_name =
+                    elem_is_i64 ? "__builtin_array_filter_i64" : "__builtin_array_filter";
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数

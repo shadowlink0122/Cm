@@ -554,33 +554,39 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 配列 map (コールバック付き) - 戻り値はポインタ（新しい配列）
-    else if (name == "__builtin_array_map" || name == "__builtin_array_map_i32") {
+    else if (name == "__builtin_array_map" || name == "__builtin_array_map_i32" ||
+             name == "__builtin_array_map_i64") {
         auto funcType = llvm::FunctionType::get(
             ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
-    // 配列 map (クロージャ版) - 戻り値はポインタ（新しい配列）
-    else if (name == "__builtin_array_map_closure" || name == "__builtin_array_map_i32_closure") {
+    // 配列 map (クロージャ版) - 戻り値はポインタ（新しい配列）。
+    // 第4引数はキャプチャ環境ポインタ（C6: キャプチャ数に依存しないシグネチャ）
+    else if (name == "__builtin_array_map_closure" || name == "__builtin_array_map_i32_closure" ||
+             name == "__builtin_array_map_i64_closure") {
         auto funcType = llvm::FunctionType::get(
             ctx.getPtrType(),
-            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
     // 配列 filter (コールバック付き) - 戻り値はポインタ（新しい配列）
-    else if (name == "__builtin_array_filter" || name == "__builtin_array_filter_i32") {
+    else if (name == "__builtin_array_filter" || name == "__builtin_array_filter_i32" ||
+             name == "__builtin_array_filter_i64") {
         auto funcType = llvm::FunctionType::get(
             ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
-    // 配列 filter (クロージャ版) - 戻り値はポインタ（新しい配列）
+    // 配列 filter (クロージャ版) - 戻り値はポインタ（新しい配列）。
+    // 第4引数はキャプチャ環境ポインタ（C6: キャプチャ数に依存しないシグネチャ）
     else if (name == "__builtin_array_filter_closure" ||
-             name == "__builtin_array_filter_i32_closure") {
+             name == "__builtin_array_filter_i32_closure" ||
+             name == "__builtin_array_filter_i64_closure") {
         auto funcType = llvm::FunctionType::get(
             ctx.getPtrType(),
-            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }

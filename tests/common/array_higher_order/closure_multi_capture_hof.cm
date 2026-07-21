@@ -1,0 +1,53 @@
+import std::io::println;
+
+// C6回帰: 高階関数（map/filter）へ渡すクロージャの複数キャプチャ検証。
+// 従来はランタイムがキャプチャを単一スカラで受けるため、2個以上でnative/jit/wasmはLLVM検証エラー、
+// js/tsは2個目以降のキャプチャが黙って落ち、引数順も逆で非可換演算は単一キャプチャでも誤答だった。
+
+int main() {
+    int base = 10;
+    int scale = 3;
+    int offset = 100;
+
+    // 2キャプチャのmap（減算は非可換なので引数順の誤りも検出できる）
+    int[3] xs = [1, 2, 3];
+    int[] ys = xs.map((int x) => { return (x - base) * scale; });
+    println("{ys[0]} {ys[1]} {ys[2]}");
+
+    // 3キャプチャのmap
+    int[] zs = xs.map((int x) => { return (x + base) * scale + offset; });
+    println("{zs[0]} {zs[1]} {zs[2]}");
+
+    // 2キャプチャのfilter
+    int lo = 2;
+    int hi = 3;
+    int[5] vs = [1, 2, 3, 4, 5];
+    int[] mid = vs.filter((int x) => { return x >= lo && x <= hi; });
+    println("{mid.len()} {mid[0]} {mid[1]}");
+
+    // 1キャプチャの非可換演算（従来jsは要素とキャプチャの順序が逆だった）
+    int[] sub = xs.map((int x) => { return x - base; });
+    println("{sub[0]} {sub[1]} {sub[2]}");
+
+    // long要素のmap×2キャプチャ（従来はi32版ランタイムが選ばれstride不一致で壊れていた）
+    long lbase = 1000000000000;
+    long lscale = 2;
+    long[3] ls = [1, 2, 3];
+    long[] lr = ls.map((long x) => { return x * lscale + lbase; });
+    println("{lr[0]} {lr[1]} {lr[2]}");
+
+    // long要素のfilter（キャプチャ無しのi64ディスパッチ回帰）
+    long[] lbig = ls.filter((long x) => { return x >= 2; });
+    println("{lbig.len()} {lbig[0]} {lbig[1]}");
+
+    // ループ内の複数キャプチャmap（環境スタック領域が周回で伸びないこと・値の再構築）
+    int total = 0;
+    int i = 0;
+    while (i < 3) {
+        int[] t = xs.map((int x) => { return x * scale + i; });
+        total = total + t[0] + t[1] + t[2];
+        i++;
+    }
+    println(total);
+    return 0;
+}

@@ -443,11 +443,12 @@ typedef int64_t (*MapFnI64)(int64_t);
 typedef int8_t (*FilterFnI32)(int32_t);
 typedef int8_t (*FilterFnI64)(int64_t);
 
-// クロージャ用関数ポインタ型（キャプチャ値を第一引数として受け取る）
-typedef int32_t (*MapFnI32Closure)(int64_t, int32_t);
-typedef int64_t (*MapFnI64Closure)(int64_t, int64_t);
-typedef int8_t (*FilterFnI32Closure)(int64_t, int32_t);
-typedef int8_t (*FilterFnI64Closure)(int64_t, int64_t);
+// クロージャ用関数ポインタ型（キャプチャ環境ポインタを第一引数として受け取る。
+// C6: キャプチャ数に依存しないシグネチャ。envはコード生成側が構築するi64スロット配列）
+typedef int32_t (*MapFnI32Closure)(void*, int32_t);
+typedef int64_t (*MapFnI64Closure)(void*, int64_t);
+typedef int8_t (*FilterFnI32Closure)(void*, int32_t);
+typedef int8_t (*FilterFnI64Closure)(void*, int64_t);
 
 // map: i32配列に関数を適用し、新しいスライスを返す
 void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
@@ -478,7 +479,7 @@ void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
 }
 
 // map (クロージャ版): キャプチャ値付きで関数を適用
-void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
     if (size < 0) {
         CmSlice* __cm_s = (CmSlice*)arr_ptr;
         arr_ptr = __cm_s->data;
@@ -496,7 +497,7 @@ void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, int
 
     int32_t* result_data = (int32_t*)result->data;
     for (int64_t i = 0; i < size; i++) {
-        result_data[i] = fn(capture, arr[i]);
+        result_data[i] = fn(env, arr[i]);
     }
     result->len = size;
 
@@ -530,7 +531,7 @@ void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
 }
 
 // map_i64 (クロージャ版)
-void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
     if (size < 0) {
         CmSlice* __cm_s = (CmSlice*)arr_ptr;
         arr_ptr = __cm_s->data;
@@ -548,7 +549,7 @@ void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr,
 
     int64_t* result_data = (int64_t*)result->data;
     for (int64_t i = 0; i < size; i++) {
-        result_data[i] = fn(capture, arr[i]);
+        result_data[i] = fn(env, arr[i]);
     }
     result->len = size;
 
@@ -587,7 +588,7 @@ void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
 }
 
 // filter (クロージャ版)
-void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, int64_t capture) {
+void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
     if (size < 0) {
         CmSlice* __cm_s = (CmSlice*)arr_ptr;
         arr_ptr = __cm_s->data;
@@ -606,7 +607,7 @@ void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, 
     int32_t* result_data = (int32_t*)result->data;
     int64_t count = 0;
     for (int64_t i = 0; i < size; i++) {
-        if (fn(capture, arr[i])) {
+        if (fn(env, arr[i])) {
             result_data[count++] = arr[i];
         }
     }
@@ -645,8 +646,7 @@ void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
 }
 
 // filter_i64 (クロージャ版)
-void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr,
-                                         int64_t capture) {
+void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
     if (size < 0) {
         CmSlice* __cm_s = (CmSlice*)arr_ptr;
         arr_ptr = __cm_s->data;
@@ -665,7 +665,7 @@ void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_p
     int64_t* result_data = (int64_t*)result->data;
     int64_t count = 0;
     for (int64_t i = 0; i < size; i++) {
-        if (fn(capture, arr[i])) {
+        if (fn(env, arr[i])) {
             result_data[count++] = arr[i];
         }
     }

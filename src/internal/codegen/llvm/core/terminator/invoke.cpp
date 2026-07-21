@@ -9,6 +9,150 @@
 
 namespace cm::codegen::llvm_backend {
 
+/// 高階クロージャ呼び出しの環境化（C6）。
+/// MIRの書き換えパスは map/filter へ渡すクロージャを
+/// args = [arr, size, ラムダ参照, cap0, cap1, ...] の可変長引数で表現するが、
+/// ランタイムのシグネチャはキャプチャ数に依存できない。
+/// ここでキャプチャ列をスタック上のi64環境配列へ格納し、
+/// 環境からキャプチャを復元してラムダを呼ぶサンク関数を合成して固定4引数へ正規化する。
+void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& callData,
+                                        const std::string& funcName,
+                                        std::vector<llvm::Value*>& args) {
+    if (args.size() < 4) {
+        return;  // キャプチャ無し（_closure版はrewrite passがキャプチャ有りのみ生成する）
+    }
+
+    // ラムダ関数の実体を関数参照名から解決する
+    std::string lambdaName;
+    if (callData.args.size() > 2 && callData.args[2] &&
+        callData.args[2]->kind == mir::MirOperand::FunctionRef) {
+        lambdaName = std::get<std::string>(callData.args[2]->data);
+    }
+    llvm::Function* lambdaFunc = nullptr;
+    if (!lambdaName.empty()) {
+        auto it = functions.find(lambdaName);
+        lambdaFunc = (it != functions.end()) ? it->second : module->getFunction(lambdaName);
+    }
+    if (!lambdaFunc) {
+        return;  // 解決不能なら変換しない（従来どおり検証エラーで顕在化させ黙殺しない）
+    }
+
+    const size_t capCount = args.size() - 3;
+    auto* lambdaTy = lambdaFunc->getFunctionType();
+    // ラムダのパラメータは [cap0..capN-1, elem] の並びであること
+    if (lambdaTy->getNumParams() != capCount + 1) {
+        return;
+    }
+
+    auto* i64Ty = ctx.getI64Type();
+    auto* i32Ty = ctx.getI32Type();
+    auto* ptrTy = ctx.getPtrType();
+
+    // キャプチャ型がi64スロットへ可逆に格納できることを事前検証する（整数・ポインタ・浮動小数のみ）
+    auto slot_representable = [&](llvm::Type* t) {
+        return t->isPointerTy() || t->isDoubleTy() || t->isFloatTy() ||
+               (t->isIntegerTy() && t->getIntegerBitWidth() <= 64);
+    };
+    for (size_t i = 0; i < capCount; ++i) {
+        if (!slot_representable(args[3 + i]->getType()) ||
+            !slot_representable(lambdaTy->getParamType(i))) {
+            return;  // 集約キャプチャ等は未対応（変換せず検証エラーで顕在化）
+        }
+    }
+
+    // ランタイム側の要素型・戻り値型（map: elem→elem、filter: elem→i8）
+    const bool isI64 = funcName.find("_i64") != std::string::npos;
+    const bool isFilter = funcName.find("filter") != std::string::npos;
+    llvm::Type* elemTy = isI64 ? i64Ty : i32Ty;
+    llvm::Type* retTy = isFilter ? ctx.getI8Type() : elemTy;
+
+    // 環境配列は関数エントリブロックへalloca（ループ内呼び出しでスタックが伸び続けるのを防ぐ）
+    auto* envArrTy = llvm::ArrayType::get(i64Ty, capCount);
+    llvm::Function* curFn = builder->GetInsertBlock()->getParent();
+    llvm::IRBuilder<> entryBuilder(&curFn->getEntryBlock(), curFn->getEntryBlock().begin());
+    auto* envAlloca = entryBuilder.CreateAlloca(envArrTy, nullptr, "hof_env");
+
+    // キャプチャ値をi64へ正規化して環境へ格納する
+    for (size_t i = 0; i < capCount; ++i) {
+        llvm::Value* v = args[3 + i];
+        llvm::Type* t = v->getType();
+        llvm::Value* as64 = nullptr;
+        if (t->isPointerTy()) {
+            as64 = builder->CreatePtrToInt(v, i64Ty, "cap_p2i");
+        } else if (t->isDoubleTy()) {
+            as64 = builder->CreateBitCast(v, i64Ty, "cap_d2i");
+        } else if (t->isFloatTy()) {
+            as64 = builder->CreateZExt(builder->CreateBitCast(v, i32Ty, "cap_f2i"), i64Ty);
+        } else if (t->isIntegerTy(64)) {
+            as64 = v;
+        } else {
+            as64 = builder->CreateSExt(v, i64Ty, "cap_sext");
+        }
+        auto* slot = builder->CreateConstInBoundsGEP2_64(envArrTy, envAlloca, 0, i, "env_slot");
+        builder->CreateStore(as64, slot);
+    }
+
+    // サンクを取得または合成する（ラムダ×ランタイム変種ごとに1つ）
+    std::string thunkName =
+        lambdaName + "$env_thunk" + (isFilter ? "_filter" : "_map") + (isI64 ? "_i64" : "_i32");
+    llvm::Function* thunk = module->getFunction(thunkName);
+    if (!thunk) {
+        auto* thunkTy = llvm::FunctionType::get(retTy, {ptrTy, elemTy}, false);
+        thunk = llvm::Function::Create(thunkTy, llvm::Function::InternalLinkage, thunkName, module);
+        auto* entry = llvm::BasicBlock::Create(ctx.getContext(), "entry", thunk);
+        llvm::IRBuilder<> tb(entry);
+
+        // 型調整ヘルパー（整数幅・ポインタ・浮動小数のi64スロットとの相互変換）
+        auto adjust = [&](llvm::Value* v, llvm::Type* target) -> llvm::Value* {
+            llvm::Type* src = v->getType();
+            if (src == target) {
+                return v;
+            }
+            if (target->isPointerTy()) {
+                return tb.CreateIntToPtr(v, target);
+            }
+            if (target->isDoubleTy()) {
+                return tb.CreateBitCast(v, target);
+            }
+            if (target->isFloatTy()) {
+                return tb.CreateBitCast(tb.CreateTrunc(v, i32Ty), target);
+            }
+            if (src->isPointerTy()) {
+                return tb.CreatePtrToInt(v, target);
+            }
+            if (src->getIntegerBitWidth() > target->getIntegerBitWidth()) {
+                return tb.CreateTrunc(v, target);
+            }
+            return tb.CreateSExt(v, target);
+        };
+
+        llvm::Value* envArg = thunk->getArg(0);
+        llvm::Value* elemArg = thunk->getArg(1);
+        std::vector<llvm::Value*> lambdaArgs;
+        for (size_t i = 0; i < capCount; ++i) {
+            auto* slot = tb.CreateConstInBoundsGEP2_64(envArrTy, envArg, 0, i, "env_slot");
+            llvm::Value* raw = tb.CreateLoad(i64Ty, slot, "cap_raw");
+            lambdaArgs.push_back(adjust(raw, lambdaTy->getParamType(i)));
+        }
+        lambdaArgs.push_back(adjust(elemArg, lambdaTy->getParamType(capCount)));
+        llvm::Value* result = tb.CreateCall(lambdaFunc, lambdaArgs, "lambda_ret");
+        // 戻り値をランタイム型へ調整（bool i1はzextで拡張）
+        if (result->getType() != retTy) {
+            if (result->getType()->isIntegerTy(1)) {
+                result = tb.CreateZExt(result, retTy);
+            } else {
+                result = adjust(result, retTy);
+            }
+        }
+        tb.CreateRet(result);
+    }
+
+    // args = [arr, size, サンク, env] の固定4引数へ正規化する
+    args.resize(2);
+    args.push_back(thunk);
+    args.push_back(envAlloca);
+}
+
 /// 直接/間接呼び出しの生成本体（分離元のswitch脱出用breakはreturnに置換済み）
 void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData,
                                     const std::string& funcName, bool isIndirectCall,

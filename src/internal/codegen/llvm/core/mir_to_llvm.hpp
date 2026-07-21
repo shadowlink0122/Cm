@@ -132,6 +132,12 @@ class MIRToLLVM {
                              const std::string& funcName, bool isIndirectCall,
                              llvm::Value* funcPtrValue, std::vector<llvm::Value*>& args);
 
+    /// 高階クロージャ呼び出しの環境化（C6、terminator/invoke.cpp）:
+    /// __builtin_array_map/filter*_closureの可変個キャプチャ引数をスタック上のi64環境配列へ格納し、
+    /// 環境からキャプチャを復元してラムダを呼ぶサンクを合成して args = [arr, size, サンク, env] へ正規化する
+    void normalizeHofClosureArgs(const mir::MirTerminator::CallData& callData,
+                                 const std::string& funcName, std::vector<llvm::Value*>& args);
+
     /// 右辺値変換
     llvm::Value* convertRvalue(const mir::MirRvalue& rvalue);
 

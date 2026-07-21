@@ -303,6 +303,14 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
             }
         }
 
+        // 高階クロージャ呼び出し（C6）: 可変個のキャプチャ引数を環境ポインタ+サンクへ正規化する
+        if (funcName == "__builtin_array_map_closure" ||
+            funcName == "__builtin_array_map_i64_closure" ||
+            funcName == "__builtin_array_filter_closure" ||
+            funcName == "__builtin_array_filter_i64_closure") {
+            normalizeHofClosureArgs(callData, funcName, args);
+        }
+
         // 関数を呼び出す
         auto func = declareExternalFunction(funcName);
         auto result = builder->CreateCall(func, args);
