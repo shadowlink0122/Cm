@@ -68,7 +68,19 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             std::cout << "[PREPROCESSOR] Processing line: " << line << "\n";
         }
 
-        if (is_import_line(line)) {
+        // 再export行（export import X;）もimportとして展開する（M7）。
+        // 従来この構文は未処理で、mod.cmの再exportを経由する選択import
+        // （import std::collections::{Vector} 等）が本体を一切取り込めなかった
+        bool is_export_import = false;
+        {
+            size_t exp_pos = skip_ws(line);
+            if (starts_with_keyword(line, exp_pos, "export")) {
+                size_t imp_pos = skip_ws(line, exp_pos + 6);
+                is_export_import = starts_with_keyword(line, imp_pos, "import");
+            }
+        }
+
+        if (is_import_line(line) || is_export_import) {
             if (debug_mode) {
                 std::cout << "[PREPROCESSOR] Matched import line: " << line << "\n";
             }
@@ -78,6 +90,11 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             };
             std::string import_statement = strip_comment(line);
             std::string import_source_line = line;
+            if (is_export_import) {
+                // 先頭のexportキーワードを落としてimport文として解析する
+                size_t exp_pos = skip_ws(import_statement);
+                import_statement = import_statement.substr(exp_pos + 6);
+            }
 
             auto count_braces = [](const std::string& text) {
                 int count = 0;
@@ -114,6 +131,33 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
             // インポート文をパース
             auto import_info = parse_import_statement(import_statement);
+            if (is_export_import) {
+                // 再exportはドット区切りのモジュール名（module std.collections.vector 形式）を
+                // 取るため::形式へ変換し、アイテム指定が無ければ内容を非修飾で取り込む
+                // （wildcard相当。再exportの意味論＝サブモジュールのexportを自モジュールの表面にする）
+                if (import_info.module_name.find("::") == std::string::npos &&
+                    import_info.module_name.find('/') == std::string::npos) {
+                    std::string converted;
+                    for (char mc : import_info.module_name) {
+                        if (mc == '.') {
+                            converted += "::";
+                        } else {
+                            converted += mc;
+                        }
+                    }
+                    import_info.module_name = converted;
+                }
+                if (!import_info.items.empty()) {
+                    // 選択的再export（export import x::{items}）は展開しない。
+                    // io/mod.cmのprintln等はMIR組み込みが実体であり、Cm定義を取り込むと
+                    // 組み込みの書式処理を影で置き換えて挙動が変わるため、従来どおり素通しする
+                    emit_source(import_source_line, current_file_str, import_chain,
+                                import_line_number);
+                    continue;
+                }
+                import_info.is_wildcard = true;
+                import_info.is_reexport = true;
+            }
             import_info.line_number = import_line_number;
             // ファイル名を相対パスに変換
             import_info.source_file =
@@ -302,6 +346,50 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
 
             // モジュールパスを解決
             auto module_path = resolve_module_path(import_info.module_name, current_file);
+
+            // 大文字開始の末尾セグメント（型名）はモジュールではなく親モジュールからの選択importとして再解釈する（M7）。
+            // 大小文字を区別しないファイルシステム（macOS等）では std::collections::Vector が
+            // vector.cm へ誤解決され、namespace Vector と struct Vector が衝突してDuplicate methodになる。
+            // 解決失敗時（Linux等）も同じフォールバックで選択importとして動作させ、プラットフォーム差を無くす
+            if (!import_info.is_wildcard && import_info.items.empty()) {
+                size_t last_sep = import_info.module_name.rfind("::");
+                if (last_sep != std::string::npos && last_sep > 0) {
+                    std::string last_part = import_info.module_name.substr(last_sep + 2);
+                    bool upper_head = !last_part.empty() &&
+                                      std::isupper(static_cast<unsigned char>(last_part[0]));
+                    // 実ファイル名と大小文字違いでのみ一致している場合は誤解決とみなす
+                    bool case_mismatch = false;
+                    if (upper_head && !module_path.empty()) {
+                        std::string actual = module_path.filename().string();
+                        std::string expect = last_part + ".cm";
+                        if (actual.size() == expect.size() && actual != expect) {
+                            bool ci_equal = true;
+                            for (size_t ci = 0; ci < actual.size(); ++ci) {
+                                if (std::tolower(static_cast<unsigned char>(actual[ci])) !=
+                                    std::tolower(static_cast<unsigned char>(expect[ci]))) {
+                                    ci_equal = false;
+                                    break;
+                                }
+                            }
+                            case_mismatch = ci_equal;
+                        }
+                    }
+                    if (upper_head && (module_path.empty() || case_mismatch)) {
+                        std::string parent = import_info.module_name.substr(0, last_sep);
+                        auto parent_path = resolve_module_path(parent, current_file);
+                        if (!parent_path.empty()) {
+                            import_info.module_name = parent;
+                            import_info.items.push_back(last_part);
+                            module_path = parent_path;
+                            if (debug_mode) {
+                                std::cout << "[PREPROCESSOR] Reinterpreted as selective import: "
+                                          << parent << "::{" << last_part << "}\n";
+                            }
+                        }
+                    }
+                }
+            }
+
             if (module_path.empty()) {
                 // 詳細なエラーメッセージ
                 std::stringstream error;
@@ -344,9 +432,12 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             bool need_process = false;
             std::vector<std::string> new_items;
 
+            // 同一ファイルからの2回目以降の選択importか（初回展開で本体・ネスト領域は出力済み）
+            bool repeat_selective_import = false;
             if (!import_info.items.empty() && !import_info.is_wildcard) {
                 // 選択的インポート: 新しいシンボルのみをインポート
                 auto& imported = imported_symbols[canonical_path];
+                repeat_selective_import = !imported.empty();
                 for (const auto& item : import_info.items) {
                     if (imported.find(item) == imported.end()) {
                         new_items.push_back(item);
@@ -433,13 +524,17 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             // インポートスタックから削除
             import_stack.pop_back();
 
-            // エクスポートフィルタリング（選択的インポートの場合）
+            // エクスポートフィルタリング（選択的インポートの場合）。
+            // 2回目以降は増分モードで新規シンボルのみを出力し、初回展開で出力済みの
+            // ネストimport領域・非export型/implの再出力によるDuplicate methodを防ぐ（M7）
             if (!import_info.items.empty() && !import_info.is_wildcard) {
                 // 新しいシンボルのみをフィルタリング
                 if (!new_items.empty()) {
-                    module_source = filter_exports(module_source, new_items);
+                    module_source =
+                        filter_exports(module_source, new_items, repeat_selective_import);
                 } else {
-                    module_source = filter_exports(module_source, import_info.items);
+                    module_source =
+                        filter_exports(module_source, import_info.items, repeat_selective_import);
                 }
             }
 

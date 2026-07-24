@@ -13,7 +13,7 @@ parent: v0.17.0 Design
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
 | H7 | 言語 | モジュールの`export`が自由関数に対して未強制で、非export関数を他モジュールからimportして呼べる（カプセル化が機能しない） | 未着手 |
-| M7 | コンパイル時間 | 選択importの重複排除漏れ（`import std::collections::Vector; import std::json;`で「Duplicate method」例外）、パスベースimportは正しく排除される | 未着手 |
+| M7 | コンパイル時間 | 選択importの重複排除漏れ（`import std::collections::Vector; import std::json;`で「Duplicate method」例外）、パスベースimportは正しく排除される | 実装済み（真因は3点: (1)大文字開始の末尾セグメントがitemにならず大小文字非区別FSでVector.cm→vector.cmが誤解決されnamespace Vectorとstruct Vectorが衝突、(2)同一ファイルからの2回目以降の選択importが展開済みの型・impl・ネスト領域を再出力、(3)export import構文が未処理でmod.cm経由の選択importが本体を取り込めない。expand.cppの型名item再解釈+filter_exportsの増分モード+ワイルドカード再exportの展開で解消。選択的再export（export import x::{items}、io形式）はMIR組み込みprintln等の意味論を壊すため展開せず素通しを維持） |
 | M2 | 識別子 | 同名シンボルの多重import（`import a::{compute}; import b::{compute};`）がエラーにならず先勝ちで黙って解決される | 未着手 |
 
 ## 背景と根本原因

@@ -19,7 +19,8 @@
 namespace cm::preprocessor {
 
 std::string ImportPreprocessor::filter_exports(const std::string& module_source,
-                                               const std::vector<std::string>& import_items) {
+                                               const std::vector<std::string>& import_items,
+                                               bool incremental) {
     // 選択的インポート：指定されたアイテムのみを抽出（行単位解析のため複数行 export { ... } は先に1行へ正規化する）
     std::stringstream result;
     std::stringstream input(normalize_export_blocks(module_source));
@@ -35,7 +36,9 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
     // 透過的インポート（別モジュール経由でlibを取り込む）で展開された impl は、対象の型が残る限り
     // 一緒に残さないと、型は使えるのに .method() が解決できなくなる（web::html の impl Html 等）。
     std::set<std::string> kept_types(import_items.begin(), import_items.end());
-    {
+    // 増分モード（同一ファイルからの2回目以降の選択import）では、非export型は初回展開で
+    // 出力済みのため透過保持の事前スキャンを行わず、新規要求シンボルの型のみをimpl保持対象にする
+    if (!incremental) {
         std::stringstream scan(normalize_export_blocks(module_source));
         std::string sline;
         const char* type_kws[] = {"struct", "enum"};
@@ -73,7 +76,9 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
         if (contains(line, "===== Wildcard import from") ||
             contains(line, "===== Selective import from") ||
             contains(line, "===== Begin module:")) {
-            result << line << "\n";
+            // 増分モードではネストimport領域は初回展開で出力済みのため再出力しない
+            if (!incremental)
+                result << line << "\n";
             nested_import_depth++;
             continue;
         }
@@ -81,12 +86,14 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
             contains(line, "===== End selective import") || contains(line, "===== End module:")) {
             if (nested_import_depth > 0)
                 nested_import_depth--;
-            result << line << "\n";
+            if (!incremental)
+                result << line << "\n";
             continue;
         }
         if (nested_import_depth > 0) {
             // 透過的に取り込んだ内容はそのまま残す（exportの取捨選択をしない）
-            result << line << "\n";
+            if (!incremental)
+                result << line << "\n";
             continue;
         }
 
@@ -311,8 +318,10 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
                 }
             }
         } else if (line.find("export") == std::string::npos) {
-            // エクスポートされていない行はそのまま保持（コメント、型定義など）
-            result << line << "\n";
+            // エクスポートされていない行はそのまま保持（コメント、型定義など）。
+            // 増分モードでは初回展開で出力済みのため再出力しない
+            if (!incremental)
+                result << line << "\n";
         }
     }
 

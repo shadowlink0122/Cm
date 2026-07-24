@@ -1,0 +1,33 @@
+//! platform: !js
+import std::collections::Vector;
+import std::collections::Queue;
+import std::json::*;
+import std::io::println;
+
+// M7回帰: 選択importの重複排除と型名itemの解決を検証する。
+// 従来は (1) 大文字開始の末尾セグメントがitemにならず、macOS等の大小文字非区別FSで
+// Vector.cm→vector.cmが誤解決されてnamespace Vectorとstruct Vectorが衝突し、
+// (2) 同一ファイルからの2回目以降の選択importが展開済みの型・implを再出力して、
+// いずれも「Duplicate method: Vector<T> already has method 'push'」で失敗していた。
+// また再export（export import）が未処理で、mod.cm経由の選択importは本体を取り込めなかった。
+
+int main() {
+    Vector<int> v();
+    v.push(10);
+    v.push(20);
+    println(v.len());
+
+    Queue<int> q();
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue(3);
+    println(q.len());
+
+    // 間接的に取り込んだjsonも共存できる
+    int root = json_parse("{\"ok\":true}");
+    int ok = json_object_get(root, "ok");
+    if (json_bool(ok)) {
+        println("json ok");
+    }
+    return 0;
+}

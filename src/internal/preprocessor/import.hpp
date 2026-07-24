@@ -95,9 +95,13 @@ class ImportPreprocessor {
     // モジュールファイルを読み込む
     std::string load_module_file(const std::filesystem::path& module_path);
 
-    // エクスポートされていない要素を削除
+    // エクスポートされていない要素を削除。
+    // incremental=trueは同一ファイルからの2回目以降の選択import用で、
+    // 初回展開で出力済みのネストimport領域・非export型/impl・素通し行を再出力せず、
+    // 新規要求されたexportシンボル（とその型のimpl）だけを出力する（M7: Duplicate method対策）
     std::string filter_exports(const std::string& module_source,
-                               const std::vector<std::string>& import_items);
+                               const std::vector<std::string>& import_items,
+                               bool incremental = false);
 
     // exportキーワードを削除
     std::string remove_export_keywords(const std::string& source);
@@ -121,9 +125,10 @@ class ImportPreprocessor {
         bool is_recursive_wildcard = false;  // import ./path/* 形式
         bool is_from_import = false;         // from構文
         bool is_relative = false;            // 相対パス（./ or ../）
-        size_t line_number = 0;              // インポート文の行番号
-        std::string source_file;             // ソースファイル名
-        std::string source_line;             // インポート文の元のコード
+        bool is_reexport = false;  // export import 行（モジュール展開時の再export取り込み）
+        size_t line_number = 0;   // インポート文の行番号
+        std::string source_file;  // ソースファイル名
+        std::string source_line;  // インポート文の元のコード
     };
     ImportInfo parse_import_statement(const std::string& import_line);
     ImportInfo parse_import_statement(const std::string& import_line, size_t line_num,
