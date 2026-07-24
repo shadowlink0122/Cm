@@ -970,6 +970,18 @@ HirExprPtr HirLowering::lower_index(ast::IndexExpr& idx, TypePtr type) {
             hir->indices.push_back(lower_expr(*idx_expr));
         }
     }
+    // 型注釈が無い場合（型チェッカーを通らない文字列補間ミニパイプライン等）は
+    // 基底の型から要素型を導出する。これをしないと arr[0].method() の受信型が
+    // <error> になり、__error__method という未定義シンボルへ黙って解決されていた
+    if (!type || type->is_error()) {
+        TypePtr derived = hir->object ? hir->object->type : nullptr;
+        for (size_t i = 0; i < index_chain.size() && derived; ++i) {
+            derived = derived->element_type;
+        }
+        if (derived) {
+            type = derived;
+        }
+    }
     return std::make_unique<HirExpr>(std::move(hir), type);
 }
 

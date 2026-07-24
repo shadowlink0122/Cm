@@ -1,0 +1,74 @@
+import std::io::println;
+
+// H1/H2回帰: 集約（構造体フィールド・配列・スライス）へのインターフェイス値格納を検証する。
+// 従来はfat pointer構築が射影なし代入限定で、Box{sh: sq}やb.sh = sq2は生の具象値が
+// 格納されてnative/jit/wasmクラッシュ・js vtable undefinedになり、配列・スライス要素も
+// 同様に壊れていた。補間内のarr[i].method()は受信型が<error>になり__error__*への
+// リンク失敗という黙殺形態もあった。
+
+interface Shape {
+    int area();
+}
+
+struct Sq {
+    int side;
+}
+
+impl Sq for Shape {
+    int area() {
+        return self.side * self.side;
+    }
+}
+
+struct Ci {
+    int r;
+}
+
+impl Ci for Shape {
+    int area() {
+        return self.r * self.r * 3;
+    }
+}
+
+struct Box {
+    Shape sh;
+}
+
+int main() {
+    Sq sq = Sq{side: 4};
+    Ci ci = Ci{r: 2};
+
+    // H2: 構造体リテラルのインターフェイスフィールドへの具象格納
+    Box b = Box{sh: sq};
+    println(b.sh.area());
+
+    // H2: 射影付きplace（フィールド）への具象代入
+    Sq sq2 = Sq{side: 5};
+    b.sh = sq2;
+    println(b.sh.area());
+
+    // H1: 固定長配列（混在具象型・補間内メソッド呼び出し）
+    Shape[2] shapes = [sq, ci];
+    println("{shapes[0].area()} {shapes[1].area()}");
+
+    // H1: 要素の上書きとループでの動的ディスパッチ
+    Sq sq6 = Sq{side: 6};
+    shapes[1] = sq6;
+    int sum = 0;
+    for (int i = 0; i < 2; i++) {
+        sum = sum + shapes[i].area();
+    }
+    println(sum);
+
+    // H1: インターフェイススライス（リテラル初期化とpush）
+    Shape[] list = [sq, ci];
+    Ci ci3 = Ci{r: 3};
+    list.push(ci3);
+    println(list.len());
+    int total = 0;
+    for (int i = 0; i < list.len(); i++) {
+        total = total + list[i].area();
+    }
+    println(total);
+    return 0;
+}

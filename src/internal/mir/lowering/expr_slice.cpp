@@ -101,6 +101,28 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                     }
                 }
 
+                // インターフェイス要素スライスへの具象構造体push:
+                // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
+                if (push_func == "cm_slice_push_blob" && slice_type && slice_type->element_type &&
+                    ctx.interface_names) {
+                    auto resolved_elem = ctx.resolve_typedef(slice_type->element_type);
+                    if (resolved_elem && resolved_elem->kind == hir::TypeKind::Struct &&
+                        ctx.interface_names->count(resolved_elem->name) > 0) {
+                        hir::TypePtr actual_type = nullptr;
+                        if (value_local < ctx.func->locals.size()) {
+                            actual_type = ctx.func->locals[value_local].type;
+                        }
+                        if (actual_type && actual_type->kind == hir::TypeKind::Struct &&
+                            actual_type->name != resolved_elem->name) {
+                            LocalId iface_tmp = ctx.new_temp(resolved_elem);
+                            ctx.push_statement(MirStatement::assign(
+                                MirPlace{iface_tmp},
+                                MirRvalue::use(MirOperand::copy(MirPlace{value_local}))));
+                            value_local = iface_tmp;
+                        }
+                    }
+                }
+
                 BlockId success_block = ctx.new_block();
                 std::vector<MirOperandPtr> args;
                 args.push_back(MirOperand::copy(slice_place));

@@ -504,6 +504,10 @@ int64_t LoweringContext::layout_size(const hir::TypePtr& type) const {
         case hir::TypeKind::UFloat:
             return 4;
         case hir::TypeKind::Struct: {
+            // インターフェイス値はfat pointer（dataポインタ+vtableポインタ）でポインタ2個分（H1）
+            if (interface_names && interface_names->count(t->name)) {
+                return 2 * cm::target_pointer_size();
+            }
             // フィールドを自然アライメントで並べたCレイアウトのサイズ
             if (struct_defs && struct_defs->count(t->name)) {
                 const auto* st = struct_defs->at(t->name);

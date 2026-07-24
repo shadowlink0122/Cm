@@ -1,16 +1,11 @@
----
-title: 集約へのインターフェイス値格納（fat pointer構築の伝播）
-parent: v0.17.0 Design
----
-
-# 集約へのインターフェイス値格納（fat pointer構築の伝播）
+# 集約へのインターフェイス値格納（fat pointer構築の伝播）（実装済み）
 
 ## 対象所見
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H1 | 型システム | インターフェイス値を配列・スライスに入れると`__error__len`/`__error__area`への解決でリンク失敗（全バックエンド、ポリモーフィックコレクション不可） | 未着手 |
-| H2 | 型システム | インターフェイス型の構造体フィールドへの代入でfat pointerが構築されずnativeセグフォ・wasmトラップ・jsでvtable undefined | 未着手 |
+| H1 | 型システム | インターフェイス値を配列・スライスに入れると`__error__len`/`__error__area`への解決でリンク失敗（全バックエンド、ポリモーフィックコレクション不可） | 実装済み（固定長配列は射影付き代入coercionで、スライスはlayout_sizeのfat pointer幅対応+リテラル/pushでのインターフェイス一時経由のfat構築で対応。`__error__*`の主因だった補間ミニパイプラインの添字結果型未導出はlower_indexの要素型フォールバックで解消） |
+| H2 | 型システム | インターフェイス型の構造体フィールドへの代入でfat pointerが構築されずnativeセグフォ・wasmトラップ・jsでvtable undefined | 実装済み（LLVM assign.cppに射影付きplace用のCase A2を追加し、格納先の静的型（Field: 構造体定義/Index・Deref: 要素型で射影を辿って解決）がインターフェイスなら具象構造体からfat pointerを構築してstoreする。JSも同様に{data, vtable}を構築） |
 
 ## 背景と根本原因
 

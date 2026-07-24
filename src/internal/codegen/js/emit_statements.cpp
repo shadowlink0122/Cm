@@ -105,6 +105,58 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                 }
             }
 
+            // interface値へのcoercion（射影付きplace・H2）: 構造体フィールドや配列要素の
+            // interface型スロットへ具象構造体を代入する場合も {data, vtable} を構築する。
+            // 従来は射影なし代入限定で、Box{sh: sq} や b.sh = sq2 は生値が入り
+            // receiver.vtable.method が undefined になっていた
+            if (!data.place.projections.empty() && target_local < func.locals.size() &&
+                data.rvalue->kind == mir::MirRvalue::Use) {
+                // 射影後の格納先型を解決する（Field: 構造体定義、Index/Deref: 要素型）
+                hir::TypePtr slotType = func.locals[target_local].type;
+                for (const auto& proj : data.place.projections) {
+                    if (!slotType) {
+                        break;
+                    }
+                    if (proj.result_type) {
+                        slotType = proj.result_type;
+                        continue;
+                    }
+                    if (proj.kind == mir::ProjectionKind::Field) {
+                        if (slotType->kind == TypeKind::Struct) {
+                            auto sit = struct_map_.find(slotType->name);
+                            if (sit != struct_map_.end() && sit->second &&
+                                proj.field_id < sit->second->fields.size()) {
+                                slotType = sit->second->fields[proj.field_id].type;
+                                continue;
+                            }
+                        }
+                        slotType = nullptr;
+                    } else {
+                        slotType = slotType->element_type;
+                    }
+                }
+                const bool slot_is_iface =
+                    slotType && (slotType->kind == TypeKind::Interface ||
+                                 (slotType->kind == TypeKind::Struct &&
+                                  interface_names_.count(slotType->name) > 0));
+                if (slot_is_iface) {
+                    const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                    if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                            useData.operand->kind == mir::MirOperand::Move)) {
+                        hir::TypePtr srcType = getOperandType(*useData.operand, func);
+                        if (srcType && srcType->kind == TypeKind::Struct &&
+                            interface_names_.count(srcType->name) == 0) {
+                            std::string src = emitOperand(*useData.operand, func);
+                            std::string vtableName = sanitizeIdentifier(srcType->name) + "_" +
+                                                     sanitizeIdentifier(slotType->name) + "_vtable";
+                            emitter_.emitLine(place + " = { data: " + src +
+                                              ", vtable: " + vtableName + " };");
+                            break;
+                        }
+                    }
+                }
+            }
+
             // クロージャ変数への代入かチェック
             if (target_local < func.locals.size() && data.place.projections.empty() &&
                 func.locals[target_local].is_closure && data.rvalue->kind == mir::MirRvalue::Use) {

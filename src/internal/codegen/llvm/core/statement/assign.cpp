@@ -146,6 +146,72 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
         }
     }
 
+    // Case A2 (H2): 射影付きplace（構造体フィールド・配列/スライス要素）のinterface型スロットへ
+    // 具象構造体を代入する場合もfat pointerを構築する。
+    // 従来はcoercionが射影なし代入限定で、Box{sh: sq} や b.sh = sq2 のような集約への格納は
+    // 生の具象値がそのまま格納され、動的ディスパッチが不正なvtableを読んでクラッシュしていた
+    if (!assign.place.projections.empty() && currentMIRFunction &&
+        assign.place.local < currentMIRFunction->locals.size() &&
+        assign.rvalue->kind == mir::MirRvalue::Use) {
+        // 射影後の格納先型を解決する（Field: 構造体定義、Index/Deref: 要素型）
+        hir::TypePtr slotType = currentMIRFunction->locals[assign.place.local].type;
+        for (const auto& proj : assign.place.projections) {
+            if (!slotType) {
+                break;
+            }
+            if (proj.result_type) {
+                slotType = proj.result_type;
+                continue;
+            }
+            if (proj.kind == mir::ProjectionKind::Field) {
+                if (slotType->kind == hir::TypeKind::Struct) {
+                    auto sit = structDefs.find(slotType->name);
+                    if (sit != structDefs.end() && sit->second &&
+                        proj.field_id < sit->second->fields.size()) {
+                        slotType = sit->second->fields[proj.field_id].type;
+                        continue;
+                    }
+                }
+                slotType = nullptr;
+            } else {
+                slotType = slotType->element_type;
+            }
+        }
+
+        if (slotType && slotType->kind == hir::TypeKind::Struct &&
+            isInterfaceType(slotType->name)) {
+            auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+            if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
+                                    useData.operand->kind == mir::MirOperand::Move)) {
+                auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
+                if (srcPlace.projections.empty() &&
+                    srcPlace.local < currentMIRFunction->locals.size()) {
+                    const auto& srcType = currentMIRFunction->locals[srcPlace.local].type;
+                    if (srcType && srcType->kind == hir::TypeKind::Struct &&
+                        !isInterfaceType(srcType->name)) {
+                        llvm::Value* srcAddr = locals[srcPlace.local];
+                        if (srcAddr && !srcAddr->getType()->isPointerTy()) {
+                            // SSA値の場合はスタックへ退避して実体アドレスを得る
+                            auto* tmp =
+                                builder->CreateAlloca(srcAddr->getType(), nullptr, "iface_src_tmp");
+                            builder->CreateStore(srcAddr, tmp);
+                            srcAddr = tmp;
+                        }
+                        if (srcAddr) {
+                            auto fat =
+                                createInterfaceFatPtr(srcAddr, srcType->name, slotType->name);
+                            auto destAddr = convertPlaceToAddress(assign.place);
+                            if (destAddr) {
+                                builder->CreateStore(fat, destAddr);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Tagged Unionペイロード読み込みの特別処理
     // rvalueがUse/Copyで、ソースがTagged Unionのfield[1]かつターゲットが構造体の場合
     // memcpyを使用して直接コピー

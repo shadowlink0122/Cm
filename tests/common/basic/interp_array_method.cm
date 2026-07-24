@@ -1,0 +1,24 @@
+import std::io::println;
+
+// 補間内の配列要素メソッド呼び出しの回帰（H1関連の一般欠陥）。
+// 補間ミニパイプラインは型チェッカーを通らず、添字式の結果型が未設定のため
+// 受信型が<error>になり、__error__メソッド名という未定義シンボルへ黙って解決されていた。
+// lower_indexが基底の要素型から結果型を導出するようにして解消。
+
+struct Pt {
+    int x;
+}
+
+impl Pt {
+    int getx() {
+        return self.x;
+    }
+}
+
+int main() {
+    Pt[2] pts = [Pt{x: 7}, Pt{x: 9}];
+    println("{pts[0].getx()} {pts[1].getx()}");
+    int[3] ns = [10, 20, 30];
+    println("{ns[2]} {ns[0] + ns[1]}");
+    return 0;
+}
