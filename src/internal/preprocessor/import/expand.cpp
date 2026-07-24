@@ -350,31 +350,28 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             // 大文字開始の末尾セグメント（型名）はモジュールではなく親モジュールからの選択importとして再解釈する（M7）。
             // 大小文字を区別しないファイルシステム（macOS等）では std::collections::Vector が
             // vector.cm へ誤解決され、namespace Vector と struct Vector が衝突してDuplicate methodになる。
-            // 解決失敗時（Linux等）も同じフォールバックで選択importとして動作させ、プラットフォーム差を無くす
+            // 大小文字を区別するファイルシステム（Linux等）では解決失敗またはルートモジュール
+            // （std/mod.cm等）への誤フォールバックになるため、いずれも同じ再解釈で
+            // プラットフォーム差を無くす
             if (!import_info.is_wildcard && import_info.items.empty()) {
                 size_t last_sep = import_info.module_name.rfind("::");
                 if (last_sep != std::string::npos && last_sep > 0) {
                     std::string last_part = import_info.module_name.substr(last_sep + 2);
                     bool upper_head = !last_part.empty() &&
                                       std::isupper(static_cast<unsigned char>(last_part[0]));
-                    // 実ファイル名と大小文字違いでのみ一致している場合は誤解決とみなす
-                    bool case_mismatch = false;
+                    // 解決結果が末尾セグメントに対応しているか検証する。
+                    // 対応する形は「<last_part>.cm ファイル」（大小文字完全一致）または
+                    // 「<last_part>/ ディレクトリのエントリポイント」のみ。
+                    // それ以外（大小文字違いの一致・親/ルートモジュールへのフォールバック）は
+                    // 誤解決とみなして再解釈する
+                    bool resolved_matches_segment = false;
                     if (upper_head && !module_path.empty()) {
                         std::string actual = module_path.filename().string();
-                        std::string expect = last_part + ".cm";
-                        if (actual.size() == expect.size() && actual != expect) {
-                            bool ci_equal = true;
-                            for (size_t ci = 0; ci < actual.size(); ++ci) {
-                                if (std::tolower(static_cast<unsigned char>(actual[ci])) !=
-                                    std::tolower(static_cast<unsigned char>(expect[ci]))) {
-                                    ci_equal = false;
-                                    break;
-                                }
-                            }
-                            case_mismatch = ci_equal;
-                        }
+                        std::string parent_dir = module_path.parent_path().filename().string();
+                        resolved_matches_segment =
+                            (actual == last_part + ".cm") || (parent_dir == last_part);
                     }
-                    if (upper_head && (module_path.empty() || case_mismatch)) {
+                    if (upper_head && (module_path.empty() || !resolved_matches_segment)) {
                         std::string parent = import_info.module_name.substr(0, last_sep);
                         auto parent_path = resolve_module_path(parent, current_file);
                         if (!parent_path.empty()) {

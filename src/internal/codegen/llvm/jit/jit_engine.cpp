@@ -203,6 +203,10 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
     // モジュール検証
     std::string verifyError;
     llvm::raw_string_ostream verifyStream(verifyError);
+    // CM_DUMP_IR=1 でJIT実行直前のモジュールIRをstderrへダンプする（プラットフォーム差の調査用）
+    if (std::getenv("CM_DUMP_IR")) {
+        llvm::errs() << llvmModule;
+    }
     if (llvm::verifyModule(llvmModule, &verifyStream)) {
         result.success = false;
         result.errorMessage = "LLVM module verification failed:\n" + verifyError;

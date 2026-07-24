@@ -567,8 +567,29 @@ void Monomorphization::update_type_references(MirProgram& program) {
                         };
 
                         for (const auto& proj : place->projections) {
-                            if (proj.kind != ProjectionKind::Field)
+                            // 配列フィールドの要素アクセス（.items[i]）は要素型へ降下する。
+                            // 従来はここでbreakし、フィールドの配列型（未置換のT[4]）が
+                            // そのまま要素destの型として上書きされていた（JIT O0で
+                            // [4 x %T]のallocaが生成されスタック隣接領域を壊す）
+                            if (proj.kind == ProjectionKind::Index) {
+                                if (current_field_type &&
+                                    current_field_type->kind == hir::TypeKind::Array &&
+                                    current_field_type->element_type) {
+                                    current_field_type = current_field_type->element_type;
+                                    if (current_field_type->kind == hir::TypeKind::Struct) {
+                                        descend_into(current_field_type);
+                                    }
+                                    continue;
+                                }
+                                // 要素型を解決できない場合はloweringが付けた型を維持する
+                                current_field_type = nullptr;
                                 break;
+                            }
+                            if (proj.kind != ProjectionKind::Field) {
+                                // Deref等は非対応: 型を上書きしない
+                                current_field_type = nullptr;
+                                break;
+                            }
 
                             FieldId fid = proj.field_id;
 
@@ -596,6 +617,16 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                         current_field_type = current_type_args[pi];
                                         // 置換後の型が構造体の場合、次のフィールドアクセスのために情報を更新
                                         descend_into(current_field_type);
+                                        is_final_type_resolved = true;
+                                        break;
+                                    }
+                                    // 配列型でelement_typeが型パラメータの場合 (T[4] → short[4])
+                                    if (field_type->kind == hir::TypeKind::Array &&
+                                        field_type->element_type &&
+                                        field_type->element_type->name == params_it->second[pi]) {
+                                        auto arr = std::make_shared<hir::Type>(*field_type);
+                                        arr->element_type = current_type_args[pi];
+                                        current_field_type = arr;
                                         is_final_type_resolved = true;
                                         break;
                                     }
