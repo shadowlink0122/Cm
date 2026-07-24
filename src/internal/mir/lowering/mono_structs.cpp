@@ -586,8 +586,9 @@ void Monomorphization::update_type_references(MirProgram& program) {
                                 break;
                             }
                             if (proj.kind != ProjectionKind::Field) {
-                                // Deref等は非対応: 型を上書きしない
-                                current_field_type = nullptr;
+                                // Deref等は従来どおりここまでに解決したフィールド型を適用する
+                                // （挙動を変えるとOption等の既存チェーンが退行するため、
+                                // 上書き抑止はIndex射影の解決不能ケースに限定する）
                                 break;
                             }
 
