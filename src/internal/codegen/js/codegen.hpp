@@ -167,6 +167,13 @@ class JSCodeGen {
     hir::TypePtr getPlaceType(const mir::MirPlace& place, const mir::MirFunction& func);
     hir::TypePtr getOperandType(const mir::MirOperand& operand, const mir::MirFunction& func);
 
+    // 構造体の実引数を値渡しとしてクローンすべきか（H3: LLVM系との値セマンティクス統一）。
+    // implメソッドのself（__入り関数の第1引数）と仮想ディスパッチのレシーバは
+    // 参照渡しで変更を伝搬させるため対象外
+    bool structArgNeedsClone(const mir::MirOperand& arg, size_t argIndex,
+                             const std::string& funcName, bool isVirtual,
+                             const mir::MirFunction& func);
+
     // 演算子
     std::string emitBinaryOp(mir::MirBinaryOp op);
     std::string emitUnaryOp(mir::MirUnaryOp op);

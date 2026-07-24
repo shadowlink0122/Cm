@@ -60,6 +60,34 @@ void JSCodeGen::emitBasicBlock(const mir::BasicBlock& block, const mir::MirFunct
     }
 }
 
+bool JSCodeGen::structArgNeedsClone(const mir::MirOperand& arg, size_t argIndex,
+                                    const std::string& funcName, bool isVirtual,
+                                    const mir::MirFunction& func) {
+    // Copyのみ対象（Moveは所有権移動のためコピー不要）
+    if (arg.kind != mir::MirOperand::Copy) {
+        return false;
+    }
+    // ランタイム組み込みは対象外（indexOf/includes等はJSのオブジェクト同一性に依存し、
+    // クローンすると===比較が常に不一致になる）
+    if (funcName.rfind("__builtin_", 0) == 0 || funcName.rfind("cm_", 0) == 0) {
+        return false;
+    }
+    // implメソッドのself（第1引数）・仮想ディスパッチのレシーバは参照渡しを維持する
+    // （LLVM系もselfはポインタ渡しで、メソッド内の変更は呼び出し元へ伝搬する）
+    if (argIndex == 0 && (isVirtual || funcName.find("__") != std::string::npos)) {
+        return false;
+    }
+    hir::TypePtr type = getOperandType(arg, func);
+    if (!type || type->kind != TypeKind::Struct) {
+        return false;
+    }
+    // インターフェイス値・外部JSオブジェクト（関数型フィールド構造体）はクローンしない
+    if (interface_names_.count(type->name) > 0 || structIsForeignObject(type->name)) {
+        return false;
+    }
+    return true;
+}
+
 void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunction& func) {
     switch (stmt.kind) {
         case mir::MirStatement::Assign: {
@@ -327,6 +355,7 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 const auto& arg = data.args[i];
                 if (arg) {
                     std::string argStr = emitOperand(*arg, func);
+                    bool interfaceWrapped = false;
 
                     // 引数の型変換（Struct -> Interfaceの暗黙キャスト）
                     if (calleeFunc && i < calleeFunc->arg_locals.size()) {
@@ -340,6 +369,7 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                                         sanitizeIdentifier(sourceType->name) + "_" +
                                         sanitizeIdentifier(targetLocal.type->name) + "_vtable";
                                     argStr = "{ data: " + argStr + ", vtable: " + vtableName + " }";
+                                    interfaceWrapped = true;
                                 }
                             }
                         }
@@ -368,6 +398,13 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             // char型は文字に変換（定数畳み込み済みの文字列リテラルはそのまま）
                             argStr = "String.fromCharCode(" + argStr + ")";
                         }
+                    }
+
+                    // 構造体の実引数は値渡しとしてクローンする（H3: LLVM系との値セマンティクス統一。
+                    // 従来は参照が渡り、呼び出し先での変更が呼び出し元へ漏れていた）
+                    if (!interfaceWrapped &&
+                        structArgNeedsClone(*arg, i, funcName, data.is_virtual, func)) {
+                        argStr = "__cm_clone(" + argStr + ")";
                     }
 
                     args.push_back(argStr);
@@ -550,6 +587,7 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                 const auto& arg = data.args[i];
                 if (arg) {
                     std::string argStr = emitOperand(*arg, func);
+                    bool interfaceWrapped = false;
 
                     // 引数の型変換（Struct -> Interfaceの暗黙キャスト）
                     if (calleeFunc && i < calleeFunc->arg_locals.size()) {
@@ -570,6 +608,7 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                                         sanitizeIdentifier(sourceType->name) + "_" +
                                         sanitizeIdentifier(targetLocal.type->name) + "_vtable";
                                     argStr = "{ data: " + argStr + ", vtable: " + vtableName + " }";
+                                    interfaceWrapped = true;
                                 }
                             }
                         }
@@ -608,6 +647,13 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                                     argStr + ")";
                             }
                         }
+                    }
+
+                    // 構造体の実引数は値渡しとしてクローンする（H3: LLVM系との値セマンティクス統一。
+                    // 従来は参照が渡り、呼び出し先での変更が呼び出し元へ漏れていた）
+                    if (!interfaceWrapped &&
+                        structArgNeedsClone(*arg, i, funcName, data.is_virtual, func)) {
+                        argStr = "__cm_clone(" + argStr + ")";
                     }
 
                     args.push_back(argStr);

@@ -9,8 +9,8 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H3 | 型システム | js/tsのみ構造体の関数引数が参照渡し（let束縛とreturnは`__cm_clone`するのに呼び出し引数だけクローンしない）、値セマンティクスがバックエンドで分裂 | 未着手 |
-| H5 | バックエンド | `long`/`ulong`がjs/tsでNumber表現のため2^53超で黙って精度喪失（64bit ID・タイムスタンプが破損） | 未着手 |
+| H3 | 型システム | js/tsのみ構造体の関数引数が参照渡し（let束縛とreturnは`__cm_clone`するのに呼び出し引数だけクローンしない）、値セマンティクスがバックエンドで分裂 | 実装済み（実引数生成の2ループへ`structArgNeedsClone`判定を適用。implメソッドのself・仮想ディスパッチのレシーバ・インターフェイス値・外部JSオブジェクト・ランタイム組み込み（indexOf等はJSのオブジェクト同一性に依存）はクローン対象外。テスト: tests/common/functions/struct_arg_value_semantics.cm） |
+| H5 | バックエンド | `long`/`ulong`がjs/tsでNumber表現のため2^53超で黙って精度喪失（64bit ID・タイムスタンプが破損） | 未着手（BigInt化はリテラル・全演算子・出力・TS型注釈・FFI境界に波及し、Number混在のTypeErrorリスクが高いため段階計画のまま保留） |
 
 ## 背景と根本原因
 
