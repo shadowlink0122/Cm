@@ -361,12 +361,15 @@ TargetConfig TargetConfig::getNative() {
     llvm::sys::getHostCPUFeatures(features);
     std::string featureStr;
     if (cpu != "generic") {
+        // 有効な機能の加算に加えて、無効な機能を明示的に否定する（-feature）。
+        // CPU名（znver4等）はそのCPUの既定機能（AVX-512等）を含意するため、
+        // 加算のみだとハイパーバイザが機能をマスクしたVM（例: Azure EPYC 9V74の一部で
+        // AVX-512が無効）でも既定機能の命令が生成され、実行時SIGILLになる。
+        // clangの-march=nativeと同様に+/-両方を渡して実ホストの機能へ正確に一致させる
         for (const auto& feature : features) {
-            if (feature.second) {
-                if (!featureStr.empty())
-                    featureStr += ",";
-                featureStr += "+" + feature.first().str();
-            }
+            if (!featureStr.empty())
+                featureStr += ",";
+            featureStr += (feature.second ? "+" : "-") + feature.first().str();
         }
     }
 
