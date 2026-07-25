@@ -1,6 +1,7 @@
 // ターゲットマネージャ実装
 #include "target.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -367,6 +368,23 @@ TargetConfig TargetConfig::getNative() {
                 featureStr += "+" + feature.first().str();
             }
         }
+    }
+
+    // 環境変数によるターゲット上書き（CIのflaky SIGILL調査・特定CPU向けの回避用）。
+    // CM_TARGET_CPU: LLVMのCPU名（例: znver4, x86-64-v3, generic）
+    // CM_TARGET_FEATURES: 機能文字列そのもの（例: "+avx2,-avx512f"。空文字で機能指定なし）
+    if (const char* cpu_env = std::getenv("CM_TARGET_CPU")) {
+        if (*cpu_env) {
+            cpu = cpu_env;
+        }
+    }
+    if (const char* feat_env = std::getenv("CM_TARGET_FEATURES")) {
+        featureStr = feat_env;
+    }
+    // CM_DUMP_TARGET=1 でコード生成に使う実際のCPU名・機能文字列をstderrへ出力する
+    if (std::getenv("CM_DUMP_TARGET")) {
+        std::cerr << "[CM_TARGET] triple=" << triple << " cpu=" << cpu << " features=" << featureStr
+                  << "\n";
     }
 
     TargetConfig config;

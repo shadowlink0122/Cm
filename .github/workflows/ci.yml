@@ -303,7 +303,10 @@ jobs:
       # x86_64 qemuとも再現せず、失敗runとCPUモデルの相関を取るための計装）
       - name: Log runner CPU
         run: |
-          lscpu 2>/dev/null | grep -E "Model name|Flags" | cut -c1-300 ||             sysctl -n machdep.cpu.brand_string || true
+          lscpu 2>/dev/null | grep -E "Model name" || sysctl -n machdep.cpu.brand_string || true
+          (grep -m1 flags /proc/cpuinfo | tr " " "\n" | grep -E "fp16|amx|avx" | sort -u | tr "\n" " "; echo) 2>/dev/null || true
+          echo 'int main() { return 0; }' > /tmp/cpu_probe.cm
+          CM_DUMP_TARGET=1 ./cm compile /tmp/cpu_probe.cm -o /tmp/cpu_probe.out 2>&1 | grep "CM_TARGET" || true
 
       - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
