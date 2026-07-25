@@ -3,6 +3,7 @@
 #include "mir_splitter.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <set>
 #include <string>
@@ -53,6 +54,13 @@ std::string MirSplitter::source_file_to_module_name(const std::string& source_fi
 
     // . を _ に変換
     std::replace(name.begin(), name.end(), '.', '_');
+
+    // 英数字と_以外はすべて_へ置換（"<generated>"等の擬似ソース名を.oファイル名・シェルコマンドとして安全にする）
+    for (auto& ch : name) {
+        if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
+            ch = '_';
+        }
+    }
 
     // 先頭の _ を削除
     while (!name.empty() && name[0] == '_') {
@@ -204,19 +212,9 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
         }
 
         // 外部参照を集める
-        std::unordered_set<std::string> needed_structs;
         std::unordered_set<std::string> needed_functions;
 
         for (const auto* func : mod.functions) {
-            // 参照される型
-            auto types = collect_referenced_types(*func);
-            for (const auto& type_name : types) {
-                if (local_structs.find(type_name) == local_structs.end() &&
-                    struct_owner.find(type_name) != struct_owner.end()) {
-                    needed_structs.insert(type_name);
-                }
-            }
-
             // 呼び出される関数
             auto calls = collect_called_functions(*func);
             for (const auto& call_name : calls) {
@@ -227,13 +225,17 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
             }
         }
 
-        // extern参照を登録
-        for (const auto& struct_name : needed_structs) {
-            for (const auto& st : program.structs) {
-                if (st && st->name == struct_name) {
-                    mod.extern_structs.push_back(st.get());
-                    break;
-                }
+        // 型定義はオブジェクトコードを生成しないため、他モジュールの構造体・enumは全てextern登録する。
+        // ローカル変数走査による参照収集では構造体フィールド経由・自己参照ポインタ等の間接参照を網羅できず、
+        // 未登録名がconvertTypeのタグ付きユニオン互換フォールバック（{i32, i8[8]}）へ落ちてモジュール間でレイアウトが食い違う（next@4とnext@8のGEP不一致でSIGSEGV）
+        for (const auto& st : program.structs) {
+            if (st && local_structs.find(st->name) == local_structs.end()) {
+                mod.extern_structs.push_back(st.get());
+            }
+        }
+        for (const auto& en : program.enums) {
+            if (en && local_enums.find(en->name) == local_enums.end()) {
+                mod.extern_enums.push_back(en.get());
             }
         }
 
@@ -249,8 +251,14 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
 
     // ============================================================
     // Step 6: 共有データを全モジュールにコピー
-    // インターフェース、vtable、グローバル変数は全モジュールで必要
+    // インターフェース・vtableは全モジュールで必要。
+    // グローバル変数は所有モジュール（mainがあればmain、無ければ先頭）だけが定義を持ち、他モジュールはextern宣言のみにする。
+    // 全モジュールへ定義を複製すると初期化状態がモジュールごとに分裂し、共有可変状態が壊れる
     // ============================================================
+    std::string globals_owner;
+    if (!modules.empty()) {
+        globals_owner = modules.count("main") > 0 ? "main" : modules.begin()->first;
+    }
     for (auto& [mod_name, mod] : modules) {
         for (const auto& iface : program.interfaces) {
             if (iface) {
@@ -264,11 +272,16 @@ std::map<std::string, ModuleProgram> MirSplitter::split_by_module(const MirProgr
         }
         for (const auto& gv : program.global_vars) {
             if (gv) {
-                mod.global_vars.push_back(gv.get());
+                if (mod_name == globals_owner) {
+                    mod.global_vars.push_back(gv.get());
+                } else {
+                    mod.extern_global_vars.push_back(gv.get());
+                }
             }
         }
-        // typedef定義マップへのポインタを設定（LLVM backendで使用）
+        // typedef定義マップと分割元プログラムへのポインタを設定（LLVM backendで使用）
         mod.typedef_defs = &program.typedef_defs;
+        mod.origin = &program;
     }
 
     return modules;

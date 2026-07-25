@@ -177,6 +177,29 @@ void TargetManager::emitObjectFile(llvm::Module& module, const std::string& file
     }
 }
 
+// オブジェクトファイル生成（直接版）
+// モジュール並列コンパイル用: fork分離・タイムアウト監視・事前検証なしで現在のスレッドでemitする
+void TargetManager::emitObjectFileDirect(llvm::Module& module, const std::string& filename) {
+#if LLVM_VERSION_MAJOR >= 18
+    auto fileType = llvm::CodeGenFileType::ObjectFile;
+#else
+    auto fileType = llvm::CGFT_ObjectFile;
+#endif
+
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+    if (ec) {
+        throw std::runtime_error("Failed to open object file: " + filename + ": " + ec.message());
+    }
+
+    llvm::legacy::PassManager pass;
+    if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+        throw std::runtime_error("TargetMachine cannot emit object file");
+    }
+    pass.run(module);
+    dest.flush();
+}
+
 // アセンブリ出力
 void TargetManager::emitAssembly(llvm::Module& module, const std::string& filename) {
     if (!SafeCodeGenerator::checkComplexity(module)) {

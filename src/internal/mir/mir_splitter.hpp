@@ -30,10 +30,18 @@ struct ModuleProgram {
     // 共有データ（全モジュール共通、元のMirProgramへの参照）
     std::vector<const MirInterface*> interfaces;
     std::vector<const VTable*> vtables;
+
+    // このモジュールが定義を持つグローバル変数（所有モジュールのみ。定義の重複による状態分裂を防ぐ）
     std::vector<const MirGlobalVar*> global_vars;
+
+    // 他モジュールが定義するグローバル変数（extern宣言のみ生成する）
+    std::vector<const MirGlobalVar*> extern_global_vars;
 
     // typedef定義マップ（LLVM backendでTypeAlias/Struct名の解決に使用）
     const std::unordered_map<std::string, hir::TypePtr>* typedef_defs = nullptr;
+
+    // 分割元のMirProgram（関数存在判定・インターフェイス検索等、プログラム全体のメタデータ参照用）
+    const MirProgram* origin = nullptr;
 };
 
 // MIR分割ユーティリティ
@@ -52,12 +60,12 @@ class MirSplitter {
     //     "" → "main"
     static std::string source_file_to_module_name(const std::string& source_file);
 
+    // 関数が呼び出す関数名を収集（リンク時のランタイムライブラリ使用判定にも使用）
+    static std::vector<std::string> collect_called_functions(const MirFunction& func);
+
    private:
     // 関数が参照する型名を収集
     static std::vector<std::string> collect_referenced_types(const MirFunction& func);
-
-    // 関数が呼び出す関数名を収集
-    static std::vector<std::string> collect_called_functions(const MirFunction& func);
 };
 
 }  // namespace cm::mir

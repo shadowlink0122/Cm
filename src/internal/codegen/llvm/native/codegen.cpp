@@ -6,9 +6,17 @@
 #include "internal/codegen/llvm/optimizations/pass_limiter.hpp"
 #include "internal/codegen/llvm/optimizations/recursion_limiter.hpp"
 #include "internal/mir/mir_splitter.hpp"
+#include "internal/mir/printer.hpp"
 #include "pass_debugger.hpp"
 
+#include <cstdint>
 #include <iostream>
+#include <mutex>
+#include <thread>
+
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/BoundsChecking.h>
 #include <llvm/Transforms/Instrumentation/MemorySanitizer.h>
@@ -96,12 +104,12 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
 }
 
 // モジュール分割付きコンパイル
-// 注意: 現在モジュール分割コンパイルは無効化されている
-// 将来フロントエンド差分化が実装された際に再有効化予定
+// 注意: 全体を単一モジュールとしてコンパイルする既定経路。
+// モジュール分割コンパイル（compileModules+linkObjects）はドライバのCM_MODULE_CODEGEN=1ゲートから使用される
 LLVMCodeGen::ModuleCompileInfo LLVMCodeGen::compileWithModuleInfo(
     const mir::MirProgram& program, const std::vector<std::string>& changed_modules_hint) {
     ModuleCompileInfo info;
-    (void)changed_modules_hint;  // 現在未使用（モジュール分割無効化中）
+    (void)changed_modules_hint;  // 全体コンパイル経路では未使用
 
     // 現時点では全体をコンパイル
     // モジュール分割情報の収集はスキップ（オーバーヘッド削減）
@@ -110,79 +118,234 @@ LLVMCodeGen::ModuleCompileInfo LLVMCodeGen::compileWithModuleInfo(
     return info;
 }
 
+// モジュール内容のFNV-1a 64bitハッシュ（キャッシュキー用。seed違いの2値を連結して128bit相当にする）
+static uint64_t fnv1a64(const std::string& s, uint64_t hash) {
+    for (unsigned char c : s) {
+        hash ^= c;
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+// コンパイラ自身の同一性（実行バイナリのパス+サイズ+更新時刻）
+// キャッシュキーへ混ぜることで、コンパイラを更新した後に古い.oを使い続けることを防ぐ
+static std::string compilerIdentity() {
+    static const std::string identity = [] {
+        std::string id;
+#ifndef _WIN32
+        Dl_info info;
+        if (dladdr(reinterpret_cast<void*>(&compilerIdentity), &info) && info.dli_fname) {
+            std::error_code ec;
+            std::filesystem::path exe(info.dli_fname);
+            auto size = std::filesystem::file_size(exe, ec);
+            auto mtime = std::filesystem::last_write_time(exe, ec);
+            id = exe.string() + ":" + std::to_string(static_cast<unsigned long long>(size)) + ":" +
+                 std::to_string(static_cast<long long>(mtime.time_since_epoch().count()));
+        }
+#endif
+        if (id.empty()) {
+            // フォールバック: ビルド時刻（このTUの再ビルドでのみ変化する保守的な近似）
+            id = std::string(__DATE__) + " " + std::string(__TIME__);
+        }
+        return id;
+    }();
+    return identity;
+}
+
 // モジュール別差分コンパイル
+// 各モジュールのMIR内容（自関数+extern関数+全型レイアウト+ターゲット/最適化設定）から内容ハッシュを計算し、
+// output_dir内の内容アドレス.o（<モジュール名>-<ハッシュ>.o）が既に存在すればコード生成・最適化を丸ごとスキップする。
+// ミスしたモジュールは独立LLVMContextでワーカスレッド並列にコンパイルする（ワーカ数はCM_CODEGEN_JOBSで上書き可能）
 std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
     const mir::MirProgram& program, const std::vector<std::string>& changed_modules,
     const std::map<std::string, std::filesystem::path>& cached_objects,
     const std::filesystem::path& output_dir) {
-    std::vector<ModuleObjectFile> results;
-
     // 出力ディレクトリを作成
     std::filesystem::create_directories(output_dir);
 
     // MIR分割
     auto modules = mir::MirSplitter::split_by_module(program);
 
-    // 変更モジュールのセット（高速検索用）
+    // 変更モジュールのセット（指定されたモジュールは内容ハッシュが一致してもキャッシュを使わない）
     std::set<std::string> changed_set(changed_modules.begin(), changed_modules.end());
 
+    // ターゲット設定はモジュール間で共通なので1回だけ構築
+    TargetConfig config;
+    if (!options.customTriple.empty()) {
+        config.triple = options.customTriple;
+        config.target = BuildTarget::Native;
+    } else {
+        switch (options.target) {
+            case BuildTarget::Baremetal:
+                config = TargetConfig::getBaremetalARM();
+                break;
+            case BuildTarget::BaremetalX86:
+                config = TargetConfig::getBaremetalX86();
+                break;
+            case BuildTarget::Wasm:
+                config = TargetConfig::getWasm();
+                break;
+            case BuildTarget::BaremetalUEFI:
+                config = TargetConfig::getBaremetalUEFI();
+                break;
+            default:
+                config = TargetConfig::getNative();
+        }
+    }
+    config.debugInfo = options.debugInfo;
+    // Bug#13修正: UEFIターゲットではCodeGen最適化を無効化
+    // LLVM TargetMachineのISel/SelectionDAG最適化がefi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
+    if (config.target == BuildTarget::BaremetalUEFI) {
+        config.optLevel = 0;
+    } else {
+        config.optLevel = options.optimizationLevel;
+    }
+
+    // ============================================================
+    // キャッシュキー計算
+    // ============================================================
+    mir::MirPrinter printer;
+
+    // 全モジュール共通部: ターゲット・最適化設定と型レイアウト（構造体・enum・グローバル・インターフェイス）。
+    // 構造体レイアウトの変更はGEPオフセットとして全モジュールのコードへ波及するため、共通キーに含めて全体を無効化する
+    std::string shared_key;
+    shared_key += compilerIdentity() + "|";
+    shared_key += config.triple + "|" + config.cpu + "|" + config.features + "|";
+    shared_key += std::to_string(config.optLevel) + "|" + std::to_string(config.debugInfo) + "|";
+    for (const auto& st : program.structs) {
+        if (!st)
+            continue;
+        shared_key += "S:" + st->name + "{";
+        for (const auto& field : st->fields) {
+            shared_key += field.name + ":" + printer.type_to_string(field.type) + ";";
+        }
+        shared_key += "}";
+    }
+    for (const auto& en : program.enums) {
+        if (!en)
+            continue;
+        shared_key += "E:" + en->name + "{";
+        for (const auto& member : en->members) {
+            shared_key += member.name + "=" + std::to_string(member.tag_value) + "(";
+            for (const auto& [field_name, field_type] : member.fields) {
+                shared_key += field_name + ":" + printer.type_to_string(field_type) + ",";
+            }
+            shared_key += ");";
+        }
+        shared_key += "}";
+    }
+    for (const auto& gv : program.global_vars) {
+        if (!gv)
+            continue;
+        shared_key += "G:" + gv->name + ":" + printer.type_to_string(gv->type) + ";";
+    }
+    for (const auto& iface : program.interfaces) {
+        if (!iface)
+            continue;
+        shared_key += "I:" + iface->name + ";";
+    }
+
+    // モジュール固有部: 自関数の全文 + extern関数の全文
+    // extern関数はシグネチャ宣言に加えBug#45経路でbodyも生成されるため、全文を含める（過剰無効化側に倒す）
+    auto module_key = [&](const mir::ModuleProgram& mod_program) {
+        std::string text = shared_key;
+        for (const auto* func : mod_program.functions) {
+            text += printer.to_string(*func);
+        }
+        for (const auto* func : mod_program.extern_functions) {
+            text += "X:" + printer.to_string(*func);
+        }
+        uint64_t h1 = fnv1a64(text, 0xcbf29ce484222325ULL);
+        uint64_t h2 = fnv1a64(text, 0x9e3779b97f4a7c15ULL);
+        char buf[33];
+        std::snprintf(buf, sizeof(buf), "%016llx%016llx", static_cast<unsigned long long>(h1),
+                      static_cast<unsigned long long>(h2));
+        return std::string(buf);
+    };
+
+    // ============================================================
+    // キャッシュ判定
+    // ============================================================
+    struct ModuleJob {
+        const std::string* mod_name;
+        const mir::ModuleProgram* mod_program;
+        std::filesystem::path obj_path;
+        size_t result_index;
+    };
+    std::vector<ModuleObjectFile> results(modules.size());
+    std::vector<ModuleJob> jobs;
+    size_t index = 0;
+
     for (const auto& [mod_name, mod_program] : modules) {
-        ModuleObjectFile result;
+        ModuleObjectFile& result = results[index];
         result.module_name = mod_name;
 
-        // キャッシュから取得可能かチェック
+        // 呼び出し元指定のキャッシュ（旧API互換）を先に確認
         auto cache_it = cached_objects.find(mod_name);
-        bool needs_recompile = changed_set.count(mod_name) > 0 || cache_it == cached_objects.end();
-
-        if (!needs_recompile && std::filesystem::exists(cache_it->second)) {
-            // キャッシュヒット: キャッシュ済み.oを使用
+        bool caller_cached = changed_set.count(mod_name) == 0 && cache_it != cached_objects.end() &&
+                             std::filesystem::exists(cache_it->second);
+        if (caller_cached) {
             result.object_path = cache_it->second;
             result.from_cache = true;
-
             if (cm::debug::debug_mode()) {
-                std::cerr << "[MODULE] " << mod_name << ": キャッシュヒット ("
+                std::cerr << "[MODULE] " << mod_name << ": キャッシュヒット（指定） ("
                           << cache_it->second.string() << ")\n";
             }
-        } else {
-            // キャッシュミス: コンパイル
-            std::string obj_filename = mod_name + ".o";
-            std::filesystem::path obj_path = output_dir / obj_filename;
+            ++index;
+            continue;
+        }
+
+        // 内容アドレスキャッシュ
+        std::filesystem::path obj_path =
+            output_dir / (mod_name + "-" + module_key(mod_program) + ".o");
+        result.object_path = obj_path;
+        if (changed_set.count(mod_name) == 0 && std::filesystem::exists(obj_path)) {
+            result.from_cache = true;
+            if (cm::debug::debug_mode()) {
+                std::cerr << "[MODULE] " << mod_name << ": キャッシュヒット（内容一致） ("
+                          << obj_path.string() << ")\n";
+            }
+            ++index;
+            continue;
+        }
+
+        result.from_cache = false;
+        jobs.push_back(ModuleJob{&results[index].module_name, &mod_program, obj_path, index});
+        ++index;
+    }
+
+    // ============================================================
+    // キャッシュミスのモジュールを並列コンパイル
+    // ============================================================
+    if (!jobs.empty()) {
+        // LLVMターゲットレジストリの初期化は非スレッドセーフなため、ワーカ起動前にメインスレッドで1回行う
+        {
+            TargetManager init_target(config);
+            init_target.initialize();
+        }
+
+        size_t worker_count = std::thread::hardware_concurrency();
+        if (const char* jobs_env = std::getenv("CM_CODEGEN_JOBS")) {
+            long v = std::strtol(jobs_env, nullptr, 10);
+            if (v > 0)
+                worker_count = static_cast<size_t>(v);
+        }
+        if (worker_count == 0)
+            worker_count = 1;
+        worker_count = std::min(worker_count, jobs.size());
+
+        std::mutex log_mutex;
+        std::atomic<size_t> next_job{0};
+        std::vector<std::exception_ptr> worker_errors(worker_count);
+
+        auto compile_one = [&](const ModuleJob& job) {
+            const std::string& mod_name = *job.mod_name;
+            const mir::ModuleProgram& mod_program = *job.mod_program;
 
             if (cm::debug::debug_mode()) {
+                std::lock_guard<std::mutex> lock(log_mutex);
                 std::cerr << "[MODULE] " << mod_name << ": コンパイル中 ("
                           << mod_program.functions.size() << " 関数)\n";
-            }
-
-            // ターゲット設定
-            TargetConfig config;
-            if (!options.customTriple.empty()) {
-                config.triple = options.customTriple;
-                config.target = BuildTarget::Native;
-            } else {
-                switch (options.target) {
-                    case BuildTarget::Baremetal:
-                        config = TargetConfig::getBaremetalARM();
-                        break;
-                    case BuildTarget::BaremetalX86:
-                        config = TargetConfig::getBaremetalX86();
-                        break;
-                    case BuildTarget::Wasm:
-                        config = TargetConfig::getWasm();
-                        break;
-                    case BuildTarget::BaremetalUEFI:
-                        config = TargetConfig::getBaremetalUEFI();
-                        break;
-                    default:
-                        config = TargetConfig::getNative();
-                }
-            }
-            config.debugInfo = options.debugInfo;
-            // Bug#13修正: UEFIターゲットではCodeGen最適化を無効化
-            // LLVM TargetMachineのISel/SelectionDAG最適化がefi_mainのcall/ret命令を削除してフォールスルークラッシュを起こす
-            if (config.target == BuildTarget::BaremetalUEFI) {
-                config.optLevel = 0;
-            } else {
-                config.optLevel = options.optimizationLevel;
             }
 
             // 独立LLVMContextを作成
@@ -218,7 +381,10 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
                 llvm::FunctionAnalysisManager FAM;
                 llvm::CGSCCAnalysisManager CGAM;
                 llvm::ModuleAnalysisManager MAM;
-                llvm::PassBuilder PB;
+                // 同一コード折り畳み（M10）は分割経路でも有効化する
+                llvm::PipelineTuningOptions modulePipelineTuning;
+                modulePipelineTuning.MergeFunctions = (options.optimizationLevel >= 2);
+                llvm::PassBuilder PB(mod_target->getTargetMachine(), modulePipelineTuning);
                 PB.registerModuleAnalyses(MAM);
                 PB.registerCGSCCAnalyses(CGAM);
                 PB.registerFunctionAnalyses(FAM);
@@ -241,14 +407,55 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
                 MPM.run(mod_context->getModule(), MAM);
             }
 
-            // オブジェクトファイル出力
-            mod_target->emitObjectFile(mod_context->getModule(), obj_path.string());
+            // CM_DUMP_IR=1/2でモジュール別IRをstderrへダンプ（分割経路のデバッグ用。1=変換直後相当、2=最適化後）
+            if (const char* dump_env = std::getenv("CM_DUMP_IR");
+                dump_env && (dump_env[0] == '1' || dump_env[0] == '2')) {
+                std::lock_guard<std::mutex> lock(log_mutex);
+                llvm::errs() << ";; ===== module: " << mod_name << " =====\n";
+                mod_context->getModule().print(llvm::errs(), nullptr);
+            }
 
-            result.object_path = obj_path;
-            result.from_cache = false;
+            // オブジェクトファイル出力（直接版: ワーカスレッドからのforkを避ける。空モジュールも正常な.oになる）
+            // 並走する別プロセスが同一キーを書く場合に備え、一時名へ出力してからrenameで原子的に置く
+            std::filesystem::path tmp_path = job.obj_path;
+            tmp_path +=
+                ".tmp" +
+                std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id()) & 0xFFFF);
+            mod_target->emitObjectFileDirect(mod_context->getModule(), tmp_path.string());
+            std::filesystem::rename(tmp_path, job.obj_path);
+        };
+
+        auto worker = [&](size_t worker_id) {
+            try {
+                while (true) {
+                    size_t i = next_job.fetch_add(1);
+                    if (i >= jobs.size())
+                        break;
+                    compile_one(jobs[i]);
+                }
+            } catch (...) {
+                worker_errors[worker_id] = std::current_exception();
+            }
+        };
+
+        if (worker_count == 1) {
+            worker(0);
+        } else {
+            std::vector<std::thread> threads;
+            threads.reserve(worker_count);
+            for (size_t w = 0; w < worker_count; ++w) {
+                threads.emplace_back(worker, w);
+            }
+            for (auto& t : threads) {
+                t.join();
+            }
         }
 
-        results.push_back(std::move(result));
+        for (const auto& err : worker_errors) {
+            if (err) {
+                std::rethrow_exception(err);
+            }
+        }
     }
 
     return results;
@@ -256,18 +463,48 @@ std::vector<LLVMCodeGen::ModuleObjectFile> LLVMCodeGen::compileModules(
 
 // 複数オブジェクトファイルからリンク
 void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
-                              const std::string& output_file) {
+                              const std::string& output_file, const mir::MirProgram* program) {
     // 初期化が必要（ターゲット情報取得のため）
     if (!context) {
         initialize("link_module");
     }
 
     // 使用ライブラリの検出
-    bool needsGPU = checkForGPUUsage();
-    bool needsNet = checkForNetUsage();
-    bool needsSync = checkForSyncUsage();
-    bool needsThread = checkForThreadUsage();
-    bool needsHTTP = checkForHTTPUsage();
+    // MIRが渡された場合は呼び出し関数名の接頭辞から判定する（モジュール分割経路ではcontextが空でLLVM宣言ベースの判定が効かない）
+    bool needsGPU = false;
+    bool needsNet = false;
+    bool needsSync = false;
+    bool needsThread = false;
+    bool needsHTTP = false;
+    if (program) {
+        auto has_prefix = [](const std::string& name, const char* prefix) {
+            return name.rfind(prefix, 0) == 0;
+        };
+        for (const auto& func : program->functions) {
+            if (!func)
+                continue;
+            for (const auto& called : mir::MirSplitter::collect_called_functions(*func)) {
+                needsGPU = needsGPU || has_prefix(called, "gpu_");
+                needsNet = needsNet || has_prefix(called, "cm_tcp_") ||
+                           has_prefix(called, "cm_udp_") || has_prefix(called, "cm_dns_") ||
+                           has_prefix(called, "cm_socket_");
+                needsSync =
+                    needsSync || has_prefix(called, "cm_mutex_") ||
+                    has_prefix(called, "cm_rwlock_") || has_prefix(called, "cm_atomic_") ||
+                    has_prefix(called, "cm_channel_") || has_prefix(called, "cm_once_") ||
+                    has_prefix(called, "atomic_store_") || has_prefix(called, "atomic_load_") ||
+                    has_prefix(called, "atomic_fetch_") || has_prefix(called, "atomic_compare_");
+                needsThread = needsThread || has_prefix(called, "cm_thread_");
+                needsHTTP = needsHTTP || has_prefix(called, "cm_http_");
+            }
+        }
+    } else {
+        needsGPU = checkForGPUUsage();
+        needsNet = checkForNetUsage();
+        needsSync = checkForSyncUsage();
+        needsThread = checkForThreadUsage();
+        needsHTTP = checkForHTTPUsage();
+    }
     bool needsPthread = needsSync || needsThread;
     bool needsCppRuntime = needsGPU || needsNet || needsSync || needsThread || needsHTTP;
 
@@ -329,6 +566,38 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
             std::string path = findStdRuntimeLibrary("http");
             if (!path.empty())
                 linkCmd += " " + path;
+            // HTTPランタイムはOpenSSLへ依存する（emit側と同じ探索順: Homebrewの既知プレフィックス→brew --prefix）
+            std::string opensslPrefix;
+#ifdef CM_DEFAULT_TARGET_ARCH
+            std::string targetArch = CM_DEFAULT_TARGET_ARCH;
+#else
+            std::string targetArch = "arm64";
+#endif
+            if (targetArch == "arm64") {
+                if (std::filesystem::exists("/opt/homebrew/opt/openssl@3/lib")) {
+                    opensslPrefix = "/opt/homebrew/opt/openssl@3";
+                }
+            } else {
+                if (std::filesystem::exists("/usr/local/opt/openssl@3/lib")) {
+                    opensslPrefix = "/usr/local/opt/openssl@3";
+                }
+            }
+            if (opensslPrefix.empty()) {
+                FILE* pipe = popen("brew --prefix openssl@3 2>/dev/null", "r");
+                if (pipe) {
+                    char buffer[256];
+                    if (fgets(buffer, sizeof(buffer), pipe)) {
+                        opensslPrefix = buffer;
+                        while (!opensslPrefix.empty() && opensslPrefix.back() == '\n')
+                            opensslPrefix.pop_back();
+                    }
+                    pclose(pipe);
+                }
+            }
+            if (!opensslPrefix.empty()) {
+                linkCmd += " -L" + opensslPrefix + "/lib";
+            }
+            linkCmd += " -lssl -lcrypto";
         }
         if (needsCppRuntime)
             linkCmd += " -lc++";
@@ -340,7 +609,34 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
         if (context->getTargetConfig().noStd) {
             linkCmd += "-nostdlib ";
         }
-        linkCmd += obj_list + runtimePath + " -o " + output_file;
+        linkCmd += obj_list + runtimePath;
+        if (needsGPU) {
+            std::string gpuRuntimePath = findGPURuntimeLibrary();
+            if (!gpuRuntimePath.empty())
+                linkCmd += " " + gpuRuntimePath;
+        }
+        if (needsNet) {
+            std::string path = findStdRuntimeLibrary("net");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsSync) {
+            std::string path = findStdRuntimeLibrary("sync");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsThread) {
+            std::string path = findStdRuntimeLibrary("thread");
+            if (!path.empty())
+                linkCmd += " " + path;
+        }
+        if (needsHTTP) {
+            std::string path = findStdRuntimeLibrary("http");
+            if (!path.empty())
+                linkCmd += " " + path;
+            linkCmd += " -lssl -lcrypto";
+        }
+        linkCmd += " -o " + output_file;
         if (needsCppRuntime)
             linkCmd += " -lstdc++";
         if (needsPthread)

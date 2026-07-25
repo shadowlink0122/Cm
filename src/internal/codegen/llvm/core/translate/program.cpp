@@ -500,14 +500,27 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         typedefDefs = *module.typedef_defs;
     }
 
-    // allModuleFunctionsを構築（自モジュール + extern の全関数）
-    // declareExternalFunctionでcurrentProgramがNULLの場合のフォールバックに使用
+    // プログラム全体のメタデータ参照（モジュール修飾呼び出しの関数存在判定・インターフェイス検索等）。
+    // 未設定だとconvertCallTerminator等がnull参照で落ちる
+    currentProgram = module.origin;
+
+    // allModuleFunctionsを構築（プログラム全体の関数。originがあれば全関数、無ければ自モジュール+extern）
+    // declareExternalFunctionのシグネチャ解決フォールバックに使用。
+    // 収集漏れがあると呼び出し時にptr等の誤ったシグネチャを推測し、構造体値渡しABIが崩れる
     allModuleFunctions.clear();
-    for (const auto* func : module.functions) {
-        allModuleFunctions.push_back(func);
-    }
-    for (const auto* func : module.extern_functions) {
-        allModuleFunctions.push_back(func);
+    if (module.origin) {
+        for (const auto& func : module.origin->functions) {
+            if (func) {
+                allModuleFunctions.push_back(func.get());
+            }
+        }
+    } else {
+        for (const auto* func : module.functions) {
+            allModuleFunctions.push_back(func);
+        }
+        for (const auto* func : module.extern_functions) {
+            allModuleFunctions.push_back(func);
+        }
     }
 
     // ターゲット判定をキャッシュ
@@ -590,7 +603,25 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         }
     }
 
-    // === グローバル変数 ===
+    // === グローバル変数（extern宣言: 他モジュールが定義を持つ） ===
+    // 初期化子なしのExternalLinkage宣言のみ生成し、定義は所有モジュールに一本化する
+    for (const auto* gv : module.extern_global_vars) {
+        if (!gv)
+            continue;
+        if (globalVariables.count(gv->name) > 0)
+            continue;  // 重複スキップ
+
+        auto llvmType = convertType(gv->type);
+        if (!llvmType)
+            continue;
+
+        auto globalVar =
+            new llvm::GlobalVariable(*this->module, llvmType, gv->is_const,
+                                     llvm::GlobalValue::ExternalLinkage, nullptr, gv->name);
+        globalVariables[gv->name] = globalVar;
+    }
+
+    // === グローバル変数（定義: このモジュールが所有） ===
     for (const auto* gv : module.global_vars) {
         if (!gv)
             continue;
@@ -601,8 +632,8 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         if (!llvmType)
             continue;
 
-        auto linkage =
-            gv->is_export ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage;
+        // モジュール分割時は他モジュールから参照されうるため、exportに関わらずExternalLinkageで定義する
+        auto linkage = llvm::GlobalValue::ExternalLinkage;
 
         llvm::Constant* initialValue = nullptr;
         if (gv->init_value) {
@@ -666,6 +697,23 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         functions[funcId] = llvmFunc;
     }
 
+    // 残る他モジュール関数も正しいMIRシグネチャで宣言しておく（宣言のみでオブジェクトコストはゼロ）。
+    // extern_functionsの参照収集はCall terminator直参照しか見ないため、間接参照される関数が漏れると
+    // 呼び出し時のdeclareExternalFunctionフォールバックが誤ったシグネチャ（ptr等）を推測してABIが崩れる
+    if (module.origin) {
+        for (const auto& func : module.origin->functions) {
+            if (!func)
+                continue;
+            auto funcId = generateFunctionId(*func);
+            if (declaredFunctions.count(funcId) > 0)
+                continue;
+            declaredFunctions.insert(funcId);
+            auto llvmFunc = convertFunctionSignature(*func);
+            llvmFunc->setLinkage(llvm::GlobalValue::ExternalLinkage);
+            functions[funcId] = llvmFunc;
+        }
+    }
+
     // === vtable生成 ===
     // currentProgramが必要なのでダミーで対応は難しい
     // vtable情報はModuleProgramのvtablesから直接生成
@@ -682,6 +730,7 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
         convertFunction(*func);
     }
     // Bug#45修正: extern_functionsにbody付きのimport先export関数が含まれる場合、bodyも生成する (declareだけだとリンカエラーになる)
+    // 定義元モジュールも同じbodyを定義するため、linkonce_odrで重複定義をリンク時にマージする（同一MIR由来なのでODR安全）
     for (const auto* func : module.extern_functions) {
         if (!func->basic_blocks.empty() && !func->is_extern) {
             auto funcId = generateFunctionId(*func);
@@ -689,6 +738,10 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
                 continue;
             declaredFunctions.insert(funcId);
             convertFunction(*func);
+            auto it = functions.find(funcId);
+            if (it != functions.end() && !it->second->isDeclaration()) {
+                it->second->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+            }
         }
     }
 

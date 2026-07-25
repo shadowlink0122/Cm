@@ -32,6 +32,12 @@ class MirPrinter {
     // MIRプログラムを文字列に変換
     std::string to_string(const MirProgram& program);
 
+    // 単一関数を文字列に変換（モジュールキャッシュキーの内容ハッシュ等、関数単位のシリアライズ用）
+    std::string to_string(const MirFunction& func);
+
+    // 型を安全に文字列化する公開ラッパ（構造体レイアウト等のシリアライズ用）
+    std::string type_to_string(const hir::TypePtr& type) const { return safe_type_to_string(type); }
+
     // MIRプログラムを出力
     void print(const MirProgram& program, std::ostream& out);
 

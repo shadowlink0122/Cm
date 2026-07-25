@@ -1,5 +1,5 @@
 // LLVMコード生成バックエンド: native/wasm/baremetal/uefi向け出力・no_std検査・
-// モジュール別差分コンパイル（現在は無効）・インクリメンタルキャッシュ保存・--run実行。
+// モジュール別差分コンパイル（CM_MODULE_CODEGEN=1で有効。内容ハッシュキャッシュ+並列コード生成）・--run実行。
 // 例外境界はコード生成呼び出しのtryに限定する
 
 #include "cmd/cm/driver.hpp"
@@ -167,8 +167,29 @@ int emit_llvm(BuildContext& ctx, mir::MirProgram& mir) {
         auto phase_llvm_start = std::chrono::steady_clock::now();
 
         // モジュール情報付きの全体コンパイル
+        // CM_MODULE_CODEGEN=1でモジュール分割コンパイル経路（compileModules+linkObjects）を使う（H14の実験ゲート）。
+        // vtable使用時（動的ディスパッチ）とサニタイザ有効時は分割経路が未対応のため全体コンパイルへフォールバックする
         cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info;
-        module_info = codegen.compileWithModuleInfo(mir, {});
+        const char* mod_env = std::getenv("CM_MODULE_CODEGEN");
+        bool use_module_codegen =
+            mod_env && mod_env[0] == '1' &&
+            llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native &&
+            llvm_opts.format == cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable &&
+            !opts.show_lir_opt && mir.vtables.empty() && !llvm_opts.sanitizeAddress &&
+            !llvm_opts.sanitizeThread && !llvm_opts.sanitizeMemory && !llvm_opts.sanitizeBounds;
+        if (use_module_codegen) {
+            // .oは内容アドレス名（<モジュール>-<ハッシュ>.o）のため、並列コンパイル間で共有しても衝突しない
+            std::filesystem::path cache_dir = ".tmp/module-cache";
+            auto module_objects = codegen.compileModules(mir, {}, {}, cache_dir);
+            std::vector<std::filesystem::path> object_paths;
+            for (const auto& mo : module_objects) {
+                object_paths.push_back(mo.object_path);
+                module_info.module_names.push_back(mo.module_name);
+            }
+            codegen.linkObjects(object_paths, llvm_opts.outputFile, &mir);
+        } else {
+            module_info = codegen.compileWithModuleInfo(mir, {});
+        }
 
         auto phase_llvm_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                  std::chrono::steady_clock::now() - phase_llvm_start)

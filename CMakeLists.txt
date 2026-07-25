@@ -875,6 +875,18 @@ if(BUILD_TESTING)
         target_link_libraries(typekey_test gtest_main)
         gtest_discover_tests(typekey_test PROPERTIES LABELS "unit")
 
+        # Unit tests - MIRモジュール分割（H14。モジュール名正規化・グローバル所有権・型定義の全配布）
+        add_executable(mir_splitter_test
+            tests/unit/mir_splitter_test.cpp
+            src/internal/mir/mir_splitter.cpp
+            src/internal/mir/nodes.cpp
+            ${CM_AST_SOURCES}
+        )
+        set_target_properties(mir_splitter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(mir_splitter_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(mir_splitter_test gtest_main)
+        gtest_discover_tests(mir_splitter_test PROPERTIES LABELS "unit")
+
         # Unit tests - MIR最適化パス
         # （手組みMIRに対して各パスの.cppを単体で検証。
         # フロントエンド・lowering非依存のため、パス実装+ノード+解析のみをリンクする）
