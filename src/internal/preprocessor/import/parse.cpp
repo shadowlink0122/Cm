@@ -94,7 +94,11 @@ ImportPreprocessor::ImportInfo ImportPreprocessor::parse_import_statement(
             // ========== import module as alias ==========
             {
                 size_t as_pos = rest.find(" as ");
-                if (as_pos != std::string::npos) {
+                size_t brace_pos = rest.find('{');
+                // ブレース内の " as "（アイテムエイリアス: import mod::{x as y}）は
+                // モジュールエイリアスではないため、選択importのパースへ委ねる
+                if (as_pos != std::string::npos &&
+                    (brace_pos == std::string::npos || as_pos < brace_pos)) {
                     info.module_name = trim(rest.substr(0, as_pos));
                     info.alias = trim(rest.substr(as_pos + 4));
                     break;

@@ -1,0 +1,5 @@
+module a;
+
+export int compute(int x) {
+    return x + 1;
+}

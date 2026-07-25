@@ -2,6 +2,7 @@
 // importプリプロセッサ - import文の再帰展開・namespaceラップ・ソースマップ生成
 // ============================================================
 
+#include "internal/base/i18n.hpp"
 #include "internal/preprocessor/import.hpp"
 #include "internal/preprocessor/import_internal.hpp"
 
@@ -429,6 +430,36 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             bool need_process = false;
             std::vector<std::string> new_items;
 
+            // 同名シンボルの多重import診断（M2）: トップレベルの選択importで、
+            // 異なるモジュールから同じ非修飾名を取り込む場合は先勝ちで黙殺せずエラーにする。
+            // エイリアス付きは公開名（エイリアス）で判定し、同一モジュールの再importは許容する
+            if (!import_info.items.empty() && !import_info.is_wildcard && import_stack.empty()) {
+                for (const auto& item : import_info.items) {
+                    std::string exposed_name = item;
+                    for (const auto& [orig, alias] : import_info.item_aliases) {
+                        if (orig == item) {
+                            exposed_name = alias;
+                            break;
+                        }
+                    }
+                    auto ex_it = exposed_symbols_.find(exposed_name);
+                    if (ex_it != exposed_symbols_.end() && ex_it->second != canonical_path) {
+                        auto rel = [](const std::string& p) {
+                            std::error_code ec;
+                            auto r =
+                                std::filesystem::relative(p, std::filesystem::current_path(), ec);
+                            return ec ? p : r.string();
+                        };
+                        std::stringstream error;
+                        error << import_info.source_file << ":" << import_info.line_number << ": ";
+                        error << i18n::msgf(i18n::MsgId::ImportDuplicateSymbol, exposed_name,
+                                            rel(ex_it->second), rel(canonical_path));
+                        throw std::runtime_error(error.str());
+                    }
+                    exposed_symbols_[exposed_name] = canonical_path;
+                }
+            }
+
             // 同一ファイルからの2回目以降の選択importか（初回展開で本体・ネスト領域は出力済み）
             bool repeat_selective_import = false;
             if (!import_info.items.empty() && !import_info.is_wildcard) {
@@ -596,6 +627,36 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                         source_to_emit = module_source;
                     }
                     source_to_emit = remove_export_keywords(source_to_emit);
+                }
+
+                // アイテムエイリアス（import mod::{x as y}）: 展開したモジュール断片内の
+                // 識別子xを単語境界でyへ改名する（自己再帰・断片内の相互参照も一貫して追従する）
+                for (const auto& [orig, alias] : import_info.item_aliases) {
+                    std::string renamed;
+                    renamed.reserve(source_to_emit.size());
+                    size_t pos = 0;
+                    auto is_ident = [](char c) {
+                        return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+                    };
+                    while (pos < source_to_emit.size()) {
+                        size_t found = source_to_emit.find(orig, pos);
+                        if (found == std::string::npos) {
+                            renamed.append(source_to_emit, pos, std::string::npos);
+                            break;
+                        }
+                        bool left_ok = (found == 0) || !is_ident(source_to_emit[found - 1]);
+                        size_t after = found + orig.size();
+                        bool right_ok =
+                            (after >= source_to_emit.size()) || !is_ident(source_to_emit[after]);
+                        renamed.append(source_to_emit, pos, found - pos);
+                        if (left_ok && right_ok) {
+                            renamed += alias;
+                        } else {
+                            renamed += orig;
+                        }
+                        pos = after;
+                    }
+                    source_to_emit = std::move(renamed);
                 }
 
                 // emit_sourceでソースマップに追加

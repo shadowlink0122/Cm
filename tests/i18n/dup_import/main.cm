@@ -1,0 +1,7 @@
+// i18n E2Eテスト用: 異なるモジュールから同名シンボルをimportする曖昧なプログラム（M2診断の検証）
+import ./a::{compute};
+import ./b::{compute};
+
+int main() {
+    return compute(1);
+}

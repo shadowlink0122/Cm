@@ -81,6 +81,12 @@ check "ja: const aggregate field warn" "const値 'p' のフィールド/要素�
 check_absent "const aggregate warn: non-const is silent" "const value 'q'" \
     "$CM" check "$DIR/const_aggregate_assign.cm"
 
+# ---------- 同名シンボルの多重import診断（M2） ----------
+check "en: duplicate import symbol" "symbol 'compute' is imported from both" \
+    "$CM" check "$DIR/dup_import/main.cm"
+check "ja: duplicate import symbol" "シンボル 'compute' は" \
+    "$CM" check --lang=ja "$DIR/dup_import/main.cm"
+
 # ---------- no_stdチェッカー（B001・複数プレースホルダ） ----------
 check "en: nostd exit"             "error: function 'main' uses 'exit'; process control is not available in bare-metal environments" \
     "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null

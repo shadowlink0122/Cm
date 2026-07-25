@@ -50,6 +50,9 @@ class ImportPreprocessor {
         imported_symbols;  // インポート済みシンボル（ファイルパス -> シンボルセット）
     std::unordered_set<std::string>
         imported_modules;  // インポート済みモジュール（再インポート防止）
+    // トップレベルの選択importで公開された非修飾シンボル名 → 由来モジュールの正規化パス。
+    // 異なるモジュールから同名シンボルを取り込む曖昧なimportを診断する（M2）
+    std::unordered_map<std::string, std::string> exposed_symbols_;
     std::vector<std::string> import_stack;  // 現在のインポートスタック（循環依存検出）
     std::unordered_map<std::string, std::string> module_cache;  // モジュールキャッシュ（展開済み）
     std::unordered_map<std::string, std::string>
