@@ -524,9 +524,15 @@ void LLVMCodeGen::optimize() {
         }
     }
 
-    // PassBuilder設定
+    // PassBuilder設定。
+    // O2以上ではMergeFunctions（同一コード折り畳み・ICF）を有効化する（M10）。
+    // モノモーフ化はレイアウト同一の特殊化（pick__int/pick__uint等）を別関数として複製するため、証明可能に同一なIR本体をLLVMパスで正準実装へのサンクに折り畳み、生成物サイズと後段コンパイル時間の乗算的膨張を抑える。
+    // 注: 設計文書の「int/uint特殊化のフロント側エイリアス化」案は、符号性が比較・除算・拡張の意味論を変えるため不採用（同一レイアウト≠同一意味論）。
+    // MergeFunctionsは本体が構造的に完全同一の場合のみ折り畳むため安全
     llvm::TargetMachine* TM = targetManager ? targetManager->getTargetMachine() : nullptr;
-    llvm::PassBuilder passBuilder(TM);
+    llvm::PipelineTuningOptions pipelineTuning;
+    pipelineTuning.MergeFunctions = (options.optimizationLevel >= 2);
+    llvm::PassBuilder passBuilder(TM, pipelineTuning);
 
     // 解析マネージャ
     llvm::LoopAnalysisManager LAM;
