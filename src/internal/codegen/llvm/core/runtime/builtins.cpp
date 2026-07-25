@@ -595,6 +595,49 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // 配列 reduce (クロージャ版): (arr, size, fn, init, env)（C6拡張）
+    else if (name == "__builtin_array_reduce_i32_closure") {
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI32Type(),
+                                    {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(),
+                                     ctx.getI32Type(), ctx.getPtrType()},
+                                    false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_array_reduce_i64_closure") {
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI64Type(),
+                                    {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(),
+                                     ctx.getI64Type(), ctx.getPtrType()},
+                                    false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
+    // 配列 forEach/some/every/findIndex (クロージャ版): (arr, size, fn, env)（C6拡張）
+    else if (name == "__builtin_array_forEach_i32_closure" ||
+             name == "__builtin_array_forEach_i64_closure") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getVoidType(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_array_some_i32_closure" ||
+               name == "__builtin_array_some_i64_closure" ||
+               name == "__builtin_array_every_i32_closure" ||
+               name == "__builtin_array_every_i64_closure") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI8Type(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_array_findIndex_i32_closure" ||
+               name == "__builtin_array_findIndex_i64_closure") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI32Type(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // フォーマット出力関数（可変長引数）
     else if (name == "cm_println_format" || name == "cm_print_format") {
         auto funcType =

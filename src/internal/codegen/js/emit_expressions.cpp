@@ -549,10 +549,17 @@ std::string JSCodeGen::emitLambdaRef(const std::string& funcName, const mir::Mir
     if (capturedLocals.empty()) {
         return safeName;
     }
-    // キャプチャ変数をbindでバインド
+    // キャプチャ変数をbindでバインド。
+    // 定数畳み込み等でローカル宣言が省略された変数（inline_values_）は
+    // インライン値を直接バインドする（従来は存在しない変数名を参照しReferenceErrorになっていた）
     std::string boundCall = safeName + ".bind(null";
     for (auto capturedId : capturedLocals) {
-        boundCall += ", " + getLocalVarName(func, capturedId);
+        auto it = inline_values_.find(capturedId);
+        if (it != inline_values_.end()) {
+            boundCall += ", " + it->second;
+        } else {
+            boundCall += ", " + getLocalVarName(func, capturedId);
+        }
     }
     boundCall += ")";
     return boundCall;

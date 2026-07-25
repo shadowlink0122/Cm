@@ -108,6 +108,16 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_map_i64_closure",
         "__builtin_array_filter_closure",
         "__builtin_array_filter_i64_closure",
+        "__builtin_array_reduce_i32_closure",
+        "__builtin_array_reduce_i64_closure",
+        "__builtin_array_forEach_i32_closure",
+        "__builtin_array_forEach_i64_closure",
+        "__builtin_array_some_i32_closure",
+        "__builtin_array_some_i64_closure",
+        "__builtin_array_every_i32_closure",
+        "__builtin_array_every_i64_closure",
+        "__builtin_array_findIndex_i32_closure",
+        "__builtin_array_findIndex_i64_closure",
         // スライス操作
         "cm_slice_get_i8",
         "cm_slice_get_i16",
@@ -462,6 +472,39 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         const bool isFilter = name.find("filter") != std::string::npos;
         return "__cm_unwrap(" + argStrs[0] + ")." + (isFilter ? "filter" : "map") + "((x) => " +
                argStrs[2] + "(" + caps + "x))";
+    }
+    // reduce（クロージャー版）: 初期値はargStrs[3]、キャプチャは[4..]（C6拡張）
+    if ((name == "__builtin_array_reduce_i32_closure" ||
+         name == "__builtin_array_reduce_i64_closure") &&
+        argStrs.size() >= 5) {
+        std::string caps;
+        for (size_t i = 4; i < argStrs.size(); ++i) {
+            caps += argStrs[i] + ", ";
+        }
+        return "__cm_unwrap(" + argStrs[0] + ").reduce((acc, x) => " + argStrs[2] + "(" + caps +
+               "acc, x), " + argStrs[3] + ")";
+    }
+    // forEach/some/every/findIndex（クロージャー版）: キャプチャは[3..]（C6拡張）
+    if ((name.rfind("__builtin_array_forEach_", 0) == 0 ||
+         name.rfind("__builtin_array_some_", 0) == 0 ||
+         name.rfind("__builtin_array_every_", 0) == 0 ||
+         name.rfind("__builtin_array_findIndex_", 0) == 0) &&
+        name.size() > 8 && name.compare(name.size() - 8, 8, "_closure") == 0 &&
+        argStrs.size() >= 4) {
+        std::string caps;
+        for (size_t i = 3; i < argStrs.size(); ++i) {
+            caps += argStrs[i] + ", ";
+        }
+        std::string method = "forEach";
+        if (name.find("_some_") != std::string::npos) {
+            method = "some";
+        } else if (name.find("_every_") != std::string::npos) {
+            method = "every";
+        } else if (name.find("_findIndex_") != std::string::npos) {
+            method = "findIndex";
+        }
+        return "__cm_unwrap(" + argStrs[0] + ")." + method + "((x) => " + argStrs[2] + "(" + caps +
+               "x))";
     }
 
     // スライス操作

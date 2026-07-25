@@ -1320,6 +1320,130 @@ int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predica
     return -1;
 }
 
+// ============================================================
+// 高階関数のクロージャ版（C6拡張）
+// キャプチャ環境ポインタ（コード生成側が構築するi64スロット配列）を
+// コールバックの第一引数として受け取る。シグネチャはキャプチャ数に依存しない
+// ============================================================
+
+int32_t __builtin_array_reduce_i32_closure(int32_t* arr, int64_t size,
+                                           int32_t (*callback)(void*, int32_t, int32_t),
+                                           int32_t init, void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int32_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(env, acc, arr[i]);
+    }
+    return acc;
+}
+
+int64_t __builtin_array_reduce_i64_closure(int64_t* arr, int64_t size,
+                                           int64_t (*callback)(void*, int64_t, int64_t),
+                                           int64_t init, void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int64_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(env, acc, arr[i]);
+    }
+    return acc;
+}
+
+void __builtin_array_forEach_i32_closure(int32_t* arr, int64_t size,
+                                         void (*callback)(void*, int32_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return;
+    for (int64_t i = 0; i < size; i++) {
+        callback(env, arr[i]);
+    }
+}
+
+void __builtin_array_forEach_i64_closure(int64_t* arr, int64_t size,
+                                         void (*callback)(void*, int64_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return;
+    for (int64_t i = 0; i < size; i++) {
+        callback(env, arr[i]);
+    }
+}
+
+bool __builtin_array_some_i32_closure(int32_t* arr, int64_t size,
+                                       bool (*predicate)(void*, int32_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(env, arr[i]))
+            return 1;
+    }
+    return 0;
+}
+
+bool __builtin_array_some_i64_closure(int64_t* arr, int64_t size,
+                                       bool (*predicate)(void*, int64_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(env, arr[i]))
+            return 1;
+    }
+    return 0;
+}
+
+bool __builtin_array_every_i32_closure(int32_t* arr, int64_t size,
+                                        bool (*predicate)(void*, int32_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return 1;
+    for (int64_t i = 0; i < size; i++) {
+        if (!predicate(env, arr[i]))
+            return 0;
+    }
+    return 1;
+}
+
+bool __builtin_array_every_i64_closure(int64_t* arr, int64_t size,
+                                        bool (*predicate)(void*, int64_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return 1;
+    for (int64_t i = 0; i < size; i++) {
+        if (!predicate(env, arr[i]))
+            return 0;
+    }
+    return 1;
+}
+
+int32_t __builtin_array_findIndex_i32_closure(int32_t* arr, int64_t size,
+                                              bool (*predicate)(void*, int32_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(env, arr[i]))
+            return (int32_t)i;
+    }
+    return -1;
+}
+
+int32_t __builtin_array_findIndex_i64_closure(int64_t* arr, int64_t size,
+                                              bool (*predicate)(void*, int64_t), void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !predicate)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (predicate(env, arr[i]))
+            return (int32_t)i;
+    }
+    return -1;
+}
+
 // first: 配列の最初の要素を返す
 int32_t __builtin_array_first_i32(int32_t* arr, int64_t size) {
     CM_HOF_UNWRAP(arr, size);

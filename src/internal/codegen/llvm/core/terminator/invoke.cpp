@@ -18,7 +18,17 @@ namespace cm::codegen::llvm_backend {
 void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& callData,
                                         const std::string& funcName,
                                         std::vector<llvm::Value*>& args) {
-    if (args.size() < 4) {
+    // HOFごとのレイアウト: キャプチャ引数の開始位置と、サンクがenvの後に受け取る
+    // 追加パラメータ数（map/filter/述語系=要素1個、reduce=アキュムレータ+要素の2個）
+    size_t caps_start = 3;
+    size_t extra_params = 1;
+    const bool isReduce = funcName.find("_reduce_") != std::string::npos;
+    if (isReduce) {
+        caps_start = 4;  // [arr, size, fn, init, cap0...]
+        extra_params = 2;
+    }
+
+    if (args.size() < caps_start + 1) {
         return;  // キャプチャ無し（_closure版はrewrite passがキャプチャ有りのみ生成する）
     }
 
@@ -37,10 +47,10 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
         return;  // 解決不能なら変換しない（従来どおり検証エラーで顕在化させ黙殺しない）
     }
 
-    const size_t capCount = args.size() - 3;
+    const size_t capCount = args.size() - caps_start;
     auto* lambdaTy = lambdaFunc->getFunctionType();
-    // ラムダのパラメータは [cap0..capN-1, elem] の並びであること
-    if (lambdaTy->getNumParams() != capCount + 1) {
+    // ラムダのパラメータは [cap0..capN-1, 追加パラメータ...] の並びであること
+    if (lambdaTy->getNumParams() != capCount + extra_params) {
         return;
     }
 
@@ -54,17 +64,27 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
                (t->isIntegerTy() && t->getIntegerBitWidth() <= 64);
     };
     for (size_t i = 0; i < capCount; ++i) {
-        if (!slot_representable(args[3 + i]->getType()) ||
+        if (!slot_representable(args[caps_start + i]->getType()) ||
             !slot_representable(lambdaTy->getParamType(i))) {
             return;  // 集約キャプチャ等は未対応（変換せず検証エラーで顕在化）
         }
     }
 
-    // ランタイム側の要素型・戻り値型（map: elem→elem、filter: elem→i8）
+    // ランタイム側の要素型・戻り値型
+    // map: elem→elem / filter・some・every・findIndex: 述語系はi8 / reduce: acc / forEach: void
     const bool isI64 = funcName.find("_i64") != std::string::npos;
     const bool isFilter = funcName.find("filter") != std::string::npos;
+    const bool isPredicate = funcName.find("_some_") != std::string::npos ||
+                             funcName.find("_every_") != std::string::npos;
+    const bool isFindIndex = funcName.find("_findIndex_") != std::string::npos;
+    const bool isForEach = funcName.find("_forEach_") != std::string::npos;
     llvm::Type* elemTy = isI64 ? i64Ty : i32Ty;
-    llvm::Type* retTy = isFilter ? ctx.getI8Type() : elemTy;
+    llvm::Type* retTy = elemTy;
+    if (isFilter || isPredicate || isFindIndex) {
+        retTy = ctx.getI8Type();
+    } else if (isForEach) {
+        retTy = ctx.getVoidType();
+    }
 
     // 環境配列は関数エントリブロックへalloca（ループ内呼び出しでスタックが伸び続けるのを防ぐ）
     auto* envArrTy = llvm::ArrayType::get(i64Ty, capCount);
@@ -74,7 +94,7 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
 
     // キャプチャ値をi64へ正規化して環境へ格納する
     for (size_t i = 0; i < capCount; ++i) {
-        llvm::Value* v = args[3 + i];
+        llvm::Value* v = args[caps_start + i];
         llvm::Type* t = v->getType();
         llvm::Value* as64 = nullptr;
         if (t->isPointerTy()) {
@@ -92,12 +112,18 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
         builder->CreateStore(as64, slot);
     }
 
-    // サンクを取得または合成する（ラムダ×ランタイム変種ごとに1つ）
-    std::string thunkName =
-        lambdaName + "$env_thunk" + (isFilter ? "_filter" : "_map") + (isI64 ? "_i64" : "_i32");
+    // サンクを取得または合成する（ラムダ×ランタイム変種ごとに1つ。名前はHOF名から導出）
+    std::string variant = funcName.substr(std::string("__builtin_array_").size());
+    std::string thunkName = lambdaName + "$env_thunk_" + variant;
     llvm::Function* thunk = module->getFunction(thunkName);
     if (!thunk) {
-        auto* thunkTy = llvm::FunctionType::get(retTy, {ptrTy, elemTy}, false);
+        // サンクの引数: env + （reduceはacc, elem / それ以外はelem）
+        std::vector<llvm::Type*> thunkParams = {ptrTy};
+        if (isReduce) {
+            thunkParams.push_back(elemTy);  // acc
+        }
+        thunkParams.push_back(elemTy);  // elem
+        auto* thunkTy = llvm::FunctionType::get(retTy, thunkParams, false);
         thunk = llvm::Function::Create(thunkTy, llvm::Function::InternalLinkage, thunkName, module);
         auto* entry = llvm::BasicBlock::Create(ctx.getContext(), "entry", thunk);
         llvm::IRBuilder<> tb(entry);
@@ -127,29 +153,37 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
         };
 
         llvm::Value* envArg = thunk->getArg(0);
-        llvm::Value* elemArg = thunk->getArg(1);
         std::vector<llvm::Value*> lambdaArgs;
         for (size_t i = 0; i < capCount; ++i) {
             auto* slot = tb.CreateConstInBoundsGEP2_64(envArrTy, envArg, 0, i, "env_slot");
             llvm::Value* raw = tb.CreateLoad(i64Ty, slot, "cap_raw");
             lambdaArgs.push_back(adjust(raw, lambdaTy->getParamType(i)));
         }
-        lambdaArgs.push_back(adjust(elemArg, lambdaTy->getParamType(capCount)));
-        llvm::Value* result = tb.CreateCall(lambdaFunc, lambdaArgs, "lambda_ret");
-        // 戻り値をランタイム型へ調整（bool i1はzextで拡張）
-        if (result->getType() != retTy) {
-            if (result->getType()->isIntegerTy(1)) {
-                result = tb.CreateZExt(result, retTy);
-            } else {
-                result = adjust(result, retTy);
-            }
+        // 追加パラメータ（reduce: acc, elem / それ以外: elem）をラムダのパラメータ型へ調整して渡す
+        for (size_t e = 0; e < extra_params; ++e) {
+            llvm::Value* extraArg = thunk->getArg(static_cast<unsigned>(1 + e));
+            lambdaArgs.push_back(adjust(extraArg, lambdaTy->getParamType(capCount + e)));
         }
-        tb.CreateRet(result);
+        llvm::Value* result = tb.CreateCall(lambdaFunc, lambdaArgs, "lambda_ret");
+        if (retTy->isVoidTy()) {
+            tb.CreateRetVoid();
+        } else {
+            // 戻り値をランタイム型へ調整（bool i1はzextで拡張）
+            if (result->getType() != retTy) {
+                if (result->getType()->isIntegerTy(1)) {
+                    result = tb.CreateZExt(result, retTy);
+                } else {
+                    result = adjust(result, retTy);
+                }
+            }
+            tb.CreateRet(result);
+        }
     }
 
-    // args = [arr, size, サンク, env] の固定4引数へ正規化する
-    args.resize(2);
-    args.push_back(thunk);
+    // 引数を正規化する: キャプチャ列を除去し、fnをサンクへ差し替え、envを末尾へ追加
+    // （map/filter/述語系: [arr, size, サンク, env] / reduce: [arr, size, サンク, init, env]）
+    args.resize(caps_start);
+    args[2] = thunk;
     args.push_back(envAlloca);
 }
 

@@ -11,6 +11,7 @@
 #include <numeric>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace cm::mir {
@@ -168,24 +169,29 @@ void MirLowering::rewrite_hof_calls_for_closures() {
             if (func_name.find("_closure") != std::string::npos)
                 continue;
 
-            // 対象の高階関数かチェック
-            bool is_map =
-                (func_name == "__builtin_array_map" || func_name == "__builtin_array_map_i64");
-            bool is_filter = (func_name == "__builtin_array_filter" ||
-                              func_name == "__builtin_array_filter_i64");
-
-            if (!is_map && !is_filter)
+            // 対象の高階関数かチェック（コールバックは第3引数 args[2]。
+            // reduceは第4引数に初期値を持つためargs.back()ではなくインデックスで特定する）
+            static const std::unordered_set<std::string> hof_with_closure_support = {
+                "__builtin_array_map",           "__builtin_array_map_i64",
+                "__builtin_array_filter",        "__builtin_array_filter_i64",
+                "__builtin_array_reduce_i32",    "__builtin_array_reduce_i64",
+                "__builtin_array_forEach_i32",   "__builtin_array_forEach_i64",
+                "__builtin_array_some_i32",      "__builtin_array_some_i64",
+                "__builtin_array_every_i32",     "__builtin_array_every_i64",
+                "__builtin_array_findIndex_i32", "__builtin_array_findIndex_i64",
+            };
+            if (hof_with_closure_support.count(func_name) == 0)
                 continue;
 
-            // 最後の引数がクロージャかチェック
+            // コールバック引数（args[2]）がクロージャかチェック
             if (call_data.args.size() < 3)
                 continue;
 
-            auto& last_arg = call_data.args.back();
-            if (last_arg->kind != MirOperand::Copy && last_arg->kind != MirOperand::Move)
+            auto& fn_arg = call_data.args[2];
+            if (!fn_arg || (fn_arg->kind != MirOperand::Copy && fn_arg->kind != MirOperand::Move))
                 continue;
 
-            auto& place = std::get<MirPlace>(last_arg->data);
+            auto& place = std::get<MirPlace>(fn_arg->data);
             if (place.local >= func->locals.size())
                 continue;
 
@@ -197,9 +203,9 @@ void MirLowering::rewrite_hof_calls_for_closures() {
             call_data.func = MirOperand::function_ref(func_name + "_closure");
 
             // コールバックを関数参照に置き換え
-            call_data.args.back() = MirOperand::function_ref(local_decl.closure_func_name);
+            call_data.args[2] = MirOperand::function_ref(local_decl.closure_func_name);
 
-            // キャプチャ値を引数として追加
+            // キャプチャ値を末尾引数として追加（reduceは初期値の後ろに並ぶ）
             for (LocalId cap_local : local_decl.captured_locals) {
                 call_data.args.push_back(MirOperand::copy(MirPlace{cap_local}));
             }

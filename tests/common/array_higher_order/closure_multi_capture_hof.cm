@@ -40,6 +40,24 @@ int main() {
     long[] lbig = ls.filter((long x) => { return x >= 2; });
     println("{lbig.len()} {lbig[0]} {lbig[1]}");
 
+    // reduce×キャプチャ（従来はランタイムがキャプチャ無しでcallback(acc, elem)を呼び、
+    // ラムダ(base, acc, x)が2引数で呼ばれてガベージを返していた）
+    int rsum = xs.reduce((int acc, int x) => { return acc + x * base + scale; }, 0);
+    println(rsum);
+
+    // some/every/findIndex/forEach×キャプチャ
+    int limit = 2;
+    bool any_big = xs.some((int x) => { return x > limit; });
+    bool all_pos = xs.every((int x) => { return x > limit - 2; });
+    int fidx = xs.findIndex((int x) => { return x * base > 25; });
+    println("{any_big} {all_pos} {fidx}");
+
+    // long要素のreduce×キャプチャ
+    long lbase2 = 1000000000;
+    long[3] lred = [1, 2, 3];
+    long lsum = lred.reduce((long acc, long x) => { return acc + x * lbase2; }, 0 as long);
+    println(lsum);
+
     // ループ内の複数キャプチャmap（環境スタック領域が周回で伸びないこと・値の再構築）
     int total = 0;
     int i = 0;
