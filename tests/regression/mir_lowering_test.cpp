@@ -285,6 +285,15 @@ TEST_F(MirLoweringTest, TempStringDropLetEscape) {
     EXPECT_EQ(count_calls(func, "cm_string_free"), 0);
 }
 
+TEST_F(MirLoweringTest, TempSliceDropExprStmt) {
+    // map結果の無名スライスは読み出し後に解放され、let束縛へエスケープしたものは解放されない
+    auto mir = check_and_lower_case("temp_slice_drop_expr_stmt");
+    const auto& func = *mir->functions[1];  // [0]=add1, [1]=main
+    EXPECT_EQ(func.name, "main");
+    // 式文のmap結果1個だけが解放される（let束縛のkeptは解放されない）
+    EXPECT_EQ(count_calls(func, "cm_slice_free"), 1);
+}
+
 TEST_F(MirLoweringTest, TempStringDropTernaryArm) {
     // 三項演算子の腕で確保された一時は条件付き実行のため解放対象にしない
     // （文末で未初期化ポインタをfreeする危険を避ける）

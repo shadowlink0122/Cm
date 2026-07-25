@@ -196,6 +196,11 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI64Type(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_slice_free") {
+        // void cm_slice_free(i8* slice) — 文一時スライスの解放（C12 dropパス）
+        auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_slice_len" || name == "cm_slice_cap") {
         // i64 cm_slice_len(i8* slice)
         auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);

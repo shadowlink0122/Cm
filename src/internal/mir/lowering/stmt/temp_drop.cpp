@@ -23,6 +23,14 @@ bool is_non_retaining_callee(const std::string& name) {
         name.rfind("cm_format_", 0) == 0 || name.rfind("__builtin_string_", 0) == 0) {
         return true;
     }
+    // スライスの読み取り系と高階関数（map/filter/len等）は引数スライスを保持しない。
+    // 格納系（cm_slice_push_*等）はホワイトリストに含めない
+    if (name.rfind("cm_slice_get", 0) == 0 || name.rfind("__builtin_array_", 0) == 0 ||
+        name == "cm_slice_len" || name == "cm_slice_cap" || name == "cm_slice_first_i32" ||
+        name == "cm_slice_first_i64" || name == "cm_slice_last_i32" ||
+        name == "cm_slice_last_i64" || name == "cm_slice_free") {
+        return true;
+    }
     return name == "cm_string_concat" || name == "cm_strlen" || name == "cm_strcmp" ||
            name == "strlen" || name == "strcmp" || name == "cm_string_free";
 }
@@ -105,6 +113,7 @@ void StmtLowering::begin_stmt_temp_scope(LoweringContext& ctx) {
     ctx.stmt_temp_scope.start_stmt_index = block ? block->statements.size() : 0;
     ctx.stmt_temp_scope.start_block_count = ctx.func->basic_blocks.size();
     ctx.stmt_temp_scope.string_temps.clear();
+    ctx.stmt_temp_scope.slice_temps.clear();
 }
 
 // 文の一時トラッキングを終了し、エスケープしなかった文字列一時へcm_string_free呼び出しを発行する
@@ -116,11 +125,12 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
     auto scope = std::move(ctx.stmt_temp_scope);
     ctx.stmt_temp_scope = LoweringContext::StmtTempScope{};
 
-    if (scope.string_temps.empty()) {
+    if (scope.string_temps.empty() && scope.slice_temps.empty()) {
         return;
     }
 
     std::unordered_set<LocalId> temps(scope.string_temps.begin(), scope.string_temps.end());
+    temps.insert(scope.slice_temps.begin(), scope.slice_temps.end());
     std::unordered_set<LocalId> escaped;
 
     // 文のlowering中に生成されたMIR範囲（開始ブロックの途中以降＋新規ブロック）をスキャンする
@@ -169,17 +179,14 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
         scan_block(ctx.func->basic_blocks[b].get(), 0);
     }
 
-    // エスケープしなかった一時をcm_string_freeで解放する（生成順に解放して問題ない）
-    for (LocalId temp : scope.string_temps) {
-        if (escaped.count(temp) > 0) {
-            continue;
-        }
+    // エスケープしなかった一時を解放する（生成順に解放して問題ない）
+    auto emit_free = [&](LocalId temp, const char* free_func, hir::TypePtr operand_type) {
         BlockId next = ctx.new_block();
         std::vector<MirOperandPtr> args;
-        args.push_back(MirOperand::copy(MirPlace{temp}, hir::make_string()));
+        args.push_back(MirOperand::copy(MirPlace{temp}, std::move(operand_type)));
         auto call_term = std::make_unique<MirTerminator>();
         call_term->kind = MirTerminator::Call;
-        call_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_string_free"),
+        call_term->data = MirTerminator::CallData{MirOperand::function_ref(free_func),
                                                   std::move(args),
                                                   std::nullopt,
                                                   next,
@@ -189,6 +196,21 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
                                                   false};
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(next);
+    };
+    for (LocalId temp : scope.string_temps) {
+        if (escaped.count(temp) == 0) {
+            emit_free(temp, "cm_string_free", hir::make_string());
+        }
+    }
+    // スライス一時（map/filter結果）はヘッダ+データを所有するためcm_slice_freeで解放する
+    for (LocalId temp : scope.slice_temps) {
+        if (escaped.count(temp) == 0) {
+            hir::TypePtr slice_type = nullptr;
+            if (temp < ctx.func->locals.size()) {
+                slice_type = ctx.func->locals[temp].type;
+            }
+            emit_free(temp, "cm_slice_free", slice_type);
+        }
     }
 }
 

@@ -134,6 +134,7 @@ class LoweringContext {
         size_t start_stmt_index = 0;  // 文開始時のstart_block内statement数
         size_t start_block_count = 0;  // 文開始時のブロック総数（以降のブロックが対象）
         std::vector<LocalId> string_temps;  // 文中で新規確保された文字列一時
+        std::vector<LocalId> slice_temps;  // 文中で新規確保されたスライス一時（map/filter結果）
     };
     StmtTempScope stmt_temp_scope;
 
@@ -145,6 +146,13 @@ class LoweringContext {
     void note_string_temp(LocalId id) {
         if (stmt_temp_scope.active && conditional_expr_depth == 0) {
             stmt_temp_scope.string_temps.push_back(id);
+        }
+    }
+
+    // スライス一時（データ所有権を持つ新規確保スライス）を現在の文スコープへ登録する
+    void note_slice_temp(LocalId id) {
+        if (stmt_temp_scope.active && conditional_expr_depth == 0) {
+            stmt_temp_scope.slice_temps.push_back(id);
         }
     }
 

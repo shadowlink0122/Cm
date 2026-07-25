@@ -357,6 +357,13 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     // 次のブロックへ移動
     ctx.switch_to_block(success_block);
 
+    // map/filter系ビルトインの結果はデータ所有権を持つ新規確保スライス。
+    // 文末のdropパス対象として登録する（C12のスライス一時）
+    if (call.func_name.rfind("__builtin_array_map", 0) == 0 ||
+        call.func_name.rfind("__builtin_array_filter", 0) == 0) {
+        ctx.note_slice_temp(result);
+    }
+
     // Bug#10修正: ptr->method()後の書き戻し
     // メソッドがderef_temp(コピー)を変更した場合、*ptrに書き戻す
     if (pending_writeback) {
