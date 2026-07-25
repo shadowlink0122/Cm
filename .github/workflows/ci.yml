@@ -298,6 +298,13 @@ jobs:
         id: sv_tools
         run: scripts/ci/install_sv_tools.sh
 
+      # native O3のparse_option_test/sync_basicが特定ランナーでのみSIGILLになる
+      # 断続的失敗の調査用（CPUモデル依存のコード生成問題の切り分け。arm64ローカル・
+      # x86_64 qemuとも再現せず、失敗runとCPUモデルの相関を取るための計装）
+      - name: Log runner CPU
+        run: |
+          lscpu 2>/dev/null | grep -E "Model name|Flags" | cut -c1-300 ||             sysctl -n machdep.cpu.brand_string || true
+
       - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
         env:

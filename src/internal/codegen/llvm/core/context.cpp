@@ -280,6 +280,11 @@ bool LLVMContext::verify() const {
     return true;
 }
 
+// IRを無条件でstderrへ出力する（CM_DUMP_IRによる非決定性調査用）
+void LLVMContext::dumpIRToStderr() const {
+    module->print(llvm::errs(), nullptr);
+}
+
 // LLVM IR 出力
 void LLVMContext::dumpIR() const {
     std::string ir;

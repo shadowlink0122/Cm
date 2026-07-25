@@ -55,6 +55,13 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
         verifyModule();
     }
 
+    // CM_DUMP_IR=1 で最適化前のLLVM IRをstderrへダンプする（非決定性・プラットフォーム差の調査用）
+    if (const char* dump_pre = std::getenv("CM_DUMP_IR")) {
+        if (dump_pre[0] == '1') {
+            context->dumpIRToStderr();
+        }
+    }
+
     // 3.5. 最適化前のパターン検出と調整
     if (options.optimizationLevel > 0) {
         int adjusted_level2 = OptimizationPassLimiter::adjustOptimizationLevel(
@@ -71,6 +78,13 @@ void LLVMCodeGen::compile(const mir::MirProgram& program) {
 
     // 4. 最適化
     optimize();
+
+    // CM_DUMP_IR=2 で最適化後のIRもダンプする
+    if (const char* dump_env = std::getenv("CM_DUMP_IR")) {
+        if (dump_env[0] == '2') {
+            context->dumpIRToStderr();
+        }
+    }
 
     // 4.5. サニタイザ計装（最適化後に実行することで冗長な検査の重複挿入を避ける。O0でも動作する）
     instrumentSanitizers();
