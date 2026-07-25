@@ -180,55 +180,29 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
     mir_struct->is_css = base_struct->is_css;
     mir_struct->is_extern = base_struct->is_extern;
 
-    // フィールドとレイアウトを計算
-    uint32_t current_offset = 0;
-    uint32_t max_align = 1;
-
+    // フィールドの型を特殊化する。
+    // 注: レイアウト（サイズ・アライメント・オフセット）はここでは計算しない（M13。
+    // レイアウトはLoweringContext::layout_size/layout_alignとLLVMのDataLayoutが唯一の情報源。
+    // スライス要素等の個別サイズが必要な箇所はcalculate_specialized_type_sizeを直接使う）
     for (const auto& field : base_struct->fields) {
         MirStructField mir_field;
         mir_field.name = field.name;
 
-        // 構造を保ったまま型パラメータを置換し、レイアウトはこのツリーで計算する
+        // 構造を保ったまま型パラメータを置換する
         hir::TypePtr size_tree = substitute_type_tree(field.type, type_subst);
-
-        // レイアウトは自然アライメントのCレイアウトで統一計算する（C9: 独自switchとの二重管理を廃止。
-        // 配列フィールドT[N]も要素型の再帰計算でstride不一致を根絶する）
-        uint32_t size = 8, align = 8;
-        if (size_tree) {
-            size = static_cast<uint32_t>(calculate_specialized_type_size(size_tree));
-            align = static_cast<uint32_t>(calculate_specialized_type_align(size_tree));
-        }
 
         // ネストしたジェネリックインスタンスの特殊化を生成し、シンボル名参照へ正規化する
         mir_field.type = to_symbol_type(program, size_tree);
-
-        // アライメント調整
-        if (current_offset % align != 0) {
-            current_offset += align - (current_offset % align);
-        }
-        mir_field.offset = current_offset;
-        current_offset += size;
-        if (align > max_align)
-            max_align = align;
 
         debug_msg("MONO", "  Field: " + field.name + " -> " +
                               (mir_field.type ? hir::type_to_string(*mir_field.type) : "unknown"));
         mir_struct->fields.push_back(std::move(mir_field));
     }
 
-    // 最終的なサイズとアライメントを設定
-    if (current_offset % max_align != 0) {
-        current_offset += max_align - (current_offset % max_align);
-    }
-    mir_struct->size = current_offset;
-    mir_struct->align = max_align;
-
     // プログラムに追加
     program.structs.push_back(std::move(mir_struct));
 
-    debug_msg("MONO", "Generated specialized struct: " + spec_name +
-                          " (size=" + std::to_string(current_offset) +
-                          ", align=" + std::to_string(max_align) + ")");
+    debug_msg("MONO", "Generated specialized struct: " + spec_name);
 }
 
 // 置換済みツリー内のジェネリックインスタンスを特殊化生成し、シンボル名参照へ書き換える

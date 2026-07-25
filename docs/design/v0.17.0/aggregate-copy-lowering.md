@@ -14,8 +14,8 @@ parent: v0.17.0 Design
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
 | C14 | コンパイル時間 | 固定長配列を持つ構造体の代入・値渡しがO2で二次爆発（`int[16384]`フィールドで24秒/6.4GB、コピーがmemcpyでなく全要素SSA展開） | Phase 1実装済み（`assign.cpp`の構造体コピーで128バイト以上の集約を`CreateMemCpy`化。`tests/common/structs/big_struct_copy.cm`で内容保存を回帰固定。byval/sretは未着手） |
-| M12 | コンパイル時間 | 構造体代入が一時変数経由で二重コピーされC14を増幅（コピー省略なし） | 未着手 |
-| M13 | 型システム | MIR側の手計算レイアウト（base.cpp:443・mono_structs.cpp:271）がArray/ネスト構造体/スライスをdefault 8/8で誤計算（現在は未参照のデッドコードだが、参照した瞬間に壊れる地雷、正しい`layout_size`と二重管理） | 一部対応（mono_structs.cpp側は型同一性リファクタリングで`calculate_specialized_type_size`の再帰計算へ置換済み。base.cpp側の一本化は未着手） |
+| M12 | コンパイル時間 | 構造体代入が一時変数経由で二重コピーされC14を増幅（コピー省略なし） | 対応済み（MIRの`CopyPropagation`パス（O1以上）が集約の一時経由コピー（コピー元→一時→最終先）を単一コピーへ畳み込むことを確認し、`tests/unit/mir_pass_test.cpp`の`CopyPropagation_FoldsAggregateCopyChain`で回帰固定。`P b = a; P c = b;`の連鎖・関数戻り値経由とも最適化後MIRで一時が消えることを実測。O0は素直な逐次コピーのまま（未最適化ビルドの期待挙動）） |
+| M13 | 型システム | MIR側の手計算レイアウト（base.cpp:443・mono_structs.cpp:271）がArray/ネスト構造体/スライスをdefault 8/8で誤計算（現在は未参照のデッドコードだが、参照した瞬間に壊れる地雷、正しい`layout_size`と二重管理） | 実装済み（読み手ゼロのデッドデータだった`MirStructField.offset`・`MirStruct.size`・`MirStruct.align`をノード定義ごと撤去し、base.cpp・mono_structs.cpp両方の手計算レイアウトを削除。レイアウトは`LoweringContext::layout_size`/`layout_align`とLLVMのDataLayoutが唯一の情報源になり、参照した瞬間に食い違う地雷と未初期化フィールドを根絶） |
 
 ## 背景と根本原因
 

@@ -386,15 +386,14 @@ std::optional<FieldId> MirLoweringBase::get_field_index(const std::string& struc
 }
 
 // MIR構造体を生成
+// 注: レイアウト（サイズ・アライメント・オフセット）はここでは計算しない。
+// かつてプリミティブのみのswitchで手計算していたが、Array・ネスト構造体・スライスがdefault 8/8へ落ちる誤計算であり、
+// 正しい計算を持つLoweringContext::layout_size/layout_alignとの二重管理の地雷だったため撤去した（M13）
 MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
     MirStruct mir_struct;
     mir_struct.name = st.name;
     mir_struct.is_css = st.is_css;
     mir_struct.is_extern = st.is_extern;
-
-    // フィールドとレイアウトを計算
-    uint32_t current_offset = 0;
-    uint32_t max_align = 1;
 
     for (const auto& field : st.fields) {
         MirStructField mir_field;
@@ -405,61 +404,8 @@ MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
         mir_field.attributes = field.attributes;
         // フィールドデフォルト値を伝播（SV用）
         mir_field.default_value_str = field.default_value_str;
-
-        // 型のサイズとアライメントを取得（簡易版）
-        uint32_t size = 0, align = 1;
-        if (mir_field.type) {
-            switch (mir_field.type->kind) {
-                case hir::TypeKind::Bool:
-                case hir::TypeKind::Tiny:
-                case hir::TypeKind::UTiny:
-                case hir::TypeKind::Char:
-                    size = 1;
-                    align = 1;
-                    break;
-                case hir::TypeKind::Short:
-                case hir::TypeKind::UShort:
-                    size = 2;
-                    align = 2;
-                    break;
-                case hir::TypeKind::Int:
-                case hir::TypeKind::UInt:
-                case hir::TypeKind::Float:
-                    size = 4;
-                    align = 4;
-                    break;
-                case hir::TypeKind::Long:
-                case hir::TypeKind::ULong:
-                case hir::TypeKind::Double:
-                case hir::TypeKind::Pointer:
-                    size = 8;
-                    align = 8;
-                    break;
-                case hir::TypeKind::String:
-                    // 文字列は参照として扱う（簡易実装）
-                    size = 16;  // ptr + len
-                    align = 8;
-                    break;
-                default:
-                    // その他の型はポインタサイズと仮定
-                    size = 8;
-                    align = 8;
-                    break;
-            }
-        }
-
-        // アライメント調整
-        current_offset = (current_offset + align - 1) & ~(align - 1);
-        mir_field.offset = current_offset;
-        current_offset += size;
-        max_align = std::max(max_align, align);
-
         mir_struct.fields.push_back(mir_field);
     }
-
-    // 構造体全体のサイズ（最終アライメント調整）
-    mir_struct.size = (current_offset + max_align - 1) & ~(max_align - 1);
-    mir_struct.align = max_align;
 
     return mir_struct;
 }

@@ -361,6 +361,30 @@ TEST(MirPassTest, CopyPropagation_PropagatesThroughChain) {
     EXPECT_EQ(place.local, a);
 }
 
+TEST(MirPassTest, CopyPropagation_FoldsAggregateCopyChain) {
+    // 構造体の一時変数経由コピー（コピー元→一時→最終先）が単一コピーへ畳み込まれる（M12）。
+    // _b = copy(_a); _c = copy(_b); → _cのコピー元が_aになり、一時_bの二重コピーが省かれる
+    // （関数引数はコピー伝播の対象外のため、_aは通常ローカルとして初期化する）
+    auto f = make_function();
+    auto struct_type = hir::make_named("P");
+    LocalId a = f->add_local("a", struct_type);
+    LocalId b = f->add_local("b", struct_type);
+    LocalId c = f->add_local("c", struct_type);
+    emit(*f, 0, a, rv_use(cint(0)));
+    emit(*f, 0, b, rv_use(use_of(a, struct_type)));
+    emit(*f, 0, c, rv_use(use_of(b, struct_type)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::CopyPropagation cp;
+    EXPECT_TRUE(cp.run(*f));
+
+    const auto& stmt = f->basic_blocks[0]->statements[2];
+    const auto& data = std::get<MirStatement::AssignData>(stmt->data);
+    const auto& use = std::get<MirRvalue::UseData>(data.rvalue->data);
+    const auto& place = std::get<MirPlace>(use.operand->data);
+    EXPECT_EQ(place.local, a);
+}
+
 // ============================================================
 // GVN（共通部分式除去）
 // ============================================================

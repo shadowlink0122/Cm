@@ -476,9 +476,11 @@ struct MirFunction {
 struct MirStructField {
     std::string name;
     hir::TypePtr type;
-    uint32_t offset;                      // バイトオフセット（将来の最適化用）
     std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
     std::string default_value_str;        // デフォルト値の文字列表現（SV用）
+    // 注: バイトオフセットは保持しない。レイアウト（サイズ・アライメント・オフセット）は
+    // LoweringContext::layout_size/layout_align とLLVMのDataLayoutが唯一の情報源であり、
+    // ここへ複製すると二重管理で食い違う（M13）
 };
 
 struct MirStruct {
@@ -487,8 +489,7 @@ struct MirStruct {
     std::string source_file;  // 元ソースファイルパス（モジュール分割用）
     bool is_export = false;   // エクスポートされているか
     std::vector<MirStructField> fields;
-    uint32_t size;   // 構造体全体のサイズ
-    uint32_t align;  // アライメント要求
+    // 注: 構造体全体のサイズ・アライメントは保持しない（MirStructFieldのoffsetと同じ理由。M13）
     bool is_css = false;
     bool is_extern = false;  // extern struct（外部HWモジュール）
 

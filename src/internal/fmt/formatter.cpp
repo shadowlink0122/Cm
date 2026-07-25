@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -696,6 +697,69 @@ std::string Formatter::normalize_operator_spacing(const std::string& code, size_
             changes++;
             prev_char = c;
             continue;
+        }
+
+        // 曖昧性のない二項演算子の前後に不足している空白を追加する（L5）。
+        // 既存の空白は削らない（意図的な整列を保持し、追加のみなので冪等）。
+        // 単独の + - * / % < > & ^ は単項演算子・ジェネリクス（<T>）・ポインタ・指数表記（1e+5）と曖昧なため対象外
+        {
+            static const char* kBinaryOps[] = {
+                // 長いものから順に照合する（"==" より先に "=" に一致させない）
+                "<<=", ">>=", "==", "!=", "<=", ">=", "&&", "||", "+=",
+                "-=",  "*=",  "/=", "%=", "&=", "|=", "^=", "=>", "=",
+            };
+            const char* matched = nullptr;
+            for (const char* op : kBinaryOps) {
+                size_t len = std::strlen(op);
+                if (code.compare(i, len, op) == 0) {
+                    matched = op;
+                    break;
+                }
+            }
+            // operator宣言行（operator bool ==(T other) 等）は宣言スタイル（==( の密着）を保持するため対象外
+            if (matched) {
+                size_t line_start = result.rfind('\n');
+                line_start = (line_start == std::string::npos) ? 0 : line_start + 1;
+                if (result.find("operator ", line_start) != std::string::npos) {
+                    matched = nullptr;
+                }
+            }
+            // "=" 単独一致は、直前が他演算子の一部（! < > 等）でないことを確認する
+            // （"!=" 等は長い候補で先に一致するが、直前文字経由の合成を防ぐ）
+            if (matched && matched[0] == '=' && matched[1] == '\0') {
+                if (prev_char == '!' || prev_char == '<' || prev_char == '>' || prev_char == '=' ||
+                    prev_char == '+' || prev_char == '-' || prev_char == '*' || prev_char == '/' ||
+                    prev_char == '%' || prev_char == '&' || prev_char == '|' || prev_char == '^') {
+                    matched = nullptr;
+                }
+            }
+            // "<=" ">=" は直後にさらに '=' が続く場合（"<==" は無いが安全側）や、
+            // SVの "<=" 代入もCm構文上は比較と同じ整形で問題ない
+            if (matched) {
+                size_t len = std::strlen(matched);
+                char after = (i + len < code.size()) ? code[i + len] : 0;
+                // 演算子の後ろがさらに '=' なら複合の一部（例: "==" の後の '='）なので見送る
+                if (after == '=') {
+                    matched = nullptr;
+                }
+                if (matched) {
+                    // 行頭（継続行の演算子先頭）は行構造を保つため前空白を追加しない
+                    bool at_line_start = result.empty() || result.back() == '\n';
+                    if (!at_line_start && result.back() != ' ' && result.back() != '(' &&
+                        result.back() != '[') {
+                        result += ' ';
+                        changes++;
+                    }
+                    result += matched;
+                    if (after != ' ' && after != '\n' && after != '\r' && after != 0) {
+                        result += ' ';
+                        changes++;
+                    }
+                    i += len - 1;
+                    prev_char = matched[len - 1];
+                    continue;
+                }
+            }
         }
 
         // パイプの前後に空白を追加 (ただし ||, |= は除外)
