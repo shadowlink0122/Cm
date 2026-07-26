@@ -168,15 +168,15 @@ int emit_llvm(BuildContext& ctx, mir::MirProgram& mir) {
 
         // モジュール情報付きの全体コンパイル
         // CM_MODULE_CODEGEN=1でモジュール分割コンパイル経路（compileModules+linkObjects）を使う（H14の実験ゲート）。
-        // vtable使用時（動的ディスパッチ）とサニタイザ有効時は分割経路が未対応のため全体コンパイルへフォールバックする
+        // サニタイザ有効時は分割経路が未対応のため全体コンパイルへフォールバックする（vtableはoriginを介した宣言解決で対応済み）
         cm::codegen::llvm_backend::LLVMCodeGen::ModuleCompileInfo module_info;
         const char* mod_env = std::getenv("CM_MODULE_CODEGEN");
         bool use_module_codegen =
             mod_env && mod_env[0] == '1' &&
             llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::Native &&
             llvm_opts.format == cm::codegen::llvm_backend::LLVMCodeGen::OutputFormat::Executable &&
-            !opts.show_lir_opt && mir.vtables.empty() && !llvm_opts.sanitizeAddress &&
-            !llvm_opts.sanitizeThread && !llvm_opts.sanitizeMemory && !llvm_opts.sanitizeBounds;
+            !opts.show_lir_opt && !llvm_opts.sanitizeAddress && !llvm_opts.sanitizeThread &&
+            !llvm_opts.sanitizeMemory && !llvm_opts.sanitizeBounds;
         if (use_module_codegen) {
             // .oは内容アドレス名（<モジュール>-<ハッシュ>.o）のため、並列コンパイル間で共有しても衝突しない
             std::filesystem::path cache_dir = ".tmp/module-cache";

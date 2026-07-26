@@ -715,10 +715,12 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     }
 
     // === vtable生成 ===
-    // currentProgramが必要なのでダミーで対応は難しい
-    // vtable情報はModuleProgramのvtablesから直接生成
-    // 注意: generateVTables()はMirProgramを必要とするため、モジュール単位ではvtableを個別に処理する必要がある
-    // 現時点ではvtableを使うプログラムは全体コンパイルにフォールバック
+    // 全関数のシグネチャ宣言が済んでいるため、vtableエントリの実装関数はモジュール内の宣言として解決できる。
+    // vtable配列はPrivateLinkageでモジュールごとに複製されるが、エントリはExternalLinkage関数への参照であり、
+    // fat pointer経由の間接呼び出しはポインタ値を運ぶためモジュール境界を越えても正しく動作する
+    if (module.origin) {
+        generateVTables(*module.origin);
+    }
 
     // === 自モジュール関数の実装を変換 ===
     declaredFunctions.clear();
