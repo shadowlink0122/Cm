@@ -324,6 +324,7 @@ enum class MsgId : int {
     TypeNotAllPathsReturn,
     TypeAssignToConstAggregate,
     ImportDuplicateSymbol,
+    ImportNonExportedSymbol,
     Count,
 };
 

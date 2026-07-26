@@ -82,7 +82,18 @@ class ImportPreprocessor {
     // モジュール検索パスを追加
     void add_search_path(const std::filesystem::path& path);
 
+    // 非exportシンボルの選択importへ警告を出す（H7の段階導入。check/lint・--strict時に有効化）
+    void set_warn_non_exported(bool enable) { warn_non_exported_ = enable; }
+
    private:
+    // 非export選択importの警告フラグ（H7）
+    bool warn_non_exported_ = false;
+
+    // 選択importで指定されたアイテムのうち、モジュールのトップレベルで非export関数として定義されているものを返す（H7）。
+    // 型定義（struct/enum/typedef/const）の透過は仕様として維持するため対象外
+    std::vector<std::string> find_non_exported_function_items(
+        const std::string& module_source, const std::vector<std::string>& items);
+
     // インポート文を検出して処理
     std::string process_imports(const std::string& source,
                                 const std::filesystem::path& current_file,

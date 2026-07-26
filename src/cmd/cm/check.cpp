@@ -78,6 +78,8 @@ int run_check(const cli::Options& opts) {
 
             // Import処理
             preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+            // check/lintでは非export関数の選択importへ警告を出す（H7の段階導入）
+            import_preprocessor.set_warn_non_exported(true);
             auto preprocess_result = import_preprocessor.process(code, file);
 
             if (!preprocess_result.success) {

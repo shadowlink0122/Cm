@@ -175,6 +175,10 @@ int run_build(cli::Options& opts, const char* argv0) {
             std::cout << "=== Import Preprocessor ===\n";
         auto phase_preprocess_start = std::chrono::steady_clock::now();
         preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+        // --force-check/--strict指定時は非export関数の選択importへ警告を出す（H7の段階導入）
+        if (opts.force_check) {
+            import_preprocessor.set_warn_non_exported(true);
+        }
         preprocess_result = import_preprocessor.process(code, opts.input_file);
         ctx.phase_preprocess_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                       std::chrono::steady_clock::now() - phase_preprocess_start)

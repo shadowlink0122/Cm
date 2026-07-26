@@ -1,0 +1,14 @@
+// 非export関数の選択import警告（H7）テスト用モジュール
+module util;
+
+export int pub_fn(int x) {
+    return x + 1;
+}
+
+int hidden_fn(int x) {
+    return x * 2;
+}
+
+export struct Data {
+    int v;
+}

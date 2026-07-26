@@ -202,9 +202,13 @@ import std::io::println;
 ### ❌ Using Unexported Symbols
 
 ```cm
-// Error: internal_helper is not exported
+// Warning: internal_helper is not exported
 import ./utils::internal_helper;
 ```
+
+Selectively importing a non-exported function currently works, but `cm check` / `cm lint` and compiles with `--strict` emit a warning (it will become an error in a future version).
+Add `export` to the definition of functions you want to expose.
+Type definitions (struct / enum / const / typedef) remain transparently accessible.
 
 ---
 

@@ -1,0 +1,9 @@
+// 非export関数hidden_fnの選択importはcheck/lintで警告される（exportされたpub_fn・型Dataは警告なし）
+import ./util::{pub_fn, hidden_fn, Data};
+import std::io::println;
+
+int main() {
+    Data d = { v: hidden_fn(pub_fn(1)) };
+    println(d.v);
+    return 0;
+}

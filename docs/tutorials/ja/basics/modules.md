@@ -212,12 +212,16 @@ import std::io::println;
 ### 2. 未エクスポートのシンボル
 
 ```cm
-// ❌ エラー: internal_helper は export されていない
+// ⚠️ 警告: internal_helper は export されていない
 import ./utils::internal_helper;
 
 // ✅ 正しい: export されたシンボルのみ使用可能
 import ./utils::add;
 ```
+
+非export関数の選択importは現在は動作しますが、`cm check` / `cm lint` と `--strict` 付きコンパイルで警告が出ます（将来のバージョンでエラーになります）。
+公開したい関数には定義に `export` を付けてください。
+struct / enum / const / typedef などの型定義は透過的に参照できます。
 
 ---
 

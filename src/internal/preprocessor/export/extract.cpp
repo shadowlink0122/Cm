@@ -328,6 +328,155 @@ std::string ImportPreprocessor::filter_exports(const std::string& module_source,
     return result.str();
 }
 
+// 選択importで指定されたアイテムのうち、モジュールのトップレベルで非export関数として定義されているものを返す（H7）。
+// 波括弧深度0の行だけを見るため、impl内メソッド・関数本体内の呼び出しは対象にならない。
+// 同名がexport定義としても存在する場合（オーバーロード等）は警告しない（保守的判定）
+std::vector<std::string> ImportPreprocessor::find_non_exported_function_items(
+    const std::string& module_source, const std::vector<std::string>& items) {
+    std::set<std::string> wanted(items.begin(), items.end());
+    std::set<std::string> exported_names;
+    std::set<std::string> non_export_funcs;
+
+    std::stringstream input(normalize_export_blocks(module_source));
+    std::string line;
+    int depth = 0;
+
+    // 行内のトップレベル関数定義名を抽出する（"型 名前(" の直前識別子。ジェネリック接頭辞 <T> はスキップ）
+    auto parse_function_name = [](const std::string& s, size_t start) -> std::string {
+        size_t p = start;
+        // ジェネリック接頭辞 <T> / <T: Ord> をスキップ
+        if (p < s.size() && s[p] == '<') {
+            int angle = 0;
+            while (p < s.size()) {
+                if (s[p] == '<')
+                    angle++;
+                else if (s[p] == '>' && --angle == 0) {
+                    p++;
+                    break;
+                }
+                p++;
+            }
+            p = skip_ws(s, p);
+        }
+        // 最初の '(' の直前の識別子が関数名。その前に戻り値型の識別子が必要（"名前(" 単独は関数呼び出し等）
+        size_t paren = s.find('(', p);
+        if (paren == std::string::npos || paren == p)
+            return "";
+        size_t name_end = paren;
+        while (name_end > p && std::isspace(static_cast<unsigned char>(s[name_end - 1])))
+            name_end--;
+        size_t name_start = name_end;
+        while (name_start > p && (std::isalnum(static_cast<unsigned char>(s[name_start - 1])) ||
+                                  s[name_start - 1] == '_'))
+            name_start--;
+        if (name_start == name_end)
+            return "";
+        // 関数名の前に戻り値型のトークンがあること（空白を挟んで識別子・]・*・> のいずれかで終わる）
+        size_t before = name_start;
+        while (before > p && std::isspace(static_cast<unsigned char>(s[before - 1])))
+            before--;
+        if (before == name_start || before == p)
+            return "";
+        char tail = s[before - 1];
+        if (!(std::isalnum(static_cast<unsigned char>(tail)) || tail == '_' || tail == ']' ||
+              tail == '*' || tail == '>'))
+            return "";
+        return s.substr(name_start, name_end - name_start);
+    };
+
+    while (std::getline(input, line)) {
+        size_t pos = skip_ws(line);
+        // 行コメントは無視
+        if (pos + 1 < line.size() && line[pos] == '/' && line[pos + 1] == '/') {
+            continue;
+        }
+        if (depth == 0 && pos < line.size()) {
+            bool has_export = starts_with_keyword(line, pos, "export");
+            size_t decl_pos = has_export ? skip_ws(line, pos + 6) : pos;
+            // 名前列挙形式 export { name1, name2, ... }; は列挙された全名をexport済みとして記録する
+            if (has_export && decl_pos < line.size() && line[decl_pos] == '{') {
+                size_t close = line.find('}', decl_pos);
+                std::string list =
+                    line.substr(decl_pos + 1, close == std::string::npos ? std::string::npos
+                                                                         : close - decl_pos - 1);
+                std::stringstream ss(list);
+                std::string entry;
+                while (std::getline(ss, entry, ',')) {
+                    size_t s = entry.find_first_not_of(" \t");
+                    size_t e = entry.find_last_not_of(" \t");
+                    if (s != std::string::npos) {
+                        exported_names.insert(entry.substr(s, e - s + 1));
+                    }
+                }
+                continue;
+            }
+            // 関数以外の宣言（型定義・impl・import等）は対象外
+            static const char* non_func_kws[] = {"struct",   "enum",   "impl", "const",
+                                                 "typedef",  "import", "use",  "namespace",
+                                                 "operator", "#"};
+            bool is_non_func = false;
+            for (const char* kw : non_func_kws) {
+                if (starts_with_keyword(line, decl_pos, kw) ||
+                    (kw[0] == '#' && line[decl_pos] == '#')) {
+                    is_non_func = true;
+                    break;
+                }
+            }
+            if (!is_non_func) {
+                std::string name = parse_function_name(line, decl_pos);
+                if (!name.empty()) {
+                    if (has_export) {
+                        exported_names.insert(name);
+                    } else if (wanted.count(name) > 0) {
+                        non_export_funcs.insert(name);
+                    }
+                }
+            } else if (has_export) {
+                // export付きの型・const等も「export済み」として名前を記録する（同名関数の誤警告防止）
+                size_t np = decl_pos;
+                while (np < line.size() && !std::isalnum(static_cast<unsigned char>(line[np])) &&
+                       line[np] != '_')
+                    np++;
+                size_t kw_end = np;
+                while (
+                    kw_end < line.size() &&
+                    (std::isalnum(static_cast<unsigned char>(line[kw_end])) || line[kw_end] == '_'))
+                    kw_end++;
+                size_t ns = skip_ws(line, kw_end);
+                size_t ne = ns;
+                while (ne < line.size() &&
+                       (std::isalnum(static_cast<unsigned char>(line[ne])) || line[ne] == '_'))
+                    ne++;
+                if (ne > ns)
+                    exported_names.insert(line.substr(ns, ne - ns));
+            }
+        }
+        // 波括弧深度を更新（文字列リテラル内は数えない）
+        bool in_str = false;
+        for (size_t i = 0; i < line.size(); ++i) {
+            char c = line[i];
+            if (c == '"' && (i == 0 || line[i - 1] != '\\'))
+                in_str = !in_str;
+            if (in_str)
+                continue;
+            if (c == '/' && i + 1 < line.size() && line[i + 1] == '/')
+                break;
+            if (c == '{')
+                depth++;
+            else if (c == '}' && depth > 0)
+                depth--;
+        }
+    }
+
+    std::vector<std::string> result;
+    for (const auto& item : items) {
+        if (non_export_funcs.count(item) > 0 && exported_names.count(item) == 0) {
+            result.push_back(item);
+        }
+    }
+    return result;
+}
+
 std::vector<std::string> ImportPreprocessor::extract_reexports(const std::string& module_source) {
     // export { M }; または export { M, N, ... }; 形式を検出
     std::vector<std::string> reexports;

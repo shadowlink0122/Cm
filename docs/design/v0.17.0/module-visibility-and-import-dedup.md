@@ -12,7 +12,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H7 | 言語 | モジュールの`export`が自由関数に対して未強制で、非export関数を他モジュールからimportして呼べる（カプセル化が機能しない） | 未着手 |
+| H7 | 言語 | モジュールの`export`が自由関数に対して未強制で、非export関数を他モジュールからimportして呼べる（カプセル化が機能しない） | 段階2実装済み（選択importで明示指定された非export自由関数へ警告を出す。破壊的変更回避のためcheck/lintと`--force-check`/`--strict`コンパイル時のみ発火し、通常コンパイルは従来どおり。検出はモジュール元ソースのトップレベル走査で、`export {名前列挙};`形式・ジェネリック接頭辞`<T>`対応、型定義（struct/enum/const/typedef）の透過は仕様として維持。tests/common/modules・advanced_modules・libs/stdの全数スキャンで既存コードへの誤警告ゼロを確認。エラー化と段階4（extract_exported_blocksのnamespace外複製ヘルパーの非修飾公開の抑止）は将来バージョンで実施） |
 | M7 | コンパイル時間 | 選択importの重複排除漏れ（`import std::collections::Vector; import std::json;`で「Duplicate method」例外）、パスベースimportは正しく排除される | 実装済み（真因は3点: (1)大文字開始の末尾セグメントがitemにならず大小文字非区別FSでVector.cm→vector.cmが誤解決されnamespace Vectorとstruct Vectorが衝突、(2)同一ファイルからの2回目以降の選択importが展開済みの型・impl・ネスト領域を再出力、(3)export import構文が未処理でmod.cm経由の選択importが本体を取り込めない。expand.cppの型名item再解釈+filter_exportsの増分モード+ワイルドカード再exportの展開で解消。選択的再export（export import x::{items}、io形式）はMIR組み込みprintln等の意味論を壊すため展開せず素通しを維持） |
 | M2 | 識別子 | 同名シンボルの多重import（`import a::{compute}; import b::{compute};`）がエラーにならず先勝ちで黙って解決される | 実装済み（トップレベルの選択importで公開名→由来パスの表`exposed_symbols_`を管理し、異なるモジュールからの同名取り込みを診断エラー化。エイリアス（`import mod::{x as y}`）による回避に対応するため、ブレース内` as `のモジュールエイリアス誤解釈と、アイテムエイリアスの展開断片内改名（未実装だった）も修正。i18n: ImportDuplicateSymbol） |
 

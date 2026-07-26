@@ -552,6 +552,21 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
             // インポートスタックから削除
             import_stack.pop_back();
 
+            // 非export関数の選択importに警告（H7の段階導入。check/lint・--strict時のみ）。
+            // 展開済みソースではなく元のモジュールソースをトップレベル走査する
+            if (warn_non_exported_ && !import_info.items.empty() && !import_info.is_wildcard) {
+                for (const auto& name :
+                     find_non_exported_function_items(raw_module_source, import_info.items)) {
+                    std::error_code rel_ec;
+                    auto rel_path = std::filesystem::relative(
+                        module_path, std::filesystem::current_path(), rel_ec);
+                    std::cerr << import_info.source_file << ":" << import_info.line_number << ": "
+                              << i18n::msgf(i18n::MsgId::ImportNonExportedSymbol, name,
+                                            rel_ec ? module_path.string() : rel_path.string())
+                              << "\n";
+                }
+            }
+
             // エクスポートフィルタリング（選択的インポートの場合）。
             // 2回目以降は増分モードで新規シンボルのみを出力し、初回展開で出力済みの
             // ネストimport領域・非export型/implの再出力によるDuplicate methodを防ぐ（M7）

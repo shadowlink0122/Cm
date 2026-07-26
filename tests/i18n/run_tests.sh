@@ -87,6 +87,16 @@ check "en: duplicate import symbol" "symbol 'compute' is imported from both" \
 check "ja: duplicate import symbol" "シンボル 'compute' は" \
     "$CM" check --lang=ja "$DIR/dup_import/main.cm"
 
+# ---------- 非export関数の選択import警告（H7） ----------
+check "en: non-export import warn" "warning: function 'hidden_fn' selected by import is not exported from" \
+    "$CM" check "$DIR/non_export_import/main.cm"
+check "ja: non-export import warn" "importで指定された関数 'hidden_fn' は" \
+    "$CM" check --lang=ja "$DIR/non_export_import/main.cm"
+check_absent "non-export import warn: exported fn is silent" "'pub_fn' selected by import" \
+    "$CM" check "$DIR/non_export_import/main.cm"
+check_absent "non-export import warn: type is silent" "'Data' selected by import" \
+    "$CM" check "$DIR/non_export_import/main.cm"
+
 # ---------- no_stdチェッカー（B001・複数プレースホルダ） ----------
 check "en: nostd exit"             "error: function 'main' uses 'exit'; process control is not available in bare-metal environments" \
     "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null
