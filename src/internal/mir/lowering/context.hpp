@@ -138,20 +138,46 @@ class LoweringContext {
     };
     StmtTempScope stmt_temp_scope;
 
-    // 条件付き実行の腕（三項演算子・短絡評価の右辺）の内側では一時を追跡しない。
-    // 文末尾の解放地点で未初期化ポインタをfreeする危険があるため、深度>0の間は登録を抑止する
+    // 条件付き実行の腕（三項演算子・短絡評価の右辺）の内側では文スコープへ一時を登録しない。
+    // 文末尾の解放地点で未初期化ポインタをfreeする危険があるため、深度>0の間は文スコープ登録を抑止する
     int conditional_expr_depth = 0;
 
-    // 文字列一時を現在の文スコープへ登録する（スコープ非アクティブ・条件腕内では何もしない）
+    // 条件腕の一時スコープ（C12）。
+    // 腕内で確保され腕内で完結する一時は、腕ブロック内（mergeへの分岐前）で解放する。
+    // 腕の結果値は result = copy(値) のUseエスケープとして自然に保護される
+    struct ArmTempScope {
+        BlockId start_block = 0;
+        size_t start_stmt_index = 0;
+        size_t start_block_count = 0;
+        std::vector<LocalId> string_temps;
+        std::vector<LocalId> slice_temps;
+    };
+    std::vector<ArmTempScope> arm_temp_scopes;
+
+    // 文字列一時を現在のスコープへ登録する（腕スコープ内なら最内の腕、そうでなければ文スコープ）
     void note_string_temp(LocalId id) {
-        if (stmt_temp_scope.active && conditional_expr_depth == 0) {
+        if (!stmt_temp_scope.active) {
+            return;
+        }
+        if (!arm_temp_scopes.empty()) {
+            arm_temp_scopes.back().string_temps.push_back(id);
+            return;
+        }
+        if (conditional_expr_depth == 0) {
             stmt_temp_scope.string_temps.push_back(id);
         }
     }
 
-    // スライス一時（データ所有権を持つ新規確保スライス）を現在の文スコープへ登録する
+    // スライス一時（データ所有権を持つ新規確保スライス）を現在のスコープへ登録する
     void note_slice_temp(LocalId id) {
-        if (stmt_temp_scope.active && conditional_expr_depth == 0) {
+        if (!stmt_temp_scope.active) {
+            return;
+        }
+        if (!arm_temp_scopes.empty()) {
+            arm_temp_scopes.back().slice_temps.push_back(id);
+            return;
+        }
+        if (conditional_expr_depth == 0) {
             stmt_temp_scope.slice_temps.push_back(id);
         }
     }
@@ -240,5 +266,12 @@ class LoweringContext {
     int64_t layout_size(const hir::TypePtr& type) const;
     int64_t layout_align(const hir::TypePtr& type) const;
 };
+
+// 条件腕の一時スコープの開始/終了（C12。実装はstmt/temp_drop.cpp）。
+// beginは文スコープがアクティブなときだけ腕スコープを積み、積んだかどうかを返す。
+// endはbeginの戻り値を受け取り、積んだ場合のみ腕範囲をエスケープ解析して非エスケープ一時を腕内で解放する。
+// 腕の終端（mergeへの分岐）を設定する前に呼ぶこと
+bool begin_arm_temp_scope(LoweringContext& ctx);
+void end_arm_temp_scope(LoweringContext& ctx, bool pushed);
 
 }  // namespace cm::mir

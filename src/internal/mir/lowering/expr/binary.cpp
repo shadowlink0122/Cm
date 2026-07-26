@@ -329,14 +329,17 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         ctx.set_terminator(
             MirTerminator::switch_int(MirOperand::copy(MirPlace{lhs}), {{1, eval_rhs}}, skip_rhs));
 
-        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12）
+        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12。
+        // 腕スコープでトラッキングし、腕内で完結した一時は腕ブロック内で解放する）
         ctx.switch_to_block(eval_rhs);
         ctx.conditional_expr_depth++;
+        bool and_rhs_arm = begin_arm_temp_scope(ctx);
         LocalId rhs = lower_expression(*bin.rhs, ctx);
         ctx.conditional_expr_depth--;
         // 結果は右辺の値（左辺は既にtrue）
         ctx.push_statement(MirStatement::assign(MirPlace{result},
                                                 MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        end_arm_temp_scope(ctx, and_rhs_arm);
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // 右辺をスキップするブロック（左辺がfalse）
@@ -382,14 +385,17 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                                                 MirRvalue::use(MirOperand::constant(true_const))));
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
-        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12）
+        // 右辺を評価するブロック（条件付き実行のため内側の文字列一時は文末drop対象外・C12。
+        // 腕スコープでトラッキングし、腕内で完結した一時は腕ブロック内で解放する）
         ctx.switch_to_block(eval_rhs);
         ctx.conditional_expr_depth++;
+        bool or_rhs_arm = begin_arm_temp_scope(ctx);
         LocalId rhs = lower_expression(*bin.rhs, ctx);
         ctx.conditional_expr_depth--;
         // 結果は右辺の値（左辺は既にfalse）
         ctx.push_statement(MirStatement::assign(MirPlace{result},
                                                 MirRvalue::use(MirOperand::copy(MirPlace{rhs}))));
+        end_arm_temp_scope(ctx, or_rhs_arm);
         ctx.set_terminator(MirTerminator::goto_block(merge));
 
         // マージブロック

@@ -100,40 +100,19 @@ void collect_rvalue_escapes(const MirRvaluePtr& rvalue, const std::unordered_set
     }
 }
 
-}  // namespace
-
-// 文の一時トラッキングを開始する（既にアクティブなら何もしない＝最外の単純文が勝つ）
-void StmtLowering::begin_stmt_temp_scope(LoweringContext& ctx) {
-    if (ctx.stmt_temp_scope.active) {
-        return;
-    }
-    ctx.stmt_temp_scope.active = true;
-    ctx.stmt_temp_scope.start_block = ctx.current_block;
-    auto* block = ctx.get_current_block();
-    ctx.stmt_temp_scope.start_stmt_index = block ? block->statements.size() : 0;
-    ctx.stmt_temp_scope.start_block_count = ctx.func->basic_blocks.size();
-    ctx.stmt_temp_scope.string_temps.clear();
-    ctx.stmt_temp_scope.slice_temps.clear();
-}
-
-// 文の一時トラッキングを終了し、エスケープしなかった文字列一時へcm_string_free呼び出しを発行する
-void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
-    if (was_active || !ctx.stmt_temp_scope.active) {
-        // ネストした呼び出し（外側の文がトラッキング中）では何もしない
-        return;
-    }
-    auto scope = std::move(ctx.stmt_temp_scope);
-    ctx.stmt_temp_scope = LoweringContext::StmtTempScope{};
-
-    if (scope.string_temps.empty() && scope.slice_temps.empty()) {
+// 指定範囲（開始ブロックの途中以降＋開始時点以降に作られた全ブロック）をエスケープ解析し、
+// エスケープしなかった一時を現在位置で解放する（文スコープ・腕スコープ共通の実装）
+void scan_and_free_temps(LoweringContext& ctx, BlockId start_block, size_t start_stmt_index,
+                         size_t start_block_count, const std::vector<LocalId>& string_temps,
+                         const std::vector<LocalId>& slice_temps) {
+    if (string_temps.empty() && slice_temps.empty()) {
         return;
     }
 
-    std::unordered_set<LocalId> temps(scope.string_temps.begin(), scope.string_temps.end());
-    temps.insert(scope.slice_temps.begin(), scope.slice_temps.end());
+    std::unordered_set<LocalId> temps(string_temps.begin(), string_temps.end());
+    temps.insert(slice_temps.begin(), slice_temps.end());
     std::unordered_set<LocalId> escaped;
 
-    // 文のlowering中に生成されたMIR範囲（開始ブロックの途中以降＋新規ブロック）をスキャンする
     auto scan_block = [&](const BasicBlock* block, size_t from_index) {
         if (!block) {
             return;
@@ -167,15 +146,15 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
                 }
             } else if (term.kind == MirTerminator::Return) {
                 // 戻り値ローカル経由の使用は事前の代入で検出済みだが、保守的に全一時を保持する
-                // （単純文のトラッキング範囲でReturnが現れるのは?演算子の早期return経路のみ）
+                // （トラッキング範囲でReturnが現れるのは?演算子の早期return経路のみ）
             }
         }
     };
 
-    if (scope.start_block < ctx.func->basic_blocks.size()) {
-        scan_block(ctx.func->basic_blocks[scope.start_block].get(), scope.start_stmt_index);
+    if (start_block < ctx.func->basic_blocks.size()) {
+        scan_block(ctx.func->basic_blocks[start_block].get(), start_stmt_index);
     }
-    for (size_t b = scope.start_block_count; b < ctx.func->basic_blocks.size(); ++b) {
+    for (size_t b = start_block_count; b < ctx.func->basic_blocks.size(); ++b) {
         scan_block(ctx.func->basic_blocks[b].get(), 0);
     }
 
@@ -197,13 +176,13 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
         ctx.set_terminator(std::move(call_term));
         ctx.switch_to_block(next);
     };
-    for (LocalId temp : scope.string_temps) {
+    for (LocalId temp : string_temps) {
         if (escaped.count(temp) == 0) {
             emit_free(temp, "cm_string_free", hir::make_string());
         }
     }
     // スライス一時（map/filter結果）はヘッダ+データを所有するためcm_slice_freeで解放する
-    for (LocalId temp : scope.slice_temps) {
+    for (LocalId temp : slice_temps) {
         if (escaped.count(temp) == 0) {
             hir::TypePtr slice_type = nullptr;
             if (temp < ctx.func->locals.size()) {
@@ -212,6 +191,62 @@ void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
             emit_free(temp, "cm_slice_free", slice_type);
         }
     }
+}
+
+}  // namespace
+
+// 条件腕の一時スコープを開始する（文スコープ非アクティブ時は何もしない）
+bool begin_arm_temp_scope(LoweringContext& ctx) {
+    if (!ctx.stmt_temp_scope.active) {
+        return false;
+    }
+    LoweringContext::ArmTempScope scope;
+    scope.start_block = ctx.current_block;
+    auto* block = ctx.get_current_block();
+    scope.start_stmt_index = block ? block->statements.size() : 0;
+    scope.start_block_count = ctx.func->basic_blocks.size();
+    ctx.arm_temp_scopes.push_back(std::move(scope));
+    return true;
+}
+
+// 条件腕の一時スコープを終了し、腕内で完結した一時を腕ブロック内で解放する。
+// 腕の結果値（result = copy(値)）はUseエスケープとして自然に保護される
+void end_arm_temp_scope(LoweringContext& ctx, bool pushed) {
+    if (!pushed || ctx.arm_temp_scopes.empty()) {
+        return;
+    }
+    auto scope = std::move(ctx.arm_temp_scopes.back());
+    ctx.arm_temp_scopes.pop_back();
+    scan_and_free_temps(ctx, scope.start_block, scope.start_stmt_index, scope.start_block_count,
+                        scope.string_temps, scope.slice_temps);
+}
+
+// 文の一時トラッキングを開始する（既にアクティブなら何もしない＝最外の単純文が勝つ）
+void StmtLowering::begin_stmt_temp_scope(LoweringContext& ctx) {
+    if (ctx.stmt_temp_scope.active) {
+        return;
+    }
+    ctx.stmt_temp_scope.active = true;
+    ctx.stmt_temp_scope.start_block = ctx.current_block;
+    auto* block = ctx.get_current_block();
+    ctx.stmt_temp_scope.start_stmt_index = block ? block->statements.size() : 0;
+    ctx.stmt_temp_scope.start_block_count = ctx.func->basic_blocks.size();
+    ctx.stmt_temp_scope.string_temps.clear();
+    ctx.stmt_temp_scope.slice_temps.clear();
+}
+
+// 文の一時トラッキングを終了し、エスケープしなかった文字列一時へcm_string_free呼び出しを発行する
+void StmtLowering::end_stmt_temp_scope(LoweringContext& ctx, bool was_active) {
+    if (was_active || !ctx.stmt_temp_scope.active) {
+        // ネストした呼び出し（外側の文がトラッキング中）では何もしない
+        return;
+    }
+    auto scope = std::move(ctx.stmt_temp_scope);
+    ctx.stmt_temp_scope = LoweringContext::StmtTempScope{};
+
+    // 文のlowering中に生成されたMIR範囲（開始ブロックの途中以降＋新規ブロック）をスキャンして解放する
+    scan_and_free_temps(ctx, scope.start_block, scope.start_stmt_index, scope.start_block_count,
+                        scope.string_temps, scope.slice_temps);
 }
 
 }  // namespace cm::mir

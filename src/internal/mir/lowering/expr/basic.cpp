@@ -486,21 +486,26 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     ctx.set_terminator(
         MirTerminator::switch_int(MirOperand::copy(MirPlace{cond}), {{1, then_block}}, else_block));
 
-    // then/else部は条件付き実行のため、内側で確保される文字列一時は文末dropの対象外にする（C12）
+    // then/else部は条件付き実行のため、内側で確保される文字列一時は文末dropの対象外にする（C12）。
+    // 代わりに腕スコープでトラッキングし、腕内で完結した一時は腕ブロック内（merge分岐前）で解放する
     ctx.conditional_expr_depth++;
 
     // then部
     ctx.switch_to_block(then_block);
+    bool then_arm = begin_arm_temp_scope(ctx);
     LocalId then_value = lower_expression(*ternary.then_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{then_value}))));
+    end_arm_temp_scope(ctx, then_arm);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
 
     // else部
     ctx.switch_to_block(else_block);
+    bool else_arm = begin_arm_temp_scope(ctx);
     LocalId else_value = lower_expression(*ternary.else_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{else_value}))));
+    end_arm_temp_scope(ctx, else_arm);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
 
     ctx.conditional_expr_depth--;
