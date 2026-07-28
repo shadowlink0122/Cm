@@ -360,7 +360,8 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
     // map/filter系ビルトインの結果はデータ所有権を持つ新規確保スライス。
     // 文末のdropパス対象として登録する（C12のスライス一時）
     if (call.func_name.rfind("__builtin_array_map", 0) == 0 ||
-        call.func_name.rfind("__builtin_array_filter", 0) == 0) {
+        call.func_name.rfind("__builtin_array_filter", 0) == 0 ||
+        call.func_name == "__builtin_string_chars") {
         ctx.note_slice_temp(result);
     }
 

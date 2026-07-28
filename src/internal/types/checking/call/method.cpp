@@ -634,6 +634,12 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
                        debug::Level::Debug);
         return ast::make_uint();
     }
+    if (member.member == "chars") {
+        if (!member.args.empty()) {
+            error(current_span_, "String chars() takes no arguments");
+        }
+        return ast::make_array(ast::make_uint());
+    }
     if (member.member == "codepoint_at") {
         if (member.args.size() != 1) {
             error(current_span_, "String codepoint_at() takes 1 argument");

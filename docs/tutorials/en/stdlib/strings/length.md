@@ -36,5 +36,7 @@ int main() {
 
 - In v0.17.0 the meaning of `len()` changed from byte count to code point count. ASCII-only strings are unaffected. Use `byte_len()` when you need the byte count
 - Indices of `substring()` / `slice()` are code-point based (negative indices count from the end). `codepoint_at(i)` returns the Unicode scalar value at code-point index `i` as `uint` (0 when out of range)
+- `chars()` returns the code points as a `uint[]` slice; iterate with `for (cp in s.chars())`
+- `indexOf()` returns a code-point index (`"あいうえお".indexOf("うえ")` is 2; -1 when not found)
 - `charAt()` / `at()` remain byte-based access (the byte-level API paired with `byte_len()`)
 - The JS backend counts surrogate pairs (such as emoji) as one code point

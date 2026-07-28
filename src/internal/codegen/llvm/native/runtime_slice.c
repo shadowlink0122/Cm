@@ -51,6 +51,52 @@ void cm_slice_free(void* slice_ptr) {
     cm_dealloc(slice);
 }
 
+// 文字列のコードポイント列をuint(i32)スライスで返す（H9のchars()。for-in列挙用の実体化スライス）
+void* __builtin_string_chars(const char* str) {
+    // コードポイント数を数える（継続バイト0b10xxxxxxを除外）
+    int64_t n = 0;
+    if (str) {
+        for (const unsigned char* p = (const unsigned char*)str; *p; p++) {
+            if ((*p & 0xC0) != 0x80) {
+                n++;
+            }
+        }
+    }
+    CmSlice* slice = (CmSlice*)cm_slice_new(sizeof(int32_t), n > 0 ? n : 1);
+    if (!slice) {
+        return NULL;
+    }
+    int32_t* out = (int32_t*)slice->data;
+    int64_t idx = 0;
+    if (str) {
+        const unsigned char* p = (const unsigned char*)str;
+        while (*p && idx < n) {
+            unsigned char b0 = *p;
+            uint32_t cp = 0;
+            int adv = 1;
+            if (b0 < 0x80) {
+                cp = b0;
+            } else if ((b0 & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x1F) << 6) | (uint32_t)(p[1] & 0x3F);
+                adv = 2;
+            } else if ((b0 & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) |
+                     (uint32_t)(p[2] & 0x3F);
+                adv = 3;
+            } else if ((b0 & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+                       (p[3] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x07) << 18) | ((uint32_t)(p[1] & 0x3F) << 12) |
+                     ((uint32_t)(p[2] & 0x3F) << 6) | (uint32_t)(p[3] & 0x3F);
+                adv = 4;
+            }
+            out[idx++] = (int32_t)cp;
+            p += adv;
+        }
+    }
+    slice->len = idx;
+    return slice;
+}
+
 // 長さを取得
 int64_t cm_slice_len(void* slice_ptr) {
     if (!slice_ptr)

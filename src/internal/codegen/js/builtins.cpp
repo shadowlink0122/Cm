@@ -62,6 +62,7 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_string_len",
         "__builtin_string_codepoint_len",
         "__builtin_string_codepoint_at",
+        "__builtin_string_chars",
         "__builtin_string_charAt",
         "__builtin_string_substring",
         "__builtin_string_indexOf",
@@ -398,7 +399,14 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
     }
     if (name == "__builtin_string_indexOf" && argStrs.size() >= 2) {
-        return argStrs[0] + ".indexOf(" + argStrs[1] + ")";
+        // 戻り値はコードポイント添字（.indexOfのUTF-16単位をスプレッドで変換。未検出は-1）
+        return "((s, t) => { const i = s.indexOf(t); return i < 0 ? -1 : [...s.slice(0, "
+               "i)].length; })(" +
+               argStrs[0] + ", " + argStrs[1] + ")";
+    }
+    if (name == "__builtin_string_chars" && argStrs.size() >= 1) {
+        // コードポイント列の配列（jsのスライスは配列表現）
+        return "[..." + argStrs[0] + "].map((c) => c.codePointAt(0))";
     }
     if (name == "__builtin_string_toUpperCase" && argStrs.size() >= 1) {
         return argStrs[0] + ".toUpperCase()";

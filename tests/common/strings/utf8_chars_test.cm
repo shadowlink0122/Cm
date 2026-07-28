@@ -1,0 +1,28 @@
+//! platform: !sv
+import std::io::println;
+
+// H9回帰: chars()がコードポイント列のuint[]スライスを返しfor-inで列挙できること、
+// indexOf()の戻り値がコードポイント添字であること（従来はnative=バイト・js=UTF-16単位で不一致）を
+// 全バックエンドで検証する
+
+int main() {
+    // chars(): ASCII・日本語・絵文字の混在
+    string s = "aあ😀";
+    uint[] cps = s.chars();
+    println(cps.len());
+    for (cp in cps) {
+        println(cp);
+    }
+
+    // 空文字列のchars()
+    string empty = "";
+    uint[] none = empty.chars();
+    println(none.len());
+
+    // indexOf: ASCII・マルチバイト・未検出
+    println("abcdef".indexOf("cd"));
+    println("あいうえお".indexOf("うえ"));
+    println("a😀b".indexOf("b"));
+    println("xyz".indexOf("q"));
+    return 0;
+}

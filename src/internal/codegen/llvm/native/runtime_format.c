@@ -1014,13 +1014,20 @@ uint32_t __builtin_string_codepoint_at(const char* str, int64_t index) {
     return 0;
 }
 
+// indexOfの戻り値はコードポイント添字（H9。従来はバイトオフセットでjs=UTF-16単位と不一致だった）。未検出は-1
 int64_t __builtin_string_indexOf(const char* str, const char* substr) {
     if (!str || !substr)
         return -1;
     const char* pos = strstr(str, substr);
     if (!pos)
         return -1;
-    return (int64_t)(pos - str);
+    int64_t cp_index = 0;
+    for (const unsigned char* p = (const unsigned char*)str; p < (const unsigned char*)pos; p++) {
+        if ((*p & 0xC0) != 0x80) {
+            cp_index++;
+        }
+    }
+    return cp_index;
 }
 
 char* __builtin_string_toUpperCase(const char* str) {
