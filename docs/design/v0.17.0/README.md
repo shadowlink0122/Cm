@@ -33,7 +33,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 ### ランタイム・コレクション・文字列・ビルド
 - [文字列のUTF-8対応とStringBuilder](strings-utf8-and-stringbuilder.md) — H9
 - [チェーンレシーバの解決](chain-receiver-resolution.md) — H10
-- [インクリメンタルビルドと並列コード生成](incremental-build-and-parallel-codegen.md) — H14 / M6（実装済み） / M10
+- [インクリメンタルビルドと並列コード生成](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) — H14 / M6 / M10（全項目実装済み・archiveへ移動。CM_MODULE_CODEGENの既定有効化はsoak後判断）
 - [その他の診断とLow優先度項目](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — M18 / L1 / L2 / L3 / L5 / L6 / L7（全項目実装済み・archiveへ移動）
 
 ## 着手順の推奨
