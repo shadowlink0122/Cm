@@ -267,11 +267,21 @@ class LoweringContext {
     int64_t layout_align(const hir::TypePtr& type) const;
 };
 
+// 腕の値の所有権判定結果（C12三項結果一時）。
+// 腕の値がその腕で登録されたfresh一時で、唯一のエスケープ先が結果ローカルの場合に所有権が結果へ移動する
+enum class ArmValueOwnership { None, String, Slice };
+
 // 条件腕の一時スコープの開始/終了（C12。実装はstmt/temp_drop.cpp）。
 // beginは文スコープがアクティブなときだけ腕スコープを積み、積んだかどうかを返す。
 // endはbeginの戻り値を受け取り、積んだ場合のみ腕範囲をエスケープ解析して非エスケープ一時を腕内で解放する。
 // 腕の終端（mergeへの分岐）を設定する前に呼ぶこと
 bool begin_arm_temp_scope(LoweringContext& ctx);
 void end_arm_temp_scope(LoweringContext& ctx, bool pushed);
+
+// 所有権判定付きの腕スコープ終了（三項演算子用）。
+// arm_valueが腕内登録のfresh一時で、腕内での使用が読み取り・非保持呼び出しと
+// result_localへのUseコピー1回だけの場合、所有権がresultへ移動したとみなし種別を返す
+ArmValueOwnership end_arm_temp_scope(LoweringContext& ctx, bool pushed, LocalId arm_value,
+                                     LocalId result_local);
 
 }  // namespace cm::mir

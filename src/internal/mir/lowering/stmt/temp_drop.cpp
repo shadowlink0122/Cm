@@ -221,6 +221,136 @@ void end_arm_temp_scope(LoweringContext& ctx, bool pushed) {
                         scope.string_temps, scope.slice_temps);
 }
 
+// 所有権判定付きの腕スコープ終了（三項演算子用）。
+// arm_valueがこの腕で登録されたfresh一時で、腕内での使用が読み取り・非保持呼び出しと
+// result_localへのUseコピー1回だけの場合、所有権が結果へ移動したとみなして種別を返す。
+// 両腕がともに所有を返した場合のみ、呼び出し側は結果ローカルを外側スコープの所有一時として登録できる
+ArmValueOwnership end_arm_temp_scope(LoweringContext& ctx, bool pushed, LocalId arm_value,
+                                     LocalId result_local) {
+    if (!pushed || ctx.arm_temp_scopes.empty()) {
+        return ArmValueOwnership::None;
+    }
+    auto scope = std::move(ctx.arm_temp_scopes.back());
+    ctx.arm_temp_scopes.pop_back();
+
+    // arm_valueの登録種別
+    ArmValueOwnership kind = ArmValueOwnership::None;
+    for (LocalId t : scope.string_temps) {
+        if (t == arm_value) {
+            kind = ArmValueOwnership::String;
+            break;
+        }
+    }
+    if (kind == ArmValueOwnership::None) {
+        for (LocalId t : scope.slice_temps) {
+            if (t == arm_value) {
+                kind = ArmValueOwnership::Slice;
+                break;
+            }
+        }
+    }
+
+    // 腕範囲を走査し、arm_valueの使用が「result_localへのUseコピー1回+読み取り/非保持呼び出しのみ」かを確認する
+    bool sole_transfer = true;
+    int result_copies = 0;
+    if (kind != ArmValueOwnership::None) {
+        auto uses_arm_value = [&](const MirOperandPtr& op) {
+            if (!op || (op->kind != MirOperand::Copy && op->kind != MirOperand::Move)) {
+                return false;
+            }
+            const auto& place = std::get<MirPlace>(op->data);
+            return place.local == arm_value;
+        };
+        auto scan_block = [&](const BasicBlock* block, size_t from_index) {
+            if (!block) {
+                return;
+            }
+            for (size_t i = from_index; i < block->statements.size(); ++i) {
+                const auto& stmt = block->statements[i];
+                if (!stmt || stmt->kind != MirStatement::Assign) {
+                    continue;
+                }
+                const auto& assign = std::get<MirStatement::AssignData>(stmt->data);
+                if (!assign.rvalue) {
+                    continue;
+                }
+                switch (assign.rvalue->kind) {
+                    case MirRvalue::Use: {
+                        const auto& use = std::get<MirRvalue::UseData>(assign.rvalue->data);
+                        if (uses_arm_value(use.operand)) {
+                            if (assign.place.projections.empty() &&
+                                assign.place.local == result_local) {
+                                result_copies++;
+                            } else {
+                                sole_transfer = false;
+                            }
+                        }
+                        break;
+                    }
+                    case MirRvalue::BinaryOp: {
+                        // 読み取りのみ（比較等）。所有権は移らない
+                        break;
+                    }
+                    case MirRvalue::UnaryOp:
+                    case MirRvalue::FormatConvert:
+                        break;
+                    case MirRvalue::Ref:
+                        if (std::get<MirRvalue::RefData>(assign.rvalue->data).place.local ==
+                            arm_value) {
+                            sole_transfer = false;
+                        }
+                        break;
+                    case MirRvalue::Aggregate:
+                        for (const auto& op :
+                             std::get<MirRvalue::AggregateData>(assign.rvalue->data).operands) {
+                            if (uses_arm_value(op)) {
+                                sole_transfer = false;
+                            }
+                        }
+                        break;
+                    case MirRvalue::Cast:
+                        if (uses_arm_value(
+                                std::get<MirRvalue::CastData>(assign.rvalue->data).operand)) {
+                            sole_transfer = false;
+                        }
+                        break;
+                }
+            }
+            if (block->terminator && block->terminator->kind == MirTerminator::Call) {
+                const auto& call = std::get<MirTerminator::CallData>(block->terminator->data);
+                std::string callee;
+                if (call.func && call.func->kind == MirOperand::FunctionRef) {
+                    callee = std::get<std::string>(call.func->data);
+                }
+                bool retains = callee.empty() || !is_non_retaining_callee(callee);
+                for (const auto& arg : call.args) {
+                    if (retains && uses_arm_value(arg)) {
+                        sole_transfer = false;
+                    }
+                }
+            } else if (block->terminator && block->terminator->kind == MirTerminator::Return) {
+                // return経由の使用は保守的に所有権移動なしとみなす
+                sole_transfer = false;
+            }
+        };
+        if (scope.start_block < ctx.func->basic_blocks.size()) {
+            scan_block(ctx.func->basic_blocks[scope.start_block].get(), scope.start_stmt_index);
+        }
+        for (size_t b = scope.start_block_count; b < ctx.func->basic_blocks.size(); ++b) {
+            scan_block(ctx.func->basic_blocks[b].get(), 0);
+        }
+    }
+
+    // 腕内で完結した一時の解放は従来どおり行う（arm_valueはresultへのエスケープで保護される）
+    scan_and_free_temps(ctx, scope.start_block, scope.start_stmt_index, scope.start_block_count,
+                        scope.string_temps, scope.slice_temps);
+
+    if (kind != ArmValueOwnership::None && sole_transfer && result_copies == 1) {
+        return kind;
+    }
+    return ArmValueOwnership::None;
+}
+
 // 文の一時トラッキングを開始する（既にアクティブなら何もしない＝最外の単純文が勝つ）
 void StmtLowering::begin_stmt_temp_scope(LoweringContext& ctx) {
     if (ctx.stmt_temp_scope.active) {

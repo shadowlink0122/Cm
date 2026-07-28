@@ -496,7 +496,7 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     LocalId then_value = lower_expression(*ternary.then_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{then_value}))));
-    end_arm_temp_scope(ctx, then_arm);
+    ArmValueOwnership then_owned = end_arm_temp_scope(ctx, then_arm, then_value, result);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
 
     // else部
@@ -505,13 +505,22 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     LocalId else_value = lower_expression(*ternary.else_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{else_value}))));
-    end_arm_temp_scope(ctx, else_arm);
+    ArmValueOwnership else_owned = end_arm_temp_scope(ctx, else_arm, else_value, result);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
 
     ctx.conditional_expr_depth--;
 
     // マージポイント
     ctx.switch_to_block(merge_block);
+
+    // 三項結果一時の所有権登録（C12）: 両腕がともに「fresh一時の所有権を結果へ移した」場合のみ、
+    // 結果をどちらの経路でも所有バッファとして外側スコープ（文または外側の腕）へ登録する。
+    // 片腕でも借用値（変数コピー・リテラル）なら所有権が条件依存になるため登録しない
+    if (then_owned == ArmValueOwnership::String && else_owned == ArmValueOwnership::String) {
+        ctx.note_string_temp(result);
+    } else if (then_owned == ArmValueOwnership::Slice && else_owned == ArmValueOwnership::Slice) {
+        ctx.note_slice_temp(result);
+    }
 
     return result;
 }
