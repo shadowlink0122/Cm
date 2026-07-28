@@ -67,6 +67,14 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 
 ---
 
+## 文字列
+
+| モジュール | 説明 | ドキュメント |
+|-----------|------|------------|
+| `std::strings::builder` | `StringBuilder` 可変文字列バッファ（償却O(1)追記） | [StringBuilder](strings/builder.html) |
+
+---
+
 ## 標準ライブラリの拡張
 
 独自のNativeモジュールを C/C++/Objective-C++ で作成する方法:

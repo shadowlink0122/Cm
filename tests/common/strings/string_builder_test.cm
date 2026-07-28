@@ -1,0 +1,46 @@
+//! platform: !sv
+import std::strings::StringBuilder;
+import std::io::println;
+
+// H9第1段回帰: StringBuilderの基本操作（append/to_string/len/clear）と、
+// ループ連結との結果一致を全バックエンド（jit/native/wasm/js/ts）で検証する。
+// SVは動的文字列バッファが合成不能のため対象外
+
+int main() {
+    // 基本操作
+    StringBuilder sb();
+    sb.append("hello");
+    sb.append(", ");
+    sb.append("world");
+    println(sb.to_string());
+    println(sb.len());
+
+    // to_string後も継続して追記できる
+    sb.append("!");
+    println(sb.to_string());
+
+    // clearで空になり容量は再利用される
+    sb.clear();
+    println(sb.len());
+    sb.append("re");
+    sb.append("used");
+    println(sb.to_string());
+
+    // 空文字列のappendは長さを変えない
+    sb.append("");
+    println(sb.len());
+
+    // ループ連結との結果一致（数値は補間で文字列化して追記）
+    StringBuilder nums();
+    string joined = "";
+    int i = 0;
+    while (i < 5) {
+        nums.append("{i},");
+        joined = joined + "{i},";
+        i++;
+    }
+    string built = nums.to_string();
+    println(built);
+    println(built == joined);
+    return 0;
+}

@@ -333,7 +333,12 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
                 if (calleeFunc->is_extern) {
-                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                    if (isBuiltinFunction(calleeFunc->name)) {
+                        // ランタイムビルトイン（cm_sb_*等のextern "C"宣言）はJS FFI名へマップしない
+                        // （mapExternJsNameは全アンダースコアをドット化するためcm.sb.create等に化ける）
+                        funcName = calleeFunc->name;
+                    } else if (calleeFunc->package_name == "js" ||
+                               calleeFunc->package_name.empty()) {
                         funcName = mapExternJsName(calleeFunc->name);
                     } else if (calleeFunc->package_name != "libc") {
                         // 外部パッケージ: pkg.func() 形式に変換
@@ -565,7 +570,12 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
             if (it_func != function_map_.end()) {
                 calleeFunc = it_func->second;
                 if (calleeFunc->is_extern) {
-                    if (calleeFunc->package_name == "js" || calleeFunc->package_name.empty()) {
+                    if (isBuiltinFunction(calleeFunc->name)) {
+                        // ランタイムビルトイン（cm_sb_*等のextern "C"宣言）はJS FFI名へマップしない
+                        // （mapExternJsNameは全アンダースコアをドット化するためcm.sb.create等に化ける）
+                        funcName = calleeFunc->name;
+                    } else if (calleeFunc->package_name == "js" ||
+                               calleeFunc->package_name.empty()) {
                         funcName = mapExternJsName(calleeFunc->name);
                     } else if (calleeFunc->package_name != "libc") {
                         // 外部パッケージ: pkg.func() 形式に変換

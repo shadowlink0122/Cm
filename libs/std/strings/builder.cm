@@ -1,0 +1,52 @@
+// std/strings/builder.cm - StringBuilder（可変文字列バッファ）
+// ループ連結のO(n²)（毎回の全コピー）を、容量倍増バッファへの償却O(1)追記で解消する（H9第1段）。
+// バッファ実体はランタイム（cm_sb_*）が保持し、Cm側はlongハンドルのラッパー
+module std.strings.builder;
+
+// ランタイムextern宣言（内部使用）
+extern "C" long cm_sb_create();
+extern "C" void cm_sb_append(long handle, string s);
+extern "C" string cm_sb_to_string(long handle);
+extern "C" long cm_sb_len(long handle);
+extern "C" void cm_sb_clear(long handle);
+extern "C" void cm_sb_destroy(long handle);
+
+// =============================================================
+// StringBuilder - 可変文字列バッファ
+// =============================================================
+
+export struct StringBuilder {
+    long handle;
+}
+
+export impl StringBuilder {
+    // コンストラクタ: 空のバッファを作成する
+    self() {
+        self.handle = cm_sb_create();
+    }
+
+    // 末尾へ文字列を追記する（償却O(1)）
+    void append(string s) {
+        cm_sb_append(self.handle, s);
+    }
+
+    // 現在の内容を新しい文字列として返す（builderは継続使用できる）
+    string to_string() {
+        return cm_sb_to_string(self.handle);
+    }
+
+    // 現在のバイト長を返す（O(1)）
+    long len() {
+        return cm_sb_len(self.handle);
+    }
+
+    // 内容を空にする（内部容量は維持される）
+    void clear() {
+        cm_sb_clear(self.handle);
+    }
+
+    // デストラクタ: ランタイムバッファを解放する
+    ~self() {
+        cm_sb_destroy(self.handle);
+    }
+}

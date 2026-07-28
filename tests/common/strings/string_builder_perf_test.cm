@@ -1,0 +1,20 @@
+//! platform: !sv
+import std::strings::StringBuilder;
+import std::io::println;
+
+// H9第1段回帰: 大量append（50000回×6文字=300000バイト）が償却O(1)で完走することを検証する。
+// 従来のループ連結（毎回全コピーのO(n²)）ではN=200kで数秒かかっていた領域。
+// 出力は長さで検証する（全文出力はテストログを汚すため行わない）
+
+int main() {
+    StringBuilder sb();
+    int i = 0;
+    while (i < 50000) {
+        sb.append("abc123");
+        i++;
+    }
+    println(sb.len());
+    string s = sb.to_string();
+    println(s.len());
+    return 0;
+}

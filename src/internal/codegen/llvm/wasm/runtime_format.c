@@ -1170,6 +1170,107 @@ void cm_string_free(char* str) {
     }
 }
 
+// ============================================================
+// StringBuilder（H9第1段）: 容量倍増の可変バッファへ償却O(1)で追記する。
+// ループ連結のO(n²)（毎回strlen+全コピー）をO(n)へ置き換える（native版と同一シグネチャ）
+// ============================================================
+
+typedef struct {
+    char* data;
+    size_t len;
+    size_t cap;
+} CmStringBuilder;
+
+int64_t cm_sb_create(void) {
+    CmStringBuilder* sb = (CmStringBuilder*)wasm_alloc(sizeof(CmStringBuilder));
+    if (!sb) {
+        return 0;
+    }
+    sb->cap = 16;
+    sb->len = 0;
+    sb->data = (char*)wasm_alloc(sb->cap);
+    if (!sb->data) {
+        wasm_free(sb);
+        return 0;
+    }
+    return (int64_t)(intptr_t)sb;
+}
+
+void cm_sb_append(int64_t handle, const char* s) {
+    CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
+    if (!sb || !s) {
+        return;
+    }
+    size_t add = wasm_strlen(s);
+    if (add == 0) {
+        return;
+    }
+    if (sb->len + add > sb->cap) {
+        size_t new_cap = sb->cap;
+        while (sb->len + add > new_cap) {
+            new_cap *= 2;
+        }
+        char* new_data = (char*)wasm_alloc(new_cap);
+        if (!new_data) {
+            return;
+        }
+        for (size_t i = 0; i < sb->len; i++) {
+            new_data[i] = sb->data[i];
+        }
+        wasm_free(sb->data);
+        sb->data = new_data;
+        sb->cap = new_cap;
+    }
+    for (size_t i = 0; i < add; i++) {
+        sb->data[sb->len + i] = s[i];
+    }
+    sb->len += add;
+}
+
+// 現在の内容をNUL終端の新規バッファで返す（呼び出し側所有。builderは継続使用可能）
+char* cm_sb_to_string(int64_t handle) {
+    CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
+    if (!sb) {
+        char* empty = (char*)wasm_alloc(1);
+        if (empty) {
+            empty[0] = '\0';
+        }
+        return empty;
+    }
+    char* result = (char*)wasm_alloc(sb->len + 1);
+    if (!result) {
+        return NULL;
+    }
+    for (size_t i = 0; i < sb->len; i++) {
+        result[i] = sb->data[i];
+    }
+    result[sb->len] = '\0';
+    return result;
+}
+
+int64_t cm_sb_len(int64_t handle) {
+    CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
+    return sb ? (int64_t)sb->len : 0;
+}
+
+// 内容を空にする（容量は維持し、再利用時の再確保を避ける）
+void cm_sb_clear(int64_t handle) {
+    CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
+    if (sb) {
+        sb->len = 0;
+    }
+}
+
+void cm_sb_destroy(int64_t handle) {
+    CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
+    if (sb) {
+        if (sb->data) {
+            wasm_free(sb->data);
+        }
+        wasm_free(sb);
+    }
+}
+
 char* cm_int_to_string(int value) {
     return cm_format_int(value);
 }

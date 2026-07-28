@@ -34,6 +34,12 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_string_concat",
         "cm_string_free",
         "cm_slice_free",
+        "cm_sb_create",
+        "cm_sb_append",
+        "cm_sb_to_string",
+        "cm_sb_len",
+        "cm_sb_clear",
+        "cm_sb_destroy",
         "cm_int_to_string",
         "cm_long_to_string",
         "cm_ulong_to_string",
@@ -285,6 +291,28 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
 
     if (name == "cm_string_free" || name == "cm_slice_free") {
         // JS/TSはGC管理のため解放は不要（C12 dropパスのno-op）
+        return "void 0";
+    }
+
+    // StringBuilder（H9第1段）: ハンドルを{parts: [], n: 長さ}オブジェクトへ写像する。
+    // partsへのpush + 最後のjoinで償却O(1)追記になる。destroyはGC管理のためno-op
+    if (name == "cm_sb_create") {
+        return "({ parts: [], n: 0 })";
+    }
+    if (name == "cm_sb_append" && argStrs.size() >= 2) {
+        return "((h, s) => { h.parts.push(s); h.n += String(s).length; })(" + argStrs[0] + ", " +
+               argStrs[1] + ")";
+    }
+    if (name == "cm_sb_to_string" && argStrs.size() >= 1) {
+        return "(" + argStrs[0] + ").parts.join(\"\")";
+    }
+    if (name == "cm_sb_len" && argStrs.size() >= 1) {
+        return "(" + argStrs[0] + ").n";
+    }
+    if (name == "cm_sb_clear" && argStrs.size() >= 1) {
+        return "((h) => { h.parts.length = 0; h.n = 0; })(" + argStrs[0] + ")";
+    }
+    if (name == "cm_sb_destroy") {
         return "void 0";
     }
 
