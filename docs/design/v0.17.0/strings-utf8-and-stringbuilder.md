@@ -9,7 +9,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段以降（byte_len分離・UTF-8・(ptr,len)表現）は未着手） |
+| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段（byte_len分離）・第3段のlen()コードポイント化も実装済み（native/wasm=継続バイトスキップ、js=[...s].length、byte_lenのjsはTextEncoderでUTF-8バイト数）。添字・部分文字列のコードポイント単位化と第4段以降（(ptr,len)表現・埋め込みNUL・連結最適化）は未着手） |
 
 これはランタイム表現・型マッピング・全バックエンドのコード生成に及ぶ大規模な設計変更であり、段階分割を厚く扱う。
 
@@ -127,8 +127,8 @@ println(result.len());   // 200000
    - jsバックエンド: ハンドルをオブジェクト`{parts: []}`へ写像するビルトインを追加（`cm_sb_create`→`{parts:[]}`相当、`cm_sb_append`→`parts.push(String(s))`、`cm_sb_to_string`→`parts.join("")`、`cm_sb_len`→追記時に加算する長さカウンタ、`cm_sb_destroy`→no-op）。JSはGC管理のためdestroyは何もしない
    - SVバックエンド: 対象外（動的文字列バッファは合成不能）。テストは`//! platform: !sv`で除外する
    - 所有権と安全性: StringBuilder構造体はlongハンドル1個のPODで、既存のRAII（~self()）により関数スコープ終了時にランタイムバッファが解放される。to_string()の戻り値は新規確保バッファで呼び出し側変数が所有する（既存のC12再代入解放・一時解放の対象規則にそのまま乗る）
-2. 第2段（byte_len明示化）: 従来のstrlenベース長さを`byte_len()`として公開し、`len()`のコードポイント化の受け皿を作る（この時点では`len()`=`byte_len()`のまま、APIだけ分離）。
-3. 第3段（UTF-8デコード）: native/wasmにUTF-8境界判定を実装し、`len()`をコードポイント数へ切替。jsをコードポイント基準へ揃える。添字・部分文字列・`chars()`をコードポイント単位化。
+2. 第2段（byte_len明示化）: 従来のstrlenベース長さを`byte_len()`として公開し、`len()`のコードポイント化の受け皿を作る。（実装済み: 型検査`infer_string_method`とHIR loweringへ`byte_len`を追加し`__builtin_string_len`へ写像。jsのbyte_lenは`TextEncoder.encode(s).length`でUTF-8バイト数を返す——JS Stringの`.length`はUTF-16単位のためnativeと食い違っていた）
+3. 第3段（UTF-8デコード）: native/wasmにUTF-8境界判定を実装し、`len()`をコードポイント数へ切替。jsをコードポイント基準へ揃える。添字・部分文字列・`chars()`をコードポイント単位化。（len()の切替は実装済み: `__builtin_string_codepoint_len`（継続バイト0b10xxxxxxを数えないO(n)スキャン）をnative/wasmへ追加し、jsは`[...s].length`（サロゲートペアを1と数える）。ASCIIのみの文字列は挙動不変。添字・部分文字列・chars()のコードポイント単位化は未着手でバイト単位のまま——チュートリアルとリリースノートに明記）
 4. 第4段（(ptr,len)表現移行）: LLVM系の文字列型を長さ付き表現へ差し替え（types.cpp:58-60, 726, program.cpp:266, rvalue.cpp:609, operators.cpp:221/260）。埋め込みNUL保持を有効化。`len()`をO(1)化。共通ヘッダ（format_core.h, runtime_common.h, runtime_functions.cpp）の連結・長さ関数を新表現へ更新。
 5. 第5段（連結最適化）: 連結演算子の内部で、隣接連結を`StringBuilder`経由へ集約する最適化（可能なら`a + b + c`を1回のバッファ確保へ）。
 

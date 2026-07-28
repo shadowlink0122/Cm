@@ -624,7 +624,8 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
 ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::TypePtr obj_type) {
     std::string type_name = ast::type_to_string(*obj_type);
 
-    if (member.member == "len" || member.member == "size" || member.member == "length") {
+    if (member.member == "len" || member.member == "size" || member.member == "length" ||
+        member.member == "byte_len") {
         if (!member.args.empty()) {
             error(current_span_, "String " + member.member + "() takes no arguments");
         }

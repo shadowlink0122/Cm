@@ -1,0 +1,34 @@
+//! platform: !sv
+import std::io::println;
+
+// H9第2段・第3段回帰: len()はUTF-8コードポイント数、byte_len()はバイト数を返す。
+// ASCIIのみでは両者が一致し、マルチバイト（日本語3バイト・絵文字4バイト）では分離する。
+// jit/native/wasm/js/tsの全バックエンドで一致することを検証する（SVは文字列長が静的解決のため対象外）
+
+int main() {
+    // ASCII: len == byte_len
+    string ascii = "hello";
+    println(ascii.len());
+    println(ascii.byte_len());
+
+    // 日本語（3バイト/文字）
+    string ja = "こんにちは";
+    println(ja.len());
+    println(ja.byte_len());
+
+    // 絵文字（4バイト/文字、jsではサロゲートペア）
+    string emoji = "😀🚀";
+    println(emoji.len());
+    println(emoji.byte_len());
+
+    // 混在
+    string mixed = "abc漢字😀";
+    println(mixed.len());
+    println(mixed.byte_len());
+
+    // 空文字列
+    string empty = "";
+    println(empty.len());
+    println(empty.byte_len());
+    return 0;
+}

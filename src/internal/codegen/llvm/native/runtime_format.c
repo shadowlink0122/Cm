@@ -894,6 +894,21 @@ size_t __builtin_string_len(const char* str) {
     return str ? cm_strlen_impl(str) : 0;
 }
 
+// UTF-8コードポイント数を返す（H9第3段のlen()実体。継続バイト0b10xxxxxxを数えない）。
+// 不正なUTF-8列でも各バイトの上位2ビット判定のみのため停止せず、バイト数以下の値を返す
+size_t __builtin_string_codepoint_len(const char* str) {
+    if (!str) {
+        return 0;
+    }
+    size_t count = 0;
+    for (const unsigned char* p = (const unsigned char*)str; *p; p++) {
+        if ((*p & 0xC0) != 0x80) {
+            count++;
+        }
+    }
+    return count;
+}
+
 char __builtin_string_charAt(const char* str, int64_t index) {
     if (!str || index < 0)
         return '\0';

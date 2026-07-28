@@ -44,6 +44,7 @@ void ProgramDeadCodeElimination::collect_used_functions(const MirProgram& progra
                                                    "exit",
                                                    "panic",
                                                    "__builtin_string_len",
+                                                   "__builtin_string_codepoint_len",
                                                    "__builtin_string_charAt",
                                                    "__builtin_string_substring",
                                                    "__builtin_string_indexOf",

@@ -1,0 +1,39 @@
+---
+title: 文字列の長さ（len / byte_len）
+---
+
+# 文字列の長さ - len() と byte_len()
+
+Cmの文字列はUTF-8で表現されます。
+`len()` は**コードポイント数**（文字数）、`byte_len()` は**UTF-8バイト数**を返します。
+
+> **対応バックエンド:** JIT / Native / WASM / JS / TS（SVは文字列長が静的解決のため対象外）
+
+---
+
+## 基本
+
+```cm
+import std::io::println;
+
+int main() {
+    string ascii = "hello";
+    println(ascii.len());       // 5
+    println(ascii.byte_len());  // 5（ASCIIでは一致）
+
+    string ja = "こんにちは";
+    println(ja.len());          // 5（コードポイント数）
+    println(ja.byte_len());     // 15（3バイト×5文字）
+
+    string emoji = "😀🚀";
+    println(emoji.len());       // 2
+    println(emoji.byte_len());  // 8（4バイト×2文字）
+    return 0;
+}
+```
+
+## 注意事項
+
+- v0.17.0で `len()` の意味がバイト数からコードポイント数へ変わりました。ASCIIのみの文字列は影響を受けません。バイト数が必要な場合は `byte_len()` を使ってください
+- `charAt()` / `substring()` の添字は現時点ではバイト単位のままです（コードポイント単位化は将来のバージョンで対応予定）
+- JSバックエンドではサロゲートペア（絵文字等）も1コードポイントとして数えます

@@ -60,6 +60,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_format_string_3",
         "cm_format_string_4",
         "__builtin_string_len",
+        "__builtin_string_codepoint_len",
         "__builtin_string_charAt",
         "__builtin_string_substring",
         "__builtin_string_indexOf",
@@ -378,7 +379,12 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
 
     // 文字列メソッド
     if (name == "__builtin_string_len" && argStrs.size() >= 1) {
-        return argStrs[0] + ".length";
+        // byte_len(): JSのStringはUTF-16のため、UTF-8バイト長はエンコードして数える
+        return "(new TextEncoder().encode(" + argStrs[0] + ")).length";
+    }
+    if (name == "__builtin_string_codepoint_len" && argStrs.size() >= 1) {
+        // len(): コードポイント数（スプレッドはサロゲートペアを1要素として数える）
+        return "[..." + argStrs[0] + "].length";
     }
     if (name == "__builtin_string_charAt" && argStrs.size() >= 2) {
         return argStrs[0] + ".charCodeAt(" + argStrs[1] + ")";

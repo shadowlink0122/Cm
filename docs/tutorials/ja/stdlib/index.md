@@ -72,6 +72,7 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
 | `std::strings::builder` | `StringBuilder` 可変文字列バッファ（償却O(1)追記） | [StringBuilder](strings/builder.html) |
+| 文字列組み込み | `len()`（コードポイント数）/ `byte_len()`（バイト数） | [文字列の長さ](strings/length.html) |
 
 ---
 

@@ -772,11 +772,21 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
         // 文字列のビルトインメソッド処理
         if (obj_type && obj_type->kind == ast::TypeKind::String) {
+            // len()はUTF-8コードポイント数、byte_len()はバイト数（H9第2段・第3段。
+            // ASCIIのみの文字列では両者は一致する。添字・部分文字列は現時点ではバイト単位のまま）
             if (mem.member == "len" || mem.member == "size" || mem.member == "length") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_string_codepoint_len";
+                hir->args.push_back(std::move(obj_hir));
+                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin len()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
+            }
+            if (mem.member == "byte_len") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_string_len";
                 hir->args.push_back(std::move(obj_hir));
-                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin len()",
+                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin byte_len()",
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
             }

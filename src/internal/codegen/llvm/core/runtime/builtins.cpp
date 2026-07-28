@@ -127,8 +127,9 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
-    // 文字列長取得関数
-    else if (name == "__builtin_string_len" || name == "cm_strlen") {
+    // 文字列長取得関数（string_len=バイト数、codepoint_len=UTF-8コードポイント数）
+    else if (name == "__builtin_string_len" || name == "__builtin_string_codepoint_len" ||
+             name == "cm_strlen") {
         auto funcType = llvm::FunctionType::get(ctx.getI64Type(), {ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
