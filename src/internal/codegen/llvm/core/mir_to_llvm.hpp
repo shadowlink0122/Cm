@@ -198,7 +198,7 @@ class MIRToLLVM {
 
     /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
     /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
-    bool isSmallStruct(const hir::TypePtr& type) const;
+    bool isSmallStruct(const hir::TypePtr& type);
 
     // 戻り値をsret（隠し出力ポインタ）で返すべき関数か（C14 Phase 4）。
     // 非extern・非main・戻り値が16バイト超の構造体・アドレス未取得（間接呼び出しされない）の場合true

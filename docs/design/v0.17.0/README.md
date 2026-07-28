@@ -20,7 +20,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 ### メモリ管理
 - [drop パスと寿命管理](memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15
 - [アロケータと一時プール](allocator-and-temp-pool.md) — H11 / M14
-- [集約コピーのlowering](aggregate-copy-lowering.md) — C14 / M12 / M13
+- [集約コピーのlowering](../../archive/v0.17.0/aggregate-copy-lowering.md) — C14 / M12 / M13（全Phase実装済み・archiveへ移動）
 
 ### モジュール・可視性・静的解析
 - [モジュール可視性とimport重複排除](module-visibility-and-import-dedup.md) — H7 / M7（実装済み） / M2（実装済み）

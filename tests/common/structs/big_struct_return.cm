@@ -3,7 +3,7 @@ import std::io::println;
 // C14 Phase 4回帰: 16バイト超構造体の戻り値がsret（隠し出力ポインタ）で返り、
 // 第一級集約returnのSROA展開によるO2二次爆発が起きないこと（int[16384]で実測60秒超→1秒未満）と、
 // 値が正しく呼び出し元へ渡ることを検証する。小構造体（16バイト以下）は従来ABIのまま。
-// 値渡し引数の検証は中型構造体で行う（大配列の値渡し引数は別問題としてbyval段で対応予定）
+// 大配列構造体の値渡し引数もポインタ渡し+呼び出し先コピーで爆発せず、呼び出し元の値が隔離されることを検証する
 
 struct Big {
     int[16384] data;
@@ -42,10 +42,19 @@ Small make_small(int v) {
     return s;
 }
 
+int consume_big(Big src) {
+    src.tag = src.tag + 100;
+    return src.tag + src.data[0];
+}
+
 int main() {
     Big b = make_big(7);
     println(b.data[0]);
     println(b.data[16383]);
+    println(b.tag);
+
+    // 大配列構造体の値渡し引数（従来はisSmallStructのArray誤計算で第一級集約渡しになりwasm Ozで145秒）
+    println(consume_big(b));
     println(b.tag);
 
     // 中型構造体（16バイト超=sret対象）の値渡し+sret戻り（呼び出し元の値は変更されない）

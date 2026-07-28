@@ -55,65 +55,25 @@ hir::TypePtr MIRToLLVM::resolveTypeAlias(const hir::TypePtr& type) const {
 
 // 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
 // System V ABI: 16バイト以下の構造体はレジスタで値渡し
-bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
+bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) {
     if (!type || type->kind != hir::TypeKind::Struct) {
         return false;
     }
 
-    // 構造体定義を取得
-    auto it = structDefs.find(type->name);
-    if (it == structDefs.end()) {
-        return false;  // 定義が見つからない場合は安全のためポインタ渡し
+    // 構造体定義が未登録なら安全のためポインタ渡し
+    if (structDefs.find(type->name) == structDefs.end()) {
+        return false;
     }
 
-    const mir::MirStruct* structDef = it->second;
-
-    // フィールドのサイズを合計
-    size_t totalSize = 0;
-    for (const auto& field : structDef->fields) {
-        if (!field.type)
-            continue;
-
-        // TypeAlias（typedef）を基底型に解決
-        auto resolvedFieldType = resolveTypeAlias(field.type);
-        switch (resolvedFieldType->kind) {
-            case hir::TypeKind::Bool:
-            case hir::TypeKind::Char:
-            case hir::TypeKind::Tiny:
-            case hir::TypeKind::UTiny:
-                totalSize += 1;
-                break;
-            case hir::TypeKind::Short:
-            case hir::TypeKind::UShort:
-                totalSize += 2;
-                break;
-            case hir::TypeKind::Int:
-            case hir::TypeKind::UInt:
-            case hir::TypeKind::Float:
-                totalSize += 4;
-                break;
-            case hir::TypeKind::Long:
-            case hir::TypeKind::ULong:
-            case hir::TypeKind::Double:
-            case hir::TypeKind::Pointer:
-            case hir::TypeKind::String:
-                totalSize += 8;
-                break;
-            case hir::TypeKind::Struct:
-                // ネストした構造体は安全のためポインタ渡し
-                return false;
-            default:
-                totalSize += 8;  // デフォルトはポインタサイズ
-                break;
-        }
-
-        // 16バイトを超えたら即座にfalse
-        if (totalSize > 16) {
-            return false;
-        }
+    // サイズはLLVM DataLayoutの正確な値で判定する（C14 Phase 4）。
+    // 従来の手計算switchはArray・ネスト構造体フィールドをdefault 8バイトと見積もるため、
+    // int[16384]等の大配列フィールド構造体を「小」と誤判定して第一級集約の値渡しになり、
+    // SROA全展開でO2/Ozのコンパイル時間が爆発していた（16バイト超はポインタ渡し+呼び出し先コピーへ）
+    auto llvmType = convertType(type);
+    if (!llvmType || !llvmType->isSized()) {
+        return false;
     }
-
-    return totalSize <= 16;
+    return module->getDataLayout().getTypeAllocSize(llvmType) <= 16;
 }
 
 // 戻り値をsret（隠し出力ポインタ）で返すべき関数か（C14 Phase 4）。
