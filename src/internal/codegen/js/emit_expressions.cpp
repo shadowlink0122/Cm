@@ -467,6 +467,29 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                                "Math.min(" +
                                max_lit + ", Math.max(" + min_lit + ", t)); })(" + operand + ")";
                     }
+                    // 整数→整数: ビット幅・符号のラップをLLVMのtrunc/ビット再解釈と一致させる。
+                    // 従来はMath.truncのみで -1 as uint が -1 のまま残り、native（4294967295）と
+                    // 出力が分裂していた（O2はMIR定数畳み込みで隠れ、O0で顕在化）。
+                    // 32ビット以下はJSのビット演算（ToInt32/ToUint32）が正確な2の補数ラップを行う。
+                    // long/ulong等の64ビットはdoubleで表現可能な範囲で従来どおり
+                    if (src_type && src_type->is_integer()) {
+                        switch (data.target_type->kind) {
+                            case TypeKind::Tiny:
+                                return "((" + operand + ") << 24 >> 24)";
+                            case TypeKind::UTiny:
+                                return "((" + operand + ") & 0xFF)";
+                            case TypeKind::Short:
+                                return "((" + operand + ") << 16 >> 16)";
+                            case TypeKind::UShort:
+                                return "((" + operand + ") & 0xFFFF)";
+                            case TypeKind::Int:
+                                return "((" + operand + ") | 0)";
+                            case TypeKind::UInt:
+                                return "((" + operand + ") >>> 0)";
+                            default:
+                                break;
+                        }
+                    }
                     return "Math.trunc(" + operand + ")";
                 } else if (data.target_type->kind == TypeKind::Bool) {
                     return "Boolean(" + operand + ")";
