@@ -200,6 +200,15 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
 
         callee = functions[funcId];
 
+        // sret関数は先頭に隠し出力ポインタを持つため、期待パラメータ数を+1して数え合わせる（C14 Phase 4）
+        auto expected_params = [&](const llvm::Function* f) {
+            size_t n = args.size();
+            if (f && f->arg_size() > 0 && f->hasParamAttribute(0, llvm::Attribute::StructRet)) {
+                n += 1;
+            }
+            return n;
+        };
+
         // Bug#45修正: functionsテーブルのcalleeが不正なシグネチャ(void())の場合がある
         // convertFunctionSignatureがMIR内のarg_locals空の関数をvoid()で作成するため。
         // 実引数の数とcalleeの引数数が一致しない場合はcalleeを無効化する。
@@ -210,7 +219,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                 if (args.size() < calleeType->getNumParams()) {
                     callee = nullptr;
                 }
-            } else if (calleeType->getNumParams() != args.size()) {
+            } else if (calleeType->getNumParams() != expected_params(callee)) {
                 callee = nullptr;
             }
         }
@@ -219,7 +228,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
             // Bug#45修正: ベース名の前方一致でfunctionsマップを検索
             for (const auto& [fName, fFunc] : functions) {
                 if (fFunc && fName.find(funcName + "_") == 0 &&
-                    fFunc->getFunctionType()->getNumParams() == args.size()) {
+                    fFunc->getFunctionType()->getNumParams() == expected_params(fFunc)) {
                     callee = fFunc;
                     break;
                 }
@@ -251,7 +260,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                         if (args.size() >= funcType->getNumParams()) {
                             callee = existingFunc;
                         }
-                    } else if (funcType->getNumParams() == args.size()) {
+                    } else if (funcType->getNumParams() == expected_params(existingFunc)) {
                         callee = existingFunc;
                     }
                 }
@@ -312,6 +321,25 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
             auto result = module->getOrInsertFunction(funcName, funcType);
             callee = llvm::cast<llvm::Function>(result.getCallee());
         }
+    }
+
+    // 呼び出し先がsret関数なら、引数型調整の前に格納先allocaを先頭へ挿入して位置を揃える（C14 Phase 4）。
+    // 戻り値はvoidになり、後段のdestination格納は自然にスキップされる（storeもmemcpyも不要のコピー0回）
+    if (callee && callee->arg_size() > 0 &&
+        callee->hasParamAttribute(0, llvm::Attribute::StructRet)) {
+        llvm::Value* sretDest = nullptr;
+        if (callData.destination && callData.destination->projections.empty() &&
+            allocatedLocals.count(callData.destination->local) > 0 &&
+            locals[callData.destination->local]) {
+            sretDest = locals[callData.destination->local];
+        }
+        if (!sretDest) {
+            // 格納先が無い（結果を捨てる）場合はダミーバッファを渡す
+            auto sretType =
+                callee->getParamAttribute(0, llvm::Attribute::StructRet).getValueAsType();
+            sretDest = builder->CreateAlloca(sretType, nullptr, "sret_discard");
+        }
+        args.insert(args.begin(), sretDest);
     }
 
     if (callee) {
@@ -768,8 +796,20 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
     } else {
         // success == INVALID_BLOCK または ブロックがDCEで削除された場合
         // ターミネータがないとLLVMがハングするため、適切なターミネータを生成
-        if (currentMIRFunction &&
-            currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
+        if (currentMIRFunction && needsSretReturn(*currentMIRFunction)) {
+            // sret関数のフォールバック終端（C14 Phase 4。retval→sretバッファへコピーしてret void）
+            auto retVal = locals[currentMIRFunction->return_local];
+            auto sretPtr = currentFunction->getArg(0);
+            if (retVal && llvm::isa<llvm::AllocaInst>(retVal)) {
+                auto allocaInst = llvm::cast<llvm::AllocaInst>(retVal);
+                auto dataLayout = module->getDataLayout();
+                auto allocSize = dataLayout.getTypeAllocSize(allocaInst->getAllocatedType());
+                builder->CreateMemCpy(sretPtr, llvm::MaybeAlign(), retVal, llvm::MaybeAlign(),
+                                      allocSize);
+            }
+            builder->CreateRetVoid();
+        } else if (currentMIRFunction &&
+                   currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
             auto& returnLocal = currentMIRFunction->locals[currentMIRFunction->return_local];
             if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
                 // ベアメタル対応 - スタック配列は自動解放

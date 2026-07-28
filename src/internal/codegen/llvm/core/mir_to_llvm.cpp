@@ -116,4 +116,105 @@ bool MIRToLLVM::isSmallStruct(const hir::TypePtr& type) const {
     return totalSize <= 16;
 }
 
+// 戻り値をsret（隠し出力ポインタ）で返すべき関数か（C14 Phase 4）。
+// 大きな構造体の第一級集約returnはSROAが全要素展開しO2で二次爆発するため、
+// 呼び出し元バッファへの直接書き込みに変換する。extern関数はFFIのABI互換のため、
+// アドレス取得された関数は間接呼び出しのシグネチャ不一致を避けるため対象外
+bool MIRToLLVM::needsSretReturn(const mir::MirFunction& func) {
+    if (func.is_extern || func.name == "main") {
+        return false;
+    }
+    if (func.return_local >= func.locals.size()) {
+        return false;
+    }
+    const auto& ret_type = func.locals[func.return_local].type;
+    if (!ret_type || ret_type->kind != hir::TypeKind::Struct) {
+        return false;
+    }
+    // インターフェイス値はfat pointer（16バイト）でsret不要
+    if (isInterfaceType(ret_type->name)) {
+        return false;
+    }
+    // サイズ判定はLLVM DataLayoutの正確な値を使う
+    // （isSmallStructはArrayフィールドをdefault 8バイトと見積もるため大配列フィールドを見逃す）
+    auto llvmType = convertType(ret_type);
+    if (!llvmType || !llvmType->isSized()) {
+        return false;
+    }
+    auto size = module->getDataLayout().getTypeAllocSize(llvmType);
+    if (size <= 16) {
+        return false;
+    }
+    return addressTakenFunctions.count(func.name) == 0;
+}
+
+// プログラム全体からアドレス取得された関数を収集する。
+// FunctionRefオペランドが「Call終端の呼び出し先」以外の位置（rvalueオペランド・呼び出し引数）に
+// 現れる関数は、関数ポインタ・クロージャ・vtable経由で間接呼び出されうるためsret対象から除外する
+void MIRToLLVM::collectAddressTakenFunctions(const std::vector<mir::MirFunctionPtr>& functions) {
+    auto note_operand = [&](const mir::MirOperandPtr& op) {
+        if (op && op->kind == mir::MirOperand::FunctionRef) {
+            if (const auto* name = std::get_if<std::string>(&op->data)) {
+                addressTakenFunctions.insert(*name);
+            }
+        }
+    };
+    for (const auto& func : functions) {
+        if (!func) {
+            continue;
+        }
+        for (const auto& block : func->basic_blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& stmt : block->statements) {
+                if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                    continue;
+                }
+                const auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
+                if (!assign.rvalue) {
+                    continue;
+                }
+                switch (assign.rvalue->kind) {
+                    case mir::MirRvalue::Use:
+                        note_operand(
+                            std::get<mir::MirRvalue::UseData>(assign.rvalue->data).operand);
+                        break;
+                    case mir::MirRvalue::BinaryOp: {
+                        const auto& bin =
+                            std::get<mir::MirRvalue::BinaryOpData>(assign.rvalue->data);
+                        note_operand(bin.lhs);
+                        note_operand(bin.rhs);
+                        break;
+                    }
+                    case mir::MirRvalue::UnaryOp:
+                        note_operand(
+                            std::get<mir::MirRvalue::UnaryOpData>(assign.rvalue->data).operand);
+                        break;
+                    case mir::MirRvalue::Cast:
+                        note_operand(
+                            std::get<mir::MirRvalue::CastData>(assign.rvalue->data).operand);
+                        break;
+                    case mir::MirRvalue::Aggregate:
+                        for (const auto& op :
+                             std::get<mir::MirRvalue::AggregateData>(assign.rvalue->data)
+                                 .operands) {
+                            note_operand(op);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            if (block->terminator && block->terminator->kind == mir::MirTerminator::Call) {
+                const auto& call = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+                // 呼び出し先（call.func）は対象外。引数として渡るFunctionRefのみ収集する
+                for (const auto& arg : call.args) {
+                    note_operand(arg);
+                }
+            }
+        }
+    }
+}
+
 }  // namespace cm::codegen::llvm_backend

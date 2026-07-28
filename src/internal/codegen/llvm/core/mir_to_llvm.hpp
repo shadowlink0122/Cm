@@ -199,6 +199,17 @@ class MIRToLLVM {
     /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
     /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
     bool isSmallStruct(const hir::TypePtr& type) const;
+
+    // 戻り値をsret（隠し出力ポインタ）で返すべき関数か（C14 Phase 4）。
+    // 非extern・非main・戻り値が16バイト超の構造体・アドレス未取得（間接呼び出しされない）の場合true
+    bool needsSretReturn(const mir::MirFunction& func);
+
+    // アドレス取得された関数名（FunctionRefが呼び出し先以外のオペランドに現れる関数。
+    // 関数ポインタ・vtable経由の間接呼び出しはsretのシグネチャ変換を追跡できないため除外する）
+    std::unordered_set<std::string> addressTakenFunctions;
+
+    // プログラム全体からアドレス取得された関数を収集する（convertの冒頭で呼ぶ）
+    void collectAddressTakenFunctions(const std::vector<mir::MirFunctionPtr>& functions);
     // TypeAlias（typedef）を基底型に再帰的に解決するヘルパー
     hir::TypePtr resolveTypeAlias(const hir::TypePtr& type) const;
 

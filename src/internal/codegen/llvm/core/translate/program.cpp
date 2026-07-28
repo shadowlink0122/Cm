@@ -30,6 +30,10 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
 
     currentProgram = &program;
 
+    // アドレス取得された関数を収集（sret変換の除外判定用。C14 Phase 4）
+    addressTakenFunctions.clear();
+    collectAddressTakenFunctions(program.functions);
+
     // typedef定義マップをコピー（convertTypeでTypeAlias/Struct名の解決に使用）
     typedefDefs = program.typedef_defs;
 
@@ -503,6 +507,12 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     // プログラム全体のメタデータ参照（モジュール修飾呼び出しの関数存在判定・インターフェイス検索等）。
     // 未設定だとconvertCallTerminator等がnull参照で落ちる
     currentProgram = module.origin;
+
+    // アドレス取得された関数を収集（sret変換の除外判定用。全体プログラムから計算し全モジュールで同一判定にする）
+    addressTakenFunctions.clear();
+    if (module.origin) {
+        collectAddressTakenFunctions(module.origin->functions);
+    }
 
     // allModuleFunctionsを構築（プログラム全体の関数。originがあれば全関数、無ければ自モジュール+extern）
     // declareExternalFunctionのシグネチャ解決フォールバックに使用。

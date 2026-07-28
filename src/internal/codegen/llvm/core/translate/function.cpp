@@ -258,8 +258,15 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         builder->SetInsertPoint(entryBB);
 
         // パラメータをローカル変数にマップ
+        // sret関数は先頭のLLVM引数が隠し出力ポインタのため、MIR引数の対応をずらす（C14 Phase 4）
+        bool useSret = needsSretReturn(func);
         size_t argIdx = 0;
+        bool skipped_sret = false;
         for (auto& arg : currentFunction->args()) {
+            if (useSret && !skipped_sret) {
+                skipped_sret = true;
+                continue;
+            }
             if (argIdx < func.arg_locals.size()) {
                 auto localIdx = func.arg_locals[argIdx];
                 // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用（C ABIで16バイト以下の構造体はレジスタ渡しされる）
@@ -270,6 +277,26 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     builder->CreateStore(&arg, alloca);
                     locals[localIdx] = alloca;
                     allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else if (arg.getType()->isPointerTy() && localIdx < func.locals.size() &&
+                           func.locals[localIdx].type &&
+                           func.locals[localIdx].type->kind == hir::TypeKind::Struct &&
+                           !isInterfaceType(func.locals[localIdx].type->name)) {
+                    // ABIでポインタ渡しされた16バイト超の値渡し構造体パラメータ（C14 byval相当）。
+                    // 従来はポインタを直接使っていたため、呼び出し先での変更が呼び出し元の値へ波及していた
+                    // （selfはMIR型がPointerなのでこの分岐に来ず、従来どおり参照渡し）。
+                    // エントリでローカルコピーを作り値セマンティクスを保つ
+                    auto structType = convertType(func.locals[localIdx].type);
+                    if (structType && structType->isSized()) {
+                        auto alloca = builder->CreateAlloca(structType, nullptr,
+                                                            "byval_copy_" + std::to_string(argIdx));
+                        auto copySize = module->getDataLayout().getTypeAllocSize(structType);
+                        builder->CreateMemCpy(alloca, llvm::MaybeAlign(), &arg, llvm::MaybeAlign(),
+                                              copySize);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
+                    } else {
+                        locals[localIdx] = &arg;
+                    }
                 } else if (arg.getType()->isPointerTy() && argIdx == 0 &&
                            localIdx < func.locals.size()) {
                     // プリミティブ型implメソッドのself引数: i8*で渡されるがローカルはプリミティブ型

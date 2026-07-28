@@ -288,9 +288,15 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 
     // 戻り値型
     // main関数は常にi32を返す（C標準準拠）
+    // 16バイト超構造体の戻り値はsret（先頭の隠し出力ポインタ）へ変換する（C14 Phase 4。
+    // 第一級集約returnのSROA全展開によるO2二次爆発を防ぐ）
+    bool useSret = needsSretReturn(func);
     llvm::Type* returnType;
     if (func.name == "main") {
         returnType = ctx.getI32Type();
+    } else if (useSret) {
+        returnType = ctx.getVoidType();
+        paramTypes.insert(paramTypes.begin(), ctx.getPtrType());
     } else {
         returnType = ctx.getVoidType();
         if (func.return_local < func.locals.size()) {
@@ -327,6 +333,14 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     }
     auto llvmFunc =
         llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
+
+    // sretパラメータへ属性を付与（最適化に呼び出し元バッファへの直接書き込みであることを伝える）
+    if (useSret && func.return_local < func.locals.size()) {
+        auto retLlvmType = convertType(func.locals[func.return_local].type);
+        llvmFunc->addParamAttr(
+            0, llvm::Attribute::get(ctx.getContext(), llvm::Attribute::StructRet, retLlvmType));
+        llvmFunc->addParamAttr(0, llvm::Attribute::get(ctx.getContext(), llvm::Attribute::NoAlias));
+    }
 
     // アロケータ関数にはnoinline属性を追加
     // LLVMが積極的にインライン化してから削除するのを防ぐ
