@@ -438,14 +438,17 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 lhs = builder->CreateIntToPtr(lhs, rhs->getType(), "null_to_ptr");
                 return builder->CreateICmpEQ(lhs, rhs, "ptr_eq");
             }
-            // 整数型のビット幅を揃える
+            // 整数型のビット幅を揃える。拡張は拡張されるオペランド自身の符号で選ぶ
+            // （uintをsextするとint32超の値が負値化し、4277009103 == 0xFEEDFACFがfalseになる）
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = isUnsignedType(lhs_type) ? builder->CreateZExt(lhs, rhs->getType())
+                                                   : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = isUnsignedType(rhs_type) ? builder->CreateZExt(rhs, lhs->getType())
+                                                   : builder->CreateSExt(rhs, lhs->getType());
                 }
             }
             return builder->CreateICmpEQ(lhs, rhs, "eq");
@@ -476,14 +479,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 lhs = builder->CreateIntToPtr(lhs, rhs->getType(), "null_to_ptr");
                 return builder->CreateICmpNE(lhs, rhs, "ptr_ne");
             }
-            // 整数型のビット幅を揃える
+            // 整数型のビット幅を揃える。拡張は拡張されるオペランド自身の符号で選ぶ（Eqと同じ理由）
             if (lhs->getType()->isIntegerTy() && rhs->getType()->isIntegerTy()) {
                 auto lhsBits = lhs->getType()->getIntegerBitWidth();
                 auto rhsBits = rhs->getType()->getIntegerBitWidth();
                 if (lhsBits < rhsBits) {
-                    lhs = builder->CreateSExt(lhs, rhs->getType());
+                    lhs = isUnsignedType(lhs_type) ? builder->CreateZExt(lhs, rhs->getType())
+                                                   : builder->CreateSExt(lhs, rhs->getType());
                 } else if (rhsBits < lhsBits) {
-                    rhs = builder->CreateSExt(rhs, lhs->getType());
+                    rhs = isUnsignedType(rhs_type) ? builder->CreateZExt(rhs, lhs->getType())
+                                                   : builder->CreateSExt(rhs, lhs->getType());
                 }
             }
             return builder->CreateICmpNE(lhs, rhs, "ne");

@@ -1,6 +1,8 @@
 // MIR lowering - 制御フロー文（return/if/while/for/loop/switch/block）
 
 #include "internal/base/debug.hpp"
+#include "internal/base/target.hpp"
+#include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
 
@@ -39,9 +41,78 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
             }
         }
 
-        // 戻り値をreturn用ローカル変数に代入
-        ctx.push_statement(MirStatement::assign(MirPlace{ctx.func->return_local},
-                                                MirRvalue::use(MirOperand::copy(return_src))));
+        // 固定長配列をスライス戻り値型で返す場合、スタック上の配列ポインタが生のまま返り
+        // 呼び出し側がCmSlice*として解釈してクラッシュしていた。
+        // cm_array_to_slice（ヒープへ内容コピー）を挟んでスライスへ実体化してから返す
+        bool returned_as_slice = false;
+        if (ret.value->type && ctx.func->return_local < ctx.func->locals.size()) {
+            auto value_type = ctx.resolve_typedef(ret.value->type);
+            const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+            if (value_type && value_type->kind == hir::TypeKind::Array &&
+                value_type->array_size.has_value() && ret_type &&
+                ret_type->kind == hir::TypeKind::Array && !ret_type->array_size.has_value()) {
+                const int64_t array_size = value_type->array_size.value_or(0);
+                int64_t elem_size = 4;
+                if (value_type->element_type) {
+                    auto resolved_ek = ctx.resolve_typedef(value_type->element_type);
+                    auto ek = resolved_ek ? resolved_ek->kind : value_type->element_type->kind;
+                    if (auto info = slice_scalar_info(ek)) {
+                        elem_size = info->elem_size;
+                    } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
+                        // cm_array_to_sliceのmemcpyは配列実ストライド（ポインタサイズ）基準（wasm32=4）
+                        elem_size = cm::target_pointer_size();
+                    } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
+                        elem_size = ctx.layout_size(value_type->element_type);
+                    }
+                }
+
+                LocalId addr_local = ctx.new_temp(hir::make_pointer(value_type->element_type));
+                ctx.push_statement(
+                    MirStatement::assign(MirPlace{addr_local}, MirRvalue::ref(return_src, false)));
+
+                LocalId size_local = ctx.new_temp(hir::make_long());
+                MirConstant size_const;
+                size_const.value = array_size;
+                size_const.type = hir::make_long();
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
+
+                LocalId elem_size_local = ctx.new_temp(hir::make_long());
+                MirConstant elem_size_const;
+                elem_size_const.value = elem_size;
+                elem_size_const.type = hir::make_long();
+                ctx.push_statement(
+                    MirStatement::assign(MirPlace{elem_size_local},
+                                         MirRvalue::use(MirOperand::constant(elem_size_const))));
+
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                args.push_back(MirOperand::copy(MirPlace{size_local}));
+                args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
+
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
+                                            std::move(args),
+                                            MirPlace{ctx.func->return_local},
+                                            success_block,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+                returned_as_slice = true;
+            }
+        }
+
+        if (!returned_as_slice) {
+            // 戻り値をreturn用ローカル変数に代入
+            ctx.push_statement(MirStatement::assign(MirPlace{ctx.func->return_local},
+                                                    MirRvalue::use(MirOperand::copy(return_src))));
+        }
     }
 
     // 現在のスコープのdefer文を実行（逆順）

@@ -1,0 +1,36 @@
+// 符号なし整数と幅広リテラルの等値比較回帰: Eq/Neのビット幅揃えがsext固定で、
+// uint(i32)の0xFEEDFACFがi64へ負値拡張され 4277009103 == 0xFEEDFACF がfalseになっていた
+// 拡張は拡張されるオペランド自身の符号で選ぶ（unsigned→zext、signed→sext維持）
+import std::io::println;
+
+uint make_u() {
+    return 0xFEEDFACF as uint;
+}
+
+ushort make_us() {
+    return 0xFEED as ushort;
+}
+
+utiny make_ut() {
+    return 0xFE as utiny;
+}
+
+int make_neg() {
+    return -1;
+}
+
+int main() {
+    // uint vs long範囲リテラル（旧実装はsextで負値化しfalse）
+    println(make_u() == 4277009103);
+    println(make_u() != 4277009103);
+    println(make_u() == 4277009102);
+
+    // ushort/utinyの上位ビット立ち値も同様
+    println(make_us() == 65261);
+    println(make_ut() == 254);
+
+    // 符号付きの負値拡張は維持される（zext化すると-1が4294967295になり不一致）
+    println(make_neg() == -1 as long);
+    println(make_neg() != -1 as long);
+    return 0;
+}

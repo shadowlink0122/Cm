@@ -1,0 +1,43 @@
+// ローカル固定長配列をスライス戻り値型で返す回帰: 従来はcm_array_to_slice変換が
+// return経路で発行されず、スタック配列ポインタが生のままCmSlice*として返りクラッシュしていた
+// （リリースノート既知の問題。js/tsはGCのため動作していた）
+import std::io::println;
+
+int[] make_ints() {
+    int[3] a = [10, 20, 30];
+    return a;
+}
+
+string[] make_strs() {
+    string[2] s = ["alpha", "beta"];
+    return s;
+}
+
+long[] make_longs() {
+    long[2] l = [8589934591, -1];
+    return l;
+}
+
+int main() {
+    int[] r = make_ints();
+    println(r.len());
+    println(r[0]);
+    println(r[1]);
+    println(r[2]);
+
+    string[] s = make_strs();
+    println(s.len());
+    println(s[0]);
+    println(s[1]);
+
+    long[] l = make_longs();
+    println(l.len());
+    println(l[0]);
+    println(l[1]);
+
+    // 返したスライスは呼び出し元で伸長できる（ヒープ実体化の確認）
+    r.push(40);
+    println(r.len());
+    println(r[3]);
+    return 0;
+}

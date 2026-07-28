@@ -1,6 +1,7 @@
 // MIR lowering - let文（定数畳み込みヘルパーと配列/スライス初期化を含む変数宣言の展開）
 
 #include "internal/base/debug.hpp"
+#include "internal/base/target.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
@@ -434,7 +435,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                     inner_elem_size = info->elem_size;
                                 } else if (inner_elem_kind == hir::TypeKind::Pointer ||
                                            inner_elem_kind == hir::TypeKind::String) {
-                                    inner_elem_size = 8;
+                                    // cm_array_to_sliceのmemcpyは配列実ストライド（ポインタサイズ）基準
+                                    inner_elem_size = cm::target_pointer_size();
                                 }
                             }
 
@@ -573,7 +575,10 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             // スカラ型: elem_sizeをslice_dispatchから取得（short/ushort欠落を解消。C4）
                             elem_size = info->elem_size;
                         } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
-                            elem_size = 8;
+                            // cm_array_to_sliceは配列をmemcpyするため、スロット幅は配列の実ストライド
+                            // （ターゲットのポインタサイズ）に合わせる。8固定だとwasm32(4バイト)で
+                            // 2要素目以降が範囲外読みになり文字列要素が壊れる
+                            elem_size = cm::target_pointer_size();
                         } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
                             // 構造体・ユニオンはblob要素としてインラインコピーされる
                             elem_size = ctx.layout_size(let.init->type->element_type);
