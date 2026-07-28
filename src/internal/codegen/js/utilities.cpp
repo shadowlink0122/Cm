@@ -166,6 +166,10 @@ void JSCodeGen::expandRuntimeHelperDependencies(std::unordered_set<std::string>&
     if (used.count("__cm_output")) {
         used.insert("__cm_output_element");
     }
+    if (used.count("__cm_format") || used.count("__cm_format_string")) {
+        // __cm_formatのspec無し経路が数値整形に__cm_fmt_doubleを使う
+        used.insert("__cm_fmt_double");
+    }
 }
 
 std::string JSCodeGen::toKebabCase(const std::string& name) const {

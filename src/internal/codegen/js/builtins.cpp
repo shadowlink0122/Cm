@@ -256,9 +256,16 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // println系
+    if (name == "cm_println_double") {
+        // 非有限値・-0の表記をnativeランタイム（inf/-inf/nan/0）へ統一する
+        if (argStrs.empty()) {
+            return "console.log()";
+        }
+        return "console.log(__cm_fmt_double(" + argStrs[0] + "))";
+    }
     if (name == "println" || name == "cm_println_string" || name == "cm_println_int" ||
         name == "cm_println_long" || name == "cm_println_ulong" || name == "cm_println_uint" ||
-        name == "cm_println_double" || name == "cm_println_bool") {
+        name == "cm_println_bool") {
         if (argStrs.empty()) {
             return "console.log()";
         }
@@ -331,7 +338,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "String(" + argStrs[0] + ")";
     }
     if (name == "cm_double_to_string" && argStrs.size() >= 1) {
-        return "String(" + argStrs[0] + ")";
+        return "__cm_fmt_double(" + argStrs[0] + ")";
     }
     if (name == "cm_bool_to_string" && argStrs.size() >= 1) {
         return "String(" + argStrs[0] + ")";
@@ -344,7 +351,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "String(" + argStrs[0] + ")";
     }
     if (name == "cm_format_double" && argStrs.size() >= 1) {
-        return "String(" + argStrs[0] + ")";
+        return "__cm_fmt_double(" + argStrs[0] + ")";
     }
     if (name == "cm_format_bool" && argStrs.size() >= 1) {
         return "(" + argStrs[0] + " ? \"true\" : \"false\")";
@@ -375,9 +382,12 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // print系
+    if (name == "cm_print_double" && argStrs.size() >= 1) {
+        return "process.stdout.write(__cm_fmt_double(" + argStrs[0] + "))";
+    }
     if (name == "print" || name == "cm_print_string" || name == "cm_print_int" ||
         name == "cm_print_long" || name == "cm_print_ulong" || name == "cm_print_uint" ||
-        name == "cm_print_double" || name == "cm_print_bool" || name == "cm_print_char") {
+        name == "cm_print_bool" || name == "cm_print_char") {
         if (argStrs.empty()) {
             return "process.stdout.write('')";
         }

@@ -176,11 +176,25 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine();
     }
 
+    // double整形（非有限値・-0の表記をnativeランタイムと一致させる: inf/-inf/nan/0）
+    if (needs("__cm_fmt_double")) {
+        emitter.emitLine("function __cm_fmt_double(v) {");
+        emitter.increaseIndent();
+        emitter.emitLine("if (v === Infinity) return \"inf\";");
+        emitter.emitLine("if (v === -Infinity) return \"-inf\";");
+        emitter.emitLine("if (v !== v) return \"nan\";");
+        emitter.emitLine("return String(v);");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
     // フォーマット関数
     if (need_format) {
         emitter.emitLine("function __cm_format(val, spec) {");
         emitter.increaseIndent();
-        emitter.emitLine("if (!spec) return String(val);");
+        emitter.emitLine(
+            "if (!spec) return (typeof val === 'number') ? __cm_fmt_double(val) : String(val);");
         emitter.emitLine("// char型変換");
         emitter.emitLine("if (spec === 'c') return String.fromCharCode(val);");
         emitter.emitLine("// 基数指定");

@@ -115,8 +115,20 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateFPTrunc(value, targetType, "fptrunc");
             }
 
-            // int <-> float/double 変換
+            // int <-> float/double 変換。符号なしソースはuitofp
+            // （sitofp固定だとuint 4000000000 as doubleが-294967296になる）
             if (sourceType->isIntegerTy() && targetType->isFloatingPointTy()) {
+                bool src_unsigned = false;
+                if (auto src_hir = getOperandType(*castData.operand)) {
+                    auto k = src_hir->kind;
+                    src_unsigned = k == hir::TypeKind::UTiny || k == hir::TypeKind::UShort ||
+                                   k == hir::TypeKind::UInt || k == hir::TypeKind::ULong ||
+                                   k == hir::TypeKind::USize || k == hir::TypeKind::Bool ||
+                                   k == hir::TypeKind::Char;
+                }
+                if (src_unsigned) {
+                    return builder->CreateUIToFP(value, targetType, "uitofp");
+                }
                 return builder->CreateSIToFP(value, targetType, "sitofp");
             }
             if (sourceType->isFloatingPointTy() && targetType->isIntegerTy()) {

@@ -505,10 +505,14 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
         }
     }
 
-    // Int -> Double
-    if (target_type->kind == hir::TypeKind::Float) {
+    // Int -> Float/Double。符号なしソースはuint64として解釈する
+    // （int64解釈だとulong 18000000000000000000 as doubleが負値になる）
+    if (target_type->kind == hir::TypeKind::Float || target_type->kind == hir::TypeKind::Double ||
+        target_type->kind == hir::TypeKind::UFloat || target_type->kind == hir::TypeKind::UDouble) {
         if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
-            result.value = static_cast<double>(*int_val);
+            result.value = const_eval::is_unsigned_type(operand.type)
+                               ? static_cast<double>(static_cast<uint64_t>(*int_val))
+                               : static_cast<double>(*int_val);
             return result;
         }
     }
