@@ -9,6 +9,7 @@
 #include "internal/mir/printer.hpp"
 #include "pass_debugger.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <mutex>
@@ -648,7 +649,17 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
         std::cerr << "[LINK] " << linkCmd << "\n";
     }
 
+    auto link_start = std::chrono::steady_clock::now();
     int ret = std::system(linkCmd.c_str());
+    auto link_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - link_start)
+                       .count();
+    // emitExecutableと同じ切り分け警告（システムリンカ待ちの長時間化はcm外の要因）
+    if (link_ms > 10000) {
+        std::cerr << "warning: linker took " << (link_ms / 1000)
+                  << "s (cm waits for the system linker; security software scanning new "
+                     "binaries can cause this)\n";
+    }
     if (ret != 0) {
         throw std::runtime_error("リンクコマンド失敗: " + linkCmd);
     }
@@ -1234,7 +1245,19 @@ void LLVMCodeGen::emitExecutable() {
 
     // リンカ実行
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMLink, linkCmd);
+    auto link_start = std::chrono::steady_clock::now();
     int result = std::system(linkCmd.c_str());
+    auto link_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - link_start)
+                       .count();
+    // リンクはシステムリンカ（clang++/ld）の子プロセス待ちであり、cm自身は計算していない。
+    // セキュリティソフトの実行ファイルスキャン等で子プロセスが長時間ブロックされると
+    // cmがハングしたように見えるため、閾値超過時に切り分け用の警告を出す
+    if (link_ms > 10000) {
+        std::cerr << "warning: linker took " << (link_ms / 1000)
+                  << "s (cm waits for the system linker; security software scanning new "
+                     "binaries can cause this)\n";
+    }
     if (result != 0) {
         throw std::runtime_error("Linking failed");
     }

@@ -339,6 +339,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/passes/scalar/array_base_extraction.cpp
     src/internal/mir/passes/cleanup/dce.cpp
     src/internal/mir/passes/cleanup/dse.cpp
+    src/internal/mir/passes/cleanup/string_reassign_free.cpp
     src/internal/mir/passes/cleanup/simplify_cfg.cpp
     src/internal/mir/passes/cleanup/program_dce.cpp
     src/internal/mir/passes/interprocedural/inlining.cpp
@@ -904,6 +905,7 @@ if(BUILD_TESTING)
             src/internal/mir/passes/scalar/propagation.cpp
             src/internal/mir/passes/cleanup/dce.cpp
             src/internal/mir/passes/cleanup/dse.cpp
+            src/internal/mir/passes/cleanup/string_reassign_free.cpp
             src/internal/mir/passes/cleanup/simplify_cfg.cpp
             src/internal/mir/passes/cleanup/program_dce.cpp
             src/internal/mir/passes/interprocedural/inlining.cpp

@@ -4,6 +4,7 @@
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/dse.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
+#include "internal/mir/passes/cleanup/string_reassign_free.hpp"
 #include "internal/mir/passes/convergence/manager.hpp"
 #include "internal/mir/passes/interprocedural/inlining.hpp"
 #include "internal/mir/passes/interprocedural/tail_call_elimination.hpp"
@@ -36,6 +37,11 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     if (optimization_level == 0) {
         return passes;
     }
+
+    // Phase 0: 文字列再代入の旧バッファ解放（C12）。
+    // loweringが生成した素のMIR形状（T = concat(...) → X = copy(T)）を前提に分類するため、
+    // コピー伝播等がこの形状を書き換える前のパイプライン先頭で実行する
+    passes.push_back(std::make_unique<StringReassignFree>());
 
     // Phase 1: 基礎最適化
     passes.push_back(std::make_unique<SparseConditionalConstantPropagation>());

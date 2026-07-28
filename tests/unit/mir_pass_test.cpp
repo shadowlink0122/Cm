@@ -11,6 +11,7 @@
 #include "../../src/internal/mir/passes/cleanup/dse.hpp"
 #include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
 #include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
+#include "../../src/internal/mir/passes/cleanup/string_reassign_free.hpp"
 #include "../../src/internal/mir/passes/instrumentation/undefined.hpp"
 #include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
 #include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
@@ -383,6 +384,107 @@ TEST(MirPassTest, CopyPropagation_FoldsAggregateCopyChain) {
     const auto& use = std::get<MirRvalue::UseData>(data.rvalue->data);
     const auto& place = std::get<MirPlace>(use.operand->data);
     EXPECT_EQ(place.local, a);
+}
+
+// ============================================================
+// StringReassignFree（文字列再代入の旧バッファ解放・C12）
+// ============================================================
+
+namespace {
+
+// 到達定義が全てfreshなループ再代入を構築する共通ヘルパー。
+// bb0: T1 = concat(...) → bb1: X = copy(T1) → bb2(ループ頭): T2 = concat(...) → bb3: X = copy(T2) → bb2 …
+MirFunctionPtr make_fresh_reassign_loop(LocalId& x_out) {
+    auto f = make_function();
+    LocalId t1 = f->add_local("t1", hir::make_string());
+    LocalId x = f->add_local("x", hir::make_string());
+    LocalId t2 = f->add_local("t2", hir::make_string());
+    BlockId b1 = f->add_block();
+    BlockId b2 = f->add_block();
+    BlockId b3 = f->add_block();
+    f->basic_blocks[0]->set_terminator(call_terminator("cm_string_concat", b1, MirPlace{t1}));
+    emit(*f, b1, x, rv_use(use_of(t1, hir::make_string())));
+    f->basic_blocks[b1]->set_terminator(MirTerminator::goto_block(b2));
+    f->basic_blocks[b2]->set_terminator(call_terminator("cm_string_concat", b3, MirPlace{t2}));
+    emit(*f, b3, x, rv_use(use_of(t2, hir::make_string())));
+    f->basic_blocks[b3]->set_terminator(MirTerminator::goto_block(b2));
+    x_out = x;
+    return f;
+}
+
+// cm_string_freeのCall終端の数を数える
+int count_string_free_calls(const MirFunction& func) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call) {
+            continue;
+        }
+        const auto& call = std::get<MirTerminator::CallData>(block->terminator->data);
+        if (call.func && call.func->kind == MirOperand::FunctionRef &&
+            std::get<std::string>(call.func->data) == "cm_string_free") {
+            count++;
+        }
+    }
+    return count;
+}
+
+}  // namespace
+
+TEST(MirPassTest, StringReassignFree_FreesOldBufferOnFreshReassign) {
+    // 全定義fresh・非エイリアスのループ再代入では、再代入直前へ旧値のcm_string_freeが挿入される
+    LocalId x = 0;
+    auto f = make_fresh_reassign_loop(x);
+
+    opt::StringReassignFree pass;
+    EXPECT_TRUE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 1);
+}
+
+TEST(MirPassTest, StringReassignFree_SkipsLiteralInitializedLocal) {
+    // リテラル初期化が到達定義に混ざるローカル（string acc = ""; ループで加算）は解放しない
+    auto f = make_function();
+    LocalId x = f->add_local("x", hir::make_string());
+    LocalId t2 = f->add_local("t2", hir::make_string());
+    BlockId b1 = f->add_block();
+    BlockId b2 = f->add_block();
+    MirConstant lit;
+    lit.type = hir::make_string();
+    lit.value = std::string("");
+    emit(*f, 0, x, rv_use(MirOperand::constant(std::move(lit))));
+    f->basic_blocks[0]->set_terminator(MirTerminator::goto_block(b1));
+    f->basic_blocks[b1]->set_terminator(call_terminator("cm_string_concat", b2, MirPlace{t2}));
+    emit(*f, b2, x, rv_use(use_of(t2, hir::make_string())));
+    f->basic_blocks[b2]->set_terminator(MirTerminator::goto_block(b1));
+
+    opt::StringReassignFree pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 0);
+}
+
+TEST(MirPassTest, StringReassignFree_SkipsAliasedLocal) {
+    // 他ローカルへコピーされた（エイリアスされた）ローカルは解放しない（コピー先が保持呼び出しへ渡る）
+    LocalId x = 0;
+    auto f = make_fresh_reassign_loop(x);
+    LocalId alias = f->add_local("alias", hir::make_string());
+    BlockId b_last = static_cast<BlockId>(f->basic_blocks.size() - 1);
+    emit(*f, b_last, alias, rv_use(use_of(x, hir::make_string())));
+    // aliasを保持しうるユーザー関数へ渡す（透明なコピー先ではなくなる）
+    BlockId b_after = f->add_block();
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = MirTerminator::Call;
+    MirTerminator::CallData data;
+    data.func = MirOperand::function_ref("user_fn");
+    std::vector<MirOperandPtr> args;
+    args.push_back(MirOperand::copy(MirPlace{alias}, hir::make_string()));
+    data.args = std::move(args);
+    data.success = b_after;
+    term->data = std::move(data);
+    f->basic_blocks[b_last]->set_terminator(std::move(term));
+    f->basic_blocks[b_after]->set_terminator(MirTerminator::return_value());
+
+    opt::StringReassignFree pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 0);
 }
 
 // ============================================================
