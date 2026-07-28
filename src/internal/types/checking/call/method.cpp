@@ -634,6 +634,17 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
                        debug::Level::Debug);
         return ast::make_uint();
     }
+    if (member.member == "codepoint_at") {
+        if (member.args.size() != 1) {
+            error(current_span_, "String codepoint_at() takes 1 argument");
+        } else {
+            auto arg_type = infer_type(*member.args[0]);
+            if (!arg_type->is_integer()) {
+                error(current_span_, "String codepoint_at() index must be integer");
+            }
+        }
+        return ast::make_uint();
+    }
     if (member.member == "charAt" || member.member == "at") {
         if (member.args.size() != 1) {
             error(current_span_, "String " + member.member + "() takes 1 argument");

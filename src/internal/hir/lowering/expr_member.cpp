@@ -790,6 +790,17 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                                 debug::Level::Debug);
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
             }
+            if (mem.member == "codepoint_at") {
+                auto hir = std::make_unique<HirCall>();
+                hir->func_name = "__builtin_string_codepoint_at";
+                hir->args.push_back(std::move(obj_hir));
+                for (auto& arg : mem.args) {
+                    hir->args.push_back(lower_expr(*arg));
+                }
+                debug::hir::log(debug::hir::Id::MethodCallLower, "String builtin codepoint_at()",
+                                debug::Level::Debug);
+                return std::make_unique<HirExpr>(std::move(hir), ast::make_uint());
+            }
             if (mem.member == "charAt" || mem.member == "at") {
                 auto hir = std::make_unique<HirCall>();
                 hir->func_name = "__builtin_string_charAt";

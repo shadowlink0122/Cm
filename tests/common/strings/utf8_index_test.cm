@@ -1,0 +1,34 @@
+//! platform: !sv
+import std::io::println;
+
+// H9第3段回帰: substring/sliceの添字がコードポイント単位で切れること（バイト境界で壊れたUTF-8を生まない）、
+// codepoint_at(i)がコードポイント添字のUnicodeスカラ値を返すことを全バックエンドで検証する。
+// 負添字のPython風意味論（末尾からの位置）も維持される
+
+int main() {
+    string ja = "こんにちは";
+
+    // コードポイント添字の部分文字列
+    println(ja.substring(0, 2));
+    println(ja.substring(2, 5));
+    println(ja.substring(1, -1));
+
+    // 絵文字（4バイト・サロゲートペア）混在
+    string mixed = "a😀b漢c";
+    println(mixed.substring(1, 2));
+    println(mixed.substring(0, 3));
+    println(mixed.substring(3, 5));
+
+    // 範囲外は切り詰め・逆転は空
+    println(ja.substring(3, 100));
+    string empty_result = ja.substring(4, 2);
+    println(empty_result.len());
+
+    // codepoint_at: ASCII・日本語・絵文字・範囲外
+    string s = "aあ😀";
+    println(s.codepoint_at(0));
+    println(s.codepoint_at(1));
+    println(s.codepoint_at(2));
+    println(s.codepoint_at(3));
+    return 0;
+}

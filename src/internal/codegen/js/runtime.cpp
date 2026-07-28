@@ -100,7 +100,9 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
     if (needs("__cm_str_slice")) {
         emitter.emitLine("function __cm_str_slice(str, start, end) {");
         emitter.increaseIndent();
-        emitter.emitLine("const len = str.length;");
+        // 添字はコードポイント単位（H9第3段。スプレッドでサロゲートペアを1要素に分解）
+        emitter.emitLine("const cps = [...str];");
+        emitter.emitLine("const len = cps.length;");
         emitter.emitLine("if (start < 0) start = len + start;");
         emitter.emitLine("if (start < 0) start = 0;");
         emitter.emitLine("if (end === undefined || end === null) end = len;");
@@ -109,7 +111,7 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("if (start > len) start = len;");
         emitter.emitLine("if (end > len) end = len;");
         emitter.emitLine("if (start > end) return '';");
-        emitter.emitLine("return str.substring(start, end);");
+        emitter.emitLine("return cps.slice(start, end).join(\"\");");
         emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine();

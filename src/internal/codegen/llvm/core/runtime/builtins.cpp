@@ -134,6 +134,13 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // コードポイント取得（uint32を返す）
+    else if (name == "__builtin_string_codepoint_at") {
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI32Type(), {ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // 文字列charAt
     else if (name == "__builtin_string_charAt") {
         auto funcType =

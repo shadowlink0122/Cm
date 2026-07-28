@@ -61,6 +61,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_format_string_4",
         "__builtin_string_len",
         "__builtin_string_codepoint_len",
+        "__builtin_string_codepoint_at",
         "__builtin_string_charAt",
         "__builtin_string_substring",
         "__builtin_string_indexOf",
@@ -385,6 +386,10 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     if (name == "__builtin_string_codepoint_len" && argStrs.size() >= 1) {
         // len(): コードポイント数（スプレッドはサロゲートペアを1要素として数える）
         return "[..." + argStrs[0] + "].length";
+    }
+    if (name == "__builtin_string_codepoint_at" && argStrs.size() >= 2) {
+        // codepoint_at(i): コードポイント添字iのスカラ値（範囲外は0）
+        return "(([..." + argStrs[0] + "][" + argStrs[1] + "] ?? \"\\0\").codePointAt(0))";
     }
     if (name == "__builtin_string_charAt" && argStrs.size() >= 2) {
         return argStrs[0] + ".charCodeAt(" + argStrs[1] + ")";

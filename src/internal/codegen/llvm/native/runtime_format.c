@@ -931,34 +931,87 @@ char __builtin_string_last(const char* str) {
     return str[len - 1];
 }
 
+// コードポイント添字に対応するバイトオフセットを返す（cp_index個のコードポイント開始をスキップ）。
+// 末尾を越える添字は文字列末尾のバイトオフセットを返す
+static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
+    const unsigned char* p = (const unsigned char*)str;
+    int64_t seen = 0;
+    while (*p) {
+        if ((*p & 0xC0) != 0x80) {
+            if (seen == cp_index) {
+                break;
+            }
+            seen++;
+        }
+        p++;
+    }
+    // 継続バイトの途中で止まらないよう、次のコードポイント開始または終端まで進める
+    while (*p && (*p & 0xC0) == 0x80) {
+        p++;
+    }
+    return (size_t)((const char*)p - str);
+}
+
+// substring/sliceの添字はコードポイント単位（H9第3段）。
+// 従来はnative=バイト・js=UTF-16単位で意味が食い違っており、マルチバイト文字の途中で切れて壊れたUTF-8を生んでいた。
+// 負添字のPython風意味論（末尾からの位置）は維持する
 char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
     if (!str)
         return NULL;
-    size_t len = cm_strlen_impl(str);
+    int64_t cp_len = (int64_t)__builtin_string_codepoint_len(str);
     // Python風: 負の値は末尾からの位置
     if (start < 0) {
-        start = (int64_t)len + start;
+        start = cp_len + start;
         if (start < 0)
             start = 0;
     }
     if (end < 0) {
-        end = (int64_t)len + end + 1;  // -1 => len
+        end = cp_len + end + 1;  // -1 => cp_len
     }
-    if ((size_t)end > len)
-        end = (int64_t)len;
+    if (end > cp_len)
+        end = cp_len;
     if (start >= end) {
         char* empty = (char*)cm_alloc(1);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
-    size_t result_len = (size_t)(end - start);
+    size_t byte_start = cm_cp_index_to_byte(str, start);
+    size_t byte_end = cm_cp_index_to_byte(str, end);
+    size_t result_len = byte_end - byte_start;
     char* result = (char*)cm_alloc(result_len + 1);
     if (!result)
         return NULL;
-    memcpy(result, str + start, result_len);
+    memcpy(result, str + byte_start, result_len);
     result[result_len] = '\0';
     return result;
+}
+
+// コードポイント添字indexのUnicodeスカラ値を返す（H9第3段）。範囲外・不正列は0
+uint32_t __builtin_string_codepoint_at(const char* str, int64_t index) {
+    if (!str || index < 0)
+        return 0;
+    size_t off = cm_cp_index_to_byte(str, index);
+    const unsigned char* p = (const unsigned char*)str + off;
+    if (!*p)
+        return 0;
+    unsigned char b0 = *p;
+    if (b0 < 0x80) {
+        return b0;
+    }
+    if ((b0 & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x1F) << 6) | (uint32_t)(p[1] & 0x3F);
+    }
+    if ((b0 & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) |
+               (uint32_t)(p[2] & 0x3F);
+    }
+    if ((b0 & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+        (p[3] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x07) << 18) | ((uint32_t)(p[1] & 0x3F) << 12) |
+               ((uint32_t)(p[2] & 0x3F) << 6) | (uint32_t)(p[3] & 0x3F);
+    }
+    return 0;
 }
 
 int64_t __builtin_string_indexOf(const char* str, const char* substr) {

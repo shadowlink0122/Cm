@@ -225,34 +225,83 @@ char __builtin_string_last(const char* str) {
     return str[len - 1];
 }
 
+// コードポイント添字に対応するバイトオフセットを返す（native版と同一ロジック）
+static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
+    const unsigned char* p = (const unsigned char*)str;
+    int64_t seen = 0;
+    while (*p) {
+        if ((*p & 0xC0) != 0x80) {
+            if (seen == cp_index) {
+                break;
+            }
+            seen++;
+        }
+        p++;
+    }
+    while (*p && (*p & 0xC0) == 0x80) {
+        p++;
+    }
+    return (size_t)((const char*)p - str);
+}
+
+// substring/sliceの添字はコードポイント単位（H9第3段）。負添字のPython風意味論は維持
 char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
     if (!str) {
         char* empty = (char*)wasm_alloc(1);
         empty[0] = '\0';
         return empty;
     }
-    size_t len = wasm_strlen(str);
+    int64_t cp_len = (int64_t)__builtin_string_codepoint_len(str);
     // Python風: 負の値は末尾からの位置
     if (start < 0) {
-        start = (int64_t)len + start;
+        start = cp_len + start;
         if (start < 0) start = 0;
     }
     if (end < 0) {
-        end = (int64_t)len + end + 1;  // -1 => len
+        end = cp_len + end + 1;  // -1 => cp_len
     }
-    if ((size_t)end > len) end = (int64_t)len;
+    if (end > cp_len) end = cp_len;
     if (start >= end) {
         char* empty = (char*)wasm_alloc(1);
         empty[0] = '\0';
         return empty;
     }
-    size_t result_len = (size_t)(end - start);
+    size_t byte_start = cm_cp_index_to_byte(str, start);
+    size_t byte_end = cm_cp_index_to_byte(str, end);
+    size_t result_len = byte_end - byte_start;
     char* result = (char*)wasm_alloc(result_len + 1);
     for (size_t i = 0; i < result_len; i++) {
-        result[i] = str[start + i];
+        result[i] = str[byte_start + i];
     }
     result[result_len] = '\0';
     return result;
+}
+
+// コードポイント添字indexのUnicodeスカラ値を返す（H9第3段）。範囲外・不正列は0
+uint32_t __builtin_string_codepoint_at(const char* str, int64_t index) {
+    if (!str || index < 0)
+        return 0;
+    size_t off = cm_cp_index_to_byte(str, index);
+    const unsigned char* p = (const unsigned char*)str + off;
+    if (!*p)
+        return 0;
+    unsigned char b0 = *p;
+    if (b0 < 0x80) {
+        return b0;
+    }
+    if ((b0 & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x1F) << 6) | (uint32_t)(p[1] & 0x3F);
+    }
+    if ((b0 & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) |
+               (uint32_t)(p[2] & 0x3F);
+    }
+    if ((b0 & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+        (p[3] & 0xC0) == 0x80) {
+        return ((uint32_t)(b0 & 0x07) << 18) | ((uint32_t)(p[1] & 0x3F) << 12) |
+               ((uint32_t)(p[2] & 0x3F) << 6) | (uint32_t)(p[3] & 0x3F);
+    }
+    return 0;
 }
 
 // Simple strstr implementation for WASM
