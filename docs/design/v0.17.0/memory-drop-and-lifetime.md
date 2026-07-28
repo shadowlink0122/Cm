@@ -108,12 +108,12 @@ C13の期待挙動はメモリ挙動であり構文出力の変化は無い。
 - **二重解放（C12）**: 所有権フラグの判定を誤ると、ムーブ済み一時を解放してしまいuse-after-freeを招く。所有権が移動した一時は必ず解放対象から外す不変条件を保つ。
 - **既存のリーク前提コードの挙動変化（C13/C12）**: これまでリークで延命していたオブジェクトが解放されるため、寿命を誤って前提にしていたコードが顕在化する可能性がある。ただし正しい所有権規約では問題にならない。
 - **診断強化による既存コードの新規エラー（H12）**: これまで無診断で通過していたmove後使用がエラーになるため、既存テスト・サンプルの一部が失敗しうる。破壊的変更を避けるため、まず警告として導入し段階的にエラー化する選択肢を残す。
-- **バックエンド差異**: wasmアロケータは解放を実装していない（H11、別文書allocator-and-temp-poolで対処）ため、C12のdrop挿入だけではwasmで実メモリが返らない。dropパスとwasmアロケータ改修は補完関係にあり、片方だけでは効果が限定される点に留意する。
+- **バックエンド差異**: wasmアロケータは従来解放を実装していなかった（H11、別文書allocator-and-temp-poolでフリーリスト化済み）ため、C12のdrop挿入だけではwasmで実メモリが返らない。dropパスとwasmアロケータ改修は補完関係にあり、片方だけでは効果が限定される点に留意する。
 
 ## 関連
 
 - `docs/design/v0.17.0/large-scale-bottleneck-audit.md`（監査本体、テーマ4「メモリを解放しない」）
-- `docs/design/v0.17.0/allocator-and-temp-pool.md`（H11/M14、wasmでの実解放とアロケータ差し替え）
+- `docs/archive/v0.17.0/allocator-and-temp-pool.md`（H11/M14、wasmでの実解放とアロケータ差し替え。実装済み）
 - `src/internal/mir/lowering/stmt/scope.cpp` / `src/internal/mir/lowering/stmt/control.cpp`（スコープ・制御フローlowering）
 - `src/internal/mir/lowering/mono/specialize.cpp`（ジェネリックデストラクタ特殊化）
 - `src/internal/types/checking/expr/primary.cpp` / `src/internal/types/scope.cpp`（move状態管理）

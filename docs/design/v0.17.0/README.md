@@ -19,7 +19,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 
 ### メモリ管理
 - [drop パスと寿命管理](memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15
-- [アロケータと一時プール](allocator-and-temp-pool.md) — H11 / M14
+- [アロケータと一時プール](../../archive/v0.17.0/allocator-and-temp-pool.md) — H11 / M14（全項目実装済み・archiveへ移動。set_allocator_fnsファサードとcm_mem_*経路一本化で完結）
 - [集約コピーのlowering](../../archive/v0.17.0/aggregate-copy-lowering.md) — C14 / M12 / M13（全Phase実装済み・archiveへ移動）
 
 ### モジュール・可視性・静的解析
@@ -39,3 +39,4 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 ## 着手順の推奨
 
 型システム・ジェネリクス群（C7/C8/C9・C16・H15/L8）とdropパス（C12の文字列一時/C13）・集約コピー（C14 Phase1）は実装済み。クロージャ環境化（C6）も実装済み。インターフェイス値の集約格納（H1/H2）も実装済み。残りはH12のフロー解析化・M12/M13（byval/sret）・JS値セマンティクス（H3/H5）・文字列基盤（H9）・ビルド基盤（H14）等の構造的リファクタリングが中心となる。
+セルフホスト準備（S1〜S9）はこれらと独立に進められ、libc FFIと純Cm実装だけで済む第1段から着手し、ランタイムシム（第2段）→argv対応（第3段）→通し検証（第4段）の順で進める（詳細は[self-hosting-preparation.md](self-hosting-preparation.md)）。

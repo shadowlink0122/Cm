@@ -13,7 +13,7 @@ wasmランタイムのアロケータが解放不可能な単調バンプであ�
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
 | H11 | メモリ | wasmアロケータは解放不可能な単調バンプ（`free`/`realloc`が旧ブロックを放棄）で長時間実行プログラムは総確保量に比例してメモリ増加 | 実装済み（8バイトヘッダ+サイズクラス別フリーリスト。`free`/`cm_free`が実際に返却し、`realloc`は旧サイズを正確にコピーして旧ブロックを解放、スライスgrowも旧ブロックを返却。マジック検証で非ヒープポインタのfreeは無視。解放→再確保で同一ブロックが再利用されることを実証済み） |
-| M14 | メモリ | `CmTempStringPool`は完全なデッドインフラ（呼び出しゼロ）、アロケータ差し替え（`cm_set_allocator`）はCmから到達不能で`std::mem`/`Vector`はlibc mallocを直呼び | 一部実装（`CmTempStringPool`はdropパス方針に合わせて撤去済み。`set_allocator`のCmファサードはカスタムアロケータをinterface値として渡す基盤（H1/H2）が未実装のため保留） |
+| M14 | メモリ | `CmTempStringPool`は完全なデッドインフラ（呼び出しゼロ）、アロケータ差し替え（`cm_set_allocator`）はCmから到達不能で`std::mem`/`Vector`はlibc mallocを直呼び | 実装済み（`CmTempStringPool`はdropパス方針に合わせて撤去。`std::mem`の確保経路をlibc直呼びから`cm_mem_alloc`/`cm_mem_dealloc`/`cm_mem_realloc`ラッパ経由へ一本化し、`set_allocator_fns`/`reset_allocator`ファサードでCm関数ポインタ3本（alloc/dealloc/realloc）のカスタムアロケータをJIT/Nativeから登録可能にした。interface値渡しの`set_allocator(a)`形式はH1/H2基盤導入後の将来拡張とし、関数ポインタ形式で到達可能化を先行完結。wasmは独自フリーリスト固定でno-op、js/tsはGC管理のため対象外。カウンタアロケータで`std::mem::alloc`の経由と`reset_allocator`の復帰を回帰テスト化） |
 
 ## 背景と根本原因
 

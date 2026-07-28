@@ -28,6 +28,17 @@ use libc {
 }
 
 // ============================================================
+// ランタイムアロケータFFI（M14）
+// alloc/dealloc/DefaultAllocatorはcm_alloc経由に一本化されており、
+// set_allocator_fnsでの差し替えが反映される（malloc/free直接FFIは生libc APIとして併存）
+// ============================================================
+extern "C" void* cm_mem_alloc(long size);
+extern "C" void cm_mem_dealloc(void* ptr);
+extern "C" void* cm_mem_realloc(void* ptr, long new_size);
+extern "C" void cm_set_allocator_fns(void* alloc_fn, void* dealloc_fn, void* realloc_fn);
+extern "C" void cm_reset_allocator();
+
+// ============================================================
 // Allocator Interface
 // ============================================================
 // メモリアロケータの抽象化インターフェース
@@ -52,19 +63,27 @@ export struct DefaultAllocator {}
 
 impl DefaultAllocator for Allocator {
     void* alloc(int size) {
-        return malloc(size);
+        return cm_mem_alloc(size as long);
     }
 
     void dealloc(void* ptr) {
-        free(ptr);
+        cm_mem_dealloc(ptr);
     }
 
     void* reallocate(void* ptr, int new_size) {
-        return realloc(ptr, new_size);
+        return cm_mem_realloc(ptr, new_size as long);
     }
 
     void* alloc_zeroed(int size) {
-        return calloc(1, size);
+        // 確保はcm_alloc経由（差し替え反映）、ゼロ埋めのみlibcのcallocでなく手動で行う
+        void* p = cm_mem_alloc(size as long);
+        char* bytes = p as char*;
+        int i = 0;
+        while (i < size) {
+            bytes[i] = 0 as char;
+            i++;
+        }
+        return p;
     }
 }
 
@@ -74,11 +93,28 @@ impl DefaultAllocator for Allocator {
 // ============================================================
 
 export void* alloc(int size) {
-    return malloc(size);
+    return cm_mem_alloc(size as long);
 }
 
 export void dealloc(void* ptr) {
-    free(ptr);
+    cm_mem_dealloc(ptr);
+}
+
+// ============================================================
+// アロケータ差し替えファサード（M14）
+// Cm関数（void* f(long) / void f(void*) / void* f(void*, long)）の関数ポインタ3本で
+// グローバルアロケータを差し替える。以降のalloc/dealloc/DefaultAllocator・
+// ランタイム内部確保（スライス・文字列等）が登録したアロケータを経由する。
+// 対応バックエンドはJIT/Native（wasmは独自アロケータ、js/tsはGC管理のため対象外）
+// ============================================================
+
+export void set_allocator_fns(void* alloc_fn, void* dealloc_fn, void* realloc_fn) {
+    cm_set_allocator_fns(alloc_fn, dealloc_fn, realloc_fn);
+}
+
+// 既定のアロケータへ戻す
+export void reset_allocator() {
+    cm_reset_allocator();
 }
 
 // ============================================================

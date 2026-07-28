@@ -525,8 +525,8 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
                   obj_list;
     } else if (target == BuildTarget::Wasm) {
         std::string runtimePath = findRuntimeLibrary();
-        linkCmd = "wasm-ld --entry=_start --allow-undefined " + obj_list + runtimePath + " -o " +
-                  output_file;
+        linkCmd = "wasm-ld --entry=_start --allow-undefined -z stack-size=1048576 " + obj_list +
+                  runtimePath + " -o " + output_file;
     } else {
         // ネイティブリンク
         std::string runtimePath = findRuntimeLibrary();
@@ -1087,8 +1087,8 @@ void LLVMCodeGen::emitExecutable() {
                   " " + objFile;
     } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
         std::string runtimePath = findRuntimeLibrary();
-        linkCmd = "wasm-ld --entry=_start --allow-undefined " + objFile + " " + runtimePath +
-                  " -o " + options.outputFile;
+        linkCmd = "wasm-ld --entry=_start --allow-undefined -z stack-size=1048576 " + objFile +
+                  " " + runtimePath + " -o " + options.outputFile;
     } else {
         // ネイティブ：システムリンカ使用
         std::string runtimePath = findRuntimeLibrary();

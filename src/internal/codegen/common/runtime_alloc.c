@@ -56,6 +56,39 @@ CmAllocator* cm_set_allocator(CmAllocator* allocator) {
     return previous;
 }
 
+// Cmファサード用: 3本の関数ポインタからグローバルアロケータを構成して差し替える（M14）。
+// Cm側の関数（void* f(long) / void f(void*) / void* f(void*, long)）はLP64/wasm64版のC ABIと
+// 互換のため、そのまま関数ポインタとして渡せる。いずれかがNULLなら何もしない
+static CmAllocator cm_user_allocator;
+
+// Cm FFI用のエクスポート実体（M14）。
+// cm_alloc/cm_dealloc/cm_reallocはヘッダのstatic inlineで外部シンボルを持たないため、
+// Cmのextern "C"宣言から到達できる非inlineラッパを提供する（JIT/nativeリンクの両方で解決可能）
+void* cm_mem_alloc(size_t size) {
+    return cm_get_allocator()->alloc(size);
+}
+
+void cm_mem_dealloc(void* ptr) {
+    if (ptr) {
+        cm_get_allocator()->dealloc(ptr);
+    }
+}
+
+void* cm_mem_realloc(void* ptr, size_t new_size) {
+    return cm_get_allocator()->realloc(ptr, new_size);
+}
+
+void cm_set_allocator_fns(void* alloc_fn, void* dealloc_fn, void* realloc_fn) {
+    if (!alloc_fn || !dealloc_fn || !realloc_fn) {
+        return;
+    }
+    cm_user_allocator.alloc = (CmAllocFn)alloc_fn;
+    cm_user_allocator.dealloc = (CmDeallocFn)dealloc_fn;
+    cm_user_allocator.realloc = (CmReallocFn)realloc_fn;
+    cm_user_allocator.user_data = 0;
+    cm_set_allocator(&cm_user_allocator);
+}
+
 void cm_reset_allocator(void) {
     cm_current_allocator = &cm_default_alloc_instance;
 }

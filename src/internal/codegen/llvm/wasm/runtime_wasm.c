@@ -241,6 +241,29 @@ void* malloc(size_t size) {
     return wasm_alloc(size);
 }
 
+// std::memのFFI実体（M14）。wasmはフリーリストアロケータ固定のため差し替えAPIはno-op
+void* realloc(void* ptr, size_t new_size);
+
+void* cm_mem_alloc(int64_t size) {
+    return wasm_alloc((size_t)size);
+}
+
+void cm_mem_dealloc(void* ptr) {
+    wasm_free(ptr);
+}
+
+void* cm_mem_realloc(void* ptr, int64_t new_size) {
+    return realloc(ptr, (size_t)new_size);
+}
+
+void cm_set_allocator_fns(void* alloc_fn, void* dealloc_fn, void* realloc_fn) {
+    (void)alloc_fn;
+    (void)dealloc_fn;
+    (void)realloc_fn;
+}
+
+void cm_reset_allocator(void) {}
+
 // フリーリストアロケータの解放関数（実装はruntime_format.c。H11）
 extern void wasm_free(void* ptr);
 extern size_t wasm_alloc_size(const void* ptr);

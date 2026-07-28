@@ -200,6 +200,11 @@ bool isBuiltinFunction(const std::string& name) {
         "malloc",
         "realloc",
         "free",
+        "cm_mem_alloc",
+        "cm_mem_realloc",
+        "cm_mem_dealloc",
+        "cm_set_allocator_fns",
+        "cm_reset_allocator",
         "memcpy",
         "memset",
         // 低レベルI/O
@@ -620,6 +625,17 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return argStrs[0];
     }
     if (name == "free") {
+        return "undefined";
+    }
+    // ランタイムアロケータFFI（M14）: jsはGC管理のためmalloc/freeと同じエミュレーション
+    if (name == "cm_mem_alloc" && argStrs.size() >= 1) {
+        return "{value: 0}";
+    }
+    if (name == "cm_mem_realloc" && argStrs.size() >= 2) {
+        return argStrs[0];
+    }
+    if (name == "cm_mem_dealloc" || name == "cm_set_allocator_fns" ||
+        name == "cm_reset_allocator") {
         return "undefined";
     }
     if (name == "memcpy" && argStrs.size() >= 3) {
