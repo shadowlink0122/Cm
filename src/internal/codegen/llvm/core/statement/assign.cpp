@@ -488,8 +488,25 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
                             // 縮小変換 (例: i32 -> i8, i32 -> i16)
                             rvalue = builder->CreateTrunc(rvalue, targetType, "trunc");
                         } else if (sourceBits < targetBits) {
-                            // 拡大変換 (例: i8 -> i32)
-                            rvalue = builder->CreateSExt(rvalue, targetType, "sext");
+                            // 拡大変換 (例: i8 -> i32)。符号なしソースはゼロ拡張
+                            // （sext固定だとushort(60000)をintローカルへ格納した時点で-5536になる）
+                            bool src_unsigned = false;
+                            if (assign.rvalue->kind == mir::MirRvalue::Use) {
+                                auto& ud = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
+                                if (ud.operand) {
+                                    if (auto src_hir = getOperandType(*ud.operand)) {
+                                        auto k = src_hir->kind;
+                                        src_unsigned =
+                                            k == hir::TypeKind::UTiny ||
+                                            k == hir::TypeKind::UShort ||
+                                            k == hir::TypeKind::UInt || k == hir::TypeKind::ULong ||
+                                            k == hir::TypeKind::USize || k == hir::TypeKind::Bool ||
+                                            k == hir::TypeKind::Char;
+                                    }
+                                }
+                            }
+                            rvalue = src_unsigned ? builder->CreateZExt(rvalue, targetType, "zext")
+                                                  : builder->CreateSExt(rvalue, targetType, "sext");
                         }
                     }
                     // 浮動小数点型間の変換

@@ -446,6 +446,45 @@ ast::TypePtr TypeChecker::infer_ternary(ast::TernaryExpr& ternary) {
         error(current_span_, "Ternary branches have incompatible types");
     }
 
+    // 数値同士の腕は昇格型（幅の広い方、同幅は符号なし優先）を返す。
+    // then側固定だと `false ? 0 : uint値` がint扱いになり、4000000000が-294967296と表示される
+    if (then_type && else_type && then_type->is_integer() && else_type->is_integer() &&
+        then_type->kind != else_type->kind) {
+        auto int_width = [](ast::TypeKind k) -> int {
+            switch (k) {
+                case ast::TypeKind::Tiny:
+                case ast::TypeKind::UTiny:
+                    return 8;
+                case ast::TypeKind::Short:
+                case ast::TypeKind::UShort:
+                    return 16;
+                case ast::TypeKind::Int:
+                case ast::TypeKind::UInt:
+                    return 32;
+                default:
+                    return 64;
+            }
+        };
+        auto is_uns = [](ast::TypeKind k) {
+            return k == ast::TypeKind::UTiny || k == ast::TypeKind::UShort ||
+                   k == ast::TypeKind::UInt || k == ast::TypeKind::ULong ||
+                   k == ast::TypeKind::USize;
+        };
+        const int tw = int_width(then_type->kind);
+        const int ew = int_width(else_type->kind);
+        if (tw != ew) {
+            return tw > ew ? then_type : else_type;
+        }
+        return is_uns(then_type->kind) ? then_type : else_type;
+    }
+    // float/doubleの混在はdouble優先（thenがfloat固定だと精度が落ちる）
+    if (then_type && else_type && then_type->is_floating() && else_type->is_floating() &&
+        then_type->kind != else_type->kind) {
+        const bool then_double =
+            then_type->kind == ast::TypeKind::Double || then_type->kind == ast::TypeKind::UDouble;
+        return then_double ? then_type : else_type;
+    }
+
     return then_type;
 }
 

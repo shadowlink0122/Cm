@@ -469,7 +469,8 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
 }
 
 // 三項演算子のlowering
-LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringContext& ctx) {
+LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, const hir::TypePtr& expr_type,
+                                    LoweringContext& ctx) {
     // 条件をlowering
     LocalId cond = lower_expression(*ternary.condition, ctx);
 
@@ -478,8 +479,12 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     BlockId else_block = ctx.new_block();
     BlockId merge_block = ctx.new_block();
 
-    // 結果用の変数（then_exprの型を使用）
-    hir::TypePtr result_type = ternary.then_expr ? ternary.then_expr->type : hir::make_int();
+    // 結果用の変数: 型チェッカーが決めた式全体の型（腕の昇格型）を優先する。
+    // then腕固定だと `false ? 0 : uint値` の結果がint扱いになり大値が負数表示になる
+    hir::TypePtr result_type = expr_type;
+    if (!result_type) {
+        result_type = ternary.then_expr ? ternary.then_expr->type : hir::make_int();
+    }
     LocalId result = ctx.new_temp(result_type);
 
     // 条件分岐
