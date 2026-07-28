@@ -60,6 +60,8 @@ class RuntimeFunctions {
     /// 型変換関数
     llvm::Function* getIntToString();
     llvm::Function* getUIntToString();
+    llvm::Function* getLongToString();
+    llvm::Function* getULongToString();
     llvm::Function* getCharToString();
     llvm::Function* getBoolToString();
     llvm::Function* getDoubleToString();

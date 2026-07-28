@@ -59,6 +59,10 @@ llvm::Function* RuntimeFunctions::get(const std::string& name) {
         return getIntToString();
     if (name == "cm_uint_to_string")
         return getUIntToString();
+    if (name == "cm_long_to_string")
+        return getLongToString();
+    if (name == "cm_ulong_to_string")
+        return getULongToString();
     if (name == "cm_char_to_string")
         return getCharToString();
     if (name == "cm_bool_to_string")
@@ -136,6 +140,14 @@ llvm::Function* RuntimeFunctions::getIntToString() {
 
 llvm::Function* RuntimeFunctions::getUIntToString() {
     return declare("cm_uint_to_string", ptrTy, {i32Ty});
+}
+
+llvm::Function* RuntimeFunctions::getLongToString() {
+    return declare("cm_long_to_string", ptrTy, {i64Ty});
+}
+
+llvm::Function* RuntimeFunctions::getULongToString() {
+    return declare("cm_ulong_to_string", ptrTy, {i64Ty});
 }
 
 llvm::Function* RuntimeFunctions::getCharToString() {

@@ -1346,6 +1346,18 @@ char* cm_int_to_string(int value) {
     return cm_format_int(value);
 }
 
+char* cm_uint_to_string(unsigned int value) {
+    return cm_format_uint(value);
+}
+
+char* cm_long_to_string(int64_t value) {
+    return cm_format_long(value);
+}
+
+char* cm_ulong_to_string(uint64_t value) {
+    return cm_format_ulong(value);
+}
+
 char* cm_char_to_string(char value) {
     return cm_format_char(value);
 }

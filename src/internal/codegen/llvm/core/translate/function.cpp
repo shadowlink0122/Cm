@@ -45,6 +45,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // これらはランタイムライブラリで実装されている
         if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
             func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
+            func.name.find("cm_long_to_string") == 0 || func.name.find("cm_ulong_to_string") == 0 ||
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
             func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||

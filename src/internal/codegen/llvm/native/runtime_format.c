@@ -2174,6 +2174,14 @@ char* cm_uint_to_string(unsigned int value) {
     return cm_format_uint(value);
 }
 
+char* cm_long_to_string(long long value) {
+    return cm_format_long(value);
+}
+
+char* cm_ulong_to_string(unsigned long long value) {
+    return cm_format_ulong(value);
+}
+
 char* cm_char_to_string(char value) {
     return cm_format_char(value);
 }

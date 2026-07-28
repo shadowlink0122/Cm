@@ -68,6 +68,10 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI32Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_long_to_string" || name == "cm_ulong_to_string") {
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_char_to_string") {
         auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getI8Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);

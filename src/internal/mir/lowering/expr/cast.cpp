@@ -23,15 +23,22 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
         switch (type->kind) {
             case hir::TypeKind::Int:
             case hir::TypeKind::Short:
-            case hir::TypeKind::Long:
             case hir::TypeKind::Tiny:
                 conv_func = "cm_int_to_string";
                 break;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ISize:
+                // 64ビット値はi32関数へ渡すとtruncで壊れるため専用関数を使う
+                conv_func = "cm_long_to_string";
+                break;
             case hir::TypeKind::UInt:
             case hir::TypeKind::UShort:
-            case hir::TypeKind::ULong:
             case hir::TypeKind::UTiny:
                 conv_func = "cm_uint_to_string";
+                break;
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::USize:
+                conv_func = "cm_ulong_to_string";
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:

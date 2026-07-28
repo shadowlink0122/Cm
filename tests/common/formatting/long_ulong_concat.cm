@@ -1,0 +1,27 @@
+//! platform: !js
+// 64ビット整数の文字列連結回帰: convert_to_stringがLong/ULongをi32のcm_int_to_string/
+// cm_uint_to_stringへ渡しtruncで壊れていた（"l="+8589934591が"l=-1"になる）
+// cm_long_to_string/cm_ulong_to_stringを新設して64ビット幅のまま整形する
+// jsはulongが53ビット精度制限（H5）のため対象外
+import std::io::println;
+
+long big_l() {
+    return 8589934591 as long;
+}
+
+ulong big_ul() {
+    return 18000000000000000000 as ulong;
+}
+
+long neg_l() {
+    return -8589934591 as long;
+}
+
+int main() {
+    println("l=" + big_l());
+    println("ul=" + big_ul());
+    println("neg=" + neg_l());
+    // 補間経路（cm_format_replace_*）は従来から正しい: 連結との一致を確認
+    println("l={big_l()} ul={big_ul()}");
+    return 0;
+}
