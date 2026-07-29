@@ -9,7 +9,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段（byte_len分離）・第3段のlen()コードポイント化も実装済み（native/wasm=継続バイトスキップ、js=[...s].length、byte_lenのjsはTextEncoderでUTF-8バイト数）。部分文字列・codepoint_at・chars()・indexOf()のコードポイント単位化も実装済み（charAt/atはバイトAPIとして維持）。残りは第4段（(ptr,len)表現・埋め込みNUL・len()のO(1)化）と第5段（連結最適化）のみ） |
+| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段（byte_len分離）・第3段のlen()コードポイント化も実装済み（native/wasm=継続バイトスキップ、js=[...s].length、byte_lenのjsはTextEncoderでUTF-8バイト数）。部分文字列・codepoint_at・chars()・indexOf()のコードポイント単位化も実装済み（charAt/atはバイトAPIとして維持）。第5段（連結最適化）も実装済み: 連結チェーンa+b+c(+d...)をMIR loweringで平坦化しcm_string_concat3/4へ集約（3要素で確保2回→1回、4要素で3回→1回。5要素以上は4+3+...で畳む。中間一時はdropパス登録で文末解放、チェーンループの実測で約2倍高速化・メモリ挙動は従来と等価）。残りは第4段（(ptr,len)表現・埋め込みNUL・len()のO(1)化）のみ） |
 
 これはランタイム表現・型マッピング・全バックエンドのコード生成に及ぶ大規模な設計変更であり、段階分割を厚く扱う。
 
@@ -130,7 +130,7 @@ println(result.len());   // 200000
 2. 第2段（byte_len明示化）: 従来のstrlenベース長さを`byte_len()`として公開し、`len()`のコードポイント化の受け皿を作る。（実装済み: 型検査`infer_string_method`とHIR loweringへ`byte_len`を追加し`__builtin_string_len`へ写像。jsのbyte_lenは`TextEncoder.encode(s).length`でUTF-8バイト数を返す——JS Stringの`.length`はUTF-16単位のためnativeと食い違っていた）
 3. 第3段（UTF-8デコード）: native/wasmにUTF-8境界判定を実装し、`len()`をコードポイント数へ切替。jsをコードポイント基準へ揃える。添字・部分文字列・`chars()`をコードポイント単位化。（len()の切替は実装済み: `__builtin_string_codepoint_len`（継続バイト0b10xxxxxxを数えないO(n)スキャン）をnative/wasmへ追加し、jsは`[...s].length`（サロゲートペアを1と数える）。ASCIIのみの文字列は挙動不変。部分文字列とコードポイント取得も実装済み: substring/sliceの添字をコードポイント単位へ統一（従来はnative=バイト・js=UTF-16単位で既に不一致だった。負添字のPython風意味論は維持、SVはASCII前提で従来どおり）、codepoint_at(i)を新設（コードポイント添字iのスカラ値をuintで返す。範囲外は0）。charAt/atはバイト単位のまま維持（byte_lenと対のバイトアクセスAPIとして明記）。chars()とindexOfも実装済み: chars()はコードポイント列をuint[]スライスで返しfor-inで列挙できる（native/wasm=cm_slice_new+UTF-8デコード、js=スプレッド+codePointAt写像。遅延イテレータでなく実体化スライスの設計——現行のイテレータ基盤で全バックエンド一致を優先）。indexOf()の戻り値はバイトオフセットからコードポイント添字へ統一（js=UTF-16単位との不一致も解消、未検出は-1のまま）。第4段以降へ残るのは(ptr,len)表現・埋め込みNUL・連結最適化のみ）
 4. 第4段（(ptr,len)表現移行）: LLVM系の文字列型を長さ付き表現へ差し替え（types.cpp:58-60, 726, program.cpp:266, rvalue.cpp:609, operators.cpp:221/260）。埋め込みNUL保持を有効化。`len()`をO(1)化。共通ヘッダ（format_core.h, runtime_common.h, runtime_functions.cpp）の連結・長さ関数を新表現へ更新。
-5. 第5段（連結最適化）: 連結演算子の内部で、隣接連結を`StringBuilder`経由へ集約する最適化（可能なら`a + b + c`を1回のバッファ確保へ）。
+5. 第5段（連結最適化）: 実装済み。MIR loweringのlower_binaryで文字列Addチェーンを平坦化し、cm_string_concat3/4（native/wasm、jsは+連結写像）へ集約する。StringBuilder経由でなくN引数連結関数方式を採用（確保1回で同等の効果、ランタイム追加が最小）。
 
 各段は独立にテスト可能で、第1段だけでも実害（二次時間）を解消できる。
 

@@ -49,6 +49,9 @@ class TypeChecker {
     // Lint警告の有効/無効を設定
     void set_enable_lint_warnings(bool enable) { enable_lint_warnings_ = enable; }
 
+    // M3段階3: 非constポインタへのconst基点&式の束縛を警告
+    void warn_addr_of_const_into_mutable_ptr(const ast::TypePtr& dest_type, const ast::Expr* init);
+
     // 命名規則チェック（--strict）の有効/無効を設定
     void set_enable_naming_check(bool enable) { enable_naming_check_ = enable; }
 

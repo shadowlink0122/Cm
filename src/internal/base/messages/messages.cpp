@@ -903,6 +903,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeAssignToConstAggregate
     {"assignment to a field or element of const value '{0}' (const is currently shallow for aggregates; this will become an error in a future version)",
      "const値 '{0}' のフィールド/要素へ代入しています（集約のconstは現在浅い扱いですが、将来のバージョンでエラーになります）"},
+    // TypeAddrOfConst
+    {"taking a mutable pointer to const value '{0}' (writes through the pointer bypass const; this will become an error in a future version)",
+     "const値 '{0}' へのミュータブルなポインタを取得しています（ポインタ経由の書き込みはconstを迂回します。将来のバージョンでエラーになります）"},
     // ImportDuplicateSymbol
     {"symbol '{0}' is imported from both '{1}' and '{2}' and is ambiguous; use an alias (import ... as ...) or a qualified name",
      "シンボル '{0}' は '{1}' と '{2}' の両方からimportされ曖昧です。エイリアス（import ... as ...）か修飾名を使ってください"},

@@ -31,7 +31,8 @@ bool is_non_retaining_callee(const std::string& name) {
         name == "cm_slice_last_i64" || name == "cm_slice_free") {
         return true;
     }
-    return name == "cm_string_concat" || name == "cm_strlen" || name == "cm_strcmp" ||
+    return name == "cm_string_concat" || name == "cm_string_concat3" ||
+           name == "cm_string_concat4" || name == "cm_strlen" || name == "cm_strcmp" ||
            name == "strlen" || name == "strcmp" || name == "cm_string_free";
 }
 

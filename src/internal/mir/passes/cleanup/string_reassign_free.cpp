@@ -21,7 +21,8 @@ namespace {
 
 // 新規バッファを返すことが既知のランタイム関数（この結果を受けたローカルはバッファを所有する）
 bool is_fresh_buffer_callee(const std::string& name) {
-    return name == "cm_string_concat" || name.find("_to_string") != std::string::npos ||
+    return name == "cm_string_concat" || name == "cm_string_concat3" ||
+           name == "cm_string_concat4" || name.find("_to_string") != std::string::npos ||
            name.rfind("cm_format_", 0) == 0;
 }
 
@@ -30,7 +31,8 @@ bool is_fresh_buffer_callee(const std::string& name) {
 bool is_non_retaining_callee(const std::string& name) {
     return name.rfind("cm_println_", 0) == 0 || name.rfind("cm_print_", 0) == 0 ||
            name.rfind("cm_format_", 0) == 0 || name.rfind("__builtin_string_", 0) == 0 ||
-           name == "cm_string_concat" || name == "cm_strlen" || name == "cm_strcmp" ||
+           name == "cm_string_concat" || name == "cm_string_concat3" ||
+           name == "cm_string_concat4" || name == "cm_strlen" || name == "cm_strcmp" ||
            name == "strlen" || name == "strcmp" || name == "cm_string_free" ||
            name.find("_to_string") != std::string::npos;
 }

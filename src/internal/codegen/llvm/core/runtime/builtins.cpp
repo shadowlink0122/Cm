@@ -113,6 +113,17 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_string_concat3") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(), {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_string_concat4") {
+        auto funcType = llvm::FunctionType::get(
+            ctx.getPtrType(),
+            {ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_string_free") {
         // void cm_string_free(i8* str) — 文一時文字列の解放（C12 dropパス）
         auto funcType = llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType()}, false);

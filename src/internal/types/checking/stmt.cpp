@@ -190,6 +190,51 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
     }
 }
 
+// M3段階3: 非constポインタ型の格納先へ、const基点の&式を束縛する場合に警告する
+// （const int* p = &c は正当なため、要素constのポインタ格納先は対象外）
+void TypeChecker::warn_addr_of_const_into_mutable_ptr(const ast::TypePtr& dest_type,
+                                                      const ast::Expr* init) {
+    if (!enable_lint_warnings_ || !dest_type || !init) {
+        return;
+    }
+    auto resolved = resolve_typedef(dest_type);
+    if (!resolved || resolved->kind != ast::TypeKind::Pointer) {
+        return;
+    }
+    if (resolved->element_type && resolved->element_type->qualifiers.is_const) {
+        return;
+    }
+    auto* unary = init->as<ast::UnaryExpr>();
+    if (!unary || unary->op != ast::UnaryOp::AddrOf || !unary->operand) {
+        return;
+    }
+    const ast::Expr* base = unary->operand.get();
+    while (base) {
+        if (auto* idx = base->as<ast::IndexExpr>()) {
+            base = idx->object.get();
+        } else if (auto* mem = base->as<ast::MemberExpr>()) {
+            base = mem->object.get();
+        } else {
+            break;
+        }
+    }
+    if (!base) {
+        return;
+    }
+    auto* base_ident = base->as<ast::IdentExpr>();
+    if (!base_ident) {
+        return;
+    }
+    auto base_sym = scopes_.current().lookup(base_ident->name);
+    if (base_sym && base_sym->is_const) {
+        Span warn_span = unary->operand->span;
+        if (warn_span.start == 0) {
+            warn_span = current_span_;
+        }
+        warning(warn_span, i18n::msgf(i18n::MsgId::TypeAddrOfConst, base_ident->name));
+    }
+}
+
 void TypeChecker::check_let(ast::LetStmt& let) {
     // エラー表示用に文のSpanを保存
     Span stmt_span = current_span_;
@@ -385,6 +430,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     // 初期化式がある場合は初期化済みとしてマーク
     if (let.init) {
         mark_variable_initialized(let.name);
+        // M3段階3: int* q = &const_値 の束縛を警告（const int*は対象外）
+        warn_addr_of_const_into_mutable_ptr(let.type, let.init.get());
     }
     // コンストラクタ呼び出し宣言はデストラクタ等の副作用のために存在し得るため、初期化済みかつ使用済みとして扱う（RAIIパターンのW001誤検出防止）
     if (let.has_ctor_call) {

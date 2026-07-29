@@ -125,6 +125,11 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 // 代入は初期化とみなす（宣言のみ→代入のパターンを未初期化と誤検出しない）
                 mark_variable_initialized(ident->name);
 
+                // M3段階3: 非constポインタへのconst基点&式の代入を警告（const int*は対象外）
+                if (binary.op == ast::BinaryOp::Assign) {
+                    warn_addr_of_const_into_mutable_ptr(ltype, binary.right.get());
+                }
+
                 // ライフタイムチェック: ポインタ代入時のスコープ比較
                 // p = &x の場合、pのスコープレベル < xのスコープレベルなら危険
                 if (binary.op == ast::BinaryOp::Assign && ltype &&

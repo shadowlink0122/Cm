@@ -32,6 +32,8 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_print_char",
         "cm_print_format",
         "cm_string_concat",
+        "cm_string_concat3",
+        "cm_string_concat4",
         "cm_string_free",
         "cm_slice_free",
         "cm_sb_create",
@@ -303,6 +305,13 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
             return "(" + argStrs[0] + " + " + argStrs[1] + ")";
         }
         return "\"\"";
+    }
+    if (name == "cm_string_concat3" && argStrs.size() >= 3) {
+        return "(" + argStrs[0] + " + " + argStrs[1] + " + " + argStrs[2] + ")";
+    }
+    if (name == "cm_string_concat4" && argStrs.size() >= 4) {
+        return "(" + argStrs[0] + " + " + argStrs[1] + " + " + argStrs[2] + " + " + argStrs[3] +
+               ")";
     }
 
     if (name == "cm_string_free" || name == "cm_slice_free") {

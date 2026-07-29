@@ -1215,6 +1215,40 @@ char* cm_format_double_EXP(double value) {
 // ============================================================
 // String Utilities
 // ============================================================
+// 連結チェーン最適化（H9第5段）: a+b+c(+d)を1回の確保で連結する
+char* cm_string_concat3(const char* a, const char* b, const char* c) {
+    if (!a) a = "";
+    if (!b) b = "";
+    if (!c) c = "";
+    size_t la = wasm_strlen(a);
+    size_t lb = wasm_strlen(b);
+    size_t lc = wasm_strlen(c);
+    char* result = (char*)wasm_alloc(la + lb + lc + 1);
+    for (size_t i = 0; i < la; i++) result[i] = a[i];
+    for (size_t i = 0; i < lb; i++) result[la + i] = b[i];
+    for (size_t i = 0; i < lc; i++) result[la + lb + i] = c[i];
+    result[la + lb + lc] = '\0';
+    return result;
+}
+
+char* cm_string_concat4(const char* a, const char* b, const char* c, const char* d) {
+    if (!a) a = "";
+    if (!b) b = "";
+    if (!c) c = "";
+    if (!d) d = "";
+    size_t la = wasm_strlen(a);
+    size_t lb = wasm_strlen(b);
+    size_t lc = wasm_strlen(c);
+    size_t ld = wasm_strlen(d);
+    char* result = (char*)wasm_alloc(la + lb + lc + ld + 1);
+    for (size_t i = 0; i < la; i++) result[i] = a[i];
+    for (size_t i = 0; i < lb; i++) result[la + i] = b[i];
+    for (size_t i = 0; i < lc; i++) result[la + lb + i] = c[i];
+    for (size_t i = 0; i < ld; i++) result[la + lb + lc + i] = d[i];
+    result[la + lb + lc + ld] = '\0';
+    return result;
+}
+
 char* cm_string_concat(const char* left, const char* right) {
     if (!left) left = "";
     if (!right) right = "";

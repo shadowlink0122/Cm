@@ -2045,6 +2045,51 @@ char* cm_format_double_scientific(double value, int uppercase) {
 // ============================================================
 // String Utilities
 // ============================================================
+// 連結チェーン最適化（H9第5段）: a+b+c(+d)を1回の確保で連結する
+char* cm_string_concat3(const char* a, const char* b, const char* c) {
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
+    if (!c)
+        c = "";
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    size_t lc = strlen(c);
+    char* result = (char*)cm_alloc(la + lb + lc + 1);
+    if (result) {
+        memcpy(result, a, la);
+        memcpy(result + la, b, lb);
+        memcpy(result + la + lb, c, lc);
+        result[la + lb + lc] = 0;
+    }
+    return result;
+}
+
+char* cm_string_concat4(const char* a, const char* b, const char* c, const char* d) {
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
+    if (!c)
+        c = "";
+    if (!d)
+        d = "";
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    size_t lc = strlen(c);
+    size_t ld = strlen(d);
+    char* result = (char*)cm_alloc(la + lb + lc + ld + 1);
+    if (result) {
+        memcpy(result, a, la);
+        memcpy(result + la, b, lb);
+        memcpy(result + la + lb, c, lc);
+        memcpy(result + la + lb + lc, d, ld);
+        result[la + lb + lc + ld] = 0;
+    }
+    return result;
+}
+
 char* cm_string_concat(const char* left, const char* right) {
     if (!left)
         left = "";

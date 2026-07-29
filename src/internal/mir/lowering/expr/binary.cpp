@@ -12,7 +12,103 @@
 
 namespace cm::mir {
 
+namespace {
+
+// 文字列連結（どちらかのオペランドがstring型のAdd）かを判定する（H9第5段）
+bool cm_is_string_add(const hir::HirExpr& e) {
+    auto* b = std::get_if<std::unique_ptr<hir::HirBinary>>(&e.kind);
+    if (!b || !*b || (*b)->op != hir::HirBinaryOp::Add) {
+        return false;
+    }
+    const auto& lhs = (*b)->lhs;
+    const auto& rhs = (*b)->rhs;
+    const bool l = lhs && lhs->type && lhs->type->kind == hir::TypeKind::String;
+    const bool r = rhs && rhs->type && rhs->type->kind == hir::TypeKind::String;
+    return l || r;
+}
+
+// 連結チェーンを左から右の平坦列へ展開する
+void cm_flatten_string_concat(const hir::HirExpr& e, std::vector<const hir::HirExpr*>& out) {
+    if (cm_is_string_add(e)) {
+        auto* b = std::get_if<std::unique_ptr<hir::HirBinary>>(&e.kind);
+        cm_flatten_string_concat(*(*b)->lhs, out);
+        cm_flatten_string_concat(*(*b)->rhs, out);
+        return;
+    }
+    out.push_back(&e);
+}
+
+}  // namespace
+
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
+    // 文字列連結チェーンの平坦化（H9第5段）: a + b + c (+ d ...) をcm_string_concat3/4へ
+    // まとめ、中間バッファの確保回数を減らす（3要素: 2回確保→1回、4要素: 3回→1回）
+    if (bin.op == hir::HirBinaryOp::Add) {
+        // lhs/rhsの型から文字列連結かを判定する
+        const bool lhs_str =
+            bin.lhs && bin.lhs->type && bin.lhs->type->kind == hir::TypeKind::String;
+        const bool rhs_str =
+            bin.rhs && bin.rhs->type && bin.rhs->type->kind == hir::TypeKind::String;
+        if (lhs_str || rhs_str) {
+            std::vector<const hir::HirExpr*> parts;
+            cm_flatten_string_concat(*bin.lhs, parts);
+            cm_flatten_string_concat(*bin.rhs, parts);
+            if (parts.size() >= 3) {
+                // 各要素をlowerし、非文字列は文字列へ変換する
+                std::vector<LocalId> str_parts;
+                str_parts.reserve(parts.size());
+                for (const auto* pe : parts) {
+                    LocalId v = lower_expression(*pe, ctx);
+                    if (pe->type && pe->type->kind == hir::TypeKind::String) {
+                        str_parts.push_back(v);
+                    } else {
+                        str_parts.push_back(convert_to_string(v, pe->type, ctx));
+                    }
+                }
+                // 4要素ずつ（2回目以降は前結果+3要素）でconcat2/3/4に畳む
+                size_t i = 0;
+                LocalId cur = 0;
+                bool has_cur = false;
+                const size_t n = str_parts.size();
+                while (i < n) {
+                    const size_t take = std::min<size_t>(has_cur ? 3 : 4, n - i);
+                    std::vector<MirOperandPtr> args;
+                    if (has_cur) {
+                        args.push_back(MirOperand::copy(MirPlace{cur}));
+                    }
+                    for (size_t k = 0; k < take; ++k) {
+                        args.push_back(MirOperand::copy(MirPlace{str_parts[i + k]}));
+                    }
+                    i += take;
+                    const size_t argc = args.size();
+                    const char* fn = argc == 2   ? "cm_string_concat"
+                                     : argc == 3 ? "cm_string_concat3"
+                                                 : "cm_string_concat4";
+                    LocalId result = ctx.new_temp(hir::make_string());
+                    BlockId ok = ctx.new_block();
+                    auto term = std::make_unique<MirTerminator>();
+                    term->kind = MirTerminator::Call;
+                    term->data = MirTerminator::CallData{MirOperand::function_ref(fn),
+                                                         std::move(args),
+                                                         MirPlace{result},
+                                                         ok,
+                                                         std::nullopt,
+                                                         "",
+                                                         "",
+                                                         false};
+                    ctx.set_terminator(std::move(term));
+                    ctx.switch_to_block(ok);
+                    // 中間・最終結果とも無名一時としてdropパスへ登録する（中間は次のconcatに
+                    // 消費されるだけなので文末に解放され、最終結果は既存のエスケープ規則に乗る）
+                    ctx.note_string_temp(result);
+                    cur = result;
+                    has_cur = true;
+                }
+                return cur;
+            }
+        }
+    }
+
     // 代入演算の処理
     if (bin.op == hir::HirBinaryOp::Assign) {
         // Bug#14修正: 右辺が配列リテラルの場合、temp経由のcopyを避けて

@@ -323,6 +323,7 @@ enum class MsgId : int {
     TypeUseAfterMove,
     TypeNotAllPathsReturn,
     TypeAssignToConstAggregate,
+    TypeAddrOfConst,
     ImportDuplicateSymbol,
     ImportNonExportedSymbol,
     Count,

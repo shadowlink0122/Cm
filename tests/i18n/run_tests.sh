@@ -81,6 +81,14 @@ check "ja: const aggregate field warn" "const値 'p' のフィールド/要素�
 check_absent "const aggregate warn: non-const is silent" "const value 'q'" \
     "$CM" check "$DIR/const_aggregate_assign.cm"
 
+# ---------- const値への非constポインタ取得警告（M3段階3） ----------
+check "en: addr-of const warn" "taking a mutable pointer to const value 'c'" \
+    "$CM" check "$DIR/const_addr_of.cm"
+check "ja: addr-of const warn" "const値 'c' へのミュータブルなポインタを取得しています" \
+    "$CM" check --lang=ja "$DIR/const_addr_of.cm"
+check_absent "addr-of const: const int* is silent" "const value 'ok'" \
+    "$CM" check "$DIR/const_addr_of.cm"
+
 # ---------- 確定代入・return網羅の--strictエラー昇格（H6段階3） ----------
 check "en: H6 return coverage warn (check)" "warning: non-void function 'bad_return'" \
     "$CM" check "$DIR/h6_strict_promotion.cm"
