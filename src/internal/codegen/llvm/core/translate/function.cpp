@@ -378,6 +378,17 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // 動的配列（スライス）の場合
                     if (local.type->kind == hir::TypeKind::Array &&
                         !local.type->array_size.has_value()) {
+                        // グローバルスライス変数は関数ごとに作り直さずLLVMグローバルへ写像する
+                        // （従来は毎関数cm_slice_newで別実体になり、関数間の変異が失われていた。
+                        // 実体の初期化はmainエントリのMIRで一度だけ行う）
+                        if (local.is_global) {
+                            auto git = globalVariables.find(local.name);
+                            if (git != globalVariables.end()) {
+                                locals[i] = git->second;
+                                allocatedLocals.insert(i);
+                                continue;
+                            }
+                        }
                         // スライスポインタを格納するallocaを作成
                         auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
                                                             "slice_" + std::to_string(i));

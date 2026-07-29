@@ -1,6 +1,8 @@
 #include "context.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/base/mangle.hpp"
+#include "internal/base/target.hpp"
+#include "internal/mir/lowering/slice_dispatch.hpp"
 #include "lowering.hpp"
 
 #include <memory>
@@ -238,6 +240,85 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         debug::log(
             debug::Stage::Mir, debug::Level::Debug,
             "Registered parameter '" + param.name + "' as local " + std::to_string(param_id));
+    }
+
+    // mainのエントリでグローバルスライス変数を初期化する。
+    // グローバルの非定数初期化子はコード生成で評価されず、従来は各関数がスライスを
+    // 毎回cm_slice_newで作り直して別実体になり、関数間の変異が黙って失われていた
+    if (func.name == "main") {
+        for (const auto& gv : mir_program.global_vars) {
+            if (!gv || !gv->type) {
+                continue;
+            }
+            auto gtype = resolve_typedef(gv->type);
+            if (!gtype || gtype->kind != hir::TypeKind::Array || gtype->array_size.has_value()) {
+                continue;
+            }
+            auto gid_opt = ctx.resolve_variable(gv->name);
+            if (!gid_opt) {
+                continue;
+            }
+            const LocalId gid = *gid_opt;
+            if (!gv->init_expr) {
+                continue;
+            }
+            LocalId init_val = expr_lowering.lower_expression(*gv->init_expr, ctx);
+            hir::TypePtr vt =
+                (init_val < ctx.func->locals.size()) ? ctx.func->locals[init_val].type : nullptr;
+            if (vt) {
+                vt = ctx.resolve_typedef(vt);
+            }
+            if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
+                // 固定長配列で実体化された初期化子はcm_array_to_sliceでヒープスライスへ変換して格納
+                const int64_t arr_size = static_cast<int64_t>(vt->array_size.value_or(0));
+                int64_t elem_size = 4;
+                if (vt->element_type) {
+                    auto ek_type = ctx.resolve_typedef(vt->element_type);
+                    auto ek = ek_type ? ek_type->kind : vt->element_type->kind;
+                    if (auto info = slice_scalar_info(ek)) {
+                        elem_size = info->elem_size;
+                    } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
+                        elem_size = cm::target_pointer_size();
+                    }
+                }
+                LocalId addr_local = ctx.new_temp(hir::make_pointer(vt->element_type));
+                ctx.push_statement(MirStatement::assign(MirPlace{addr_local},
+                                                        MirRvalue::ref(MirPlace{init_val}, false)));
+                LocalId size_local = ctx.new_temp(hir::make_long());
+                MirConstant size_const;
+                size_const.value = arr_size;
+                size_const.type = hir::make_long();
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
+                LocalId es_local = ctx.new_temp(hir::make_long());
+                MirConstant es_const;
+                es_const.value = elem_size;
+                es_const.type = hir::make_long();
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{es_local}, MirRvalue::use(MirOperand::constant(es_const))));
+                BlockId conv_block = ctx.new_block();
+                std::vector<MirOperandPtr> conv_args;
+                conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
+                conv_args.push_back(MirOperand::copy(MirPlace{es_local}));
+                auto conv_term = std::make_unique<MirTerminator>();
+                conv_term->kind = MirTerminator::Call;
+                conv_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
+                                            std::move(conv_args),
+                                            MirPlace{gid},
+                                            conv_block,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                ctx.set_terminator(std::move(conv_term));
+                ctx.switch_to_block(conv_block);
+            } else {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{gid}, MirRvalue::use(MirOperand::copy(MirPlace{init_val}))));
+            }
+        }
     }
 
     // 文を処理（モジュラーコンポーネントを使用）

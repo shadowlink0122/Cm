@@ -1,0 +1,51 @@
+// グローバルスライスの関数間ミューテーション回帰: 従来は各関数がcm_slice_newで
+// スライスを毎回作り直して別実体になり、関数越しのpushが黙って失われていた
+// （js/tsは正しく共有されバックエンド分裂していた）。
+// mainエントリで一度だけ初期化し、全関数がLLVMグローバル経由で同一実体を参照する
+import std::io::println;
+
+int[] g_nums = [];
+string[] g_names = [];
+int[] g_seeded = [100, 200];
+
+void add_num(int v) {
+    g_nums.push(v);
+}
+
+void add_name(string s) {
+    g_names.push(s);
+}
+
+int sum_nums() {
+    int total = 0;
+    for (int x in g_nums) {
+        total += x;
+    }
+    return total;
+}
+
+int main() {
+    // 関数越しのpushがmainから見える
+    add_num(10);
+    add_num(20);
+    g_nums.push(30);
+    println(g_nums.len());
+    println(g_nums[0]);
+    println(g_nums[2]);
+    println(sum_nums());
+
+    // 文字列要素のグローバルスライス
+    add_name("alpha");
+    add_name("beta");
+    println(g_names.len());
+    println(g_names[1]);
+
+    // 初期値付きグローバルスライス
+    println(g_seeded.len());
+    println(g_seeded[0]);
+    g_seeded.push(300);
+    println(g_seeded[2]);
+    println(g_nums.pop());
+    println(g_nums.len());
+    return 0;
+}
