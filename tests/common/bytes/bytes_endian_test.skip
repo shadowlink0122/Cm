@@ -1,0 +1,2 @@
+# 64ビットのread/writeはJSのNumber 53bit精度とBigInt経由の丸めで往復一致しない（マトリクス「JS 53bit精度」参照）
+js

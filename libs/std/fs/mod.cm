@@ -10,6 +10,8 @@ use libc {
     bool cm_file_exists(string path);
     bool cm_file_remove(string path);
     long cm_file_size(string path);
+    int mkdir(string path, int mode);
+    int rmdir(string path);
 }
 
 // ============================================================
@@ -44,6 +46,16 @@ export bool remove(string path) {
 /// ファイルサイズ（バイト）を返す（失敗時は-1）
 export long size(string path) {
     return cm_file_size(path);
+}
+
+/// ディレクトリを作成する（パーミッション0755）。成功したらtrue
+export bool create_dir(string path) {
+    return mkdir(path, 0x1ED) == 0;
+}
+
+/// 空のディレクトリを削除する。成功したらtrue
+export bool remove_dir(string path) {
+    return rmdir(path) == 0;
 }
 
 // ============================================================

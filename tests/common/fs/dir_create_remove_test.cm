@@ -1,0 +1,20 @@
+//! platform: !wasm|js
+// std::fsのディレクトリ操作（libc mkdir/rmdir、native/JITのみ）の回帰
+import std::io::println;
+import std::fs::{create_dir, remove_dir};
+
+int main() {
+    // テストランナーのCWDに依存しない相対名を使い、前回の残骸を先に掃除する（結果は不問）
+    const string dir = "cm_dir_test_workdir";
+    remove_dir(dir);
+
+    // 作成→重複作成は失敗→削除→再削除は失敗
+    println(create_dir(dir));
+    println(create_dir(dir));
+    println(remove_dir(dir));
+    println(remove_dir(dir));
+
+    // 存在しない親の下は失敗
+    println(create_dir("cm_dir_test_none_parent/child"));
+    return 0;
+}

@@ -1,0 +1,25 @@
+// std::env - 環境変数アクセス（native/JITバックエンド）
+// コマンドライン引数args()と実行パスcurrent_exe()はランタイム対応（第2段・第3段）で追加する。
+// JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
+module std.env;
+
+use libc {
+    void* getenv(string name);
+    int setenv(string name, string value, int overwrite);
+}
+
+/// 環境変数を取得する。未設定ならNone
+export Option<string> get(string name) {
+    void* p = getenv(name);
+    if (p == 0 as void*) {
+        return Option::None;
+    }
+    // getenvの戻りは環境領域への借用ポインタのため、連結で所有コピーを作って返す
+    const string borrowed = (p as char*) as string;
+    return Option::Some("" + borrowed);
+}
+
+/// 環境変数を設定する（既存値は上書き）。成功したらtrue
+export bool set(string name, string value) {
+    return setenv(name, value, 1) == 0;
+}

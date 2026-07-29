@@ -23,6 +23,8 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 | `std::mem` | メモリ管理 (alloc, size_of, Allocator) | [メモリ管理](mem.html) |
 | `std::math` | 数学関数 (sin, sqrt, PI, gcd等) | [数学関数](math.html) |
 | `std::core` | ユーティリティ (min, max, clamp, 型エイリアス) | [コア](core-utils.html) |
+| `std::env` / `std::process` | 環境変数・サブプロセス (Native/JIT) | [OS連携](os.html) |
+| `std::path` / `std::bytes` | パス操作・バイト詰め (純Cm・全バックエンド) | [OS連携](os.html) |
 
 ---
 

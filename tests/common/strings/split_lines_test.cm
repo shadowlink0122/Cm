@@ -1,0 +1,40 @@
+// std::strings::split/lines（純Cm実装・全バックエンド共通）の回帰
+// 空要素保持・空セパレータのコードポイント分割・\r\n正規化・末尾空要素の除去を検証する
+import std::io::println;
+import std::strings::{split, lines};
+
+int main() {
+    // 基本分割と空要素の保持
+    string[] parts = split("a,b,,c", ",");
+    println(parts.len());
+    println(parts[0]);
+    println(parts[2].len());
+    println(parts[3]);
+
+    // セパレータ不在は全体1要素
+    string[] whole = split("abc", "|");
+    println(whole.len());
+    println(whole[0]);
+
+    // 複数文字セパレータ
+    string[] multi = split("a::b::c", "::");
+    println(multi.len());
+    println(multi[1]);
+
+    // 空セパレータはコードポイント1文字ずつ（マルチバイト対応）
+    string[] chars = split("aあb", "");
+    println(chars.len());
+    println(chars[1]);
+
+    // lines: \r\n正規化と末尾空要素の除去
+    string[] ls = lines("x\r\ny\nz\n");
+    println(ls.len());
+    println(ls[0]);
+    println(ls[2]);
+
+    // 末尾改行なし
+    string[] ls2 = lines("p\nq");
+    println(ls2.len());
+    println(ls2[1]);
+    return 0;
+}

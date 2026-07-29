@@ -1,0 +1,50 @@
+// std::process - サブプロセス起動（native/JITバックエンド）
+// リンカ等の外部コマンド呼び出しに使う。JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
+module std.process;
+
+import std::strings::StringBuilder;
+
+use libc {
+    int system(string cmd);
+    void* popen(string cmd, string mode);
+    int pclose(void* stream);
+    void* fgets(void* buf, int size, void* stream);
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+/// コマンドをシェル経由で実行し終了コードを返す（起動失敗は-1）
+/// 注: シグナルで終了した子プロセスの終了コードは保証しない
+export int run(string cmd) {
+    const int status = system(cmd);
+    if (status < 0) {
+        return -1;
+    }
+    // POSIXのwaitステータスから終了コード（WEXITSTATUS相当）を取り出す
+    return (status >> 8) & 0xFF;
+}
+
+/// コマンドをシェル経由で実行し標準出力を文字列で返す（起動失敗のみErr、終了コードは判定しない）
+export Result<string, string> output(string cmd) {
+    void* stream = popen(cmd, "r");
+    if (stream == 0 as void*) {
+        return Result::Err("failed to launch: " + cmd);
+    }
+    void* buf = malloc(4096);
+    if (buf == 0 as void*) {
+        pclose(stream);
+        return Result::Err("out of memory");
+    }
+    StringBuilder sb();
+    while (true) {
+        void* line = fgets(buf, 4096, stream);
+        if (line == 0 as void*) {
+            break;
+        }
+        // fgetsはNUL終端するため、そのままCm文字列として追記できる
+        sb.append((buf as char*) as string);
+    }
+    free(buf);
+    pclose(stream);
+    return Result::Ok(sb.to_string());
+}

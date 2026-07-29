@@ -1,0 +1,39 @@
+// std::bytes（純Cm実装・全バックエンド共通）の回帰: LE/BEの詰めと読み戻しの往復一致
+import std::io::println;
+import std::bytes::{push_u16_le, push_u32_le, push_u64_le, push_u16_be, push_u32_be, push_u64_be,
+    read_u16_le, read_u32_le, read_u64_le, read_u16_be, read_u32_be, read_u64_be};
+
+int main() {
+    utiny[] buf = [];
+
+    // LE詰め: バイト順を直接検証
+    push_u32_le(buf, 0xFEEDFACF);
+    println(buf.len());
+    println(buf[0]);
+    println(buf[3]);
+
+    // BE詰め: 先頭が上位バイト
+    push_u16_be(buf, 0x1234);
+    println(buf[4]);
+    println(buf[5]);
+
+    // 読み戻しの往復一致
+    println(read_u32_le(buf, 0) == 0xFEEDFACF);
+    println(read_u16_be(buf, 4) == 0x1234);
+
+    // 64ビット境界値
+    utiny[] b64 = [];
+    push_u64_le(b64, 18446744073709551615);
+    push_u64_be(b64, 72057594037927936);
+    println(b64.len());
+    println(read_u64_le(b64, 0) == 18446744073709551615);
+    println(read_u64_be(b64, 8) == 72057594037927936);
+    println(b64[8]);
+    println(b64[15]);
+
+    // 16ビット境界値
+    utiny[] b16 = [];
+    push_u16_le(b16, 0xFFFF);
+    println(read_u16_le(b16, 0));
+    return 0;
+}
