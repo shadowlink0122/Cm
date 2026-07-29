@@ -1,0 +1,13 @@
+//! platform: !wasm|js
+// セルフホスト準備第2段の回帰: env::current_exe()が絶対パスの実在ファイルを返す
+import std::io::println;
+import std::env::current_exe;
+import std::fs::exists;
+
+int main() {
+    const string exe = current_exe();
+    println(exe.len() > 0);
+    println(exe.startsWith("/"));
+    println(exists(exe));
+    return 0;
+}

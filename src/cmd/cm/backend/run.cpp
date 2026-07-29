@@ -140,7 +140,14 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
 
     const bool sanitize_bounds = std::find(opts.sanitizers.begin(), opts.sanitizers.end(),
                                            "bounds") != opts.sanitizers.end();
-    auto result = jit.execute(mir, "main", opts.optimization_level, sanitize_bounds);
+
+    // スクリプト引数（cm run file.cm -- args...）。argv[0]は入力ファイルパス
+    std::vector<std::string> program_args;
+    program_args.push_back(opts.input_file);
+    for (const auto& a : opts.program_args) {
+        program_args.push_back(a);
+    }
+    auto result = jit.execute(mir, "main", opts.optimization_level, sanitize_bounds, program_args);
 
     if (!result.success) {
         std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError2, result.errorMessage);

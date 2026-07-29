@@ -115,6 +115,13 @@ Options parse_options(int argc, char* argv[]) {
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
 
+        if (arg == "--" && opts.command == Command::Run) {
+            // -- 以降はスクリプトへ渡すコマンドライン引数（std::env::args()で取得）
+            for (int j = i + 1; j < argc; ++j) {
+                opts.program_args.push_back(argv[j]);
+            }
+            break;
+        }
         if (arg == "--verbose" || arg == "-v") {
             opts.verbose = true;
         } else if (arg == "--quiet" || arg == "-q") {

@@ -310,7 +310,8 @@ ast::TypePtr Parser::parse_type() {
             std::vector<ast::TypePtr> type_args;
 
             do {
-                type_args.push_back(parse_type());
+                // スライス/配列型の型引数（Result<utiny[], string>等）も受理する
+                type_args.push_back(check_array_suffix(parse_type()));
             } while (consume_if(TokenKind::Comma));
 
             consume_gt_in_type_context();

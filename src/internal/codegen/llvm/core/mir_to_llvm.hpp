@@ -77,6 +77,7 @@ class MIRToLLVM {
     // ターゲット情報キャッシュ
     bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
     bool isUefiTarget = false;  // UEFIターゲットかどうか（Win64 ABI適用に使用）
+    bool isHostedTarget = false;  // OSホスト上のnative/jitか（mainのargc/argv受け取りに使用）
 
    public:
     /// コンストラクタ

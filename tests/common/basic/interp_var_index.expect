@@ -1,0 +1,9 @@
+name[0] = alpha
+name[1] = beta
+name[2] = gamma
+head = alpha
+fixed[0] = 10
+fixed[1] = 20
+fixed[2] = 30
+held[0] = 7
+held[1] = 8

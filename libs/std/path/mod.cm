@@ -2,22 +2,15 @@
 // 区切りは/固定（対応プラットフォームはmacOS/Linux、Windowsは対象外）
 module std.path;
 
-// 最後に出現するneedleのコードポイント添字を返す（無ければ-1）
+// 最後に出現するneedleのコードポイント添字を返す（無ければ-1）。末尾から前方一致で走査する
 int last_index_of(string s, string needle) {
-    int last = -1;
-    int base = 0;
-    const long needle_len = needle.len();
-    string rest = s;
-    while (true) {
-        const int idx = rest.indexOf(needle);
-        if (idx < 0) {
-            break;
+    const long n = needle.len();
+    for (long i = s.len() - n; i >= 0; i--) {
+        if (s.substring(i, i + n) == needle) {
+            return i as int;
         }
-        last = base + idx;
-        base = base + idx + needle_len as int;
-        rest = rest.substring(idx + needle_len, rest.len());
     }
-    return last;
+    return -1;
 }
 
 /// 2つのパス要素を/で連結する。片方が空ならもう片方をそのまま返す

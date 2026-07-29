@@ -253,6 +253,12 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 
     // パラメータ型
     std::vector<llvm::Type*> paramTypes;
+    // ホストOS環境のmainはargc/argvを受け取る（Cm言語仕様のmainは無引数のまま、
+    // プロローグでcm_args_initへ保存しstd::env::args()から取得する。セルフホスト準備 第3段）
+    if (func.name == "main" && isHostedTarget) {
+        paramTypes.push_back(ctx.getI32Type());
+        paramTypes.push_back(ctx.getPtrType());
+    }
     for (const auto& arg_local : func.arg_locals) {
         // 引数の型を適切に変換
         if (arg_local < func.locals.size()) {

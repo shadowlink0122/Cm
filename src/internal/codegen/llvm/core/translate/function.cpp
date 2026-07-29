@@ -258,6 +258,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
         builder->SetInsertPoint(entryBB);
 
+        // mainのargc/argvをランタイムへ保存する（std::env::args()。ホストOS環境のみ）
+        if (func.name == "main" && isHostedTarget && currentFunction->arg_size() >= 2) {
+            auto argsInitFunc = declareExternalFunction("cm_args_init");
+            builder->CreateCall(argsInitFunc,
+                                {currentFunction->getArg(0), currentFunction->getArg(1)});
+        }
+
         // パラメータをローカル変数にマップ
         // sret関数は先頭のLLVM引数が隠し出力ポインタのため、MIR引数の対応をずらす（C14 Phase 4）
         bool useSret = needsSretReturn(func);

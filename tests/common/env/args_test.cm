@@ -1,0 +1,15 @@
+//! platform: !wasm|js
+// セルフホスト準備第3段の回帰: env::args()が実行形態（jit/native）に依らず先頭=実行ファイル名で取得できる
+import std::io::println;
+import std::env::args;
+
+int main() {
+    const string[] argv = args();
+    println(argv.len() >= 1);
+    if (argv.len() >= 1) {
+        println(argv[0].len() > 0);
+    } else {
+        println(false);
+    }
+    return 0;
+}

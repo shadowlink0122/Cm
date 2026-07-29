@@ -10,11 +10,11 @@ title: OS連携 (env / process / path / bytes)
 
 名前空間形式（`env::get(...)`）は未対応のため、選択的importとエイリアスを使います。
 
-## std::env — 環境変数
+## std::env — 環境変数・コマンドライン引数・実行パス
 
 ```cm
 import std::io::println;
-import std::env::{get as env_get, set as env_set};
+import std::env::{get as env_get, set as env_set, args, current_exe};
 
 int main() {
     env_set("MY_VAR", "hello");
@@ -22,6 +22,15 @@ int main() {
         Option::Some(v) => println(v),
         Option::None => println("(unset)"),
     }
+
+    // コマンドライン引数（先頭は実行ファイル名/スクリプトパス）
+    const string[] argv = args();
+    for (long i = 0; i < argv.len(); i++) {
+        println("arg[{i}] = {argv[i]}");
+    }
+
+    // 自分自身の実行ファイルの絶対パス
+    println(current_exe());
     return 0;
 }
 ```
@@ -30,6 +39,15 @@ int main() {
 |------|------|
 | `Option<string> get(string name)` | 環境変数を取得（未設定はNone） |
 | `bool set(string name, string value)` | 環境変数を設定（上書き） |
+| `string[] args()` | コマンドライン引数（先頭は実行ファイル名。未初期化環境では空） |
+| `string current_exe()` | 実行ファイル自身の絶対パス（取得できなければ空文字列） |
+
+JIT実行（`cm run`）では`--`より後ろがスクリプトへの引数になり、`args()`の先頭は入力ファイルパスです。
+
+```bash
+cm run tool.cm -- input.cm -o out    # args() = ["tool.cm", "input.cm", "-o", "out"]
+./tool input.cm -o out               # ネイティブバイナリはOSのargv取得と同じ
+```
 
 ## std::process — サブプロセス
 
@@ -52,6 +70,37 @@ int main() {
 |------|------|
 | `int run(string cmd)` | シェル経由で実行し終了コードを返す（起動失敗は-1） |
 | `Result<string, string> output(string cmd)` | 標準出力を文字列で返す（起動失敗のみErr） |
+
+## std::fs拡張 — ディレクトリ列挙・バイナリ安全I/O
+
+```cm
+import std::io::println;
+import std::fs::{read_dir, read_bytes, write_bytes};
+
+int main() {
+    // エントリ名を名前昇順で列挙（"."と".."は除外）
+    const string[] entries = read_dir("src");
+    for (long i = 0; i < entries.len(); i++) {
+        println(entries[i]);
+    }
+
+    // 埋め込みNUL・非UTF-8を含むデータも欠損しない読み書き
+    match (read_bytes("input.o")) {
+        Result::Ok(data) => {
+            println("read {data.len()} bytes");
+            write_bytes("copy.o", data);
+        },
+        Result::Err(e) => println(e),
+    }
+    return 0;
+}
+```
+
+| 関数 | 説明 |
+|------|------|
+| `string[] read_dir(string path)` | ディレクトリ内のエントリ名（名前昇順、開けなければ空） |
+| `Result<utiny[], string> read_bytes(string path)` | ファイル全体をバイト列で読む（存在しなければErr） |
+| `bool write_bytes(string path, utiny[] data)` | バイト列を書き込む（長さ明示のため埋め込みNULで切れない） |
 
 ## std::path — パス操作（純Cm）
 

@@ -218,6 +218,14 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
     }
+    // コマンドライン引数の保存（mainプロローグから呼ぶ。std::env::args()が参照する）
+    else if (name == "cm_args_init") {
+        // void cm_args_init(i32 argc, i8** argv)
+        auto funcType =
+            llvm::FunctionType::get(ctx.getVoidType(), {ctx.getI32Type(), ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    }
     // スライス操作関数
     else if (name == "cm_slice_new") {
         // i8* cm_slice_new(i64 elem_size, i64 initial_capacity)

@@ -1,0 +1,66 @@
+// セルフホスト素振り: コンパイラの縮図となるCLIツール（セルフホスト準備 第4段）
+// 引数解析 → ソース読み込み → 行/トークン分割 → バイナリ成果物出力 → 外部コマンド呼び出し、
+// というコンパイラに必要なOS連携APIの一巡をstd::env/fs/strings/bytes/processだけで通す
+import std::io::println;
+import std::env::args;
+import std::fs::{read_bytes, write_bytes};
+import std::strings::{lines, split, from_bytes};
+import std::bytes::push_u32_le;
+import std::process::{run as run_command};
+
+int main() {
+    // 1. コマンドライン引数: <input> -o <output>
+    const string[] argv = args();
+    if (argv.len() < 4 || argv[2] != "-o") {
+        println("usage: {argv[0]} <input> -o <output>");
+        return 1;
+    }
+    const string input = argv[1];
+    const string output = argv[3];
+
+    // 2. ソースをバイナリ安全に読み込み、行とトークン（空白区切り）を数える
+    utiny[] source = [];
+    match (read_bytes(input)) {
+        Result::Ok(data) => {
+            source = data;
+        },
+        Result::Err(e) => {
+            println("read failed: {e}");
+            return 1;
+        },
+    }
+    const string text = from_bytes(source);
+    const string[] source_lines = lines(text);
+    long tokens = 0;
+    for (long i = 0; i < source_lines.len(); i++) {
+        const string[] words = split(source_lines[i], " ");
+        for (long j = 0; j < words.len(); j++) {
+            if (words[j].len() > 0) {
+                tokens = tokens + 1;
+            }
+        }
+    }
+
+    // 3. ヘッダ付き成果物を組み立てて書き出す（マジック + 行数 + トークン数 + 原文サイズ）
+    utiny[] artifact = [];
+    push_u32_le(artifact, 0x434D444C);
+    push_u32_le(artifact, source_lines.len() as uint);
+    push_u32_le(artifact, tokens as uint);
+    push_u32_le(artifact, source.len() as uint);
+    if (!write_bytes(output, artifact)) {
+        println("write failed: {output}");
+        return 1;
+    }
+
+    // 4. 外部コマンドを呼び、終了コードを検証する（リンカ呼び出しの代役）
+    const int code = run_command("true");
+    if (code != 0) {
+        println("external command failed: {code}");
+        return 1;
+    }
+
+    println("lines = {source_lines.len()}");
+    println("tokens = {tokens}");
+    println("artifact = {output} ({artifact.len()} bytes)");
+    return 0;
+}

@@ -1,0 +1,59 @@
+//! platform: !wasm|js
+// セルフホスト準備第2段の回帰: バイナリ安全I/O（埋め込みNULのwrite→read往復）とread_dirの決定的列挙
+import std::io::println;
+import std::fs::{write_bytes, read_bytes, read_dir, create_dir, remove_dir, write_file, remove};
+
+int main() {
+    // 埋め込みNUL・非UTF-8バイトを含むデータの往復一致
+    const string path = "cm_bytes_test.bin";
+    utiny[] data = [];
+    data.push(0x4D);
+    data.push(0x00);
+    data.push(0xFF);
+    data.push(0x7F);
+    data.push(0x00);
+    println(write_bytes(path, data));
+    match (read_bytes(path)) {
+        Result::Ok(back) => {
+            println("len = {back.len()}");
+            bool same = back.len() == data.len();
+            for (long i = 0; i < back.len(); i++) {
+                if (back[i] != data[i]) {
+                    same = false;
+                }
+            }
+            println("roundtrip = {same}");
+        },
+        Result::Err(e) => println("read failed: {e}"),
+    }
+    remove(path);
+
+    // 存在しないファイルはErr
+    match (read_bytes("cm_bytes_test_missing.bin")) {
+        Result::Ok(x) => println("unexpected ok: {x.len()}"),
+        Result::Err(e) => println("err = {e}"),
+    }
+
+    // read_dir: 逆順で作ったエントリが名前昇順で返る（"."/".."は除外）
+    const string dir = "cm_read_dir_workdir";
+    remove("{dir}/b.txt");
+    remove("{dir}/a.txt");
+    remove("{dir}/c.txt");
+    remove_dir(dir);
+    create_dir(dir);
+    write_file("{dir}/c.txt", "3");
+    write_file("{dir}/a.txt", "1");
+    write_file("{dir}/b.txt", "2");
+    const string[] entries = read_dir(dir);
+    for (long i = 0; i < entries.len(); i++) {
+        println("entry[{i}] = {entries[i]}");
+    }
+    remove("{dir}/a.txt");
+    remove("{dir}/b.txt");
+    remove("{dir}/c.txt");
+    println(remove_dir(dir));
+
+    // 開けないディレクトリは空
+    println(read_dir("cm_read_dir_missing").len());
+    return 0;
+}

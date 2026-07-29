@@ -41,6 +41,8 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     std::string triple = module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
     isUefiTarget = triple.find("windows") != std::string::npos;
+    // ベアメタル（*-none-*）はランタイムを持たないため、argc/argv対応はホストOS環境のみ
+    isHostedTarget = !isWasmTarget && !isUefiTarget && triple.find("none") == std::string::npos;
 
     // インターフェース名を収集
     // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
@@ -537,6 +539,8 @@ void MIRToLLVM::convert(const mir::ModuleProgram& module) {
     std::string triple = this->module->getTargetTriple();
     isWasmTarget = triple.find("wasm") != std::string::npos;
     isUefiTarget = triple.find("windows") != std::string::npos;
+    // ベアメタル（*-none-*）はランタイムを持たないため、argc/argv対応はホストOS環境のみ
+    isHostedTarget = !isWasmTarget && !isUefiTarget && triple.find("none") == std::string::npos;
 
     // === インターフェース名を収集 ===
     for (const auto* iface : module.interfaces) {

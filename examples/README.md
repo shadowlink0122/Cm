@@ -33,6 +33,10 @@ Cmの機能を示す公式サンプル集です。
 - `memoization_dp.cm` - メモ化DP（フィボナッチ、最小コイン問題）
 - `dijkstra.cm` - ダイクストラ法（最短経路）
 
+### 07_selfhost_drill - セルフホスト素振り（OS連携CLI）
+- `main.cm` - コンパイラの縮図となるCLIツール。`env::args()`で引数解析、`fs::read_bytes`で読み込み、`strings::lines/split`でトークン数を集計、`bytes::push_u32_le`+`fs::write_bytes`でバイナリ成果物を出力、`process::run`で外部コマンド呼び出し
+- `sample_input.cm` - 入力サンプル。`cm run examples/07_selfhost_drill/main.cm -- examples/07_selfhost_drill/sample_input.cm -o out.bin` で実行
+
 ### uefi - UEFI アプリケーション
 - `hello_world.cm` - UEFI Hello World（画面出力）
 - `memory_test.cm` - メモリ管理テスト（AllocatePool/FreePool）
@@ -69,3 +73,4 @@ cm compile --target=js examples/web-fullstack/src/server.cm -o server.js && node
 | グラフ探索 | dijkstra.cm |
 | with Css | web-fullstack/src/style.cm |
 | UEFIベアメタル | uefi/hello_world.cm |
+| OS連携（args/fs/process） | 07_selfhost_drill/main.cm |

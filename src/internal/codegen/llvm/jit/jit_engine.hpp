@@ -40,9 +40,11 @@ class JITEngine {
     /// @param entryPoint エントリポイント関数名（デフォルト: "main"）
     /// @param optLevel 最適化レベル (0-3)
     /// @param sanitizeBounds --sanitize=bounds: 境界チェック計装（違反時はtrapで即時停止）
+    /// @param programArgs mainへ渡すコマンドライン引数（cm run file.cm -- args...。先頭は入力ファイル名）
     /// @return JIT実行結果
     JITResult execute(const mir::MirProgram& program, const std::string& entryPoint = "main",
-                      int optLevel = 3, bool sanitizeBounds = false);
+                      int optLevel = 3, bool sanitizeBounds = false,
+                      const std::vector<std::string>& programArgs = {});
 
    private:
     std::unique_ptr<llvm::orc::LLJIT> jit_;

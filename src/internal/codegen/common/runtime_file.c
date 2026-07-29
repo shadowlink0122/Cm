@@ -1,7 +1,9 @@
 /// @file runtime_file.c
 /// @brief ファイル操作ランタイム関数
 
+#include <dirent.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,6 +134,94 @@ long cm_file_size(const char* path) {
         return -1;
 
     return st.st_size;
+}
+
+// ============================================================
+// ディレクトリ列挙・バイナリ安全I/O（セルフホスト準備 第2段）
+// ============================================================
+
+// CmSliceレイアウト（runtime_slice.cと同一。ヘッダ共有を避けるためのローカル定義）
+typedef struct {
+    void* data;
+    int64_t len;
+    int64_t cap;
+    int64_t elem_size;
+} CmFileSlice;
+
+/// ディレクトリを開く（direntをCm側へ出さないためのハンドルシム）。失敗時NULL
+void* cm_dir_open(const char* path) {
+    if (!path)
+        return NULL;
+    return (void*)opendir(path);
+}
+
+/// 次のエントリ名を返す。"."と".."はスキップし、終端はNULL
+/// 戻りポインタは次のcm_dir_next/cm_dir_close呼び出しまで有効（Cm側で即コピーする）
+const char* cm_dir_next(void* handle) {
+    if (!handle)
+        return NULL;
+    struct dirent* ent;
+    while ((ent = readdir((DIR*)handle)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+        return ent->d_name;
+    }
+    return NULL;
+}
+
+/// ディレクトリハンドルを閉じる
+void cm_dir_close(void* handle) {
+    if (handle) {
+        closedir((DIR*)handle);
+    }
+}
+
+/// ファイル全体をバイト列（utiny[]スライス）として読む。失敗時は空スライス
+/// 長さはstatで取るため埋め込みNUL・非UTF-8データも欠損しない
+void* cm_file_read_bytes(const char* path) {
+    CmFileSlice* slice = (CmFileSlice*)cm_alloc(sizeof(CmFileSlice));
+    slice->data = NULL;
+    slice->len = 0;
+    slice->cap = 0;
+    slice->elem_size = 1;
+    if (!path)
+        return slice;
+
+    FILE* file = fopen(path, "rb");
+    if (!file)
+        return slice;
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    if (size < 0 || size > CM_MAX_FILE_SIZE) {
+        fclose(file);
+        return slice;
+    }
+    if (size > 0) {
+        char* buf = (char*)cm_alloc(size);
+        size_t read_size = fread(buf, 1, size, file);
+        slice->data = buf;
+        slice->len = (int64_t)read_size;
+        slice->cap = (int64_t)size;
+    }
+    fclose(file);
+    return slice;
+}
+
+/// バイト列（utiny[]スライス）をファイルへ書き込む（上書き）。長さ明示のため埋め込みNULで切れない
+bool cm_file_write_bytes(const char* path, void* slice_ptr) {
+    if (!path || !slice_ptr)
+        return false;
+    CmFileSlice* slice = (CmFileSlice*)slice_ptr;
+    FILE* file = fopen(path, "wb");
+    if (!file)
+        return false;
+    size_t written = 0;
+    if (slice->data && slice->len > 0) {
+        written = fwrite(slice->data, 1, (size_t)slice->len, file);
+    }
+    fclose(file);
+    return written == (size_t)(slice->len > 0 ? slice->len : 0);
 }
 
 /// 1行読み込み（stdin）

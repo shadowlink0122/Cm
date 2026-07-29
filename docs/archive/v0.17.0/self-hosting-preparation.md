@@ -234,9 +234,9 @@ const char* cm_current_exe(void);
 | 段階 | 内容 | 変更範囲 | 状態 |
 |------|------|----------|------|
 | 第1段 | libc FFIのみで済むAPI（S2 env::get/set、S3 process::run/output、S4のcreate_dir/remove_dir）と純Cm実装（S7 split/lines、S8 path、S9 bytes） | libs/のみ（Cmソースだけで完結） | 実装済み（std::env/std::process/std::path/std::bytes新設、strings::split/lines・fs::create_dir/remove_dir追加。名前空間形式import未対応のため選択的import＋エイリアスで使用。bytesの64ビットread/writeはJS 53bit精度のため非対応。テスト: tests/common/{strings,path,bytes,env,process,fs}） |
-| 第2段 | ランタイムシム追加（S4 readdir、S5 バイナリI/O、S6 current_exe）とstd::fs拡張 | runtime_file.c・runtime_platform.c + libs/std/fs | 未着手 |
-| 第3段 | argv（S1）: mainシグネチャ変更 + cm_args_init + jit/testランナー連携 + std::env::args() | signature.cpp・function.cpp・runtime_platform.c・cmd/cm/backend/run.cpp + libs/std/env | 未着手 |
-| 第4段 | 通し検証: 上記APIだけで書いた小さなCLIツール（後述のセルフホスト素振り）をexamplesに追加しCIで実行 | examples/ + tests | 未着手 |
+| 第2段 | ランタイムシム追加（S4 readdir、S5 バイナリI/O、S6 current_exe）とstd::fs拡張 | runtime_file.c・runtime_platform.c + libs/std/fs | 実装済み（cm_dir_open/next/close・cm_file_read_bytes/write_bytes・cm_current_exe追加。fs::read_dir（名前昇順）/read_bytes/write_bytes、env::current_exe。ジェネリック型引数のスライス型（Result<utiny[], string>）のパーサ対応も同時に実施。テスト: tests/common/fs/bytes_dir_test・tests/common/env/current_exe_test） |
+| 第3段 | argv（S1）: mainシグネチャ変更 + cm_args_init + jit/testランナー連携 + std::env::args() | signature.cpp・function.cpp・runtime_platform.c・cmd/cm/backend/run.cpp + libs/std/env | 実装済み（ホストOS環境のmainのみi32 main(i32, ptr)化しプロローグでcm_args_init発行。wasm/UEFI/ベアメタルは従来シグネチャ維持。jitはcm run file.cm -- args...のargv[0]=入力ファイルで受け渡し、#[test]等の非mainエントリは無引数呼び出しのままでargs()は空。テスト: tests/common/env/args_test） |
+| 第4段 | 通し検証: 上記APIだけで書いた小さなCLIツール（後述のセルフホスト素振り）をexamplesに追加しCIで実行 | examples/ + tests | 実装済み（examples/07_selfhost_drill: args解析→read_bytes→lines/splitトークン集計→push_u32_le+write_bytes→process::run。scripts/ci/check_examples.shでjit（--渡し）とnative（直接引数渡し）の両方を実行し成果物一致まで検証） |
 
 第1段・第2段・第3段は独立にマージ可能で、依存は第4段のみが全段に依存する。
 

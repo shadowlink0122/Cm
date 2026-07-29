@@ -101,7 +101,7 @@
 | グローバル配列の初期化子（`const uint[4] T = [5, 6, 7, 8];` 等のトップレベル宣言）がソフトウェア系バックエンド（JITで確認）で反映されず、要素の読み出しが0になる | SVターゲットではinitialブロックとして機能する（CmCPUのprog_rom等）。ソフトウェア系で必要な場合は関数内ローカル配列を使う | 全バックエンド共通のグローバル初期化経路の実装が必要。既存テストにトップレベル配列初期化子のケースはなく未検出だった |
 | 推移的importでexport再宣言が重複して出力される（同一シンボルの宣言が複数回現れる） | コンパイラ側の重複許容・名前デデュープで実害は出ていない | export再宣言の複数行初期化子切り詰め（コメント・文字列リテラル内の `;` `{` `}` 誤検出）は修正済み（回帰: tests/sv/import/multiline_export_array・multiline_export_string） |
 | SVターゲットで要素長が不揃いの文字列配列の文字インデックス（`ARR[i][j]`）が誤った文字を返す（格納幅と実要素長の不一致。要素長が全て同じ場合は正常） | 文字インデックスを使う文字列配列は要素長を揃える（実例: CmCPUのCTRL_ABBREVSは全要素3文字で正常動作） | 文字列配列の格納幅と要素長情報の管理を見直す必要がある。tests/sv/import/multiline_export_string はこの問題を避けてコンパイル検証のみとしている |
-| std::fs はJS/WASM未対応（ネイティブランタイムのcm_file_*依存） | common/fs・common/file_io はjs/llvm-wasmのみskip（native/JITは有効） | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
+| std::fs（read_dir/read_bytes/write_bytes含む）・std::env（get/set/args/current_exe）・std::process はJS/WASM未対応（ネイティブランタイムのcm_file_*・cm_dir_*・cm_arg_*等に依存） | common/fs・common/file_io・common/env・common/process はjs/llvm-wasmのみskip（native/JITは有効）。std::path/std::bytes/strings::split は純Cmのため全バックエンド共通 | WASM対応はWASIのfd系API実装が必要。JSはNode fs委譲を別途検討 |
 | `import std::io;` + `io::println()` の名前空間形式stdインポートが未対応 | 選択的import（`import std::io::println`）を使用する | モジュールシステムの残ギャップ（import_featuresの名前空間課題と同系統） |
 | JSの `void*` 非対応（明示エラー）・53bit精度・ポインタ⇔整数キャスト不可 | libc malloc/free系（collections/std::mem/allocator等）と64bit大値・ptr⇔intキャストのテストを理由付きで個別skip（2026-07-15にカテゴリ一括skipを棚卸しし、動作する26テスト［基本/フィールド/二重ポインタ・impl経由書き戻し等］を有効化） | ポインタはオブジェクト参照で基本対応。void*はJSで表現不能のため明示エラーを維持 |
 | `arr[i]` の範囲外アクセスが未検査（固定長=未定義値、スライス=0を黙って返す） | 安全にハンドリングする場合は `arr.get(i)` → `Option<T>` を使用する（v0.16.0追加） | Rust同様の範囲外パニック化は意味論変更のため別途検討 |

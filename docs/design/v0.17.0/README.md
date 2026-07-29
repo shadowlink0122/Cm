@@ -31,7 +31,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 - [JS/TSの値セマンティクスとBigInt](../../archive/v0.17.0/js-ts-value-semantics.md) — H3 / H5（全項目実装済み・archiveへ移動。BigInt表現移行で5系一致）
 
 ### セルフホスト準備
-- [セルフホスト準備（OS連携APIの整備）](self-hosting-preparation.md) — S1〜S9（監査所見外の新規整備。コマンドライン引数・環境変数・サブプロセス・ディレクトリ操作・バイナリ安全I/O・split/path/bytes）
+- [セルフホスト準備（OS連携APIの整備）](../../archive/v0.17.0/self-hosting-preparation.md) — S1〜S9（全4段実装済み・archiveへ移動。env/process/path/bytes/split・ランタイムシム（readdir/バイナリI/O/current_exe）・argv対応・セルフホスト素振りexampleのCI通し検証で完結）
 
 ### ランタイム・コレクション・文字列・ビルド
 - [文字列のUTF-8対応とStringBuilder](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md) — H9（全5段実装済み・archiveへ移動。第4段はchar*互換のSDSヘッダ方式でO(1)バイト長・埋め込みNUL・from_bytesを実現）
@@ -39,7 +39,6 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 - [インクリメンタルビルドと並列コード生成](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) — H14 / M6 / M10（全項目実装済み・archiveへ移動。CM_MODULE_CODEGENの既定有効化はsoak後判断）
 - [その他の診断とLow優先度項目](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — M18 / L1 / L2 / L3 / L5 / L6 / L7（全項目実装済み・archiveへ移動）
 
-## 着手順の推奨
+## 状態
 
-型システム・ジェネリクス群（C7/C8/C9・C16・H15/L8）とdropパス（C12の文字列一時/C13）・集約コピー（C14 Phase1）は実装済み。クロージャ環境化（C6）も実装済み。インターフェイス値の集約格納（H1/H2）も実装済み。残りはH12のフロー解析化・M12/M13（byval/sret）・JS値セマンティクス（H3/H5）・文字列基盤（H9）・ビルド基盤（H14）等の構造的リファクタリングが中心となる。
-セルフホスト準備（S1〜S9）はこれらと独立に進められ、libc FFIと純Cm実装だけで済む第1段から着手し、ランタイムシム（第2段）→argv対応（第3段）→通し検証（第4段）の順で進める（詳細は[self-hosting-preparation.md](self-hosting-preparation.md)）。
+v0.17.0の設計文書は監査全57所見の対応とセルフホスト準備（S1〜S9）を含め全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み。各文書に将来課題（エラー化・CM_MODULE_CODEGEN既定有効化等）を記録している。セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

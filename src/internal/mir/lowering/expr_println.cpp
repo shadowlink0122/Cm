@@ -15,6 +15,29 @@
 
 namespace cm::mir {
 
+namespace {
+// 補間プレースホルダ内の添字文字列（"0"や"j"）をローカルへ解決する。
+// 数値なら定数ロード、そうでなければ変数名としてスコープ解決する（従来は数値以外が黙って添字0になっていた）
+std::optional<LocalId> lower_interp_index(LoweringContext& ctx, const std::string& text) {
+    if (!text.empty() && (std::isdigit(static_cast<unsigned char>(text[0])) ||
+                          (text[0] == '-' && text.size() > 1))) {
+        try {
+            int idx = std::stoi(text);
+            LocalId idx_local = ctx.new_temp(hir::make_int());
+            MirConstant idx_const;
+            idx_const.value = static_cast<int64_t>(idx);
+            idx_const.type = hir::make_int();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{idx_local}, MirRvalue::use(MirOperand::constant(idx_const))));
+            return idx_local;
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+    return ctx.resolve_variable(text);
+}
+}  // namespace
+
 // __println__ を処理した場合はローカルIDを、対象外ならnulloptを返す
 std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                        const hir::TypePtr& result_type,
@@ -616,18 +639,13 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                             LocalId result = ctx.new_temp(elem_type);
                                             BlockId success_block = ctx.new_block();
 
-                                            // インデックス値を作成
-                                            LocalId idx_local = ctx.new_temp(hir::make_int());
-                                            try {
-                                                int idx = std::stoi(index_str);
-                                                MirConstant idx_const;
-                                                idx_const.value = static_cast<int64_t>(idx);
-                                                idx_const.type = hir::make_int();
-                                                ctx.push_statement(MirStatement::assign(
-                                                    MirPlace{idx_local},
-                                                    MirRvalue::use(
-                                                        MirOperand::constant(idx_const))));
-                                            } catch (...) {
+                                            // インデックス値を作成（数値定数または変数添字）
+                                            LocalId idx_local;
+                                            if (auto resolved =
+                                                    lower_interp_index(ctx, index_str)) {
+                                                idx_local = *resolved;
+                                            } else {
+                                                idx_local = ctx.new_temp(hir::make_int());
                                                 MirConstant idx_const;
                                                 idx_const.value = int64_t{0};
                                                 idx_const.type = hir::make_int();
@@ -680,17 +698,10 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                             hir::TypePtr current_type = arr_type;
                                             bool valid = true;
 
-                                            // インデックスを処理
-                                            try {
-                                                int idx = std::stoi(index_str);
-                                                LocalId idx_local = ctx.new_temp(hir::make_int());
-                                                MirConstant idx_const;
-                                                idx_const.value = static_cast<int64_t>(idx);
-                                                idx_const.type = hir::make_int();
-                                                ctx.push_statement(MirStatement::assign(
-                                                    MirPlace{idx_local},
-                                                    MirRvalue::use(
-                                                        MirOperand::constant(idx_const))));
+                                            // インデックスを処理（数値定数または変数添字）
+                                            auto resolved_idx = lower_interp_index(ctx, index_str);
+                                            if (resolved_idx) {
+                                                LocalId idx_local = *resolved_idx;
 
                                                 if (is_slice) {
                                                     // スライス: CmSlice*への直接indexは不正のため
@@ -743,7 +754,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                         current_type = current_type->element_type;
                                                     }
                                                 }
-                                            } catch (...) {
+                                            } else {
                                                 valid = false;
                                             }
 
@@ -819,23 +830,13 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                     }
                                                 }
 
-                                                // 追加のインデックスを処理
+                                                // 追加のインデックスを処理（数値定数または変数添字）
                                                 if (!next_index_part.empty()) {
-                                                    try {
-                                                        int next_idx = std::stoi(next_index_part);
-                                                        LocalId next_idx_local =
-                                                            ctx.new_temp(hir::make_int());
-                                                        MirConstant next_idx_const;
-                                                        next_idx_const.value =
-                                                            static_cast<int64_t>(next_idx);
-                                                        next_idx_const.type = hir::make_int();
-                                                        ctx.push_statement(MirStatement::assign(
-                                                            MirPlace{next_idx_local},
-                                                            MirRvalue::use(MirOperand::constant(
-                                                                next_idx_const))));
-
+                                                    if (auto next_idx_local = lower_interp_index(
+                                                            ctx, next_index_part)) {
                                                         place.projections.push_back(
-                                                            PlaceProjection::index(next_idx_local));
+                                                            PlaceProjection::index(
+                                                                *next_idx_local));
 
                                                         if (current_type &&
                                                             current_type->kind ==
@@ -844,7 +845,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                             current_type =
                                                                 current_type->element_type;
                                                         }
-                                                    } catch (...) {
+                                                    } else {
                                                         valid = false;
                                                     }
                                                 }
@@ -1429,22 +1430,12 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 }
                                             }
 
-                                            // 配列インデックスを処理
+                                            // 配列インデックスを処理（数値定数または変数添字）
                                             if (!index_part.empty()) {
-                                                // インデックスを数値に変換
-                                                try {
-                                                    int idx = std::stoi(index_part);
-
-                                                    // インデックス用の定数を作成
-                                                    LocalId idx_local =
-                                                        ctx.new_temp(hir::make_int());
-                                                    MirConstant idx_const;
-                                                    idx_const.value = static_cast<int64_t>(idx);
-                                                    idx_const.type = hir::make_int();
-                                                    ctx.push_statement(MirStatement::assign(
-                                                        MirPlace{idx_local},
-                                                        MirRvalue::use(
-                                                            MirOperand::constant(idx_const))));
+                                                auto resolved_member_idx =
+                                                    lower_interp_index(ctx, index_part);
+                                                if (resolved_member_idx) {
+                                                    LocalId idx_local = *resolved_member_idx;
 
                                                     // スライス（動的配列）かどうか判定
                                                     bool is_slice_type =
@@ -1533,7 +1524,7 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                             current_type = hir::make_int();
                                                         }
                                                     }
-                                                } catch (...) {
+                                                } else {
                                                     valid = false;
                                                 }
                                             }
