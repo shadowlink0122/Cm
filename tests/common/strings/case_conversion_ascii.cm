@@ -1,0 +1,11 @@
+// 大文字小文字変換のバックエンド統一回帰: jsのtoUpperCase()はUnicode対応で
+// "héllo"がHÉLLOになりnative（ASCII限定でHéLLO）と分裂していた。jsをASCII限定へ統一
+import std::io::println;
+
+int main() {
+    println("héllo wörld".toUpperCase());
+    println("HÉLLO WÖRLD".toLowerCase());
+    println("abc123XYZ".toUpperCase());
+    println("ABC123xyz".toLowerCase());
+    return 0;
+}

@@ -425,10 +425,13 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "[..." + argStrs[0] + "].map((c) => c.codePointAt(0))";
     }
     if (name == "__builtin_string_toUpperCase" && argStrs.size() >= 1) {
-        return argStrs[0] + ".toUpperCase()";
+        // nativeランタイムはASCIIのみ大文字化するため、jsもASCII限定に揃える
+        // （JSのtoUpperCase()はUnicode対応でé→Éとなりバックエンド分裂する）
+        return argStrs[0] + ".replace(/[a-z]/g, (c) => c.toUpperCase())";
     }
     if (name == "__builtin_string_toLowerCase" && argStrs.size() >= 1) {
-        return argStrs[0] + ".toLowerCase()";
+        // ASCII限定（toUpperCaseと同じ理由）
+        return argStrs[0] + ".replace(/[A-Z]/g, (c) => c.toLowerCase())";
     }
     if (name == "__builtin_string_trim" && argStrs.size() >= 1) {
         return argStrs[0] + ".trim()";
