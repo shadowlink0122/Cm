@@ -289,8 +289,12 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
             if (vt) {
                 vt = ctx.resolve_typedef(vt);
             }
-            if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
-                // 固定長配列で実体化された初期化子はcm_array_to_sliceでヒープスライスへ変換して格納
+            const bool gtype_is_slice =
+                gtype && gtype->kind == hir::TypeKind::Array && !gtype->array_size.has_value();
+            if (gtype_is_slice && vt && vt->kind == hir::TypeKind::Array &&
+                vt->array_size.has_value()) {
+                // スライス型グローバルへ固定長配列で実体化された初期化子は
+                // cm_array_to_sliceでヒープスライスへ変換して格納
                 const int64_t arr_size = static_cast<int64_t>(vt->array_size.value_or(0));
                 int64_t elem_size = 4;
                 if (vt->element_type) {

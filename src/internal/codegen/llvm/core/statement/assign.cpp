@@ -750,16 +750,17 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
                         // ポインタ値をstoreせず構造体本体をmemcpyする
                         // （グローバル構造体の初期化代入で一時のアドレスが書き込まれていた）
                         bool storedAsStructCopy = false;
-                        if (targetType &&
-                            (targetType->kind == hir::TypeKind::Struct ||
-                             targetType->kind == hir::TypeKind::Union) &&
-                            !isInterfaceType(targetType->name) &&
-                            rvalue->getType()->isPointerTy() &&
+                        const bool target_is_aggregate =
+                            targetType && ((targetType->kind == hir::TypeKind::Struct &&
+                                            !isInterfaceType(targetType->name)) ||
+                                           targetType->kind == hir::TypeKind::Union ||
+                                           (targetType->kind == hir::TypeKind::Array &&
+                                            targetType->array_size.has_value()));
+                        if (target_is_aggregate && rvalue->getType()->isPointerTy() &&
                             llvm::isa<llvm::AllocaInst>(rvalue)) {
-                            auto llvmStructTy = convertType(targetType);
-                            if (llvmStructTy && llvmStructTy->isStructTy()) {
-                                auto copySize =
-                                    module->getDataLayout().getTypeAllocSize(llvmStructTy);
+                            auto llvmAggTy = convertType(targetType);
+                            if (llvmAggTy && (llvmAggTy->isStructTy() || llvmAggTy->isArrayTy())) {
+                                auto copySize = module->getDataLayout().getTypeAllocSize(llvmAggTy);
                                 builder->CreateMemCpy(addr, llvm::MaybeAlign(), rvalue,
                                                       llvm::MaybeAlign(), copySize);
                                 storedAsStructCopy = true;

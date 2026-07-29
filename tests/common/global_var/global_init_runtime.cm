@@ -16,6 +16,7 @@ int base_value() {
 
 int g_computed = base_value();
 Counter g_c = Counter{count: 5, label: "start", history: []};
+int[3] g_fixed = [10, 20, 30];
 
 void bump() {
     g_c.count = g_c.count + 1;
@@ -38,5 +39,11 @@ int main() {
     println(g_c.history.len());
     println(g_c.history[0]);
     println(g_c.history[1]);
+
+    // 固定長配列グローバルの初期化と変異
+    println(g_fixed[0]);
+    println(g_fixed[2]);
+    g_fixed[1] = 99;
+    println(g_fixed[1]);
     return 0;
 }
