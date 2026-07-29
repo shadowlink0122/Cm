@@ -11,6 +11,15 @@ int main() {
     int[][] cells = [[7]];
     Grid g = Grid{cells: cells, id: 1};
 
+    // 構造体リテラルのスライス型フィールドへ多次元配列リテラルを直接書く形
+    // （従来は内側変換未配線でLLVM検証エラーになっていた）
+    Grid lit = Grid{cells: [[10, 20], [30]], id: 2};
+    println(lit.cells.len());
+    println(lit.cells[0][1]);
+    lit.cells[1].push(40);
+    println(lit.cells[1].len());
+    println(lit.cells[1][1]);
+
     g.cells[0].push(8);
     println(g.cells[0].len());
     println(g.cells[0][0]);

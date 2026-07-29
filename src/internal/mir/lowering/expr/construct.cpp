@@ -1,6 +1,7 @@
 // MIR lowering - 構築式（構造体リテラル・配列リテラル・enum構築/ペイロード抽出）
 
 #include "internal/base/debug.hpp"
+#include "internal/base/target.hpp"
 #include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 
@@ -84,6 +85,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
             } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
                 // 構造体・ユニオンはblob（値のインラインコピー）として格納する
                 elem_size = ctx.layout_size(elem_type);
+            } else if (elem_kind == hir::TypeKind::Array) {
+                // 多次元スライス: 要素はCmSlice構造体（data/len/cap/elem_size）のインライン格納
+                elem_size = static_cast<int64_t>(sizeof(void*) * 4);
             }
 
             // スライス用の一時変数を作成
@@ -131,11 +135,68 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
                        elem_kind == hir::TypeKind::Struct) {
                 push_func = "cm_slice_push_ptr";
+            } else if (elem_kind == hir::TypeKind::Array) {
+                // 多次元スライス: 内側スライスのヘッダをインラインコピー
+                push_func = "cm_slice_push_slice";
             }
 
             // 各要素をpushで追加
             for (const auto& elem : arr_lit->elements) {
                 LocalId elem_value = lower_expression(*elem, ctx);
+
+                // 内側要素が固定長配列（ネストした配列リテラル等）の場合はスライスへ実体化してからpushする
+                // （Grid{cells: [[7]]}が変換未配線でLLVM検証エラーになっていた。let経路と同じ変換）
+                if (elem_kind == hir::TypeKind::Array && elem->type &&
+                    elem->type->array_size.has_value()) {
+                    const int64_t inner_size =
+                        static_cast<int64_t>(elem->type->array_size.value_or(0));
+                    int64_t inner_elem_size = 4;
+                    if (elem->type->element_type) {
+                        auto inner_ek = ctx.resolve_typedef(elem->type->element_type);
+                        auto ik = inner_ek ? inner_ek->kind : elem->type->element_type->kind;
+                        if (auto iinfo = slice_scalar_info(ik)) {
+                            inner_elem_size = iinfo->elem_size;
+                        } else if (ik == hir::TypeKind::Pointer || ik == hir::TypeKind::String) {
+                            inner_elem_size = cm::target_pointer_size();
+                        }
+                    }
+                    LocalId addr_local = ctx.new_temp(hir::make_pointer(elem->type->element_type));
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{addr_local}, MirRvalue::ref(MirPlace{elem_value}, false)));
+                    LocalId size_local = ctx.new_temp(hir::make_long());
+                    MirConstant size_const;
+                    size_const.value = inner_size;
+                    size_const.type = hir::make_long();
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
+                    LocalId ies_local = ctx.new_temp(hir::make_long());
+                    MirConstant ies_const;
+                    ies_const.value = inner_elem_size;
+                    ies_const.type = hir::make_long();
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{ies_local}, MirRvalue::use(MirOperand::constant(ies_const))));
+
+                    LocalId inner_slice = ctx.new_temp(elem_type);
+                    BlockId conv_block = ctx.new_block();
+                    std::vector<MirOperandPtr> conv_args;
+                    conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                    conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
+                    conv_args.push_back(MirOperand::copy(MirPlace{ies_local}));
+                    auto conv_term = std::make_unique<MirTerminator>();
+                    conv_term->kind = MirTerminator::Call;
+                    conv_term->data =
+                        MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
+                                                std::move(conv_args),
+                                                MirPlace{inner_slice},
+                                                conv_block,
+                                                std::nullopt,
+                                                "",
+                                                "",
+                                                false};
+                    ctx.set_terminator(std::move(conv_term));
+                    ctx.switch_to_block(conv_block);
+                    elem_value = inner_slice;
+                }
 
                 BlockId success_block = ctx.new_block();
                 std::vector<MirOperandPtr> push_args;
