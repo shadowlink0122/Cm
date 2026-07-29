@@ -746,10 +746,32 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
                             }
                         }
 
+                        // 構造体値の代入でソースが一時構造体のalloca（アドレス）の場合、
+                        // ポインタ値をstoreせず構造体本体をmemcpyする
+                        // （グローバル構造体の初期化代入で一時のアドレスが書き込まれていた）
+                        bool storedAsStructCopy = false;
+                        if (targetType &&
+                            (targetType->kind == hir::TypeKind::Struct ||
+                             targetType->kind == hir::TypeKind::Union) &&
+                            !isInterfaceType(targetType->name) &&
+                            rvalue->getType()->isPointerTy() &&
+                            llvm::isa<llvm::AllocaInst>(rvalue)) {
+                            auto llvmStructTy = convertType(targetType);
+                            if (llvmStructTy && llvmStructTy->isStructTy()) {
+                                auto copySize =
+                                    module->getDataLayout().getTypeAllocSize(llvmStructTy);
+                                builder->CreateMemCpy(addr, llvm::MaybeAlign(), rvalue,
+                                                      llvm::MaybeAlign(), copySize);
+                                storedAsStructCopy = true;
+                            }
+                        }
+
                         // BUG修正(v0.14.2): asm入出力で参照される変数のみvolatileにする
-                        auto* storeInst = builder->CreateStore(rvalue, addr);
-                        if (isAllocated && asmReferencedLocals.count(assign.place.local) > 0) {
-                            storeInst->setVolatile(true);
+                        if (!storedAsStructCopy) {
+                            auto* storeInst = builder->CreateStore(rvalue, addr);
+                            if (isAllocated && asmReferencedLocals.count(assign.place.local) > 0) {
+                                storeInst->setVolatile(true);
+                            }
                         }
                     }
                 }

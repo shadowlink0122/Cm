@@ -242,18 +242,15 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
             "Registered parameter '" + param.name + "' as local " + std::to_string(param_id));
     }
 
-    // mainのエントリでグローバルスライス変数を初期化する。
-    // グローバルの非定数初期化子はコード生成で評価されず、従来は各関数がスライスを
-    // 毎回cm_slice_newで作り直して別実体になり、関数間の変異が黙って失われていた
+    // mainのエントリでグローバル変数の非定数初期化子を評価する。
+    // 定数評価できない初期化子（関数呼び出し・構造体リテラル・スライスリテラル等）は
+    // 従来コード生成で黙って捨てられ、グローバルがゼロ値のままになっていた
     if (func.name == "main") {
         for (const auto& gv : mir_program.global_vars) {
             if (!gv || !gv->type) {
                 continue;
             }
             auto gtype = resolve_typedef(gv->type);
-            if (!gtype || gtype->kind != hir::TypeKind::Array || gtype->array_size.has_value()) {
-                continue;
-            }
             auto gid_opt = ctx.resolve_variable(gv->name);
             if (!gid_opt) {
                 continue;
