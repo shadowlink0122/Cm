@@ -13,6 +13,27 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
 
     emitter.emitLine("// Cm Runtime Helpers");
 
+    // 64ビット整数のBigInt正規化（H5）: BigIntはそのまま、Numberは切り捨ててBigInt化。
+    // len()等のNumber戻り値と64bit演算の混在をTypeErrorなしで吸収する（冪等）
+    if (needs("__cm_big")) {
+        emitter.emitLine("function __cm_big(v) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return typeof v === \"bigint\" ? v : BigInt(Math.trunc(v));");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
+    // BigInt透過のtrunc（H5）: BigIntはそのまま、Numberは小数切り捨て
+    if (needs("__cm_trunc")) {
+        emitter.emitLine("function __cm_trunc(v) {");
+        emitter.increaseIndent();
+        emitter.emitLine("return typeof v === \"bigint\" ? v : Math.trunc(v);");
+        emitter.decreaseIndent();
+        emitter.emitLine("}");
+        emitter.emitLine();
+    }
+
     // ボックス化された値を展開
     if (needs("__cm_unwrap")) {
         emitter.emitLine("function __cm_unwrap(val) {");
@@ -100,6 +121,9 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
     if (needs("__cm_str_slice")) {
         emitter.emitLine("function __cm_str_slice(str, start, end) {");
         emitter.increaseIndent();
+        // H5: BigInt添字（long由来）をNumberへ正規化
+        emitter.emitLine("start = Number(start);");
+        emitter.emitLine("if (end !== undefined && end !== null) end = Number(end);");
         // 添字はコードポイント単位（H9第3段。スプレッドでサロゲートペアを1要素に分解）
         emitter.emitLine("const cps = [...str];");
         emitter.emitLine("const len = cps.length;");

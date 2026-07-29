@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書
 
-大規模開発ボトルネック監査（[large-scale-bottleneck-audit.md](large-scale-bottleneck-audit.md)）で検出した所見に対する実装設計文書の索引。局所修正で対応済みの所見はリリースノート（`docs/releases/v0.17.0.md`）に記録し、残りの構造的リファクタリング項目を項目ごとの設計文書としてまとめている。
+大規模開発ボトルネック監査（[large-scale-bottleneck-audit.md](../../archive/v0.17.0/large-scale-bottleneck-audit.md)、全57所見対応完了・archiveへ移動）で検出した所見に対する実装設計文書の索引。局所修正で対応済みの所見はリリースノート（`docs/releases/v0.17.0.md`）に記録し、残りの構造的リファクタリング項目を項目ごとの設計文書としてまとめている。
 
 ## 対応済み（リリースノート参照）
 
@@ -28,7 +28,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 - [const集約の強制](../../archive/v0.17.0/const-aggregate-enforcement.md) — M3（段階1-4実装済み・archiveへ移動。フィールド/要素代入とconstポインタ化の警告まで完了、エラー化は将来として記録）
 
 ### 値セマンティクス・バックエンド一貫性
-- [JS/TSの値セマンティクスとBigInt](js-ts-value-semantics.md) — H3（実装済み） / H5
+- [JS/TSの値セマンティクスとBigInt](../../archive/v0.17.0/js-ts-value-semantics.md) — H3 / H5（全項目実装済み・archiveへ移動。BigInt表現移行で5系一致）
 
 ### セルフホスト準備
 - [セルフホスト準備（OS連携APIの整備）](self-hosting-preparation.md) — S1〜S9（監査所見外の新規整備。コマンドライン引数・環境変数・サブプロセス・ディレクトリ操作・バイナリ安全I/O・split/path/bytes）

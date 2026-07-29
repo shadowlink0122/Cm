@@ -27,19 +27,21 @@ std::string JSCodeGen::tsType(const hir::Type* type) const {
         case TypeKind::Tiny:
         case TypeKind::Short:
         case TypeKind::Int:
-        case TypeKind::Long:
         case TypeKind::UTiny:
         case TypeKind::UShort:
         case TypeKind::UInt:
-        case TypeKind::ULong:
-        case TypeKind::ISize:
-        case TypeKind::USize:
         case TypeKind::Float:
         case TypeKind::Double:
         case TypeKind::UFloat:
         case TypeKind::UDouble:
         case TypeKind::Char:
             return "number";
+        case TypeKind::Long:
+        case TypeKind::ULong:
+        case TypeKind::ISize:
+        case TypeKind::USize:
+            // 64ビット整数はBigInt表現（H5）
+            return "bigint";
         case TypeKind::String:
         case TypeKind::CString:
             return "string";

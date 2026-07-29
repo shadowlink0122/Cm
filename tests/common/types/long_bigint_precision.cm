@@ -1,0 +1,44 @@
+// H5回帰: js/tsのlong/ulongをBigInt表現化し、2^53超の精度・64bitラップ・
+// Number混在演算（len()等の戻り値との算術）・キャスト境界・符号再解釈比較を
+// 全バックエンドで一致させる（従来jsはNumber表現で9223372036854775807が...776000へ丸まっていた）
+import std::io::println;
+
+long big_id() {
+    return 9223372036854775807;
+}
+
+ulong big_u() {
+    return 18446744073709551615;
+}
+
+int main() {
+    // 2^53超の精度保持（従来jsは丸め）
+    println(big_id());
+    println(big_u());
+    long ts = 1700000000123456789;
+    println(ts);
+    println(ts + 1);
+    println(ts * 2);
+    println(ts / 1000);
+    println(ts % 1000);
+
+    // int混在（len()等のNumber戻りとの演算）
+    string s = "hello";
+    long n = s.len();
+    println(n + 10);
+
+    // キャスト境界
+    println(ts as int);
+    println((255 as long) as utiny);
+    println(3.9 as long);
+    println(ts as double > 1.6e18);
+
+    // 比較
+    println(ts > 1700000000000000000);
+    println(big_u() > big_id() as ulong);
+
+    // ラップ
+    println(big_id() + 1);
+    println(big_u() + 1);
+    return 0;
+}

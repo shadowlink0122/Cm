@@ -112,6 +112,11 @@ inline std::string jsTypeName(const hir::Type& type) {
 // JS型のデフォルト値を取得
 inline std::string jsDefaultValue(const hir::Type& type) {
     if (type.is_integer()) {
+        // 64ビット整数はBigInt表現（H5）
+        if (type.kind == TypeKind::Long || type.kind == TypeKind::ULong ||
+            type.kind == TypeKind::ISize || type.kind == TypeKind::USize) {
+            return "0n";
+        }
         return "0";
     }
     if (type.is_floating()) {

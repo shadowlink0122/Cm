@@ -10,7 +10,7 @@ parent: v0.17.0 Design
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
 | H3 | 型システム | js/tsのみ構造体の関数引数が参照渡し（let束縛とreturnは`__cm_clone`するのに呼び出し引数だけクローンしない）、値セマンティクスがバックエンドで分裂 | 実装済み（実引数生成の2ループへ`structArgNeedsClone`判定を適用。implメソッドのself・仮想ディスパッチのレシーバ・インターフェイス値・外部JSオブジェクト・ランタイム組み込み（indexOf等はJSのオブジェクト同一性に依存）はクローン対象外。テスト: tests/common/functions/struct_arg_value_semantics.cm） |
-| H5 | バックエンド | `long`/`ulong`がjs/tsでNumber表現のため2^53超で黙って精度喪失（64bit ID・タイムスタンプが破損） | 未着手（BigInt化はリテラル・全演算子・出力・TS型注釈・FFI境界に波及し、Number混在のTypeErrorリスクが高いため段階計画のまま保留） |
+| H5 | バックエンド | `long`/`ulong`がjs/tsでNumber表現のため2^53超で黙って精度喪失（64bit ID・タイムスタンプが破損） | 実装済み（long/ulong/isize/usizeの実行時表現をBigIntへ移行。リテラルは123n形式、算術/ビット演算/シフトはBigInt.asIntN/asUintN(64)でLLVM系のラップ挙動へ一致、除算はBigIntのゼロ方向切り捨てでsdiv一致。等値・順序比較は両辺を64bit幅へ符号再解釈して比較（ulongの-1リテラル==最大値等もnative一致）。Number混在（len()等の32bit系戻り値との演算）は冪等ヘルパー__cm_big/__cm_truncで吸収し、呼び出し境界（Cm関数の仮引数型・スライスpush/setのスロット幅）で明示変換を挿入。キャストはasIntN/asUintN(幅)→Numberで正確に縮小。出力はString(BigInt)で整形（console.log直渡しの10n表記を回避）、TS型注釈はbigintへ写像（tscターゲットes2020）。union実行時型検査・sort比較子・文字列添字ヘルパーもBigInt対応。2^53超の精度・64bitラップ・混在演算・キャスト境界をjit/native/wasm/js/tsの5系一致で回帰固定: tests/common/types/long_bigint_precision.cm。従来jsスキップだったulong_large_hex・bytes_endian（64bit往復）もスキップ解除で全緑） |
 
 ## 背景と根本原因
 

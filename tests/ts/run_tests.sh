@@ -45,7 +45,7 @@ fi
 
 typecheck() {
     # $1 = tsファイル。tscで型検査（fixtureのnode_modulesを型解決に含める）
-    $TIMEOUT_CMD npx -y -p typescript@5 tsc --noEmit --skipLibCheck --lib es2020 "$1" 2>&1
+    $TIMEOUT_CMD npx -y -p typescript@5 tsc --noEmit --skipLibCheck --target es2020 --lib es2020 "$1" 2>&1
 }
 
 echo "=== TypeScript backend E2E tests ==="

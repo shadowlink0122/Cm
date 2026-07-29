@@ -107,13 +107,19 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 lhsType && lhsType->is_integer() && rhsType && rhsType->is_integer();
             const bool int_divmod = (data.result_type && data.result_type->is_integer()) ||
                                     (!data.result_type && int_operands);
+            auto is_pre64 = [](const hir::TypePtr& t) {
+                return t && (t->kind == TypeKind::Long || t->kind == TypeKind::ULong ||
+                             t->kind == TypeKind::ISize || t->kind == TypeKind::USize);
+            };
+            const bool divmod_wide64 =
+                is_pre64(data.result_type) || is_pre64(lhsType) || is_pre64(rhsType);
             if ((data.op == mir::MirBinaryOp::Div || data.op == mir::MirBinaryOp::Mod) &&
-                int_divmod) {
+                int_divmod && !divmod_wide64) {
                 std::string safe_rhs =
                     "((" + rhs +
                     ") || (() => { throw new Error(\"integer division by zero\"); })())";
                 if (data.op == mir::MirBinaryOp::Div) {
-                    return "Math.trunc(" + lhs + " / " + safe_rhs + ")";
+                    return "__cm_trunc(" + lhs + " / " + safe_rhs + ")";
                 }
                 return "(" + lhs + " % " + safe_rhs + ")";
             }
@@ -123,7 +129,8 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 if (!t)
                     return false;
                 return t->kind == TypeKind::UTiny || t->kind == TypeKind::UShort ||
-                       t->kind == TypeKind::UInt || t->kind == TypeKind::ULong;
+                       t->kind == TypeKind::UInt || t->kind == TypeKind::ULong ||
+                       t->kind == TypeKind::USize;
             };
             const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
                              is_unsigned_int(rhsType);
@@ -133,24 +140,57 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             auto is_64bit_int = [](const hir::TypePtr& t) {
                 if (!t)
                     return false;
-                return t->kind == TypeKind::Long || t->kind == TypeKind::ULong;
+                return t->kind == TypeKind::Long || t->kind == TypeKind::ULong ||
+                       t->kind == TypeKind::ISize || t->kind == TypeKind::USize;
             };
-            const bool wide64 = is_64bit_int(data.result_type) || is_64bit_int(lhsType);
+            const bool wide64 =
+                is_64bit_int(data.result_type) || is_64bit_int(lhsType) || is_64bit_int(rhsType);
+            // 64ビット整数演算はBigIntで実行する（H5）。値はBigIntのまま保持し、
+            // 結果はasIntN/asUintN(64)でLLVM系のラップ挙動へ揃える。
+            // Number混在（len()等の戻り・32bit値）は__cm_bigの冪等変換で吸収する
             if (wide64) {
                 const std::string reinterpret = uns ? "BigInt.asUintN" : "BigInt.asIntN";
-                const std::string blhs = "BigInt(Math.trunc(" + lhs + "))";
-                const std::string brhs = "BigInt(Math.trunc(" + rhs + "))";
+                const std::string blhs = "__cm_big(" + lhs + ")";
+                const std::string brhs = "__cm_big(" + rhs + ")";
                 switch (data.op) {
+                    case mir::MirBinaryOp::Add:
+                    case mir::MirBinaryOp::Sub:
+                    case mir::MirBinaryOp::Mul:
+                        return reinterpret + "(64, (" + blhs + " " + op + " " + brhs + "))";
+                    case mir::MirBinaryOp::Div:
+                    case mir::MirBinaryOp::Mod: {
+                        // BigIntの/はゼロ方向切り捨てでLLVMのsdiv/srem一致。ゼロ除算は明示エラー
+                        std::string safe_rhs =
+                            "((" + brhs +
+                            ") || (() => { throw new Error(\"integer division by zero\"); })())";
+                        return reinterpret + "(64, (" + blhs + " " + op + " " + safe_rhs + "))";
+                    }
                     case mir::MirBinaryOp::Shr:
-                        return "Number(" + reinterpret + "(64, " + blhs + ") >> " + brhs + ")";
+                        return reinterpret + "(64, " + reinterpret + "(64, " + blhs + ") >> " +
+                               brhs + ")";
                     case mir::MirBinaryOp::Shl:
-                        return "Number(" + reinterpret + "(64, " + blhs + " << " + brhs + "))";
+                        return reinterpret + "(64, " + blhs + " << " + brhs + ")";
                     case mir::MirBinaryOp::BitAnd:
-                        return "Number(" + reinterpret + "(64, " + blhs + " & " + brhs + "))";
+                        return reinterpret + "(64, " + blhs + " & " + brhs + ")";
                     case mir::MirBinaryOp::BitOr:
-                        return "Number(" + reinterpret + "(64, " + blhs + " | " + brhs + "))";
+                        return reinterpret + "(64, " + blhs + " | " + brhs + ")";
                     case mir::MirBinaryOp::BitXor:
-                        return "Number(" + reinterpret + "(64, " + blhs + " ^ " + brhs + "))";
+                        return reinterpret + "(64, " + blhs + " ^ " + brhs + ")";
+                    case mir::MirBinaryOp::Eq:
+                        // 両辺をBigInt化し64bit幅へ符号再解釈して比較する
+                        // （ulong比較で-1リテラルが18446744073709551615と等価になるLLVM挙動へ一致）
+                        return "(" + reinterpret + "(64, " + blhs + ") === " + reinterpret +
+                               "(64, " + brhs + "))";
+                    case mir::MirBinaryOp::Ne:
+                        return "(" + reinterpret + "(64, " + blhs + ") !== " + reinterpret +
+                               "(64, " + brhs + "))";
+                    case mir::MirBinaryOp::Lt:
+                    case mir::MirBinaryOp::Le:
+                    case mir::MirBinaryOp::Gt:
+                    case mir::MirBinaryOp::Ge:
+                        // 順序比較も符号再解釈で正規化（unsignedはult相当）
+                        return "(" + reinterpret + "(64, " + blhs + ") " + op + " " + reinterpret +
+                               "(64, " + brhs + "))";
                     default:
                         break;
                 }
@@ -394,7 +434,7 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                         typeof_name = "string";
                     } else if (data.target_type->is_integer()) {
                         typeof_name = "number";
-                        conv_prefix = "Math.trunc(";
+                        conv_prefix = "__cm_trunc(";
                         conv_suffix = ")";
                     } else if (data.target_type->is_floating()) {
                         typeof_name = "number";
@@ -412,7 +452,9 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                         " return " + conv_prefix + "v.field1" + conv_suffix + "; })()";
                     std::string raw_branch;
                     if (!typeof_name.empty()) {
-                        raw_branch = "(() => { if (typeof v !== \"" + typeof_name + "\") " + fail +
+                        raw_branch = "(() => { if (!(typeof v === \"" + typeof_name + "\" || (\"" +
+                                     typeof_name +
+                                     "\" === \"number\" && typeof v === \"bigint\"))) " + fail +
                                      " return " + conv_prefix + "v" + conv_suffix + "; })()";
                     } else {
                         // 構造体変種等: 生値はtypeofで判別できないため無検査で通す
@@ -427,6 +469,14 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
 
             // 型変換
             if (data.target_type) {
+                // 64bit整数（BigInt）→浮動小数はNumberへ変換する（H5。素通しだとBigInt演算に混入）
+                if (data.target_type->is_floating()) {
+                    hir::TypePtr fsrc = getOperandType(*data.operand, func);
+                    if (fsrc && (fsrc->kind == TypeKind::Long || fsrc->kind == TypeKind::ULong ||
+                                 fsrc->kind == TypeKind::ISize || fsrc->kind == TypeKind::USize)) {
+                        return "Number(" + operand + ")";
+                    }
+                }
                 if (data.target_type->is_integer()) {
                     // M9: 範囲外float→intはバックエンドで挙動が分裂していたため、
                     // LLVM系のfptosi.sat/fptoui.satと同じ飽和（範囲外はclamp、NaNは0）に統一する
@@ -469,35 +519,74 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                                 break;
                         }
                         std::string vp = options_.emitTypeScript ? "(v: number)" : "(v)";
+                        const bool tgt64 = data.target_type->kind == TypeKind::Long ||
+                                           data.target_type->kind == TypeKind::ULong ||
+                                           data.target_type->kind == TypeKind::ISize ||
+                                           data.target_type->kind == TypeKind::USize;
+                        if (tgt64) {
+                            // 64bitターゲットはBigIntで返す（H5）。NaNは0n、範囲外はclamp
+                            return "(" + vp +
+                                   " => { const t = __cm_trunc(v); return Number.isNaN(t) ? 0n : "
+                                   "BigInt(Math.min(" +
+                                   max_lit + ", Math.max(" + min_lit + ", t))); })(" + operand +
+                                   ")";
+                        }
                         return "(" + vp +
-                               " => { const t = Math.trunc(v); return Number.isNaN(t) ? 0 : "
+                               " => { const t = __cm_trunc(v); return Number.isNaN(t) ? 0 : "
                                "Math.min(" +
                                max_lit + ", Math.max(" + min_lit + ", t)); })(" + operand + ")";
                     }
                     // 整数→整数: ビット幅・符号のラップをLLVMのtrunc/ビット再解釈と一致させる。
-                    // 従来はMath.truncのみで -1 as uint が -1 のまま残り、native（4294967295）と
-                    // 出力が分裂していた（O2はMIR定数畳み込みで隠れ、O0で顕在化）。
                     // 32ビット以下はJSのビット演算（ToInt32/ToUint32）が正確な2の補数ラップを行う。
-                    // long/ulong等の64ビットはdoubleで表現可能な範囲で従来どおり
+                    // 64ビット（long/ulong）はBigInt表現（H5）: ソースが64bitの場合は一旦
+                    // asIntN(32)等で正確に縮めてからNumberへ、ターゲットが64bitはBigInt化する
                     if (src_type && src_type->is_integer()) {
+                        const bool src64 =
+                            src_type->kind == TypeKind::Long || src_type->kind == TypeKind::ULong ||
+                            src_type->kind == TypeKind::ISize || src_type->kind == TypeKind::USize;
+                        const std::string big_src = "__cm_big(" + operand + ")";
                         switch (data.target_type->kind) {
                             case TypeKind::Tiny:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(8, " + big_src + "))";
+                                }
                                 return "((" + operand + ") << 24 >> 24)";
                             case TypeKind::UTiny:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(8, " + big_src + "))";
+                                }
                                 return "((" + operand + ") & 0xFF)";
                             case TypeKind::Short:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(16, " + big_src + "))";
+                                }
                                 return "((" + operand + ") << 16 >> 16)";
                             case TypeKind::UShort:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(16, " + big_src + "))";
+                                }
                                 return "((" + operand + ") & 0xFFFF)";
                             case TypeKind::Int:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(32, " + big_src + "))";
+                                }
                                 return "((" + operand + ") | 0)";
                             case TypeKind::UInt:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(32, " + big_src + "))";
+                                }
                                 return "((" + operand + ") >>> 0)";
+                            case TypeKind::Long:
+                            case TypeKind::ISize:
+                                return "BigInt.asIntN(64, " + big_src + ")";
+                            case TypeKind::ULong:
+                            case TypeKind::USize:
+                                return "BigInt.asUintN(64, " + big_src + ")";
                             default:
                                 break;
                         }
                     }
-                    return "Math.trunc(" + operand + ")";
+                    return "__cm_trunc(" + operand + ")";
                 } else if (data.target_type->kind == TypeKind::Bool) {
                     return "Boolean(" + operand + ")";
                 } else if (data.target_type->kind == TypeKind::String) {
@@ -755,14 +844,27 @@ std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
     if (constant.type && constant.type->kind == ast::TypeKind::Void) {
         return "null";
     }
+    // long/ulong系はBigIntリテラル（123n）で出力する（H5。ulongは符号なし解釈）
+    const bool is_wide64_const = constant.type && (constant.type->kind == ast::TypeKind::Long ||
+                                                   constant.type->kind == ast::TypeKind::ULong ||
+                                                   constant.type->kind == ast::TypeKind::ISize ||
+                                                   constant.type->kind == ast::TypeKind::USize);
+    const bool wide64_unsigned = constant.type && (constant.type->kind == ast::TypeKind::ULong ||
+                                                   constant.type->kind == ast::TypeKind::USize);
     return std::visit(
-        [](auto&& val) -> std::string {
+        [is_wide64_const, wide64_unsigned](auto&& val) -> std::string {
             using T = std::decay_t<decltype(val)>;
             if constexpr (std::is_same_v<T, std::monostate>) {
                 return "undefined";
             } else if constexpr (std::is_same_v<T, bool>) {
                 return val ? "true" : "false";
             } else if constexpr (std::is_same_v<T, int64_t>) {
+                if (is_wide64_const) {
+                    if (wide64_unsigned) {
+                        return std::to_string(static_cast<uint64_t>(val)) + "n";
+                    }
+                    return "(" + std::to_string(val) + "n)";
+                }
                 return std::to_string(val);
             } else if constexpr (std::is_same_v<T, double>) {
                 std::ostringstream oss;

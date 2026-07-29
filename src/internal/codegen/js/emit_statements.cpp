@@ -405,6 +405,61 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         }
                     }
 
+                    // H5: ランタイムスライスビルトインの値引数境界（callee情報が無いため名前で判定）。
+                    // 32bit以下スロットへのpush/setに64bit型付き定数（uint[]リテラルの4000000000等）が
+                    // 流入するとBigInt混在TypeErrorになるため、スロット幅へ正規化する
+                    if (!calleeFunc && i == 1) {
+                        auto at2 = getOperandType(*arg, func);
+                        const bool a64 = at2 && (at2->kind == ast::TypeKind::Long ||
+                                                 at2->kind == ast::TypeKind::ULong ||
+                                                 at2->kind == ast::TypeKind::ISize ||
+                                                 at2->kind == ast::TypeKind::USize);
+                        if (a64 && (funcName.find("cm_slice_push_i8") == 0 ||
+                                    funcName.find("cm_slice_push_i16") == 0 ||
+                                    funcName.find("cm_slice_push_i32") == 0 ||
+                                    funcName.find("cm_slice_push_f32") == 0 ||
+                                    funcName.find("cm_slice_push_f64") == 0 ||
+                                    funcName.find("cm_slice_set_") == 0)) {
+                            argStr = "Number(__cm_big(" + argStr + "))";
+                        } else if (funcName.find("cm_slice_push_i64") == 0) {
+                            argStr = "__cm_big(" + argStr + ")";
+                        }
+                    }
+
+                    // H5: 64bit（BigInt）と32bit以下（Number）の呼び出し境界変換。
+                    // 型注釈上の不一致（64bit型付きリテラルを32bit引数へ渡す等）でJSの
+                    // BigInt/Number混在TypeErrorになるため、仮引数型に合わせて明示変換する
+                    if (calleeFunc && i < calleeFunc->arg_locals.size()) {
+                        mir::LocalId ptl = calleeFunc->arg_locals[i];
+                        if (ptl < calleeFunc->locals.size() && calleeFunc->locals[ptl].type) {
+                            auto pk = calleeFunc->locals[ptl].type->kind;
+                            auto ak = ast::TypeKind::Void;
+                            if (auto at = getOperandType(*arg, func)) {
+                                ak = at->kind;
+                            }
+                            auto is64 = [](ast::TypeKind k) {
+                                return k == ast::TypeKind::Long || k == ast::TypeKind::ULong ||
+                                       k == ast::TypeKind::ISize || k == ast::TypeKind::USize;
+                            };
+                            auto is_small_int = [](ast::TypeKind k) {
+                                return k == ast::TypeKind::Tiny || k == ast::TypeKind::UTiny ||
+                                       k == ast::TypeKind::Short || k == ast::TypeKind::UShort ||
+                                       k == ast::TypeKind::Int || k == ast::TypeKind::UInt ||
+                                       k == ast::TypeKind::Char || k == ast::TypeKind::Bool;
+                            };
+                            if (is_small_int(pk) && is64(ak)) {
+                                const char* fn =
+                                    (pk == ast::TypeKind::UInt || pk == ast::TypeKind::UShort ||
+                                     pk == ast::TypeKind::UTiny)
+                                        ? "BigInt.asUintN"
+                                        : "BigInt.asIntN";
+                                argStr =
+                                    "Number(" + std::string(fn) + "(32, __cm_big(" + argStr + ")))";
+                            } else if (is64(pk) && is_small_int(ak)) {
+                                argStr = "__cm_big(" + argStr + ")";
+                            }
+                        }
+                    }
                     // 構造体の実引数は値渡しとしてクローンする（H3: LLVM系との値セマンティクス統一。
                     // 従来は参照が渡り、呼び出し先での変更が呼び出し元へ漏れていた）
                     if (!interfaceWrapped &&
@@ -659,6 +714,61 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                         }
                     }
 
+                    // H5: ランタイムスライスビルトインの値引数境界（callee情報が無いため名前で判定）。
+                    // 32bit以下スロットへのpush/setに64bit型付き定数（uint[]リテラルの4000000000等）が
+                    // 流入するとBigInt混在TypeErrorになるため、スロット幅へ正規化する
+                    if (!calleeFunc && i == 1) {
+                        auto at2 = getOperandType(*arg, func);
+                        const bool a64 = at2 && (at2->kind == ast::TypeKind::Long ||
+                                                 at2->kind == ast::TypeKind::ULong ||
+                                                 at2->kind == ast::TypeKind::ISize ||
+                                                 at2->kind == ast::TypeKind::USize);
+                        if (a64 && (funcName.find("cm_slice_push_i8") == 0 ||
+                                    funcName.find("cm_slice_push_i16") == 0 ||
+                                    funcName.find("cm_slice_push_i32") == 0 ||
+                                    funcName.find("cm_slice_push_f32") == 0 ||
+                                    funcName.find("cm_slice_push_f64") == 0 ||
+                                    funcName.find("cm_slice_set_") == 0)) {
+                            argStr = "Number(__cm_big(" + argStr + "))";
+                        } else if (funcName.find("cm_slice_push_i64") == 0) {
+                            argStr = "__cm_big(" + argStr + ")";
+                        }
+                    }
+
+                    // H5: 64bit（BigInt）と32bit以下（Number）の呼び出し境界変換。
+                    // 型注釈上の不一致（64bit型付きリテラルを32bit引数へ渡す等）でJSの
+                    // BigInt/Number混在TypeErrorになるため、仮引数型に合わせて明示変換する
+                    if (calleeFunc && i < calleeFunc->arg_locals.size()) {
+                        mir::LocalId ptl = calleeFunc->arg_locals[i];
+                        if (ptl < calleeFunc->locals.size() && calleeFunc->locals[ptl].type) {
+                            auto pk = calleeFunc->locals[ptl].type->kind;
+                            auto ak = ast::TypeKind::Void;
+                            if (auto at = getOperandType(*arg, func)) {
+                                ak = at->kind;
+                            }
+                            auto is64 = [](ast::TypeKind k) {
+                                return k == ast::TypeKind::Long || k == ast::TypeKind::ULong ||
+                                       k == ast::TypeKind::ISize || k == ast::TypeKind::USize;
+                            };
+                            auto is_small_int = [](ast::TypeKind k) {
+                                return k == ast::TypeKind::Tiny || k == ast::TypeKind::UTiny ||
+                                       k == ast::TypeKind::Short || k == ast::TypeKind::UShort ||
+                                       k == ast::TypeKind::Int || k == ast::TypeKind::UInt ||
+                                       k == ast::TypeKind::Char || k == ast::TypeKind::Bool;
+                            };
+                            if (is_small_int(pk) && is64(ak)) {
+                                const char* fn =
+                                    (pk == ast::TypeKind::UInt || pk == ast::TypeKind::UShort ||
+                                     pk == ast::TypeKind::UTiny)
+                                        ? "BigInt.asUintN"
+                                        : "BigInt.asIntN";
+                                argStr =
+                                    "Number(" + std::string(fn) + "(32, __cm_big(" + argStr + ")))";
+                            } else if (is64(pk) && is_small_int(ak)) {
+                                argStr = "__cm_big(" + argStr + ")";
+                            }
+                        }
+                    }
                     // 構造体の実引数は値渡しとしてクローンする（H3: LLVM系との値セマンティクス統一。
                     // 従来は参照が渡り、呼び出し先での変更が呼び出し元へ漏れていた）
                     if (!interfaceWrapped &&

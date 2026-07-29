@@ -267,9 +267,15 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         }
         return "console.log(__cm_fmt_double(" + argStrs[0] + "))";
     }
+    if (name == "cm_println_long" || name == "cm_println_ulong") {
+        // BigIntのconsole.log直渡しは"10n"表記になるためStringで整形する（H5）
+        if (argStrs.empty()) {
+            return "console.log()";
+        }
+        return "console.log(String(" + argStrs[0] + "))";
+    }
     if (name == "println" || name == "cm_println_string" || name == "cm_println_int" ||
-        name == "cm_println_long" || name == "cm_println_ulong" || name == "cm_println_uint" ||
-        name == "cm_println_bool") {
+        name == "cm_println_uint" || name == "cm_println_bool") {
         if (argStrs.empty()) {
             return "console.log()";
         }
@@ -692,7 +698,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
          name == "cm_slice_sort_i64" || name == "cm_slice_sort_u64" ||
          name == "cm_slice_sort_f32" || name == "cm_slice_sort_f64") &&
         argStrs.size() >= 1) {
-        return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => a - b)";
+        return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))";
     }
     if (name == "cm_slice_reverse" && argStrs.size() >= 1) {
         return "[...__cm_unwrap(" + argStrs[0] + ")].reverse()";
@@ -717,7 +723,7 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     if ((name == "__builtin_array_sort" || name == "__builtin_array_sort_i32" ||
          name == "__builtin_array_sort_i64") &&
         argStrs.size() >= 2) {
-        return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => a - b)";
+        return "[...__cm_unwrap(" + argStrs[0] + ")].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))";
     }
     if ((name == "__builtin_array_map" || name == "__builtin_array_map_i32" ||
          name == "__builtin_array_map_i64") &&
