@@ -259,6 +259,30 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
             if (!gv->init_expr) {
                 continue;
             }
+            // 型名なしの構造体リテラル（JsonArena arena = { count: 0 }; 等）は
+            // 無名構造体一時の型解決ができずコード生成が壊れるため、フィールド単位の代入へ分解する
+            if (gtype && gtype->kind == hir::TypeKind::Struct) {
+                if (auto* lit_ptr =
+                        std::get_if<std::unique_ptr<hir::HirStructLiteral>>(&gv->init_expr->kind)) {
+                    if (*lit_ptr && (*lit_ptr)->type_name.empty()) {
+                        for (const auto& field : (*lit_ptr)->fields) {
+                            if (!field.value) {
+                                continue;
+                            }
+                            auto fidx = ctx.get_field_index(gtype->name, field.name);
+                            if (!fidx) {
+                                continue;
+                            }
+                            LocalId fval = expr_lowering.lower_expression(*field.value, ctx);
+                            MirPlace fplace{gid};
+                            fplace.projections.push_back(PlaceProjection::field(*fidx));
+                            ctx.push_statement(MirStatement::assign(
+                                fplace, MirRvalue::use(MirOperand::copy(MirPlace{fval}))));
+                        }
+                        continue;
+                    }
+                }
+            }
             LocalId init_val = expr_lowering.lower_expression(*gv->init_expr, ctx);
             hir::TypePtr vt =
                 (init_val < ctx.func->locals.size()) ? ctx.func->locals[init_val].type : nullptr;
