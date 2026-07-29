@@ -97,6 +97,7 @@ Baremetalターゲットではオブジェクト出力に加えて、FLASH/RAM�
 - モジュールのDataLayoutはTargetMachineから設定する（`target.cpp:156-159`）。これを怠るとMIR→LLVM変換時のサイズ判定（構造体値渡し/sret閾値）と実レイアウトがずれ、ABI不一致を起こす。
 - PreCodeGenValidatorのベアメタル/UEFIスキップ条件（triple文字列判定、`safe_codegen.hpp:278-281`）を変更する際は、意図的無限ループを持つカーネル/UEFIサンプルが誤検知されないことを確認する。
 - 回帰テスト: バックエンドスイート（`make test-llvm`）が生成オブジェクトの実行まで検証し、タイムアウト経路は `CM_CODEGEN_TIMEOUT` を小さく設定して検証できる（`safe_codegen.hpp:47-49`）。
+- デバッグ情報オプション（`--debug`/`-d` 由来の `config.debugInfo`）はオプション配管とキャッシュキーへの反映のみで実体を持たない: ドライバが `opts.debug` を転写し（`src/cmd/cm/backend/llvm.cpp:86`）、`TargetConfig` への反映とキャッシュキーへの算入までは行われる（`src/internal/codegen/llvm/native/codegen.cpp:196, 215`）が、`LLVMContext` の `debugBuilder`（DIBuilder、`core/context.hpp:100`）は宣言のみで使用箇所がなく、DWARF等のデバッグ情報は生成されない。
 
 ## 関連資料
 

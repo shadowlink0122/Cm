@@ -8,6 +8,8 @@ Cmコンパイラの実装方法を、実装に使われている基本アルゴ
 |---|---|
 | [コンパイルパイプライン全体像](pipeline/overview.md) | lexer→parser→AST→型検査→HIR→MIR→LLVM IR→native/jitの段構成と、ドライバ（main.cpp/build.cpp/backend）からの呼び出し流れ |
 | [MIRの設計](pipeline/mir-design.md) | MirFunction・locals・基本ブロック・terminatorの表現、最適化パスの種類と実行順、O0/O1/O2の差、パス追加時の不変条件 |
+| [MIR最適化パスの全カタログ](pipeline/mir-optimization-passes.md) | 標準パイプライン12+単独駆動4+休眠1の全17パスを、目的・アルゴリズム・実行条件・維持すべき不変条件付きで1パス1節で列挙 |
+| [属性の処理](pipeline/attributes.md) | `#[target]`・`#[test]`・`#[derive]`等のパースと消費フェーズの分散設計（パース直後フィルタ・型検査・JITランナー・derive生成） |
 
 ## lowering — 言語機能の脱糖
 
@@ -16,6 +18,14 @@ Cmコンパイラの実装方法を、実装に使われている基本アルゴ
 | [クロージャのlowering](lowering/closures.md) | ラムダの独立関数化とキャプチャ前置、高階ランタイム向けのi64環境配列+サンク合成、`__lambda_`命名規約の役割 |
 | [enumとmatchのlowering](lowering/enums-and-match.md) | `{i32 tag, [N x i8] payload}`のタグ付きunionレイアウト、`__tag`比較+`__payload`抽出への脱糖、網羅性検査 |
 | [メソッドチェーンの処理](lowering/method-chains.md) | 後置式の左結合パース、チェーン各段の型伝播とレシーバ参照渡し・一時実体化・書き戻し、`return self`のデリファレンス、連結チェーン平坦化 |
+| [FFI（use libc / extern "C"）](lowering/ffi-extern.md) | 2つの宣言形式のパースとHirExternBlock、マングリング除外と宣言のみのllvm::Function発行、native=リンカ/jit=ホストプロセスの2経路シンボル解決 |
+| [インラインアセンブリ](lowering/inline-asm.md) | `${制約:変数}`記法の`$N`番号化とAsmData解決、GCC互換制約の並べ替え・clobber自動付与・レジスタ非リマップ方針によるllvm::InlineAsm変換 |
+
+## macro — マクロ
+
+| ドキュメント | 内容 |
+|---|---|
+| [マクロの展開](macro/expansion.md) | 型付きマクロ（定数のHIRインライン置換・関数マクロのパース時関数化）の2段階処理と、ビルド未接続のトークンツリー展開器（matcher/expander/hygiene）の位置づけ |
 
 ## types — 型システム基礎
 
@@ -72,6 +82,10 @@ Cmコンパイラの実装方法を、実装に使われている基本アルゴ
 | [オブジェクトファイル出力](codegen-native/object-emission.md) | TargetMachine構成（arm64/x86_64・クロス書き換え）、直接オブジェクト出力、fork隔離+タイムアウトでLLVMクラッシュから本体を守る設計 |
 | [リンクとランタイム解決](codegen-native/linking-and-runtime.md) | プラットフォーム別リンカコマンド、cm_*プレフィックス走査による必要ランタイムの自動検出、cm_runtime.oの探索順 |
 | [数値出力とキャストの一貫性](codegen-native/numeric-and-casts.md) | 最短round-trip数値書式化、`as`キャストの意味論（飽和・切り捨て・ptr↔int）、共通実装への集約 |
+| [LLVM最適化の構成](codegen-native/llvm-optimization.md) | native/jit双方のPassBuilderパイプライン構築とO0〜O3写像、MergeFunctions ICF、サニタイザ計装、最適化暴走への3層防御、verifyModuleの配置 |
+| [スライスと配列のコード生成](codegen-native/slice-and-array-codegen.md) | スライス=opaque ptr+cm_slice_*呼び出し・固定長配列=[N x elem]+インラインGEPの二分方針、リテラル生成・添字GEP・サブスライス参照・for-in展開のIR |
+| [非同期ランタイムとイベントループ](codegen-native/async-event-loop.md) | async/awaitフラグがnative/jitではMIR検証で拒否される設計、未リンクの準備実装（Future・Executor・kqueue/epoll）の位置づけ、実際の並行処理を担うnative::thread/sync |
+| [printと文字列補間](codegen-native/print-and-interpolation.md) | 補間の分解→プレースホルダ変換→型ディスパッチ（cm_format_replace_*呼び分け・unionタグ分岐）の三段構成、Display/Debug自動実装の再帰的文字列化 |
 
 ## codegen-jit — JIT実行
 
