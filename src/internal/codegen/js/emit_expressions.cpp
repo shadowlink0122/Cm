@@ -185,6 +185,13 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                 if (data.op == mir::MirBinaryOp::Shl && result_unsigned) {
                     return "((" + lhs + " << " + rhs + ") >>> 0)";
                 }
+                // ビット演算: JSの|&^はToInt32で符号付き32ビットになるため、uintは>>>0で符号なし化
+                // （0xFE<<24を含むOR結果が負値になりnativeの4277009103と分裂していた）
+                if ((data.op == mir::MirBinaryOp::BitOr || data.op == mir::MirBinaryOp::BitAnd ||
+                     data.op == mir::MirBinaryOp::BitXor) &&
+                    result_unsigned) {
+                    return "((" + lhs + " " + op + " " + rhs + ") >>> 0)";
+                }
             }
 
             return "(" + lhs + " " + op + " " + rhs + ")";
