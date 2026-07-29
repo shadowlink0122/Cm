@@ -223,6 +223,27 @@ int main() {
 }
 ```
 
+### Element Operations on Multidimensional Slices (v0.17.0+)
+
+You can call methods directly on elements (inner slices) of a variable-length slice via an index receiver.
+
+```cm
+int main() {
+    int[][] rows = [];
+    int[] r0 = [1];
+    rows.push(r0);
+
+    rows[0].push(42);          // push directly to the element slice
+    println(rows[0].len());    // 2
+    println(rows[0][1]);       // 42 (direct multi-index read)
+
+    rows[0].pop();             // pop/delete/clear/len/cap work the same way
+    return 0;
+}
+```
+
+Mixed chains through struct fields (`grid.cells[i].push(v)`) are resolved as well.
+
 ### Performance (since v0.11.0)
 
 Multidimensional arrays are automatically flattened internally for cache locality (transparent to user code; 200-250x speedups on large matrices).

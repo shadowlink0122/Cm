@@ -286,11 +286,71 @@ bool ExprLowering::resolve_receiver_place(const hir::HirExpr* expr, LoweringCont
         auto resolved = base_type ? ctx.resolve_typedef(base_type) : nullptr;
         if (!resolved || resolved->kind != hir::TypeKind::Array)
             return false;
-        // サイズ既知の固定長配列のみindexプロジェクションで場所化できる。
-        // スライス（可変長）要素の場所化はランタイム経由のアドレス取得が必要なため未対応
-        // （黙殺せず呼び出し側の診断で停止する）
-        if (!resolved->array_size.has_value() && resolved->dimensions.empty())
-            return false;
+        // 固定長配列（サイズ既知）はindexプロジェクションで場所化する。
+        // スライス（可変長）はdimensionsに0が入ることがあるためarray_sizeと次元値の両方で判別する
+        const bool base_is_fixed_array =
+            resolved->array_size.has_value() ||
+            (!resolved->dimensions.empty() && resolved->dimensions[0] > 0);
+        if (!base_is_fixed_array) {
+            // スライス要素レシーバ（H10第3段）: 要素が内側スライス（多次元スライス）の場合、
+            // cm_slice_get_subslice_refで格納中の内側ヘッダへの参照を取得し、それをレシーバ場所とする。
+            // 内側ヘッダは外側スライスのdataバッファへインライン格納されているため、
+            // 参照経由のpush/pop等の変異が格納中のヘッダへ直接反映され書き戻しは不要
+            auto elem =
+                resolved->element_type ? ctx.resolve_typedef(resolved->element_type) : nullptr;
+            if (!elem || elem->kind != hir::TypeKind::Array || elem->array_size.has_value()) {
+                // 構造体blob等の要素は値コピーになり変異が失われるため場所化しない
+                // （黙殺せず呼び出し側の診断で停止する）
+                return false;
+            }
+            // 添字式を収集（単一index or 多次元indices）
+            std::vector<const hir::HirExprPtr*> index_exprs;
+            if (!(*idx)->indices.empty()) {
+                for (const auto& ie : (*idx)->indices) {
+                    index_exprs.push_back(&ie);
+                }
+            } else {
+                index_exprs.push_back(&(*idx)->index);
+            }
+            MirPlace cur_place = base;
+            hir::TypePtr cur_type = resolved;
+            for (const auto* iep : index_exprs) {
+                if (!iep || !*iep)
+                    return false;
+                if (!cur_type || cur_type->kind != hir::TypeKind::Array ||
+                    cur_type->array_size.has_value())
+                    return false;
+                auto cur_elem =
+                    cur_type->element_type ? ctx.resolve_typedef(cur_type->element_type) : nullptr;
+                if (!cur_elem || cur_elem->kind != hir::TypeKind::Array ||
+                    cur_elem->array_size.has_value())
+                    return false;
+                LocalId iv = lower_expression(**iep, ctx);
+                LocalId elem_local = ctx.new_temp(cur_elem);
+                BlockId success_block = ctx.new_block();
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(cur_place));
+                args.push_back(MirOperand::copy(MirPlace{iv}));
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_get_subslice_ref"),
+                                            std::move(args),
+                                            MirPlace{elem_local},
+                                            success_block,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success_block);
+                cur_place = MirPlace{elem_local};
+                cur_type = cur_elem;
+            }
+            out_place = cur_place;
+            out_type = cur_type;
+            return true;
+        }
 
         // 添字を適用（多次元はindicesを順に適用）
         auto apply_index = [&](const hir::HirExprPtr& index_expr) -> bool {
@@ -542,6 +602,59 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         if (array_type && array_type->kind == hir::TypeKind::Array && array_type->element_type &&
             array_type->element_type->kind == hir::TypeKind::Union) {
             elem_type = array_type->element_type;
+        }
+    }
+
+    // 多次元スライスの多重添字読み（rows[0][1]等）: 中間レベルをcm_slice_get_subsliceで辿り、
+    // 単一添字の読みへ還元する（従来は固定長配列のprojection経路へ落ちて壊れた値を読んでいた。H10）
+    if (is_slice && index_locals.size() > 1 && array_is_set) {
+        hir::TypePtr walk = nullptr;
+        if (array < ctx.func->locals.size() && ctx.func->locals[array].type) {
+            walk = ctx.resolve_typedef(ctx.func->locals[array].type);
+        }
+        if (!walk && index_expr.object && index_expr.object->type) {
+            walk = ctx.resolve_typedef(index_expr.object->type);
+        }
+        std::vector<hir::TypePtr> level_types;
+        bool all_slice = true;
+        for (size_t i = 0; i < index_locals.size(); ++i) {
+            if (!walk || walk->kind != hir::TypeKind::Array || walk->array_size.has_value()) {
+                all_slice = false;
+                break;
+            }
+            walk = walk->element_type ? ctx.resolve_typedef(walk->element_type) : nullptr;
+            level_types.push_back(walk);
+        }
+        if (all_slice) {
+            LocalId cur = array;
+            for (size_t i = 0; i + 1 < index_locals.size(); ++i) {
+                LocalId nxt = ctx.new_temp(level_types[i] ? level_types[i] : hir::make_int());
+                BlockId sb = ctx.new_block();
+                std::vector<MirOperandPtr> sargs;
+                sargs.push_back(MirOperand::copy(MirPlace{cur}));
+                sargs.push_back(MirOperand::copy(MirPlace{index_locals[i]}));
+                auto ct = std::make_unique<MirTerminator>();
+                ct->kind = MirTerminator::Call;
+                ct->data =
+                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_get_subslice"),
+                                            std::move(sargs),
+                                            MirPlace{nxt},
+                                            sb,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                ctx.set_terminator(std::move(ct));
+                ctx.switch_to_block(sb);
+                cur = nxt;
+            }
+            array = cur;
+            const LocalId last_index = index_locals.back();
+            index_locals.clear();
+            index_locals.push_back(last_index);
+            if (!level_types.empty() && level_types.back()) {
+                elem_type = level_types.back();
+            }
         }
     }
 

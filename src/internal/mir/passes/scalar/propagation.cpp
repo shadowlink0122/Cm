@@ -165,6 +165,17 @@ bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalI
                                     }
                                 }
 
+                                // js/ts: 集約コピーは深いクローンで別実体になるため伝播しない
+                                // （伝播するとコピー元経由の変異が呼び出し側の変数へ反映されない）
+                                if (no_aggregate_prop_ && target < func.locals.size()) {
+                                    const auto& t = func.locals[target].type;
+                                    if (t && (t->kind == hir::TypeKind::Struct ||
+                                              t->kind == hir::TypeKind::Array ||
+                                              t->kind == hir::TypeKind::Union)) {
+                                        continue;
+                                    }
+                                }
+
                                 // 自己代入でない場合
                                 if (target != source) {
                                     copies[target] = source;

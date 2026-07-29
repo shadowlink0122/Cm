@@ -49,7 +49,7 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
 
     // Phase 2: データフロー最適化
     passes.push_back(std::make_unique<GVN>());
-    passes.push_back(std::make_unique<CopyPropagation>());
+    passes.push_back(std::make_unique<CopyPropagation>(user_opts.no_aggregate_copy_prop));
 
     // Phase 3: 冗長性排除
     passes.push_back(std::make_unique<DeadStoreElimination>());
@@ -69,7 +69,7 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     // 最適化レベル2以上: 複数回実行
     if (optimization_level >= 2) {
         passes.push_back(std::make_unique<ConstantFolding>());
-        passes.push_back(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<CopyPropagation>(user_opts.no_aggregate_copy_prop));
         passes.push_back(std::make_unique<DeadCodeElimination>());
     }
 

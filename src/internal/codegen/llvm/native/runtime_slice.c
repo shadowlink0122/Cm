@@ -785,6 +785,20 @@ void* cm_slice_get_element_ptr(void* slice_ptr, int64_t index) {
 // 多次元スライスの内側の配列をラップするスライスを作成
 // 内側の配列がCmSlice*の場合、それを返す
 // そうでない場合（固定配列）、一時的なラッパーを作成
+// 内側スライスヘッダへの参照を返す（コピーしない）。
+// 添字レシーバ（rows[0].push(x)等）の変異を格納中のヘッダへ反映するために使う（H10第3段）。
+// 返したポインタは外側スライスのdataバッファ内を指すため、外側のpush/growで無効化される。
+// 取得直後のメソッド呼び出しにのみ使用し、保持しないこと
+void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (index < 0 || index >= slice->len || !slice->data)
+        return NULL;
+    CmSlice* slice_array = (CmSlice*)slice->data;
+    return &slice_array[index];
+}
+
 void* cm_slice_get_subslice(void* slice_ptr, int64_t index) {
     if (!slice_ptr)
         return NULL;

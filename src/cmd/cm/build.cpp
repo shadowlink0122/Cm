@@ -487,6 +487,9 @@ int run_build(cli::Options& opts, const char* argv0) {
             mir::opt::MirOptimizationOptions user_opts;
             user_opts.unroll_loops = opts.unroll_loops;
             user_opts.unroll_max_trips = opts.unroll_max_trips;
+            // js/tsは構造体コピーが深いクローンのため、集約コピーの伝播は不健全（別実体の変異になる）
+            user_opts.no_aggregate_copy_prop =
+                (opts.target == "js" || opts.target == "ts" || opts.target == "web");
             mir::opt::run_optimization_passes(mir, opts.optimization_level,
                                               opts.debug || opts.verbose, user_opts);
             if (cm::debug::debug_mode())

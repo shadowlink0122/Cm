@@ -166,6 +166,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_push_slice",
         "cm_make_slice",
         "cm_slice_get_subslice",
+        "cm_slice_get_subslice_ref",
         "cm_slice_sort",
         "cm_slice_sort_i8",
         "cm_slice_sort_u8",
@@ -658,6 +659,10 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "[]";
     }
     if (name == "cm_slice_get_subslice" && argStrs.size() >= 2) {
+        return "__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "]";
+    }
+    if (name == "cm_slice_get_subslice_ref" && argStrs.size() >= 2) {
+        // JS配列は参照型のため要素アクセスがそのまま共有参照になる
         return "__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "]";
     }
     if (name == "cm_slice_sort_str" && argStrs.size() >= 1) {

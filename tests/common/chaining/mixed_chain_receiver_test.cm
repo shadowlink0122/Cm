@@ -1,0 +1,22 @@
+// H10第5段回帰: 構造体フィールド経由の混合チェーン（g.cells[i].push(v)）
+// get_member_place（フィールド場所）→添字レシーバの連結で解決する
+import std::io::println;
+
+struct Grid {
+    int[][] cells;
+    int id;
+}
+
+int main() {
+    int[][] cells = [[7]];
+    Grid g = Grid{cells: cells, id: 1};
+
+    g.cells[0].push(8);
+    println(g.cells[0].len());
+    println(g.cells[0][0]);
+    println(g.cells[0][1]);
+
+    println(g.cells[0].pop());
+    println(g.cells[0].len());
+    return 0;
+}
