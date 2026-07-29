@@ -990,6 +990,16 @@ void* cm_slice_sort(void* slice_ptr) {
     return cm_slice_sort_with(slice_ptr, cm_slice_cmp_i32);
 }
 
+
+// バイト列スライスから文字列を構築する（埋め込みNUL保持。H9第4段）
+extern char* cm_string_from_bytes(const void* data, int64_t len);
+char* cm_string_from_byte_slice(void* slice_ptr) {
+    if (!slice_ptr)
+        return cm_string_from_bytes("", 0);
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    return cm_string_from_bytes(slice->data, slice->len);
+}
+
 // 固定サイズ配列からスライスを作成
 void* cm_array_to_slice(void* array_ptr, int64_t len, int64_t elem_size) {
     CmSlice* result = (CmSlice*)cm_alloc(sizeof(CmSlice));

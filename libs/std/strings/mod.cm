@@ -4,3 +4,4 @@ module std.strings;
 
 export import std.strings.builder;
 export import std.strings.split;
+export import std.strings.from_bytes;

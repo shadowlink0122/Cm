@@ -1,6 +1,9 @@
 // Cm Language Runtime - Print Functions (LLVM Backend)
 // Platform-specific output implementations
 
+// ヘッダ付き文字列対応の解放（runtime_format.c実装。H9第4段）
+extern void cm_string_free(char* str);
+
 #include "../../common/runtime_alloc.h"
 #include "../../common/runtime_platform.h"
 #include <stdint.h>
@@ -55,7 +58,7 @@ void cm_println_string(const char* str) {
         if (unescaped) {
             cm_print_str(unescaped);
             cm_write_stdout("\n", 1);
-            cm_dealloc(unescaped);
+            cm_string_free(unescaped);
         } else {
             cm_print_str(str);
             cm_write_stdout("\n", 1);
@@ -76,7 +79,7 @@ void cm_print_int(int value) {
     char* str = cm_format_int(value);
     if (str) {
         cm_print_str(str);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -89,7 +92,7 @@ void cm_println_int(int value) {
     if (str) {
         cm_print_str(str);
         cm_write_stdout("\n", 1);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -101,7 +104,7 @@ void cm_print_uint(unsigned int value) {
     char* str = cm_format_uint(value);
     if (str) {
         cm_print_str(str);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -114,7 +117,7 @@ void cm_println_uint(unsigned int value) {
     if (str) {
         cm_print_str(str);
         cm_write_stdout("\n", 1);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -126,7 +129,7 @@ void cm_print_long(int64_t value) {
     char* str = cm_format_long((long long)value);
     if (str) {
         cm_print_str(str);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -139,7 +142,7 @@ void cm_println_long(int64_t value) {
     if (str) {
         cm_print_str(str);
         cm_write_stdout("\n", 1);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -151,7 +154,7 @@ void cm_print_ulong(uint64_t value) {
     char* str = cm_format_ulong((unsigned long long)value);
     if (str) {
         cm_print_str(str);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -164,7 +167,7 @@ void cm_println_ulong(uint64_t value) {
     if (str) {
         cm_print_str(str);
         cm_write_stdout("\n", 1);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -179,7 +182,7 @@ void cm_print_double(double value) {
     char* str = cm_format_double(value);
     if (str) {
         cm_print_str(str);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }
@@ -192,7 +195,7 @@ void cm_println_double(double value) {
     if (str) {
         cm_print_str(str);
         cm_write_stdout("\n", 1);
-        cm_dealloc(str);
+        cm_string_free((char*)str);
     }
 #endif
 }

@@ -666,6 +666,26 @@ llvm::Type* MIRToLLVM::getPointeeType(const hir::TypePtr& ptrType) {
 }
 
 // 定数変換
+
+llvm::Constant* MIRToLLVM::createHeaderedStringLiteral(const std::string& str) {
+    auto& llvm_ctx = ctx.getContext();
+    auto i32 = ctx.getI32Type();
+    auto bytes = llvm::ConstantDataArray::getString(llvm_ctx, str, true);
+    auto sty = llvm::StructType::get(llvm_ctx, {i32, i32, i32, i32, bytes->getType()},
+                                     /*isPacked=*/true);
+    auto init = llvm::ConstantStruct::get(
+        sty, {llvm::ConstantInt::get(i32, 0x434D5331u),
+              llvm::ConstantInt::get(i32, static_cast<uint32_t>(str.size())),
+              llvm::ConstantInt::get(i32, 0x53315243u), llvm::ConstantInt::get(i32, 0), bytes});
+    auto gv = new llvm::GlobalVariable(*module, sty, /*isConstant=*/true,
+                                       llvm::GlobalValue::PrivateLinkage, init, "strh");
+    gv->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    gv->setAlignment(llvm::Align(16));
+    auto i8 = ctx.getI8Type();
+    llvm::Constant* idx[] = {llvm::ConstantInt::get(ctx.getI64Type(), 16)};
+    return llvm::ConstantExpr::getInBoundsGetElementPtr(i8, gv, idx);
+}
+
 llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
     // std::variant を処理
     if (std::holds_alternative<bool>(constant.value)) {
@@ -721,9 +741,9 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
         }
         return llvm::ConstantFP::get(ctx.getF64Type(), std::get<double>(constant.value));
     } else if (std::holds_alternative<std::string>(constant.value)) {
-        // 文字列リテラル
+        // 文字列リテラル（長さヘッダ付き。H9第4段）
         auto& str = std::get<std::string>(constant.value);
-        return builder->CreateGlobalStringPtr(str, "str");
+        return createHeaderedStringLiteral(str);
     } else {
         // nullまたは未知の型
         if (constant.type) {

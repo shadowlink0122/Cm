@@ -90,3 +90,12 @@ string[] ls = lines("x\r\ny\n");         // ["x", "y"] (normalizes \r\n, drops t
 ```
 
 When the separator is an empty string, `split` splits into individual code points.
+
+`from_bytes(utiny[])` builds a string from a byte slice (v0.17.0). Byte sequences containing embedded NULs (0x00) are preserved correctly by `byte_len()`, `substring()`, and concatenation.
+
+```cm
+import std::strings::from_bytes;
+
+utiny[] raw = [72, 105];          // "Hi"
+string s = from_bytes(raw);
+```

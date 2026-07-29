@@ -344,6 +344,11 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType(), ctx.getI64Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "cm_string_from_byte_slice") {
+        // char* cm_string_from_byte_slice(void* slice)
+        auto funcType = llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "cm_slice_get_subslice" || name == "cm_slice_get_subslice_ref") {
         // void* cm_slice_get_subslice(void* slice, i64 index) / 参照版（H10添字レシーバ用）
         auto funcType =

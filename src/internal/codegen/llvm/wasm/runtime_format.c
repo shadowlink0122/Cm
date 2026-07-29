@@ -34,10 +34,95 @@ static size_t wasm_strlen(const char* str) {
     return len;
 }
 
+
+// ============================================================
+// 長さヘッダ付き文字列（H9第4段。native側と同一設計のSDS方式）
+// ============================================================
+#define CM_STR_MAGIC 0x434D5331u  /* "CMS1" */
+#define CM_STR_MAGIC2 0x53315243u /* "S1RC" */
+
+typedef struct {
+    uint32_t magic;
+    uint32_t byte_len;
+    uint32_t magic2;
+    uint32_t reserved;
+} CmStrHdr;
+
+void* wasm_alloc(size_t size);
+void wasm_free(void* ptr);
+
+static char* cm_str_alloc(size_t len) {
+    char* raw = (char*)wasm_alloc(sizeof(CmStrHdr) + len + 1);
+    if (!raw)
+        return NULL;
+    CmStrHdr* hdr = (CmStrHdr*)raw;
+    hdr->magic = CM_STR_MAGIC;
+    hdr->byte_len = (uint32_t)len;
+    hdr->magic2 = CM_STR_MAGIC2;
+    hdr->reserved = (uint32_t)sizeof(CmStrHdr);
+    char* data = raw + sizeof(CmStrHdr);
+    data[len] = 0;
+    return data;
+}
+
+static const CmStrHdr* cm_str_hdr(const char* s) {
+    if (!s)
+        return NULL;
+    // wasmの線形メモリは連続でヘッダ位置の前方読みが常に安全なため、
+    // アドレス下限と4バイト整列（u32フィールド読み）のみ確認する
+    if ((uintptr_t)s < sizeof(CmStrHdr) || (((uintptr_t)s & 3u) != 0))
+        return NULL;
+    const CmStrHdr* hdr = (const CmStrHdr*)(s - sizeof(CmStrHdr));
+    if (hdr->magic != CM_STR_MAGIC || hdr->magic2 != CM_STR_MAGIC2)
+        return NULL;
+    if (s[hdr->byte_len] != 0)
+        return NULL;
+    return hdr;
+}
+
+size_t cm_string_byte_len(const char* s) {
+    if (!s)
+        return 0;
+    const CmStrHdr* hdr = cm_str_hdr(s);
+    if (hdr)
+        return hdr->byte_len;
+    size_t len = 0;
+    while (s[len])
+        len++;
+    return len;
+}
+
+static char* cm_str_dup(const char* src) {
+    size_t len = 0;
+    if (src) {
+        while (src[len])
+            len++;
+    }
+    char* out = cm_str_alloc(len);
+    if (out) {
+        for (size_t i = 0; i < len; i++)
+            out[i] = src[i];
+    }
+    return out;
+}
+
+char* cm_string_from_bytes(const void* data, int64_t len) {
+    if (len < 0)
+        len = 0;
+    char* out = cm_str_alloc((size_t)len);
+    if (out && len) {
+        const char* src = (const char*)data;
+        for (int64_t i = 0; i < len; i++)
+            out[i] = src[i];
+    }
+    return out;
+}
+
 // Builtin string length function (used by Cm .len() method)
 // Returns uint64_t to match the Cm type system
 uint64_t __builtin_string_len(const char* str) {
-    return (uint64_t)wasm_strlen(str);
+    // ヘッダ付き文字列はO(1)、リテラル等はstrlenフォールバック（埋め込みNULも正しく数える）
+    return (uint64_t)cm_string_byte_len(str);
 }
 
 // UTF-8コードポイント数を返す（H9第3段のlen()実体。継続バイト0b10xxxxxxを数えない）。
@@ -46,9 +131,11 @@ uint64_t __builtin_string_codepoint_len(const char* str) {
     if (!str) {
         return 0;
     }
+    const size_t blen = cm_string_byte_len(str);
     uint64_t count = 0;
-    for (const unsigned char* p = (const unsigned char*)str; *p; p++) {
-        if ((*p & 0xC0) != 0x80) {
+    const unsigned char* p = (const unsigned char*)str;
+    for (size_t i = 0; i < blen; i++) {
+        if ((p[i] & 0xC0) != 0x80) {
             count++;
         }
     }
@@ -227,27 +314,30 @@ char __builtin_string_last(const char* str) {
 
 // コードポイント添字に対応するバイトオフセットを返す（native版と同一ロジック）
 static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
+    // バイト長境界で走査する（埋め込みNULを越えて正しく添字を解決する。H9第4段）
+    const size_t blen = cm_string_byte_len(str);
     const unsigned char* p = (const unsigned char*)str;
     int64_t seen = 0;
-    while (*p) {
-        if ((*p & 0xC0) != 0x80) {
+    size_t i = 0;
+    while (i < blen) {
+        if ((p[i] & 0xC0) != 0x80) {
             if (seen == cp_index) {
                 break;
             }
             seen++;
         }
-        p++;
+        i++;
     }
-    while (*p && (*p & 0xC0) == 0x80) {
-        p++;
+    while (i < blen && (p[i] & 0xC0) == 0x80) {
+        i++;
     }
-    return (size_t)((const char*)p - str);
+    return i;
 }
 
 // substring/sliceの添字はコードポイント単位（H9第3段）。負添字のPython風意味論は維持
 char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
     if (!str) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
@@ -262,18 +352,17 @@ char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
     }
     if (end > cp_len) end = cp_len;
     if (start >= end) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
     size_t byte_start = cm_cp_index_to_byte(str, start);
     size_t byte_end = cm_cp_index_to_byte(str, end);
     size_t result_len = byte_end - byte_start;
-    char* result = (char*)wasm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     for (size_t i = 0; i < result_len; i++) {
         result[i] = str[byte_start + i];
     }
-    result[result_len] = '\0';
     return result;
 }
 
@@ -333,12 +422,12 @@ int64_t __builtin_string_indexOf(const char* str, const char* substr) {
 
 char* __builtin_string_toUpperCase(const char* str) {
     if (!str) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
     size_t len = wasm_strlen(str);
-    char* result = (char*)wasm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
     for (size_t i = 0; i < len; i++) {
         char c = str[i];
         if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
@@ -350,12 +439,12 @@ char* __builtin_string_toUpperCase(const char* str) {
 
 char* __builtin_string_toLowerCase(const char* str) {
     if (!str) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
     size_t len = wasm_strlen(str);
-    char* result = (char*)wasm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
     for (size_t i = 0; i < len; i++) {
         char c = str[i];
         if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
@@ -367,7 +456,7 @@ char* __builtin_string_toLowerCase(const char* str) {
 
 char* __builtin_string_trim(const char* str) {
     if (!str) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
@@ -378,7 +467,7 @@ char* __builtin_string_trim(const char* str) {
     while (end > start && (str[end-1] == ' ' || str[end-1] == '\t' || 
            str[end-1] == '\n' || str[end-1] == '\r')) end--;
     size_t result_len = end - start;
-    char* result = (char*)wasm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     for (size_t i = 0; i < result_len; i++) {
         result[i] = str[start + i];
     }
@@ -417,13 +506,13 @@ bool __builtin_string_includes(const char* str, const char* substr) {
 
 char* __builtin_string_repeat(const char* str, int64_t count) {
     if (!str || count <= 0) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
     size_t len = wasm_strlen(str);
     size_t total_len = len * (size_t)count;
-    char* result = (char*)wasm_alloc(total_len + 1);
+    char* result = cm_str_alloc(total_len);
     for (int64_t i = 0; i < count; i++) {
         for (size_t j = 0; j < len; j++) {
             result[i * len + j] = str[j];
@@ -435,20 +524,20 @@ char* __builtin_string_repeat(const char* str, int64_t count) {
 
 char* __builtin_string_replace(const char* str, const char* from, const char* to) {
     if (!str) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         empty[0] = '\0';
         return empty;
     }
     if (!from || !to) {
         size_t len = wasm_strlen(str);
-        char* copy = (char*)wasm_alloc(len + 1);
+        char* copy = cm_str_alloc(len);
         for (size_t i = 0; i <= len; i++) copy[i] = str[i];
         return copy;
     }
     const char* pos = wasm_strstr(str, from);
     if (!pos) {
         size_t len = wasm_strlen(str);
-        char* copy = (char*)wasm_alloc(len + 1);
+        char* copy = cm_str_alloc(len);
         for (size_t i = 0; i <= len; i++) copy[i] = str[i];
         return copy;
     }
@@ -456,7 +545,7 @@ char* __builtin_string_replace(const char* str, const char* from, const char* to
     size_t from_len = wasm_strlen(from);
     size_t to_len = wasm_strlen(to);
     size_t result_len = str_len - from_len + to_len;
-    char* result = (char*)wasm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     size_t prefix_len = (size_t)(pos - str);
     for (size_t i = 0; i < prefix_len; i++) result[i] = str[i];
     for (size_t i = 0; i < to_len; i++) result[prefix_len + i] = to[i];
@@ -649,7 +738,7 @@ char* cm_unescape_braces(const char* str) {
     if (!str) return 0;
 
     size_t len = wasm_strlen(str);
-    char* result = (char*)wasm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
 
     size_t j = 0;
     for (size_t i = 0; i < len; i++) {
@@ -1220,10 +1309,10 @@ char* cm_string_concat3(const char* a, const char* b, const char* c) {
     if (!a) a = "";
     if (!b) b = "";
     if (!c) c = "";
-    size_t la = wasm_strlen(a);
-    size_t lb = wasm_strlen(b);
-    size_t lc = wasm_strlen(c);
-    char* result = (char*)wasm_alloc(la + lb + lc + 1);
+    size_t la = cm_string_byte_len(a);
+    size_t lb = cm_string_byte_len(b);
+    size_t lc = cm_string_byte_len(c);
+    char* result = cm_str_alloc(la + lb + lc);
     for (size_t i = 0; i < la; i++) result[i] = a[i];
     for (size_t i = 0; i < lb; i++) result[la + i] = b[i];
     for (size_t i = 0; i < lc; i++) result[la + lb + i] = c[i];
@@ -1236,11 +1325,11 @@ char* cm_string_concat4(const char* a, const char* b, const char* c, const char*
     if (!b) b = "";
     if (!c) c = "";
     if (!d) d = "";
-    size_t la = wasm_strlen(a);
-    size_t lb = wasm_strlen(b);
-    size_t lc = wasm_strlen(c);
-    size_t ld = wasm_strlen(d);
-    char* result = (char*)wasm_alloc(la + lb + lc + ld + 1);
+    size_t la = cm_string_byte_len(a);
+    size_t lb = cm_string_byte_len(b);
+    size_t lc = cm_string_byte_len(c);
+    size_t ld = cm_string_byte_len(d);
+    char* result = cm_str_alloc(la + lb + lc + ld);
     for (size_t i = 0; i < la; i++) result[i] = a[i];
     for (size_t i = 0; i < lb; i++) result[la + i] = b[i];
     for (size_t i = 0; i < lc; i++) result[la + lb + i] = c[i];
@@ -1253,9 +1342,9 @@ char* cm_string_concat(const char* left, const char* right) {
     if (!left) left = "";
     if (!right) right = "";
 
-    size_t len1 = wasm_strlen(left);
-    size_t len2 = wasm_strlen(right);
-    char* result = (char*)wasm_alloc(len1 + len2 + 1);
+    size_t len1 = cm_string_byte_len(left);
+    size_t len2 = cm_string_byte_len(right);
+    char* result = cm_str_alloc(len1 + len2);
 
     for (size_t i = 0; i < len1; i++) {
         result[i] = left[i];
@@ -1263,7 +1352,6 @@ char* cm_string_concat(const char* left, const char* right) {
     for (size_t i = 0; i < len2; i++) {
         result[len1 + i] = right[i];
     }
-    result[len1 + len2] = '\0';
 
     return result;
 }
@@ -1271,7 +1359,17 @@ char* cm_string_concat(const char* left, const char* right) {
 // 文一時文字列の解放（C12 dropパス）。cm_string_concat・cm_*_to_string等が返した無名一時の解放に使う。NULLは無視する
 void cm_string_free(char* str) {
     if (str) {
-        wasm_free(str);
+        // ヘッダ付き文字列は確保起点（ヘッダ先頭）を解放する（H9第4段）
+        if (cm_str_hdr(str)) {
+            // 解放前にマジックを消去し、ブロック再利用時の残留ヘッダ誤認を防ぐ
+            CmStrHdr* hdr = (CmStrHdr*)(str - sizeof(CmStrHdr));
+            char* raw = str - hdr->reserved;
+            hdr->magic = 0;
+            hdr->magic2 = 0;
+            wasm_free(raw);
+        } else {
+            wasm_free(str);
+        }
     }
 }
 
@@ -1336,13 +1434,13 @@ void cm_sb_append(int64_t handle, const char* s) {
 char* cm_sb_to_string(int64_t handle) {
     CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
     if (!sb) {
-        char* empty = (char*)wasm_alloc(1);
+        char* empty = cm_str_alloc(0);
         if (empty) {
             empty[0] = '\0';
         }
         return empty;
     }
-    char* result = (char*)wasm_alloc(sb->len + 1);
+    char* result = cm_str_alloc(sb->len);
     if (!result) {
         return NULL;
     }
@@ -1435,7 +1533,7 @@ char* cm_format_replace(const char* format, const char* value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1452,7 +1550,7 @@ char* cm_format_replace(const char* format, const char* value) {
     }
 
     if (end == start) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1499,7 +1597,7 @@ char* cm_format_replace_int(const char* format, int value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1574,7 +1672,7 @@ char* cm_format_replace_int(const char* format, int value) {
     char* formatted_value;
     
     if (width > 0 && (size_t)width > val_len && align != '\0') {
-        formatted_value = (char*)wasm_alloc(width + 1);
+        formatted_value = cm_str_alloc(width);
         size_t padding = width - val_len;
         
         if (align == '<') {
@@ -1632,7 +1730,7 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1692,7 +1790,7 @@ char* cm_format_replace_ptr(const char* format, long long value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1762,7 +1860,7 @@ char* cm_format_replace_long(const char* format, long long value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1846,7 +1944,7 @@ char* cm_format_replace_double(const char* format, double value) {
     }
 
     if (!found) {
-        char* result = (char*)wasm_alloc(fmt_len + 1);
+        char* result = cm_str_alloc(fmt_len);
         for (size_t i = 0; i < fmt_len; i++) {
             result[i] = format[i];
         }
@@ -1977,7 +2075,7 @@ char* cm_format_replace_string(const char* format, const char* value) {
     char* formatted_value;
     
     if (width > 0 && (size_t)width > val_len && align != '\0') {
-        formatted_value = (char*)wasm_alloc(width + 1);
+        formatted_value = cm_str_alloc(width);
         size_t padding = width - val_len;
         
         if (align == '<') {
@@ -1997,7 +2095,7 @@ char* cm_format_replace_string(const char* format, const char* value) {
         }
         formatted_value[width] = '\0';
     } else {
-        formatted_value = (char*)wasm_alloc(val_len + 1);
+        formatted_value = cm_str_alloc(val_len);
         for (size_t i = 0; i < val_len; i++) formatted_value[i] = value[i];
         formatted_value[val_len] = '\0';
     }

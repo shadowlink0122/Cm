@@ -42,6 +42,11 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::GlobalVariable*> globals;
     std::unordered_map<std::string, llvm::Function*> functions;
 
+    // 長さヘッダ付き文字列リテラルを発行し、データ先頭（+16）ポインタを返す（H9第4段）。
+    // {u32 magic, u32 len, u32 magic2, u32 reserved, [N+1 x i8]} のグローバル定数として配置し、
+    // ランタイムのcm_string_byte_lenがリテラルでもO(1)で長さを取得できるようにする
+    llvm::Constant* createHeaderedStringLiteral(const std::string& str);
+
     // グローバル変数マッピング（MirGlobalVar名 -> LLVM GlobalVariable）
     std::unordered_map<std::string, llvm::GlobalVariable*> globalVariables;
 

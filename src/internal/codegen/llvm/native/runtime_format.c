@@ -24,6 +24,109 @@
 // These can be used without libc in freestanding environments
 // ============================================================
 
+
+// ============================================================
+// 長さヘッダ付き文字列（H9第4段）
+// ランタイムが生成する文字列はデータ直前に{magic, byte_len}の8バイトヘッダを持ち、
+// データ自体は従来どおりNUL終端のchar*としてどのAPI・FFIにもそのまま渡せる（SDS方式）。
+// これによりO(1)のバイト長取得と、長さ対応APIでの埋め込みNUL保持を互換のまま実現する。
+// リテラル等ヘッダ無し文字列はmagic不一致でstrlenへフォールバックする
+// ============================================================
+
+#define CM_STR_MAGIC 0x434D5331u  /* "CMS1" */
+#define CM_STR_MAGIC2 0x53315243u /* "S1RC" */
+
+typedef struct {
+    uint32_t magic;
+    uint32_t byte_len;
+    uint32_t magic2;
+    uint32_t reserved;
+} CmStrHdr;
+
+// ヘッダ付きで確保し、データ先頭ポインタを返す（末尾NULは呼び出し側で書く前提だが
+// ここでも安全のため終端しておく）
+static inline char* cm_str_alloc(size_t len) {
+    // ページ先頭16バイト未満にデータが落ちると読み取りゲートが自前文字列を
+    // 判別できなくなるため、その場合は16バイトずらして配置し、シフト量込みの
+    // 確保起点オフセットをreservedへ記録する（freeはdata - reservedを解放する）
+    char* raw = (char*)cm_alloc(sizeof(CmStrHdr) + len + 1 + 16);
+    if (!raw)
+        return NULL;
+    char* data = raw + sizeof(CmStrHdr);
+    if (((uintptr_t)data & 4095u) < sizeof(CmStrHdr)) {
+        data += 16;
+    }
+    CmStrHdr* hdr = (CmStrHdr*)(data - sizeof(CmStrHdr));
+    hdr->magic = CM_STR_MAGIC;
+    hdr->byte_len = (uint32_t)len;
+    hdr->magic2 = CM_STR_MAGIC2;
+    hdr->reserved = (uint32_t)(data - raw);
+    data[len] = 0;
+    return data;
+}
+
+// ヘッダの有無を判定する（magic一致かつ格納長の位置がNUL終端であることを二重検証）
+static inline const CmStrHdr* cm_str_hdr(const char* s) {
+    if (!s)
+        return NULL;
+    // 前方読みの安全ゲート: ヘッダ付き文字列のデータは必ず16バイト整列（raw+16）で、
+    // 同一オブジェクト内にヘッダがあるため読める。未整列ポインタはヘッダ無し確定、
+    // ページ先頭16バイト未満は前方が未マップの可能性があるため読まずにフォールバックする
+    if (((uintptr_t)s & 15u) != 0)
+        return NULL;
+    if (((uintptr_t)s & 4095u) < sizeof(CmStrHdr))
+        return NULL;
+    const CmStrHdr* hdr = (const CmStrHdr*)(s - sizeof(CmStrHdr));
+    if (hdr->magic != CM_STR_MAGIC || hdr->magic2 != CM_STR_MAGIC2)
+        return NULL;
+    if (s[hdr->byte_len] != 0)
+        return NULL;
+    return hdr;
+}
+
+// バイト長: ヘッダがあればO(1)、無ければstrlen
+size_t cm_string_byte_len(const char* s) {
+    if (!s)
+        return 0;
+    const CmStrHdr* hdr = cm_str_hdr(s);
+    if (hdr)
+        return hdr->byte_len;
+    const char* p = s;
+    while (*p)
+        p++;
+    return (size_t)(p - s);
+}
+
+// 内容コピーでヘッダ付き文字列を作る（NUL終端文字列用）
+static inline char* cm_str_dup(const char* src) {
+    size_t len = 0;
+    if (src) {
+        const char* p = src;
+        while (*p)
+            p++;
+        len = (size_t)(p - src);
+    }
+    char* out = cm_str_alloc(len);
+    if (out && len) {
+        for (size_t i = 0; i < len; i++)
+            out[i] = src[i];
+    }
+    return out;
+}
+
+// バイト列から文字列を構築する（埋め込みNULを保持する第一級コンストラクタ）
+char* cm_string_from_bytes(const void* data, int64_t len) {
+    if (len < 0)
+        len = 0;
+    char* out = cm_str_alloc((size_t)len);
+    if (out && len) {
+        const char* src = (const char*)data;
+        for (int64_t i = 0; i < len; i++)
+            out[i] = src[i];
+    }
+    return out;
+}
+
 // 自前のstrlen実装 (O(n))
 static inline size_t cm_strlen_impl(const char* str) {
     if (!str)
@@ -891,7 +994,8 @@ void cm_qsort(void* base, size_t nmemb, size_t size, int (*compar)(const void*, 
 // String Builtin Functions
 // ============================================================
 size_t __builtin_string_len(const char* str) {
-    return str ? cm_strlen_impl(str) : 0;
+    // ヘッダ付き文字列はO(1)、リテラル等はstrlenフォールバック（埋め込みNULも正しく数える）
+    return cm_string_byte_len(str);
 }
 
 // UTF-8コードポイント数を返す（H9第3段のlen()実体。継続バイト0b10xxxxxxを数えない）。
@@ -900,9 +1004,12 @@ size_t __builtin_string_codepoint_len(const char* str) {
     if (!str) {
         return 0;
     }
+    // バイト長境界で走査する（埋め込みNULも1コードポイントとして数える。H9第4段）
+    const size_t blen = cm_string_byte_len(str);
     size_t count = 0;
-    for (const unsigned char* p = (const unsigned char*)str; *p; p++) {
-        if ((*p & 0xC0) != 0x80) {
+    const unsigned char* p = (const unsigned char*)str;
+    for (size_t i = 0; i < blen; i++) {
+        if ((p[i] & 0xC0) != 0x80) {
             count++;
         }
     }
@@ -934,22 +1041,25 @@ char __builtin_string_last(const char* str) {
 // コードポイント添字に対応するバイトオフセットを返す（cp_index個のコードポイント開始をスキップ）。
 // 末尾を越える添字は文字列末尾のバイトオフセットを返す
 static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
+    // バイト長境界で走査する（埋め込みNULを越えて正しく添字を解決する。H9第4段）
+    const size_t blen = cm_string_byte_len(str);
     const unsigned char* p = (const unsigned char*)str;
     int64_t seen = 0;
-    while (*p) {
-        if ((*p & 0xC0) != 0x80) {
+    size_t i = 0;
+    while (i < blen) {
+        if ((p[i] & 0xC0) != 0x80) {
             if (seen == cp_index) {
                 break;
             }
             seen++;
         }
-        p++;
+        i++;
     }
     // 継続バイトの途中で止まらないよう、次のコードポイント開始または終端まで進める
-    while (*p && (*p & 0xC0) == 0x80) {
-        p++;
+    while (i < blen && (p[i] & 0xC0) == 0x80) {
+        i++;
     }
-    return (size_t)((const char*)p - str);
+    return i;
 }
 
 // substring/sliceの添字はコードポイント単位（H9第3段）。
@@ -971,19 +1081,15 @@ char* __builtin_string_substring(const char* str, int64_t start, int64_t end) {
     if (end > cp_len)
         end = cp_len;
     if (start >= end) {
-        char* empty = (char*)cm_alloc(1);
-        if (empty)
-            empty[0] = '\0';
-        return empty;
+        return cm_str_alloc(0);
     }
     size_t byte_start = cm_cp_index_to_byte(str, start);
     size_t byte_end = cm_cp_index_to_byte(str, end);
     size_t result_len = byte_end - byte_start;
-    char* result = (char*)cm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     if (!result)
         return NULL;
     memcpy(result, str + byte_start, result_len);
-    result[result_len] = '\0';
     return result;
 }
 
@@ -1034,7 +1140,7 @@ char* __builtin_string_toUpperCase(const char* str) {
     if (!str)
         return NULL;
     size_t len = cm_strlen_impl(str);
-    char* result = (char*)cm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
     if (!result)
         return NULL;
     for (size_t i = 0; i < len; i++) {
@@ -1051,7 +1157,7 @@ char* __builtin_string_toLowerCase(const char* str) {
     if (!str)
         return NULL;
     size_t len = cm_strlen_impl(str);
-    char* result = (char*)cm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
     if (!result)
         return NULL;
     for (size_t i = 0; i < len; i++) {
@@ -1076,7 +1182,7 @@ char* __builtin_string_trim(const char* str) {
                            str[end - 1] == '\r'))
         end--;
     size_t result_len = end - start;
-    char* result = (char*)cm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     if (!result)
         return NULL;
     memcpy(result, str + start, result_len);
@@ -1112,14 +1218,14 @@ bool __builtin_string_includes(const char* str, const char* substr) {
 
 char* __builtin_string_repeat(const char* str, int64_t count) {
     if (!str || count <= 0) {
-        char* empty = (char*)cm_alloc(1);
+        char* empty = cm_str_alloc(0);
         if (empty)
             empty[0] = '\0';
         return empty;
     }
     size_t len = cm_strlen_impl(str);
     size_t total_len = len * (size_t)count;
-    char* result = (char*)cm_alloc(total_len + 1);
+    char* result = cm_str_alloc(total_len);
     if (!result)
         return NULL;
     for (int64_t i = 0; i < count; i++) {
@@ -1149,7 +1255,7 @@ char* __builtin_string_replace(const char* str, const char* from, const char* to
     size_t from_len = strlen(from);
     size_t to_len = strlen(to);
     size_t result_len = str_len - from_len + to_len;
-    char* result = (char*)cm_alloc(result_len + 1);
+    char* result = cm_str_alloc(result_len);
     if (!result)
         return NULL;
     size_t prefix_len = (size_t)(pos - str);
@@ -1858,7 +1964,7 @@ char* cm_unescape_braces(const char* str) {
         return NULL;
 
     size_t len = cm_strlen_impl(str);
-    char* result = (char*)cm_alloc(len + 1);
+    char* result = cm_str_alloc(len);
     if (!result)
         return NULL;
 
@@ -1886,35 +1992,31 @@ char* cm_format_unescape_braces(const char* str) {
 // Type to String Conversion (no_std compatible)
 // ============================================================
 char* cm_format_int(int value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_itoa_buf(value, buffer, 32);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_itoa_buf(value, tmp, 32);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_uint(unsigned int value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_utoa_buf(value, buffer, 32);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_utoa_buf(value, tmp, 32);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_long(long long value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_ltoa_buf(value, buffer, 32);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_ltoa_buf(value, tmp, 32);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_ulong(unsigned long long value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_ultoa_buf(value, buffer, 32);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_ultoa_buf(value, tmp, 32);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_double(double value) {
@@ -1930,11 +2032,10 @@ char* cm_format_double(double value) {
 }
 
 char* cm_format_double_precision(double value, int precision) {
-    char* buffer = (char*)cm_alloc(64);
-    if (buffer) {
-        cm_dtoa_buf(value, buffer, 64, precision);
-    }
-    return buffer;
+    char tmp[64];
+    tmp[0] = 0;
+        cm_dtoa_buf(value, tmp, 64, precision);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_bool(char value) {
@@ -1964,19 +2065,17 @@ char* cm_format_char(char value) {
 // Integer Format Variants (no_std compatible)
 // ============================================================
 char* cm_format_int_hex(long long value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_itoa_hex_buf((unsigned long long)value, buffer, 32, false);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_itoa_hex_buf((unsigned long long)value, tmp, 32, false);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_int_HEX(long long value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_itoa_hex_buf((unsigned long long)value, buffer, 32, true);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_itoa_hex_buf((unsigned long long)value, tmp, 32, true);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_int_binary(long long value) {
@@ -2008,30 +2107,27 @@ char* cm_format_int_binary(long long value) {
 }
 
 char* cm_format_int_octal(long long value) {
-    char* buffer = (char*)cm_alloc(32);
-    if (buffer) {
-        cm_itoa_oct_buf((unsigned long long)value, buffer, 32);
-    }
-    return buffer;
+    char tmp[32];
+    tmp[0] = 0;
+        cm_itoa_oct_buf((unsigned long long)value, tmp, 32);
+    return cm_str_dup(tmp);
 }
 
 // ============================================================
 // Double Format Variants (no_std compatible)
 // ============================================================
 char* cm_format_double_exp(double value) {
-    char* buffer = (char*)cm_alloc(64);
-    if (buffer) {
-        cm_dtoa_exp_buf(value, buffer, 64, false);
-    }
-    return buffer;
+    char tmp[64];
+    tmp[0] = 0;
+        cm_dtoa_exp_buf(value, tmp, 64, false);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_double_EXP(double value) {
-    char* buffer = (char*)cm_alloc(64);
-    if (buffer) {
-        cm_dtoa_exp_buf(value, buffer, 64, true);
-    }
-    return buffer;
+    char tmp[64];
+    tmp[0] = 0;
+        cm_dtoa_exp_buf(value, tmp, 64, true);
+    return cm_str_dup(tmp);
 }
 
 char* cm_format_double_scientific(double value, int uppercase) {
@@ -2053,15 +2149,14 @@ char* cm_string_concat3(const char* a, const char* b, const char* c) {
         b = "";
     if (!c)
         c = "";
-    size_t la = strlen(a);
-    size_t lb = strlen(b);
-    size_t lc = strlen(c);
-    char* result = (char*)cm_alloc(la + lb + lc + 1);
+    size_t la = cm_string_byte_len(a);
+    size_t lb = cm_string_byte_len(b);
+    size_t lc = cm_string_byte_len(c);
+    char* result = cm_str_alloc(la + lb + lc);
     if (result) {
         memcpy(result, a, la);
         memcpy(result + la, b, lb);
         memcpy(result + la + lb, c, lc);
-        result[la + lb + lc] = 0;
     }
     return result;
 }
@@ -2075,17 +2170,16 @@ char* cm_string_concat4(const char* a, const char* b, const char* c, const char*
         c = "";
     if (!d)
         d = "";
-    size_t la = strlen(a);
-    size_t lb = strlen(b);
-    size_t lc = strlen(c);
-    size_t ld = strlen(d);
-    char* result = (char*)cm_alloc(la + lb + lc + ld + 1);
+    size_t la = cm_string_byte_len(a);
+    size_t lb = cm_string_byte_len(b);
+    size_t lc = cm_string_byte_len(c);
+    size_t ld = cm_string_byte_len(d);
+    char* result = cm_str_alloc(la + lb + lc + ld);
     if (result) {
         memcpy(result, a, la);
         memcpy(result + la, b, lb);
         memcpy(result + la + lb, c, lc);
         memcpy(result + la + lb + lc, d, ld);
-        result[la + lb + lc + ld] = 0;
     }
     return result;
 }
@@ -2096,13 +2190,13 @@ char* cm_string_concat(const char* left, const char* right) {
     if (!right)
         right = "";
 
-    size_t len1 = strlen(left);
-    size_t len2 = strlen(right);
-    char* result = (char*)cm_alloc(len1 + len2 + 1);
+    size_t len1 = cm_string_byte_len(left);
+    size_t len2 = cm_string_byte_len(right);
+    char* result = cm_str_alloc(len1 + len2);
 
     if (result) {
-        strcpy(result, left);
-        strcat(result, right);
+        memcpy(result, left, len1);
+        memcpy(result + len1, right, len2);
     }
 
     return result;
@@ -2111,7 +2205,18 @@ char* cm_string_concat(const char* left, const char* right) {
 // 文一時文字列の解放（C12 dropパス）。cm_string_concat・cm_*_to_string等が返した無名一時の解放に使う。NULLは無視する
 void cm_string_free(char* str) {
     if (str) {
-        cm_dealloc(str);
+        // ヘッダ付き文字列は確保起点（ヘッダ先頭）を解放する（H9第4段）
+        if (cm_str_hdr(str)) {
+            // 解放前にマジックを消去し、ブロック再利用時の残留ヘッダ誤認を防ぐ。
+            // 確保起点はページ回避シフトを含むreservedオフセットから復元する
+            CmStrHdr* hdr = (CmStrHdr*)(str - sizeof(CmStrHdr));
+            char* raw = str - hdr->reserved;
+            hdr->magic = 0;
+            hdr->magic2 = 0;
+            cm_dealloc(raw);
+        } else {
+            cm_dealloc(str);
+        }
     }
 }
 
@@ -2172,13 +2277,13 @@ void cm_sb_append(int64_t handle, const char* s) {
 char* cm_sb_to_string(int64_t handle) {
     CmStringBuilder* sb = (CmStringBuilder*)(intptr_t)handle;
     if (!sb) {
-        char* empty = (char*)cm_alloc(1);
+        char* empty = cm_str_alloc(0);
         if (empty) {
             empty[0] = '\0';
         }
         return empty;
     }
-    char* result = (char*)cm_alloc(sb->len + 1);
+    char* result = cm_str_alloc(sb->len);
     if (!result) {
         return NULL;
     }
@@ -2333,14 +2438,14 @@ char* cm_format_replace_int(const char* format, int value) {
         if (width <= val_len) {
             formatted_value = int_str;
         } else {
-            formatted_value = (char*)cm_alloc(width + 1);
+            formatted_value = cm_str_alloc(width);
             if (formatted_value) {
                 int padding = width - val_len;
                 for (int i = 0; i < padding; i++)
                     formatted_value[i] = '0';
                 strcpy(formatted_value + padding, int_str);
             }
-            cm_dealloc(int_str);
+            cm_string_free(int_str);
         }
     } else {
         formatted_value = cm_format_int(value);
@@ -2350,7 +2455,7 @@ char* cm_format_replace_int(const char* format, int value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2363,7 +2468,7 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2406,7 +2511,7 @@ char* cm_format_replace_ptr(const char* format, long long value) {
                 formatted_value[1] = 'x';
                 cm_strcpy_impl(formatted_value + 2, hex_str);
             }
-            cm_dealloc(hex_str);
+            cm_string_free(hex_str);
         }
     } else if (cm_strcmp(specifier, ":X") == 0) {
         // 大文字16進数（ポインタなので0xプレフィックス付き）
@@ -2419,7 +2524,7 @@ char* cm_format_replace_ptr(const char* format, long long value) {
                 formatted_value[1] = 'x';
                 cm_strcpy_impl(formatted_value + 2, hex_str);
             }
-            cm_dealloc(hex_str);
+            cm_string_free(hex_str);
         }
     } else if (cm_strcmp(specifier, ":b") == 0) {
         formatted_value = cm_format_int_binary(value);
@@ -2434,7 +2539,7 @@ char* cm_format_replace_ptr(const char* format, long long value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2481,14 +2586,14 @@ char* cm_format_replace_long(const char* format, long long value) {
         if (width <= val_len) {
             formatted_value = long_str;
         } else {
-            formatted_value = (char*)cm_alloc(width + 1);
+            formatted_value = cm_str_alloc(width);
             if (formatted_value) {
                 int padding = width - val_len;
                 for (int i = 0; i < padding; i++)
                     formatted_value[i] = '0';
                 strcpy(formatted_value + padding, long_str);
             }
-            cm_dealloc(long_str);
+            cm_string_free(long_str);
         }
     } else {
         formatted_value = cm_format_long(value);
@@ -2498,7 +2603,7 @@ char* cm_format_replace_long(const char* format, long long value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2511,7 +2616,7 @@ char* cm_format_replace_ulong(const char* format, unsigned long long value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2548,7 +2653,7 @@ char* cm_format_replace_address(const char* format, const char* var_name, void* 
         return NULL;
 
     char* result = cm_format_replace(format, formatted_address);
-    cm_dealloc(formatted_address);
+    cm_string_free(formatted_address);
     return result;
 }
 
@@ -2594,7 +2699,7 @@ char* cm_format_replace_double(const char* format, double value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2634,11 +2739,11 @@ char* cm_format_replace_string(const char* format, const char* value) {
         int val_len = strlen(value);
 
         if (width <= val_len) {
-            formatted_value = (char*)cm_alloc(val_len + 1);
+            formatted_value = cm_str_alloc(val_len);
             if (formatted_value)
                 strcpy(formatted_value, value);
         } else {
-            formatted_value = (char*)cm_alloc(width + 1);
+            formatted_value = cm_str_alloc(width);
             if (formatted_value) {
                 int padding = width - val_len;
                 if (align == '<') {
@@ -2670,7 +2775,7 @@ char* cm_format_replace_string(const char* format, const char* value) {
         return NULL;
 
     char* result = cm_format_replace(format, formatted_value);
-    cm_dealloc(formatted_value);
+    cm_string_free(formatted_value);
     return result;
 }
 
@@ -2717,7 +2822,7 @@ char* cm_format_string(const char* format, int num_args, ...) {
     va_end(args);
 
     if (!result) {
-        result = (char*)cm_alloc(1);
+        result = cm_str_alloc(0);
         if (result)
             result[0] = '\0';
     }
@@ -2732,7 +2837,7 @@ char* cm_format_string_1(const char* fmt, const char* arg1) {
 char* cm_format_string_2(const char* fmt, const char* arg1, const char* arg2) {
     char* temp = cm_format_replace(fmt, arg1);
     char* result = cm_format_replace(temp, arg2);
-    cm_dealloc(temp);
+    cm_string_free(temp);
     return result;
 }
 
@@ -2740,8 +2845,8 @@ char* cm_format_string_3(const char* fmt, const char* arg1, const char* arg2, co
     char* temp1 = cm_format_replace(fmt, arg1);
     char* temp2 = cm_format_replace(temp1, arg2);
     char* result = cm_format_replace(temp2, arg3);
-    cm_dealloc(temp1);
-    cm_dealloc(temp2);
+    cm_string_free(temp1);
+    cm_string_free(temp2);
     return result;
 }
 
@@ -2751,9 +2856,9 @@ char* cm_format_string_4(const char* fmt, const char* arg1, const char* arg2, co
     char* temp2 = cm_format_replace(temp1, arg2);
     char* temp3 = cm_format_replace(temp2, arg3);
     char* result = cm_format_replace(temp3, arg4);
-    cm_dealloc(temp1);
-    cm_dealloc(temp2);
-    cm_dealloc(temp3);
+    cm_string_free(temp1);
+    cm_string_free(temp2);
+    cm_string_free(temp3);
     return result;
 }
 

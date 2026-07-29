@@ -90,3 +90,12 @@ string[] ls = lines("x\r\ny\n");         // ["x", "y"]（\r\n正規化・末尾�
 ```
 
 `split`のセパレータが空文字列の場合はコードポイント1文字ずつに分割します。
+
+`from_bytes(utiny[])`はバイト列から文字列を構築します（v0.17.0）。埋め込みNUL（0x00）を含むバイト列も`byte_len()`・`substring()`・連結で正しく保持されます。
+
+```cm
+import std::strings::from_bytes;
+
+utiny[] raw = [72, 105];          // "Hi"
+string s = from_bytes(raw);
+```
