@@ -18,13 +18,13 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 （すべて実装済み・archiveへ移動）
 
 ### メモリ管理
-- [drop パスと寿命管理](memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15
+- [drop パスと寿命管理](../../archive/v0.17.0/memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15（全項目実装済み・archiveへ移動。C12のO0再代入解放とH12線形フロー診断で完結、厳密CFG化は将来課題として記録）
 - [アロケータと一時プール](../../archive/v0.17.0/allocator-and-temp-pool.md) — H11 / M14（全項目実装済み・archiveへ移動。set_allocator_fnsファサードとcm_mem_*経路一本化で完結）
 - [集約コピーのlowering](../../archive/v0.17.0/aggregate-copy-lowering.md) — C14 / M12 / M13（全Phase実装済み・archiveへ移動）
 
 ### モジュール・可視性・静的解析
 - [モジュール可視性とimport重複排除](module-visibility-and-import-dedup.md) — H7 / M7（実装済み） / M2（実装済み）
-- [確定代入とreturn網羅の解析](definite-assignment-and-correctness-lints.md) — H6 / L4
+- [確定代入とreturn網羅の解析](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md) — H6 / L4（段階1-3実装済み・archiveへ移動。--strictでエラー昇格、恒真条件枠とCFG精密化は将来課題として記録）
 - [const集約の強制](const-aggregate-enforcement.md) — M3（警告として段階導入済み・エラー化は将来）
 
 ### 値セマンティクス・バックエンド一貫性

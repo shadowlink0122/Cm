@@ -9,7 +9,7 @@ parent: v0.17.0 Design
 
 | # | 領域 | 所見 | 状態 |
 |---|------|------|------|
-| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段（byte_len分離）・第3段のlen()コードポイント化も実装済み（native/wasm=継続バイトスキップ、js=[...s].length、byte_lenのjsはTextEncoderでUTF-8バイト数）。添字・部分文字列のコードポイント単位化と第4段以降（(ptr,len)表現・埋め込みNUL・連結最適化）は未着手） |
+| H9 | 言語 | 文字列がNUL終端`char*`のため埋め込みNULでデータ喪失・lenはバイト数のみ（UTF-8非対応）・StringBuilderが無くループ連結はO(n²)（実測で二次時間、N=200kで4.6秒） | 第1段実装済み（`std::strings::StringBuilder`を追加。native/wasmは容量倍増バッファのランタイム（cm_sb_*、ハンドルはint64_t——wasm32のC longは32ビットでCmのlongと不一致になるため）、jsは{parts:[], n}への写像。jit/native/wasm/js/tsの5系で出力一致、N=50kのappendで素朴連結1.4秒CPU→ほぼ0秒を実測。第2段（byte_len分離）・第3段のlen()コードポイント化も実装済み（native/wasm=継続バイトスキップ、js=[...s].length、byte_lenのjsはTextEncoderでUTF-8バイト数）。部分文字列・codepoint_at・chars()・indexOf()のコードポイント単位化も実装済み（charAt/atはバイトAPIとして維持）。残りは第4段（(ptr,len)表現・埋め込みNUL・len()のO(1)化）と第5段（連結最適化）のみ） |
 
 これはランタイム表現・型マッピング・全バックエンドのコード生成に及ぶ大規模な設計変更であり、段階分割を厚く扱う。
 

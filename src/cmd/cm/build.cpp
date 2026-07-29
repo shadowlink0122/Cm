@@ -12,6 +12,7 @@
 #include "internal/mir/lowering/lowering.hpp"
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
+#include "internal/mir/passes/cleanup/string_reassign_free.hpp"
 #include "internal/mir/passes/core/manager.hpp"
 #include "internal/mir/passes/instrumentation/bounds.hpp"
 #include "internal/mir/passes/instrumentation/undefined.hpp"
@@ -497,6 +498,15 @@ int run_build(cli::Options& opts, const char* argv0) {
 
             if (opts.debug)
                 std::cout << i18n::msg(i18n::MsgId::CliOptimizationComplete);
+        } else if (!is_sv) {
+            // O0でも文字列再代入の旧バッファ解放（C12）だけは実行する。
+            // メモリ健全性のためのパスであり最適化ではないため、最適化レベルに依存させない
+            mir::opt::StringReassignFree o0_reassign_free;
+            for (auto& func : mir.functions) {
+                if (func) {
+                    o0_reassign_free.run(*func);
+                }
+            }
         }
 
         // SVターゲット: 定数トリップカウントのループを静的展開する（generate/genvar相当。合成ツールは動的whileを展開できないため）

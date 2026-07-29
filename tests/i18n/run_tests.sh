@@ -81,6 +81,18 @@ check "ja: const aggregate field warn" "const値 'p' のフィールド/要素�
 check_absent "const aggregate warn: non-const is silent" "const value 'q'" \
     "$CM" check "$DIR/const_aggregate_assign.cm"
 
+# ---------- 確定代入・return網羅の--strictエラー昇格（H6段階3） ----------
+check "en: H6 return coverage warn (check)" "warning: non-void function 'bad_return'" \
+    "$CM" check "$DIR/h6_strict_promotion.cm"
+check "en: H6 uninit warn (check)" "warning: Variable 'y' may be used before initialization" \
+    "$CM" check "$DIR/h6_strict_promotion.cm"
+check "en: H6 return coverage error (--strict)" "error: non-void function 'bad_return'" \
+    "$CM" check --strict "$DIR/h6_strict_promotion.cm"
+check "en: H6 uninit error (--strict)" "error: Variable 'y' may be used before initialization" \
+    "$CM" check --strict "$DIR/h6_strict_promotion.cm"
+check "ja: H6 return coverage error (--strict)" "非void関数 'bad_return'" \
+    "$CM" check --strict --lang=ja "$DIR/h6_strict_promotion.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 check "en: duplicate import symbol" "symbol 'compute' is imported from both" \
     "$CM" check "$DIR/dup_import/main.cm"

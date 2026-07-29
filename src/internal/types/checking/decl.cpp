@@ -1086,7 +1086,12 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         bool exempt = func.is_extern || func.is_always || func.is_async || func.body.empty() ||
                       func.name == "main";
         if (is_non_void && !exempt && !cm_stmts_terminate(func.body, true)) {
-            warning(func.name_span, i18n::msgf(i18n::MsgId::TypeNotAllPathsReturn, func.name));
+            // H6段階3: --strict（check/lint --strict）ではエラーへ昇格する。通常のcheck/lintは警告のまま
+            if (enable_naming_check_) {
+                error(func.name_span, i18n::msgf(i18n::MsgId::TypeNotAllPathsReturn, func.name));
+            } else {
+                warning(func.name_span, i18n::msgf(i18n::MsgId::TypeNotAllPathsReturn, func.name));
+            }
         }
     }
 

@@ -90,9 +90,14 @@ void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
         return;
     }
 
-    // initialized_variables_に含まれていない場合は警告
+    // initialized_variables_に含まれていない場合は診断を出す。
+    // H6段階3: --strict（check/lint --strict）ではエラーへ昇格し、通常のcheck/lintは警告のまま
     if (initialized_variables_.count(name) == 0) {
-        warning(span, "Variable '" + name + "' may be used before initialization");
+        if (enable_naming_check_) {
+            error(span, "Variable '" + name + "' may be used before initialization");
+        } else {
+            warning(span, "Variable '" + name + "' may be used before initialization");
+        }
     }
 }
 

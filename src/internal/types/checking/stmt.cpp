@@ -392,9 +392,12 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         scopes_.current().mark_used(let.name);
     }
     if (!let.init && let.type) {
-        // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、未初期化使用の警告対象はスカラ・配列に限定する
+        // 構造体型は既定構築、固定長配列はH4のゼロ初期化、スライスは暗黙の空スライス構築が
+        // ランタイム保証されるため、未初期化使用の警告対象はスカラに限定する
+        // （utiny[4096] buf; の書き込みバッファや int[] s; return s; が偽陽性になっていた）
         auto resolved = resolve_typedef(let.type);
-        if (resolved && resolved->kind == ast::TypeKind::Struct) {
+        if (resolved &&
+            (resolved->kind == ast::TypeKind::Struct || resolved->kind == ast::TypeKind::Array)) {
             mark_variable_initialized(let.name);
         }
     }
