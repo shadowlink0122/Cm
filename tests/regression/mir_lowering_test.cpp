@@ -270,11 +270,13 @@ int count_calls(const mir::MirFunction& func, const std::string& callee) {
 }  // namespace
 
 TEST_F(MirLoweringTest, TempStringDropExprStmt) {
-    // println(a + " " + b) の式文では中間concatとprintln引数の両一時が解放される
+    // println(a + " " + b) の式文: 連結チェーンはcm_string_concat3へ平坦化され（H9第5段）、
+    // 単一の結果一時がprintln後に解放される
     auto mir = check_and_lower_case("temp_string_drop_expr_stmt");
     const auto& func = *mir->functions[0];
-    EXPECT_EQ(count_calls(func, "cm_string_concat"), 2);
-    EXPECT_EQ(count_calls(func, "cm_string_free"), 2);
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 0);
+    EXPECT_EQ(count_calls(func, "cm_string_concat3"), 1);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 1);
 }
 
 TEST_F(MirLoweringTest, TempStringDropLetEscape) {
