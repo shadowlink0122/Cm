@@ -1,0 +1,9 @@
+module helper;
+
+int internal_secret() {
+    return 42;
+}
+
+export int api() {
+    return internal_secret() + 1;
+}

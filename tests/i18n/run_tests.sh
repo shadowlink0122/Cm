@@ -89,6 +89,12 @@ check "ja: addr-of const warn" "const値 'c' へのミュータブルなポイ�
 check_absent "addr-of const: const int* is silent" "const value 'ok'" \
     "$CM" check "$DIR/const_addr_of.cm"
 
+# ---------- 非exportヘルパーの非修飾公開の抑止（H7段階4） ----------
+check "H7s4: internal helper hidden" "'internal_secret' is not a function" \
+    "$CM" check "$DIR/non_export_helper/main.cm"
+check_absent "H7s4: exported api keeps working" "is not a function" \
+    "$CM" check "$DIR/non_export_helper/main_ok.cm"
+
 # ---------- 確定代入・return網羅の--strictエラー昇格（H6段階3） ----------
 check "en: H6 return coverage warn (check)" "warning: non-void function 'bad_return'" \
     "$CM" check "$DIR/h6_strict_promotion.cm"

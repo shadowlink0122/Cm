@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -116,6 +117,23 @@ class ImportPreprocessor {
     std::string filter_exports(const std::string& module_source,
                                const std::vector<std::string>& import_items,
                                bool incremental = false);
+
+    // H7段階4: モジュールの非exportヘルパー関数名（生ソースから収集、canonicalパス鍵）。
+    // 値は (改名プレフィックス, 関数名リスト)
+    std::map<std::string, std::pair<std::string, std::vector<std::string>>> module_internal_fns_;
+
+    // 生ソースのトップレベル非export関数名を収集する（H7段階4の改名対象。
+    // インラインexport・リストexport（export { a, b }; / export a, b;）は除外、main/efi_mainも除外）
+    std::vector<std::string> collect_non_export_function_names(const std::string& module_source);
+
+    // 収集した関数名を __cm_priv_<prefix>_<名前> へ単語境界で一貫改名する。
+    // 改名結果は元名を _ 付きで含むため再適用しても変化しない（冪等）
+    std::string rename_internal_functions(std::string text, const std::vector<std::string>& names,
+                                          const std::string& prefix);
+
+    // module_internal_fns_に基づき、モジュール断片へ内部関数改名を適用する（未登録パスは素通し）
+    std::string apply_internal_fn_renames(std::string text,
+                                          const std::filesystem::path& module_path);
 
     // exportキーワードを削除
     std::string remove_export_keywords(const std::string& source);

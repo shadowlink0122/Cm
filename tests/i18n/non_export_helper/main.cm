@@ -1,0 +1,9 @@
+// i18n E2Eテスト用: 非exportヘルパーの非修飾呼び出しが遮断されることを検証（H7段階4）
+import std::io::println;
+import helper::api;
+
+int main() {
+    println(api());
+    println(internal_secret());
+    return 0;
+}

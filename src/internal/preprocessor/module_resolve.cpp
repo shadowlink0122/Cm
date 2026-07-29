@@ -57,7 +57,24 @@ std::string ImportPreprocessor::load_module_file(const std::filesystem::path& mo
 
     std::stringstream buffer;
     buffer << file.rdbuf();
-    return buffer.str();
+    std::string content = buffer.str();
+
+    // H7段階4: 生ソース（export情報が完全に残る唯一の時点）から非exportヘルパー関数を
+    // 収集してcanonicalパス鍵で保持する。改名の適用は展開断片のemit時に行う
+    std::error_code ec;
+    auto canonical = std::filesystem::weakly_canonical(module_path, ec);
+    const std::string key = ec ? module_path.string() : canonical.string();
+    if (module_internal_fns_.find(key) == module_internal_fns_.end()) {
+        std::string prefix = module_path.stem().string();
+        for (auto& c : prefix) {
+            if (!std::isalnum(static_cast<unsigned char>(c))) {
+                c = '_';
+            }
+        }
+        prefix += "_" + std::to_string(module_internal_fns_.size());
+        module_internal_fns_[key] = {prefix, collect_non_export_function_names(content)};
+    }
+    return content;
 }
 
 std::filesystem::path ImportPreprocessor::find_project_root(

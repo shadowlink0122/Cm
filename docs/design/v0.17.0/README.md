@@ -23,7 +23,7 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 - [集約コピーのlowering](../../archive/v0.17.0/aggregate-copy-lowering.md) — C14 / M12 / M13（全Phase実装済み・archiveへ移動）
 
 ### モジュール・可視性・静的解析
-- [モジュール可視性とimport重複排除](module-visibility-and-import-dedup.md) — H7 / M7（実装済み） / M2（実装済み）
+- [モジュール可視性とimport重複排除](../../archive/v0.17.0/module-visibility-and-import-dedup.md) — H7 / M7 / M2（全段階実装済み・archiveへ移動。段階4は生ソース収集+パス鍵伝搬の改名方式で完結、エラー化は将来として記録）
 - [確定代入とreturn網羅の解析](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md) — H6 / L4（段階1-3実装済み・archiveへ移動。--strictでエラー昇格、恒真条件枠とCFG精密化は将来課題として記録）
 - [const集約の強制](../../archive/v0.17.0/const-aggregate-enforcement.md) — M3（段階1-4実装済み・archiveへ移動。フィールド/要素代入とconstポインタ化の警告まで完了、エラー化は将来として記録）
 

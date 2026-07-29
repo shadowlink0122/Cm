@@ -298,6 +298,8 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     // exportブロック抽出用にオリジナルソースを保存（remove前に）
                     std::string original_sub_source = sub_module_source;
                     sub_module_source = remove_export_keywords(sub_module_source);
+                    sub_module_source =
+                        apply_internal_fn_renames(std::move(sub_module_source), sub_module_path);
 
                     import_stack.pop_back();
 
@@ -331,7 +333,8 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     }
 
                     // exportされたシンボルをnamespace外にも展開
-                    std::string sub_exported = extract_exported_blocks(original_sub_source);
+                    std::string sub_exported = apply_internal_fn_renames(
+                        extract_exported_blocks(original_sub_source), sub_module_path);
                     if (!sub_exported.empty()) {
                         result << "// ===== Exported symbols from " << rel_str
                                << " (direct access) =====\n";
@@ -590,6 +593,7 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 module_source = processed_module_cache[canonical_path];
             } else {
                 module_source = remove_export_keywords(module_source);
+                module_source = apply_internal_fn_renames(std::move(module_source), module_path);
                 if (import_info.items.empty()) {
                     processed_module_cache[canonical_path] = module_source;
                 }
@@ -674,6 +678,10 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                     source_to_emit = std::move(renamed);
                 }
 
+                // H7段階4: 断片へ複製された非exportヘルパー関数を内部名へ改名し、
+                // ユーザーコードからの非修飾解決対象から外す（改名は冪等で重複適用可）
+                source_to_emit = apply_internal_fn_renames(std::move(source_to_emit), module_path);
+
                 // emit_sourceでソースマップに追加
                 emit_source(source_to_emit, module_file_str, module_chain, 1);
 
@@ -698,12 +706,18 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 if (!submodule_ns.empty()) {
                     std::string extracted = extract_namespace_content(module_source, submodule_ns);
                     if (!extracted.empty()) {
-                        result << remove_export_keywords(extracted) << "\n";
+                        result << apply_internal_fn_renames(remove_export_keywords(extracted),
+                                                            module_path)
+                               << "\n";
                     } else {
-                        result << remove_export_keywords(module_source) << "\n";
+                        result << apply_internal_fn_renames(remove_export_keywords(module_source),
+                                                            module_path)
+                               << "\n";
                     }
                 } else {
-                    result << remove_export_keywords(module_source) << "\n";
+                    result << apply_internal_fn_renames(remove_export_keywords(module_source),
+                                                        module_path)
+                           << "\n";
                 }
                 result << "// ===== End wildcard import from " << import_info.module_name
                        << " =====\n\n";
@@ -792,7 +806,8 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 }
 
                 // exportキーワードを削除
-                std::string cleaned_source = remove_export_keywords(module_source);
+                std::string cleaned_source =
+                    apply_internal_fn_renames(remove_export_keywords(module_source), module_path);
                 // モジュールソースの各行をemit_sourceで出力（元ファイルの行番号を追跡）
                 emit_source(cleaned_source, module_file_str, module_chain, 1);
 
@@ -809,7 +824,8 @@ std::string ImportPreprocessor::process_imports(const std::string& source,
                 // exportされたシンボルをnamespace外にも展開
                 // これにより名前空間修飾なしでも呼び出し可能になる
                 // サブインポート展開済みソースを使用し推移的エクスポートも含める
-                std::string exported_blocks = extract_exported_blocks(export_extraction_source);
+                std::string exported_blocks = apply_internal_fn_renames(
+                    extract_exported_blocks(export_extraction_source), module_path);
                 if (!exported_blocks.empty()) {
                     emit_line("// ===== Exported symbols from " + import_info.module_name +
                                   " (direct access) =====",

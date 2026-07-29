@@ -508,6 +508,166 @@ std::vector<std::string> ImportPreprocessor::extract_reexports(const std::string
 
 // exportされたブロック（関数・struct・const等）をモジュールソースから抽出する
 // namespace外へのforward展開用: namespaceラップされたモジュールのexportシンボルをnamespace外にも出力して、名前空間修飾なしで呼び出し可能にする
+std::vector<std::string> cm::preprocessor::ImportPreprocessor::collect_non_export_function_names(
+    const std::string& module_source) {
+    std::vector<std::string> names;
+
+    // 事前スキャン: リストexport（export { a, b }; ・export a, b; ・export name;）で
+    // 公開された名前は非exportヘルパーではないため除外する（コメント混在の複数行形式に対応）
+    std::set<std::string> list_exported;
+    {
+        std::stringstream scan(module_source);
+        std::string sline;
+        bool in_list = false;
+        std::string acc;
+        auto flush_idents = [&](const std::string& body) {
+            std::string cur;
+            for (char c : body) {
+                if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+                    cur += c;
+                } else {
+                    if (!cur.empty()) {
+                        list_exported.insert(cur);
+                        cur.clear();
+                    }
+                }
+            }
+            if (!cur.empty()) {
+                list_exported.insert(cur);
+            }
+        };
+        std::regex names_re(R"(^\s*export\s+(\w+(\s*,\s*\w+)*)\s*;\s*$)");
+        std::smatch m;
+        while (std::getline(scan, sline)) {
+            std::string code = code_portion(sline);
+            if (!in_list) {
+                size_t pos = skip_ws(code);
+                if (!starts_with_keyword(code, pos, "export")) {
+                    continue;
+                }
+                size_t after = skip_ws(code, pos + 6);
+                if (after < code.size() && code[after] == '{') {
+                    in_list = true;
+                    acc = code.substr(after + 1);
+                    size_t close = acc.find('}');
+                    if (close != std::string::npos) {
+                        flush_idents(acc.substr(0, close));
+                        in_list = false;
+                        acc.clear();
+                    }
+                } else if (std::regex_match(code, m, names_re)) {
+                    flush_idents(m[1].str());
+                }
+                continue;
+            }
+            size_t close = code.find('}');
+            if (close != std::string::npos) {
+                acc += " " + code.substr(0, close);
+                flush_idents(acc);
+                in_list = false;
+                acc.clear();
+            } else {
+                acc += " " + code;
+            }
+        }
+    }
+
+    std::stringstream input(module_source);
+    std::string line;
+    int depth = 0;
+    while (std::getline(input, line)) {
+        const std::string code = code_portion(line);
+        if (depth == 0) {
+            size_t pos = skip_ws(line);
+            const bool skip = starts_with_keyword(line, pos, "export") ||
+                              starts_with_keyword(line, pos, "struct") ||
+                              starts_with_keyword(line, pos, "enum") ||
+                              starts_with_keyword(line, pos, "interface") ||
+                              starts_with_keyword(line, pos, "impl") ||
+                              starts_with_keyword(line, pos, "typedef") ||
+                              starts_with_keyword(line, pos, "const") ||
+                              starts_with_keyword(line, pos, "use") ||
+                              starts_with_keyword(line, pos, "namespace") ||
+                              starts_with_keyword(line, pos, "import") ||
+                              starts_with_keyword(line, pos, "module") ||
+                              (pos < line.size() && (line[pos] == '}' || line[pos] == '<'));
+            if (!skip) {
+                // 関数定義: type name( パターン
+                size_t p2 = pos;
+                size_t type_start = p2;
+                while (p2 < line.size() && (std::isalnum(static_cast<unsigned char>(line[p2])) ||
+                                            line[p2] == '_' || line[p2] == '*'))
+                    p2++;
+                if (p2 > type_start) {
+                    p2 = skip_ws(line, p2);
+                    size_t fname_start = p2;
+                    while (p2 < line.size() &&
+                           (std::isalnum(static_cast<unsigned char>(line[p2])) || line[p2] == '_'))
+                        p2++;
+                    if (p2 > fname_start && p2 < line.size() && line[p2] == '(') {
+                        std::string fname = line.substr(fname_start, p2 - fname_start);
+                        if (fname != "efi_main" && fname != "main" &&
+                            list_exported.count(fname) == 0 && fname.rfind("__cm_priv_", 0) != 0) {
+                            names.push_back(fname);
+                        }
+                    }
+                }
+            }
+        }
+        for (char c : code) {
+            if (c == '{')
+                depth++;
+            else if (c == '}')
+                depth--;
+        }
+        if (depth < 0)
+            depth = 0;
+    }
+    return names;
+}
+
+std::string cm::preprocessor::ImportPreprocessor::rename_internal_functions(
+    std::string text, const std::vector<std::string>& names, const std::string& prefix) {
+    auto is_ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (const auto& orig : names) {
+        const std::string alias = "__cm_priv_" + prefix + "_" + orig;
+        std::string renamed;
+        renamed.reserve(text.size());
+        size_t pos = 0;
+        while (pos < text.size()) {
+            size_t found = text.find(orig, pos);
+            if (found == std::string::npos) {
+                renamed.append(text, pos, std::string::npos);
+                break;
+            }
+            bool left_ok = (found == 0) || !is_ident(text[found - 1]);
+            size_t after = found + orig.size();
+            bool right_ok = (after >= text.size()) || !is_ident(text[after]);
+            renamed.append(text, pos, found - pos);
+            if (left_ok && right_ok) {
+                renamed += alias;
+            } else {
+                renamed += orig;
+            }
+            pos = after;
+        }
+        text = std::move(renamed);
+    }
+    return text;
+}
+
+std::string cm::preprocessor::ImportPreprocessor::apply_internal_fn_renames(
+    std::string text, const std::filesystem::path& module_path) {
+    std::error_code ec;
+    auto canonical = std::filesystem::weakly_canonical(module_path, ec);
+    const std::string key = ec ? module_path.string() : canonical.string();
+    auto it = module_internal_fns_.find(key);
+    if (it == module_internal_fns_.end() || it->second.second.empty()) {
+        return text;
+    }
+    return rename_internal_functions(std::move(text), it->second.second, it->second.first);
+}
+
 std::string cm::preprocessor::ImportPreprocessor::extract_exported_blocks(
     const std::string& module_source) {
     // 行単位解析のため複数行 export { ... } は先に1行へ正規化する
