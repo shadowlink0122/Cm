@@ -859,10 +859,15 @@ std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
             } else if constexpr (std::is_same_v<T, bool>) {
                 return val ? "true" : "false";
             } else if constexpr (std::is_same_v<T, int64_t>) {
-                if (is_wide64_const) {
-                    if (wide64_unsigned) {
-                        return std::to_string(static_cast<uint64_t>(val)) + "n";
-                    }
+                // 値駆動のBigInt化（H5）: 2^53以内はNumberのまま出力し、64bit演算側の
+                // __cm_big冪等変換に委ねる（小さな64bit型付き定数が32bit文脈へ混入して
+                // TypeErrorになるのを防ぐ）。精度が必要な2^53超と、ulong型の負値エンコード
+                // （-1 = 18446744073709551615）のみBigIntリテラルにする
+                constexpr int64_t kSafeMax = 9007199254740991LL;
+                if (is_wide64_const && wide64_unsigned && val < 0) {
+                    return std::to_string(static_cast<uint64_t>(val)) + "n";
+                }
+                if (val > kSafeMax || val < -kSafeMax) {
                     return "(" + std::to_string(val) + "n)";
                 }
                 return std::to_string(val);

@@ -223,9 +223,53 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
             }
 
             std::string rvalue = emitRvalue(*data.rvalue, func);
-            // 狭い整数型（tiny/utiny/short/ushort）への代入は型幅にラップする
             if (data.place.projections.empty() && target_local < func.locals.size()) {
+                // 32bit以下の整数スロットへwide64静的型の値を代入する場合はNumber化する（H5）。
+                // MIRはlong型定数を無キャストでuint等へ流すことがあり、BigIntのまま漏れると後続のNumber演算でTypeErrorになる
+                const auto& dt0 = func.locals[target_local].type;
+                if (dt0 && data.rvalue->kind == mir::MirRvalue::Use) {
+                    const bool dest_small_int =
+                        dt0->kind == TypeKind::Int || dt0->kind == TypeKind::UInt ||
+                        dt0->kind == TypeKind::Short || dt0->kind == TypeKind::UShort ||
+                        dt0->kind == TypeKind::Tiny || dt0->kind == TypeKind::UTiny;
+                    if (dest_small_int) {
+                        const auto& useData = std::get<mir::MirRvalue::UseData>(data.rvalue->data);
+                        hir::TypePtr srcType =
+                            useData.operand ? getOperandType(*useData.operand, func) : nullptr;
+                        if (srcType &&
+                            (srcType->kind == TypeKind::Long || srcType->kind == TypeKind::ULong ||
+                             srcType->kind == TypeKind::ISize ||
+                             srcType->kind == TypeKind::USize)) {
+                            const bool dest_unsigned = dt0->kind == TypeKind::UInt ||
+                                                       dt0->kind == TypeKind::UShort ||
+                                                       dt0->kind == TypeKind::UTiny;
+                            rvalue = std::string("Number(BigInt.") +
+                                     (dest_unsigned ? "asUintN" : "asIntN") + "(32, __cm_big(" +
+                                     rvalue + ")))";
+                        }
+                    }
+                }
+                // 狭い整数型（tiny/utiny/short/ushort）への代入は型幅にラップする
                 rvalue = wrapNarrowInt(rvalue, func.locals[target_local].type);
+                // 64bit整数スロットへの素の整数リテラル代入はBigIntリテラルにする（H5）。
+                // 定数側は値駆動で2^53以内をNumberのまま出すため、bigint宣言スロット（TS）と
+                // 「wide64スロットは常にBigInt」の実行時不変条件をここで回復する
+                const auto& dt = func.locals[target_local].type;
+                if (dt && (dt->kind == TypeKind::Long || dt->kind == TypeKind::ULong ||
+                           dt->kind == TypeKind::ISize || dt->kind == TypeKind::USize)) {
+                    bool plain_int = !rvalue.empty();
+                    for (size_t ci = 0; ci < rvalue.size(); ++ci) {
+                        char c = rvalue[ci];
+                        if (!(std::isdigit(static_cast<unsigned char>(c)) ||
+                              (ci == 0 && c == '-'))) {
+                            plain_int = false;
+                            break;
+                        }
+                    }
+                    if (plain_int && rvalue != "-") {
+                        rvalue = (rvalue[0] == '-') ? "(" + rvalue + "n)" : rvalue + "n";
+                    }
+                }
             }
             if (data.place.projections.empty() && declare_on_assign_.count(target_local) > 0 &&
                 declared_locals_.count(target_local) == 0) {

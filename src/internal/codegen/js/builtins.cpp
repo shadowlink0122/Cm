@@ -267,12 +267,19 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         }
         return "console.log(__cm_fmt_double(" + argStrs[0] + "))";
     }
-    if (name == "cm_println_long" || name == "cm_println_ulong") {
-        // BigIntのconsole.log直渡しは"10n"表記になるためStringで整形する（H5）
+    if (name == "cm_println_long") {
+        // BigIntのconsole.log直渡しは"10n"表記になるため、64bit符号再解釈のうえStringで整形（H5）
         if (argStrs.empty()) {
             return "console.log()";
         }
-        return "console.log(String(" + argStrs[0] + "))";
+        return "console.log(String(BigInt.asIntN(64, __cm_big(" + argStrs[0] + "))))";
+    }
+    if (name == "cm_println_ulong") {
+        // ulongは符号なし再解釈（-1エンコードの定数が18446744073709551615と表示される）
+        if (argStrs.empty()) {
+            return "console.log()";
+        }
+        return "console.log(String(BigInt.asUintN(64, __cm_big(" + argStrs[0] + "))))";
     }
     if (name == "println" || name == "cm_println_string" || name == "cm_println_int" ||
         name == "cm_println_uint" || name == "cm_println_bool") {
@@ -353,10 +360,14 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // 型変換
-    if ((name == "cm_int_to_string" || name == "cm_long_to_string" ||
-         name == "cm_ulong_to_string" || name == "cm_uint_to_string") &&
-        argStrs.size() >= 1) {
+    if ((name == "cm_int_to_string" || name == "cm_uint_to_string") && argStrs.size() >= 1) {
         return "String(" + argStrs[0] + ")";
+    }
+    if (name == "cm_long_to_string" && argStrs.size() >= 1) {
+        return "String(BigInt.asIntN(64, __cm_big(" + argStrs[0] + ")))";
+    }
+    if (name == "cm_ulong_to_string" && argStrs.size() >= 1) {
+        return "String(BigInt.asUintN(64, __cm_big(" + argStrs[0] + ")))";
     }
     if (name == "cm_double_to_string" && argStrs.size() >= 1) {
         return "__cm_fmt_double(" + argStrs[0] + ")";
@@ -366,10 +377,14 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // cm_format_*
-    if ((name == "cm_format_int" || name == "cm_format_long" || name == "cm_format_ulong" ||
-         name == "cm_format_uint") &&
-        argStrs.size() >= 1) {
+    if ((name == "cm_format_int" || name == "cm_format_uint") && argStrs.size() >= 1) {
         return "String(" + argStrs[0] + ")";
+    }
+    if (name == "cm_format_long" && argStrs.size() >= 1) {
+        return "String(BigInt.asIntN(64, __cm_big(" + argStrs[0] + ")))";
+    }
+    if (name == "cm_format_ulong" && argStrs.size() >= 1) {
+        return "String(BigInt.asUintN(64, __cm_big(" + argStrs[0] + ")))";
     }
     if (name == "cm_format_double" && argStrs.size() >= 1) {
         return "__cm_fmt_double(" + argStrs[0] + ")";
@@ -405,6 +420,12 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     // print系
     if (name == "cm_print_double" && argStrs.size() >= 1) {
         return "process.stdout.write(__cm_fmt_double(" + argStrs[0] + "))";
+    }
+    if (name == "cm_print_long" && argStrs.size() >= 1) {
+        return "process.stdout.write(String(BigInt.asIntN(64, __cm_big(" + argStrs[0] + "))))";
+    }
+    if (name == "cm_print_ulong" && argStrs.size() >= 1) {
+        return "process.stdout.write(String(BigInt.asUintN(64, __cm_big(" + argStrs[0] + "))))";
     }
     if (name == "print" || name == "cm_print_string" || name == "cm_print_int" ||
         name == "cm_print_long" || name == "cm_print_ulong" || name == "cm_print_uint" ||
