@@ -366,6 +366,38 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
             struct_it = struct_defs_.find(lit.type_name);
         }
     }
+    // typedef別名（typedef P = Point; / typedef IntPair = Pair<int,int>;）は再帰的に基底名へ解決してから構造体表を引く（B8）
+    ast::TypePtr alias_target;
+    if (struct_it == struct_defs_.end()) {
+        std::set<std::string> visited;
+        std::string base_name = lit.type_name;
+        while (struct_defs_.find(base_name) == struct_defs_.end() &&
+               visited.insert(base_name).second) {
+            auto td_it = typedef_defs_.find(base_name);
+            if (td_it == typedef_defs_.end() || !td_it->second)
+                break;
+            const auto& target = td_it->second;
+            // 別名の基底が名前付き構造体型でなければ構造体リテラルの対象外
+            if (target->kind != ast::TypeKind::Struct || target->name.empty())
+                break;
+            alias_target = target;
+            base_name = target->name;
+        }
+        auto base_it = struct_defs_.find(base_name);
+        if (base_it != struct_defs_.end()) {
+            // 基底名へ書き換えてHIR/コード生成へ伝播する（名前空間解決と同じ方式）
+            debug::tc::log(debug::tc::Id::TypeInfer,
+                           "Resolved struct literal alias: " + lit.type_name + " -> " + base_name,
+                           debug::Level::Debug);
+            lit.type_name = base_name;
+            struct_it = base_it;
+        } else {
+            debug::tc::log(
+                debug::tc::Id::TypeInfer,
+                "Struct literal alias unresolved: " + lit.type_name + " (base " + base_name + ")",
+                debug::Level::Debug);
+        }
+    }
     if (struct_it == struct_defs_.end()) {
         error(current_span_, "Unknown struct type: " + lit.type_name);
         return ast::make_error();
@@ -373,6 +405,11 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
 
     for (auto& field : lit.fields) {
         infer_type(*field.value);
+    }
+
+    // ジェネリック特殊化別名（typedef IntPair = Pair<int,int>;）は型引数付きの基底型をそのまま返す
+    if (alias_target && !alias_target->type_args.empty()) {
+        return alias_target;
     }
 
     auto type = std::make_shared<ast::Type>(ast::TypeKind::Struct);

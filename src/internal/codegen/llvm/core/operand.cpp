@@ -753,6 +753,65 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
+                // スライス型（可変長Array）へのIndexプロジェクション: CmSliceヘッダ経由で要素アドレスを計算する（B4）。
+                // 従来は固定長配列と同じフラットGEPに落ち、ヘッダポインタのスロットを要素列として誤読していた。
+                // 要素が内側スライス（多次元）の場合はインライン格納表現が異なるため従来経路に委ねる
+                {
+                    const bool cur_is_slice =
+                        currentType && currentType->kind == hir::TypeKind::Array &&
+                        !currentType->array_size.has_value() &&
+                        (currentType->dimensions.empty() || currentType->dimensions[0] == 0);
+                    const bool elem_is_inline_slice =
+                        cur_is_slice && currentType->element_type &&
+                        currentType->element_type->kind == hir::TypeKind::Array;
+                    if (cur_is_slice && !elem_is_inline_slice) {
+                        // 添字値を取得（alloca格納の場合はロードしてi64へ拡張）
+                        llvm::Value* sliceIndexVal = nullptr;
+                        auto slice_idx_it = locals.find(proj.index_local);
+                        if (slice_idx_it != locals.end()) {
+                            sliceIndexVal = slice_idx_it->second;
+                            if (allocatedLocals.count(proj.index_local)) {
+                                llvm::Type* idxType = ctx.getI64Type();
+                                if (currentMIRFunction &&
+                                    proj.index_local < currentMIRFunction->locals.size()) {
+                                    auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                                    idxType = convertType(idxLocal.type);
+                                }
+                                sliceIndexVal =
+                                    builder->CreateLoad(idxType, sliceIndexVal, "idx_load");
+                                if (idxType->isIntegerTy(32)) {
+                                    sliceIndexVal = builder->CreateSExt(
+                                        sliceIndexVal, ctx.getI64Type(), "idx_ext");
+                                }
+                            }
+                        }
+                        if (!sliceIndexVal) {
+                            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                                    "Cannot get index value for slice access",
+                                                    cm::debug::Level::Error);
+                            return nullptr;
+                        }
+
+                        // addrはCmSlice*を格納するスロット（alloca/フィールドGEP）を指すためまずヘッダポインタをロードする。
+                        // Deref直後等で既にヘッダポインタ値そのものの場合は再ロードしない
+                        llvm::Value* hdrPtr = addr;
+                        if (!llvm::isa<llvm::LoadInst>(addr)) {
+                            hdrPtr = builder->CreateLoad(ctx.getPtrType(), addr, "slice_hdr");
+                        }
+
+                        // CmSliceの先頭フィールドdataを読み、要素型ストライドでGEPする
+                        llvm::Value* dataPtr =
+                            builder->CreateLoad(ctx.getPtrType(), hdrPtr, "slice_data");
+                        llvm::Type* sliceElemType = currentType->element_type
+                                                        ? convertType(currentType->element_type)
+                                                        : ctx.getI32Type();
+                        addr = builder->CreateGEP(sliceElemType, dataPtr, sliceIndexVal,
+                                                  "slice_elem_ptr");
+                        currentType = currentType->element_type;
+                        break;
+                    }
+                }
+
                 // ポインタ型の場合は単純なポインタ演算（フラット化不要）
                 // Deref後のLoadInst結果（ポインタ値）へのインデックスアクセスも含む
                 bool isPointerIndexing =

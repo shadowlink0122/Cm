@@ -374,6 +374,36 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                                         ret_expr.type = fit->second->return_type;
                                     }
                                 }
+                                // インターフェイスメソッド（Animal__name等）はimplが具象名（Dog__name）で登録されるためhir_func_defsでは解決できない（B7）。
+                                // HIRのインターフェイス宣言からシードした戻り値型マップで補完する
+                                if ((!ret_expr.type || ret_expr.type->is_error()) &&
+                                    ctx.interface_method_returns) {
+                                    auto iit = ctx.interface_method_returns->find(callee);
+                                    if (iit != ctx.interface_method_returns->end()) {
+                                        ret_expr.type = iit->second;
+                                    } else {
+                                        // モノモーフ化前のジェネリック関数本体ではcalleeが`T__method`になり型パラメータ名では直接引けない。
+                                        // メソッド名部分の境界つき末尾一致で任意のインターフェイス宣言から戻り値型を引く（呼び出し名の具象化はモノモーフ化のMIR書き換えが行う）
+                                        auto sep = callee.find("__");
+                                        if (sep != std::string::npos && sep > 0 &&
+                                            sep + 2 < callee.size()) {
+                                            std::string method = callee.substr(sep + 2);
+                                            for (const auto& [sig_name, sig_ret] :
+                                                 *ctx.interface_method_returns) {
+                                                if (sig_name.size() > method.size() + 2 &&
+                                                    sig_name.compare(
+                                                        sig_name.size() - method.size(),
+                                                        method.size(), method) == 0 &&
+                                                    sig_name.compare(
+                                                        sig_name.size() - method.size() - 2, 2,
+                                                        "__") == 0) {
+                                                    ret_expr.type = sig_ret;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 // 自動実装メソッドの既知シグネチャ（Debug/Display/CSS）
                                 if (!ret_expr.type || ret_expr.type->is_error()) {
                                     auto base = cm::text::strip_namespace(callee);

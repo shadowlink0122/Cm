@@ -36,6 +36,9 @@ class Monomorphization : public MirLoweringBase {
     // ジェネリック構造体のモノモーフィゼーション
     void monomorphize_structs(MirProgram& program);
 
+    // 単相化で型が確定したローカルのprintln/print系ディスパッチ補正（N2）
+    void fixup_println_dispatch(MirFunction* caller, LocalId local_id);
+
     // ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
     void rewrite_generic_calls(
         MirProgram& program, const std::map<std::pair<std::string, std::vector<std::string>>,

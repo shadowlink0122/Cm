@@ -38,7 +38,8 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_member(const hir::HirMember& mem, LoweringContext& ctx);
     LocalId lower_ternary(const hir::HirTernary& ternary, const hir::TypePtr& expr_type,
                           LoweringContext& ctx);
-    LocalId lower_struct_literal(const hir::HirStructLiteral& lit, LoweringContext& ctx);
+    LocalId lower_struct_literal(const hir::HirStructLiteral& lit, const hir::TypePtr& expr_type,
+                                 LoweringContext& ctx);
     LocalId lower_array_literal(const hir::HirArrayLiteral& lit, const hir::TypePtr& expected_type,
                                 LoweringContext& ctx);
     LocalId lower_cast(const hir::HirCast& cast, LoweringContext& ctx);

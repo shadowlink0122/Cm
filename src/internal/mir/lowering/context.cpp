@@ -427,6 +427,46 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
     return type;
 }
 
+// 整数値を浮動小数文脈へ渡す際の暗黙変換としてCast（sitofp/uitofp相当）を挿入する（B2: 整数ビットのdouble再解釈で5e-324になる誤りの修正）
+// float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
+LocalId LoweringContext::coerce_to_float_context(LocalId value, const hir::TypePtr& target_type) {
+    if (!target_type || value >= func->locals.size()) {
+        return value;
+    }
+    auto is_float_kind = [](hir::TypeKind k) {
+        return k == hir::TypeKind::Float || k == hir::TypeKind::Double ||
+               k == hir::TypeKind::UFloat || k == hir::TypeKind::UDouble;
+    };
+    auto is_int_kind = [](hir::TypeKind k) {
+        return k == hir::TypeKind::Tiny || k == hir::TypeKind::Short || k == hir::TypeKind::Int ||
+               k == hir::TypeKind::Long || k == hir::TypeKind::UTiny ||
+               k == hir::TypeKind::UShort || k == hir::TypeKind::UInt ||
+               k == hir::TypeKind::ULong || k == hir::TypeKind::ISize || k == hir::TypeKind::USize;
+    };
+    // f32/f64の実表現幅で比較する（UFloat/Floatのような符号制約のみの違いは変換不要）
+    auto float_width = [](hir::TypeKind k) {
+        return (k == hir::TypeKind::Float || k == hir::TypeKind::UFloat) ? 32 : 64;
+    };
+    auto target = resolve_typedef(target_type);
+    if (!target || !is_float_kind(target->kind)) {
+        return value;
+    }
+    auto value_type = resolve_typedef(func->locals[value].type);
+    if (!value_type) {
+        return value;
+    }
+    const bool needs_int_to_float = is_int_kind(value_type->kind);
+    const bool needs_float_resize = is_float_kind(value_type->kind) &&
+                                    float_width(value_type->kind) != float_width(target->kind);
+    if (!needs_int_to_float && !needs_float_resize) {
+        return value;
+    }
+    LocalId casted = new_temp(target);
+    push_statement(MirStatement::assign(
+        MirPlace{casted}, MirRvalue::cast(MirOperand::copy(MirPlace{value}), target)));
+    return casted;
+}
+
 // LLVMのDataLayout（自然アライメント・パッキングなし）と一致するアライメントを計算する
 int64_t LoweringContext::layout_align(const hir::TypePtr& type) const {
     if (!type) {

@@ -215,6 +215,17 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             }
 
             LocalId arg_local = lower_expression(*arg, ctx);
+            // 整数引数を浮動小数パラメータへ渡す場合はsitofp/uitofp相当のCastを挿入する（B2）
+            if (ctx.hir_func_defs) {
+                auto fit = ctx.hir_func_defs->find(call.func_name);
+                if (fit == ctx.hir_func_defs->end()) {
+                    fit = ctx.hir_func_defs->find(effective_call_name);
+                }
+                if (fit != ctx.hir_func_defs->end() && fit->second &&
+                    i < fit->second->params.size()) {
+                    arg_local = ctx.coerce_to_float_context(arg_local, fit->second->params[i].type);
+                }
+            }
             args.push_back(MirOperand::copy(MirPlace{arg_local}));
         }
     }

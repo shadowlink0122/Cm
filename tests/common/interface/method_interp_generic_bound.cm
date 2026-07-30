@@ -1,0 +1,61 @@
+import std::io::println;
+// B7回帰: 境界`<T: Shape>`経由のジェネリック関数内でメソッド戻り値を直接補間しても正しい型で書式化されることを検証する。
+// モノモーフ化前の本体ではcalleeが`T__method`となり具象implから戻り値型を引けないため、インターフェイス宣言のシグネチャから解決する。
+
+interface Shape {
+    string label();
+    int area();
+    double scale();
+}
+
+struct Sq {
+    int s;
+}
+
+impl Sq for Shape {
+    string label() {
+        return "square";
+    }
+
+    int area() {
+        return self.s * self.s;
+    }
+
+    double scale() {
+        return 1.5;
+    }
+}
+
+struct Rc {
+    int w;
+    int h;
+}
+
+impl Rc for Shape {
+    string label() {
+        return "rect";
+    }
+
+    int area() {
+        return self.w * self.h;
+    }
+
+    double scale() {
+        return 2.25;
+    }
+}
+
+// 境界メソッドの戻り値を関数本体内で直接補間する
+<T: Shape> void describe(T x) {
+    println("label={x.label()} area={x.area()} scale={x.scale()}");
+}
+
+int main() {
+    Sq q = Sq{s: 3};
+    Rc r = Rc{w: 2, h: 5};
+
+    describe(q);
+    describe(r);
+
+    return 0;
+}

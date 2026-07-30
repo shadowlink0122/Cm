@@ -330,23 +330,45 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "reduce") {
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてサフィックスを決定
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
+                // コールバックと初期値を先にlowerし、アキュムレータ型を取り出す
+                std::vector<HirExprPtr> lowered_args;
+                for (auto& arg : mem.args) {
+                    lowered_args.push_back(lower_expr(*arg));
+                }
+                hir::TypePtr acc_type = nullptr;
+                if (!lowered_args.empty() && lowered_args[0] && lowered_args[0]->type &&
+                    lowered_args[0]->type->kind == ast::TypeKind::Function &&
+                    !lowered_args[0]->type->param_types.empty()) {
+                    acc_type = lowered_args[0]->type->param_types[0];
+                }
+                const bool elem64 = obj_type->element_type &&
+                                    (obj_type->element_type->kind == ast::TypeKind::Long ||
+                                     obj_type->element_type->kind == ast::TypeKind::ULong);
+                const bool acc64 = acc_type && (acc_type->kind == ast::TypeKind::Long ||
+                                                acc_type->kind == ast::TypeKind::ULong ||
+                                                acc_type->kind == ast::TypeKind::ISize ||
+                                                acc_type->kind == ast::TypeKind::USize);
+                // 要素型に応じてサフィックスを決定する。アキュムレータが64bitで要素が32bit以下の場合は
+                // 混合幅版を選ぶ（従来は要素型のみで選んでいたため、long acc×int要素のコールバックが
+                // (i32,i32)シグネチャで呼ばれ、wasmはcall_indirectの型検査でトラップしていた）
+                std::string suffix = "_i32";
+                if (elem64) {
                     suffix = "_i64";
+                } else if (acc64) {
+                    suffix = "_i32_acc64";
                 }
                 hir->func_name = "__builtin_array_reduce" + suffix;
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数と初期値
-                for (auto& arg : mem.args) {
-                    hir->args.push_back(lower_expr(*arg));
+                for (auto& larg : lowered_args) {
+                    hir->args.push_back(std::move(larg));
                 }
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin reduce()",
                                 debug::Level::Debug);
-                return std::make_unique<HirExpr>(std::move(hir), obj_type->element_type);
+                // 結果型はアキュムレータ型（不明なら従来どおり要素型）
+                hir::TypePtr result_type = acc_type ? acc_type : obj_type->element_type;
+                return std::make_unique<HirExpr>(std::move(hir), result_type);
             }
 
             if (mem.member == "some") {

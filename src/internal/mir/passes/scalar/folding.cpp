@@ -92,10 +92,21 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
 
         // no_optフラグがtrueの場合は最適化スキップ
         if (stmt->no_opt) {
-            // mustブロック内の代入は定数追跡から除外
+            // mustブロック内の代入も書き込みとして扱い、定数情報を無効化する
+            // フィールド・配列要素代入でもベース変数を無効化しないと、ブロック外の読み出しが古い定数へ畳み込まれる誤コンパイルになる（Bug B3）
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
+                // デリファレンス書き込みはエイリアスの可能性があるため全定数情報をクリア
+                bool has_deref = false;
+                for (const auto& proj : assign_data.place.projections) {
+                    if (proj.kind == ProjectionKind::Deref) {
+                        has_deref = true;
+                        break;
+                    }
+                }
+                if (has_deref) {
+                    constants.clear();
+                } else {
                     constants.erase(assign_data.place.local);
                 }
             }

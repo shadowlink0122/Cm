@@ -1,0 +1,73 @@
+// B2回帰: 整数リテラル・整数値を浮動小数文脈で使うとsitofpされず整数ビットのdouble再解釈になり5e-324を出力していた
+// 宣言・代入・引数・return・構造体フィールドの各文脈でdouble/float両方の暗黙変換を検証する
+import std::io::println;
+
+double take_double(double v) {
+    return v;
+}
+
+float take_float(float v) {
+    return v;
+}
+
+double ret_double() {
+    return 3;
+}
+
+float ret_float() {
+    return 4;
+}
+
+int int_val() {
+    return 7;
+}
+
+struct Point {
+    double x;
+    float y;
+}
+
+int main() {
+    // 宣言初期化（整数リテラル）
+    double d = 1;
+    float f = 2;
+    println(d);
+    println(f as double);
+
+    // 宣言初期化（整数変数から）
+    int i = int_val();
+    double dv = i;
+    float fv = i;
+    println(dv);
+    println(fv as double);
+
+    // 代入（整数リテラル・整数変数）
+    d = 10;
+    f = 11;
+    println(d);
+    println(f as double);
+    d = i;
+    println(d);
+
+    // 引数（整数リテラル・整数変数）
+    println(take_double(5));
+    println(take_float(6) as double);
+    println(take_double(i));
+
+    // return（整数リテラル）
+    println(ret_double());
+    println(ret_float() as double);
+
+    // 構造体フィールド初期化・フィールド代入
+    Point p = Point { x: 8, y: 9 };
+    println(p.x);
+    println(p.y as double);
+    p.x = i;
+    println(p.x);
+
+    // 符号なし整数はuitofp（sitofp固定だと40億が負値になるnegative check）
+    uint u = 4000000000;
+    double du = u;
+    println(du);
+    return 0;
+}

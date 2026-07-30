@@ -15,12 +15,19 @@
 namespace cm::mir {
 
 // 構造体リテラルのlowering
-LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, LoweringContext& ctx) {
+LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
+                                           const hir::TypePtr& expr_type, LoweringContext& ctx) {
     debug_msg("MIR", "Lowering struct literal: " + lit.type_name);
 
     // 構造体の型を作成
     hir::TypePtr struct_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
     struct_type->name = lit.type_name;
+
+    // ジェネリック特殊化のリテラル（typedef IntPair = Pair<int,int>;由来）は型引数付きのHIR型を一時変数へ引き継ぎ、モノモーフィゼーションの特殊化・型書き換え対象にする（B8）
+    if (expr_type && expr_type->kind == hir::TypeKind::Struct && expr_type->name == lit.type_name &&
+        !expr_type->type_args.empty()) {
+        struct_type = expr_type;
+    }
 
     // 結果用の変数を作成
     LocalId result = ctx.new_temp(struct_type);
@@ -220,6 +227,9 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
             // 通常の処理
             field_value = lower_expression(*field.value, ctx);
         }
+
+        // 整数値を浮動小数フィールドへ入れる場合はsitofp/uitofp相当のCastを挿入する（B2）
+        field_value = ctx.coerce_to_float_context(field_value, field_type);
 
         // フィールドへの代入を生成
         MirPlace place{result};

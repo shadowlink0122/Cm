@@ -101,6 +101,12 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
         return t && (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString);
     };
     const bool string_compare = is_string_type(lhs_type) || is_string_type(rhs_type);
+    // ポインタ比較の判定: HIR型がポインタ型のオペランド（キャスト結果 null as T* を含む）はアドレスのicmp比較にする（B5）。
+    // かつてはptr同士のEq/Neを無条件にstrcmpしていたため、キャスト付きnull比較が文字列比較に落ちてnullへのstrcmpで未定義動作になっていた。
+    auto is_pointer_type = [](const hir::TypePtr& t) {
+        return t && t->kind == ast::TypeKind::Pointer;
+    };
+    const bool pointer_compare = is_pointer_type(lhs_type) || is_pointer_type(rhs_type);
     switch (op) {
         // 算術演算
         case mir::MirBinaryOp::Add: {
@@ -422,10 +428,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpOEQ(lhs, rhs, "feq");
             }
+            // HIR型がポインタ型のオペランド同士はアドレスのicmp比較（キャスト付きnull比較 p == null as T* を含む、B5）
+            if (pointer_compare && !string_compare && lhs->getType()->isPointerTy() &&
+                rhs->getType()->isPointerTy()) {
+                return builder->CreateICmpEQ(lhs, rhs, "ptr_eq");
+            }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
-            // ポインタ同士の比較は文字列比較として扱う
-            // Eq/Neのポインタ→strcmpは既存挙動（派生Eqの構造体/配列フィールド比較が依存）のため
-            // string_compareでゲートしない。順序比較(Lt/Le/Gt/Ge)のみ文字列に限定する（C2）。
+            // 残りのptr同士（string/cstringのほか、派生Eqが構造体フィールドを直接Eqに落とすケース等）は既存挙動のstrcmpを維持する（C2）
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",
@@ -466,9 +475,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 coerceFloatTypes(builder, lhs, rhs);
                 return builder->CreateFCmpONE(lhs, rhs, "fne");
             }
+            // HIR型がポインタ型のオペランド同士はアドレスのicmp比較（キャスト付きnull比較を含む、B5、Eqと同じ理由）
+            if (pointer_compare && !string_compare && lhs->getType()->isPointerTy() &&
+                rhs->getType()->isPointerTy()) {
+                return builder->CreateICmpNE(lhs, rhs, "ptr_ne");
+            }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
-            // ポインタ同士の比較は文字列比較として扱う
-            // Eq/Neのポインタ→strcmpは既存挙動のためstring_compareでゲートしない（C2）。
+            // 残りのptr同士は既存挙動のstrcmpを維持する（Eqと同じ理由、C2）
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
                 auto strcmpFunc = module->getOrInsertFunction(
                     "cm_strcmp",

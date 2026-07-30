@@ -4,6 +4,7 @@
 #include "lowering.hpp"
 
 #include "internal/base/debug.hpp"
+#include "internal/base/mangle.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -172,13 +173,21 @@ void MirLowering::rewrite_hof_calls_for_closures() {
             // 対象の高階関数かチェック（コールバックは第3引数 args[2]。
             // reduceは第4引数に初期値を持つためargs.back()ではなくインデックスで特定する）
             static const std::unordered_set<std::string> hof_with_closure_support = {
-                "__builtin_array_map",           "__builtin_array_map_i64",
-                "__builtin_array_filter",        "__builtin_array_filter_i64",
-                "__builtin_array_reduce_i32",    "__builtin_array_reduce_i64",
-                "__builtin_array_forEach_i32",   "__builtin_array_forEach_i64",
-                "__builtin_array_some_i32",      "__builtin_array_some_i64",
-                "__builtin_array_every_i32",     "__builtin_array_every_i64",
-                "__builtin_array_findIndex_i32", "__builtin_array_findIndex_i64",
+                "__builtin_array_map",
+                "__builtin_array_map_i64",
+                "__builtin_array_filter",
+                "__builtin_array_filter_i64",
+                "__builtin_array_reduce_i32",
+                "__builtin_array_reduce_i64",
+                "__builtin_array_reduce_i32_acc64",
+                "__builtin_array_forEach_i32",
+                "__builtin_array_forEach_i64",
+                "__builtin_array_some_i32",
+                "__builtin_array_some_i64",
+                "__builtin_array_every_i32",
+                "__builtin_array_every_i64",
+                "__builtin_array_findIndex_i32",
+                "__builtin_array_findIndex_i64",
             };
             if (hof_with_closure_support.count(func_name) == 0)
                 continue;
@@ -384,6 +393,10 @@ void MirLowering::register_interface(const hir::HirInterface& iface) {
             mir_method.param_types.push_back(param.type);
         }
         mir_iface->methods.push_back(std::move(mir_method));
+
+        // 補間ミニパイプラインの戻り値型解決用にインターフェイス宣言のシグネチャを記録する（B7）
+        interface_method_returns_[mangle::method_name(iface.name, method.name)] =
+            method.return_type;
     }
 
     // 演算子シグネチャを登録

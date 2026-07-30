@@ -50,6 +50,14 @@ class MIRToLLVM {
     // グローバル変数マッピング（MirGlobalVar名 -> LLVM GlobalVariable）
     std::unordered_map<std::string, llvm::GlobalVariable*> globalVariables;
 
+    // 初期化子をinitializerへ定数畳み込み済みのconstグローバル名（B1修正）。
+    // mainエントリのMIRに残る初期化storeはrodataへの書き込みになるため、convertAssignStatementでこの集合を参照してスキップする
+    std::unordered_set<std::string> constFoldedGlobals;
+
+    // constグローバルの初期化式（HIR）をLLVM定数へ畳み込む（B1修正、translate/program.cpp）。
+    // リテラル・単項マイナス・配列リテラル・構造体リテラルの入れ子を型主導で評価し、畳み込めない場合はnullptrを返す
+    llvm::Constant* foldConstInitExpr(const hir::HirExpr& expr, const hir::TypePtr& type);
+
     // static変数マッピング（関数名_変数名 -> グローバル変数）
     std::unordered_map<std::string, llvm::GlobalVariable*> staticVariables;
 

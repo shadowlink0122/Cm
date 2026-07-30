@@ -303,6 +303,15 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
             }
         }
 
+        // acc64混合幅reduceの初期値（4番目）はi64へ拡張する（i32リテラル初期値との型不一致対策）
+        if (funcName.find("reduce_i32_acc64") != std::string::npos && args.size() >= 4) {
+            auto initArg = args[3];
+            if (initArg->getType()->isIntegerTy() &&
+                initArg->getType()->getIntegerBitWidth() < 64) {
+                args[3] = builder->CreateSExt(initArg, ctx.getI64Type(), "reduce_init_i64");
+            }
+        }
+
         // 高階クロージャ呼び出し（C6）: 可変個のキャプチャ引数を環境ポインタ+サンクへ正規化する
         // （map/filter/reduce/forEach/some/every/findIndexの_closure変種すべて）
         if (funcName.rfind("__builtin_array_", 0) == 0 && funcName.size() > 8 &&

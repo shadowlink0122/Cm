@@ -125,3 +125,17 @@ int main() {
 
 <!-- nav -->
 ← Prev: [Types - typedef](typedef.html) | [Contents](index.html) | Next: [Types - Interfaces](interfaces.html) →
+
+## Constructing Generic Structs with Literals
+
+Type arguments are inferred from the declared type, so struct literals can be written without them (v0.17.0).
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Box<int> b = Box{v: 7};                            // bare-name literal (inferred)
+Pair<int, string> p = {first: 7, second: "seven"}; // anonymous literal (inferred)
+```
+
+Explicit type arguments in literals (`Box<int>{v: 7}`) are not supported due to parsing ambiguity with comparison operators. Field-by-field assignment (`Box<int> b; b.v = 7;`) also keeps working.

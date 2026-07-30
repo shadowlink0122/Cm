@@ -109,6 +109,13 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         }
 
         if (!returned_as_slice) {
+            // 整数値を浮動小数戻り値型で返す場合はsitofp/uitofp相当のCastを挿入する（B2）
+            if (return_src.projections.empty() &&
+                ctx.func->return_local < ctx.func->locals.size()) {
+                LocalId coerced = ctx.coerce_to_float_context(
+                    return_src.local, ctx.func->locals[ctx.func->return_local].type);
+                return_src = MirPlace{coerced};
+            }
             // 戻り値をreturn用ローカル変数に代入
             ctx.push_statement(MirStatement::assign(MirPlace{ctx.func->return_local},
                                                     MirRvalue::use(MirOperand::copy(return_src))));
@@ -371,6 +378,97 @@ void StmtLowering::lower_loop(const hir::HirLoop& loop_stmt, LoweringContext& ct
 void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringContext& ctx) {
     // 判別式をlowering
     LocalId discriminant = expr_lowering->lower_expression(*switch_stmt.expr, ctx);
+
+    // 文字列スクルーチニはswitch命令（整数専用）へ落とせないため、
+    // 文字列Eq比較の逐次チェーンへ脱糖する（N3。従来はcase定数が整数として発行され
+    // LLVM検証エラー、jsはポインタ同一性比較で常にelse落ちしていた）
+    const bool is_string_switch = switch_stmt.expr && switch_stmt.expr->type &&
+                                  switch_stmt.expr->type->kind == hir::TypeKind::String;
+    if (is_string_switch) {
+        BlockId default_block = ctx.new_block();
+        BlockId exit_block = ctx.new_block();
+
+        // 各caseの文字列リテラル値と本体ブロックを収集し、比較チェーンを構築する
+        std::vector<BlockId> case_blocks;
+        for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
+            if (!switch_stmt.cases[i].pattern) {
+                case_blocks.push_back(0);  // else/defaultはプレースホルダー
+                continue;
+            }
+            BlockId case_block = ctx.new_block();
+            case_blocks.push_back(case_block);
+
+            // case文字列を抽出（SingleValueの文字列リテラルのみ許可）
+            std::string case_str;
+            bool have_str = false;
+            const auto& pat = *switch_stmt.cases[i].pattern;
+            const hir::HirExprPtr* value_expr = nullptr;
+            if (pat.kind == hir::HirSwitchPattern::SingleValue && pat.value) {
+                value_expr = &pat.value;
+            } else if (switch_stmt.cases[i].value) {
+                value_expr = &switch_stmt.cases[i].value;
+            }
+            if (value_expr) {
+                if (auto lit =
+                        std::get_if<std::unique_ptr<hir::HirLiteral>>(&(*value_expr)->kind)) {
+                    if (*lit && std::holds_alternative<std::string>((*lit)->value)) {
+                        case_str = std::get<std::string>((*lit)->value);
+                        have_str = true;
+                    }
+                }
+            }
+            if (!have_str) {
+                // 非リテラル/非文字列caseは一致しない扱い（型検査側の将来のエラー化対象）
+                continue;
+            }
+
+            LocalId cmp = ctx.new_temp(hir::make_bool());
+            MirConstant sc;
+            sc.type = hir::make_string();
+            sc.value = case_str;
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{cmp},
+                MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace{discriminant}),
+                                  MirOperand::constant(sc), hir::make_bool())));
+            BlockId next_check = ctx.new_block();
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{cmp}),
+                                                         {{1, case_block}}, next_check));
+            ctx.switch_to_block(next_check);
+        }
+        // どのcaseにも一致しなければdefaultへ
+        ctx.set_terminator(MirTerminator::goto_block(default_block));
+
+        // 各case本体をlowering
+        for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
+            if (!switch_stmt.cases[i].pattern) {
+                continue;
+            }
+            ctx.switch_to_block(case_blocks[i]);
+            for (const auto& stmt : switch_stmt.cases[i].stmts) {
+                lower_statement(*stmt, ctx);
+            }
+            if (!ctx.get_current_block()->terminator) {
+                ctx.set_terminator(MirTerminator::goto_block(exit_block));
+            }
+        }
+
+        // default本体（else句）をlowering
+        ctx.switch_to_block(default_block);
+        for (const auto& case_item : switch_stmt.cases) {
+            if (!case_item.pattern) {
+                for (const auto& stmt : case_item.stmts) {
+                    lower_statement(*stmt, ctx);
+                }
+                break;
+            }
+        }
+        if (!ctx.get_current_block()->terminator) {
+            ctx.set_terminator(MirTerminator::goto_block(exit_block));
+        }
+
+        ctx.switch_to_block(exit_block);
+        return;
+    }
 
     // ヘルパー: HirExprからcase値（int64_t）を抽出
     auto extract_case_value = [](const hir::HirExprPtr& expr) -> int64_t {

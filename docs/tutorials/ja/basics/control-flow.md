@@ -188,6 +188,24 @@ for (n in arr) {
 ## switch文
 
 **重要:** Cmのswitch文はcase()構文を使い、自動的にbreakします。
+スクルーチニ（判別式）には整数・charに加えて文字列も使えます（v0.17.0。文字列は内容比較の逐次チェーンへ脱糖され、case値は文字列リテラルのみ指定できます）。
+
+```cm
+string classify(string s) {
+    switch (s) {
+        case("alpha") {
+            return "a";
+        }
+        case("beta") {
+            return "b";
+        }
+        else {
+            return "other";
+        }
+    }
+    return "";
+}
+```
 
 ### 基本的なswitch
 

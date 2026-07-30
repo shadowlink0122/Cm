@@ -197,6 +197,49 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
         // ジェネリック型パラメータの場合
         if (generic_context_.has_type_param(type_name)) {
+            // 境界インターフェイス（<T: Shape>等）の宣言シグネチャからメソッドを解決し、戻り値型を式型へ伝搬する
+            if (const auto* type_param = generic_context_.get_type_param(type_name)) {
+                for (const auto& bound : type_param->bounds) {
+                    auto bound_it = interface_methods_.find(bound);
+                    if (bound_it == interface_methods_.end()) {
+                        continue;
+                    }
+                    auto method_it = bound_it->second.find(member.member);
+                    if (method_it == bound_it->second.end()) {
+                        continue;
+                    }
+                    const auto& method_info = method_it->second;
+
+                    std::string arity_err =
+                        method_arity_error(member.member, member.args.size(), method_info);
+                    if (!arity_err.empty()) {
+                        error(current_span_, arity_err);
+                    } else {
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            auto arg_type = infer_type(*member.args[i]);
+                            if (!types_compatible(method_info.param_types[i], arg_type)) {
+                                std::string expected =
+                                    ast::type_to_string(*method_info.param_types[i]);
+                                std::string actual = ast::type_to_string(*arg_type);
+                                error(current_span_, "Argument type mismatch in method call '" +
+                                                         member.member + "': expected " + expected +
+                                                         ", got " + actual);
+                            }
+                        }
+                    }
+
+                    // 戻り値型がインターフェイス自身の型パラメータ（Cloneのclone()等）の場合はレシーバ型で置き換える
+                    ast::TypePtr bound_return = method_info.return_type;
+                    if (bound_return && bound_return->kind == ast::TypeKind::Generic) {
+                        bound_return = obj_type;
+                    }
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Generic bound " + bound + "." + member.member +
+                                       "() : " + ast::type_to_string(*bound_return),
+                                   debug::Level::Debug);
+                    return bound_return;
+                }
+            }
             debug::tc::log(debug::tc::Id::Resolved,
                            "Generic type param " + type_name + "." + member.member +
                                "() - assuming valid (constraint check deferred)",

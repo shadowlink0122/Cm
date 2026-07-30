@@ -23,6 +23,15 @@ namespace cm::codegen::llvm_backend {
 
 /// Assign文の変換本体（分離元のswitch脱出用breakはreturnに置換済み）
 void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assign) {
+    // 初期化子をinitializerへ畳み込み済みのconstグローバルにはmainエントリの初期化storeを発行しない（B1修正）。
+    // rodataに配置されたconstantへのstoreはO0でSIGBUS、最適化時は読み出しとの順序保証がなく誤値になる。
+    // constグローバルへの代入は型検査で拒否されるため、ここへ到達するstoreは初期化経路のみでありrvalueは副作用を持たない
+    if (currentMIRFunction && assign.place.local < currentMIRFunction->locals.size()) {
+        const auto& destLocal = currentMIRFunction->locals[assign.place.local];
+        if (destLocal.is_global && constFoldedGlobals.count(destLocal.name) > 0) {
+            return;
+        }
+    }
     // interface型へのcoercion（動的ディスパッチ用 fat pointer 構築）
     // - Shape sh = sq;      : dest=interface値、src=具象構造体
     // - Shape* p = &sq;     : dest=interfaceポインタ、src=具象構造体へのRef

@@ -113,6 +113,8 @@ class LoweringContext {
     const std::unordered_set<std::string>* interface_names = nullptr;
     // HIR関数定義（デフォルト引数補完用）
     const std::unordered_map<std::string, const hir::HirFunction*>* hir_func_defs = nullptr;
+    // インターフェイスメソッドの戻り値型（マングル名`Iface__method`→戻り値型）- 親クラスから参照（B7: 補間ミニパイプラインはimplの具象名しか引けず動的ディスパッチ呼び出しの戻り値型が解決できないため、HIRのインターフェイス宣言からシードする）
+    const std::unordered_map<std::string, hir::TypePtr>* interface_method_returns = nullptr;
 
     // Tagged Union名のセット - 親クラスから参照
     const std::unordered_set<std::string>* tagged_union_names = nullptr;
@@ -260,6 +262,10 @@ class LoweringContext {
 
     // typedefとenumを解決（必要に応じて再帰的に）
     hir::TypePtr resolve_typedef(const hir::TypePtr& type);
+
+    // 整数値を浮動小数文脈へ渡す際の暗黙変換としてCast（sitofp/uitofp相当）を挿入する（B2: 整数ビットのdouble再解釈で5e-324になる誤りの修正）
+    // float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
+    LocalId coerce_to_float_context(LocalId value, const hir::TypePtr& target_type);
 
     // LLVMのDataLayout（自然アライメント）と一致する型サイズ/アライメントを計算する
     // スライスのblob要素サイズ算出用（calculate_type_sizeは見積もりでありレイアウト非互換）

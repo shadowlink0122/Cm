@@ -1,0 +1,56 @@
+import std::io::println;
+// B7関連回帰: インターフェイス型変数経由のstring戻り値メソッドを検証する。
+// インターフェイス宣言のシグネチャから戻り値型が解決され、動的ディスパッチの結果が文字列として扱われることを確認する。
+// 補間内に直接メソッド呼び出しを書く形（"{a.name()}"）はmethod_interp_direct.cm / method_interp_generic_bound.cmで検証する。
+
+interface Animal {
+    string name();
+    int legs();
+}
+
+struct Dog {}
+
+impl Dog for Animal {
+    string name() {
+        return "dog";
+    }
+
+    int legs() {
+        return 4;
+    }
+}
+
+struct Bird {}
+
+impl Bird for Animal {
+    string name() {
+        return "bird";
+    }
+
+    int legs() {
+        return 2;
+    }
+}
+
+int main() {
+    Animal a = Dog {};
+
+    // string戻り値メソッドの結果を変数へ受けて補間する
+    string n = a.name();
+    println("name={n}");
+
+    // string戻り値メソッドの結果をprintlnへ直接渡す
+    println(a.name());
+
+    // int戻り値メソッドも同様に検証する
+    const int legs = a.legs();
+    println("legs={legs}");
+
+    // 別の具象型へ差し替えても動的ディスパッチで正しい文字列が返る
+    a = Bird {};
+    string n2 = a.name();
+    println("name={n2}");
+    println(a.name());
+
+    return 0;
+}

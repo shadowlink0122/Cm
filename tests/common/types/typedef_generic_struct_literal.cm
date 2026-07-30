@@ -1,0 +1,20 @@
+import std::io::println;
+// ジェネリック特殊化別名での構造体リテラル構築（B8）
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+
+typedef IntPair = Pair<int, int>;
+typedef MixedPair = Pair<int, string>;
+
+int main() {
+    IntPair p = IntPair { first: 10, second: 32 };
+    println("{p.first}");
+    println("{p.second}");
+
+    MixedPair m = MixedPair { first: 7, second: "seven" };
+    println("{m.first}");
+    println("{m.second}");
+    return 0;
+}

@@ -1,0 +1,66 @@
+import std::io::println;
+// B6回帰: ジェネリック境界`<T: Shape>`経由の非voidメソッド呼び出しを検証する。
+// 従来はインターフェイス宣言のメソッド戻り値型が解決されずvoid扱いになり、returnで「Return type mismatch: expected 'int', got 'void'」と誤拒否されていた。
+
+interface Shape {
+    int area();
+    string label();
+}
+
+struct Sq {
+    int s;
+}
+
+impl Sq for Shape {
+    int area() {
+        return self.s * self.s;
+    }
+
+    string label() {
+        return "square";
+    }
+}
+
+struct Rc {
+    int w;
+    int h;
+}
+
+impl Rc for Shape {
+    int area() {
+        return self.w * self.h;
+    }
+
+    string label() {
+        return "rect";
+    }
+}
+
+// 境界メソッドの戻り値を直接returnする
+<T: Shape> int total(T x) {
+    return x.area();
+}
+
+// 境界メソッドの戻り値を変数へ代入し、式の中でも使用する
+<T: Shape> int doubled(T x) {
+    const int a = x.area();
+    return a + x.area();
+}
+
+// string戻り値の境界メソッドをreturnする
+<T: Shape> string describe(T x) {
+    return x.label();
+}
+
+int main() {
+    Sq q = Sq{s: 3};
+    Rc r = Rc{w: 2, h: 5};
+
+    println(total(q));
+    println(total(r));
+    println(doubled(q));
+    println(describe(q));
+    println(describe(r));
+
+    return 0;
+}

@@ -126,3 +126,17 @@ int main() {
 
 <!-- nav -->
 ← 前: [型システム編 - typedef型エイリアス](typedef.html) ｜ [目次](index.html) ｜ 次: [型システム編 - インターフェース](interfaces.html) →
+
+## ジェネリック構造体のリテラル構築
+
+宣言型から型引数が推論されるため、リテラルの型名には型引数を書かずに構築できます（v0.17.0）。
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Box<int> b = Box{v: 7};                            // 裸名リテラル（推論）
+Pair<int, string> p = {first: 7, second: "seven"}; // 無名リテラル（推論）
+```
+
+明示型引数付きリテラル（`Box<int>{v: 7}`）は比較演算子との構文曖昧性のため未対応です。フィールド個別代入（`Box<int> b; b.v = 7;`）も従来どおり使えます。

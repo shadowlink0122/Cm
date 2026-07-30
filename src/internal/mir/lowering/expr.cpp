@@ -33,7 +33,7 @@ LocalId ExprLowering::lower_expression(const hir::HirExpr& expr, LoweringContext
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirTernary>>) {
                 return lower_ternary(*expr_ptr, expr.type, ctx);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirStructLiteral>>) {
-                return lower_struct_literal(*expr_ptr, ctx);
+                return lower_struct_literal(*expr_ptr, expr.type, ctx);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirArrayLiteral>>) {
                 return lower_array_literal(*expr_ptr, expr.type, ctx);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLambda>>) {

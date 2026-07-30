@@ -55,6 +55,9 @@ class MirLoweringBase {
     // インターフェース定義 (インターフェース名 -> HirInterface)
     std::unordered_map<std::string, const hir::HirInterface*> interface_defs_;
 
+    // インターフェイスメソッドの戻り値型 (マングル名`Iface__method` -> 戻り値型。B7: 補間ミニパイプラインの戻り値型解決用にLoweringContextへシードする)
+    std::unordered_map<std::string, hir::TypePtr> interface_method_returns_;
+
     // グローバルconst変数の値
     std::unordered_map<std::string, MirConstant> global_const_values;
 

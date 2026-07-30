@@ -1,0 +1,23 @@
+// 回帰(N2): T[]引数の要素読みがモノモーフ化でT未置換のままガベージを返すバグの検証
+import std::io::println;
+<T> long count_all(T[] xs) {
+    return xs.len();
+}
+<T> T first_of(T[] xs) {
+    return xs[0];
+}
+int main() {
+    int[] a = [];
+    a.push(5);
+    a.push(6);
+    println(count_all(a));
+    println(first_of(a));
+    string[] s = [];
+    s.push("x");
+    println(count_all(s));
+    println(first_of(s));
+    double[] d = [];
+    d.push(2.5);
+    println(first_of(d));
+    return 0;
+}

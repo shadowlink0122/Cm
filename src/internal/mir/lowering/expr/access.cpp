@@ -396,68 +396,182 @@ bool ExprLowering::get_member_place(const hir::HirMember& member, LoweringContex
         current = (*inner_member)->object.get();
     }
 
-    // ベースオブジェクトを取得（変数参照のみサポート）
+    // ベースオブジェクトの場所と構造体型を解決する（変数参照・添字式をサポート）
+    MirPlace base_place{0};
+    hir::TypePtr obj_type = nullptr;
+
     if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&current->kind)) {
         auto local_opt = ctx.resolve_variable((*var_ref)->name);
         if (!local_opt)
             return false;
 
         LocalId object = *local_opt;
-        hir::TypePtr obj_type = nullptr;
         if (object < ctx.func->locals.size()) {
             obj_type = ctx.func->locals[object].type;
         }
 
-        // フィールドチェーンを逆順にしてプロジェクションを構築
-        out_place = MirPlace{object};
+        base_place = MirPlace{object};
 
         // implメソッド内の self は *Struct（構造体へのポインタ）で渡される。
         // その場合はまず Deref を挟み、pointee の構造体型を基点にフィールドを辿る。
         // これがないと self.items のようなメンバスライスの場所が解決できず、push等が黙って捨てられる。
         if (obj_type && obj_type->kind == hir::TypeKind::Pointer && obj_type->element_type &&
             obj_type->element_type->kind == hir::TypeKind::Struct) {
-            out_place.projections.push_back(PlaceProjection::deref());
+            base_place.projections.push_back(PlaceProjection::deref());
             obj_type = obj_type->element_type;
         }
+    } else if (auto* idx = std::get_if<std::unique_ptr<hir::HirIndex>>(&current->kind)) {
+        // 添字式ベース（bags[0].items 等）: 添字の対象を再帰的に場所化して要素の場所を得る（B4）。
+        // 従来はここで解決できず、bags[0].items.push(x) のようなネストメンバスライス変異が黙って捨てられ、後続の読み出しが未初期化ヘッダ経由でSIGSEGVしていた
+        MirPlace idx_base{0};
+        hir::TypePtr idx_base_type = nullptr;
+        if (!resolve_receiver_place((*idx)->object.get(), ctx, idx_base, idx_base_type))
+            return false;
+        auto resolved = idx_base_type ? ctx.resolve_typedef(idx_base_type) : nullptr;
+        if (!resolved || resolved->kind != hir::TypeKind::Array)
+            return false;
 
-        if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+        // 添字式を収集（単一index or 多次元indices）
+        std::vector<const hir::HirExprPtr*> index_exprs;
+        if (!(*idx)->indices.empty()) {
+            for (const auto& ie : (*idx)->indices) {
+                index_exprs.push_back(&ie);
+            }
+        } else {
+            index_exprs.push_back(&(*idx)->index);
+        }
+
+        // 固定長配列とスライスの判別はarray_sizeと次元値の両方で行う（dimensionsに0が入るケースがあるため）
+        const bool base_is_fixed_array =
+            resolved->array_size.has_value() ||
+            (!resolved->dimensions.empty() && resolved->dimensions[0] > 0);
+
+        if (base_is_fixed_array) {
+            // 固定長配列要素はindexプロジェクションでそのまま場所化する
+            for (const auto* iep : index_exprs) {
+                if (!iep || !*iep || !resolved || resolved->kind != hir::TypeKind::Array)
+                    return false;
+                LocalId iv = lower_expression(**iep, ctx);
+                idx_base.projections.push_back(PlaceProjection::index(iv));
+                resolved =
+                    resolved->element_type ? ctx.resolve_typedef(resolved->element_type) : nullptr;
+            }
+            base_place = idx_base;
+            obj_type = resolved;
+        } else {
+            // スライス要素: 中間レベルは格納中の内側ヘッダ参照（cm_slice_get_subslice_ref）で辿り、
+            // 最終レベルは格納中の構造体blobへのポインタ（cm_slice_get_element_ptr）をDerefで場所化する。
+            // コピーされた一時への変異は失われるため、必ず格納中の実体を指す参照経由で場所化する
+            MirPlace cur_place = idx_base;
+            hir::TypePtr cur_type = resolved;
+            for (size_t i = 0; i < index_exprs.size(); ++i) {
+                const auto* iep = index_exprs[i];
+                if (!iep || !*iep)
+                    return false;
+                if (!cur_type || cur_type->kind != hir::TypeKind::Array ||
+                    cur_type->array_size.has_value())
+                    return false;
+                auto cur_elem =
+                    cur_type->element_type ? ctx.resolve_typedef(cur_type->element_type) : nullptr;
+                if (!cur_elem)
+                    return false;
+                const bool is_last = (i + 1 == index_exprs.size());
+                if (is_last) {
+                    // 最終レベルの要素は構造体blobのみサポート（それ以外は従来どおり解決失敗）
+                    if (cur_elem->kind != hir::TypeKind::Struct)
+                        return false;
+                    LocalId iv = lower_expression(**iep, ctx);
+                    LocalId ptr_local = ctx.new_temp(hir::make_pointer(cur_elem));
+                    BlockId success_block = ctx.new_block();
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(cur_place));
+                    args.push_back(MirOperand::copy(MirPlace{iv}));
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data = MirTerminator::CallData{
+                        MirOperand::function_ref("cm_slice_get_element_ptr"),
+                        std::move(args),
+                        MirPlace{ptr_local},
+                        success_block,
+                        std::nullopt,
+                        "",
+                        "",
+                        false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+                    cur_place = MirPlace{ptr_local, {PlaceProjection::deref()}};
+                    cur_type = cur_elem;
+                } else {
+                    // 中間レベルは内側スライスのみ（多次元スライスの途中段）
+                    if (cur_elem->kind != hir::TypeKind::Array || cur_elem->array_size.has_value())
+                        return false;
+                    LocalId iv = lower_expression(**iep, ctx);
+                    LocalId elem_local = ctx.new_temp(cur_elem);
+                    BlockId success_block = ctx.new_block();
+                    std::vector<MirOperandPtr> args;
+                    args.push_back(MirOperand::copy(cur_place));
+                    args.push_back(MirOperand::copy(MirPlace{iv}));
+                    auto call_term = std::make_unique<MirTerminator>();
+                    call_term->kind = MirTerminator::Call;
+                    call_term->data = MirTerminator::CallData{
+                        MirOperand::function_ref("cm_slice_get_subslice_ref"),
+                        std::move(args),
+                        MirPlace{elem_local},
+                        success_block,
+                        std::nullopt,
+                        "",
+                        "",
+                        false};
+                    ctx.set_terminator(std::move(call_term));
+                    ctx.switch_to_block(success_block);
+                    cur_place = MirPlace{elem_local};
+                    cur_type = cur_elem;
+                }
+            }
+            base_place = cur_place;
+            obj_type = cur_type;
+        }
+    } else {
+        return false;
+    }
+
+    if (!obj_type || obj_type->kind != hir::TypeKind::Struct) {
+        return false;
+    }
+
+    // フィールドチェーンを逆順にしてプロジェクションを構築
+    out_place = base_place;
+    hir::TypePtr current_type = obj_type;
+
+    for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {
+        const std::string& field_name = it->second;
+
+        if (!current_type || current_type->kind != hir::TypeKind::Struct) {
             return false;
         }
 
-        hir::TypePtr current_type = obj_type;
+        auto field_idx = ctx.get_field_index(current_type->name, field_name);
+        if (!field_idx) {
+            return false;
+        }
 
-        for (auto it = field_chain.rbegin(); it != field_chain.rend(); ++it) {
-            const std::string& field_name = it->second;
+        out_place.projections.push_back(PlaceProjection::field(*field_idx));
 
-            if (!current_type || current_type->kind != hir::TypeKind::Struct) {
-                return false;
-            }
-
-            auto field_idx = ctx.get_field_index(current_type->name, field_name);
-            if (!field_idx) {
-                return false;
-            }
-
-            out_place.projections.push_back(PlaceProjection::field(*field_idx));
-
-            // 次のフィールドの型を取得
-            if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
-                const auto* struct_def = ctx.struct_defs->at(current_type->name);
-                if (*field_idx < struct_def->fields.size()) {
-                    current_type = struct_def->fields[*field_idx].type;
-                } else {
-                    current_type = hir::make_int();
-                }
+        // 次のフィールドの型を取得
+        if (ctx.struct_defs && ctx.struct_defs->count(current_type->name)) {
+            const auto* struct_def = ctx.struct_defs->at(current_type->name);
+            if (*field_idx < struct_def->fields.size()) {
+                current_type = struct_def->fields[*field_idx].type;
             } else {
                 current_type = hir::make_int();
             }
+        } else {
+            current_type = hir::make_int();
         }
-
-        out_type = current_type;
-        return true;
     }
 
-    return false;
+    out_type = current_type;
+    return true;
 }
 
 // 配列インデックスのlowering

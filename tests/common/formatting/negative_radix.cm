@@ -1,0 +1,17 @@
+// 回帰(N7): 負数の基数書式が64bit符号拡張/符号付き絶対値でバックエンド分裂するバグの検証
+// 意味論: int以下は昇格幅32bit・long系は64bitの2の補数を符号なし基数表記する
+import std::io::println;
+int main() {
+    int neg = -255;
+    println("{neg:x}");
+    println("{neg:X}");
+    println("{neg:b}");
+    println("{neg:o}");
+    tiny t = -1;
+    println("{t:x}");
+    long ln = -255;
+    println("{ln:x}");
+    uint u = 0xFFFFFF01 as uint;
+    println("{u:x}");
+    return 0;
+}

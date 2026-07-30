@@ -269,6 +269,8 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                     MirPlace{*lhs_opt},
                     MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_type)));
             } else {
+                // 整数右辺を浮動小数変数へ代入する場合はsitofp/uitofp相当のCastを挿入する（B2）
+                rhs_value = ctx.coerce_to_float_context(rhs_value, lhs_type);
                 ctx.push_statement(MirStatement::assign(
                     MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             }
@@ -282,6 +284,8 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         hir::TypePtr current_type;
 
         if (build_lvalue_place(assign.target.get(), place, current_type)) {
+            // 整数右辺を浮動小数フィールド・配列要素へ代入する場合もCastを挿入する（B2）
+            rhs_value = ctx.coerce_to_float_context(rhs_value, current_type);
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }

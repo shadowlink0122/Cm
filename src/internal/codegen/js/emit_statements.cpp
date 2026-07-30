@@ -470,6 +470,25 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         }
                     }
 
+                    // N7: 書式化関数へ渡すwide64型の値はBigIntへ正規化する。
+                    // 定数畳み込みでlong定数がNumberリテラルになると基数書式（{x:x}）の
+                    // 64bit幅判定（typeof bigint）が効かなくなるため、静的型で幅を保存する
+                    if (!calleeFunc && i >= 1 &&
+                        (funcName == "cm_format_string" ||
+                         funcName.find("cm_format_string_") == 0 ||
+                         funcName == "cm_println_format" || funcName == "cm_print_format" ||
+                         funcName == "cm_format_replace_long" ||
+                         funcName == "cm_format_replace_ulong")) {
+                        auto aft = getOperandType(*arg, func);
+                        const bool w64 = aft && (aft->kind == ast::TypeKind::Long ||
+                                                 aft->kind == ast::TypeKind::ULong ||
+                                                 aft->kind == ast::TypeKind::ISize ||
+                                                 aft->kind == ast::TypeKind::USize);
+                        if (w64) {
+                            argStr = "__cm_big(" + argStr + ")";
+                        }
+                    }
+
                     // H5: 64bit（BigInt）と32bit以下（Number）の呼び出し境界変換。
                     // 型注釈上の不一致（64bit型付きリテラルを32bit引数へ渡す等）でJSの
                     // BigInt/Number混在TypeErrorになるため、仮引数型に合わせて明示変換する
@@ -775,6 +794,25 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
                                     funcName.find("cm_slice_set_") == 0)) {
                             argStr = "Number(__cm_big(" + argStr + "))";
                         } else if (funcName.find("cm_slice_push_i64") == 0) {
+                            argStr = "__cm_big(" + argStr + ")";
+                        }
+                    }
+
+                    // N7: 書式化関数へ渡すwide64型の値はBigIntへ正規化する。
+                    // 定数畳み込みでlong定数がNumberリテラルになると基数書式（{x:x}）の
+                    // 64bit幅判定（typeof bigint）が効かなくなるため、静的型で幅を保存する
+                    if (!calleeFunc && i >= 1 &&
+                        (funcName == "cm_format_string" ||
+                         funcName.find("cm_format_string_") == 0 ||
+                         funcName == "cm_println_format" || funcName == "cm_print_format" ||
+                         funcName == "cm_format_replace_long" ||
+                         funcName == "cm_format_replace_ulong")) {
+                        auto aft = getOperandType(*arg, func);
+                        const bool w64 = aft && (aft->kind == ast::TypeKind::Long ||
+                                                 aft->kind == ast::TypeKind::ULong ||
+                                                 aft->kind == ast::TypeKind::ISize ||
+                                                 aft->kind == ast::TypeKind::USize);
+                        if (w64) {
                             argStr = "__cm_big(" + argStr + ")";
                         }
                     }

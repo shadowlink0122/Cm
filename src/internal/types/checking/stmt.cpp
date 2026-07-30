@@ -374,7 +374,19 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                     }
                 }
             }
-            if (!is_enum_variant_coercion) {
+            // ジェネリック構造体リテラルの期待型推論: Pair<int, string> p = Pair{...} / {...}
+            // リテラルの裸名（Pair）は特殊化を持たないため、宣言型が同基底の特殊化なら宣言型を採用する
+            bool is_generic_literal_coercion = false;
+            if (let.init && !resolved_type->type_args.empty()) {
+                if (auto* slit = let.init->as<ast::StructLiteralExpr>()) {
+                    if (slit->type_name.empty() || slit->type_name == resolved_type->name) {
+                        is_generic_literal_coercion = true;
+                        slit->type_name = resolved_type->name;
+                        let.init->type = resolved_type;
+                    }
+                }
+            }
+            if (!is_enum_variant_coercion && !is_generic_literal_coercion) {
                 error(stmt_span, "Type mismatch in variable declaration '" + let.name +
                                      "': expected '" + ast::type_to_string(*resolved_type) +
                                      "', got '" + ast::type_to_string(*init_type) + "'");

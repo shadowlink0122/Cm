@@ -1,0 +1,31 @@
+// must_assign_visibility.cm - must{}内の代入がブロック外の読み出しへ正しく反映されるかのテスト（Bug B3回帰）
+import std::io::println;
+
+struct Rect {
+    int w;
+    int h;
+    int area;
+}
+
+int main() {
+    // フィールド代入: 初期化用一時変数へのコピー伝播が残ると初期値0を読んでしまう
+    Rect r = Rect{ w: 19, h: 58, area: 0 };
+    must { r.area = r.w * r.h; }
+    int field_result = r.area;
+
+    // 配列要素代入: ベース変数のコピー・定数情報が無効化されることを検証
+    int[3] a = [1, 2, 3];
+    must { a[0] = a[1] + a[2]; }
+    int index_result = a[0];
+
+    // スカラ代入: 古い定数へ畳み込まれないことを検証
+    int x = 7;
+    must { x = x * 6; }
+    int scalar_result = x;
+
+    println(field_result);   // 1102
+    println(index_result);   // 5
+    println(scalar_result);  // 42
+    println("PASS");
+    return 0;
+}

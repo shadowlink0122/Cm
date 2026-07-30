@@ -39,6 +39,11 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 - [インクリメンタルビルドと並列コード生成](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) — H14 / M6 / M10（全項目実装済み・archiveへ移動。CM_MODULE_CODEGENの既定有効化はsoak後判断）
 - [その他の診断とLow優先度項目](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — M18 / L1 / L2 / L3 / L5 / L6 / L7（全項目実装済み・archiveへ移動）
 
+### 構文網羅検証で検出したバグ（B1〜B9・N1〜N8、全件修正済み・archiveへ移動）
+
+構文→LLVM IR対訳リファレンス執筆時の実機検証（B1〜B9）と、5バックエンド差分プローブの追加ラウンド（N1〜N8）で検出したバグは全件修正し、個別文書を [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した。
+索引は [syntax-audit-bugfixes.md](../../archive/v0.17.0/syntax-audit-bugfixes.md)（B群）と各個別文書（interp-nested-slice-index / generic-slice-element-garbage / string-switch-miscompile / wasm-reduce-closure-trap / generic-struct-literal / enum-multi-payload-match / negative-radix-format / js-string-index-bigint）を参照。
+
 ## 状態
 
-v0.17.0の設計文書は監査全57所見の対応とセルフホスト準備（S1〜S9）を含め全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み。各文書に将来課題（エラー化・CM_MODULE_CODEGEN既定有効化等）を記録している。セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。
+v0.17.0の設計文書は、監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8）を含め全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

@@ -586,6 +586,13 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI32Type()}, false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_array_reduce_i32_acc64") {
+        // 混合幅版: 64bitアキュムレータ×32bit要素（long acc×int[]のreduce）
+        auto funcType = llvm::FunctionType::get(
+            ctx.getI64Type(),
+            {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(), ctx.getI64Type()}, false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
     } else if (name == "__builtin_array_reduce_i64") {
         auto funcType = llvm::FunctionType::get(
             ctx.getI64Type(),
@@ -643,6 +650,14 @@ llvm::Function* MIRToLLVM::declareBuiltinRuntimeFunction(const std::string& name
             llvm::FunctionType::get(ctx.getI32Type(),
                                     {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(),
                                      ctx.getI32Type(), ctx.getPtrType()},
+                                    false);
+        auto func = module->getOrInsertFunction(name, funcType);
+        return llvm::cast<llvm::Function>(func.getCallee());
+    } else if (name == "__builtin_array_reduce_i32_acc64_closure") {
+        auto funcType =
+            llvm::FunctionType::get(ctx.getI64Type(),
+                                    {ctx.getPtrType(), ctx.getI64Type(), ctx.getPtrType(),
+                                     ctx.getI64Type(), ctx.getPtrType()},
                                     false);
         auto func = module->getOrInsertFunction(name, funcType);
         return llvm::cast<llvm::Function>(func.getCallee());

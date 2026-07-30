@@ -700,6 +700,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             MirPlace{local}, MirRvalue::cast(MirOperand::copy(MirPlace{init_value}),
                                                              resolved_let_type)));
                     } else {
+                        // 整数初期値を浮動小数変数へ入れる場合はsitofp/uitofp相当のCastを挿入する（B2）
+                        init_value = ctx.coerce_to_float_context(init_value, resolved_let_type);
                         ctx.push_statement(MirStatement::assign(
                             MirPlace{local},
                             MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));

@@ -1,0 +1,22 @@
+import std::io::println;
+// 暗黙終端での複数defer逆順発火と明示return関数との出力一致を検証（B9）
+void implicit_end() {
+    defer println("first");
+    defer println("second");
+    defer println("third");
+    println("implicit body");
+}
+
+void explicit_end() {
+    defer println("first");
+    defer println("second");
+    defer println("third");
+    println("explicit body");
+    return;
+}
+
+int main() {
+    implicit_end();
+    explicit_end();
+    return 0;
+}

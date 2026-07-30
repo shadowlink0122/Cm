@@ -320,12 +320,43 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
         if (arg_type_name.empty())
             continue;
 
+        // 推論結果が型パラメータ名そのもの（T = T）にならないようにするガード。
+        // 呼び出し元の一時がジェネリック型のまま（戻り値先のT等）だと無意味な自己推論になり、
+        // 無置換の特殊化（first_of__T）が生成されて要素アクセスが不定値になっていた
+        auto is_generic_param_name = [&](const std::string& name) {
+            for (const auto& gp : callee->generic_params) {
+                if (name == gp.name) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (is_generic_param_name(arg_type_name))
+            continue;
+
         // 1. 単純な型パラメータの場合（T → int）
         for (const auto& generic_param : callee->generic_params) {
             if (param.type->name == generic_param.name) {
                 inferred_map[generic_param.name] = arg_type_name;
                 debug_msg("MONO", "Inferred " + generic_param.name + " = " + arg_type_name +
                                       " from simple param");
+            }
+        }
+
+        // 1b. スライス/配列パラメータの場合（T[] → int[] から T = int）
+        if (param.type->kind == hir::TypeKind::Array && param.type->element_type) {
+            for (const auto& generic_param : callee->generic_params) {
+                if (param.type->element_type->name == generic_param.name &&
+                    arg_type_name.size() > 2 &&
+                    arg_type_name.compare(arg_type_name.size() - 2, 2, "[]") == 0) {
+                    std::string elem_name = arg_type_name.substr(0, arg_type_name.size() - 2);
+                    if (!elem_name.empty() && !is_generic_param_name(elem_name)) {
+                        inferred_map[generic_param.name] = elem_name;
+                        debug_msg("MONO", "Inferred " + generic_param.name + " = " + elem_name +
+                                              " from slice param");
+                    }
+                }
             }
         }
 
@@ -401,7 +432,15 @@ std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* ca
                     const auto& dest_local = caller->locals[call_data.destination->local];
                     if (dest_local.type) {
                         std::string dest_type_name = get_type_name(dest_local.type);
-                        if (!dest_type_name.empty() &&
+                        // 格納先がジェネリック型のまま（T等）の自己推論は無意味なので除外する
+                        bool dest_is_generic_name = false;
+                        for (const auto& gp : callee->generic_params) {
+                            if (dest_type_name == gp.name) {
+                                dest_is_generic_name = true;
+                                break;
+                            }
+                        }
+                        if (!dest_type_name.empty() && !dest_is_generic_name &&
                             inferred_map.find(generic_param.name) == inferred_map.end()) {
                             inferred_map[generic_param.name] = dest_type_name;
                             debug_msg("MONO", "Inferred " + generic_param.name + " = " +

@@ -1651,16 +1651,16 @@ char* cm_format_replace_int(const char* format, int value) {
     char* value_str;
     switch (spec) {
         case 'x':
-            value_str = cm_format_int_hex((long long)value);  // 整数には0xプレフィックスなし
+            value_str = cm_format_int_hex((long long)(unsigned int)value);  // 整数には0xプレフィックスなし
             break;
         case 'X':
-            value_str = cm_format_int_HEX((long long)value);  // 整数には0xプレフィックスなし
+            value_str = cm_format_int_HEX((long long)(unsigned int)value);  // 整数には0xプレフィックスなし
             break;
         case 'b':
-            value_str = cm_format_int_binary((long long)value);
+            value_str = cm_format_int_binary((long long)(unsigned int)value);
             break;
         case 'o':
-            value_str = cm_format_int_octal((long long)value);
+            value_str = cm_format_int_octal((long long)(unsigned int)value);
             break;
         default:
             value_str = cm_format_int(value);
@@ -1882,30 +1882,13 @@ char* cm_format_replace_long(const char* format, long long value) {
     // 指定子に応じた値の文字列化
     char* value_str;
     switch (spec) {
-        case 'x': {
-            // 小文字16進数（明示的指定時は0xプレフィックス付き）
-            char* hex_str = cm_format_int_hex(value);
-            size_t hex_len = wasm_strlen(hex_str);
-            value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
-            value_str[0] = '0';
-            value_str[1] = 'x';
-            for (size_t i = 0; i <= hex_len; i++) {
-                value_str[i + 2] = hex_str[i];
-            }
+        case 'x':
+            // 小文字16進数（整数には0xプレフィックスなし。native/jsと表記を統一）
+            value_str = cm_format_int_hex(value);
             break;
-        }
-        case 'X': {
-            // 大文字16進数（明示的指定時は0xプレフィックス付き）
-            char* hex_str = cm_format_int_HEX(value);
-            size_t hex_len = wasm_strlen(hex_str);
-            value_str = (char*)wasm_alloc(hex_len + 3);  // "0x" + hex + '\0'
-            value_str[0] = '0';
-            value_str[1] = 'x';
-            for (size_t i = 0; i <= hex_len; i++) {
-                value_str[i + 2] = hex_str[i];
-            }
+        case 'X':
+            value_str = cm_format_int_HEX(value);
             break;
-        }
         case 'b':
             value_str = cm_format_int_binary(value);
             break;
@@ -2296,6 +2279,20 @@ int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, _Bool (*predic
 // コールバックの第一引数として受け取る。シグネチャはキャプチャ数に依存しない
 // ============================================================
 
+// 混合幅版: 64bitアキュムレータ×32bit要素（long acc×int[]のreduce。
+// 要素幅だけで選ぶと(i32,i32)シグネチャでコールバックが呼ばれ、wasmはcall_indirectの型検査でトラップする）
+int64_t __builtin_array_reduce_i32_acc64(int32_t* arr, int64_t size,
+                                         int64_t (*callback)(int64_t, int32_t), int64_t init) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int64_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(acc, arr[i]);
+    }
+    return acc;
+}
+
 int32_t __builtin_array_reduce_i32_closure(int32_t* arr, int64_t size,
                                            int32_t (*callback)(void*, int32_t, int32_t),
                                            int32_t init, void* env) {
@@ -2303,6 +2300,19 @@ int32_t __builtin_array_reduce_i32_closure(int32_t* arr, int64_t size,
     if (!arr || !callback)
         return init;
     int32_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(env, acc, arr[i]);
+    }
+    return acc;
+}
+
+int64_t __builtin_array_reduce_i32_acc64_closure(int32_t* arr, int64_t size,
+                                                 int64_t (*callback)(void*, int64_t, int32_t),
+                                                 int64_t init, void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int64_t acc = init;
     for (int64_t i = 0; i < size; i++) {
         acc = callback(env, acc, arr[i]);
     }

@@ -710,6 +710,41 @@ void Monomorphization::generate_generic_specializations(
                                 if (current_func_name == func_name) {
                                     // 関数名を特殊化された名前に変更
                                     call_data.func = MirOperand::function_ref(specialized_name);
+                                    // 呼び出し結果ローカルの未置換ジェネリック型（T・T[]）を具体型へ差し替える（N2）。
+                                    // 残ったままだと後続利用の型解決がptrtointへフォールバックし、値でなくアドレスが流れる
+                                    if (call_data.destination && hir_func) {
+                                        LocalId dl = call_data.destination->local;
+                                        if (dl < func->locals.size() && func->locals[dl].type) {
+                                            auto& dtype = func->locals[dl].type;
+                                            const auto& gps = hir_func->generic_params;
+                                            bool patched = false;
+                                            for (size_t gi = 0;
+                                                 gi < gps.size() && gi < type_args.size(); ++gi) {
+                                                if (dtype->name == gps[gi].name) {
+                                                    func->locals[dl].type =
+                                                        make_type_from_name(type_args[gi]);
+                                                    patched = true;
+                                                    break;
+                                                }
+                                                if (dtype->kind == hir::TypeKind::Array &&
+                                                    dtype->element_type &&
+                                                    dtype->element_type->name == gps[gi].name) {
+                                                    auto nt = std::make_shared<hir::Type>(*dtype);
+                                                    nt->element_type =
+                                                        make_type_from_name(type_args[gi]);
+                                                    func->locals[dl].type = nt;
+                                                    patched = true;
+                                                    break;
+                                                }
+                                            }
+                                            // println/print系のディスパッチは単相化前のT型（int既定）で
+                                            // 焼き付いているため、パッチしたローカルを引数に取る出力呼び出しを
+                                            // 具体型に合わせて選び直す
+                                            if (patched) {
+                                                fixup_println_dispatch(func.get(), dl);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -718,6 +753,66 @@ void Monomorphization::generate_generic_specializations(
                 }
             }
         }
+    }
+}
+
+// 単相化で型が確定したローカルを引数に取るprintln/print系呼び出しのディスパッチを選び直す（N2）。
+// println(first_of(s))のようにT型のまま既定のcm_println_intへloweringされた呼び出しが対象
+void Monomorphization::fixup_println_dispatch(MirFunction* caller, LocalId local_id) {
+    if (!caller || local_id >= caller->locals.size() || !caller->locals[local_id].type) {
+        return;
+    }
+    const auto kind = caller->locals[local_id].type->kind;
+    std::string suffix;
+    switch (kind) {
+        case hir::TypeKind::String:
+            suffix = "string";
+            break;
+        case hir::TypeKind::Double:
+        case hir::TypeKind::Float:
+            suffix = "double";
+            break;
+        case hir::TypeKind::Long:
+        case hir::TypeKind::ISize:
+            suffix = "long";
+            break;
+        case hir::TypeKind::ULong:
+        case hir::TypeKind::USize:
+            suffix = "ulong";
+            break;
+        case hir::TypeKind::UInt:
+            suffix = "uint";
+            break;
+        case hir::TypeKind::Bool:
+            suffix = "bool";
+            break;
+        default:
+            return;  // int系はそのまま
+    }
+    for (auto& block : caller->basic_blocks) {
+        if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call) {
+            continue;
+        }
+        auto& cd = std::get<MirTerminator::CallData>(block->terminator->data);
+        if (!cd.func || cd.func->kind != MirOperand::FunctionRef || cd.args.size() != 1) {
+            continue;
+        }
+        const auto& cname = std::get<std::string>(cd.func->data);
+        if (cname != "cm_println_int" && cname != "cm_print_int") {
+            continue;
+        }
+        const auto& arg = cd.args[0];
+        if (!arg || (arg->kind != MirOperand::Copy && arg->kind != MirOperand::Move)) {
+            continue;
+        }
+        const auto* pl = std::get_if<MirPlace>(&arg->data);
+        if (!pl || pl->local != local_id || !pl->projections.empty()) {
+            continue;
+        }
+        const std::string prefix = (cname == "cm_println_int") ? "cm_println_" : "cm_print_";
+        cd.func = MirOperand::function_ref(prefix + suffix);
+        debug_msg("MONO", "Fixed println dispatch for local " + std::to_string(local_id) + " -> " +
+                              prefix + suffix);
     }
 }
 

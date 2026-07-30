@@ -98,6 +98,7 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_every_i64",
         "__builtin_array_reduce_i32",
         "__builtin_array_reduce_i64",
+        "__builtin_array_reduce_i32_acc64",
         "__builtin_array_map_i32",
         "__builtin_array_map_i64",
         "__builtin_array_map",
@@ -122,6 +123,7 @@ bool isBuiltinFunction(const std::string& name) {
         "__builtin_array_filter_i64_closure",
         "__builtin_array_reduce_i32_closure",
         "__builtin_array_reduce_i64_closure",
+        "__builtin_array_reduce_i32_acc64_closure",
         "__builtin_array_forEach_i32_closure",
         "__builtin_array_forEach_i64_closure",
         "__builtin_array_some_i32_closure",
@@ -446,11 +448,12 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "[..." + argStrs[0] + "].length";
     }
     if (name == "__builtin_string_codepoint_at" && argStrs.size() >= 2) {
-        // codepoint_at(i): コードポイント添字iのスカラ値（範囲外は0）
-        return "(([..." + argStrs[0] + "][" + argStrs[1] + "] ?? \"\\0\").codePointAt(0))";
+        // codepoint_at(i): コードポイント添字iのスカラ値（範囲外は0）。long添字のBigIntはNumber化（H5）
+        return "(([..." + argStrs[0] + "][Number(" + argStrs[1] + ")] ?? \"\\0\").codePointAt(0))";
     }
     if (name == "__builtin_string_charAt" && argStrs.size() >= 2) {
-        return argStrs[0] + ".charCodeAt(" + argStrs[1] + ")";
+        // 添字がlong系変数だとBigIntが渡り charCodeAt(BigInt) がTypeErrorになるためNumber化する（H5）
+        return argStrs[0] + ".charCodeAt(Number(" + argStrs[1] + "))";
     }
     if (name == "__builtin_string_substring" && argStrs.size() >= 3) {
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
@@ -531,7 +534,8 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         argStrs.size() >= 3) {
         return "__cm_unwrap(" + argStrs[0] + ").every(" + argStrs[2] + ")";
     }
-    if ((name == "__builtin_array_reduce_i32" || name == "__builtin_array_reduce_i64") &&
+    if ((name == "__builtin_array_reduce_i32" || name == "__builtin_array_reduce_i64" ||
+         name == "__builtin_array_reduce_i32_acc64") &&
         argStrs.size() >= 4) {
         return "__cm_unwrap(" + argStrs[0] + ").reduce(" + argStrs[2] + ", " + argStrs[3] + ")";
     }
@@ -582,7 +586,8 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
     // reduce（クロージャー版）: 初期値はargStrs[3]、キャプチャは[4..]（C6拡張）
     if ((name == "__builtin_array_reduce_i32_closure" ||
-         name == "__builtin_array_reduce_i64_closure") &&
+         name == "__builtin_array_reduce_i64_closure" ||
+         name == "__builtin_array_reduce_i32_acc64_closure") &&
         argStrs.size() >= 5) {
         std::string caps;
         for (size_t i = 4; i < argStrs.size(); ++i) {

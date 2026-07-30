@@ -93,6 +93,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
     ctx.hir_func_defs = &hir_functions;
+    ctx.interface_method_returns = &interface_method_returns_;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
@@ -212,6 +213,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
     ctx.hir_func_defs = &hir_functions;
+    ctx.interface_method_returns = &interface_method_returns_;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
@@ -356,7 +358,13 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // デフォルト値で戻る（return文がない場合）
     auto* current = ctx.get_current_block();
     if (current && !current->terminator) {
-        // デストラクタを呼び出す
+        // 暗黙の関数終端でも明示returnと同一のdefer展開（逆順）を通す（B9）
+        auto end_defers = ctx.get_defer_stmts();
+        for (const auto* defer_stmt : end_defers) {
+            stmt_lowering.lower_statement(*defer_stmt, ctx);
+        }
+
+        // デストラクタを呼び出す（defer逆順→dtor逆順の規約を維持）
         emit_destructors(ctx);
 
         // 構造体、void、配列（動的スライス含む）型はデフォルト値代入をスキップ

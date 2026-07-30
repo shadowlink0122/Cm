@@ -573,6 +573,15 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
 
         for (const auto& member : en->members) {
             if (member.has_data()) {
+                // 設計上ペイロードは1値のみ（decl.hppのEnumMember設計コメント参照）。
+                // 従来は複数値宣言を黙って受理し、構築時に2値目以降が消失・matchで束縛不能だった
+                if (member.fields.size() > 1) {
+                    error(decl.span,
+                          "Enum variant '" + en->name + "::" + member.name +
+                              "' has multiple payload values; enum payloads are limited to a "
+                              "single value, wrap them in a struct (e.g. " +
+                              member.name + "(" + member.name + "Data))");
+                }
                 for (const auto& [field_name, field_type] : member.fields) {
                     if (field_type && !is_valid_type(field_type)) {
                         error(decl.span, "Undefined type: '" + ast::type_to_string(*field_type) +
@@ -767,7 +776,15 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     generic_context_.clear();
     if (!impl.generic_params.empty()) {
         for (const auto& param : impl.generic_params) {
-            generic_context_.add_type_param(param);
+            // 境界インターフェイス付きimpl（impl<T: Shape>等）でも境界をコンテキストへ伝搬する
+            std::vector<std::string> bounds;
+            for (const auto& gp : impl.generic_params_v2) {
+                if (gp.name == param && gp.is_type()) {
+                    bounds = gp.type_constraint.interfaces;
+                    break;
+                }
+            }
+            generic_context_.add_type_param(param, bounds);
         }
     }
 
@@ -1036,7 +1053,15 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     generic_context_.clear();
     if (!func.generic_params.empty()) {
         for (const auto& param : func.generic_params) {
-            generic_context_.add_type_param(param);
+            // 境界インターフェイス（<T: Shape>等）はgeneric_params_v2側に保持されるため、名前で引いてコンテキストへ伝搬する
+            std::vector<std::string> bounds;
+            for (const auto& gp : func.generic_params_v2) {
+                if (gp.name == param && gp.is_type()) {
+                    bounds = gp.type_constraint.interfaces;
+                    break;
+                }
+            }
+            generic_context_.add_type_param(param, bounds);
             scopes_.current().define(param, ast::make_named(param));
             debug::tc::log(debug::tc::Id::Resolved, "Added generic type param: " + param,
                            debug::Level::Trace);

@@ -254,6 +254,14 @@ std::string get_type_name(const hir::TypePtr& type) {
             }
             return type->name;
         }
+        case hir::TypeKind::Array: {
+            // スライス/配列型: 要素名 + []（T[]引数の型推論で使用。従来は空文字で推論不能だった）
+            std::string elem = get_type_name(type->element_type);
+            if (elem.empty()) {
+                return type->name.empty() ? "" : type->name;
+            }
+            return elem + "[]";
+        }
         default:
             return type->name.empty() ? "" : type->name;
     }

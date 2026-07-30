@@ -108,11 +108,33 @@ bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalI
 
         // no_optフラグがtrueの場合は最適化スキップ
         if (stmt->no_opt) {
-            // mustブロック内の代入はコピー情報から除外
+            // mustブロック内の代入も書き込みとして扱い、コピー情報を無効化する
+            // フィールド・配列要素代入でベース変数を無効化しないと、ブロック外の読み出しが初期化用一時変数へ付け替えられ古い値を読む誤コンパイルになる（Bug B3）
             if (stmt->kind == MirStatement::Assign) {
                 auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    copies.erase(assign_data.place.local);
+                // デリファレンス書き込みはエイリアスの可能性があるため全コピー情報をクリア
+                bool has_deref = false;
+                for (const auto& proj : assign_data.place.projections) {
+                    if (proj.kind == ProjectionKind::Deref) {
+                        has_deref = true;
+                        break;
+                    }
+                }
+                if (has_deref) {
+                    copies.clear();
+                } else {
+                    // 書き込み先ベース変数を参照するコピー情報も含めて無効化する（通常パスのフィールド代入処理と同じ扱い）
+                    LocalId modified_base = assign_data.place.local;
+                    std::vector<LocalId> to_remove;
+                    for (const auto& [target, source] : copies) {
+                        if (source == modified_base) {
+                            to_remove.push_back(target);
+                        }
+                    }
+                    for (LocalId id : to_remove) {
+                        copies.erase(id);
+                    }
+                    copies.erase(modified_base);
                 }
             }
             continue;

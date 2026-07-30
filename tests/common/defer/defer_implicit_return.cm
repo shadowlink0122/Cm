@@ -1,0 +1,12 @@
+import std::io::println;
+// return省略void関数の暗黙終端でdeferが発火することを検証（B9）
+void cleanup_single() {
+    defer println("cleanup");
+    println("body");
+}
+
+int main() {
+    cleanup_single();
+    println("after");
+    return 0;
+}

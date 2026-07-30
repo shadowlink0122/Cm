@@ -221,11 +221,16 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
             "if (!spec) return (typeof val === 'number') ? __cm_fmt_double(val) : String(val);");
         emitter.emitLine("// char型変換");
         emitter.emitLine("if (spec === 'c') return String.fromCharCode(val);");
-        emitter.emitLine("// 基数指定");
-        emitter.emitLine("if (spec === 'x') return val.toString(16);");
-        emitter.emitLine("if (spec === 'X') return val.toString(16).toUpperCase();");
-        emitter.emitLine("if (spec === 'b') return val.toString(2);");
-        emitter.emitLine("if (spec === 'o') return val.toString(8);");
+        emitter.emitLine(
+            "// 基数指定（負数は型幅の2の補数へ正規化: "
+            "bigint=64bit、number整数=32bit。nativeと一致させる）");
+        emitter.emitLine(
+            "const __radix = (v) => (typeof v === 'bigint') ? BigInt.asUintN(64, v) : "
+            "(Number.isInteger(v) ? (v >>> 0) : v);");
+        emitter.emitLine("if (spec === 'x') return __radix(val).toString(16);");
+        emitter.emitLine("if (spec === 'X') return __radix(val).toString(16).toUpperCase();");
+        emitter.emitLine("if (spec === 'b') return __radix(val).toString(2);");
+        emitter.emitLine("if (spec === 'o') return __radix(val).toString(8);");
         emitter.emitLine("// 科学記法");
         emitter.emitLine("if (spec === 'e') return val.toExponential();");
         emitter.emitLine("if (spec === 'E') return val.toExponential().toUpperCase();");

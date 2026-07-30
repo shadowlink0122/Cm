@@ -1203,6 +1203,12 @@ HirExprPtr HirLowering::lower_struct_literal(ast::StructLiteralExpr& lit, TypePt
     TypePtr struct_type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
     struct_type->name = type_name;
 
+    // ジェネリック特殊化別名（typedef IntPair = Pair<int,int>;）のリテラルは型検査が型引数付きの基底型を返すため、型引数を保持したままMIRへ伝播する（B8）
+    if (expected_type && expected_type->kind == ast::TypeKind::Struct &&
+        expected_type->name == type_name && !expected_type->type_args.empty()) {
+        struct_type = expected_type;
+    }
+
     const ast::StructDecl* struct_def = nullptr;
     if (!type_name.empty()) {
         auto struct_it = struct_defs_.find(type_name);

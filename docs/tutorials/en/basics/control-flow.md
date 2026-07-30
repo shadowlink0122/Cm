@@ -200,6 +200,24 @@ int main() {
 ## switch Statement
 
 **Important:** Cm's `switch` uses `case()` syntax and breaks automatically.
+The scrutinee can be an integer, a char, or a string (v0.17.0; string switches are desugared into a chain of content comparisons, and case values must be string literals).
+
+```cm
+string classify(string s) {
+    switch (s) {
+        case("alpha") {
+            return "a";
+        }
+        case("beta") {
+            return "b";
+        }
+        else {
+            return "other";
+        }
+    }
+    return "";
+}
+```
 
 ### Basic switch
 

@@ -704,41 +704,75 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 LocalId idx_local = *resolved_idx;
 
                                                 if (is_slice) {
-                                                    // スライス: CmSlice*への直接indexは不正のため
-                                                    // 要素ポインタを取得してデリファレンス基点にする
                                                     hir::TypePtr slice_elem =
                                                         arr_type->element_type
                                                             ? arr_type->element_type
                                                             : hir::make_int();
-                                                    LocalId elem_ptr =
-                                                        ctx.new_temp(hir::make_pointer(slice_elem));
-                                                    BlockId elem_block = ctx.new_block();
+                                                    const bool elem_is_slice =
+                                                        slice_elem &&
+                                                        slice_elem->kind == hir::TypeKind::Array &&
+                                                        !slice_elem->array_size.has_value();
+                                                    if (elem_is_slice) {
+                                                        // 多次元スライス: 内側ヘッダは外側dataへインライン格納のため、
+                                                        // 参照版get_subslice_refでスライスとして降下する（生index投影はヘッダをメモリとして読み不定値になる）
+                                                        LocalId inner = ctx.new_temp(slice_elem);
+                                                        BlockId sub_block = ctx.new_block();
+                                                        std::vector<MirOperandPtr> sub_args;
+                                                        sub_args.push_back(
+                                                            MirOperand::copy(MirPlace{*arr_id}));
+                                                        sub_args.push_back(
+                                                            MirOperand::copy(MirPlace{idx_local}));
+                                                        auto sub_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        sub_term->kind = MirTerminator::Call;
+                                                        sub_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(
+                                                                "cm_slice_get_subslice_ref"),
+                                                            std::move(sub_args),
+                                                            MirPlace{inner},
+                                                            sub_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(sub_term));
+                                                        ctx.switch_to_block(sub_block);
 
-                                                    std::vector<MirOperandPtr> ep_args;
-                                                    ep_args.push_back(
-                                                        MirOperand::copy(MirPlace{*arr_id}));
-                                                    ep_args.push_back(
-                                                        MirOperand::copy(MirPlace{idx_local}));
-                                                    auto ep_term =
-                                                        std::make_unique<MirTerminator>();
-                                                    ep_term->kind = MirTerminator::Call;
-                                                    ep_term->data = MirTerminator::CallData{
-                                                        MirOperand::function_ref(
-                                                            "cm_slice_get_element_ptr"),
-                                                        std::move(ep_args),
-                                                        MirPlace{elem_ptr},
-                                                        elem_block,
-                                                        std::nullopt,
-                                                        "",
-                                                        "",
-                                                        false};
-                                                    ctx.set_terminator(std::move(ep_term));
-                                                    ctx.switch_to_block(elem_block);
+                                                        place = MirPlace{inner};
+                                                        current_type = slice_elem;
+                                                    } else {
+                                                        // スライス: CmSlice*への直接indexは不正のため
+                                                        // 要素ポインタを取得してデリファレンス基点にする
+                                                        LocalId elem_ptr = ctx.new_temp(
+                                                            hir::make_pointer(slice_elem));
+                                                        BlockId elem_block = ctx.new_block();
 
-                                                    place = MirPlace{elem_ptr};
-                                                    place.projections.push_back(
-                                                        PlaceProjection::deref());
-                                                    current_type = slice_elem;
+                                                        std::vector<MirOperandPtr> ep_args;
+                                                        ep_args.push_back(
+                                                            MirOperand::copy(MirPlace{*arr_id}));
+                                                        ep_args.push_back(
+                                                            MirOperand::copy(MirPlace{idx_local}));
+                                                        auto ep_term =
+                                                            std::make_unique<MirTerminator>();
+                                                        ep_term->kind = MirTerminator::Call;
+                                                        ep_term->data = MirTerminator::CallData{
+                                                            MirOperand::function_ref(
+                                                                "cm_slice_get_element_ptr"),
+                                                            std::move(ep_args),
+                                                            MirPlace{elem_ptr},
+                                                            elem_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
+                                                        ctx.set_terminator(std::move(ep_term));
+                                                        ctx.switch_to_block(elem_block);
+
+                                                        place = MirPlace{elem_ptr};
+                                                        place.projections.push_back(
+                                                            PlaceProjection::deref());
+                                                        current_type = slice_elem;
+                                                    }
                                                 } else {
                                                     place.projections.push_back(
                                                         PlaceProjection::index(idx_local));
@@ -834,16 +868,102 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                                                 if (!next_index_part.empty()) {
                                                     if (auto next_idx_local = lower_interp_index(
                                                             ctx, next_index_part)) {
-                                                        place.projections.push_back(
-                                                            PlaceProjection::index(
-                                                                *next_idx_local));
-
-                                                        if (current_type &&
+                                                        const bool cur_is_slice =
+                                                            current_type &&
                                                             current_type->kind ==
                                                                 hir::TypeKind::Array &&
-                                                            current_type->element_type) {
-                                                            current_type =
-                                                                current_type->element_type;
+                                                            !current_type->array_size.has_value();
+                                                        if (cur_is_slice) {
+                                                            // スライスへの生index投影はヘッダをメモリとして読むため、
+                                                            // get系ビルトイン呼び出しへ置き換える（N1修正）
+                                                            hir::TypePtr elem_type =
+                                                                current_type->element_type
+                                                                    ? current_type->element_type
+                                                                    : hir::make_int();
+                                                            // 射影付きplaceはスライス値を一時へ取り出してから渡す
+                                                            LocalId slice_local;
+                                                            if (place.projections.empty()) {
+                                                                slice_local = place.local;
+                                                            } else {
+                                                                slice_local =
+                                                                    ctx.new_temp(current_type);
+                                                                ctx.push_statement(
+                                                                    MirStatement::assign(
+                                                                        MirPlace{slice_local},
+                                                                        MirRvalue::use(
+                                                                            MirOperand::copy(
+                                                                                place))));
+                                                            }
+                                                            const bool elem_is_slice =
+                                                                elem_type->kind ==
+                                                                    hir::TypeKind::Array &&
+                                                                !elem_type->array_size.has_value();
+                                                            std::string get_func;
+                                                            hir::TypePtr dest_type = elem_type;
+                                                            bool deref_after = false;
+                                                            if (elem_is_slice) {
+                                                                // さらにネスト: 参照版で降下する
+                                                                get_func =
+                                                                    "cm_slice_get_subslice_ref";
+                                                            } else if (auto info =
+                                                                           slice_scalar_info(
+                                                                               elem_type->kind)) {
+                                                                get_func =
+                                                                    std::string("cm_slice_get_") +
+                                                                    info->width;
+                                                            } else if (elem_type->kind ==
+                                                                           hir::TypeKind::Pointer ||
+                                                                       elem_type->kind ==
+                                                                           hir::TypeKind::String) {
+                                                                get_func = "cm_slice_get_ptr";
+                                                            } else {
+                                                                // 集約要素: 要素ポインタ経由でデリファレンス基点にする
+                                                                get_func =
+                                                                    "cm_slice_get_element_ptr";
+                                                                dest_type =
+                                                                    hir::make_pointer(elem_type);
+                                                                deref_after = true;
+                                                            }
+                                                            LocalId dest = ctx.new_temp(dest_type);
+                                                            BlockId nb = ctx.new_block();
+                                                            std::vector<MirOperandPtr> gargs;
+                                                            gargs.push_back(MirOperand::copy(
+                                                                MirPlace{slice_local}));
+                                                            gargs.push_back(MirOperand::copy(
+                                                                MirPlace{*next_idx_local}));
+                                                            auto gterm =
+                                                                std::make_unique<MirTerminator>();
+                                                            gterm->kind = MirTerminator::Call;
+                                                            gterm->data = MirTerminator::CallData{
+                                                                MirOperand::function_ref(get_func),
+                                                                std::move(gargs),
+                                                                MirPlace{dest},
+                                                                nb,
+                                                                std::nullopt,
+                                                                "",
+                                                                "",
+                                                                false};
+                                                            ctx.set_terminator(std::move(gterm));
+                                                            ctx.switch_to_block(nb);
+
+                                                            place = MirPlace{dest};
+                                                            if (deref_after) {
+                                                                place.projections.push_back(
+                                                                    PlaceProjection::deref());
+                                                            }
+                                                            current_type = elem_type;
+                                                        } else {
+                                                            place.projections.push_back(
+                                                                PlaceProjection::index(
+                                                                    *next_idx_local));
+
+                                                            if (current_type &&
+                                                                current_type->kind ==
+                                                                    hir::TypeKind::Array &&
+                                                                current_type->element_type) {
+                                                                current_type =
+                                                                    current_type->element_type;
+                                                            }
                                                         }
                                                     } else {
                                                         valid = false;

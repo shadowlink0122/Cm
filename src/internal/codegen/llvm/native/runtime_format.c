@@ -1507,6 +1507,20 @@ int32_t __builtin_array_findIndex_i32(int32_t* arr, int64_t size, bool (*predica
 // コールバックの第一引数として受け取る。シグネチャはキャプチャ数に依存しない
 // ============================================================
 
+// 混合幅版: 64bitアキュムレータ×32bit要素（long acc×int[]のreduce。
+// 要素幅だけで選ぶと(i32,i32)シグネチャでコールバックが呼ばれ、wasmはcall_indirectの型検査でトラップする）
+int64_t __builtin_array_reduce_i32_acc64(int32_t* arr, int64_t size,
+                                         int64_t (*callback)(int64_t, int32_t), int64_t init) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int64_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(acc, arr[i]);
+    }
+    return acc;
+}
+
 int32_t __builtin_array_reduce_i32_closure(int32_t* arr, int64_t size,
                                            int32_t (*callback)(void*, int32_t, int32_t),
                                            int32_t init, void* env) {
@@ -1514,6 +1528,19 @@ int32_t __builtin_array_reduce_i32_closure(int32_t* arr, int64_t size,
     if (!arr || !callback)
         return init;
     int32_t acc = init;
+    for (int64_t i = 0; i < size; i++) {
+        acc = callback(env, acc, arr[i]);
+    }
+    return acc;
+}
+
+int64_t __builtin_array_reduce_i32_acc64_closure(int32_t* arr, int64_t size,
+                                                 int64_t (*callback)(void*, int64_t, int32_t),
+                                                 int64_t init, void* env) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr || !callback)
+        return init;
+    int64_t acc = init;
     for (int64_t i = 0; i < size; i++) {
         acc = callback(env, acc, arr[i]);
     }
@@ -2421,15 +2448,16 @@ char* cm_format_replace_int(const char* format, int value) {
         strncpy(specifier, start + 1, spec_len);
     }
 
+    // 基数書式は32bit幅の2の補数を符号なしとして表記する（負数の64bit符号拡張防止。int以下は昇格幅=32bit、long系はreplace_long側で64bit）
     char* formatted_value = NULL;
     if (strcmp(specifier, ":x") == 0) {
-        formatted_value = cm_format_int_hex(value);
+        formatted_value = cm_format_int_hex((long long)(unsigned int)value);
     } else if (strcmp(specifier, ":X") == 0) {
-        formatted_value = cm_format_int_HEX(value);
+        formatted_value = cm_format_int_HEX((long long)(unsigned int)value);
     } else if (strcmp(specifier, ":b") == 0) {
-        formatted_value = cm_format_int_binary(value);
+        formatted_value = cm_format_int_binary((long long)(unsigned int)value);
     } else if (strcmp(specifier, ":o") == 0) {
-        formatted_value = cm_format_int_octal(value);
+        formatted_value = cm_format_int_octal((long long)(unsigned int)value);
     } else if (strncmp(specifier, ":0>", 3) == 0) {
         int width = atoi(specifier + 3);
         char* int_str = cm_format_int(value);
@@ -2463,7 +2491,26 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
     if (!format)
         return NULL;
 
-    char* formatted_value = cm_format_uint(value);
+    // 基数書式（:x/:X/:b/:o）は32bit値を符号なし基数表記する（従来は10進のみでjsと分裂していた）
+    char* formatted_value = NULL;
+    const char* spec_start = strchr(format, '{');
+    const char* spec_end = spec_start ? strchr(spec_start, '}') : NULL;
+    char specifier[32] = {0};
+    if (spec_start && spec_end && spec_end - spec_start - 1 > 0 &&
+        (size_t)(spec_end - spec_start - 1) < sizeof(specifier)) {
+        strncpy(specifier, spec_start + 1, spec_end - spec_start - 1);
+    }
+    if (strcmp(specifier, ":x") == 0) {
+        formatted_value = cm_format_int_hex((long long)value);
+    } else if (strcmp(specifier, ":X") == 0) {
+        formatted_value = cm_format_int_HEX((long long)value);
+    } else if (strcmp(specifier, ":b") == 0) {
+        formatted_value = cm_format_int_binary((long long)value);
+    } else if (strcmp(specifier, ":o") == 0) {
+        formatted_value = cm_format_int_octal((long long)value);
+    } else {
+        formatted_value = cm_format_uint(value);
+    }
     if (!formatted_value)
         return NULL;
 
