@@ -166,10 +166,11 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                         return reinterpret + "(64, (" + blhs + " " + op + " " + safe_rhs + "))";
                     }
                     case mir::MirBinaryOp::Shr:
-                        return reinterpret + "(64, " + reinterpret + "(64, " + blhs + ") >> " +
-                               brhs + ")";
+                        // シフト量は幅-1でマスク（V8のmod幅意味論。BigIntシフトはマスクされないため明示する）
+                        return reinterpret + "(64, " + reinterpret + "(64, " + blhs + ") >> ((" +
+                               brhs + ") & 63n))";
                     case mir::MirBinaryOp::Shl:
-                        return reinterpret + "(64, " + blhs + " << " + brhs + ")";
+                        return reinterpret + "(64, " + blhs + " << ((" + brhs + ") & 63n))";
                     case mir::MirBinaryOp::BitAnd:
                         return reinterpret + "(64, " + blhs + " & " + brhs + ")";
                     case mir::MirBinaryOp::BitOr:

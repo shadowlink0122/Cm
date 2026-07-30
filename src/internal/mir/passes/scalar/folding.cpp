@@ -362,16 +362,23 @@ std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const
                 case MirBinaryOp::BitXor:
                     result.value = const_eval::normalize_int(lv ^ rv, result.type);
                     return result;
-                case MirBinaryOp::Shl:
+                case MirBinaryOp::Shl: {
+                    // シフト量は結果型の幅でマスクする（V8。&63固定だとintの32以上シフトが
+                    // 畳み込み経路のみ0になり、実行時のmod幅挙動と分裂していた）
+                    const uint64_t shl_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        static_cast<int64_t>(ulv << (urv & 63)), result.type);
+                        static_cast<int64_t>(ulv << (urv & shl_mask)), result.type);
                     return result;
-                case MirBinaryOp::Shr:
-                    // 符号なし型は論理シフト、符号付き型は算術シフト
+                }
+                case MirBinaryOp::Shr: {
+                    // 符号なし型は論理シフト、符号付き型は算術シフト（シフト量は結果型幅マスク。V8）
+                    const uint64_t shr_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        uns ? static_cast<int64_t>(ulv >> (urv & 63)) : lv >> (rv & 63),
+                        uns ? static_cast<int64_t>(ulv >> (urv & shr_mask))
+                            : lv >> (rv & static_cast<int64_t>(shr_mask)),
                         result.type);
                     return result;
+                }
 
                 // 比較演算（bool結果）
                 case MirBinaryOp::Eq:

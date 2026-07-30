@@ -405,6 +405,20 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
 
     for (auto& field : lit.fields) {
         infer_type(*field.value);
+        // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）
+        if (field.value && is_capturing_closure_expr(*field.value)) {
+            const ast::StructDecl* sd = struct_it->second;
+            for (const auto& sf : sd->fields) {
+                if (sf.name == field.name && sf.type && sf.type->kind == ast::TypeKind::Function) {
+                    error(current_span_,
+                          "Cannot store a capturing closure in struct field '" + field.name +
+                              "' of '" + lit.type_name +
+                              "': closures lose their captured environment when stored as "
+                              "values (bind to a local variable and call it directly)");
+                    break;
+                }
+            }
+        }
     }
 
     // ジェネリック特殊化別名（typedef IntPair = Pair<int,int>;）は型引数付きの基底型をそのまま返す

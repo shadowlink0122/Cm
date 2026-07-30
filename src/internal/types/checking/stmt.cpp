@@ -304,6 +304,22 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         }
     }
 
+    // キャプチャ付きクロージャ変数の追跡（V5〜V7の診断用。infer後はlambda.capturesが確定している）
+    if (let.init) {
+        if (const auto* lam = let.init->as<ast::LambdaExpr>()) {
+            if (!lam->captures.empty()) {
+                closure_vars_.insert(let.name);
+            } else {
+                closure_vars_.erase(let.name);
+            }
+        } else if (is_capturing_closure_expr(*let.init)) {
+            // クロージャ変数のコピーもクロージャとして追跡する
+            closure_vars_.insert(let.name);
+        } else {
+            closure_vars_.erase(let.name);
+        }
+    }
+
     if (let.has_ctor_call && let.type) {
         std::string type_name = ast::type_to_string(*let.type);
         std::string ctor_name = type_name + "__ctor";

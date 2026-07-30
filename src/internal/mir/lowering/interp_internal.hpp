@@ -54,7 +54,42 @@ inline bool interp_content_is_expression(const std::string& s) {
             if (c == ':' && bracket != 0) {
                 return true;
             }
+            // 添字内の演算子（arr[i + 1] / arr[i * 2] 等）も式マーカー（V1〜V3）。
+            // 従来は角括弧内を素通ししていたため、name[式]がテキスト再解析経路へ落ちて
+            // 未初期化一時のガベージ・stoi切り詰め（"1 + 1"→1）・添字0フォールバックになっていた
+            if (bracket != 0) {
+                switch (c) {
+                    case '+':
+                    case '/':
+                    case '%':
+                    case '^':
+                    case '~':
+                    case '?':
+                    case '<':
+                    case '>':
+                    case '=':
+                    case '*':
+                    case '&':
+                    case '!':
+                    case '|':
+                        return true;
+                    case '-':
+                        // "->" はポインタメンバアクセスなので除外
+                        if (i + 1 < s.size() && s[i + 1] == '>') {
+                            ++i;
+                            break;
+                        }
+                        return true;
+                    default:
+                        break;
+                }
+            }
             continue;
+        }
+        // move式（{move s}）は本物の式パーサで評価する（V4。従来は変数名として解決できず
+        // 未初期化一時のガベージ数値が表示されていた）
+        if (i == 0 && s.compare(0, 5, "move ") == 0) {
+            return true;
         }
         // 括弧外の as キャスト（例: (*pc) as int）は式として扱う
         if (c == ' ' && s.compare(i, 4, " as ") == 0) {

@@ -19,8 +19,17 @@ namespace {
 // 補間プレースホルダ内の添字文字列（"0"や"j"）をローカルへ解決する。
 // 数値なら定数ロード、そうでなければ変数名としてスコープ解決する（従来は数値以外が黙って添字0になっていた）
 std::optional<LocalId> lower_interp_index(LoweringContext& ctx, const std::string& text) {
-    if (!text.empty() && (std::isdigit(static_cast<unsigned char>(text[0])) ||
-                          (text[0] == '-' && text.size() > 1))) {
+    // 数値と判定するのは全桁が数字の場合のみ。stoi("1 + 1")は例外なく1を返すため、
+    // 先頭桁だけの判定だと式添字が黙って切り詰められる（V2）
+    bool all_digits = !text.empty();
+    for (size_t ci = 0; ci < text.size(); ++ci) {
+        char c = text[ci];
+        if (!(std::isdigit(static_cast<unsigned char>(c)) || (ci == 0 && c == '-'))) {
+            all_digits = false;
+            break;
+        }
+    }
+    if (all_digits && text != "-") {
         try {
             int idx = std::stoi(text);
             LocalId idx_local = ctx.new_temp(hir::make_int());

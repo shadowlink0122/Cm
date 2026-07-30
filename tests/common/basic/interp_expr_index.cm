@@ -1,0 +1,26 @@
+// 回帰(V1〜V4): 補間内の式添字（二項式・定数式・動的配列・文字列・メンバ配列）とmove式が
+// テキスト再解析経路へ落ちてガベージ・誤要素になるバグの検証（式パイプラインへ委譲）
+import std::io::println;
+struct H { int[3] data; }
+int main() {
+    int[3] arr = [10, 20, 30];
+    int i = 1;
+    println("{arr[i + 1]}");
+    println("{arr[1 + 1]}");
+    println("{arr[(i + 1)]}");
+    println("{arr[i + 1] + 100}");
+    println("{arr[i - 1]}");
+    println("{arr[i * 2]}");
+    int[] dyn;
+    dyn.push(7);
+    dyn.push(8);
+    dyn.push(9);
+    println("{dyn[i + 1]}");
+    string s = "hello";
+    println("{s[i + 1]}");
+    H h = H{data: [1, 2, 3]};
+    println("{h.data[i + 1]}");
+    string m = "i" + "i";
+    println("{move m}");
+    return 0;
+}

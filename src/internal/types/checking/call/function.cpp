@@ -575,6 +575,17 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                         error(current_span_, "Argument type mismatch in call to '" + ident->name +
                                                  "': expected " + expected + ", got " + actual);
                     }
+                    // キャプチャ付きクロージャの関数引数渡しは環境喪失でゴミ値になるため拒否（V5）
+                    if (sym->param_types[i] &&
+                        sym->param_types[i]->kind == ast::TypeKind::Function &&
+                        is_capturing_closure_expr(*call.args[i])) {
+                        error(current_span_,
+                              "Cannot pass a capturing closure to function parameter " +
+                                  std::to_string(i + 1) + " of '" + ident->name +
+                                  "': closures lose their captured environment when passed as "
+                                  "values (bind to a local variable and call it directly, or use "
+                                  "builtin higher-order methods like map/filter)");
+                    }
                 }
                 // 可変長引数の型は推論のみ
                 for (size_t i = param_count; i < arg_count; ++i) {
@@ -600,6 +611,16 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     std::string actual = ast::type_to_string(*arg_type);
                     error(current_span_, "Argument type mismatch in call to '" + ident->name +
                                              "': expected " + expected + ", got " + actual);
+                }
+                // キャプチャ付きクロージャの関数引数渡しは環境喪失でゴミ値になるため拒否（V5）
+                if (sym->param_types[i] && sym->param_types[i]->kind == ast::TypeKind::Function &&
+                    is_capturing_closure_expr(*call.args[i])) {
+                    error(current_span_,
+                          "Cannot pass a capturing closure to function parameter " +
+                              std::to_string(i + 1) + " of '" + ident->name +
+                              "': closures lose their captured environment when passed as "
+                              "values (bind to a local variable and call it directly, or use "
+                              "builtin higher-order methods like map/filter)");
                 }
             }
         }

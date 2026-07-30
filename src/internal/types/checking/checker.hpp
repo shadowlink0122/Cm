@@ -284,6 +284,15 @@ class TypeChecker {
     // 変更されたことのある変数（const推奨警告用）
     std::unordered_set<std::string> modified_variables_;
 
+    // キャプチャ付きクロージャを束縛したローカル変数名（関数単位でクリア）。
+    // クロージャはラムダリフティング実装で値としては生の関数ポインタしか持たないため、
+    // 関数引数・構造体フィールド・スライス要素へ渡すと環境が失われゴミ値になる（V5〜V7）。
+    // 恒久対応（{fnptr, env}のファットポインタ化）までは該当箇所を診断付きで拒否する
+    std::unordered_set<std::string> closure_vars_;
+
+    // 式がキャプチャ付きクロージャ（ラムダ直書きまたはclosure_vars_の変数参照）か
+    bool is_capturing_closure_expr(const ast::Expr& expr) const;
+
     // 宣言された非const変数の情報（名前 → Span）
     std::unordered_map<std::string, Span> non_const_variable_spans_;
 

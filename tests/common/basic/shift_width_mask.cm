@@ -1,0 +1,25 @@
+// 回帰(V8): 型幅以上のシフトが経路間で分裂するバグの検証（シフト量は型幅でmod、全経路同一）
+import std::io::println;
+int sh(int v, int s) {
+    return v << s;
+}
+int shr(int v, int s) {
+    return v >> s;
+}
+int main() {
+    int v = 1;
+    int s = 32;
+    println(v << s);
+    println(sh(1, 32));
+    println(v << 33);
+    println(sh(1, 33));
+    println(1 << 32);
+    long lv = 1;
+    long ls = 64;
+    println(lv << ls);
+    println(lv << 65);
+    int neg = -16;
+    println(neg >> 34);
+    println(shr(-16, 34));
+    return 0;
+}

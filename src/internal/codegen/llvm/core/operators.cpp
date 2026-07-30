@@ -704,6 +704,13 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                                                    : builder->CreateSExt(rhs, lhs->getType());
                 }
             }
+            // 型幅以上のシフト量はLLVMのshlがpoisonになり経路間で結果が分裂するため、
+            // シフト量を幅-1でマスクして全経路同一の挙動（Rust/AArch64/x86実挙動と同じmod幅）を保証する（V8）
+            if (lhs->getType()->isIntegerTy()) {
+                auto width = lhs->getType()->getIntegerBitWidth();
+                rhs = builder->CreateAnd(rhs, llvm::ConstantInt::get(lhs->getType(), width - 1),
+                                         "shl_amt");
+            }
             return builder->CreateShl(lhs, rhs, "shl");
         }
         case mir::MirBinaryOp::Shr: {
@@ -718,6 +725,12 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                     rhs = isUnsignedType(rhs_type) ? builder->CreateZExt(rhs, lhs->getType())
                                                    : builder->CreateSExt(rhs, lhs->getType());
                 }
+            }
+            // シフト量を幅-1でマスク（Shlと同じくpoison回避で全経路統一。V8）
+            if (lhs->getType()->isIntegerTy()) {
+                auto width = lhs->getType()->getIntegerBitWidth();
+                rhs = builder->CreateAnd(rhs, llvm::ConstantInt::get(lhs->getType(), width - 1),
+                                         "shr_amt");
             }
             // 符号なし型は論理シフト、符号付き型は算術シフト
             if (operands_unsigned) {

@@ -1,0 +1,25 @@
+// 回帰(V5〜V7の許可側): キャプチャなしラムダ・通常関数の引数渡し、キャプチャ付きの直接呼び出しとHOFは動作を維持する
+import std::io::println;
+int apply(const int*(int) f, int v) {
+    return f(v);
+}
+int add_one(int x) {
+    return x + 1;
+}
+int main() {
+    // キャプチャなしラムダ・通常関数の関数引数渡しは従来どおり許可
+    const int*(int) twice = (int x) => { return x * 2; };
+    println(apply(twice, 21));
+    println(apply(add_one, 41));
+    println(apply((int x) => { return x - 1; }, 43));
+    // キャプチャ付きでも直接呼び出しとHOFは許可
+    int base = 10;
+    const int*(int) addb = (int x) => { return x + base; };
+    println(addb(32));
+    int[] xs = [];
+    xs.push(1);
+    xs.push(2);
+    int[] ys = xs.map((int x) => { return x + base; });
+    println("{ys[0]} {ys[1]}");
+    return 0;
+}

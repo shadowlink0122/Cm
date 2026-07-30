@@ -1033,6 +1033,9 @@ void TypeChecker::register_print() {
 }
 
 void TypeChecker::check_function(ast::FunctionDecl& func) {
+    // キャプチャ付きクロージャ変数の追跡は関数単位（V5〜V7の診断用）
+    closure_vars_.clear();
+
     // #[test] 関数は「引数なし・戻り値void」に限定する（SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
     for (const auto& attr : func.attributes) {
         if (attr.name == "test") {

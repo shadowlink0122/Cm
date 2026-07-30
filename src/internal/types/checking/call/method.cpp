@@ -404,6 +404,15 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
             }
             if (!member.args.empty()) {
                 infer_type(*member.args[0]);
+                // キャプチャ付きクロージャのスライス格納は環境喪失・未解決シンボルになるため拒否（V7）
+                if (obj_type->element_type &&
+                    obj_type->element_type->kind == ast::TypeKind::Function &&
+                    is_capturing_closure_expr(*member.args[0])) {
+                    error(current_span_,
+                          "Cannot push a capturing closure into a function-type slice: closures "
+                          "lose their captured environment when stored as values (bind to a "
+                          "local variable and call it directly)");
+                }
             }
             return ast::make_void();
         }

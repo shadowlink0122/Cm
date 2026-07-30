@@ -188,4 +188,15 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
     return func_type;
 }
 
+// 式がキャプチャ付きクロージャ（ラムダ直書きまたはclosure_vars_の変数参照）か（V5〜V7）
+bool TypeChecker::is_capturing_closure_expr(const ast::Expr& expr) const {
+    if (const auto* lam = expr.as<ast::LambdaExpr>()) {
+        return !lam->captures.empty();
+    }
+    if (const auto* ident = expr.as<ast::IdentExpr>()) {
+        return closure_vars_.count(ident->name) > 0;
+    }
+    return false;
+}
+
 }  // namespace cm

@@ -260,6 +260,8 @@ relational_expr ::= shift_expr
 shift_expr ::= additive_expr
               | shift_expr ('<<' | '>>') additive_expr
 
+(* シフト量の意味論: 左オペランドの型幅でmodを取る（int << 32 == int << 0、long << 65 == long << 1）。C言語のような未定義動作にはならず、全バックエンド・全最適化レベルで同一結果を保証する *)
+
 additive_expr ::= multiplicative_expr
                  | additive_expr ('+' | '-') multiplicative_expr
 
