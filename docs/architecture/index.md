@@ -10,6 +10,7 @@ Cmコンパイラの実装方法を、実装に使われている基本アルゴ
 | [MIRの設計](pipeline/mir-design.md) | MirFunction・locals・基本ブロック・terminatorの表現、最適化パスの種類と実行順、O0/O1/O2の差、パス追加時の不変条件 |
 | [MIR最適化パスの全カタログ](pipeline/mir-optimization-passes.md) | 標準パイプライン12+単独駆動4+休眠1の全17パスを、目的・アルゴリズム・実行条件・維持すべき不変条件付きで1パス1節で列挙 |
 | [属性の処理](pipeline/attributes.md) | `#[target]`・`#[test]`・`#[derive]`等のパースと消費フェーズの分散設計（パース直後フィルタ・型検査・JITランナー・derive生成） |
+| [条件付きコンパイル](pipeline/conditional-compilation.md) | プリレックス行ベースの`#ifdef`フィルタ（空行置換による行番号保存）、組み込みシンボル3系統とホスト由来性、`#[target]`属性との棲み分け |
 
 ## lowering — 言語機能の脱糖
 
@@ -86,6 +87,7 @@ Cmコンパイラの実装方法を、実装に使われている基本アルゴ
 | [スライスと配列のコード生成](codegen-native/slice-and-array-codegen.md) | スライス=opaque ptr+cm_slice_*呼び出し・固定長配列=[N x elem]+インラインGEPの二分方針、リテラル生成・添字GEP・サブスライス参照・for-in展開のIR |
 | [非同期ランタイムとイベントループ](codegen-native/async-event-loop.md) | async/awaitフラグがnative/jitではMIR検証で拒否される設計、未リンクの準備実装（Future・Executor・kqueue/epoll）の位置づけ、実際の並行処理を担うnative::thread/sync |
 | [printと文字列補間](codegen-native/print-and-interpolation.md) | 補間の分解→プレースホルダ変換→型ディスパッチ（cm_format_replace_*呼び分け・unionタグ分岐）の三段構成、Display/Debug自動実装の再帰的文字列化 |
+| [最適化レベルO0/O3の生成過程と実差分](codegen-native/optimization-levels.md) | O0の完全素通しとO3の二段最適化（MIR式整理→LLVM mem2reg・インライン化・ループ閉形式評価）を、実機IRダンプの対比で記述 |
 
 ## codegen-jit — JIT実行
 
