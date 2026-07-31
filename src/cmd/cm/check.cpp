@@ -2,6 +2,7 @@
 // ファイル単位の失敗はそのファイルのエラーとして数え、全体の走査は継続する（例外境界はファイル単位）
 
 #include "driver.hpp"
+#include "frontend.hpp"
 #include "internal/base/diag_emitter.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/base/source_location.hpp"
@@ -77,53 +78,44 @@ int run_check(const cli::Options& opts) {
             std::string platform_directive = parse_platform_directive(code);
             bool is_baremetal_file = is_baremetal_platform(platform_directive);
 
-            // モジュールリゾルバ初期化
-            module::initialize_module_resolver();
-
-            // Import処理
-            preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+            // フロントエンド（import展開・条件コンパイル・字句・構文解析。共有パイプライン frontend.cpp）
+            cli::FrontendParams fparams;
+            fparams.input_file = file;
+            fparams.defines = opts.defines;
+            fparams.test_mode = opts.test_mode;
             // check/lintでは非export関数の選択importへ警告を出す（H7の段階導入）
-            import_preprocessor.set_warn_non_exported(true);
-            auto preprocess_result = import_preprocessor.process(code, file);
+            fparams.warn_non_exported = true;
+            fparams.debug = opts.debug;
+            auto front = cli::run_frontend(fparams, std::move(code));
 
-            if (!preprocess_result.success) {
-                std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
-                                        preprocess_result.error_message);
+            if (!front.internal_error_stage.empty()) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliInternalError, front.internal_error_stage,
+                                        front.internal_error);
                 total_errors++;
                 continue;
             }
-
-            code = preprocess_result.processed_source;
-
-            // 条件付きコンパイル
-            preprocessor::ConditionalPreprocessor conditional;
-            for (const auto& def : opts.defines) {
-                conditional.define(def);
+            if (!front.preprocess_ok) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
+                                        front.preprocess_error);
+                total_errors++;
+                continue;
             }
-            // テストモード（--test）: TEST を自動定義
-            if (opts.test_mode) {
-                conditional.define("TEST");
-            }
-            code = conditional.process(code);
-
-            // パース
-            Lexer lexer(code);  // lint/checkではディレクティブで自動検出
-            auto tokens = lexer.tokenize();
-            Parser parser(std::move(tokens), lexer.is_sv());
-            auto program = parser.parse();
+            code = front.code;
+            auto& preprocess_result = front.preprocess;
+            auto& program = front.program;
 
             // コンパイルと同様に、テストモード以外では #[test] 宣言を除去する（#[test] 関数だけが参照するシンボルの誤検出を防ぐ）
             {
-                Target lint_target = lexer.is_sv() ? Target::SV : Target::Native;
+                Target lint_target = front.is_sv ? Target::SV : Target::Native;
                 ast::TargetFilteringVisitor target_filter(lint_target, opts.test_mode);
                 target_filter.visit(program);
             }
 
-            if (parser.has_errors()) {
+            if (!front.parse_ok) {
                 // 診断表示はDiagnosticEmitterへ一元化（source_map写像・参照ファイル読込を含む。X5）
                 DiagnosticEmitter emitter(code, file, &preprocess_result.source_map);
-                emitter.emit_all(parser.diagnostics());
-                total_errors += parser.diagnostics().size();
+                emitter.emit_all(front.parser_diagnostics);
+                total_errors += front.parser_diagnostics.size();
                 continue;
             }
 

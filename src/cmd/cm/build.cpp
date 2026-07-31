@@ -3,6 +3,7 @@
 // バックエンド（JIT/SV/JS/LLVM）へのディスパッチは backend_*.cpp が担う
 
 #include "driver.hpp"
+#include "frontend.hpp"
 #include "internal/base/debug_messages.hpp"
 #include "internal/base/diag_emitter.hpp"
 #include "internal/base/i18n.hpp"
@@ -162,135 +163,52 @@ int run_build(cli::Options& opts, const char* argv0) {
         }
     }
 
-    // ========== Initialize Module Resolver ==========
-    if (opts.debug)
-        std::cout << "=== Module Resolver Init ===\n";
-    module::initialize_module_resolver();
-
-    // 段階間で共有する状態はBuildContextに置き、参照で従来の変数名に束縛する
+    // ========== フロントエンド（import展開・条件コンパイル・字句・構文解析。共有パイプライン frontend.cpp）==========
+    ast::Program program;
     auto& preprocess_result = ctx.preprocess;
-
-    // ========== 前処理段階（import展開・条件付きコンパイル）==========
-    try {
-        // ========== Import Preprocessor ==========
-        if (opts.debug)
-            std::cout << "=== Import Preprocessor ===\n";
-        auto phase_preprocess_start = std::chrono::steady_clock::now();
-        preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
+    {
+        cli::FrontendParams fparams;
+        fparams.input_file = opts.input_file;
+        fparams.defines = opts.defines;
+        fparams.target = opts.target;
+        fparams.test_mode = opts.test_mode;
         // --force-check/--strict指定時は非export関数の選択importへ警告を出す（H7の段階導入）
-        if (opts.force_check) {
-            import_preprocessor.set_warn_non_exported(true);
-        }
-        preprocess_result = import_preprocessor.process(code, opts.input_file);
-        ctx.phase_preprocess_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      std::chrono::steady_clock::now() - phase_preprocess_start)
-                                      .count();
+        fparams.warn_non_exported = opts.force_check;
+        fparams.debug = opts.debug;
+        fparams.dump_preprocessed = true;
+        auto front = cli::run_frontend(fparams, std::move(code));
 
-        if (!preprocess_result.success) {
-            std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError2,
-                                    preprocess_result.error_message);
+        if (!front.internal_error_stage.empty()) {
+            std::cerr << i18n::msgf(i18n::MsgId::CliInternalError, front.internal_error_stage,
+                                    front.internal_error);
+            return kExitFailure;
+        }
+        if (!front.preprocess_ok) {
+            std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError2, front.preprocess_error);
             return 1;
-        }
-
-        // デバッグ出力
-        {
-            std::ofstream out(".tmp/preprocessed.cm");
-            if (out) {
-                out << preprocess_result.processed_source;
-            }
         }
 
         // コンパイル時間計測開始
         ctx.compile_start = std::chrono::steady_clock::now();
+        ctx.phase_preprocess_ms = front.phase_preprocess_ms;
+        ctx.phase_parse_ms = front.phase_parse_ms;
+        preprocess_result = std::move(front.preprocess);
+        code = std::move(front.code);
 
-        if (opts.debug && !preprocess_result.imported_modules.empty()) {
-            std::cout << i18n::msg(i18n::MsgId::CliImportedModules);
-            for (const auto& module : preprocess_result.imported_modules) {
-                std::cout << "  - " << module << "\n";
-            }
-            std::cout << "\n";
-        }
-
-        // プリプロセス後のコードを使用
-        code = preprocess_result.processed_source;
-
-        // ========== Conditional Preprocessor ==========
-        if (opts.debug)
-            std::cout << "=== Conditional Preprocessor ===\n";
-        preprocessor::ConditionalPreprocessor conditional;
-        // -D オプションのユーザ定義を追加
-        for (const auto& def : opts.defines) {
-            conditional.define(def);
-        }
-        // テストモード（cm test / --test）: TEST を自動定義（#[test] と連動するテスト補助コードを #ifdef TEST で書けるようにする）
-        if (opts.test_mode) {
-            conditional.define("TEST");
-        }
-        // ターゲットに応じたプリプロセッサ定数を追加
-        if (opts.target == "baremetal-arm" || opts.target == "bm" ||
-            opts.target == "baremetal-x86" || opts.target == "bm-x86") {
-            conditional.define("__NO_STD__");
-            conditional.define("__BAREMETAL__");
-        } else if (opts.target == "uefi") {
-            conditional.define("__NO_STD__");
-            conditional.define("__BAREMETAL__");  // UEFIもベアメタルサブカテゴリ
-            conditional.define("__UEFI__");
-            conditional.define("__EFI__");
-        }
-        code = conditional.process(code);
-        if (opts.debug) {
-            std::cout << i18n::msg(i18n::MsgId::CliDefinedSymbols);
-            for (const auto& def : conditional.definitions()) {
-                std::cout << def << " ";
-            }
-            std::cout << "\n";
-        }
-
-        // デバッグ時はプリプロセス後のコードを出力
-        if (opts.debug) {
-            std::cout << "=== Preprocessed Code ===\n";
-            std::cout << code << "\n";
-            std::cout << "=== End Preprocessed Code ===\n\n";
-        }
-    } catch (const std::exception& e) {
-        std::cerr << i18n::msgf(i18n::MsgId::CliInternalError, "preprocess", e.what());
-        return kExitFailure;
-    }
-
-    // ========== 構文解析段階（字句解析・構文解析・ターゲットフィルタ）==========
-    ast::Program program;
-    auto phase_parse_start = std::chrono::steady_clock::now();
-    try {
-        // ========== Lexer ==========
-        if (opts.debug)
-            std::cout << "=== Lexer ===\n";
-        // ターゲットに応じたレキサープラットフォーム設定
-        LexerPlatform lexer_platform = LexerPlatform::Default;
-        if (opts.target == "sv" || opts.target == "verilog" || opts.target == "systemverilog") {
-            lexer_platform = LexerPlatform::SV;
-        }
-        Lexer lexer(code, lexer_platform);
-        auto tokens = lexer.tokenize();
-
-        if (opts.debug)
-            std::cout << i18n::msgf(i18n::MsgId::CliTokens, tokens.size());
-
-        // ========== Parser ==========
-        if (opts.debug)
-            std::cout << "=== Parser ===\n";
-        Parser parser(std::move(tokens), lexer.is_sv());
-        program = parser.parse();
-
-        if (parser.has_errors()) {
+        if (!front.parse_ok) {
             std::cerr << i18n::msg(i18n::MsgId::CliSyntaxErrorsOccurred);
             // 診断表示はDiagnosticEmitterへ一元化（source_map写像・参照ファイル読込を含む。X5）
             DiagnosticEmitter emitter(code, opts.input_file, &preprocess_result.source_map);
-            emitter.emit_all(parser.diagnostics());
+            emitter.emit_all(front.parser_diagnostics);
             return 1;  // エラー時は1で終了
         }
-        if (opts.debug)
-            std::cout << i18n::msgf(i18n::MsgId::CliDeclarations, program.declarations.size());
+        program = std::move(front.program);
+    }
+    if (opts.debug)
+        std::cout << i18n::msgf(i18n::MsgId::CliDeclarations, program.declarations.size());
 
+    // ========== ターゲットフィルタ段階（SVトップモジュール抽出を含む）==========
+    try {
         // SVターゲット用: `module NAME;` ヘッダ宣言からトップモジュール名を取得（lowering前に取得する。宣言が無ければ空文字＝ファイル名から推定）
         ctx.sv_top_module = codegen::sv::extract_top_module_name(program);
 
@@ -326,9 +244,6 @@ int run_build(cli::Options& opts, const char* argv0) {
         // ========== Type Checker ==========
         if (opts.debug)
             std::cout << "=== Type Checker ===\n";
-        ctx.phase_parse_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::steady_clock::now() - phase_parse_start)
-                                 .count();
         auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
         // Check/Lintコマンド、または--force-check/--strict指定時にLint警告を有効化

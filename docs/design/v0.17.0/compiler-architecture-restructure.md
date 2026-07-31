@@ -89,6 +89,12 @@ cm_span ← cm_diag ← cm_syntax(cm_ast) ← cm_macro
 - CMakeのOBJECTライブラリ物理分割は見送った。unity build（バッチ16）と条件付きソース（LLVM有無・プラットフォーム別）の再バッチ化リスクに対し、include検査が同じ規律を先に強制できるため。物理分割は第2段以降（base再編・fmt隔離のリンク検査）で扱う。
 - 第3段が目標とする「fmtの隔離」は、include水準では既に成立している（fmt→baseのみ。ALLOWEDで固定済み）。リンク水準の検査（fmtバイナリがcodegenシンボルを含まない）は物理分割後に導入する。
 
-### 残り（第2段〜第6段）: 未実装
+### 第5段（driver統合）: フロントエンド共有化を実装済み
 
-第2段（base→cm_span+cm_diag再編）は診断統一の実装完了により物理分離のみが残件、第6段（cm_resolve新設）はmodule-system-structural-imports.mdと同時実施の計画のまま。
+- `src/cmd/cm/frontend.hpp/.cpp` に共有フロントエンドパイプライン `run_frontend`（import展開→条件付きコンパイル→字句解析→構文解析。パラメータ: defines/target/test_mode/H7警告/デバッグ/ダンプ）を新設し、build.cpp/check.cppのステージ配線複製（各約120行）を排除した。両ドライバはパラメータを渡して結果（プリプロセス後ソース・source_map・AST・パーサ診断・フェーズ計測）を消費するだけになった。
+- 内部例外のステージ帰属（preprocess/parse）・プリプロセス失敗・構文エラーは結果構造体で判別し、表示は各ドライバがDiagnosticEmitterで行う（診断統一第1段と接続）。
+- SessionオブジェクトとしてのDiagCtxt/ターゲット情報の保持は診断統一の解決記録（emitter方式で確定）により縮小され、残りはoptions.cppの手書きif連鎖（41分岐）のテーブル化のみ。
+
+### 残り: 未実装
+
+第2段（base→cm_span+cm_diag再編）は診断統一の実装完了により物理分離のみが残件。第4段（Lint分離）・第5段の残り（options.cppテーブル化）・第6段（cm_resolve新設。module-system-structural-imports.mdと同時実施）。

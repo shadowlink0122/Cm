@@ -362,6 +362,7 @@ set(CM_SOURCES
     src/cmd/cm/main.cpp
     src/cmd/cm/util.cpp
     src/cmd/cm/check.cpp
+    src/cmd/cm/frontend.cpp
     src/cmd/cm/fmt.cpp
     src/cmd/cm/build.cpp
     src/cmd/cm/backend/run.cpp
