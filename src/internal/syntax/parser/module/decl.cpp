@@ -127,11 +127,11 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
             if (consume_if(TokenKind::Slash)) {
                 path_prefix = "../";
             } else {
-                error("Expected '/' after '..'");
+                error(i18n::msg(i18n::MsgId::PsExpected));
                 return nullptr;
             }
         } else {
-            error("Expected '/' after '.'");
+            error(i18n::msg(i18n::MsgId::PsExpected2));
             return nullptr;
         }
     }
@@ -239,7 +239,7 @@ ast::DeclPtr Parser::parse_export() {
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});
         }
-        error("Expected 'from' after 'export *'");
+        error(i18n::msg(i18n::MsgId::PsExpectedFromExport));
         return nullptr;
     }
 

@@ -28,7 +28,7 @@ ast::Program Parser::parse() {
         }
         // 無限ループ検出（進捗が無い場合のみ強制的に進める）
         if (pos_ == last_pos && !is_first) {
-            error("Parser stuck - no progress made");
+            error(i18n::msg(i18n::MsgId::PsParserStuckNoProgressMade));
             if (!is_at_end()) {
                 advance();  // 強制的に進める
             }
@@ -168,7 +168,7 @@ ast::DeclPtr Parser::parse_top_level() {
 
         // それ以外は分離エクスポート (export NAME1, NAME2;)
         if (!attrs.empty()) {
-            error("Attributes are not supported on export lists");
+            error(i18n::msg(i18n::MsgId::PsAttributesNotSupportedExportLists));
         }
         pos_ = saved_pos;
         return parse_export();
@@ -264,7 +264,7 @@ ast::DeclPtr Parser::parse_top_level() {
             if (directive_name == "test" || directive_name == "bench" ||
                 directive_name == "deprecated" || directive_name == "inline" ||
                 directive_name == "optimize") {
-                error("Directive '#" + directive_name + "' is not yet implemented");
+                error(i18n::msgf(i18n::MsgId::PsDirectiveNotYetImplemented, directive_name));
                 while (!is_at_end() && current().kind != TokenKind::Semicolon &&
                        current().kind != TokenKind::LBrace) {
                     advance();
@@ -274,7 +274,7 @@ ast::DeclPtr Parser::parse_top_level() {
         }
 
         pos_ = saved_pos;
-        error("Unknown or invalid directive after '#'");
+        error(i18n::msg(i18n::MsgId::PsUnknownInvalidDirective));
         return nullptr;
     }
 
@@ -451,7 +451,7 @@ std::vector<ast::Param> Parser::parse_params() {
                 param.default_value = parse_expr();
                 has_default = true;
             } else if (has_default) {
-                error("Default argument required after parameter with default value");
+                error(i18n::msg(i18n::MsgId::PsDefaultArgumentRequiredParameterDefault));
             }
 
             params.push_back(std::move(param));
@@ -487,7 +487,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     for (const auto& attr : attributes) {
         if (attr.name == "derive") {
             if (attr.args.empty()) {
-                error("#[derive] requires at least one interface name");
+                error(i18n::msg(i18n::MsgId::PsDeriveRequiresAtLeastOne));
             }
             for (const auto& arg : attr.args) {
                 auto_impls.push_back(arg);
@@ -544,7 +544,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
 
         if (consume_if(TokenKind::KwDefault)) {
             if (has_default_field) {
-                error("Only one default member allowed per struct");
+                error(i18n::msg(i18n::MsgId::PsOnlyOneDefaultMemberAllowed));
             }
             field.is_default = true;
             has_default_field = true;
@@ -701,7 +701,7 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
 
             auto op_kind = parse_operator_kind();
             if (!op_kind) {
-                error("Expected operator symbol after 'operator'");
+                error(i18n::msg(i18n::MsgId::PsExpectedOperatorSymbolOperator));
                 continue;
             }
             op_sig.op = *op_kind;
@@ -822,7 +822,7 @@ ast::DeclPtr Parser::parse_impl(std::vector<ast::AttributeNode> attributes) {
 
                     auto op_kind = parse_operator_kind();
                     if (!op_kind) {
-                        error("Expected operator symbol after 'operator'");
+                        error(i18n::msg(i18n::MsgId::PsExpectedOperatorSymbolOperator));
                         continue;
                     }
                     op_impl->op = *op_kind;
@@ -896,11 +896,11 @@ ast::DeclPtr Parser::parse_impl_ctor(ast::TypePtr target,
                     dtor->is_destructor = true;
 
                     if (decl->destructor) {
-                        error("Only one destructor allowed per impl block");
+                        error(i18n::msg(i18n::MsgId::PsOnlyOneDestructorAllowedPer));
                     }
                     decl->destructor = std::move(dtor);
                 } else {
-                    error("Expected 'self' after '~'");
+                    error(i18n::msg(i18n::MsgId::PsExpectedSelf));
                     synchronize();
                 }
             }
@@ -928,7 +928,7 @@ ast::DeclPtr Parser::parse_impl_ctor(ast::TypePtr target,
 
                 auto op_kind = parse_operator_kind();
                 if (!op_kind) {
-                    error("Expected operator symbol after 'operator'");
+                    error(i18n::msg(i18n::MsgId::PsExpectedOperatorSymbolOperator));
                     continue;
                 }
                 op_impl->op = *op_kind;
@@ -980,7 +980,7 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
 
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         if (pos_ == last_pos && !is_first) {
-            error("Parser stuck in block - no progress made");
+            error(i18n::msg(i18n::MsgId::PsParserStuckBlockNoProgress));
             while (!is_at_end() && current().kind != TokenKind::Semicolon &&
                    current().kind != TokenKind::RBrace) {
                 advance();
@@ -1063,7 +1063,7 @@ void Parser::synchronize() {
     }
 
     if (skipped >= MAX_SKIP) {
-        error("Parser stuck in synchronization - too many tokens skipped");
+        error(i18n::msg(i18n::MsgId::PsParserStuckSynchronizationTooMany));
     }
 }
 

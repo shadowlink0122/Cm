@@ -508,17 +508,15 @@ ast::ExprPtr Parser::parse_primary() {
                 if (!check(TokenKind::RBrace)) {
                     do {
                         if (!check(TokenKind::Ident)) {
-                            error(
-                                "Expected field name in struct literal (named initialization "
-                                "required)");
+                            error(i18n::msg(i18n::MsgId::PsExpectedFieldNameStructLiteral));
                         }
 
                         std::string field_name(current().get_string());
                         advance();
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name +
-                                  "' in struct literal");
+                            error(i18n::msgf(i18n::MsgId::PsExpectedFieldNameStructLiteral2,
+                                             field_name));
                         }
                         advance();
 
@@ -562,17 +560,15 @@ ast::ExprPtr Parser::parse_primary() {
                 if (!check(TokenKind::RBrace)) {
                     do {
                         if (!check(TokenKind::Ident)) {
-                            error(
-                                "Expected field name in struct literal (named initialization "
-                                "required)");
+                            error(i18n::msg(i18n::MsgId::PsExpectedFieldNameStructLiteral));
                         }
 
                         std::string field_name(current().get_string());
                         advance();
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name +
-                                  "' in struct literal");
+                            error(i18n::msgf(i18n::MsgId::PsExpectedFieldNameStructLiteral2,
+                                             field_name));
                         }
                         advance();
 
@@ -607,7 +603,7 @@ ast::ExprPtr Parser::parse_primary() {
                 return parse_lambda_body({}, start_pos);
             }
             // ()だけの場合はエラー
-            error("Empty parentheses without lambda body");
+            error(i18n::msg(i18n::MsgId::PsEmptyParenthesesWithoutLambdaBody));
             return ast::make_null_literal();
         }
 
@@ -748,7 +744,7 @@ ast::ExprPtr Parser::parse_primary() {
     std::string error_msg = "Expected expression but found: ";
     error_msg += token_kind_to_string(current().kind);
     debug::par::log(debug::par::Id::ExprError, error_msg, debug::Level::Error);
-    error("Expected expression");
+    error(i18n::msg(i18n::MsgId::PsExpectedExpression));
     return ast::make_null_literal();
 }
 

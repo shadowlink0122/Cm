@@ -155,7 +155,7 @@ ast::AttributeNode Parser::parse_attribute() {
     } else if (consume_if(TokenKind::Hash)) {
         // #[...] 形式
     } else {
-        error("Expected attribute start '@' or '#'");
+        error(i18n::msg(i18n::MsgId::PsExpectedAttributeStart));
     }
     expect(TokenKind::LBracket);
 

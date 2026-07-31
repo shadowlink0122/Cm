@@ -1,5 +1,6 @@
 // パーサ - 型解析（ジェネリックパラメータ、型パース、配列サフィックス）
 #include "internal/base/debug/par.hpp"
+#include "internal/base/i18n.hpp"
 #include "parser.hpp"
 
 #include <memory>
@@ -296,7 +297,7 @@ ast::TypePtr Parser::parse_type() {
         while (check(TokenKind::ColonColon)) {
             advance();
             if (!check(TokenKind::Ident)) {
-                error("Expected identifier after '::'");
+                error(i18n::msg(i18n::MsgId::PsExpectedIdentifier));
                 return ast::make_error();
             }
             name += "::" + current_text();
@@ -375,7 +376,7 @@ ast::TypePtr Parser::parse_type() {
         return result;
     }
 
-    error("Expected type");
+    error(i18n::msg(i18n::MsgId::PsExpectedType));
     return ast::make_error();
 }
 
@@ -433,10 +434,7 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
         // SVの範囲表記 [msb:lsb] は型宣言では非対応（スライス式と紛らわしいため）。
         // Cmは要素数表記に統一しており、SV出力側で [N-1:0] へ変換される
         if (check(TokenKind::Colon)) {
-            error(
-                "型の幅・要素数は個数で指定します（SVの範囲表記 [msb:lsb] "
-                "は型宣言では使えません）。例: bit[3:0] ではなく bit[4] と書きます"
-                "（生成されるSVでは logic [3:0] になります）");
+            error(i18n::msg(i18n::MsgId::PsSvMsbLsbBit3));
             // 復帰: ']' まで読み飛ばして後続の解析を継続する
             while (!check(TokenKind::RBracket) && !check(TokenKind::Eof)) {
                 advance();
@@ -479,7 +477,7 @@ void Parser::consume_gt_in_type_context() {
         return;
     }
 
-    error("Expected '>'");
+    error(i18n::msg(i18n::MsgId::PsExpected3));
 }
 
 // 識別子を期待
@@ -502,12 +500,12 @@ std::string Parser::expect_ident() {
         if (got.empty()) {
             got = token_kind_to_string(current().kind);
             if (current().kind >= TokenKind::KwAs && current().kind <= TokenKind::KwBit) {
-                error("Expected identifier, got reserved word '" + got + "'");
+                error(i18n::msgf(i18n::MsgId::PsExpectedIdentifierReservedWord, got));
             } else {
-                error("Expected identifier, got '" + got + "'");
+                error(i18n::msgf(i18n::MsgId::PsExpectedIdentifier2, got));
             }
         } else {
-            error("Expected identifier, got '" + got + "'");
+            error(i18n::msgf(i18n::MsgId::PsExpectedIdentifier2, got));
         }
     }
     advance();

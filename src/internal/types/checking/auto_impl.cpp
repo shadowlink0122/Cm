@@ -2,6 +2,7 @@
 // TypeChecker 実装 - 自動実装 (with キーワード)
 // ============================================================
 
+#include "internal/base/i18n.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <memory>
@@ -19,10 +20,10 @@ void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::strin
 
     if (derivable_interfaces.find(iface_name) == derivable_interfaces.end()) {
         if (interface_names_.find(iface_name) == interface_names_.end()) {
-            error(current_span_, "Unknown interface '" + iface_name + "' in 'with' / #[derive]");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownInterfaceDerive, iface_name));
         } else {
-            error(current_span_, "Interface '" + iface_name + "' is not derivable; use 'impl " +
-                                     st.name + " for " + iface_name + "' instead");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcInterfaceNotDerivableImpl, iface_name,
+                                            st.name, iface_name));
         }
         return;
     }
@@ -123,8 +124,8 @@ bool TypeChecker::validate_derive_field_types(const ast::StructDecl& st,
         }
 
         if (!reason.empty()) {
-            error(current_span_, "Cannot derive '" + iface_name + "' for struct '" + st.name +
-                                     "': field '" + field.name + "' (" + reason + ")");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcCannotDeriveStructField, iface_name,
+                                            st.name, field.name, reason));
             return false;
         }
     }

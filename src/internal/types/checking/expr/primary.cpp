@@ -225,7 +225,8 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             if (auto* ident = move_expr->operand->as<ast::IdentExpr>()) {
                 // 借用中の変数はmove禁止（借用安全性）
                 if (scopes_.current().is_borrowed(ident->name)) {
-                    error(current_span_, "Cannot move '" + ident->name + "' while it is borrowed");
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TcCannotMoveWhileItBorrowed, ident->name));
                     return ast::make_error();
                 }
                 mark_variable_moved(ident->name);
@@ -248,7 +249,8 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                     if (const auto* base_ident = base->as<ast::IdentExpr>()) {
                         if (scopes_.current().is_borrowed(base_ident->name)) {
                             error(current_span_,
-                                  "Cannot move '" + base_ident->name + "' while it is borrowed");
+                                  i18n::msgf(i18n::MsgId::TcCannotMoveWhileItBorrowed,
+                                             base_ident->name));
                             return ast::make_error();
                         }
                         mark_variable_moved(base_ident->name);
@@ -467,7 +469,7 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
         }
     }
     if (struct_it == struct_defs_.end()) {
-        error(current_span_, "Unknown struct type: " + lit.type_name);
+        error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownStructType2, lit.type_name));
         return ast::make_error();
     }
 
@@ -490,10 +492,8 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
             for (const auto& sf : sd->fields) {
                 if (sf.name == field.name && sf.type && sf.type->kind == ast::TypeKind::Function) {
                     error(current_span_,
-                          "Cannot store a capturing closure in struct field '" + field.name +
-                              "' of '" + lit.type_name +
-                              "': closures lose their captured environment when stored as "
-                              "values (bind to a local variable and call it directly)");
+                          i18n::msgf(i18n::MsgId::TcCannotStoreCapturingClosureStruct, field.name,
+                                     lit.type_name));
                     break;
                 }
             }
@@ -552,7 +552,7 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
     auto sym = lookup_var_ident(ident);
     if (!sym) {
         // 暗黙的selfは許可しない - 明示的にself.fieldを使用する必要がある
-        error(current_span_, "Undefined variable '" + ident.name + "'");
+        error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedVariable, ident.name));
         return ast::make_error();
     }
 

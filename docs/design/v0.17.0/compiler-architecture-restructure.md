@@ -65,7 +65,7 @@ cm_span ← cm_diag ← cm_syntax(cm_ast) ← cm_macro
 ## 段階分割
 
 1. 第1段（物理分割の準備）: CMakeでinternal配下をターゲット分割し、現状の依存を可視化する（コード移動なし、逆依存の棚卸しのみ）。
-2. 第2段（基盤層の独立）: base/をcm_span+cm_diagへ再編し、全層の診断発行をcm_diag経由へ寄せる（diagnostics-engine-unification.mdと同時実施）。
+2. 第2段（基盤層の独立）: base/をcm_span+cm_diagへ再編し、全層の診断発行をcm_diag経由へ寄せる（診断統一はarchive/v0.17.0/diagnostics-engine-unification.mdとして実装完了済み。表示・発行の一元化はDiagnosticEmitter/診断チャネルで達成されており、本段は物理的なターゲット分離のみを扱う）。
 3. 第3段（fmtの隔離）: cm_fmtをsyntaxのみに依存させ、リンク時に層違反を検出できる最初の実例にする。
 4. 第4段（Lintの分離）: types/内のLint検査（W001系・命名規則・const警告等）をcm_lintのvisitorへ移設する。
 5. 第5段（driver統合）: Session導入とcmd/cm配下のパイプライン手書き排除（options.cppの手書きif連鎖のテーブル化を含む）。
@@ -91,4 +91,4 @@ cm_span ← cm_diag ← cm_syntax(cm_ast) ← cm_macro
 
 ### 残り（第2段〜第6段）: 未実装
 
-第2段（base→cm_span+cm_diag再編）はdiagnostics-engine-unification.mdと同時実施、第6段（cm_resolve新設）はmodule-system-structural-imports.mdと同時実施の計画のまま。
+第2段（base→cm_span+cm_diag再編）は診断統一の実装完了により物理分離のみが残件、第6段（cm_resolve新設）はmodule-system-structural-imports.mdと同時実施の計画のまま。

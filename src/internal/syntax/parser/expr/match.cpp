@@ -214,7 +214,7 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
                     binding_name = std::string(current().get_string());
                     advance();
                 } else {
-                    error("Expected binding variable name in pattern");
+                    error(i18n::msg(i18n::MsgId::PsExpectedBindingVariableNamePattern));
                     binding_name = "_";
                 }
                 expect(TokenKind::RParen);
@@ -253,7 +253,7 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
         return ast::MatchPattern::make_variable(name);
     }
 
-    error("Expected match pattern");
+    error(i18n::msg(i18n::MsgId::PsExpectedMatchPattern));
     return ast::MatchPattern::make_wildcard();
 }
 

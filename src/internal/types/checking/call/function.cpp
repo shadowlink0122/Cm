@@ -26,13 +26,15 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // __llvm__: 後方互換性のため残す（将来はLLVM IR対応予定）
         if (ident->name == "__asm__" || ident->name == "__llvm__") {
             if (call.args.size() != 1) {
-                error(current_span_, ident->name + " requires exactly 1 argument (assembly code)");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcRequiresExactly1ArgumentAssembly, ident->name));
                 return ast::make_error();
             }
             // 引数が文字列リテラルであることを確認
             if (auto* lit = call.args[0]->as<ast::LiteralExpr>()) {
                 if (!std::holds_alternative<std::string>(lit->value)) {
-                    error(current_span_, ident->name + " argument must be a string literal");
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TcArgumentMustStringLiteral, ident->name));
                     return ast::make_error();
                 }
                 // ${制約:変数名} で参照される変数を使用・変更・初期化済みとしてマークする（=r/+r制約はasmが書き込むため、Lintの誤検出を防ぐ）
@@ -46,7 +48,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     mark_variable_initialized(var_name);
                 }
             } else {
-                error(current_span_, ident->name + " argument must be a string literal");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcArgumentMustStringLiteral, ident->name));
                 return ast::make_error();
             }
             return ast::make_void();
@@ -56,12 +59,13 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         if (ident->name == "println" || ident->name == "print") {
             // println() は引数なしでも許可（空行出力）
             if (ident->name == "print" && call.args.empty()) {
-                error(current_span_, "'" + ident->name + "' requires at least 1 argument");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcRequiresAtLeast1Argument, ident->name));
                 return ast::make_error();
             }
             if (call.args.size() > 1) {
-                error(current_span_, "'" + ident->name + "' takes only 1 argument, got " +
-                                         std::to_string(call.args.size()));
+                error(current_span_, i18n::msgf(i18n::MsgId::TcTakesOnly1Argument, ident->name,
+                                                std::to_string(call.args.size())));
                 return ast::make_error();
             }
 
@@ -293,17 +297,19 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
 
                         // 静的メソッドかチェック
                         if (!method_info.is_static) {
-                            error(current_span_, "Method '" + method_name + "' of type '" +
-                                                     type_name + "' is not a static method");
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcMethodTypeNotStaticMethod, method_name,
+                                             type_name));
                             return ast::make_error();
                         }
 
                         // 引数の型チェック
                         if (call.args.size() != method_info.param_types.size()) {
-                            error(current_span_,
-                                  "Static method '" + ident->name + "' expects " +
-                                      std::to_string(method_info.param_types.size()) +
-                                      " arguments, got " + std::to_string(call.args.size()));
+                            error(
+                                current_span_,
+                                i18n::msgf(i18n::MsgId::TcStaticMethodExpectsArguments, ident->name,
+                                           std::to_string(method_info.param_types.size()),
+                                           std::to_string(call.args.size())));
                         } else {
                             for (size_t i = 0; i < call.args.size(); ++i) {
                                 auto arg_type = infer_type(*call.args[i]);
@@ -311,9 +317,10 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                     std::string expected =
                                         ast::type_to_string(*method_info.param_types[i]);
                                     std::string actual = ast::type_to_string(*arg_type);
-                                    error(current_span_, "Argument type mismatch in call to '" +
-                                                             ident->name + "': expected " +
-                                                             expected + ", got " + actual);
+                                    error(
+                                        current_span_,
+                                        i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
+                                                   ident->name, expected, actual));
                                 }
                             }
                         }
@@ -404,12 +411,13 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                             auto expected_type = substitute_generic_type(
                                                 member.fields[0].second, type_params, type_args);
                                             if (!types_compatible(expected_type, arg_type)) {
-                                                error(
-                                                    current_span_,
-                                                    "Argument type mismatch in enum constructor '" +
-                                                        ident->name + "': expected " +
-                                                        ast::type_to_string(*expected_type) +
-                                                        ", got " + ast::type_to_string(*arg_type));
+                                                error(current_span_,
+                                                      i18n::msgf(
+                                                          i18n::MsgId::
+                                                              TcArgumentTypeMismatchEnumConstructor,
+                                                          ident->name,
+                                                          ast::type_to_string(*expected_type),
+                                                          ast::type_to_string(*arg_type)));
                                             }
                                         }
                                     }
@@ -463,10 +471,11 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                         auto expected_type = type_args[param_idx];
                                         if (!types_compatible(expected_type, arg_type)) {
                                             error(current_span_,
-                                                  "Argument type mismatch in '" + ident->name +
-                                                      "': expected " +
-                                                      ast::type_to_string(*expected_type) +
-                                                      ", got " + ast::type_to_string(*arg_type));
+                                                  i18n::msgf(
+                                                      i18n::MsgId::TcArgumentTypeMismatchExpected,
+                                                      ident->name,
+                                                      ast::type_to_string(*expected_type),
+                                                      ast::type_to_string(*arg_type)));
                                         }
                                     }
                                 }
@@ -512,7 +521,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 }
             }
 
-            error(current_span_, "'" + ident->name + "' is not a function");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcNotFunction, ident->name));
             return ast::make_error();
         }
 
@@ -523,9 +532,9 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             size_t param_count = fn_type->param_types.size();
 
             if (arg_count != param_count) {
-                error(current_span_, "Function pointer '" + ident->name + "' expects " +
-                                         std::to_string(param_count) + " arguments, got " +
-                                         std::to_string(arg_count));
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcFunctionPointerExpectsArguments, ident->name,
+                                 std::to_string(param_count), std::to_string(arg_count)));
             } else {
                 for (size_t i = 0; i < arg_count; ++i) {
                     // パラメータ型を期待型として引数へ渡す（無名リテラル引数の型決定を一元化）
@@ -534,8 +543,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                         std::string expected = ast::type_to_string(*fn_type->param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
                         error(current_span_,
-                              "Argument type mismatch in call to function pointer '" + ident->name +
-                                  "': expected " + expected + ", got " + actual);
+                              i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallFunction,
+                                         ident->name, expected, actual));
                     }
                 }
             }
@@ -544,7 +553,7 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         }
 
         if (!sym->is_function) {
-            error(current_span_, "'" + ident->name + "' is not a function");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcNotFunction, ident->name));
             return ast::make_error();
         }
 
@@ -556,9 +565,9 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 可変長引数の場合は最低限の引数数をチェック
         if (sym->is_variadic) {
             if (arg_count < param_count) {
-                error(current_span_, "Variadic function '" + ident->name + "' requires at least " +
-                                         std::to_string(param_count) + " arguments, got " +
-                                         std::to_string(arg_count));
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcVariadicFunctionRequiresAtLeast, ident->name,
+                                 std::to_string(param_count), std::to_string(arg_count)));
             } else {
                 // 固定引数の型チェック
                 for (size_t i = 0; i < param_count; ++i) {
@@ -567,19 +576,17 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     if (!types_compatible(sym->param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*sym->param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
-                        error(current_span_, "Argument type mismatch in call to '" + ident->name +
-                                                 "': expected " + expected + ", got " + actual);
+                        error(current_span_,
+                              i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
+                                         ident->name, expected, actual));
                     }
                     // キャプチャ付きクロージャの関数引数渡しは環境喪失でゴミ値になるため拒否（V5）
                     if (sym->param_types[i] &&
                         sym->param_types[i]->kind == ast::TypeKind::Function &&
                         is_capturing_closure_expr(*call.args[i])) {
                         error(current_span_,
-                              "Cannot pass a capturing closure to function parameter " +
-                                  std::to_string(i + 1) + " of '" + ident->name +
-                                  "': closures lose their captured environment when passed as "
-                                  "values (bind to a local variable and call it directly, or use "
-                                  "builtin higher-order methods like map/filter)");
+                              i18n::msgf(i18n::MsgId::TcCannotPassCapturingClosureFunction,
+                                         std::to_string(i + 1), ident->name));
                     }
                 }
                 // 可変長引数の型は推論のみ
@@ -589,14 +596,14 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             }
         } else if (arg_count < required_count || arg_count > param_count) {
             if (required_count == param_count) {
-                error(current_span_, "Function '" + ident->name + "' expects " +
-                                         std::to_string(param_count) + " arguments, got " +
-                                         std::to_string(arg_count));
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcFunctionExpectsArguments, ident->name,
+                                 std::to_string(param_count), std::to_string(arg_count)));
             } else {
-                error(current_span_, "Function '" + ident->name + "' expects " +
-                                         std::to_string(required_count) + " to " +
-                                         std::to_string(param_count) + " arguments, got " +
-                                         std::to_string(arg_count));
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcFunctionExpectsArguments2, ident->name,
+                                 std::to_string(required_count), std::to_string(param_count),
+                                 std::to_string(arg_count)));
             }
         } else {
             for (size_t i = 0; i < arg_count; ++i) {
@@ -605,18 +612,15 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 if (!types_compatible(sym->param_types[i], arg_type)) {
                     std::string expected = ast::type_to_string(*sym->param_types[i]);
                     std::string actual = ast::type_to_string(*arg_type);
-                    error(current_span_, "Argument type mismatch in call to '" + ident->name +
-                                             "': expected " + expected + ", got " + actual);
+                    error(current_span_, i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
+                                                    ident->name, expected, actual));
                 }
                 // キャプチャ付きクロージャの関数引数渡しは環境喪失でゴミ値になるため拒否（V5）
                 if (sym->param_types[i] && sym->param_types[i]->kind == ast::TypeKind::Function &&
                     is_capturing_closure_expr(*call.args[i])) {
                     error(current_span_,
-                          "Cannot pass a capturing closure to function parameter " +
-                              std::to_string(i + 1) + " of '" + ident->name +
-                              "': closures lose their captured environment when passed as "
-                              "values (bind to a local variable and call it directly, or use "
-                              "builtin higher-order methods like map/filter)");
+                          i18n::msgf(i18n::MsgId::TcCannotPassCapturingClosureFunction,
+                                     std::to_string(i + 1), ident->name));
                 }
             }
         }

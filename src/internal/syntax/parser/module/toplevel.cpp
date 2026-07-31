@@ -77,7 +77,7 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     } else if (!is_sv_port && !(is_sv_platform_ && check(TokenKind::Semicolon))) {
         // 非SVポートでは初期化子を必須とする
         // ただしSVプラットフォームでは初期値なし宣言を許可（extern struct インスタンス等）
-        error("Expected '=' for global variable initializer");
+        error(i18n::msg(i18n::MsgId::PsExpectedGlobalVariableInitializer));
     }
 
     expect(TokenKind::Semicolon);
@@ -267,7 +267,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     // #[derive] は enum 未対応（将来拡張の余地として明示エラー）
     for (const auto& attr : attributes) {
         if (attr.name == "derive") {
-            error("#[derive] is not supported on enums yet");
+            error(i18n::msg(i18n::MsgId::PsDeriveNotSupportedEnumsYet));
         }
     }
 

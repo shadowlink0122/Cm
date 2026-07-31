@@ -331,10 +331,8 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         for (const auto& iface_name : st->auto_impls) {
             if (!seen_auto_impls.insert(iface_name).second) {
                 Span name_pos = st->name_span.is_empty() ? decl.span : st->name_span;
-                error(name_pos, "Interface '" + iface_name +
-                                    "' is specified more than once in 'with' / #[derive] for "
-                                    "struct '" +
-                                    st->name + "'");
+                error(name_pos, i18n::msgf(i18n::MsgId::TcInterfaceSpecifiedMoreThanOnce,
+                                           iface_name, st->name));
                 continue;
             }
             register_auto_impl(*st, iface_name);
@@ -386,8 +384,8 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         // 型を決定
         if (gv->type && !is_valid_type(gv->type)) {
-            error(decl.span, "Undefined type: '" + ast::type_to_string(*gv->type) +
-                                 "' for global variable '" + gv->name + "'");
+            error(decl.span, i18n::msgf(i18n::MsgId::TcUndefinedTypeGlobalVariable,
+                                        ast::type_to_string(*gv->type), gv->name));
         }
         ast::TypePtr var_type = gv->type ? resolve_typedef(gv->type) : init_type;
         if (var_type) {
@@ -465,8 +463,8 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
             // 型を決定
             if (macro->type && !is_valid_type(macro->type)) {
-                error(decl.span, "Undefined type: '" + ast::type_to_string(*macro->type) +
-                                     "' for macro '" + macro->name + "'");
+                error(decl.span, i18n::msgf(i18n::MsgId::TcUndefinedTypeMacro,
+                                            ast::type_to_string(*macro->type), macro->name));
             }
             ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
             if (var_type) {
@@ -530,9 +528,9 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         // 構造体の全フィールドの型が有効かチェック
         for (const auto& field : st->fields) {
             if (field.type && !is_valid_type(field.type)) {
-                error(decl.span, "Undefined type: '" + ast::type_to_string(*field.type) +
-                                     "' for field '" + field.name + "' in struct '" + st->name +
-                                     "'");
+                error(decl.span,
+                      i18n::msgf(i18n::MsgId::TcUndefinedTypeFieldStruct,
+                                 ast::type_to_string(*field.type), field.name, st->name));
             }
         }
 
@@ -553,9 +551,8 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                     const std::string& type_name = resolved_type->name;
                     if (!type_implements_interface(type_name, "Css") &&
                         !has_auto_impl(type_name, "Css")) {
-                        error(current_span_, "Nested css field '" + field.name +
-                                                 "' requires type '" + type_name +
-                                                 "' to implement Css");
+                        error(current_span_, i18n::msgf(i18n::MsgId::TcNestedCssFieldRequiresType,
+                                                        field.name, type_name));
                     }
                 }
             }
@@ -576,17 +573,14 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                 // 設計上ペイロードは1値のみ（decl.hppのEnumMember設計コメント参照）。
                 // 従来は複数値宣言を黙って受理し、構築時に2値目以降が消失・matchで束縛不能だった
                 if (member.fields.size() > 1) {
-                    error(decl.span,
-                          "Enum variant '" + en->name + "::" + member.name +
-                              "' has multiple payload values; enum payloads are limited to a "
-                              "single value, wrap them in a struct (e.g. " +
-                              member.name + "(" + member.name + "Data))");
+                    error(decl.span, i18n::msgf(i18n::MsgId::TcEnumVariantHasMultiplePayload,
+                                                en->name, member.name, member.name, member.name));
                 }
                 for (const auto& [field_name, field_type] : member.fields) {
                     if (field_type && !is_valid_type(field_type)) {
-                        error(decl.span, "Undefined type: '" + ast::type_to_string(*field_type) +
-                                             "' for field '" + field_name + "' in enum variant '" +
-                                             en->name + "::" + member.name + "'");
+                        error(decl.span, i18n::msgf(i18n::MsgId::TcUndefinedTypeFieldEnumVariant,
+                                                    ast::type_to_string(*field_type), field_name,
+                                                    en->name, member.name));
                     }
                 }
             }
@@ -596,8 +590,8 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
     } else if (auto* td = decl.as<ast::TypedefDecl>()) {
         current_span_ = decl.span;
         if (td->type && !is_valid_type(td->type)) {
-            error(decl.span, "Undefined type: '" + ast::type_to_string(*td->type) +
-                                 "' in typedef '" + td->name + "'");
+            error(decl.span, i18n::msgf(i18n::MsgId::TcUndefinedTypeTypedef,
+                                        ast::type_to_string(*td->type), td->name));
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
         current_span_ = decl.span;
@@ -609,16 +603,16 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         }
         for (const auto& method : iface->methods) {
             if (method.return_type && !is_valid_type(method.return_type)) {
-                error(decl.span,
-                      "Undefined return type: '" + ast::type_to_string(*method.return_type) +
-                          "' in interface method '" + iface->name + "::" + method.name + "'");
+                error(decl.span, i18n::msgf(i18n::MsgId::TcUndefinedReturnTypeInterfaceMethod,
+                                            ast::type_to_string(*method.return_type), iface->name,
+                                            method.name));
             }
             for (const auto& param : method.params) {
                 if (param.type && !is_valid_type(param.type)) {
-                    error(decl.span, "Undefined parameter type: '" +
-                                         ast::type_to_string(*param.type) + "' for parameter '" +
-                                         param.name + "' in interface method '" + iface->name +
-                                         "::" + method.name + "'");
+                    error(decl.span,
+                          i18n::msgf(i18n::MsgId::TcUndefinedParameterTypeParameterInterface,
+                                     ast::type_to_string(*param.type), param.name, iface->name,
+                                     method.name));
                 }
             }
         }
@@ -1076,8 +1070,8 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
 
     current_return_type_ = resolve_typedef(func.return_type);
     if (!is_valid_type(func.return_type)) {
-        error(func.name_span, "Undefined return type: '" + ast::type_to_string(*func.return_type) +
-                                  "' in function '" + func.name + "'");
+        error(func.name_span, i18n::msgf(i18n::MsgId::TcUndefinedReturnTypeFunction,
+                                         ast::type_to_string(*func.return_type), func.name));
     }
     if (generic_context_.has_type_param(ast::type_to_string(*func.return_type))) {
         current_return_type_ = func.return_type;
@@ -1085,9 +1079,9 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
 
     for (const auto& param : func.params) {
         if (!is_valid_type(param.type)) {
-            error(func.name_span, "Undefined parameter type: '" + ast::type_to_string(*param.type) +
-                                      "' for parameter '" + param.name + "' in function '" +
-                                      func.name + "'");
+            error(func.name_span,
+                  i18n::msgf(i18n::MsgId::TcUndefinedParameterTypeParameterFunction,
+                             ast::type_to_string(*param.type), param.name, func.name));
         }
         auto resolved_type = resolve_typedef(param.type);
         if (generic_context_.has_type_param(ast::type_to_string(*param.type))) {

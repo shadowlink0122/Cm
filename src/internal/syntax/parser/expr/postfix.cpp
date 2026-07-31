@@ -39,17 +39,15 @@ ast::ExprPtr Parser::parse_postfix() {
                     do {
                         // フィールド名:値 形式のみ（名前付き初期化必須）
                         if (!check(TokenKind::Ident)) {
-                            error(
-                                "Expected field name in struct literal (named initialization "
-                                "required)");
+                            error(i18n::msg(i18n::MsgId::PsExpectedFieldNameStructLiteral));
                         }
 
                         std::string field_name(current().get_string());
                         advance();  // フィールド名を消費
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name +
-                                  "' in struct literal");
+                            error(i18n::msgf(i18n::MsgId::PsExpectedFieldNameStructLiteral2,
+                                             field_name));
                         }
                         advance();  // : を消費
 

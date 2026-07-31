@@ -340,8 +340,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
         } else {
-            error(stmt_span,
-                  "Cannot infer type for 'auto' variable '" + let.name + "' without initializer");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcCannotInferTypeAutoVariable, let.name));
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
@@ -398,9 +397,9 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                 }
             }
             if (!is_enum_variant_coercion && !is_generic_literal_coercion) {
-                error(stmt_span, "Type mismatch in variable declaration '" + let.name +
-                                     "': expected '" + ast::type_to_string(*resolved_type) +
-                                     "', got '" + ast::type_to_string(*init_type) + "'");
+                error(stmt_span, i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected,
+                                            let.name, ast::type_to_string(*resolved_type),
+                                            ast::type_to_string(*init_type)));
             }
         }
         // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
@@ -417,7 +416,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {
-        error(stmt_span, "Cannot infer type for '" + let.name + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcCannotInferType, let.name));
     }
 
     // 非const変数を追跡（const推奨警告用）。
@@ -501,9 +500,10 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                 }
             }
             if (!is_enum_variant_coercion) {
-                error(stmt_span, "Return type mismatch: expected '" +
-                                     ast::type_to_string(*current_return_type_) + "', got '" +
-                                     (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+                error(stmt_span,
+                      i18n::msgf(i18n::MsgId::TcReturnTypeMismatchExpected,
+                                 ast::type_to_string(*current_return_type_),
+                                 (val_type ? ast::type_to_string(*val_type) : "unknown")));
             }
         }
 
@@ -522,16 +522,16 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                         // レベル1以上はローカル変数（0=グローバル）、ただしstaticは除外
                         if (var_level >= 1 && !is_static) {
                             error(stmt_span,
-                                  "Cannot return reference to local variable '" + ident->name +
-                                      "': variable will be dropped when function returns");
+                                  i18n::msgf(i18n::MsgId::TcCannotReturnReferenceLocalVariable,
+                                             ident->name));
                         }
                     }
                 }
             }
         }
     } else if (current_return_type_->kind != ast::TypeKind::Void) {
-        error(stmt_span, "Missing return value: expected '" +
-                             ast::type_to_string(*current_return_type_) + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcMissingReturnValueExpected,
+                                    ast::type_to_string(*current_return_type_)));
     }
 }
 
@@ -540,7 +540,7 @@ void TypeChecker::check_if(ast::IfStmt& if_stmt) {
     auto cond_type = infer_type(*if_stmt.condition);
     if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
         error(stmt_span,
-              "If condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+              i18n::msgf(i18n::MsgId::TcIfConditionMustBool, ast::type_to_string(*cond_type)));
     }
 
     // H6: 確定代入のfork/join。分岐内の初期化は「生き残る全経路で初期化」された場合のみ
@@ -591,7 +591,7 @@ void TypeChecker::check_while(ast::WhileStmt& while_stmt) {
     auto cond_type = infer_type(*while_stmt.condition);
     if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
         error(stmt_span,
-              "While condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+              i18n::msgf(i18n::MsgId::TcWhileConditionMustBool, ast::type_to_string(*cond_type)));
     }
 
     scopes_.push();
@@ -612,7 +612,7 @@ void TypeChecker::check_for(ast::ForStmt& for_stmt) {
         auto cond_type = infer_type(*for_stmt.condition);
         if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
             error(stmt_span,
-                  "For condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+                  i18n::msgf(i18n::MsgId::TcConditionMustBool, ast::type_to_string(*cond_type)));
         }
     }
     if (for_stmt.update) {
@@ -632,7 +632,7 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
 
     auto iterable_type = infer_type(*for_in.iterable);
     if (!iterable_type) {
-        error(stmt_span, "Cannot infer type of iterable expression");
+        error(stmt_span, i18n::msg(i18n::MsgId::TcCannotInferTypeIterableExpression));
         scopes_.pop();
         return;
     }
@@ -674,9 +674,8 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
 
         // iter()メソッドがない場合はエラー
         if (!for_in.use_iterator) {
-            error(stmt_span,
-                  "For-in requires an iterable type (array or type with iter() method), got '" +
-                      ast::type_to_string(*iterable_type) + "'");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcRequiresIterableTypeArrayType,
+                                        ast::type_to_string(*iterable_type)));
             scopes_.pop();
             return;
         }
@@ -684,8 +683,8 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
         // 配列型: 従来のインデックスベース展開
         element_type = iterable_type->element_type;
     } else {
-        error(stmt_span, "For-in requires an iterable type (array), got '" +
-                             ast::type_to_string(*iterable_type) + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcRequiresIterableTypeArray,
+                                    ast::type_to_string(*iterable_type)));
         scopes_.pop();
         return;
     }
@@ -696,9 +695,9 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
         if (resolved_type->kind == ast::TypeKind::Inferred) {
             for_in.var_type = element_type;
         } else if (!types_compatible(resolved_type, element_type)) {
-            error(stmt_span, "For-in variable type mismatch: expected '" +
-                                 ast::type_to_string(*element_type) + "', got '" +
-                                 ast::type_to_string(*resolved_type) + "'");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcVariableTypeMismatchExpected,
+                                        ast::type_to_string(*element_type),
+                                        ast::type_to_string(*resolved_type)));
         } else {
             for_in.var_type = resolved_type;
         }

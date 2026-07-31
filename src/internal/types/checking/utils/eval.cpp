@@ -154,19 +154,18 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),
                                debug::Level::Debug);
             } else {
-                error(current_span_, "Array size must be a positive integer, got " +
-                                         std::to_string(size) + " for '" + type->size_param_name +
-                                         "'");
+                error(current_span_, i18n::msgf(i18n::MsgId::TcArraySizeMustPositiveInteger,
+                                                std::to_string(size), type->size_param_name));
             }
         } else if (sym && !sym->is_const) {
-            error(current_span_, "Array size must be a const variable, but '" +
-                                     type->size_param_name + "' is not const");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcArraySizeMustConstVariable, type->size_param_name));
         } else if (!sym) {
             error(current_span_,
-                  "Undefined variable '" + type->size_param_name + "' used as array size");
+                  i18n::msgf(i18n::MsgId::TcUndefinedVariableUsedArraySize, type->size_param_name));
         } else {
-            error(current_span_, "Const variable '" + type->size_param_name +
-                                     "' does not have a compile-time integer value");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcConstVariableDoesNotHave, type->size_param_name));
         }
     }
 

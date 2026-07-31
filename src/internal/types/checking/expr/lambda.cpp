@@ -25,9 +25,8 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
 
     for (const auto& param : lambda.params) {
         if (!param.type || param.type->kind == ast::TypeKind::Error) {
-            error(current_span_, "Lambda parameter '" + param.name +
-                                     "' must have an explicit type. "
-                                     "Use: (Type param_name) => { ... }");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcLambdaParameterMustHaveExplicit, param.name));
             return ast::make_error();
         }
         param_types.push_back(param.type);

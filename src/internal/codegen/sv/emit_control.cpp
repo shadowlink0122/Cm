@@ -2,6 +2,7 @@
 // CFG走査ベースのSV出力 - if/else・ループの構造化
 // ============================================================
 #include "codegen.hpp"
+#include "internal/base/i18n.hpp"
 #include "sv_internal.hpp"
 
 #include <algorithm>
@@ -598,9 +599,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 // 従来は未定義関数としてそのまま出力され診断が一切なかった（黙殺）。
                 // 未定義関数の無言emitをやめ、警告してスキップする（シミュレーション出力は
                 // #[test] 関数内でのみ$displayへ変換される。段階導入のためまず警告）
-                std::cerr << "警告[SV008]: 合成モジュール内の '" << func_name
-                          << "' は合成不能のためスキップします（println等の出力は #[test] "
-                             "関数内でのみ使用できます）\n";
+                std::cerr << i18n::msgf(i18n::MsgId::SvSv008UnsynthesizableCallSkipped, func_name);
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
             } else {
                 // 一般的な関数呼び出し: result = func_name(arg1, arg2, ...);

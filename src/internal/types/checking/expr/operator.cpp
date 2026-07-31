@@ -31,8 +31,8 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
         if (auto* ident = binary.left->as<ast::IdentExpr>()) {
             // move済み変数への代入は禁止
             if (scopes_.current().is_moved(ident->name)) {
-                error(binary.left->span, "Cannot assign to moved variable '" + ident->name +
-                                             "': variable no longer exists after move");
+                error(binary.left->span,
+                      i18n::msgf(i18n::MsgId::TcCannotAssignMovedVariableVariable, ident->name));
                 return ast::make_error();
             }
         }
@@ -94,7 +94,7 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
         case ast::BinaryOp::And:
         case ast::BinaryOp::Or:
             if (ltype->kind != ast::TypeKind::Bool || rtype->kind != ast::TypeKind::Bool) {
-                error(current_span_, "Logical operators require bool operands");
+                error(current_span_, i18n::msg(i18n::MsgId::TcLogicalOperatorsRequireBoolOperands));
             }
             return std::make_shared<ast::Type>(ast::TypeKind::Bool);
 
@@ -113,13 +113,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 auto sym = scopes_.current().lookup(ident->name);
                 if (sym && sym->is_const) {
                     error(binary.left->span,
-                          "Cannot assign to const variable '" + ident->name + "'");
+                          i18n::msgf(i18n::MsgId::TcCannotAssignConstVariable, ident->name));
                     return ast::make_error();
                 }
                 // 借用チェック: 借用中の変数への代入を禁止（DRY原則）
                 if (scopes_.current().is_borrowed(ident->name)) {
                     error(binary.left->span,
-                          "Cannot assign to '" + ident->name + "' while it is borrowed");
+                          i18n::msgf(i18n::MsgId::TcCannotAssignWhileItBorrowed, ident->name));
                     return ast::make_error();
                 }
                 // 変数が変更されたことをマーク（const推奨警告用）
@@ -144,10 +144,9 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                                 // 左辺が外側スコープ（寿命長い）で右辺が内側スコープ（寿命短い）→危険
                                 if (lhs_level < rhs_level) {
                                     error(binary.left->span,
-                                          "Cannot store reference to '" + rhs_ident->name +
-                                              "' in '" + ident->name + "': '" + rhs_ident->name +
-                                              "' may be dropped while '" + ident->name +
-                                              "' is still alive");
+                                          i18n::msgf(i18n::MsgId::TcCannotStoreReferenceMayDropped,
+                                                     rhs_ident->name, ident->name, rhs_ident->name,
+                                                     ident->name));
                                     return ast::make_error();
                                 }
                             }
@@ -164,12 +163,14 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     if (ptr_type && ptr_type->kind == ast::TypeKind::Pointer) {
                         // ポインタ自体がconstの場合（const int* p）
                         if (ptr_type->qualifiers.is_const) {
-                            error(binary.left->span, "Cannot assign through const pointer");
+                            error(binary.left->span,
+                                  i18n::msg(i18n::MsgId::TcCannotAssignThroughConstPointer));
                             return ast::make_error();
                         }
                         // 要素型がconstの場合も禁止（const修飾された要素への代入）
                         if (ptr_type->element_type && ptr_type->element_type->qualifiers.is_const) {
-                            error(binary.left->span, "Cannot assign through pointer to const");
+                            error(binary.left->span,
+                                  i18n::msg(i18n::MsgId::TcCannotAssignThroughPointerConst));
                             return ast::make_error();
                         }
                     }
@@ -218,13 +219,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
                         return ltype;  // オペレーターオーバーロード対応
                     }
-                    error(binary.left->span, "Type '" + type_name + "' does not implement " +
-                                                 iface_name + " operator for compound assignment");
+                    error(binary.left->span, i18n::msgf(i18n::MsgId::TcTypeDoesNotImplementOperator,
+                                                        type_name, iface_name));
                     return ast::make_error();
                 }
             }
             if (!types_compatible(ltype, rtype)) {
-                error(binary.left->span, "Assignment type mismatch");
+                error(binary.left->span, i18n::msg(i18n::MsgId::TcAssignmentTypeMismatch));
             }
             return ltype;
         }
@@ -251,7 +252,7 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     return ltype;
                 }
             }
-            error(current_span_, "Add operator requires numeric operands or string concatenation");
+            error(current_span_, i18n::msg(i18n::MsgId::TcAddOperatorRequiresNumericOperands));
             return ast::make_error();
 
         case ast::BinaryOp::Sub:
@@ -274,7 +275,7 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                     return ltype;
                 }
             }
-            error(current_span_, "Sub operator requires numeric operands");
+            error(current_span_, i18n::msg(i18n::MsgId::TcSubOperatorRequiresNumericOperands));
             return ast::make_error();
 
         default:
@@ -306,7 +307,8 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                         }
                     }
                 }
-                error(current_span_, "Arithmetic operators require numeric operands");
+                error(current_span_,
+                      i18n::msg(i18n::MsgId::TcArithmeticOperatorsRequireNumericOperands));
                 return ast::make_error();
             }
             return common_type(ltype, rtype);
@@ -360,22 +362,22 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
         }
         case ast::UnaryOp::Neg:
             if (!otype->is_numeric()) {
-                error(current_span_, "Negation requires numeric operand");
+                error(current_span_, i18n::msg(i18n::MsgId::TcNegationRequiresNumericOperand));
             }
             return otype;
         case ast::UnaryOp::Not:
             if (otype->kind != ast::TypeKind::Bool) {
-                error(current_span_, "Logical not requires bool operand");
+                error(current_span_, i18n::msg(i18n::MsgId::TcLogicalNotRequiresBoolOperand));
             }
             return std::make_shared<ast::Type>(ast::TypeKind::Bool);
         case ast::UnaryOp::BitNot:
             if (!otype->is_integer()) {
-                error(current_span_, "Bitwise not requires integer operand");
+                error(current_span_, i18n::msg(i18n::MsgId::TcBitwiseNotRequiresIntegerOperand));
             }
             return otype;
         case ast::UnaryOp::Deref:
             if (otype->kind != ast::TypeKind::Pointer) {
-                error(current_span_, "Cannot dereference non-pointer");
+                error(current_span_, i18n::msg(i18n::MsgId::TcCannotDereferenceNonPointer));
                 return ast::make_error();
             }
             return otype->element_type;
@@ -418,20 +420,21 @@ ast::TypePtr TypeChecker::infer_unary(ast::UnaryExpr& unary) {
                 auto sym = scopes_.current().lookup(ident->name);
                 if (sym && sym->is_const) {
                     error(unary.operand->span,
-                          "Cannot modify const variable '" + ident->name + "'");
+                          i18n::msgf(i18n::MsgId::TcCannotModifyConstVariable, ident->name));
                     return ast::make_error();
                 }
                 // 借用チェック: 借用中の変数への変更を禁止（DRY原則）
                 if (scopes_.current().is_borrowed(ident->name)) {
                     error(unary.operand->span,
-                          "Cannot modify '" + ident->name + "' while it is borrowed");
+                          i18n::msgf(i18n::MsgId::TcCannotModifyWhileItBorrowed, ident->name));
                     return ast::make_error();
                 }
                 // 変数が変更されたことをマーク（const推奨警告用）
                 mark_variable_modified(ident->name);
             }
             if (!otype->is_numeric()) {
-                error(current_span_, "Increment/decrement requires numeric operand");
+                error(current_span_,
+                      i18n::msg(i18n::MsgId::TcIncrementDecrementRequiresNumericOperand));
             }
             return otype;
         }
@@ -443,14 +446,14 @@ ast::TypePtr TypeChecker::infer_ternary(ast::TernaryExpr& ternary) {
     auto cond_type = infer_type(*ternary.condition);
     if (!cond_type ||
         (cond_type->kind != ast::TypeKind::Bool && cond_type->kind != ast::TypeKind::Int)) {
-        error(current_span_, "Ternary condition must be bool or int");
+        error(current_span_, i18n::msg(i18n::MsgId::TcTernaryConditionMustBoolInt));
     }
 
     auto then_type = infer_type(*ternary.then_expr);
     auto else_type = infer_type(*ternary.else_expr);
 
     if (!types_compatible(then_type, else_type)) {
-        error(current_span_, "Ternary branches have incompatible types");
+        error(current_span_, i18n::msg(i18n::MsgId::TcTernaryBranchesHaveIncompatibleTypes));
     }
 
     // 数値同士の腕は昇格型（幅の広い方、同幅は符号なし優先）を返す。
@@ -499,7 +502,7 @@ ast::TypePtr TypeChecker::infer_index(ast::IndexExpr& idx) {
     auto obj_type = infer_type(*idx.object);
     auto index_type = infer_type(*idx.index);
     if (!index_type || !index_type->is_integer()) {
-        error(current_span_, "Array index must be an integer type");
+        error(current_span_, i18n::msg(i18n::MsgId::TcArrayIndexMustIntegerType));
     }
 
     if (!obj_type) {
@@ -523,7 +526,7 @@ ast::TypePtr TypeChecker::infer_index(ast::IndexExpr& idx) {
         return ast::make_char();
     }
 
-    error(current_span_, "Index access on non-array type");
+    error(current_span_, i18n::msg(i18n::MsgId::TcIndexAccessNonArrayType));
     return ast::make_error();
 }
 
@@ -593,19 +596,19 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
     if (slice.start) {
         auto start_type = infer_type(*slice.start);
         if (!start_type || !start_type->is_integer()) {
-            error(current_span_, "Slice start index must be an integer type");
+            error(current_span_, i18n::msg(i18n::MsgId::TcSliceStartIndexMustInteger));
         }
     }
     if (slice.end) {
         auto end_type = infer_type(*slice.end);
         if (!end_type || !end_type->is_integer()) {
-            error(current_span_, "Slice end index must be an integer type");
+            error(current_span_, i18n::msg(i18n::MsgId::TcSliceEndIndexMustInteger));
         }
     }
     if (slice.step) {
         auto step_type = infer_type(*slice.step);
         if (!step_type || !step_type->is_integer()) {
-            error(current_span_, "Slice step must be an integer type");
+            error(current_span_, i18n::msg(i18n::MsgId::TcSliceStepMustIntegerType));
         }
     }
 
@@ -621,7 +624,7 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
         return ast::make_string();
     }
 
-    error(current_span_, "Slice access on non-array/string type");
+    error(current_span_, i18n::msg(i18n::MsgId::TcSliceAccessNonArrayString));
     return ast::make_error();
 }
 

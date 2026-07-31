@@ -101,8 +101,7 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
 
         switch (gv->type->kind) {
             case hir::TypeKind::Pointer:
-                std::cerr << "error[SV002]: Pointer types are not supported in SV target: "
-                          << gv->name << "\n";
+                std::cerr << i18n::msgf(i18n::MsgId::SvSv002PointerTypesNotSupported, gv->name);
                 has_error = true;
                 break;
             case hir::TypeKind::String:
@@ -111,10 +110,8 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                 if (!gv->is_const && gv->init_value) {
                     if (const auto* sval = std::get_if<std::string>(&gv->init_value->value)) {
                         if (sval->length() > 3) {
-                            std::cerr << "error[SV005]: Non-const string longer than 3 "
-                                         "characters is not synthesizable (would be truncated "
-                                         "to logic [23:0]): "
-                                      << gv->name << " = \"" << *sval << "\"\n";
+                            std::cerr << i18n::msgf(i18n::MsgId::SvSv005NonConstStringTooLong,
+                                                    gv->name, *sval);
                             has_error = true;
                         }
                     }
@@ -153,8 +150,8 @@ bool SVCodeGen::validateSynthesizableTypes(const mir::MirProgram& program) {
                         std::isdigit(static_cast<unsigned char>(local.name[2]))) {
                         break;
                     }
-                    std::cerr << "error[SV002]: Pointer types are not supported in SV target: "
-                              << func->name << "::" << local.name << "\n";
+                    std::cerr << i18n::msgf(i18n::MsgId::SvSv002PointerTypesNotSupportedLocal,
+                                            func->name, local.name);
                     has_error = true;
                     break;
                 case hir::TypeKind::String:

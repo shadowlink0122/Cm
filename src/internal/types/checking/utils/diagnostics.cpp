@@ -40,7 +40,7 @@ void TypeChecker::check_const_recommendations() {
     for (const auto& [name, span] : non_const_variable_spans_) {
         // 変更されていない変数に対してconst推奨警告
         if (modified_variables_.count(name) == 0) {
-            warning(span, "Variable '" + name + "' is never modified, consider using 'const'");
+            warning(span, i18n::msgf(i18n::MsgId::TcVariableNeverModifiedConsiderUsing, name));
         }
     }
     // 次の関数用にクリア
@@ -63,7 +63,7 @@ void TypeChecker::check_unused_variables() {
             continue;
         }
 
-        warning(sym.span, "Variable '" + sym.name + "' is never used [W001]");
+        warning(sym.span, i18n::msgf(i18n::MsgId::TcVariableNeverUsedW001, sym.name));
     }
 }
 
@@ -94,9 +94,9 @@ void TypeChecker::check_uninitialized_use(const std::string& name, Span span) {
     // H6段階3: --strict（check/lint --strict）ではエラーへ昇格し、通常のcheck/lintは警告のまま
     if (initialized_variables_.count(name) == 0) {
         if (enable_naming_check_) {
-            error(span, "Variable '" + name + "' may be used before initialization");
+            error(span, i18n::msgf(i18n::MsgId::TcVariableMayUsedBeforeInitialization, name));
         } else {
-            warning(span, "Variable '" + name + "' may be used before initialization");
+            warning(span, i18n::msgf(i18n::MsgId::TcVariableMayUsedBeforeInitialization, name));
         }
     }
 }

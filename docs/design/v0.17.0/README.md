@@ -24,13 +24,12 @@ type-resolution-simplification.mdの4領域に続き、コンパイラが複雑�
 
 - [コンパイラ全体構成の再編](compiler-architecture-restructure.md) — rustc対応表に基づくステージ指向ライブラリ分割・依存規律のビルド強制・Lint/fmtの独立ドライバ化・Session導入（ドライバ複製の解消）（第1段=依存棚卸し・唯一の層違反解消・check_layer_deps.pyによるlint/CI強制を実装済み、第2段以降未実装）
 - [モジュールシステムの構造化](module-system-structural-imports.md) — importのテキストインライン展開（preprocessor 4,241行）を廃止しファイル単位パース+シンボル解決へ（source_map・テキスト改名・行番号ずれ・重複展開の根絶、名前空間形式import対応を含む）
-- [診断エンジンの統一](diagnostics-engine-unification.md) — 4系統の発行機構をDiagCtxtへ集約、MIRエラーのログ→診断昇格、エラー型の下流流出（__error__*シンボル）の構造的禁止（第1〜3段=表示一元化・MIRエラーの診断昇格とcodegen前停止・__error__シンボル不在検査を実装済み、第4段=MsgId化のみ未実装）
 - [型付きHIRの単一情報源化](typed-hir-single-source.md) — 「型検査後のHIRは全式が型付き」の不変条件確立と下流の型再推論禁止（B6/B7/N2/W5族の根治、対症療法コードの削除）
 - [モノモーフ化の型駆動化](monomorphization-typed-instantiation.md) — 特殊化の同定・書き換えを型ノードへ統一し、マングル名の解析・逆算（82箇所）を廃止
 - [ランタイムビルトインのレジストリ化](runtime-builtin-registry.md) — 名前・シグネチャの7箇所同期（LLVM宣言117分岐・js写像322件・native/wasmランタイムC二重実装8,088行）を単一表からの導出へ（第1段=レジストリ188件とLLVM宣言の表引き化・第2段前半=js判定集合の導出を実装済み、Cヘッダ生成・ランタイム共通化は未実装）
 - [自動実装のソース展開化](derive-as-source-expansion.md) — with/deriveの手組みMIR生成4,408行をAST合成+通常パイプラインへ置換
 
-このうちレイアウト計算の一元化と最適化パスの共有解析基盤は実装完了し、[archive/v0.17.0/layout-query-unification.md](../../archive/v0.17.0/layout-query-unification.md)（スライス格納/配列実ストライドの2意味論API・MIR/LLVM共有コア）と [archive/v0.17.0/optimizer-shared-analysis.md](../../archive/v0.17.0/optimizer-shared-analysis.md)（効果モデルeffects.hppへの8パス統合）へ移動した。
+このうち診断エンジンの統一は全4段を実装完了し [archive/v0.17.0/diagnostics-engine-unification.md](../../archive/v0.17.0/diagnostics-engine-unification.md) へ移動した（DiagnosticEmitter表示一元化・MIRエラー昇格とcodegen前停止・__error__検査・診断207呼び出しのMsgId化）。レイアウト計算の一元化と最適化パスの共有解析基盤も実装完了し、[archive/v0.17.0/layout-query-unification.md](../../archive/v0.17.0/layout-query-unification.md)（スライス格納/配列実ストライドの2意味論API・MIR/LLVM共有コア）と [archive/v0.17.0/optimizer-shared-analysis.md](../../archive/v0.17.0/optimizer-shared-analysis.md)（効果モデルeffects.hppへの8パス統合）へ移動した。
 
 ### native/jit網羅検証 第2・第3ラウンド（W1〜W5・X1〜X6、全件修正済み・archiveへ移動）
 
@@ -40,5 +39,5 @@ W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込�
 ## 状態
 
 監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案7本（compiler-architecture-restructure.md他）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。
+型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案6本（compiler-architecture-restructure.md他）が未実装または段階進行中の構造的リファクタリング提案として本ディレクトリに残っている。
 セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

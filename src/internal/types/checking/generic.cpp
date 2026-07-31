@@ -2,6 +2,7 @@
 // TypeChecker 実装 - ジェネリクス処理
 // ============================================================
 
+#include "internal/base/i18n.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <memory>
@@ -24,7 +25,7 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
     // シンボルテーブルから関数情報を取得
     auto sym = scopes_.current().lookup(func_name);
     if (!sym || !sym->is_function) {
-        error(current_span_, "'" + func_name + "' is not a function");
+        error(current_span_, i18n::msgf(i18n::MsgId::TcNotFunction, func_name));
         return ast::make_error();
     }
 
@@ -35,14 +36,14 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
 
     if (arg_count < required_count || arg_count > param_count) {
         if (required_count == param_count) {
-            error(current_span_, "Generic function '" + func_name + "' expects " +
-                                     std::to_string(param_count) + " arguments, got " +
-                                     std::to_string(arg_count));
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcGenericFunctionExpectsArguments, func_name,
+                             std::to_string(param_count), std::to_string(arg_count)));
         } else {
-            error(current_span_, "Generic function '" + func_name + "' expects " +
-                                     std::to_string(required_count) + " to " +
-                                     std::to_string(param_count) + " arguments, got " +
-                                     std::to_string(arg_count));
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcGenericFunctionExpectsArguments2, func_name,
+                             std::to_string(required_count), std::to_string(param_count),
+                             std::to_string(arg_count)));
         }
         return ast::make_error();
     }
@@ -147,9 +148,8 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
                             constraints_str += generic_param.constraints[i];
                         }
                         error(current_span_,
-                              "Type '" + actual_type + "' does not satisfy constraint '" +
-                                  constraints_str + "' for type parameter '" + generic_param.name +
-                                  "' in function '" + func_name + "'");
+                              i18n::msgf(i18n::MsgId::TcTypeDoesNotSatisfyConstraint, actual_type,
+                                         constraints_str, generic_param.name, func_name));
                     }
                 }
             }

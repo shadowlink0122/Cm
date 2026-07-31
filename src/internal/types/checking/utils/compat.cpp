@@ -431,8 +431,8 @@ bool TypeChecker::check_literal_assignment(ast::TypePtr target_type, ast::Expr* 
             allowed_list += allowed_values[i];
         }
 
-        error(span, "Invalid literal value " + actual_value +
-                        " for literal type. Allowed values: " + allowed_list);
+        error(span, i18n::msgf(i18n::MsgId::TcInvalidLiteralValueLiteralType, actual_value,
+                               allowed_list));
         return false;
     }
 

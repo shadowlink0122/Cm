@@ -70,8 +70,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
         // ポインタ型はビルトインメソッドを持たない
         if (obj_type->kind == ast::TypeKind::Pointer) {
-            error(current_span_,
-                  "Pointer type does not support method calls. Use (*ptr).method() instead.");
+            error(current_span_, i18n::msg(i18n::MsgId::TcPointerTypeDoesNotSupport));
             return ast::make_error();
         }
 
@@ -95,9 +94,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         if (current_impl_target_type_.empty() ||
                             (current_impl_target_type_ != type_name &&
                              current_impl_target_type_ != search_type)) {
-                            error(current_span_, "Cannot call private method '" + member.member +
-                                                     "' from outside impl block of '" + type_name +
-                                                     "'");
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcCannotCallPrivateMethodFrom,
+                                             member.member, type_name));
                             return ast::make_error();
                         }
                     }
@@ -114,9 +113,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                                 std::string expected =
                                     ast::type_to_string(*method_info.param_types[i]);
                                 std::string actual = ast::type_to_string(*arg_type);
-                                error(current_span_, "Argument type mismatch in method call '" +
-                                                         member.member + "': expected " + expected +
-                                                         ", got " + actual);
+                                error(current_span_,
+                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                                 member.member, expected, actual));
                             }
                         }
                     }
@@ -180,9 +179,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         if (!types_compatible(method_info.param_types[i], arg_type)) {
                             std::string expected = ast::type_to_string(*method_info.param_types[i]);
                             std::string actual = ast::type_to_string(*arg_type);
-                            error(current_span_, "Argument type mismatch in method call '" +
-                                                     member.member + "': expected " + expected +
-                                                     ", got " + actual);
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                             member.member, expected, actual));
                         }
                     }
                 }
@@ -221,9 +220,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                                 std::string expected =
                                     ast::type_to_string(*method_info.param_types[i]);
                                 std::string actual = ast::type_to_string(*arg_type);
-                                error(current_span_, "Argument type mismatch in method call '" +
-                                                         member.member + "': expected " + expected +
-                                                         ", got " + actual);
+                                error(current_span_,
+                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                                 member.member, expected, actual));
                             }
                         }
                     }
@@ -283,10 +282,10 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                             auto arg_type = infer_type(*member.args[i]);
                             auto expected_type = substitute(method_info.param_types[i]);
                             if (!types_compatible(expected_type, arg_type)) {
-                                error(current_span_, "Argument type mismatch in method call '" +
-                                                         member.member + "': expected " +
-                                                         ast::type_to_string(*expected_type) +
-                                                         ", got " + ast::type_to_string(*arg_type));
+                                error(current_span_,
+                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                                 member.member, ast::type_to_string(*expected_type),
+                                                 ast::type_to_string(*arg_type)));
                             }
                         }
                     }
@@ -312,20 +311,21 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         break;
                     }
                     if (member.args.size() != field_type->param_types.size()) {
-                        error(current_span_, "Function field '" + member.member + "' expects " +
-                                                 std::to_string(field_type->param_types.size()) +
-                                                 " arguments, got " +
-                                                 std::to_string(member.args.size()));
+                        error(
+                            current_span_,
+                            i18n::msgf(i18n::MsgId::TcFunctionFieldExpectsArguments, member.member,
+                                       std::to_string(field_type->param_types.size()),
+                                       std::to_string(member.args.size())));
                         return ast::make_error();
                     }
                     for (size_t i = 0; i < member.args.size(); ++i) {
                         auto arg_type = infer_type(*member.args[i]);
                         if (!types_compatible(field_type->param_types[i], arg_type)) {
                             error(current_span_,
-                                  "Argument type mismatch in function field call '" +
-                                      member.member + "': expected " +
-                                      ast::type_to_string(*field_type->param_types[i]) + ", got " +
-                                      ast::type_to_string(*arg_type));
+                                  i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchFunctionField,
+                                             member.member,
+                                             ast::type_to_string(*field_type->param_types[i]),
+                                             ast::type_to_string(*arg_type)));
                         }
                     }
                     return field_type->return_type ? field_type->return_type : ast::make_void();
@@ -333,7 +333,8 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             }
         }
 
-        error(current_span_, "Unknown method '" + member.member + "' for type '" + type_name + "'");
+        error(current_span_,
+              i18n::msgf(i18n::MsgId::TcUnknownMethodType, member.member, type_name));
         return ast::make_error();
     }
 
@@ -351,9 +352,9 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         if (current_impl_target_type_.empty() ||
                             (current_impl_target_type_ != type_name &&
                              current_impl_target_type_ != base_type_name)) {
-                            error(current_span_, "Cannot access private field '" + member.member +
-                                                     "' from outside impl block of '" +
-                                                     base_type_name + "'");
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcCannotAccessPrivateFieldFrom,
+                                             member.member, base_type_name));
                             return ast::make_error();
                         }
                     }
@@ -372,17 +373,17 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                 }
             }
             error(current_span_,
-                  "Unknown field '" + member.member + "' in struct '" + type_name + "'");
+                  i18n::msgf(i18n::MsgId::TcUnknownFieldStruct, member.member, type_name));
         } else {
-            error(current_span_, "Unknown struct type '" + type_name + "'");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownStructType, type_name));
         }
     } else {
         // ポインタ型の場合は、より具体的なエラーメッセージを表示
         if (obj_type->kind == ast::TypeKind::Pointer) {
-            error(current_span_, "Cannot use '.' on pointer type '" + type_name +
-                                     "'. Use '->' for field access through pointers.");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcCannotPointerTypeFieldAccess, type_name));
         } else {
-            error(current_span_, "Field access on non-struct type '" + type_name + "'");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcFieldAccessNonStructType, type_name));
         }
     }
 
@@ -395,7 +396,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
 
     if (member.member == "size" || member.member == "len" || member.member == "length") {
         if (!member.args.empty()) {
-            error(current_span_, "Array " + member.member + "() takes no arguments");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcArrayTakesNoArguments, member.member));
         }
         debug::tc::log(debug::tc::Id::Resolved,
                        "Array builtin: " + type_name + "." + member.member + "() : uint",
@@ -407,13 +408,14 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     if (is_dynamic) {
         if (member.member == "cap" || member.member == "capacity") {
             if (!member.args.empty()) {
-                error(current_span_, "Slice " + member.member + "() takes no arguments");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSliceTakesNoArguments, member.member));
             }
             return ast::make_usize();
         }
         if (member.member == "push") {
             if (member.args.size() != 1) {
-                error(current_span_, "Slice push() takes 1 argument");
+                error(current_span_, i18n::msg(i18n::MsgId::TcSlicePushTakes1Argument));
             }
             if (!member.args.empty()) {
                 // レシーバの要素型を期待型として引数へ渡す（X3/X4。無名リテラルの型決定はinfer_type_expectingへ一元化）
@@ -422,23 +424,21 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                 if (obj_type->element_type &&
                     obj_type->element_type->kind == ast::TypeKind::Function &&
                     is_capturing_closure_expr(*member.args[0])) {
-                    error(current_span_,
-                          "Cannot push a capturing closure into a function-type slice: closures "
-                          "lose their captured environment when stored as values (bind to a "
-                          "local variable and call it directly)");
+                    error(current_span_, i18n::msg(i18n::MsgId::TcCannotPushCapturingClosureInto));
                 }
             }
             return ast::make_void();
         }
         if (member.member == "pop") {
             if (!member.args.empty()) {
-                error(current_span_, "Slice pop() takes no arguments");
+                error(current_span_, i18n::msg(i18n::MsgId::TcSlicePopTakesNoArguments));
             }
             return obj_type->element_type ? obj_type->element_type : ast::make_int();
         }
         if (member.member == "remove" || member.member == "delete") {
             if (member.args.size() != 1) {
-                error(current_span_, "Slice " + member.member + "() takes 1 index argument");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSliceTakes1IndexArgument, member.member));
             }
             if (!member.args.empty()) {
                 infer_type(*member.args[0]);
@@ -447,7 +447,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         }
         if (member.member == "clear") {
             if (!member.args.empty()) {
-                error(current_span_, "Slice clear() takes no arguments");
+                error(current_span_, i18n::msg(i18n::MsgId::TcSliceClearTakesNoArguments));
             }
             return ast::make_void();
         }
@@ -455,7 +455,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
 
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array indexOf() takes 1 argument");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayIndexofTakes1Argument));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -464,7 +464,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "includes" || member.member == "contains") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array " + member.member + "() takes 1 argument");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcArrayTakes1Argument, member.member));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -473,7 +473,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "some") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array some() takes 1 predicate function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArraySomeTakes1Predicate));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -482,7 +482,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "every") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array every() takes 1 predicate function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayEveryTakes1Predicate));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -491,7 +491,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "findIndex") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array findIndex() takes 1 predicate function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayFindindexTakes1Predicate));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -500,7 +500,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "reduce") {
         if (member.args.size() < 1 || member.args.size() > 2) {
-            error(current_span_, "Array reduce() takes 1-2 arguments (callback, [initial])");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayReduceTakes12));
         }
         for (auto& arg : member.args) {
             infer_type(*arg);
@@ -509,7 +509,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "forEach") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array forEach() takes 1 callback function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayForeachTakes1Callback));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -518,7 +518,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "map") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array map() takes 1 callback function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayMapTakes1Callback));
         }
         if (!member.args.empty()) {
             auto callback_type = infer_type(*member.args[0]);
@@ -536,7 +536,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "filter") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array filter() takes 1 predicate function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayFilterTakes1Predicate));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -546,22 +546,21 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "reverse") {
         if (!member.args.empty()) {
-            error(current_span_, "Array reverse() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayReverseTakesNoArguments));
         }
         // 逆順の動的配列を返す（サイズは動的）
         return ast::make_array(obj_type->element_type, std::nullopt);
     }
     if (member.member == "sort") {
         if (!member.args.empty()) {
-            error(current_span_,
-                  "Array sort() takes no arguments (use sortBy for custom comparator)");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArraySortTakesNoArguments));
         }
         // ソート済み動的配列を返す（サイズは動的）
         return ast::make_array(obj_type->element_type, std::nullopt);
     }
     if (member.member == "sortBy") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array sortBy() takes 1 comparator function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArraySortbyTakes1Comparator));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -572,11 +571,11 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     if (member.member == "get") {
         // チェック付き要素アクセス: 範囲内ならOption::Some(要素)、範囲外ならOption::None（Rustのslice::get相当。arr[i]の範囲外アクセスを避けるための安全API）
         if (member.args.size() != 1) {
-            error(current_span_, "Array get() takes 1 index argument");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayGetTakes1Index));
         } else {
             auto idx_type = infer_type(*member.args[0]);
             if (idx_type && !idx_type->is_integer()) {
-                error(current_span_, "Array get() index must be an integer");
+                error(current_span_, i18n::msg(i18n::MsgId::TcArrayGetIndexMustInteger));
             }
         }
         auto opt = std::make_shared<ast::Type>(ast::TypeKind::Struct);
@@ -586,21 +585,21 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "first") {
         if (!member.args.empty()) {
-            error(current_span_, "Array first() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayFirstTakesNoArguments));
         }
         // 最初の要素を返す
         return obj_type->element_type ? obj_type->element_type : ast::make_error();
     }
     if (member.member == "last") {
         if (!member.args.empty()) {
-            error(current_span_, "Array last() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayLastTakesNoArguments));
         }
         // 最後の要素を返す
         return obj_type->element_type ? obj_type->element_type : ast::make_error();
     }
     if (member.member == "find") {
         if (member.args.size() != 1) {
-            error(current_span_, "Array find() takes 1 predicate function");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayFindTakes1Predicate));
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -610,7 +609,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
     if (member.member == "dim") {
         if (!member.args.empty()) {
-            error(current_span_, "Array dim() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcArrayDimTakesNoArguments));
         }
         // 次元数（整数）を返す
         return ast::make_int();
@@ -634,9 +633,9 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                     if (!types_compatible(method_info.param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*method_info.param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
-                        error(current_span_, "Argument type mismatch in method call '" +
-                                                 member.member + "': expected " + expected +
-                                                 ", got " + actual);
+                        error(current_span_,
+                              i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                         member.member, expected, actual));
                     }
                 }
             }
@@ -667,9 +666,9 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                         if (!types_compatible(method_info.param_types[i], arg_type)) {
                             std::string expected = ast::type_to_string(*method_info.param_types[i]);
                             std::string actual = ast::type_to_string(*arg_type);
-                            error(current_span_, "Argument type mismatch in method call '" +
-                                                     member.member + "': expected " + expected +
-                                                     ", got " + actual);
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                             member.member, expected, actual));
                         }
                     }
                 }
@@ -683,7 +682,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         }
     }
 
-    error(current_span_, "Unknown array method '" + member.member + "'");
+    error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownArrayMethod, member.member));
     return ast::make_error();
 }
 
@@ -693,7 +692,7 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     if (member.member == "len" || member.member == "size" || member.member == "length" ||
         member.member == "byte_len") {
         if (!member.args.empty()) {
-            error(current_span_, "String " + member.member + "() takes no arguments");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakesNoArguments, member.member));
         }
         debug::tc::log(debug::tc::Id::Resolved,
                        "String builtin: " + type_name + "." + member.member + "() : uint",
@@ -702,41 +701,42 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     }
     if (member.member == "chars") {
         if (!member.args.empty()) {
-            error(current_span_, "String chars() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringCharsTakesNoArguments));
         }
         return ast::make_array(ast::make_uint());
     }
     if (member.member == "codepoint_at") {
         if (member.args.size() != 1) {
-            error(current_span_, "String codepoint_at() takes 1 argument");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringCodepointAtTakes1));
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (!arg_type->is_integer()) {
-                error(current_span_, "String codepoint_at() index must be integer");
+                error(current_span_, i18n::msg(i18n::MsgId::TcStringCodepointAtIndexMust));
             }
         }
         return ast::make_uint();
     }
     if (member.member == "charAt" || member.member == "at") {
         if (member.args.size() != 1) {
-            error(current_span_, "String " + member.member + "() takes 1 argument");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakes1Argument, member.member));
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (!arg_type->is_integer()) {
-                error(current_span_, "String " + member.member + "() index must be integer");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcStringIndexMustInteger, member.member));
             }
         }
         return ast::make_char();
     }
     if (member.member == "substring" || member.member == "slice") {
         if (member.args.size() < 1 || member.args.size() > 2) {
-            error(current_span_, "String " + member.member + "() takes 1-2 arguments");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakes12Arguments, member.member));
         } else {
             for (auto& arg : member.args) {
                 auto arg_type = infer_type(*arg);
                 if (!arg_type->is_integer()) {
                     error(current_span_,
-                          "String " + member.member + "() arguments must be integers");
+                          i18n::msgf(i18n::MsgId::TcStringArgumentsMustIntegers, member.member));
                 }
             }
         }
@@ -744,11 +744,11 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     }
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
-            error(current_span_, "String indexOf() takes 1 argument");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringIndexofTakes1Argument));
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (arg_type->kind != ast::TypeKind::String) {
-                error(current_span_, "String indexOf() argument must be string");
+                error(current_span_, i18n::msg(i18n::MsgId::TcStringIndexofArgumentMustString));
             }
         }
         return ast::make_int();
@@ -756,41 +756,43 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     if (member.member == "toUpperCase" || member.member == "toLowerCase" ||
         member.member == "trim") {
         if (!member.args.empty()) {
-            error(current_span_, "String " + member.member + "() takes no arguments");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakesNoArguments, member.member));
         }
         return ast::make_string();
     }
     if (member.member == "startsWith" || member.member == "endsWith" ||
         member.member == "includes" || member.member == "contains") {
         if (member.args.size() != 1) {
-            error(current_span_, "String " + member.member + "() takes 1 argument");
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakes1Argument, member.member));
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (arg_type->kind != ast::TypeKind::String) {
-                error(current_span_, "String " + member.member + "() argument must be string");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcStringArgumentMustString, member.member));
             }
         }
         return ast::make_bool();
     }
     if (member.member == "repeat") {
         if (member.args.size() != 1) {
-            error(current_span_, "String repeat() takes 1 argument");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringRepeatTakes1Argument));
         } else {
             auto arg_type = infer_type(*member.args[0]);
             if (!arg_type->is_integer()) {
-                error(current_span_, "String repeat() count must be integer");
+                error(current_span_, i18n::msg(i18n::MsgId::TcStringRepeatCountMustInteger));
             }
         }
         return ast::make_string();
     }
     if (member.member == "replace") {
         if (member.args.size() != 2) {
-            error(current_span_, "String replace() takes 2 arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringReplaceTakes2Arguments));
         } else {
             for (auto& arg : member.args) {
                 auto arg_type = infer_type(*arg);
                 if (arg_type->kind != ast::TypeKind::String) {
-                    error(current_span_, "String replace() arguments must be strings");
+                    error(current_span_,
+                          i18n::msg(i18n::MsgId::TcStringReplaceArgumentsMustStrings));
                 }
             }
         }
@@ -798,18 +800,18 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
     }
     if (member.member == "first") {
         if (!member.args.empty()) {
-            error(current_span_, "String first() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringFirstTakesNoArguments));
         }
         return ast::make_char();
     }
     if (member.member == "last") {
         if (!member.args.empty()) {
-            error(current_span_, "String last() takes no arguments");
+            error(current_span_, i18n::msg(i18n::MsgId::TcStringLastTakesNoArguments));
         }
         return ast::make_char();
     }
 
-    error(current_span_, "Unknown string method '" + member.member + "'");
+    error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownStringMethod, member.member));
     return ast::make_error();
 }
 

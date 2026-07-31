@@ -63,6 +63,15 @@ rustc_errorsのDiagCtxt（全層が共有する単一の診断コンテキスト
 - regression: `tests/regression/mir_lowering_test.cpp` にジェネリックメソッドチェーン・補間内呼び出し・スライス組み込みを含む代表プログラム（cases/mir_lowering/error_artifact_free.cm）で__error__シンボル不在とMIR診断空を固定するテストを追加した。
 - HIR側の宣言・式単位での`<error>`型検査（コンパイル停止をより早い段階へ移す形）は、型検査のエラー回復設計（typed-hir-single-source.md）と合わせて扱う。
 
-### 残り（第4段）: 未実装
+### 第4段（英語直書き診断のMsgId化）: 実装済み
 
-英語直書き診断のMsgId化。実測で型検査に約140件・パーサに約46件の英語直書きが残っており（i18n化済みは型検査41件）、独立の作業パッケージとして扱う。新設するMIR診断はMsgId定義を必須とする運用を第2段から適用済み。
+- 型検査・パーサの英語直書き診断207呼び出し（一意メッセージ183件）を全てMsgId（i18n表のen/ja対）へ収容した。変換は呼び出しの機械抽出（バランス括弧+文字列連結の分解）で行い、enテンプレートは既存文面の完全再構成のため英語出力はバイト同一を維持する（既存の.error照合・i18n E2Eの英語期待に影響しない）。ja訳183件を新規執筆した。
+- codegenに残っていた生文字列診断（SV002/SV005/SV008の4箇所）もMsgId化した。SV008は従来enでも日本語文面だったため英語文面を新設した（照合テストなし）。SVの型幅エラー1件は日本語のみの既存文面をen/ja共通として維持した。
+- ルールID付きメッセージ（[W001]等）はja訳でも末尾IDを維持し、check/lintのルールID抽出・レベル設定と互換。
+
+## 解決記録（設計判断）
+
+- 発行APIは「Parser/TypeChecker/MIR loweringが共通の`cm::Diagnostic`型を各自のベクタへ収集し、ドライバが単一の`DiagnosticEmitter`で表示する」構成で確定した。原案の単一DiagCtxtオブジェクト共有は、発行元が3系統で確定しており表示・座標系・i18nの一元化が emitter 側で達成できるため導入しなかった（発行元がさらに増える場合の将来課題として残す）。
+- codegen段の診断（バックエンド検証エラー: SVnnn・Codegen系）はMIRにSpanが運搬されないため構造化Diagnosticではなくi18n化されたcerr出力で確定した。Span運搬はmodule-system-structural-imports実装後の座標系整理と合わせて将来検討する。
+- 診断IDカタログ（E001/W001系）の`--explain`拡張向け統合（方針5）は受け皿（diagnostics/catalog）を維持したまま将来課題とする。
+- 中核の4目標（表示一元化・MIRエラー昇格とcodegen前停止・エラー型成果物の構造的検査・MsgId収容）は全て実装完了し、本文書はarchiveへ移動する。
