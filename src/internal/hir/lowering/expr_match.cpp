@@ -469,6 +469,9 @@ HirExprPtr HirLowering::clone_hir_expr(const HirExprPtr& expr) {
     if (auto* lit = std::get_if<std::unique_ptr<HirLiteral>>(&expr->kind)) {
         auto clone = std::make_unique<HirLiteral>();
         clone->value = (*lit)->value;
+        clone->bit_info = (*lit)->bit_info;
+        // 脱糖済み補間部分式も保持する（shared所有。落とすとテキスト解決へのフォールバックになる。第4段b）
+        clone->interp_parts = (*lit)->interp_parts;
         return std::make_unique<HirExpr>(std::move(clone), expr->type, expr->span);
     }
 

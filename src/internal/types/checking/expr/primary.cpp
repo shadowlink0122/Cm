@@ -332,8 +332,18 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
     if (lit.is_char())
         return ast::make_char();
     if (lit.is_string()) {
-        // 文字列リテラルはどこでも補間される（string s = "{x}" 等）ため、プレースホルダ内の変数参照を使用としてマークする（W001誤検出防止）
-        mark_interpolation_uses(std::get<std::string>(lit.value));
+        // 補間プレースホルダを一度だけ実ASTへ脱糖し、現在のスコープで通常の式として推論する（第4段b）。
+        // スコープ・move・未定義変数・型の検査が本物の検査器で行われ、HIR/MIRは脱糖済み式を消費する
+        if (!lit.interp_scanned) {
+            Span lit_span = current_span_;
+            desugar_interpolation_parts(lit);
+            for (auto& [content, pexpr] : lit.interp_parts) {
+                if (pexpr) {
+                    infer_type(*pexpr);
+                }
+            }
+            current_span_ = lit_span;
+        }
         return ast::make_string();
     }
     return ast::make_error();

@@ -32,6 +32,10 @@ using HirDeclPtr = std::unique_ptr<HirDecl>;
 struct HirLiteral {
     std::variant<std::monostate, bool, int64_t, double, char, std::string> value;
     std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
+
+    // 補間プレースホルダの脱糖済み部分式（文字列リテラルのみ。第4段b）。
+    // （プレースホルダ内容文字列, 型検査済みHIR式）。MIRのprintln/format loweringがテキスト再パースの代わりに消費する
+    std::vector<std::pair<std::string, std::shared_ptr<HirExpr>>> interp_parts;
 };
 
 // 変数参照

@@ -79,6 +79,12 @@ class ExprLowering : public MirLoweringBase {
     // 補間プレースホルダを値ローカルへ解決（識別子直接参照 or 式パーサ経由）
     LocalId resolve_interp_placeholder(const std::string& content, LoweringContext& ctx);
 
+    // 脱糖済みの補間部分式（HirLiteral.interp_parts）を優先して各プレースホルダを値ローカルへ解決する（第4段b）。
+    // 部分式が無い内容のみ従来のテキスト解決（resolve_interp_placeholder）へフォールバックする
+    std::vector<LocalId> lower_interp_arg_values(const hir::HirLiteral& lit,
+                                                 const std::vector<std::string>& var_names,
+                                                 LoweringContext& ctx);
+
    protected:
     // HIR二項演算子をMIRに変換
     MirBinaryOp convert_binary_op(hir::HirBinaryOp op);

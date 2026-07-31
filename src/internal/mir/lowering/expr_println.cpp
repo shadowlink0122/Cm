@@ -109,16 +109,12 @@ std::optional<LocalId> ExprLowering::try_lower_println(const hir::HirCall& call,
                     str_const.value = converted_format;
                     args.push_back(MirOperand::constant(str_const));
 
-                    // 引数を収集（名前付き変数を先に、明示的引数を後に）
-                    std::vector<LocalId> arg_locals;
-
-                    // 名前付き変数を解決して追加（プレースホルダの順番通り）
-                    // プレースホルダは唯一の解決経路resolve_interp_placeholder（識別子直接参照＋式パイプライン）で値へ降下する（type-resolution-simplification 領域1第4段）。
-                    // 従来ここにあった約2,000行のテキストパターン照合（メンバ・添字・アロー・enum・否定・アドレス等の個別分岐）は、部分一致で誤った場所を構築する再発源（B7/N1/V1〜V4/W5）だったため撤去した。
+                    // 引数を収集（名前付き変数を先に、明示的引数を後に）。
+                    // 型検査で脱糖済みの補間部分式を優先して値へ降下し、無い内容のみテキスト解決へフォールバックする（第4段a/4b）。
+                    // 従来ここにあった約2,000行のテキストパターン照合は部分一致で誤った場所を構築する再発源（B7/N1/V1〜V4/W5）だったため撤去済み。
                     // 表示変換はコード生成のformat置換が値ローカルの型で行うため、ここでは型が正しいローカルを渡すことのみ保証する
-                    for (const auto& var_name : var_names) {
-                        arg_locals.push_back(resolve_interp_placeholder(var_name, ctx));
-                    }
+                    std::vector<LocalId> arg_locals =
+                        lower_interp_arg_values(**lit, var_names, ctx);
 
                     // 明示的な引数は無視（単一の文字列リテラルのみ許可）
                     // 将来的にはエラーを報告する

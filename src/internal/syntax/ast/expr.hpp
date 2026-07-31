@@ -29,6 +29,12 @@ struct LiteralExpr {
     bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
     std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 
+    // 補間プレースホルダの脱糖結果（文字列リテラルのみ。type-resolution-simplification 領域1第4段b）。
+    // 型検査時に一度だけプレースホルダ内容を実ASTへパース・推論し、HIR/MIRはテキスト再パースせずこの式を消費する。
+    // 要素は（プレースホルダ内容文字列, パース済み式）。パース不能な内容は登録されず従来のリテラル扱いに落ちる
+    std::vector<std::pair<std::string, std::shared_ptr<Expr>>> interp_parts;
+    bool interp_scanned = false;  // 脱糖を一度だけ行うためのフラグ
+
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
     explicit LiteralExpr(int64_t v) : value(v) {}

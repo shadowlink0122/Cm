@@ -1,0 +1,12 @@
+// 回帰(第4段b): 一般文字列コンテキスト（非println）の式補間
+import std::io::println;
+struct P { int x; }
+int main() {
+    int x = 7;
+    string s = "v: {x} sum: {x + 1} mul: {x * 2}";
+    println(s);
+    P p = {x: 3};
+    string t = "member: {p.x} idx-free";
+    println(t);
+    return 0;
+}

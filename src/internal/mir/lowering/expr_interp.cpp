@@ -11,6 +11,7 @@
 #include "interp_internal.hpp"
 
 #include <cctype>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -727,6 +728,34 @@ LocalId ExprLowering::resolve_interp_placeholder(const std::string& content, Low
         return *var_id;
     }
     return ctx.new_temp(hir::make_error());
+}
+
+// 脱糖済みの補間部分式を優先して各プレースホルダを値ローカルへ解決する（type-resolution-simplification 領域1第4段b）。
+// 型検査済みのHIR式を通常のloweringへ渡すため、ミニパイプラインの再パース・型補完はフォールバック時のみ動く
+std::vector<LocalId> ExprLowering::lower_interp_arg_values(
+    const hir::HirLiteral& lit, const std::vector<std::string>& var_names, LoweringContext& ctx) {
+    // 同一内容の重複（{x} {x}）に対応するため、内容ごとの出現キューで先頭から消費する
+    std::unordered_map<std::string, std::deque<hir::HirExpr*>> parts;
+    for (const auto& [content, pe] : lit.interp_parts) {
+        if (pe) {
+            parts[content].push_back(pe.get());
+        }
+    }
+    std::vector<LocalId> out;
+    out.reserve(var_names.size());
+    for (const auto& name : var_names) {
+        auto it = parts.find(name);
+        if (it != parts.end() && !it->second.empty()) {
+            hir::HirExpr* pe = it->second.front();
+            it->second.pop_front();
+            out.push_back(lower_expression(*pe, ctx));
+            continue;
+        }
+        // 部分式が無い内容（パース不能・スキャナ差分）は従来経路で解決する
+        debug_msg("MIR", "interp fallback to text resolution: " + name);
+        out.push_back(resolve_interp_placeholder(name, ctx));
+    }
+    return out;
 }
 
 }  // namespace cm::mir

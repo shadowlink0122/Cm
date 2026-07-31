@@ -383,6 +383,13 @@ HirExprPtr HirLowering::lower_literal(ast::LiteralExpr& lit, TypePtr type) {
     auto hir_lit = std::make_unique<HirLiteral>();
     hir_lit->value = lit.value;
     hir_lit->bit_info = lit.bit_info;  // SV幅付きリテラル伝搬
+    // 型検査で脱糖済みの補間部分式をHIRへ下ろす（第4段b）。MIRはテキスト再パースせずこの式を消費する
+    for (auto& [content, part_expr] : lit.interp_parts) {
+        if (part_expr) {
+            hir_lit->interp_parts.emplace_back(content,
+                                               std::shared_ptr<HirExpr>(lower_expr(*part_expr)));
+        }
+    }
     return std::make_unique<HirExpr>(std::move(hir_lit), type);
 }
 
