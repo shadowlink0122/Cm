@@ -66,6 +66,11 @@ parent: v0.17.0 Design
 - 検査で実乖離2件を検出し修正した: (1) `__builtin_array_findIndex_i64` のnative実装がint64_t戻り（LLVM宣言・closure変種・wasm実装はi32。ABIの偶然で動作していた）→i32へ統一 (2) wasmの `cm_format_string` スタブがargc引数を欠いていた→レジストリ宣言（fmt, argc, ...)へ整合。
 - negative検証: 意図的な不一致（cm_slice_lenのi32戻り定義）でレジストリ照合・相互照合の両方が検出することを確認した。
 
-### 残り（第2段後半・第4段）: 未実装
+### 第2段後半（jsの写像表駆動化）: 不採用（設計判断）
 
-jsの`emitBuiltinCall`写像if連鎖の表駆動化・js固有42件のレジストリ収容と、ランタイムCの共通ソース化（native/wasm 8,088行の一本化）。
+- `emitBuiltinCall`の実装を精査した結果、各caseはBigInt再解釈（asIntN/asUintN境界）・process.exitフォールバック・fmt_double正規化などjs固有の意味論を持ち、「基本写像を表から導出し特殊整形をフックに残す」と大半がフック側に残るため、表駆動化は複雑さの移動にしかならないと判断し不採用とした。名前集合の導出（isBuiltinFunctionのレジストリ照合化）までを第2段の成果とする。
+- js固有42件のレジストリ収容も、それらのLLVM宣言が別経路（system.cpp・MIRシグネチャ）にあり、収容には各宣言経路との優先順位整理が必要なため見送った（シグネチャ検査の対象拡大として将来検討）。
+
+### 残り（第4段）: 未実装
+
+ランタイムCの共通ソース化（native/wasm 8,088行の一本化。slice系→format系の順、wasm固有のゲート・アロケータ差はフック化）。
