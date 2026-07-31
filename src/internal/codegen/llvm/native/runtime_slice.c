@@ -294,6 +294,18 @@ int16_t cm_slice_pop_i16(void* slice_ptr) {
 }
 
 // i32要素をpop
+// blob（構造体/union）要素のpop用: 値の取り出しは呼び出し側がcm_slice_get_element_ptr経由で行い、
+// ここではlen減算のみ行う（ポインタ幅で読むcm_slice_pop_ptrをblobへ流用すると
+// 構造体宛先への型不整合storeで不正メモリアクセスになる。W3）
+void cm_slice_pop_blob(void* slice_ptr) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len == 0)
+        return;
+    slice->len--;
+}
+
 int32_t cm_slice_pop_i32(void* slice_ptr) {
     if (!slice_ptr)
         return 0;

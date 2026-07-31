@@ -139,9 +139,13 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
             if (auto info = slice_scalar_info(elem_kind)) {
                 // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
                 push_func = std::string("cm_slice_push_") + info->width;
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
+            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 push_func = "cm_slice_push_ptr";
+            } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
+                // 構造体・ユニオンはblob（値のインラインコピー）でpushする（W1）。
+                // 従来はpush_ptrで一時のアドレスがポインタ幅の値として格納され、
+                // 読み出しがゴミ値・stringフィールド再代入でSIGSEGVになっていた
+                push_func = "cm_slice_push_blob";
             } else if (elem_kind == hir::TypeKind::Array) {
                 // 多次元スライス: 内側スライスのヘッダをインラインコピー
                 push_func = "cm_slice_push_slice";
@@ -203,6 +207,14 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
                     ctx.set_terminator(std::move(conv_term));
                     ctx.switch_to_block(conv_block);
                     elem_value = inner_slice;
+                }
+
+                // blob pushは要素一時のアドレスを渡す（ランタイムがelem_sizeバイトをインラインコピー）
+                if (push_func == "cm_slice_push_blob") {
+                    LocalId elem_addr = ctx.new_temp(hir::make_pointer(elem_type));
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{elem_addr}, MirRvalue::ref(MirPlace{elem_value}, false)));
+                    elem_value = elem_addr;
                 }
 
                 BlockId success_block = ctx.new_block();

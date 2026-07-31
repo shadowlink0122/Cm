@@ -293,6 +293,10 @@ class TypeChecker {
     // 式がキャプチャ付きクロージャ（ラムダ直書きまたはclosure_vars_の変数参照）か
     bool is_capturing_closure_expr(const ast::Expr& expr) const;
 
+    // リテラル式へ期待型を再帰的に伝播する（W1/X3/X4）。
+    // 無名構造体リテラルの型名補完と、配列リテラル（要素の無名リテラル含む）の型注釈を行う
+    void propagate_literal_expected_type(ast::Expr& expr, const ast::TypePtr& expected);
+
     // 宣言された非const変数の情報（名前 → Span）
     std::unordered_map<std::string, Span> non_const_variable_spans_;
 

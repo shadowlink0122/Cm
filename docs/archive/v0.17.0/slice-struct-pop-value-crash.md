@@ -59,3 +59,9 @@ int x = xs.pop();
 ## 検出経緯
 
 native/jit網羅検証第2ラウンドで検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_pop.cm` / `min/m_pop2.cm`。
+
+## 解決記録（実装済み）
+
+方針1どおり、blob（構造体/union）要素のpopを「cm_slice_get_element_ptrで末尾要素ポインタ取得→構造体宛先へderefコピー→len減算」の脱糖へ変更した。
+len減算はランタイム新設のcm_slice_pop_blob（native/wasm両実装、js写像は.pop()破棄）で行う。
+回帰テスト tests/common/dynamic_array/struct_pop_value.cm（戻り値受け取り・チェーン読み・破棄・string持ち構造体・スカラ対比）を7モードで検証した。

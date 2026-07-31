@@ -152,6 +152,7 @@ bool isBuiltinFunction(const std::string& name) {
         "cm_slice_push_ptr",
         "cm_slice_push_blob",
         "cm_slice_get_element_ptr",
+        "cm_slice_pop_blob",
         "cm_slice_pop_i16",
         "cm_slice_pop_i32",
         "cm_slice_pop_i64",
@@ -653,6 +654,9 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     if ((name == "cm_slice_pop_i16" || name == "cm_slice_pop_i32" || name == "cm_slice_pop_i64" ||
          name == "cm_slice_pop_f32" || name == "cm_slice_pop_f64" || name == "cm_slice_pop_ptr") &&
         argStrs.size() >= 1) {
+        return "__cm_unwrap(" + argStrs[0] + ").pop()";
+    }
+    if (name == "cm_slice_pop_blob" && argStrs.size() >= 1) {
         return "__cm_unwrap(" + argStrs[0] + ").pop()";
     }
     if (name == "cm_slice_delete" && argStrs.size() >= 2) {

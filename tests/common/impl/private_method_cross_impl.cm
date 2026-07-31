@@ -1,0 +1,27 @@
+// 回帰(X6): privateメソッドの可視性は構造体単位（同一構造体の別implから呼べる。C++のprivate相当）
+import std::io::println;
+interface A {
+    int fa();
+}
+interface B {
+    int fb();
+}
+struct S { int v; }
+impl S for A {
+    private int helper() {
+        return 10;
+    }
+    int fa() {
+        return self.helper();
+    }
+}
+impl S for B {
+    int fb() {
+        return self.helper() + 1;
+    }
+}
+int main() {
+    S s = {v: 0};
+    println("{s.fa()} {s.fb()}");
+    return 0;
+}

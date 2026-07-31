@@ -101,6 +101,88 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                     }
                 }
 
+                // 多次元スライスへの配列リテラル直接push（X3）:
+                // リテラルは固定長配列blobとしてlowerされるため、cm_slice_push_sliceが
+                // 期待するCmSliceヘッダでないメモリが渡り壊れた要素が格納されていた。
+                // cm_array_to_sliceでヒープスライスへ実体化してからpushする（空リテラルはlen=0の正規ヘッダ）
+                if (push_func == "cm_slice_push_slice" && value_local < ctx.func->locals.size()) {
+                    hir::TypePtr vt = ctx.func->locals[value_local].type;
+                    if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
+                        auto inner_slice_type = ctx.resolve_typedef(slice_type->element_type);
+                        const int64_t inner_size = static_cast<int64_t>(vt->array_size.value_or(0));
+                        int64_t inner_elem_size = 4;
+                        hir::TypePtr inner_et =
+                            inner_slice_type ? inner_slice_type->element_type : nullptr;
+                        if (vt->element_type) {
+                            auto rk = ctx.resolve_typedef(vt->element_type);
+                            auto ik = rk ? rk->kind : vt->element_type->kind;
+                            if (auto iinfo = slice_scalar_info(ik)) {
+                                inner_elem_size = iinfo->elem_size;
+                            } else if (ik == hir::TypeKind::Pointer ||
+                                       ik == hir::TypeKind::String) {
+                                inner_elem_size = cm::target_pointer_size();
+                            } else if (ik == hir::TypeKind::Struct || ik == hir::TypeKind::Union) {
+                                inner_elem_size = ctx.layout_size(rk ? rk : vt->element_type);
+                            } else if (ik == hir::TypeKind::Array) {
+                                inner_elem_size = static_cast<int64_t>(sizeof(void*) * 4);
+                            }
+                        } else if (inner_et) {
+                            // 空リテラル []: 要素型はレシーバの内側スライスから取る
+                            auto rk = ctx.resolve_typedef(inner_et);
+                            auto ik = rk ? rk->kind : inner_et->kind;
+                            if (auto iinfo = slice_scalar_info(ik)) {
+                                inner_elem_size = iinfo->elem_size;
+                            } else if (ik == hir::TypeKind::Pointer ||
+                                       ik == hir::TypeKind::String) {
+                                inner_elem_size = cm::target_pointer_size();
+                            } else if (ik == hir::TypeKind::Struct || ik == hir::TypeKind::Union) {
+                                inner_elem_size = ctx.layout_size(rk ? rk : inner_et);
+                            } else if (ik == hir::TypeKind::Array) {
+                                inner_elem_size = static_cast<int64_t>(sizeof(void*) * 4);
+                            }
+                        }
+
+                        LocalId addr_local = ctx.new_temp(hir::make_pointer(vt->element_type));
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{addr_local}, MirRvalue::ref(MirPlace{value_local}, false)));
+                        LocalId size_local = ctx.new_temp(hir::make_long());
+                        MirConstant size_const;
+                        size_const.value = inner_size;
+                        size_const.type = hir::make_long();
+                        ctx.push_statement(
+                            MirStatement::assign(MirPlace{size_local},
+                                                 MirRvalue::use(MirOperand::constant(size_const))));
+                        LocalId ies_local = ctx.new_temp(hir::make_long());
+                        MirConstant ies_const;
+                        ies_const.value = inner_elem_size;
+                        ies_const.type = hir::make_long();
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{ies_local}, MirRvalue::use(MirOperand::constant(ies_const))));
+
+                        LocalId conv = ctx.new_temp(inner_slice_type ? inner_slice_type
+                                                                     : slice_type->element_type);
+                        BlockId conv_block = ctx.new_block();
+                        std::vector<MirOperandPtr> conv_args;
+                        conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
+                        conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
+                        conv_args.push_back(MirOperand::copy(MirPlace{ies_local}));
+                        auto conv_term = std::make_unique<MirTerminator>();
+                        conv_term->kind = MirTerminator::Call;
+                        conv_term->data =
+                            MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
+                                                    std::move(conv_args),
+                                                    MirPlace{conv},
+                                                    conv_block,
+                                                    std::nullopt,
+                                                    "",
+                                                    "",
+                                                    false};
+                        ctx.set_terminator(std::move(conv_term));
+                        ctx.switch_to_block(conv_block);
+                        value_local = conv;
+                    }
+                }
+
                 // インターフェイス要素スライスへの具象構造体push:
                 // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
                 if (push_func == "cm_slice_push_blob" && slice_type && slice_type->element_type &&
@@ -185,9 +267,82 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
                         // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
                         pop_func = std::string("cm_slice_pop_") + info->width;
                     } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String ||
-                               elem_kind == hir::TypeKind::Struct) {
+                               elem_kind == hir::TypeKind::String) {
                         pop_func = "cm_slice_pop_ptr";
+                    } else if (elem_kind == hir::TypeKind::Struct ||
+                               elem_kind == hir::TypeKind::Union) {
+                        // blob要素: cm_slice_pop_ptrはポインタ幅の戻り値を構造体宛先へ
+                        // 格納する型不整合になりSIGSEGVしていた（W3）。
+                        // 末尾要素ポインタからderefコピーで受けてからlenを減算する
+                        LocalId len_local = ctx.new_temp(hir::make_long());
+                        BlockId len_block = ctx.new_block();
+                        std::vector<MirOperandPtr> len_args;
+                        len_args.push_back(MirOperand::copy(slice_place));
+                        auto len_term = std::make_unique<MirTerminator>();
+                        len_term->kind = MirTerminator::Call;
+                        len_term->data =
+                            MirTerminator::CallData{MirOperand::function_ref("cm_slice_len"),
+                                                    std::move(len_args),
+                                                    MirPlace{len_local},
+                                                    len_block,
+                                                    std::nullopt,
+                                                    "",
+                                                    "",
+                                                    false};
+                        ctx.set_terminator(std::move(len_term));
+                        ctx.switch_to_block(len_block);
+
+                        LocalId idx_local = ctx.new_temp(hir::make_long());
+                        MirConstant one_const;
+                        one_const.value = int64_t{1};
+                        one_const.type = hir::make_long();
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{idx_local},
+                            MirRvalue::binary(MirBinaryOp::Sub,
+                                              MirOperand::copy(MirPlace{len_local}),
+                                              MirOperand::constant(one_const), hir::make_long())));
+
+                        LocalId elem_ptr = ctx.new_temp(hir::make_pointer(elem_type));
+                        BlockId ptr_block = ctx.new_block();
+                        std::vector<MirOperandPtr> ptr_args;
+                        ptr_args.push_back(MirOperand::copy(slice_place));
+                        ptr_args.push_back(MirOperand::copy(MirPlace{idx_local}));
+                        auto ptr_term = std::make_unique<MirTerminator>();
+                        ptr_term->kind = MirTerminator::Call;
+                        ptr_term->data = MirTerminator::CallData{
+                            MirOperand::function_ref("cm_slice_get_element_ptr"),
+                            std::move(ptr_args),
+                            MirPlace{elem_ptr},
+                            ptr_block,
+                            std::nullopt,
+                            "",
+                            "",
+                            false};
+                        ctx.set_terminator(std::move(ptr_term));
+                        ctx.switch_to_block(ptr_block);
+
+                        LocalId blob_result = ctx.new_temp(elem_type);
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{blob_result}, MirRvalue::use(MirOperand::copy(MirPlace{
+                                                       elem_ptr, {PlaceProjection::deref()}}))));
+
+                        BlockId pop_block = ctx.new_block();
+                        std::vector<MirOperandPtr> pop_args;
+                        pop_args.push_back(MirOperand::copy(slice_place));
+                        auto pop_term = std::make_unique<MirTerminator>();
+                        pop_term->kind = MirTerminator::Call;
+                        pop_term->data =
+                            MirTerminator::CallData{MirOperand::function_ref("cm_slice_pop_blob"),
+                                                    std::move(pop_args),
+                                                    std::nullopt,
+                                                    pop_block,
+                                                    std::nullopt,
+                                                    "",
+                                                    "",
+                                                    false};
+                        ctx.set_terminator(std::move(pop_term));
+                        ctx.switch_to_block(pop_block);
+                        return blob_result;
                     }
                 }
 

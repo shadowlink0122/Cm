@@ -14,48 +14,12 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 
 ## 残りの設計文書（テーマ別）
 
-### native/jit網羅検証 第2ラウンド（未修正の新規所見 W1〜W5）
+### native/jit網羅検証 第2・第3ラウンド（W1〜W5・X1〜X6、全件修正済み・archiveへ移動）
 
-深いネスト・チェーン・複合型・最適化正しさを対象とした検証で検出。バグ1種類につき1文書。
-
-- [W1: 構造体リテラル内配列の無名構造体リテラル喪失](nested-anonymous-struct-literal-loss.md) — フィールドがゼロ/ゴミ値化し、喪失stringへの再代入でnativeのみSIGSEGV（Critical・無診断）
-- [W2: スライスofスライス要素への直接代入がSIGSEGV](nested-slice-element-write-crash.md) — `rows[0][1] = v` が全経路クラッシュ（読みはN1修正済み・書き経路が未修正）（Critical）
-- [W3: 構造体要素スライスのpop()戻り値受け取りがSIGSEGV](slice-struct-pop-value-crash.md) — blob要素popが`cm_slice_pop_ptr`へ誤ディスパッチ（Critical）
-- [W4: LICMがグローバルを呼び出し越しに不変とみなすmiscompile](licm-global-clobber-miscompile.md) — O1以上でループ内のグローバル読みが初期値に固定（Critical・jit/native共通）
-- [W5: 補間内チェーン式の誤lowering](interp-chain-lowering-failures.md) — 2段以上のチェーン/メソッド/アローでSIGSEGV・誤値・`__error__len`ビルド不能（High、V1〜V4と同根）
-
-### 型システム・ジェネリクス
-（すべて実装済み・archiveへ移動）
-
-### メモリ管理
-- [drop パスと寿命管理](../../archive/v0.17.0/memory-drop-and-lifetime.md) — C12 / C13 / H12 / M15（全項目実装済み・archiveへ移動。C12のO0再代入解放とH12線形フロー診断で完結、厳密CFG化は将来課題として記録）
-- [アロケータと一時プール](../../archive/v0.17.0/allocator-and-temp-pool.md) — H11 / M14（全項目実装済み・archiveへ移動。set_allocator_fnsファサードとcm_mem_*経路一本化で完結）
-- [集約コピーのlowering](../../archive/v0.17.0/aggregate-copy-lowering.md) — C14 / M12 / M13（全Phase実装済み・archiveへ移動）
-
-### モジュール・可視性・静的解析
-- [モジュール可視性とimport重複排除](../../archive/v0.17.0/module-visibility-and-import-dedup.md) — H7 / M7 / M2（全段階実装済み・archiveへ移動。段階4は生ソース収集+パス鍵伝搬の改名方式で完結、エラー化は将来として記録）
-- [確定代入とreturn網羅の解析](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md) — H6 / L4（段階1-3実装済み・archiveへ移動。--strictでエラー昇格、恒真条件枠とCFG精密化は将来課題として記録）
-- [const集約の強制](../../archive/v0.17.0/const-aggregate-enforcement.md) — M3（段階1-4実装済み・archiveへ移動。フィールド/要素代入とconstポインタ化の警告まで完了、エラー化は将来として記録）
-
-### 値セマンティクス・バックエンド一貫性
-- [JS/TSの値セマンティクスとBigInt](../../archive/v0.17.0/js-ts-value-semantics.md) — H3 / H5（全項目実装済み・archiveへ移動。BigInt表現移行で5系一致）
-
-### セルフホスト準備
-- [セルフホスト準備（OS連携APIの整備）](../../archive/v0.17.0/self-hosting-preparation.md) — S1〜S9（全4段実装済み・archiveへ移動。env/process/path/bytes/split・ランタイムシム（readdir/バイナリI/O/current_exe）・argv対応・セルフホスト素振りexampleのCI通し検証で完結）
-
-### ランタイム・コレクション・文字列・ビルド
-- [文字列のUTF-8対応とStringBuilder](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md) — H9（全5段実装済み・archiveへ移動。第4段はchar*互換のSDSヘッダ方式でO(1)バイト長・埋め込みNUL・from_bytesを実現）
-- [チェーンレシーバの解決](../../archive/v0.17.0/chain-receiver-resolution.md) — H10（全5段実装済み・archiveへ移動。添字レシーバ・混合チェーン・多重添字読みで完結）
-- [インクリメンタルビルドと並列コード生成](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) — H14 / M6 / M10（全項目実装済み・archiveへ移動。CM_MODULE_CODEGENの既定有効化はsoak後判断）
-- [その他の診断とLow優先度項目](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — M18 / L1 / L2 / L3 / L5 / L6 / L7（全項目実装済み・archiveへ移動）
-
-### 構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8、全件修正済み・archiveへ移動）
-
-構文→LLVM IR対訳リファレンス執筆時の実機検証（B1〜B9）と、5バックエンド差分プローブの追加ラウンド（N1〜N8）で検出したバグは全件修正し、個別文書を [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した。
-索引は [syntax-audit-bugfixes.md](../../archive/v0.17.0/syntax-audit-bugfixes.md)（B群）と各個別文書（interp-nested-slice-index / generic-slice-element-garbage / string-switch-miscompile / wasm-reduce-closure-trap / generic-struct-literal / enum-multi-payload-match / negative-radix-format / js-string-index-bigint）、および [move-closure-interp-audit.md](../../archive/v0.17.0/move-closure-interp-audit.md)（V群: 補間式添字・クロージャ第一級性・シフト境界）を参照。
+move・クロージャ・深いネスト・最適化・static・private・複合pushの網羅検証で検出した11件は全件修正し、個別文書を [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した。
+W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込みのsubslice降下、W3=構造体popのblob脱糖、W4=最適化パス（LICM/SCCP/folding）のグローバル・静的ガード、W5=補間チェーンの式パイプライン委譲＋再帰型補完、X1=static初期化ガード、X2=privateフィールド検査、X3=push配列リテラルのスライス実体化、X5=構文エラーのsource_map写像と予約語表示、X6=可視性仕様の確定（構造体単位）を参照。
 
 ## 状態
 
-監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-第2ラウンド検証で検出したW1〜W5は未修正の設計文書として本ディレクトリに残っている。
+監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
 セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

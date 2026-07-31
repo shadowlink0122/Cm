@@ -83,7 +83,11 @@ void run_optimization_passes(MirProgram& program, int optimization_level, bool d
     pass_mgr.enable_debug_output(debug);
 
     auto passes = create_standard_passes(optimization_level, user_opts);
+    const bool trace_passes = std::getenv("CM_TRACE_PASSES") != nullptr;
     for (auto& pass : passes) {
+        if (trace_passes) {
+            fprintf(stderr, "[PASSDBG] queued: %s\n", pass->name().c_str());
+        }
         pass_mgr.add_pass(std::move(pass));
     }
 

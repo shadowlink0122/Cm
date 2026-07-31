@@ -63,6 +63,19 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         }
     }
 
+    // グローバル/静的変数もOverdefinedに初期化する（W4）。
+    // 関数内に代入が無いグローバルはUndefined（楽観）のまま残り、
+    // acc + g がUndefined・merge(Const, Undefined)=Const の楽観連鎖で
+    // ループ内の読みが初期値の定数へ畳まれていた（実値は他関数の書き込みで変わる）
+    for (LocalId i = 0; i < local_count; ++i) {
+        if (func.locals[i].is_global || func.locals[i].is_static) {
+            for (size_t b = 0; b < block_count; ++b) {
+                in_states[b][i] = {LatticeKind::Overdefined, {}};
+                out_states[b][i] = {LatticeKind::Overdefined, {}};
+            }
+        }
+    }
+
     // Bug#5修正: ASM出力変数を事前にOverdefined化
     // インラインアセンブリの出力変数は実行時に決定されるため、定数として扱えない。
     // ループ前の初期代入（例: byte_val = 0）により定数推論されると、compute_successorsがループ本体への到達を遮断し、ASM出力のOverdefined化が反復解析で反映されない。事前マーキングで安全に回避する。
@@ -241,6 +254,15 @@ void SparseConditionalConstantPropagation::analyze(
                 if (arg < merged_in.size()) {
                     merged_in[arg] = {LatticeKind::Overdefined, {}};
                 }
+            }
+        }
+
+        // グローバル/静的変数は常にOverdefined（W4）。
+        // 関数内に代入が無いグローバルはUndefined（楽観）のまま残り、
+        // merge(Const, Undefined)=Constの楽観連鎖でループ内の読みが初期値定数へ畳まれていた
+        for (LocalId li = 0; li < merged_in.size() && li < func.locals.size(); ++li) {
+            if (func.locals[li].is_global || func.locals[li].is_static) {
+                merged_in[li] = {LatticeKind::Overdefined, {}};
             }
         }
 

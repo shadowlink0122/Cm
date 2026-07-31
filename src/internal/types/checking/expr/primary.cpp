@@ -353,6 +353,55 @@ ast::TypePtr TypeChecker::infer_array_literal(ast::ArrayLiteralExpr& lit) {
     return ast::make_array(first_type, lit.elements.size());
 }
 
+// リテラル式へ期待型を再帰的に伝播する（W1/X3/X4）。
+// 「構造体リテラル > 配列リテラル > 無名構造体リテラル」等のネストで要素側の期待型が
+// 伝わらず、型不明のままゼロ/未初期化blobとしてlowerされてフィールド喪失・ゴミ値になっていた
+void TypeChecker::propagate_literal_expected_type(ast::Expr& expr, const ast::TypePtr& expected) {
+    if (!expected) {
+        return;
+    }
+    auto resolved = resolve_typedef(expected);
+    if (!resolved) {
+        return;
+    }
+    if (auto* slit = expr.as<ast::StructLiteralExpr>()) {
+        if (resolved->kind != ast::TypeKind::Struct) {
+            return;
+        }
+        if (slit->type_name.empty()) {
+            slit->type_name = resolved->name;
+        }
+        expr.type = resolved;
+        // フィールド値へ再帰伝播（フィールド型は構造体定義から引く）
+        const ast::StructDecl* sd = get_struct(resolved->name);
+        if (sd) {
+            for (auto& fv : slit->fields) {
+                for (const auto& sf : sd->fields) {
+                    if (sf.name == fv.name && fv.value) {
+                        propagate_literal_expected_type(*fv.value, sf.type);
+                        break;
+                    }
+                }
+            }
+        }
+        return;
+    }
+    if (auto* alit = expr.as<ast::ArrayLiteralExpr>()) {
+        if (resolved->kind != ast::TypeKind::Array) {
+            return;
+        }
+        expr.type = resolved;
+        if (resolved->element_type) {
+            for (auto& el : alit->elements) {
+                if (el) {
+                    propagate_literal_expected_type(*el, resolved->element_type);
+                }
+            }
+        }
+        return;
+    }
+}
+
 ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
     if (lit.type_name.empty()) {
         return ast::make_error();
@@ -404,6 +453,16 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
     }
 
     for (auto& field : lit.fields) {
+        // フィールド型を期待型としてリテラル値へ伝播してから推論する（W1）
+        {
+            const ast::StructDecl* sd0 = struct_it->second;
+            for (const auto& sf : sd0->fields) {
+                if (sf.name == field.name && field.value) {
+                    propagate_literal_expected_type(*field.value, sf.type);
+                    break;
+                }
+            }
+        }
         infer_type(*field.value);
         // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）
         if (field.value && is_capturing_closure_expr(*field.value)) {

@@ -344,6 +344,19 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
         if (struct_decl) {
             for (const auto& field : struct_decl->fields) {
                 if (field.name == member.member) {
+                    // privateフィールドの外部アクセス検査（X2）。
+                    // メソッド側の検査（Cannot call private method）と同じimpl粒度で、
+                    // 従来はフィールドだけ無検査で読み書きが素通りしていた
+                    if (field.visibility == ast::Visibility::Private) {
+                        if (current_impl_target_type_.empty() ||
+                            (current_impl_target_type_ != type_name &&
+                             current_impl_target_type_ != base_type_name)) {
+                            error(current_span_, "Cannot access private field '" + member.member +
+                                                     "' from outside impl block of '" +
+                                                     base_type_name + "'");
+                            return ast::make_error();
+                        }
+                    }
                     auto resolved_field_type = resolve_typedef(field.type);
 
                     if (!obj_type->type_args.empty() && !struct_decl->generic_params.empty()) {
@@ -403,6 +416,12 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                 error(current_span_, "Slice push() takes 1 argument");
             }
             if (!member.args.empty()) {
+                // レシーバの要素型を期待型としてリテラル引数へ伝播する（X3/X4）。
+                // 配列リテラル・無名構造体リテラルの直接pushが型不明のままlowerされ、
+                // 壊れたヘッダ・フィールドずれの要素が格納されていた
+                if (obj_type->element_type) {
+                    propagate_literal_expected_type(*member.args[0], obj_type->element_type);
+                }
                 infer_type(*member.args[0]);
                 // キャプチャ付きクロージャのスライス格納は環境喪失・未解決シンボルになるため拒否（V7）
                 if (obj_type->element_type &&

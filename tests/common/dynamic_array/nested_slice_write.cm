@@ -1,0 +1,31 @@
+// 回帰(W2): 多次元スライス要素への直接代入がSIGSEGVするバグの検証（subslice_ref降下）
+import std::io::println;
+int main() {
+    int[][] rows = [];
+    int[] r0 = [];
+    r0.push(1);
+    r0.push(2);
+    rows.push(r0);
+    rows[0][1] = 22;
+    println(rows[0][1]);
+    rows[0][1] += 5;
+    println(rows[0][1]);
+    int i = 0;
+    rows[i][0] = 100;
+    println(rows[0][0]);
+    int[][][] cube = [];
+    int[][] plane = [];
+    int[] line = [];
+    line.push(7);
+    plane.push(line);
+    cube.push(plane);
+    cube[0][0][0] = 42;
+    println(cube[0][0][0]);
+    string[][] srows = [];
+    string[] sr = [];
+    sr.push("a");
+    srows.push(sr);
+    srows[0][0] = "z";
+    println(srows[0][0]);
+    return 0;
+}

@@ -324,44 +324,69 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 bool is_slice_base = walk_type && walk_type->kind == hir::TypeKind::Array &&
                                      !walk_type->array_size.has_value();
                 if (proj.kind == ProjectionKind::Index && is_slice_base) {
-                    // スライス値（CmSlice*）を一時変数へロード
-                    MirPlace slice_place = place;
-                    slice_place.projections.resize(pi);
-                    LocalId slice_local = ctx.new_temp(walk_type);
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{slice_local}, MirRvalue::use(MirOperand::copy(slice_place))));
-
-                    // 要素ポインタを取得
                     hir::TypePtr elem_type =
                         walk_type->element_type ? walk_type->element_type : hir::make_int();
-                    LocalId elem_ptr = ctx.new_temp(hir::make_pointer(elem_type));
+                    const bool elem_is_slice = elem_type->kind == hir::TypeKind::Array &&
+                                               !elem_type->array_size.has_value();
+
+                    // スライス値（CmSlice*）を場所化する。基点が{ptr, deref}（インライン格納の
+                    // 内側ヘッダ）の場合、derefコピーはヘッダ先頭のdataポインタを値として読む
+                    // 誤り（W2のSIGSEGV源）のため、ポインタ自体をCmSlice*として使う
+                    LocalId slice_local;
+                    MirPlace slice_place = place;
+                    slice_place.projections.resize(pi);
+                    if (slice_place.projections.size() == 1 &&
+                        slice_place.projections[0].kind == ProjectionKind::Deref) {
+                        slice_local = slice_place.local;
+                    } else if (slice_place.projections.empty()) {
+                        slice_local = slice_place.local;
+                    } else {
+                        slice_local = ctx.new_temp(walk_type);
+                        ctx.push_statement(MirStatement::assign(
+                            MirPlace{slice_local}, MirRvalue::use(MirOperand::copy(slice_place))));
+                    }
+
+                    // 中間スライス段（要素がスライス）は参照版subsliceで内側ヘッダへ降下する（W2）。
+                    // 最終要素段は要素ポインタ経由のデリファレンス格納にする
+                    const std::string get_func =
+                        elem_is_slice ? "cm_slice_get_subslice_ref" : "cm_slice_get_element_ptr";
+                    hir::TypePtr dest_type =
+                        elem_is_slice ? elem_type : hir::make_pointer(elem_type);
+                    LocalId elem_ptr = ctx.new_temp(dest_type);
                     BlockId next_block = ctx.new_block();
                     std::vector<MirOperandPtr> ep_args;
                     ep_args.push_back(MirOperand::copy(MirPlace{slice_local}));
                     ep_args.push_back(MirOperand::copy(MirPlace{proj.index_local}));
                     auto ep_term = std::make_unique<MirTerminator>();
                     ep_term->kind = MirTerminator::Call;
-                    ep_term->data = MirTerminator::CallData{
-                        MirOperand::function_ref("cm_slice_get_element_ptr"),
-                        std::move(ep_args),
-                        MirPlace{elem_ptr},
-                        next_block,
-                        std::nullopt,
-                        "",
-                        "",
-                        false};
+                    ep_term->data = MirTerminator::CallData{MirOperand::function_ref(get_func),
+                                                            std::move(ep_args),
+                                                            MirPlace{elem_ptr},
+                                                            next_block,
+                                                            std::nullopt,
+                                                            "",
+                                                            "",
+                                                            false};
                     ctx.set_terminator(std::move(ep_term));
                     ctx.switch_to_block(next_block);
 
-                    // 残りのプロジェクションをデリファレンス基点へ付け替える
+                    // 残りのプロジェクションを新基点へ付け替える
                     MirPlace new_place{elem_ptr};
-                    new_place.projections.push_back(PlaceProjection::deref());
+                    if (!elem_is_slice) {
+                        new_place.projections.push_back(PlaceProjection::deref());
+                    }
                     for (size_t rest = pi + 1; rest < place.projections.size(); ++rest) {
                         new_place.projections.push_back(place.projections[rest]);
                     }
                     place = new_place;
                     walk_type = elem_type;
-                    pi = 0;  // 新しいplaceの先頭（deref）から再走査
+                    if (elem_is_slice) {
+                        // subslice降下は新placeの先頭が次のindex投影のため、0から再走査する
+                        // （continueでpi++されるためSIZE_MAXを経由して0に戻す）
+                        pi = static_cast<size_t>(-1);
+                    } else {
+                        pi = 0;  // deref基点はderefを飛ばして次から再走査
+                    }
                     continue;
                 }
                 // 型を追跡

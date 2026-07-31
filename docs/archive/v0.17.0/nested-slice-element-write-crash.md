@@ -59,3 +59,10 @@ rows[0].push(9);
 ## 検出経緯
 
 native/jit網羅検証第2ラウンドで検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d07b.cm`、回避確認は同 `min/m_d07c.cm`。
+
+## 解決記録（実装済み）
+
+書き込み経路の実体はexpr/binary.cppの代入正規化ループで、中間スライス段をcm_slice_get_element_ptr＋derefコピー（ヘッダ先頭のdataポインタを値として読む誤り）で辿っていたのが真因だった。
+中間段（要素がスライス）はcm_slice_get_subslice_ref（インライン格納の内側ヘッダ参照）で降下し、最終段のみ要素ポインタ経由のデリファレンス格納にするよう修正した（3次元は再走査開始位置の補正も実施）。
+stmt/assign.cppのbuild_projectionsにも同型のsubslice降下を追加した。
+回帰テスト tests/common/dynamic_array/nested_slice_write.cm（2D/3D・複合代入・変数添字・string要素）を7モードで検証した。

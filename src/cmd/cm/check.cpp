@@ -12,10 +12,13 @@
 #include "internal/syntax/parser/parser.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -117,11 +120,37 @@ int run_check(const cli::Options& opts) {
 
             if (parser.has_errors()) {
                 SourceLocationManager loc_mgr(code, file);
+                // import展開後の座標を元ソースへ写像する（X5。build経路と同じ扱い）
+                std::unordered_map<std::string, std::string> parse_file_contents;
+                if (!preprocess_result.source_map.empty()) {
+                    std::set<std::string> files_to_load;
+                    for (const auto& entry : preprocess_result.source_map) {
+                        if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
+                            entry.original_file != "<generated>") {
+                            files_to_load.insert(entry.original_file);
+                        }
+                    }
+                    for (const auto& f : files_to_load) {
+                        std::ifstream ifs(f);
+                        if (ifs) {
+                            std::stringstream buffer;
+                            buffer << ifs.rdbuf();
+                            parse_file_contents[f] = buffer.str();
+                        }
+                    }
+                }
                 for (const auto& diag : parser.diagnostics()) {
-                    std::string error_type =
-                        (diag.severity == DiagKind::Error ? "error" : "warning");
-                    std::cerr << loc_mgr.format_error_location(diag.span,
-                                                               error_type + ": " + diag.message);
+                    if (!preprocess_result.source_map.empty()) {
+                        std::cerr << loc_mgr.format_error_with_source_map(
+                            diag.span, diag.message, preprocess_result.source_map,
+                            parse_file_contents,
+                            diag.severity == DiagKind::Error ? "error" : "warning");
+                    } else {
+                        std::string error_type =
+                            (diag.severity == DiagKind::Error ? "error" : "warning");
+                        std::cerr << loc_mgr.format_error_location(
+                            diag.span, error_type + ": " + diag.message);
+                    }
                 }
                 total_errors += parser.diagnostics().size();
                 continue;

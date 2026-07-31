@@ -1,0 +1,25 @@
+// 回帰(W1/X4): 構造体リテラル内配列・push引数の無名構造体リテラルがフィールド喪失するバグの検証
+import std::io::println;
+struct Tag { string name; int weight; }
+struct Item { Tag[2] tags; }
+struct Item2 { Tag[] tags; }
+struct P { int x; int y; }
+struct Q { string name; int age; }
+int main() {
+    Item it = {tags: [{name: "a0", weight: 1}, {name: "a1", weight: 2}]};
+    println("{it.tags[0].weight} {it.tags[1].name}");
+    Item2 it2 = {tags: [{name: "b0", weight: 3}, {name: "b1", weight: 4}]};
+    long t2len = it2.tags.len();
+    int t2w = it2.tags[0].weight;
+    string t2n = it2.tags[1].name;
+    println("{t2len} {t2w} {t2n}");
+    it.tags[0].name = "mod" + "!";
+    println(it.tags[0].name);
+    P[] ps = [];
+    ps.push({x: 3, y: 4});
+    println("{ps[0].x} {ps[0].y}");
+    Q[] qs = [];
+    qs.push({name: "alice", age: 30});
+    println("{qs[0].name} {qs[0].age}");
+    return 0;
+}

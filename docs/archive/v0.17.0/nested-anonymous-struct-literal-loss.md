@@ -70,3 +70,9 @@ nativeクラッシュは、喪失したstringフィールド（ヌル/未初期�
 ## 検出経緯
 
 native/jit網羅検証第2ラウンド（深いネスト・チェーン・最適化検証）で検出。再現ハーネスは `.tmp/nativejit-bughunt2/harness2.sh`、最小再現は同 `min/m_agg2.cm` / `min/m_agg_slice.cm` / `min/m_agg_write.cm`。
+
+## 解決記録（実装済み）
+
+型検査へ期待型の再帰伝播ヘルパー（propagate_literal_expected_type）を新設し、構造体リテラルのフィールド値へフィールド型を、配列リテラルの要素へ要素型を、無名構造体リテラルへ型名を再帰的に伝播するようにした（infer前に適用）。
+併せてMIR loweringの構造体リテラル・スライスフィールド経路で、構造体要素のpushがcm_slice_push_ptr（一時のアドレス格納）になっていたのをcm_slice_push_blob（値のインラインコピー）へ修正し、ゴミ値と再代入SIGSEGVを解消した。
+回帰テスト tests/common/structs/anon_literal_in_array_field.cm（固定長・スライス・再代入・push無名リテラル）をjit O0/O1/O3・native O0/O2・js・wasmの7モードで検証した。

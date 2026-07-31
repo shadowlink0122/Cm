@@ -173,14 +173,60 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                     return false;
                 }
 
+                // スライス（element_typeがスライス）への添字か判定するヘルパー
+                auto is_slice_of_slice = [](const hir::TypePtr& t) {
+                    return t && t->kind == hir::TypeKind::Array && !t->array_size.has_value() &&
+                           t->element_type && t->element_type->kind == hir::TypeKind::Array &&
+                           !t->element_type->array_size.has_value();
+                };
+
                 // 多次元配列最適化: indices が設定されている場合、全インデックスを処理
                 if (!(*index)->indices.empty()) {
                     // 多次元: 全インデックスをプロジェクションとして追加
                     for (const auto& idx_expr : (*index)->indices) {
                         LocalId idx = expr_lowering->lower_expression(*idx_expr, ctx);
-                        projections.push_back([idx](MirPlace& p, LoweringContext&) {
-                            p.projections.push_back(PlaceProjection::index(idx));
-                        });
+                        if (is_slice_of_slice(inner_type)) {
+                            // スライスofスライスの中間添字は生index投影ではなく参照版subsliceで降下する（W2）。
+                            // 外側要素はインライン格納された内側ヘッダのため、生投影はヘッダを要素配列と
+                            // みなした不正アドレスへの書き込みになりSIGSEGVしていた
+                            hir::TypePtr obj_t = inner_type;
+                            hir::TypePtr elem_t = inner_type->element_type;
+                            projections.push_back(
+                                [idx, obj_t, elem_t](MirPlace& p, LoweringContext& c) {
+                                    LocalId slice_local;
+                                    if (p.projections.empty()) {
+                                        slice_local = p.local;
+                                    } else {
+                                        slice_local = c.new_temp(obj_t);
+                                        c.push_statement(MirStatement::assign(
+                                            MirPlace{slice_local},
+                                            MirRvalue::use(MirOperand::copy(p))));
+                                    }
+                                    LocalId inner = c.new_temp(elem_t);
+                                    BlockId nb = c.new_block();
+                                    std::vector<MirOperandPtr> sargs;
+                                    sargs.push_back(MirOperand::copy(MirPlace{slice_local}));
+                                    sargs.push_back(MirOperand::copy(MirPlace{idx}));
+                                    auto sterm = std::make_unique<MirTerminator>();
+                                    sterm->kind = MirTerminator::Call;
+                                    sterm->data = MirTerminator::CallData{
+                                        MirOperand::function_ref("cm_slice_get_subslice_ref"),
+                                        std::move(sargs),
+                                        MirPlace{inner},
+                                        nb,
+                                        std::nullopt,
+                                        "",
+                                        "",
+                                        false};
+                                    c.set_terminator(std::move(sterm));
+                                    c.switch_to_block(nb);
+                                    p = MirPlace{inner};
+                                });
+                        } else {
+                            projections.push_back([idx](MirPlace& p, LoweringContext&) {
+                                p.projections.push_back(PlaceProjection::index(idx));
+                            });
+                        }
                         // 型を更新（配列またはポインタの要素型）
                         if (inner_type && inner_type->element_type) {
                             if (inner_type->kind == hir::TypeKind::Array ||
@@ -193,9 +239,47 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                 } else {
                     // 単一インデックス（後方互換性）
                     LocalId idx = expr_lowering->lower_expression(*(*index)->index, ctx);
-                    projections.push_back([idx](MirPlace& p, LoweringContext&) {
-                        p.projections.push_back(PlaceProjection::index(idx));
-                    });
+                    if (is_slice_of_slice(inner_type)) {
+                        // スライスofスライスの中間添字は生index投影ではなく参照版subsliceで降下する（W2）。
+                        // 外側要素はインライン格納された内側ヘッダのため、生投影はヘッダを要素配列と
+                        // みなした不正アドレスへの書き込みになりSIGSEGVしていた
+                        hir::TypePtr obj_t = inner_type;
+                        hir::TypePtr elem_t = inner_type->element_type;
+                        projections.push_back([idx, obj_t, elem_t](MirPlace& p,
+                                                                   LoweringContext& c) {
+                            LocalId slice_local;
+                            if (p.projections.empty()) {
+                                slice_local = p.local;
+                            } else {
+                                slice_local = c.new_temp(obj_t);
+                                c.push_statement(MirStatement::assign(
+                                    MirPlace{slice_local}, MirRvalue::use(MirOperand::copy(p))));
+                            }
+                            LocalId inner = c.new_temp(elem_t);
+                            BlockId nb = c.new_block();
+                            std::vector<MirOperandPtr> sargs;
+                            sargs.push_back(MirOperand::copy(MirPlace{slice_local}));
+                            sargs.push_back(MirOperand::copy(MirPlace{idx}));
+                            auto sterm = std::make_unique<MirTerminator>();
+                            sterm->kind = MirTerminator::Call;
+                            sterm->data = MirTerminator::CallData{
+                                MirOperand::function_ref("cm_slice_get_subslice_ref"),
+                                std::move(sargs),
+                                MirPlace{inner},
+                                nb,
+                                std::nullopt,
+                                "",
+                                "",
+                                false};
+                            c.set_terminator(std::move(sterm));
+                            c.switch_to_block(nb);
+                            p = MirPlace{inner};
+                        });
+                    } else {
+                        projections.push_back([idx](MirPlace& p, LoweringContext&) {
+                            p.projections.push_back(PlaceProjection::index(idx));
+                        });
+                    }
                     // 次の型を取得（配列またはポインタの要素型）
                     if (inner_type && inner_type->element_type) {
                         if (inner_type->kind == hir::TypeKind::Array ||

@@ -113,7 +113,7 @@ int main() {
 
 ## Private Methods
 
-You can define auxiliary methods that can only be used within the `impl` block. These are not part of the interface signature but are useful for organizing common logic.
+You can define auxiliary methods that can only be used within impl blocks of the same struct (struct-level visibility, like C++ private; callable from other interface implementations of the same struct). These are not part of the interface signature but are useful for organizing common logic.
 
 ```cm
 interface Calculator {
@@ -125,7 +125,7 @@ struct MyCalc {
 }
 
 impl MyCalc for Calculator {
-    // Only callable within this impl block
+    // Only callable from impl blocks of the same struct (struct-level visibility, like C++ private)
     private int helper(int n) {
         return n * 2;
     }

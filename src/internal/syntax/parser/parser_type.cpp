@@ -496,7 +496,20 @@ std::string Parser::expect_ident() {
         advance();
         return name;
     }
-    error("Expected identifier, got '" + std::string(current().get_string()) + "'");
+    // トークン字句が空（キーワード等）の場合はkind表記へフォールバックし、予約語は明記する（X5）
+    {
+        std::string got(current().get_string());
+        if (got.empty()) {
+            got = token_kind_to_string(current().kind);
+            if (current().kind >= TokenKind::KwAs && current().kind <= TokenKind::KwBit) {
+                error("Expected identifier, got reserved word '" + got + "'");
+            } else {
+                error("Expected identifier, got '" + got + "'");
+            }
+        } else {
+            error("Expected identifier, got '" + got + "'");
+        }
+    }
     advance();
     return "<error>";
 }

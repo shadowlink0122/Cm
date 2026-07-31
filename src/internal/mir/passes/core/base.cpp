@@ -114,6 +114,25 @@ void OptimizationPipeline::run_until_fixpoint(MirProgram& program, int max_itera
 
             auto pass_start = std::chrono::steady_clock::now();
             bool pass_changed = pass->run_on_program(program);
+            if (std::getenv("CM_TRACE_PASSES")) {
+                for (const auto& f : program.functions) {
+                    if (f && f->name == "main") {
+                        for (const auto& b : f->basic_blocks) {
+                            if (!b || !b->terminator || b->terminator->kind != MirTerminator::Call)
+                                continue;
+                            const auto& cd = std::get<MirTerminator::CallData>(b->terminator->data);
+                            if (cd.func && cd.func->kind == MirOperand::FunctionRef &&
+                                std::get<std::string>(cd.func->data).find("println") !=
+                                    std::string::npos &&
+                                cd.args.size() >= 3 && cd.args[2] &&
+                                cd.args[2]->kind == MirOperand::Constant) {
+                                fprintf(stderr, "[PASSDBG] after %s: println arg is CONST\n",
+                                        pass_name.c_str());
+                            }
+                        }
+                    }
+                }
+            }
             auto pass_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - pass_start)
                                .count();

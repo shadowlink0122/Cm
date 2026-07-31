@@ -207,12 +207,36 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         }
     }
 
-    // static変数の場合、初期化コードは生成しない
-    // LLVMバックエンドでグローバル変数としてゼロ初期化で生成される
-    // インタプリタでは初回呼び出し時にのみ初期化される
+    // static変数: 格納はゼロ初期化のグローバル（バックエンド側でfunc名_変数名の永続領域）とし、
+    // 初期化子は初回到達時に1回だけ実行するガード付き代入として発行する（X1。
+    // 従来は初期化コード自体を生成せず、非ゼロ初期値が全スコープで無視されていた）
     if (let.is_static) {
-        // 初期化代入は生成しない
-        // 注: 現在はゼロ初期化のみサポート。非ゼロ初期値は将来実装
+        if (let.init) {
+            // ガード用のstatic bool（ゼロ初期化=未初期化）
+            LocalId guard =
+                ctx.new_local(let.name + "__static_guard", hir::make_bool(), true, false, true);
+            LocalId guard_val = ctx.new_temp(hir::make_bool());
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{guard_val}, MirRvalue::use(MirOperand::copy(MirPlace{guard}))));
+
+            BlockId init_block = ctx.new_block();
+            BlockId after_block = ctx.new_block();
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{guard_val}),
+                                                         {{0, init_block}}, after_block));
+
+            ctx.switch_to_block(init_block);
+            MirConstant true_const;
+            true_const.value = true;
+            true_const.type = hir::make_bool();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{guard}, MirRvalue::use(MirOperand::constant(true_const))));
+            LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+            ctx.set_terminator(MirTerminator::goto_block(after_block));
+
+            ctx.switch_to_block(after_block);
+        }
         return;
     }
 

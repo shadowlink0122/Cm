@@ -852,6 +852,9 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
         }
     }
 
+    // コンストラクタ/デストラクタ本体でもprivateメンバへアクセスできるよう、impl対象型はここで設定する（X2）
+    current_impl_target_type_ = type_name;
+
     // コンストラクタ/デストラクタのチェック
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {

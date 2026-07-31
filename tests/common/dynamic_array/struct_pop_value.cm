@@ -1,0 +1,22 @@
+// 回帰(W3): 構造体要素スライスのpop()戻り値受け取りがSIGSEGVするバグの検証（blob脱糖）
+import std::io::println;
+struct Leaf { int v; }
+struct Named { string s; int n; }
+int main() {
+    Leaf[] leaves = [];
+    leaves.push(Leaf { v: 10 });
+    leaves.push(Leaf { v: 20 });
+    Leaf popped = leaves.pop();
+    println("{popped.v} {leaves.len()}");
+    println(leaves.pop().v);
+    leaves.push(Leaf { v: 5 });
+    leaves.pop();
+    println(leaves.len());
+    Named[] ns = [];
+    ns.push(Named { s: "aa", n: 1 });
+    Named nn = ns.pop();
+    println("{nn.s} {nn.n}");
+    int[] xs = [1, 2];
+    println(xs.pop());
+    return 0;
+}

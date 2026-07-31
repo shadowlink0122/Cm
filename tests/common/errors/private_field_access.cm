@@ -1,0 +1,10 @@
+// 回帰(X2): privateフィールドの外部アクセスが無検査だったバグの検証（診断付き拒否）
+struct S {
+    int open;
+    private int secret;
+}
+int main() {
+    S s;
+    s.secret = 42;
+    return 0;
+}

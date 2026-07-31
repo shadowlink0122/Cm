@@ -80,3 +80,11 @@ checkerはいずれも無診断で受理する。(d)はレシーバ型の解決�
 ## 検出経緯
 
 native/jit網羅検証第2ラウンド（深いネスト・チェーン検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_interp.cm` / `min/m_interp_arrow.cm` / `min/m_interp_len.cm`、チェーン網羅は同 `nest/` ディレクトリ。
+
+## 解決記録（実装済み）
+
+方針どおり式パイプライン委譲を全チェーンへ拡張した。
+(1) 分類器interp_content_is_chainを新設し、メンバ＋添字の混在・多段アロー・アロー＋チェーンを式パイプラインへ委譲する（debug/toString/css系の旧経路除外は維持）。
+(2) 式ミニパイプラインへ再帰型補完ウォーカー（annotate_interp_expr_types）を新設し、メンバ・添字・呼び出し・derefのチェーン型を底から補完する。ジェネリック構造体はフィールド型の型引数置換と特殊化名（Box__Box__string）のデコードを行い、ミニlowering自身が残した未解決型パラメータ名（T）も上書き対象にする。
+(3) レシーバ型不明のままマングリングされた呼び出し名（__error__len等)を補完済みレシーバ型から再解決し、__error__*シンボルの発行を排除した。
+回帰テスト tests/common/basic/interp_chain.cm（(a)〜(d)全形状）を7モードで検証した。

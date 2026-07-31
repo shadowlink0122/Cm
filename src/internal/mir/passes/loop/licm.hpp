@@ -27,6 +27,9 @@ class LoopInvariantCodeMotion : public OptimizationPass {
     BlockId get_or_create_pre_header(MirFunction& func, cm::mir::Loop* loop);
     bool is_invariant(const MirRvalue& rvalue, const std::set<LocalId>& modified_locals);
     bool is_invariant(const MirOperand& operand, const std::set<LocalId>& modified_locals);
+
+    // 現在処理中の関数（is_invariantでグローバル/静的変数を判定するため。W4）
+    const MirFunction* current_func_ = nullptr;
     bool has_memory_access(const MirRvalue& rvalue);
 };
 

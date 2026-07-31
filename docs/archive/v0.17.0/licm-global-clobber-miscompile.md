@@ -53,3 +53,10 @@ SCCP（`scalar/sccp.cpp:549`）は `is_global || is_static` を格子から除�
 ## 検出経緯
 
 native/jit網羅検証第2ラウンド（最適化正しさ検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_o06.cm`（6経路比較は `harness2.sh`）。
+
+## 解決記録（実装済み）
+
+方針1（LICMのis_invariantでis_global/is_staticを不変としない）に加え、監査（方針3）で同種の欠落を2箇所検出し修正した。
+(1) ConstantFolding: 関数全体で共有するconstants表にグローバルの初期化値が記録され、呼び出し越しに伝播していた（グローバル/静的を追跡から除外）。
+(2) SCCP: 関数内に代入が無いグローバルが格子でUndefined（楽観）のまま残り、acc + g = Undefined・merge(Const, Undefined) = Constの楽観連鎖でループ内の読みが初期値定数へ畳まれていた（マージ時にグローバル/静的を常時Overdefined化。can_bind_constantの束縛ガードだけでは不十分だった）。
+回帰テスト tests/common/global_var/global_call_clobber.cm をjit/native両系のO0〜O3で検証した（全レベルacc=20）。

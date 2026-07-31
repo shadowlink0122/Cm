@@ -285,14 +285,40 @@ int run_build(cli::Options& opts, const char* argv0) {
             // ソース位置管理を作成
             SourceLocationManager loc_mgr(code, opts.input_file);
 
+            // import展開後の座標を元ソースへ写像する（X5。従来は型検査診断のみ
+            // source_mapを適用し、構文エラーだけ展開後バッファの行番号を報告していた）
+            std::unordered_map<std::string, std::string> parse_file_contents;
+            if (!preprocess_result.source_map.empty()) {
+                std::set<std::string> files_to_load;
+                for (const auto& entry : preprocess_result.source_map) {
+                    if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
+                        entry.original_file != "<generated>") {
+                        files_to_load.insert(entry.original_file);
+                    }
+                }
+                for (const auto& file : files_to_load) {
+                    std::ifstream ifs(file);
+                    if (ifs) {
+                        std::stringstream buffer;
+                        buffer << ifs.rdbuf();
+                        parse_file_contents[file] = buffer.str();
+                    }
+                }
+            }
+
             // 診断情報を表示
             for (const auto& diag : parser.diagnostics()) {
-                // エラーメッセージをフォーマットして表示
-                std::string error_type =
-                    (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
-                                                      : i18n::msg(i18n::MsgId::CliS2));
-                std::cerr << loc_mgr.format_error_location(diag.span,
-                                                           error_type + ": " + diag.message);
+                if (!preprocess_result.source_map.empty()) {
+                    std::cerr << loc_mgr.format_error_with_source_map(
+                        diag.span, diag.message, preprocess_result.source_map, parse_file_contents,
+                        diag.severity == DiagKind::Error ? "error" : "warning");
+                } else {
+                    std::string error_type =
+                        (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
+                                                          : i18n::msg(i18n::MsgId::CliS2));
+                    std::cerr << loc_mgr.format_error_location(diag.span,
+                                                               error_type + ": " + diag.message);
+                }
             }
             return 1;  // エラー時は1で終了
         }

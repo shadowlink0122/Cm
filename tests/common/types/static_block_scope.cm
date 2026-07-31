@@ -1,0 +1,35 @@
+// 回帰(X1): ネストスコープのstatic変数の初期化子適用とO1以上での値保持の検証
+import std::io::println;
+int f() {
+    {
+        static int n = 100;
+        n = n + 1;
+        return n;
+    }
+}
+int g2() {
+    if (true) {
+        static int a = 50;
+        a = a + 5;
+        return a;
+    }
+    return -1;
+}
+int top() {
+    static int t = 7;
+    t = t + 1;
+    return t;
+}
+int main() {
+    println("{f()} {f()}");
+    println("{g2()} {g2()}");
+    println("{top()} {top()}");
+    int total = 0;
+    for (int i = 0; i < 3; i++) {
+        static int hits = 0;
+        hits = hits + 1;
+        total = hits;
+    }
+    println("total={total}");
+    return 0;
+}

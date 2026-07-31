@@ -9,6 +9,7 @@ namespace cm::mir::opt {
 
 bool LoopInvariantCodeMotion::run(MirFunction& func) {
     bool changed = false;
+    current_func_ = &func;
 
     // 1. Dominator Tree & Loop Analysis構築
     cm::mir::DominatorTree dom_tree(func);
@@ -260,6 +261,16 @@ bool LoopInvariantCodeMotion::is_invariant(const MirOperand& operand,
         auto& place = std::get<MirPlace>(operand.data);
         if (!place.projections.empty())
             return false;
+
+        // グローバル/静的変数はループ内の関数呼び出しが書き換えうるため不変としない（W4）。
+        // 従来はループ本体内の代入文しか見ておらず、呼び出し先での書き込みが素通りして
+        // ループ内の読みがpre-headerへ巻き上がり初期値に固定されていた
+        if (current_func_ && place.local < current_func_->locals.size()) {
+            const auto& local = current_func_->locals[place.local];
+            if (local.is_global || local.is_static) {
+                return false;
+            }
+        }
 
         return modified_locals.find(place.local) == modified_locals.end();
     }

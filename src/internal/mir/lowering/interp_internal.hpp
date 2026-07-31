@@ -140,6 +140,56 @@ inline bool interp_content_is_expression(const std::string& s) {
     return false;
 }
 
+// メンバ・添字・アローの多段チェーンを本物の式パーサ経路で降下すべきか判定する（W5）。
+// 旧経路のテキスト再解析は限られたパターンの手書き場所化で、2段以上のチェーンは
+// 部分一致の誤った場所を構築してSIGSEGV・ゴミ値になっていた。
+// 自動実装メソッド（debug/toString/css系）は旧経路がネスト整形込みで正しいため除外する
+inline bool interp_content_is_chain(const std::string& s) {
+    static const char* legacy_methods[] = {".debug(", ".toString(", ".css(", ".to_css("};
+    for (const auto* m : legacy_methods) {
+        if (s.find(m) != std::string::npos) {
+            return false;
+        }
+    }
+    bool has_dot = false;
+    bool has_bracket = false;
+    int arrows = 0;
+    bool in_string = false;
+    char quote = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (in_string) {
+            if (c == quote && (i == 0 || s[i - 1] != '\\')) {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            in_string = true;
+            quote = c;
+            continue;
+        }
+        if (c == '.') {
+            has_dot = true;
+        } else if (c == '[') {
+            has_bracket = true;
+        } else if (c == '-' && i + 1 < s.size() && s[i + 1] == '>') {
+            ++arrows;
+            ++i;
+        }
+    }
+    if (has_dot && has_bracket) {
+        return true;
+    }
+    if (arrows >= 2) {
+        return true;
+    }
+    if (arrows >= 1 && (has_dot || has_bracket)) {
+        return true;
+    }
+    return false;
+}
+
 // 補間内のメソッド/関数呼び出しを本物の式パーサ経路で降下すべきか判定する。
 // 自動実装メソッド（debug/toString/css系）は旧経路がネスト展開込みで
 // 正しく整形できるため除外する（式パーサ経路では文字列ポインタが数値表示になることを実測確認済み。with_debug系テストが検出する）

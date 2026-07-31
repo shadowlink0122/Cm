@@ -142,6 +142,15 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
             // 単純な代入（_x = _y）の場合
             LocalId target = assign_data.place.local;
 
+            // グローバル/静的変数は関数呼び出しが書き換えうるため定数追跡しない（W4）。
+            // SCCPは格子から除外済みだがこちらは漏れており、mainエントリの初期化値が
+            // 呼び出し越しに伝播してループ内の読みが初期値へ固定されていた
+            if (target < func.locals.size() &&
+                (func.locals[target].is_global || func.locals[target].is_static)) {
+                constants.erase(target);
+                continue;
+            }
+
             // 複数回代入される変数は定数追跡から除外
             if (multiAssigned.count(target) > 0) {
                 constants.erase(target);
