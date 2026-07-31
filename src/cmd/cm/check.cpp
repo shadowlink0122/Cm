@@ -2,6 +2,7 @@
 // ファイル単位の失敗はそのファイルのエラーとして数え、全体の走査は継続する（例外境界はファイル単位）
 
 #include "driver.hpp"
+#include "internal/base/diag_emitter.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/base/source_location.hpp"
 #include "internal/lint/config.hpp"
@@ -119,39 +120,9 @@ int run_check(const cli::Options& opts) {
             }
 
             if (parser.has_errors()) {
-                SourceLocationManager loc_mgr(code, file);
-                // import展開後の座標を元ソースへ写像する（X5。build経路と同じ扱い）
-                std::unordered_map<std::string, std::string> parse_file_contents;
-                if (!preprocess_result.source_map.empty()) {
-                    std::set<std::string> files_to_load;
-                    for (const auto& entry : preprocess_result.source_map) {
-                        if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
-                            entry.original_file != "<generated>") {
-                            files_to_load.insert(entry.original_file);
-                        }
-                    }
-                    for (const auto& f : files_to_load) {
-                        std::ifstream ifs(f);
-                        if (ifs) {
-                            std::stringstream buffer;
-                            buffer << ifs.rdbuf();
-                            parse_file_contents[f] = buffer.str();
-                        }
-                    }
-                }
-                for (const auto& diag : parser.diagnostics()) {
-                    if (!preprocess_result.source_map.empty()) {
-                        std::cerr << loc_mgr.format_error_with_source_map(
-                            diag.span, diag.message, preprocess_result.source_map,
-                            parse_file_contents,
-                            diag.severity == DiagKind::Error ? "error" : "warning");
-                    } else {
-                        std::string error_type =
-                            (diag.severity == DiagKind::Error ? "error" : "warning");
-                        std::cerr << loc_mgr.format_error_location(
-                            diag.span, error_type + ": " + diag.message);
-                    }
-                }
+                // 診断表示はDiagnosticEmitterへ一元化（source_map写像・参照ファイル読込を含む。X5）
+                DiagnosticEmitter emitter(code, file, &preprocess_result.source_map);
+                emitter.emit_all(parser.diagnostics());
                 total_errors += parser.diagnostics().size();
                 continue;
             }
@@ -167,8 +138,9 @@ int run_check(const cli::Options& opts) {
             bool type_check_ok = checker.check(program);
             (void)type_check_ok;  // 警告抑制：将来のエラー処理で使用予定
 
-            // 診断情報を表示
-            SourceLocationManager loc_mgr(code, file);
+            // 診断表示はDiagnosticEmitterへ一元化（従来はsource_map未適用で展開後の行番号を表示していた）
+            DiagnosticEmitter emitter(code, file, &preprocess_result.source_map);
+            const SourceLocationManager& loc_mgr = emitter.location_manager();
 
             // インラインコメントによる無効化を解析
             config.clear_line_disables();
@@ -231,7 +203,7 @@ int run_check(const cli::Options& opts) {
                     count_as_error = (diag.severity == DiagKind::Error);
                 }
 
-                std::cerr << loc_mgr.format_error_location(diag.span, prefix + ": " + diag.message);
+                emitter.emit(diag, prefix);
                 if (count_as_error) {
                     total_errors++;
                 } else {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "internal/base/module_range.hpp"
+#include "internal/base/source_map.hpp"
 
 #include <filesystem>
 #include <map>
@@ -18,15 +19,9 @@ namespace cm::preprocessor {
 // importステートメントを検出し、モジュールコードをインライン展開する
 class ImportPreprocessor {
    public:
-    // ソースマップエントリ：プリプロセス後の行が元のどのファイル・行に対応するか
-    struct SourceMapEntry {
-        std::string original_file;  // 元のファイルパス
-        size_t original_line;       // 元の行番号（1-indexed）
-        std::string import_chain;   // インポートチェーン（デバッグ用）
-    };
-
-    // ソースマップ：プリプロセス後の行番号（1-indexed） -> 元の位置情報
-    using SourceMap = std::vector<SourceMapEntry>;
+    // ソースマップ（実体はbaseの共有型。診断表示DiagnosticEmitterが消費するため最下層に定義）
+    using SourceMapEntry = cm::SourceMapEntry;
+    using SourceMap = cm::SourceMap;
 
     // モジュール範囲（実体はbaseの共有型。MIR loweringが消費するため最下層に定義）
     using ModuleRange = cm::ModuleRange;

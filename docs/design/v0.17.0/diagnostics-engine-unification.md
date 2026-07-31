@@ -39,3 +39,16 @@ rustc_errorsのDiagCtxt（全層が共有する単一の診断コンテキスト
 - i18nスイートで全サブコマンドの診断が同一emitter経由（--lang=ja適用・座標表示形式統一）であることを検証する。
 - `__error__` シンボル不在のMIRスナップショット検査をregressionへ追加する。
 - MIRエラー昇格後も既存のerrorsスイート（.errorファイル照合）が全通過することを確認する。
+
+## 進捗
+
+### 第1段（表示の一元化）: 実装済み
+
+- `src/internal/base/diag_emitter.hpp/.cpp` に `DiagnosticEmitter` を新設し、診断表示（source_map写像・参照ファイル読込・重大度ラベル・import_chainトレース）を一元化した。SourceMapEntry/SourceMapは `base/source_map.hpp` の共有型へ移設し（preprocessor側はエイリアス）、表示側がpreprocessorへ依存しない層構成にした。
+- build.cpp（パーサ診断・型検査診断）とcheck.cpp（パーサ診断・型検査診断）の表示複製4ブロック（計約170行）をemitter呼び出しへ置換した。X5で複製されたsource_map適用+ファイル読込コードは1実装に集約された。
+- 置換により、`cm check` の型検査診断がsource_map未適用で展開後の行番号を表示していた既存の不整合（`cm run` は元ソースの4行目・`cm check` は展開後の23行目を表示する等）が解消され、全サブコマンドがRustスタイルの統一表示になった。
+- check/lintのルールレベル設定（error/warning/hint昇格・無効化コメント・設定ファイル）はemitterのlabel引数と `location_manager()` で維持した。
+- 検証: i18n E2E 42件・linter 10件・全12スイート通過。
+- 発行側の統合（Parser/TypeCheckerが単一DiagCtxtへ直接発行する形）は未実施。現状は両者が同一の `cm::Diagnostic` 型を各自のベクタへ収集しドライバがemitterへ渡す構成で、表示の複製は解消済み。DiagCtxt導入は第2段（MIRエラー昇格で発行元が増える時点)で行う。
+
+### 残り（第2段〜第4段）: 未実装

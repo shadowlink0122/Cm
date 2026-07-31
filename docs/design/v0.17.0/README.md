@@ -24,7 +24,7 @@ type-resolution-simplification.mdの4領域に続き、コンパイラが複雑�
 
 - [コンパイラ全体構成の再編](compiler-architecture-restructure.md) — rustc対応表に基づくステージ指向ライブラリ分割・依存規律のビルド強制・Lint/fmtの独立ドライバ化・Session導入（ドライバ複製の解消）（第1段=依存棚卸し・唯一の層違反解消・check_layer_deps.pyによるlint/CI強制を実装済み、第2段以降未実装）
 - [モジュールシステムの構造化](module-system-structural-imports.md) — importのテキストインライン展開（preprocessor 4,241行）を廃止しファイル単位パース+シンボル解決へ（source_map・テキスト改名・行番号ずれ・重複展開の根絶、名前空間形式import対応を含む）
-- [診断エンジンの統一](diagnostics-engine-unification.md) — 4系統の発行機構をDiagCtxtへ集約、MIRエラーのログ→診断昇格、エラー型の下流流出（__error__*シンボル）の構造的禁止
+- [診断エンジンの統一](diagnostics-engine-unification.md) — 4系統の発行機構をDiagCtxtへ集約、MIRエラーのログ→診断昇格、エラー型の下流流出（__error__*シンボル）の構造的禁止（第1段=DiagnosticEmitterによる表示一元化・check側の行番号写像欠落修正を実装済み、第2段以降未実装）
 - [型付きHIRの単一情報源化](typed-hir-single-source.md) — 「型検査後のHIRは全式が型付き」の不変条件確立と下流の型再推論禁止（B6/B7/N2/W5族の根治、対症療法コードの削除）
 - [モノモーフ化の型駆動化](monomorphization-typed-instantiation.md) — 特殊化の同定・書き換えを型ノードへ統一し、マングル名の解析・逆算（82箇所）を廃止
 - [ランタイムビルトインのレジストリ化](runtime-builtin-registry.md) — 名前・シグネチャの7箇所同期（LLVM宣言117分岐・js写像322件・native/wasmランタイムC二重実装8,088行）を単一表からの導出へ

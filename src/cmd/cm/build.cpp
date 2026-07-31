@@ -4,6 +4,7 @@
 
 #include "driver.hpp"
 #include "internal/base/debug_messages.hpp"
+#include "internal/base/diag_emitter.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/base/source_location.hpp"
 #include "internal/codegen/sv/codegen.hpp"
@@ -282,44 +283,9 @@ int run_build(cli::Options& opts, const char* argv0) {
 
         if (parser.has_errors()) {
             std::cerr << i18n::msg(i18n::MsgId::CliSyntaxErrorsOccurred);
-            // ソース位置管理を作成
-            SourceLocationManager loc_mgr(code, opts.input_file);
-
-            // import展開後の座標を元ソースへ写像する（X5。従来は型検査診断のみ
-            // source_mapを適用し、構文エラーだけ展開後バッファの行番号を報告していた）
-            std::unordered_map<std::string, std::string> parse_file_contents;
-            if (!preprocess_result.source_map.empty()) {
-                std::set<std::string> files_to_load;
-                for (const auto& entry : preprocess_result.source_map) {
-                    if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
-                        entry.original_file != "<generated>") {
-                        files_to_load.insert(entry.original_file);
-                    }
-                }
-                for (const auto& file : files_to_load) {
-                    std::ifstream ifs(file);
-                    if (ifs) {
-                        std::stringstream buffer;
-                        buffer << ifs.rdbuf();
-                        parse_file_contents[file] = buffer.str();
-                    }
-                }
-            }
-
-            // 診断情報を表示
-            for (const auto& diag : parser.diagnostics()) {
-                if (!preprocess_result.source_map.empty()) {
-                    std::cerr << loc_mgr.format_error_with_source_map(
-                        diag.span, diag.message, preprocess_result.source_map, parse_file_contents,
-                        diag.severity == DiagKind::Error ? "error" : "warning");
-                } else {
-                    std::string error_type =
-                        (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
-                                                          : i18n::msg(i18n::MsgId::CliS2));
-                    std::cerr << loc_mgr.format_error_location(diag.span,
-                                                               error_type + ": " + diag.message);
-                }
-            }
+            // 診断表示はDiagnosticEmitterへ一元化（source_map写像・参照ファイル読込を含む。X5）
+            DiagnosticEmitter emitter(code, opts.input_file, &preprocess_result.source_map);
+            emitter.emit_all(parser.diagnostics());
             return 1;  // エラー時は1で終了
         }
         if (opts.debug)
@@ -374,64 +340,10 @@ int run_build(cli::Options& opts, const char* argv0) {
                                      std::chrono::steady_clock::now() - phase_typecheck_start)
                                      .count();
 
-        // 診断情報（エラー・警告）を表示
+        // 診断情報（エラー・警告）の表示はDiagnosticEmitterへ一元化
         if (!checker.diagnostics().empty()) {
-            // ソース位置管理を作成
-            SourceLocationManager loc_mgr(code, opts.input_file);
-
-            // ソースマップがある場合、元ファイルの内容を読み込む
-            std::unordered_map<std::string, std::string> file_contents;
-            if (!preprocess_result.source_map.empty()) {
-                // ソースマップから参照されているファイルを収集
-                std::set<std::string> files_to_load;
-                for (const auto& entry : preprocess_result.source_map) {
-                    if (!entry.original_file.empty() && entry.original_file != "<unknown>" &&
-                        entry.original_file != "<generated>") {
-                        files_to_load.insert(entry.original_file);
-                    }
-                    // インポートチェーンからもファイルを収集
-                    if (!entry.import_chain.empty()) {
-                        std::string remaining = entry.import_chain;
-                        std::string delimiter = " -> ";
-                        size_t pos;
-                        while ((pos = remaining.find(delimiter)) != std::string::npos) {
-                            std::string part = remaining.substr(0, pos);
-                            if (!part.empty() && part != "<unknown>" && part != "<generated>") {
-                                files_to_load.insert(part);
-                            }
-                            remaining = remaining.substr(pos + delimiter.length());
-                        }
-                        if (!remaining.empty() && remaining != "<unknown>" &&
-                            remaining != "<generated>") {
-                            files_to_load.insert(remaining);
-                        }
-                    }
-                }
-                // 各ファイルの内容を読み込む
-                for (const auto& file : files_to_load) {
-                    std::ifstream ifs(file);
-                    if (ifs) {
-                        std::stringstream buffer;
-                        buffer << ifs.rdbuf();
-                        file_contents[file] = buffer.str();
-                    }
-                }
-            }
-
-            // 診断情報を表示
-            for (const auto& diag : checker.diagnostics()) {
-                if (!preprocess_result.source_map.empty()) {
-                    std::cerr << loc_mgr.format_error_with_source_map(
-                        diag.span, diag.message, preprocess_result.source_map, file_contents,
-                        diag.severity == DiagKind::Error ? "error" : "warning");
-                } else {
-                    std::string error_type =
-                        (diag.severity == DiagKind::Error ? i18n::msg(i18n::MsgId::CliS)
-                                                          : i18n::msg(i18n::MsgId::CliS2));
-                    std::cerr << loc_mgr.format_error_location(diag.span,
-                                                               error_type + ": " + diag.message);
-                }
-            }
+            DiagnosticEmitter emitter(code, opts.input_file, &preprocess_result.source_map);
+            emitter.emit_all(checker.diagnostics());
         }
 
         // エラーがあった場合は終了

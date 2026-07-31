@@ -403,6 +403,7 @@ set(CM_SOURCES
     src/internal/base/format_string.cpp
     src/internal/base/source_location.cpp
     src/internal/base/diagnostics.cpp
+    src/internal/base/diag_emitter.cpp
     src/internal/hir/string_interpolation.cpp
     src/internal/diagnostics/engine.cpp
     src/internal/diagnostics/catalog.cpp
