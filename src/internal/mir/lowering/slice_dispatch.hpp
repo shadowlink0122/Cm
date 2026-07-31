@@ -55,6 +55,40 @@ inline std::optional<SliceScalarInfo> slice_scalar_info(hir::TypeKind kind) {
     }
 }
 
+// 要素の格納クラス（type-resolution-simplification 領域4）。
+// push/pop/get/set系ランタイム関数の選択と呼び出し規約（値渡し/アドレス渡し・値戻し/要素ポインタ戻し）を各ビルトインloweringが個別に持たず、この分類から一律に導出する。
+enum class SliceElemClass {
+    Scalar,  // 整数・浮動小数: cm_slice_*_<width> を値渡し・値戻しで呼ぶ
+    Ptr,     // ポインタ・文字列: cm_slice_*_ptr を値渡し・値戻しで呼ぶ
+    InnerSlice,  // 内側スライス（多次元）: cm_slice_*_slice。ヘッダはdataへインライン格納
+    Blob,  // 構造体・ユニオン: cm_slice_*_blob。アドレス渡し・要素ポインタ経由の受け取り
+};
+
+struct SliceElemDispatch {
+    SliceElemClass cls;
+    const char* suffix;  // ランタイム関数サフィックス: width/"ptr"/"slice"/"blob"
+};
+
+// 要素型kindから格納クラスとサフィックスを引く。
+// 未知のkind（enum等の整数表現）は従来既定のScalar/i32に落とす
+inline SliceElemDispatch slice_elem_dispatch(hir::TypeKind kind) {
+    if (auto info = slice_scalar_info(kind)) {
+        return {SliceElemClass::Scalar, info->width};
+    }
+    switch (kind) {
+        case hir::TypeKind::Array:
+            return {SliceElemClass::InnerSlice, "slice"};
+        case hir::TypeKind::Struct:
+        case hir::TypeKind::Union:
+            return {SliceElemClass::Blob, "blob"};
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            return {SliceElemClass::Ptr, "ptr"};
+        default:
+            return {SliceElemClass::Scalar, "i32"};
+    }
+}
+
 // スカラ要素型のソート関数サフィックス（符号・浮動小数を区別）。集約はnullptr。
 inline const char* slice_scalar_sort_suffix(hir::TypeKind kind) {
     switch (kind) {

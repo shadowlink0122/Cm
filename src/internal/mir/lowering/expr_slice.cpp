@@ -1,6 +1,8 @@
 // ============================================================
 // MIR lowering - スライスbuiltin（len/cap/push/pop/delete/clear）
 // ============================================================
+// 要素型ごとのランタイム関数選択と呼び出し規約はslice_dispatch.hppのslice_elem_dispatchに集約し、本ファイルは表引きと共通のCall構築ヘルパのみで構成する（type-resolution-simplification 領域4）。
+// 従来はpush/pop/get各loweringが「スカラ→幅・Array→slice・Struct/Union→blob・Pointer/String→ptr」の選択と規約を個別に手書きしており、popだけがblob受け取り規約を欠いてW3（構造体pop戻り値のSIGSEGV）を招いた。
 
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
@@ -15,439 +17,248 @@
 
 namespace cm::mir {
 
+namespace {
+
+// ランタイム関数呼び出しを1ブロックとして発行し、後続ブロックへ切り替える（destなしは戻り値破棄）
+void emit_call(LoweringContext& ctx, const std::string& func, std::vector<MirOperandPtr> args,
+               std::optional<MirPlace> dest) {
+    BlockId next = ctx.new_block();
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = MirTerminator::Call;
+    term->data = MirTerminator::CallData{MirOperand::function_ref(func),
+                                         std::move(args),
+                                         std::move(dest),
+                                         next,
+                                         std::nullopt,
+                                         "",
+                                         "",
+                                         false};
+    ctx.set_terminator(std::move(term));
+    ctx.switch_to_block(next);
+}
+
+// 整数定数をローカルへ実体化する
+LocalId make_const(LoweringContext& ctx, int64_t v, const hir::TypePtr& type) {
+    LocalId l = ctx.new_temp(type);
+    MirConstant c;
+    c.value = v;
+    c.type = type;
+    ctx.push_statement(MirStatement::assign(MirPlace{l}, MirRvalue::use(MirOperand::constant(c))));
+    return l;
+}
+
+// 値ローカルのアドレスを取ってポインタローカルを返す（Blob規約のアドレス渡し）
+LocalId make_addr(LoweringContext& ctx, LocalId value_local) {
+    hir::TypePtr vt =
+        (value_local < ctx.func->locals.size()) ? ctx.func->locals[value_local].type : nullptr;
+    LocalId addr = ctx.new_temp(hir::make_pointer(vt ? vt : hir::make_int()));
+    ctx.push_statement(
+        MirStatement::assign(MirPlace{addr}, MirRvalue::ref(MirPlace{value_local}, false)));
+    return addr;
+}
+
+// 要素型の確保バイト幅（スカラは表、ポインタ/文字列はターゲットポインタ幅、集約はレイアウト、内側スライスはヘッダサイズ）
+int64_t elem_size_of(LoweringContext& ctx, const hir::TypePtr& t) {
+    if (!t) {
+        return 4;
+    }
+    auto r = ctx.resolve_typedef(t);
+    auto k = r ? r->kind : t->kind;
+    if (auto info = slice_scalar_info(k)) {
+        return info->elem_size;
+    }
+    switch (k) {
+        case hir::TypeKind::Pointer:
+        case hir::TypeKind::String:
+            return cm::target_pointer_size();
+        case hir::TypeKind::Struct:
+        case hir::TypeKind::Union:
+            return ctx.layout_size(r ? r : t);
+        case hir::TypeKind::Array:
+            return static_cast<int64_t>(sizeof(void*) * 4);
+        default:
+            return 4;
+    }
+}
+
+}  // namespace
+
 // スライスbuiltinを処理した場合はローカルIDを、対象外ならnulloptを返す
 std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall& call,
                                                              const hir::TypePtr& result_type,
                                                              LoweringContext& ctx) {
-    (void)result_type;
-    // スライスのlen/cap処理
-    if (call.func_name == "__builtin_slice_len" || call.func_name == "__builtin_slice_cap") {
-        if (!call.args.empty()) {
-            auto slice_expr = call.args[0].get();
-
-            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。H10）
-            MirPlace slice_place{0};
-            hir::TypePtr slice_type = nullptr;
-            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
-
-            // 場所を持たない式（make_slice().len() 等の呼び出し戻り値）は一時ローカルへ
-            // 実体化して読み取る（H10: 従来は診断なしで空tempを返し黙って欠落していた）
-            if (!resolved) {
-                LocalId materialized = lower_expression(*slice_expr, ctx);
-                slice_place = MirPlace{materialized};
-                resolved = true;
-            }
-
-            if (resolved) {
-                std::string func_name =
-                    (call.func_name == "__builtin_slice_len") ? "cm_slice_len" : "cm_slice_cap";
-
-                LocalId result = ctx.new_temp(hir::make_uint());
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(slice_place));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data = MirTerminator::CallData{MirOperand::function_ref(func_name),
-                                                          std::move(args),
-                                                          MirPlace{result},
-                                                          success_block,
-                                                          std::nullopt,
-                                                          "",
-                                                          "",
-                                                          false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-                return result;
-            }
-        }
-        return ctx.new_temp(hir::make_uint());
+    const std::string& name = call.func_name;
+    const bool is_len = name == "__builtin_slice_len";
+    const bool is_cap = name == "__builtin_slice_cap";
+    const bool is_push = name == "__builtin_slice_push";
+    const bool is_pop = name == "__builtin_slice_pop";
+    const bool is_delete = name == "__builtin_slice_delete";
+    const bool is_clear = name == "__builtin_slice_clear";
+    if (!is_len && !is_cap && !is_push && !is_pop && !is_delete && !is_clear) {
+        return std::nullopt;
     }
 
-    // スライスビルトイン関数の処理 - 通常の関数呼び出しとして変換
-    if (call.func_name == "__builtin_slice_push") {
-        if (call.args.size() >= 2) {
-            auto slice_expr = call.args[0].get();
-
-            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。H10）
-            MirPlace slice_place{0};
-            hir::TypePtr slice_type = nullptr;
-            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
-
-            if (resolved) {
-                LocalId value_local = lower_expression(*call.args[1], ctx);
-
-                // 要素型に基づいてランタイム関数を選択
-                // メンバ経由のslice_typeはtypedefエイリアス未解決のことがあるため解決してから判定
-                std::string push_func = "cm_slice_push_i32";
-                if (slice_type && slice_type->element_type) {
-                    auto resolved_elem = ctx.resolve_typedef(slice_type->element_type);
-                    auto elem_kind =
-                        resolved_elem ? resolved_elem->kind : slice_type->element_type->kind;
-                    if (auto info = slice_scalar_info(elem_kind)) {
-                        // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
-                        push_func = std::string("cm_slice_push_") + info->width;
-                    } else if (elem_kind == hir::TypeKind::Array) {
-                        // 多次元スライス: 内側スライスはポインタとしてpush
-                        push_func = "cm_slice_push_slice";
-                    } else if (elem_kind == hir::TypeKind::Union ||
-                               elem_kind == hir::TypeKind::Struct) {
-                        // ユニオン・構造体: blobとして値をインラインコピー
-                        push_func = "cm_slice_push_blob";
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        push_func = "cm_slice_push_ptr";
-                    }
-                }
-
-                // 多次元スライスへの配列リテラル直接push（X3）:
-                // リテラルは固定長配列blobとしてlowerされるため、cm_slice_push_sliceが
-                // 期待するCmSliceヘッダでないメモリが渡り壊れた要素が格納されていた。
-                // cm_array_to_sliceでヒープスライスへ実体化してからpushする（空リテラルはlen=0の正規ヘッダ）
-                if (push_func == "cm_slice_push_slice" && value_local < ctx.func->locals.size()) {
-                    hir::TypePtr vt = ctx.func->locals[value_local].type;
-                    if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
-                        auto inner_slice_type = ctx.resolve_typedef(slice_type->element_type);
-                        const int64_t inner_size = static_cast<int64_t>(vt->array_size.value_or(0));
-                        int64_t inner_elem_size = 4;
-                        hir::TypePtr inner_et =
-                            inner_slice_type ? inner_slice_type->element_type : nullptr;
-                        if (vt->element_type) {
-                            auto rk = ctx.resolve_typedef(vt->element_type);
-                            auto ik = rk ? rk->kind : vt->element_type->kind;
-                            if (auto iinfo = slice_scalar_info(ik)) {
-                                inner_elem_size = iinfo->elem_size;
-                            } else if (ik == hir::TypeKind::Pointer ||
-                                       ik == hir::TypeKind::String) {
-                                inner_elem_size = cm::target_pointer_size();
-                            } else if (ik == hir::TypeKind::Struct || ik == hir::TypeKind::Union) {
-                                inner_elem_size = ctx.layout_size(rk ? rk : vt->element_type);
-                            } else if (ik == hir::TypeKind::Array) {
-                                inner_elem_size = static_cast<int64_t>(sizeof(void*) * 4);
-                            }
-                        } else if (inner_et) {
-                            // 空リテラル []: 要素型はレシーバの内側スライスから取る
-                            auto rk = ctx.resolve_typedef(inner_et);
-                            auto ik = rk ? rk->kind : inner_et->kind;
-                            if (auto iinfo = slice_scalar_info(ik)) {
-                                inner_elem_size = iinfo->elem_size;
-                            } else if (ik == hir::TypeKind::Pointer ||
-                                       ik == hir::TypeKind::String) {
-                                inner_elem_size = cm::target_pointer_size();
-                            } else if (ik == hir::TypeKind::Struct || ik == hir::TypeKind::Union) {
-                                inner_elem_size = ctx.layout_size(rk ? rk : inner_et);
-                            } else if (ik == hir::TypeKind::Array) {
-                                inner_elem_size = static_cast<int64_t>(sizeof(void*) * 4);
-                            }
-                        }
-
-                        LocalId addr_local = ctx.new_temp(hir::make_pointer(vt->element_type));
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{addr_local}, MirRvalue::ref(MirPlace{value_local}, false)));
-                        LocalId size_local = ctx.new_temp(hir::make_long());
-                        MirConstant size_const;
-                        size_const.value = inner_size;
-                        size_const.type = hir::make_long();
-                        ctx.push_statement(
-                            MirStatement::assign(MirPlace{size_local},
-                                                 MirRvalue::use(MirOperand::constant(size_const))));
-                        LocalId ies_local = ctx.new_temp(hir::make_long());
-                        MirConstant ies_const;
-                        ies_const.value = inner_elem_size;
-                        ies_const.type = hir::make_long();
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{ies_local}, MirRvalue::use(MirOperand::constant(ies_const))));
-
-                        LocalId conv = ctx.new_temp(inner_slice_type ? inner_slice_type
-                                                                     : slice_type->element_type);
-                        BlockId conv_block = ctx.new_block();
-                        std::vector<MirOperandPtr> conv_args;
-                        conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                        conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
-                        conv_args.push_back(MirOperand::copy(MirPlace{ies_local}));
-                        auto conv_term = std::make_unique<MirTerminator>();
-                        conv_term->kind = MirTerminator::Call;
-                        conv_term->data =
-                            MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
-                                                    std::move(conv_args),
-                                                    MirPlace{conv},
-                                                    conv_block,
-                                                    std::nullopt,
-                                                    "",
-                                                    "",
-                                                    false};
-                        ctx.set_terminator(std::move(conv_term));
-                        ctx.switch_to_block(conv_block);
-                        value_local = conv;
-                    }
-                }
-
-                // インターフェイス要素スライスへの具象構造体push:
-                // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
-                if (push_func == "cm_slice_push_blob" && slice_type && slice_type->element_type &&
-                    ctx.interface_names) {
-                    auto resolved_elem = ctx.resolve_typedef(slice_type->element_type);
-                    if (resolved_elem && resolved_elem->kind == hir::TypeKind::Struct &&
-                        ctx.interface_names->count(resolved_elem->name) > 0) {
-                        hir::TypePtr actual_type = nullptr;
-                        if (value_local < ctx.func->locals.size()) {
-                            actual_type = ctx.func->locals[value_local].type;
-                        }
-                        if (actual_type && actual_type->kind == hir::TypeKind::Struct &&
-                            actual_type->name != resolved_elem->name) {
-                            LocalId iface_tmp = ctx.new_temp(resolved_elem);
-                            ctx.push_statement(MirStatement::assign(
-                                MirPlace{iface_tmp},
-                                MirRvalue::use(MirOperand::copy(MirPlace{value_local}))));
-                            value_local = iface_tmp;
-                        }
-                    }
-                }
-
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(slice_place));
-                if (push_func == "cm_slice_push_blob") {
-                    // blob pushはデータ先頭へのポインタを受け取る（ユニオン値は集約のため）
-                    hir::TypePtr value_type = nullptr;
-                    if (value_local < ctx.func->locals.size()) {
-                        value_type = ctx.func->locals[value_local].type;
-                    }
-                    LocalId addr_local =
-                        ctx.new_temp(hir::make_pointer(value_type ? value_type : hir::make_int()));
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{addr_local}, MirRvalue::ref(MirPlace{value_local}, false)));
-                    args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                } else {
-                    args.push_back(MirOperand::copy(MirPlace{value_local}));
-                }
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data = MirTerminator::CallData{MirOperand::function_ref(push_func),
-                                                          std::move(args),
-                                                          std::nullopt,
-                                                          success_block,
-                                                          std::nullopt,
-                                                          "",
-                                                          "",
-                                                          false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-                return ctx.new_temp(hir::make_void());
-            }
-
-            // 黙殺禁止: レシーバを解決できない場合は診断を出す（H10。従来pushは診断なしで
-            // 文ごと欠落していた）
-            debug::log(debug::Stage::Mir, debug::Level::Error,
-                       "slice push(): レシーバのスライス場所を解決できませんでした");
+    // 引数不足・レシーバ解決不能時の返り値（従来の各ビルトインの既定と同じ）
+    auto fallback_result = [&]() -> LocalId {
+        if (is_len || is_cap) {
+            return ctx.new_temp(hir::make_uint());
         }
+        if (is_pop) {
+            return ctx.new_temp(result_type ? result_type : hir::make_int());
+        }
+        return ctx.new_temp(hir::make_void());
+    };
+    const size_t min_args = (is_push || is_delete) ? 2 : 1;
+    if (call.args.size() < min_args) {
+        return fallback_result();
+    }
+
+    // レシーバの場所化（唯一の場所化API lower_place。H10）
+    MirPlace slice_place{0};
+    hir::TypePtr slice_type = nullptr;
+    bool resolved = lower_place(call.args[0].get(), ctx, slice_place, slice_type);
+
+    // len/capは場所を持たない式（make_slice().len() 等の呼び出し戻り値）も一時実体化して読める（H10）
+    if (!resolved && (is_len || is_cap)) {
+        slice_place = MirPlace{lower_expression(*call.args[0], ctx)};
+        resolved = true;
+    }
+    if (!resolved) {
+        // 黙殺禁止: レシーバを解決できない場合は診断を出す（C11/H10。従来は診断なしで文ごと欠落していた）
+        debug::log(debug::Stage::Mir, debug::Level::Error,
+                   "slice builtin: レシーバのスライス場所を解決できませんでした");
+        return fallback_result();
+    }
+
+    if (is_len || is_cap) {
+        LocalId result = ctx.new_temp(hir::make_uint());
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(slice_place));
+        emit_call(ctx, is_len ? "cm_slice_len" : "cm_slice_cap", std::move(args), MirPlace{result});
+        return result;
+    }
+
+    if (is_delete) {
+        LocalId index_local = lower_expression(*call.args[1], ctx);
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(slice_place));
+        args.push_back(MirOperand::copy(MirPlace{index_local}));
+        emit_call(ctx, "cm_slice_delete", std::move(args), std::nullopt);
         return ctx.new_temp(hir::make_void());
     }
 
-    if (call.func_name == "__builtin_slice_pop") {
-        if (!call.args.empty()) {
-            auto slice_expr = call.args[0].get();
-
-            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
-            MirPlace slice_place{0};
-            hir::TypePtr slice_type = nullptr;
-            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
-
-            if (resolved) {
-                std::string pop_func = "cm_slice_pop_i32";
-                hir::TypePtr elem_type = hir::make_int();
-                // メンバ経由のslice_typeはtypedefエイリアス未解決のことがあるため解決してから判定
-                if (slice_type && slice_type->element_type) {
-                    auto resolved_elem = ctx.resolve_typedef(slice_type->element_type);
-                    elem_type = resolved_elem ? resolved_elem : slice_type->element_type;
-                    auto elem_kind = elem_type->kind;
-                    if (auto info = slice_scalar_info(elem_kind)) {
-                        // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
-                        pop_func = std::string("cm_slice_pop_") + info->width;
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        pop_func = "cm_slice_pop_ptr";
-                    } else if (elem_kind == hir::TypeKind::Struct ||
-                               elem_kind == hir::TypeKind::Union) {
-                        // blob要素: cm_slice_pop_ptrはポインタ幅の戻り値を構造体宛先へ
-                        // 格納する型不整合になりSIGSEGVしていた（W3）。
-                        // 末尾要素ポインタからderefコピーで受けてからlenを減算する
-                        LocalId len_local = ctx.new_temp(hir::make_long());
-                        BlockId len_block = ctx.new_block();
-                        std::vector<MirOperandPtr> len_args;
-                        len_args.push_back(MirOperand::copy(slice_place));
-                        auto len_term = std::make_unique<MirTerminator>();
-                        len_term->kind = MirTerminator::Call;
-                        len_term->data =
-                            MirTerminator::CallData{MirOperand::function_ref("cm_slice_len"),
-                                                    std::move(len_args),
-                                                    MirPlace{len_local},
-                                                    len_block,
-                                                    std::nullopt,
-                                                    "",
-                                                    "",
-                                                    false};
-                        ctx.set_terminator(std::move(len_term));
-                        ctx.switch_to_block(len_block);
-
-                        LocalId idx_local = ctx.new_temp(hir::make_long());
-                        MirConstant one_const;
-                        one_const.value = int64_t{1};
-                        one_const.type = hir::make_long();
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{idx_local},
-                            MirRvalue::binary(MirBinaryOp::Sub,
-                                              MirOperand::copy(MirPlace{len_local}),
-                                              MirOperand::constant(one_const), hir::make_long())));
-
-                        LocalId elem_ptr = ctx.new_temp(hir::make_pointer(elem_type));
-                        BlockId ptr_block = ctx.new_block();
-                        std::vector<MirOperandPtr> ptr_args;
-                        ptr_args.push_back(MirOperand::copy(slice_place));
-                        ptr_args.push_back(MirOperand::copy(MirPlace{idx_local}));
-                        auto ptr_term = std::make_unique<MirTerminator>();
-                        ptr_term->kind = MirTerminator::Call;
-                        ptr_term->data = MirTerminator::CallData{
-                            MirOperand::function_ref("cm_slice_get_element_ptr"),
-                            std::move(ptr_args),
-                            MirPlace{elem_ptr},
-                            ptr_block,
-                            std::nullopt,
-                            "",
-                            "",
-                            false};
-                        ctx.set_terminator(std::move(ptr_term));
-                        ctx.switch_to_block(ptr_block);
-
-                        LocalId blob_result = ctx.new_temp(elem_type);
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{blob_result}, MirRvalue::use(MirOperand::copy(MirPlace{
-                                                       elem_ptr, {PlaceProjection::deref()}}))));
-
-                        BlockId pop_block = ctx.new_block();
-                        std::vector<MirOperandPtr> pop_args;
-                        pop_args.push_back(MirOperand::copy(slice_place));
-                        auto pop_term = std::make_unique<MirTerminator>();
-                        pop_term->kind = MirTerminator::Call;
-                        pop_term->data =
-                            MirTerminator::CallData{MirOperand::function_ref("cm_slice_pop_blob"),
-                                                    std::move(pop_args),
-                                                    std::nullopt,
-                                                    pop_block,
-                                                    std::nullopt,
-                                                    "",
-                                                    "",
-                                                    false};
-                        ctx.set_terminator(std::move(pop_term));
-                        ctx.switch_to_block(pop_block);
-                        return blob_result;
-                    }
-                }
-
-                LocalId result = ctx.new_temp(elem_type);
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(slice_place));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data = MirTerminator::CallData{MirOperand::function_ref(pop_func),
-                                                          std::move(args),
-                                                          MirPlace{result},
-                                                          success_block,
-                                                          std::nullopt,
-                                                          "",
-                                                          "",
-                                                          false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-                return result;
-            }
-
-            // 黙殺禁止: レシーバを解決できない場合は診断を出す（C11）
-            debug::log(debug::Stage::Mir, debug::Level::Error,
-                       "slice pop(): レシーバのスライス場所を解決できませんでした");
-        }
-        return ctx.new_temp(result_type ? result_type : hir::make_int());
-    }
-
-    if (call.func_name == "__builtin_slice_delete") {
-        if (call.args.size() >= 2) {
-            auto slice_expr = call.args[0].get();
-
-            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
-            MirPlace slice_place{0};
-            hir::TypePtr slice_type = nullptr;
-            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
-
-            if (resolved) {
-                LocalId index_local = lower_expression(*call.args[1], ctx);
-
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(slice_place));
-                args.push_back(MirOperand::copy(MirPlace{index_local}));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data =
-                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_delete"),
-                                            std::move(args),
-                                            std::nullopt,
-                                            success_block,
-                                            std::nullopt,
-                                            "",
-                                            "",
-                                            false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-                return ctx.new_temp(hir::make_void());
-            }
-
-            // 黙殺禁止: レシーバを解決できない場合は診断を出す（C11）
-            debug::log(debug::Stage::Mir, debug::Level::Error,
-                       "slice delete(): レシーバのスライス場所を解決できませんでした");
-        }
+    if (is_clear) {
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(slice_place));
+        emit_call(ctx, "cm_slice_clear", std::move(args), std::nullopt);
         return ctx.new_temp(hir::make_void());
     }
 
-    if (call.func_name == "__builtin_slice_clear") {
-        if (!call.args.empty()) {
-            auto slice_expr = call.args[0].get();
+    // 要素型と格納規約を表から引く（メンバ経由のslice_typeはtypedefエイリアス未解決のことがあるため解決してから判定。C4）
+    hir::TypePtr elem_type = nullptr;
+    if (slice_type && slice_type->element_type) {
+        auto r = ctx.resolve_typedef(slice_type->element_type);
+        elem_type = r ? r : slice_type->element_type;
+    }
+    const SliceElemDispatch disp =
+        slice_elem_dispatch(elem_type ? elem_type->kind : hir::TypeKind::Int);
 
-            // スライスレシーバの場所を解決する（VarRef/Member/固定長配列Index。C11/H10）
-            MirPlace slice_place{0};
-            hir::TypePtr slice_type = nullptr;
-            bool resolved = resolve_receiver_place(slice_expr, ctx, slice_place, slice_type);
+    if (is_push) {
+        LocalId value_local = lower_expression(*call.args[1], ctx);
 
-            if (resolved) {
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(slice_place));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data =
-                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_clear"),
-                                            std::move(args),
-                                            std::nullopt,
-                                            success_block,
-                                            std::nullopt,
-                                            "",
-                                            "",
-                                            false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-                return ctx.new_temp(hir::make_void());
+        // 多次元スライスへの配列リテラル直接push（X3）: リテラルは固定長配列blobとしてlowerされるためcm_slice_push_sliceが期待するCmSliceヘッダにならない。cm_array_to_sliceでヒープスライスへ実体化してからpushする（空リテラルはlen=0の正規ヘッダ）
+        if (disp.cls == SliceElemClass::InnerSlice && value_local < ctx.func->locals.size()) {
+            hir::TypePtr vt = ctx.func->locals[value_local].type;
+            if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
+                // 空リテラル[]は要素型をレシーバの内側スライスから取る
+                hir::TypePtr inner_elem = vt->element_type
+                                              ? vt->element_type
+                                              : (elem_type ? elem_type->element_type : nullptr);
+                LocalId addr = make_addr(ctx, value_local);
+                LocalId size_local = make_const(
+                    ctx, static_cast<int64_t>(vt->array_size.value_or(0)), hir::make_long());
+                LocalId ies_local =
+                    make_const(ctx, elem_size_of(ctx, inner_elem), hir::make_long());
+                LocalId conv = ctx.new_temp(elem_type ? elem_type : slice_type->element_type);
+                std::vector<MirOperandPtr> conv_args;
+                conv_args.push_back(MirOperand::copy(MirPlace{addr}));
+                conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
+                conv_args.push_back(MirOperand::copy(MirPlace{ies_local}));
+                emit_call(ctx, "cm_array_to_slice", std::move(conv_args), MirPlace{conv});
+                value_local = conv;
             }
-
-            // 黙殺禁止: レシーバを解決できない場合は診断を出す（C11）
-            debug::log(debug::Stage::Mir, debug::Level::Error,
-                       "slice clear(): レシーバのスライス場所を解決できませんでした");
         }
+
+        // インターフェイス要素スライスへの具象構造体push: インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
+        if (disp.cls == SliceElemClass::Blob && elem_type &&
+            elem_type->kind == hir::TypeKind::Struct && ctx.interface_names &&
+            ctx.interface_names->count(elem_type->name) > 0) {
+            hir::TypePtr actual = (value_local < ctx.func->locals.size())
+                                      ? ctx.func->locals[value_local].type
+                                      : nullptr;
+            if (actual && actual->kind == hir::TypeKind::Struct &&
+                actual->name != elem_type->name) {
+                LocalId iface_tmp = ctx.new_temp(elem_type);
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{iface_tmp}, MirRvalue::use(MirOperand::copy(MirPlace{value_local}))));
+                value_local = iface_tmp;
+            }
+        }
+
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(slice_place));
+        // Blob規約は値のアドレスを渡す（集約のインラインコピーのため）、それ以外は値渡し
+        LocalId value_arg =
+            (disp.cls == SliceElemClass::Blob) ? make_addr(ctx, value_local) : value_local;
+        args.push_back(MirOperand::copy(MirPlace{value_arg}));
+        emit_call(ctx, std::string("cm_slice_push_") + disp.suffix, std::move(args), std::nullopt);
         return ctx.new_temp(hir::make_void());
+    }
+
+    if (is_pop) {
+        hir::TypePtr result_elem = elem_type ? elem_type : hir::make_int();
+        if (disp.cls == SliceElemClass::Blob) {
+            // Blob規約: ポインタ幅戻り値のcm_slice_pop_ptrでは構造体宛先への格納が型不整合になるため（W3）、末尾要素ポインタからderefコピーで受けてからlenを減算する
+            LocalId len_local = ctx.new_temp(hir::make_long());
+            std::vector<MirOperandPtr> len_args;
+            len_args.push_back(MirOperand::copy(slice_place));
+            emit_call(ctx, "cm_slice_len", std::move(len_args), MirPlace{len_local});
+
+            LocalId idx_local = ctx.new_temp(hir::make_long());
+            MirConstant one_const;
+            one_const.value = int64_t{1};
+            one_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{idx_local},
+                MirRvalue::binary(MirBinaryOp::Sub, MirOperand::copy(MirPlace{len_local}),
+                                  MirOperand::constant(one_const), hir::make_long())));
+
+            LocalId elem_ptr = ctx.new_temp(hir::make_pointer(result_elem));
+            std::vector<MirOperandPtr> ptr_args;
+            ptr_args.push_back(MirOperand::copy(slice_place));
+            ptr_args.push_back(MirOperand::copy(MirPlace{idx_local}));
+            emit_call(ctx, "cm_slice_get_element_ptr", std::move(ptr_args), MirPlace{elem_ptr});
+
+            LocalId blob_result = ctx.new_temp(result_elem);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{blob_result},
+                MirRvalue::use(MirOperand::copy(MirPlace{elem_ptr, {PlaceProjection::deref()}}))));
+
+            std::vector<MirOperandPtr> pop_args;
+            pop_args.push_back(MirOperand::copy(slice_place));
+            emit_call(ctx, "cm_slice_pop_blob", std::move(pop_args), std::nullopt);
+            return blob_result;
+        }
+
+        // 内側スライス要素のpopはランタイム未実装のため従来既定のi32に落ちる（既知の未対応。導入時はcm_slice_pop_sliceを追加して表のsuffixを使う）
+        const std::string pop_suffix =
+            (disp.cls == SliceElemClass::InnerSlice) ? "i32" : disp.suffix;
+        LocalId result = ctx.new_temp(result_elem);
+        std::vector<MirOperandPtr> args;
+        args.push_back(MirOperand::copy(slice_place));
+        emit_call(ctx, std::string("cm_slice_pop_") + pop_suffix, std::move(args),
+                  MirPlace{result});
+        return result;
     }
 
     return std::nullopt;
