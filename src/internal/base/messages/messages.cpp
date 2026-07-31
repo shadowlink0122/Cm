@@ -912,6 +912,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ImportNonExportedSymbol
     {"warning: function '{0}' selected by import is not exported from '{1}' (currently allowed, but will become an error in a future version; add 'export' to the definition)",
      "警告: importで指定された関数 '{0}' は '{1}' でexportされていません（現在は許容されますが将来のバージョンでエラーになります。定義にexportを付けてください）"},
+    // MirSliceReceiverUnresolved
+    {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
+     "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},
+    // MirErrorSymbol
+    {"internal error: unresolved type artifact '{0}' reached MIR in function '{1}' (a type checker recovery leaked downstream)",
+     "内部エラー: 未解決型の成果物 '{0}' が関数 '{1}' のMIRに到達しました（型検査のエラー回復が下流へ漏れています）"},
 };
 // clang-format on
 

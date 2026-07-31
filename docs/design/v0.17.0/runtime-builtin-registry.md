@@ -45,3 +45,20 @@ parent: v0.17.0 Design
 - 各段で全12スイート+O0検証を完走させる（挙動不変）。
 - レジストリと実装Cの関数集合が一致することのビルド時検査（宣言生成ヘッダの適用）をCIに追加する。
 - N4/V5系の回帰（シグネチャ不一致がビルド時に落ちること）を意図的な不一致ケースのnegativeテストで固定する。
+
+## 進捗
+
+### 第1段（レジストリ新設とLLVM宣言の表引き化）: 実装済み
+
+- `src/internal/codegen/common/builtin_registry.hpp` にビルトインレジストリ（`BuiltinSig{name, symbol, ret, args, vararg}` の名前昇順constexpr表・188件・二分探索の`find_builtin_sig`）を新設した。表は旧else-if連鎖からの機械抽出で生成し、名前集合の新旧完全一致（欠落・過剰ゼロ）と代表エントリ（printf別名・vararg・bool型）の突き合わせで等価性を検証した。
+- `declareBuiltinRuntimeFunction`（core/runtime/builtins.cpp）を表引き+型タグ→LLVM型写像の1関数へ置換した（720行→約60行、117分岐の削除）。シンボル別名（`__println__`→printf）はレジストリのsymbol列で表現する。
+- 表に無い名前は従来どおりnullptrを返し呼び出し元の後続解決へ委ねる（挙動不変）。
+
+### 第2段（js側の導出）: 名前集合のみ実装済み
+
+- jsの`isBuiltinFunction`をレジストリ照合+js固有42件（i64系HOF・StringBuilder・アロケータ・format_N等、LLVM側は別経路宣言）の小集合へ書き換え、154件の重複列挙を削除した。
+- `emitBuiltinCall`の写像if連鎖の表駆動化と、js固有42件のレジストリ収容（シグネチャ定義）は未実施。
+
+### 残り（第3段・第4段）: 未実装
+
+表からのCヘッダ生成によるnative/wasmシグネチャ乖離のビルドエラー化と、ランタイムCの共通ソース化。

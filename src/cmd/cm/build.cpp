@@ -391,6 +391,15 @@ int run_build(cli::Options& opts, const char* argv0) {
         debug::log(debug::Stage::Mir, debug::Level::Info, "Calling lower() function");
         mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
+
+        // MIR段階の診断を表示し、エラーがあればcodegenへ進まない（diagnostics-engine-unification 第2段。従来はログのみでコンパイル続行し黙って壊れたコードを出していた）
+        if (!mir_lowering.mir_diagnostics().empty()) {
+            DiagnosticEmitter emitter(code, opts.input_file, &preprocess_result.source_map);
+            emitter.emit_all(mir_lowering.mir_diagnostics());
+            if (mir_lowering.has_diagnostic_errors()) {
+                return 1;
+            }
+        }
         ctx.phase_mir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - phase_mir_start)
                                .count();

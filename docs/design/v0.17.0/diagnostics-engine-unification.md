@@ -51,4 +51,18 @@ rustc_errorsのDiagCtxt（全層が共有する単一の診断コンテキスト
 - 検証: i18n E2E 42件・linter 10件・全12スイート通過。
 - 発行側の統合（Parser/TypeCheckerが単一DiagCtxtへ直接発行する形）は未実施。現状は両者が同一の `cm::Diagnostic` 型を各自のベクタへ収集しドライバがemitterへ渡す構成で、表示の複製は解消済み。DiagCtxt導入は第2段（MIRエラー昇格で発行元が増える時点)で行う。
 
-### 残り（第2段〜第4段）: 未実装
+### 第2段（MIRエラーの診断昇格）: 実装済み
+
+- MirLoweringBaseへ診断チャネル（`report_error(Span, message)`・`mir_diagnostics()`・`has_diagnostic_errors()`）を追加し、MirLoweringのctorでexpr/stmt loweringへ診断ベクタを共有配線した。
+- MIR段階で唯一のError級ログ（スライス組み込みのレシーバ場所未解決。C11/H10の黙殺禁止ガード）を`report_error`によるエラー診断へ昇格し、build.cppはMIR lowering後に診断をDiagnosticEmitterで表示してエラー時はcodegenへ進まない。
+- MIR診断のメッセージは新設時からMsgId（i18n表）で定義した（MirSliceReceiverUnresolved・MirErrorSymbol）。
+
+### 第3段（エラー型成果物の検査）: 実装済み
+
+- MirLowering::lower()の最終段に`check_error_artifacts`を追加し、MIRの関数名・呼び出し先FunctionRefに`__error__`プレフィックスのシンボル（未解決型のマングリング成果物。B6/B7/W5(d)/N2族）が存在しないことを検査、検出時はエラー診断として報告しドライバがcodegen前に停止する。
+- regression: `tests/regression/mir_lowering_test.cpp` にジェネリックメソッドチェーン・補間内呼び出し・スライス組み込みを含む代表プログラム（cases/mir_lowering/error_artifact_free.cm）で__error__シンボル不在とMIR診断空を固定するテストを追加した。
+- HIR側の宣言・式単位での`<error>`型検査（コンパイル停止をより早い段階へ移す形）は、型検査のエラー回復設計（typed-hir-single-source.md）と合わせて扱う。
+
+### 残り（第4段）: 未実装
+
+英語直書き診断のMsgId化。実測で型検査に約140件・パーサに約46件の英語直書きが残っており（i18n化済みは型検査41件）、独立の作業パッケージとして扱う。新設するMIR診断はMsgId定義を必須とする運用を第2段から適用済み。

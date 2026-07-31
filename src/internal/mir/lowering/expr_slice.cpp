@@ -6,6 +6,7 @@
 
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
+#include "internal/base/i18n.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 #include "slice_dispatch.hpp"
 
@@ -124,9 +125,8 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         resolved = true;
     }
     if (!resolved) {
-        // 黙殺禁止: レシーバを解決できない場合は診断を出す（C11/H10。従来は診断なしで文ごと欠落していた）
-        debug::log(debug::Stage::Mir, debug::Level::Error,
-                   "slice builtin: レシーバのスライス場所を解決できませんでした");
+        // 黙殺禁止: レシーバを解決できない場合はエラー診断として報告しcodegen前に停止する（C11/H10。従来はログのみでコンパイル続行し文ごと欠落していた）
+        report_error(call.args[0]->span, i18n::msg(i18n::MsgId::MirSliceReceiverUnresolved));
         return fallback_result();
     }
 

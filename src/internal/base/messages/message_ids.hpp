@@ -326,6 +326,8 @@ enum class MsgId : int {
     TypeAddrOfConst,
     ImportDuplicateSymbol,
     ImportNonExportedSymbol,
+    MirSliceReceiverUnresolved,
+    MirErrorSymbol,
     Count,
 };
 

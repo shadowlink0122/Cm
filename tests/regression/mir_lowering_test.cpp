@@ -318,3 +318,65 @@ TEST_F(MirLoweringTest, MultipleFunctions) {
         EXPECT_GE(func->basic_blocks.size(), 1u);
     }
 }
+
+// ============================================================
+// エラー型成果物の不在検査（diagnostics-engine-unification 第3段）
+// ============================================================
+
+namespace {
+
+// MIR全体から__error__プレフィックスのシンボル（関数名・呼び出し先）を収集する
+std::vector<std::string> collect_error_symbols(const mir::MirProgram& program) {
+    std::vector<std::string> found;
+    for (const auto& func : program.functions) {
+        if (!func) {
+            continue;
+        }
+        if (func->name.rfind("__error__", 0) == 0) {
+            found.push_back(func->name);
+        }
+        for (const auto& block : func->basic_blocks) {
+            if (!block || !block->terminator ||
+                block->terminator->kind != mir::MirTerminator::Call) {
+                continue;
+            }
+            const auto& call = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+            if (!call.func || call.func->kind != mir::MirOperand::FunctionRef) {
+                continue;
+            }
+            if (const auto* name = std::get_if<std::string>(&call.func->data)) {
+                if (name->rfind("__error__", 0) == 0) {
+                    found.push_back(*name);
+                }
+            }
+        }
+    }
+    return found;
+}
+
+}  // namespace
+
+TEST_F(MirLoweringTest, NoErrorArtifactSymbolsInRepresentativeProgram) {
+    // ジェネリックメソッドチェーン・補間内呼び出し・スライス組み込みを含む代表プログラムで、
+    // 未解決型のマングリング成果物（__error__*）がMIRに存在しないこと、MIR診断が空であることを固定する
+    auto code = load_case("error_artifact_free");
+    Lexer lex(code);
+    std::vector<Token> tokens = lex.tokenize();
+    Parser p(tokens);
+    auto ast = p.parse();
+    ASSERT_FALSE(p.has_errors());
+
+    TypeChecker checker;
+    ASSERT_TRUE(checker.check(ast));
+
+    hir::HirLowering hir_lowering;
+    auto hir = hir_lowering.lower(ast);
+
+    mir::MirLowering mir_lowering;
+    auto mir = mir_lowering.lower(hir);
+
+    const auto errors = collect_error_symbols(mir);
+    EXPECT_TRUE(errors.empty()) << "__error__シンボルがMIRに残っています: " << errors.front();
+    EXPECT_TRUE(mir_lowering.mir_diagnostics().empty())
+        << "MIR診断が発生: " << mir_lowering.mir_diagnostics().front().message;
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.hpp"
+#include "internal/base/diagnostics.hpp"
 #include "internal/base/module_range.hpp"
 #include "internal/hir/nodes.hpp"
 #include "internal/mir/nodes.hpp"
@@ -72,12 +73,42 @@ class MirLoweringBase {
     // モジュール範囲情報（ソースファイルベースのモジュール分割用）
     const std::vector<cm::ModuleRange>* module_ranges_ = nullptr;
 
+    // MIR段階の診断（ログでなく診断として収集しcodegen前に停止する。diagnostics-engine-unification 第2段）
+    // MirLoweringが親としてexpr/stmt loweringへ自身のベクタを共有する
+    std::vector<Diagnostic> mir_diagnostics_;
+    std::vector<Diagnostic>* shared_diagnostics_ = nullptr;
+
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
 
     // モジュール範囲情報を設定（ソースファイルベースの分割用）
     void set_module_ranges(const std::vector<cm::ModuleRange>* ranges) { module_ranges_ = ranges; }
+
+    // 診断ベクタを共有（MirLoweringのctorでexpr/stmt loweringへ配線する）
+    void set_shared_diagnostics(std::vector<Diagnostic>* diags) { shared_diagnostics_ = diags; }
+
+    // MIR段階の診断（共有されていれば親のベクタ）
+    std::vector<Diagnostic>& mir_diagnostics() {
+        return shared_diagnostics_ ? *shared_diagnostics_ : mir_diagnostics_;
+    }
+    const std::vector<Diagnostic>& mir_diagnostics() const {
+        return shared_diagnostics_ ? *shared_diagnostics_ : mir_diagnostics_;
+    }
+
+    // MIR段階の問題をエラー診断として報告する（黙殺・ログ出力での代替は禁止）
+    void report_error(const Span& span, const std::string& message) {
+        mir_diagnostics().emplace_back(Severity::Error, span, message);
+    }
+
+    bool has_diagnostic_errors() const {
+        for (const auto& d : mir_diagnostics()) {
+            if (d.severity == Severity::Error) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // 共有impl_infoを設定
     void set_shared_impl_info(

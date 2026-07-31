@@ -4,6 +4,7 @@
 #include "lowering.hpp"
 
 #include "internal/base/debug.hpp"
+#include "internal/base/i18n.hpp"
 #include "internal/base/mangle.hpp"
 
 #include <algorithm>
@@ -16,6 +17,36 @@
 #include <utility>
 
 namespace cm::mir {
+
+// MIRに__error__シンボル（未解決型のマングリング成果物）が残っていないか検査する。
+// 関数名・呼び出し先FunctionRefの両方を走査し、検出時はエラー診断として報告する（codegen前停止はドライバが行う）
+void MirLowering::check_error_artifacts(const MirProgram& mir_program) {
+    constexpr const char* kErrorPrefix = "__error__";
+    for (const auto& func : mir_program.functions) {
+        if (!func) {
+            continue;
+        }
+        if (func->name.rfind(kErrorPrefix, 0) == 0) {
+            report_error(Span{}, i18n::msgf(i18n::MsgId::MirErrorSymbol, func->name, func->name));
+            continue;
+        }
+        for (const auto& block : func->basic_blocks) {
+            if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call) {
+                continue;
+            }
+            const auto& call = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call.func || call.func->kind != MirOperand::FunctionRef) {
+                continue;
+            }
+            if (const auto* name = std::get_if<std::string>(&call.func->data)) {
+                if (name->rfind(kErrorPrefix, 0) == 0) {
+                    report_error(Span{},
+                                 i18n::msgf(i18n::MsgId::MirErrorSymbol, *name, func->name));
+                }
+            }
+        }
+    }
+}
 
 MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
     if (cm::debug::debug_mode())
@@ -136,6 +167,11 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
 
     // typedef定義をMirProgramにコピー（LLVM backendでTypeAlias解決に使用）
     mir_program.typedef_defs = typedef_defs;
+
+    // エラー型成果物の検査（diagnostics-engine-unification 第3段）:
+    // 型検査のエラー回復で漏れた未解決型はマングリングで__error__*シンボルになりリンク不能・誤コンパイルとして顕在化する（B6/B7/W5(d)/N2族）。
+    // HIR→MIR境界の最終検査としてMIRに__error__シンボルが存在しないことを保証し、検出時はcodegen前に停止させる
+    check_error_artifacts(mir_program);
 
     return std::move(mir_program);
 }

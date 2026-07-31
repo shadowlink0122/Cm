@@ -37,6 +37,9 @@ class MirLowering : public MirLoweringBase {
         // impl_infoを共有
         expr_lowering.set_shared_impl_info(&impl_info);
         stmt_lowering.set_shared_impl_info(&impl_info);
+        // 診断ベクタを共有（expr/stmtの報告が親のmir_diagnostics()へ集まる）
+        expr_lowering.set_shared_diagnostics(&mir_diagnostics_);
+        stmt_lowering.set_shared_diagnostics(&mir_diagnostics_);
     }
 
     // HIRプログラムをMIRに変換
@@ -49,6 +52,9 @@ class MirLowering : public MirLoweringBase {
     void propagate_closure_info();
 
    private:
+    // MIRにエラー型成果物（__error__*シンボル）が残っていないことを検査する（第3段）
+    void check_error_artifacts(const MirProgram& mir_program);
+
     // 宣言の登録
     void register_declarations(const hir::HirProgram& hir_program);
 
