@@ -1,0 +1,22 @@
+// 期待型API化で一元化された無名リテラルの消費サイト確認
+import std::io::println;
+struct P { int x; int y; }
+P make() {
+    return {x: 1, y: 2};
+}
+int take(P p) {
+    return p.x * 10 + p.y;
+}
+int main() {
+    P a = make();
+    println("{a.x} {a.y}");
+    P b = {x: 0, y: 0};
+    b = {x: 7, y: 8};
+    println("{b.x} {b.y}");
+    int r = take({x: 3, y: 4});
+    println("{r}");
+    P[] ps = [];
+    ps.push({x: 5, y: 6});
+    println("{ps[0].x} {ps[0].y}");
+    return 0;
+}

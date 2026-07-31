@@ -87,6 +87,10 @@ class TypeChecker {
     // 式の型推論 (expr.cpp)
     // ============================================================
     ast::TypePtr infer_type(ast::Expr& expr);
+
+    // 期待型つき式推論の正式API（type-resolution-simplification 領域3）。
+    // 値消費サイト（let初期化・代入右辺・return・関数引数・push引数・フィールド/要素）は期待型をここへ渡すだけにし、無名リテラルの型決定はpropagate_literal_expected_typeの1箇所へ集約する
+    ast::TypePtr infer_type_expecting(ast::Expr& expr, const ast::TypePtr& expected);
     ast::TypePtr infer_literal(ast::LiteralExpr& lit);
     ast::TypePtr infer_array_literal(ast::ArrayLiteralExpr& lit);
     ast::TypePtr infer_struct_literal(ast::StructLiteralExpr& lit);

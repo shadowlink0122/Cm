@@ -535,7 +535,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                          std::to_string(arg_count));
             } else {
                 for (size_t i = 0; i < arg_count; ++i) {
-                    auto arg_type = infer_type(*call.args[i]);
+                    // パラメータ型を期待型として引数へ渡す（無名リテラル引数の型決定を一元化）
+                    auto arg_type = infer_type_expecting(*call.args[i], fn_type->param_types[i]);
                     if (!types_compatible(fn_type->param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*fn_type->param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
@@ -568,7 +569,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             } else {
                 // 固定引数の型チェック
                 for (size_t i = 0; i < param_count; ++i) {
-                    auto arg_type = infer_type(*call.args[i]);
+                    // パラメータ型を期待型として引数へ渡す（無名リテラル引数の型決定を一元化）
+                    auto arg_type = infer_type_expecting(*call.args[i], sym->param_types[i]);
                     if (!types_compatible(sym->param_types[i], arg_type)) {
                         std::string expected = ast::type_to_string(*sym->param_types[i]);
                         std::string actual = ast::type_to_string(*arg_type);
@@ -605,7 +607,8 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             }
         } else {
             for (size_t i = 0; i < arg_count; ++i) {
-                auto arg_type = infer_type(*call.args[i]);
+                // パラメータ型を期待型として引数へ渡す（無名リテラル引数の型決定を一元化）
+                auto arg_type = infer_type_expecting(*call.args[i], sym->param_types[i]);
                 if (!types_compatible(sym->param_types[i], arg_type)) {
                     std::string expected = ast::type_to_string(*sym->param_types[i]);
                     std::string actual = ast::type_to_string(*arg_type);

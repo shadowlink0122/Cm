@@ -284,23 +284,18 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.init) {
         if (auto* array_lit = let.init->as<ast::ArrayLiteralExpr>()) {
             if (let.type && let.type->kind == ast::TypeKind::Array) {
+                // 宣言型を採用しつつ、要素（ネストした無名リテラル含む）へ要素型を期待型として伝播する
                 init_type = let.type;
                 let.init->type = let.type;
                 for (auto& elem : array_lit->elements) {
-                    infer_type(*elem);
+                    infer_type_expecting(*elem, let.type->element_type);
                 }
             } else {
                 init_type = infer_type(*let.init);
             }
-        } else if (auto* struct_lit = let.init->as<ast::StructLiteralExpr>()) {
-            if (let.type && let.type->kind == ast::TypeKind::Struct) {
-                if (struct_lit->type_name.empty()) {
-                    struct_lit->type_name = let.type->name;
-                }
-            }
-            init_type = infer_type(*let.init);
         } else {
-            init_type = infer_type(*let.init);
+            // 宣言型があれば期待型として渡す（無名構造体リテラルの型名補完はinfer_type_expectingへ一元化）
+            init_type = infer_type_expecting(*let.init, let.type);
         }
     }
 
@@ -486,7 +481,8 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
         return;
 
     if (ret.value) {
-        auto val_type = infer_type(*ret.value);
+        // 戻り値型を期待型として渡す（return {..}; / return [..]; の無名リテラルを許容）
+        auto val_type = infer_type_expecting(*ret.value, current_return_type_);
         if (!types_compatible(current_return_type_, val_type)) {
             // ジェネリクスenum variant型推論: return Option::None のようなケース
             bool is_enum_variant_coercion = false;

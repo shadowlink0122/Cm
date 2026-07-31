@@ -353,6 +353,15 @@ ast::TypePtr TypeChecker::infer_array_literal(ast::ArrayLiteralExpr& lit) {
     return ast::make_array(first_type, lit.elements.size());
 }
 
+// 期待型つき式推論の正式API（type-resolution-simplification 領域3）。
+// 無名リテラルへの期待型伝播を消費サイトごとの個別パッチ（W1/X3/X4の3連発の原因）にせず、消費サイトはこのAPIへ期待型を渡すだけにする
+ast::TypePtr TypeChecker::infer_type_expecting(ast::Expr& expr, const ast::TypePtr& expected) {
+    if (expected) {
+        propagate_literal_expected_type(expr, expected);
+    }
+    return infer_type(expr);
+}
+
 // リテラル式へ期待型を再帰的に伝播する（W1/X3/X4）。
 // 「構造体リテラル > 配列リテラル > 無名構造体リテラル」等のネストで要素側の期待型が
 // 伝わらず、型不明のままゼロ/未初期化blobとしてlowerされてフィールド喪失・ゴミ値になっていた
@@ -453,17 +462,18 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
     }
 
     for (auto& field : lit.fields) {
-        // フィールド型を期待型としてリテラル値へ伝播してから推論する（W1）
+        // フィールド型を期待型として値へ渡す（W1。無名リテラルの型決定はinfer_type_expectingへ一元化）
         {
+            ast::TypePtr field_expected = nullptr;
             const ast::StructDecl* sd0 = struct_it->second;
             for (const auto& sf : sd0->fields) {
                 if (sf.name == field.name && field.value) {
-                    propagate_literal_expected_type(*field.value, sf.type);
+                    field_expected = sf.type;
                     break;
                 }
             }
+            infer_type_expecting(*field.value, field_expected);
         }
-        infer_type(*field.value);
         // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）
         if (field.value && is_capturing_closure_expr(*field.value)) {
             const ast::StructDecl* sd = struct_it->second;

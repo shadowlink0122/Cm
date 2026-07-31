@@ -416,13 +416,8 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
                 error(current_span_, "Slice push() takes 1 argument");
             }
             if (!member.args.empty()) {
-                // レシーバの要素型を期待型としてリテラル引数へ伝播する（X3/X4）。
-                // 配列リテラル・無名構造体リテラルの直接pushが型不明のままlowerされ、
-                // 壊れたヘッダ・フィールドずれの要素が格納されていた
-                if (obj_type->element_type) {
-                    propagate_literal_expected_type(*member.args[0], obj_type->element_type);
-                }
-                infer_type(*member.args[0]);
+                // レシーバの要素型を期待型として引数へ渡す（X3/X4。無名リテラルの型決定はinfer_type_expectingへ一元化）
+                infer_type_expecting(*member.args[0], obj_type->element_type);
                 // キャプチャ付きクロージャのスライス格納は環境喪失・未解決シンボルになるため拒否（V7）
                 if (obj_type->element_type &&
                     obj_type->element_type->kind == ast::TypeKind::Function &&

@@ -71,7 +71,9 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     }
 
     auto ltype = infer_type(*binary.left);
-    auto rtype = infer_type(*binary.right);
+    // 単純代入は左辺型を期待型として右辺へ渡す（無名リテラル代入の型決定を一元化）
+    auto rtype = (binary.op == ast::BinaryOp::Assign) ? infer_type_expecting(*binary.right, ltype)
+                                                      : infer_type(*binary.right);
 
     if (!ltype || !rtype)
         return ast::make_error();
