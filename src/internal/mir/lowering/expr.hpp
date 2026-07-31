@@ -46,11 +46,17 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx);
     LocalId lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx);
 
-    // メンバアクセスからMirPlaceを取得（コピーせずに参照を取得）
+    // 唯一の場所化API（type-resolution-simplification 領域2）。
+    // 変数・メンバ・添字・デリファレンスの任意チェーンからMirPlaceを構築し、代入左辺値・メソッドレシーバ・参照取得のすべてで共用する。
+    // スライスヘッダ降下（内側スライス要素はcm_slice_get_subslice_refで参照降下、それ以外の要素はcodegenがヘッダ経由で解決するIndex投影）とtypedef解決・ジェネリックフィールド型置換はここにのみ存在させる
+    bool lower_place(const hir::HirExpr* expr, LoweringContext& ctx, MirPlace& out_place,
+                     hir::TypePtr& out_type);
+
+    // メンバアクセスからMirPlaceを取得（lower_placeのHirMember枝。HirMember&しか持たない既存呼び出し元のための入口）
     bool get_member_place(const hir::HirMember& mem, LoweringContext& ctx, MirPlace& out_place,
                           hir::TypePtr& out_type);
 
-    // メソッドレシーバの場所を解決する（VarRef/Member/固定長配列のIndexチェーン。H10）
+    // メソッドレシーバの場所化（H10）。実体はlower_placeへの委譲
     bool resolve_receiver_place(const hir::HirExpr* expr, LoweringContext& ctx, MirPlace& out_place,
                                 hir::TypePtr& out_type);
 
