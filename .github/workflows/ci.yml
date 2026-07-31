@@ -46,6 +46,10 @@ jobs:
       - name: Check layer dependencies
         run: python3 scripts/check_layer_deps.py --matrix
 
+      # ビルトインレジストリとランタイムC実装のシグネチャ突き合わせ（runtime-builtin-registry 第3段）
+      - name: Check builtin signatures
+        run: python3 scripts/check_builtin_signatures.py
+
   # ========================================
   # Extension Lint - VSCode拡張機能チェック（独立・並列）
   # ========================================

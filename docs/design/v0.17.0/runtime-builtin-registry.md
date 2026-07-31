@@ -59,6 +59,13 @@ parent: v0.17.0 Design
 - jsの`isBuiltinFunction`をレジストリ照合+js固有42件（i64系HOF・StringBuilder・アロケータ・format_N等、LLVM側は別経路宣言）の小集合へ書き換え、154件の重複列挙を削除した。
 - `emitBuiltinCall`の写像if連鎖の表駆動化と、js固有42件のレジストリ収容（シグネチャ定義）は未実施。
 
-### 残り（第3段・第4段）: 未実装
+### 第3段（シグネチャ乖離の自動検査）: 実装済み
 
-表からのCヘッダ生成によるnative/wasmシグネチャ乖離のビルドエラー化と、ランタイムCの共通ソース化。
+- `scripts/check_builtin_signatures.py` を新設し、レジストリ表とnative/wasmランタイムC実装の関数シグネチャ（戻り型・引数の幅と個数・可変長）を突き合わせる検査を `make lint` とCIのLintジョブへ組み込んだ（レジストリ照合297件・native/wasm二重実装の相互照合191件、同名の重複定義も全件検査）。
+- 原案の「Cヘッダ生成をランタイムへ適用」はポインタのpointee型（char*/CmSlice*等）が実装ごとに異なりC言語の再宣言互換で誤検出になるため、幅正規化（ポインタ→Ptr・スカラ→幅タグ）でのlint時突き合わせへ設計変更した。検出対象の本質（N4/V5/M14族の幅・個数・可変長乖離）は同等に検出でき、native/wasm二重実装同士の乖離検査も追加で得られる。boolのI1/I8表現差は互換として扱い、wasmエクスポートでのsize_t等の可変幅型は警告する。
+- 検査で実乖離2件を検出し修正した: (1) `__builtin_array_findIndex_i64` のnative実装がint64_t戻り（LLVM宣言・closure変種・wasm実装はi32。ABIの偶然で動作していた）→i32へ統一 (2) wasmの `cm_format_string` スタブがargc引数を欠いていた→レジストリ宣言（fmt, argc, ...)へ整合。
+- negative検証: 意図的な不一致（cm_slice_lenのi32戻り定義）でレジストリ照合・相互照合の両方が検出することを確認した。
+
+### 残り（第2段後半・第4段）: 未実装
+
+jsの`emitBuiltinCall`写像if連鎖の表駆動化・js固有42件のレジストリ収容と、ランタイムCの共通ソース化（native/wasm 8,088行の一本化）。

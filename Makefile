@@ -791,8 +791,13 @@ layer-deps-check:
 	@echo "Checking layer dependencies..."
 	@python3 scripts/check_layer_deps.py
 
+.PHONY: builtin-sig-check
+builtin-sig-check:
+	@echo "Checking builtin signatures..."
+	@python3 scripts/check_builtin_signatures.py
+
 .PHONY: lint
-lint: format-check layer-deps-check
+lint: format-check layer-deps-check builtin-sig-check
 
 # ========================================
 # Quick Shortcuts（マクロで自動生成）

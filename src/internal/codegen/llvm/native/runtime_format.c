@@ -1479,7 +1479,8 @@ bool __builtin_array_every_i32(int32_t* arr, int64_t size, bool (*predicate)(int
 }
 
 // findIndex: 条件を満たす最初の要素のインデックス
-int64_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
+// 戻り幅はCmのint（i32）に統一する（LLVM宣言・closure変種・wasm実装と一致。従来のint64_tはABIの偶然で動作していた）
+int32_t __builtin_array_findIndex_i64(int64_t* arr, int64_t size, bool (*predicate)(int64_t)) {
     CM_HOF_UNWRAP(arr, size);
     if (!arr || !predicate)
         return -1;

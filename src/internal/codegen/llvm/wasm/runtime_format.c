@@ -2128,7 +2128,9 @@ char* cm_format_string_4(const char* fmt, const char* arg1, const char* arg2, co
     return cm_format_replace(temp3, arg4);
 }
 
-char* cm_format_string(const char* fmt, ...) {
+// wasmでは可変長引数版は未使用（コード生成はcm_format_string_1〜4を使う）。リンク完全性のためのスタブだが、シグネチャはレジストリ宣言（fmt, argc, ...）と一致させる
+char* cm_format_string(const char* fmt, int num_args, ...) {
+    (void)num_args;
     return (char*)fmt;  // Simplified
 }
 
