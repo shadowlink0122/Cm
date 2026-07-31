@@ -594,12 +594,19 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                                 return iit->second;
                             }
                         }
+                        // 自動実装メソッド（Debug/Display/CSS）はマングル名（Point__debug等）のMIR直生成でhir_func_defsに無いため、Type__プレフィックスを剥がしたメソッド名部分で判定する
                         auto base = cm::text::strip_namespace(callee);
-                        if (base == "debug" || base == "display" || base == "to_string" ||
-                            base == "toString" || base == "css" || base == "to_css") {
+                        auto tail_sep = base.rfind("__");
+                        std::string mtail =
+                            (tail_sep != std::string::npos) ? base.substr(tail_sep + 2) : base;
+                        if (mtail == "debug" || mtail == "display" || mtail == "to_string" ||
+                            mtail == "toString" || mtail == "css" || mtail == "to_css") {
                             return hir::make_string();
                         }
-                        if (base == "len" || base == "byte_len") {
+                        if (mtail == "is_css" || mtail == "isCss") {
+                            return hir::make_bool();
+                        }
+                        if (mtail == "len" || mtail == "byte_len") {
                             return hir::make_long();
                         }
                         return nullptr;
@@ -667,12 +674,17 @@ std::optional<LocalId> ExprLowering::lower_interp_expression(const std::string& 
                                 }
                                 // 自動実装メソッドの既知シグネチャ（Debug/Display/CSS）
                                 if (!ret_expr.type || ret_expr.type->is_error()) {
+                                    // 自動実装メソッドはマングル名でhir_func_defsに無いため、Type__プレフィックスを剥がして判定する
                                     auto base = cm::text::strip_namespace(callee);
-                                    if (base == "debug" || base == "display" ||
-                                        base == "to_string" || base == "toString" ||
-                                        base == "css" || base == "to_css") {
+                                    auto tail_sep = base.rfind("__");
+                                    std::string mtail = (tail_sep != std::string::npos)
+                                                            ? base.substr(tail_sep + 2)
+                                                            : base;
+                                    if (mtail == "debug" || mtail == "display" ||
+                                        mtail == "to_string" || mtail == "toString" ||
+                                        mtail == "css" || mtail == "to_css") {
                                         ret_expr.type = hir::make_string();
-                                    } else if (base == "is_css" || base == "isCss") {
+                                    } else if (mtail == "is_css" || mtail == "isCss") {
                                         ret_expr.type = hir::make_bool();
                                     }
                                 }

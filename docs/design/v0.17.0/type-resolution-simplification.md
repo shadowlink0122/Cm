@@ -86,9 +86,10 @@ W3はpopだけがblob要素の受け取り規約（要素ポインタ経由）�
 1. 第1段（領域2）: `lower_place` 統合。**実装済み**。ExprLowering::lower_placeを唯一の場所化APIとし、resolve_receiver_placeは委譲・assign.cppのbuild_lvalue_placeは1行ラッパへ縮退（約550行の重複削除）。
 2. 第2段（領域4）: スライスディスパッチ表化。**実装済み**。slice_elem_dispatch（Scalar/Ptr/InnerSlice/Blobの格納クラスとサフィックス）とemit_call等の共通ヘルパでexpr_slice.cppを表引き構成へ書き換え。内側スライス要素のpopがランタイム未実装で従来既定i32へ落ちる挙動は既知の未対応としてコメントに固定。
 3. 第3段（領域3）: 期待型パラメータの正式化。**実装済み**。infer_type_expecting(expr, expected)を正式APIとし、let初期化・代入右辺・return・関数引数（通常/可変長/関数ポインタ）・push引数・構造体リテラルフィールド・配列要素の全消費サイトを接続。副次効果としてreturn文・関数引数への無名構造体リテラルが許容されるようになった（回帰: tests/common/structs/anon_literal_all_sites）。
-4. 第4段（領域1）: 補間のパース時脱糖。**未実装**。削除量が最大（expr_println.cpp 2,341行+ミニパイプライン+影の型チェッカー）だが、第1〜3段の統合APIが揃ったため着手可能。フォーマット指定子の脱糖時変換と、補間式・直接式のMIR一致スナップショット検証を含めて独立ブランチで実施する。
+4. 第4段a（領域1・解決経路の一本化）: **実装済み**。expr_println.cppの約2,000行のテキストパターン照合（メンバ・添字・アロー・enum・否定・アドレス等の個別分岐）を全廃し、全プレースホルダをresolve_interp_placeholder（識別子直接参照＋式パイプライン）の単一経路へ委譲した（2,341行→296行）。旧分類器interp_content_is_*と旧添字ヘルパーも撤去。自動実装メソッド（Point__debug等）の戻り値型解決をType__プレフィックス除去で補完し、旧経路で壊れていた`{t[1]}`（空出力）・`{t.len()} {t[1]}`（SIGSEGV）も修正された（回帰: tests/common/basic/interp_string_index）。あわせて第1段lower_placeのwasm回帰（構造体blob要素スライスへの生Index投影書き込みが未対応で変異消失）をcm_slice_get_element_ptr降下へ統一して修正した。
+5. 第4段b（領域1・パース時脱糖）: **未実装**。プレースホルダの再パース自体（lower_interp_expressionのミニパイプライン・annotate_interp_expr_typesの影の型チェッカー・check_interpolation_scopeの検査用パース）を、パース時のリテラル断片＋実AST部分式への脱糖で置き換える最終段。解決経路が1本になったため置き換え対象は明確になった。フォーマット指定子の脱糖時変換と、補間式・直接式のMIR一致スナップショット検証を含めて独立ブランチで実施する。
 
-各段でmake test全スイートを完走させ、削除した経路のテスト（interp_chain・push_array_literal等）が新経路で通ることを確認する（第1〜3段は完走済み）。
+各段でmake test全スイートを完走させ、削除した経路のテスト（interp_chain・push_array_literal等）が新経路で通ることを確認する（第1〜3段・第4段aは全12スイート完走済み。第1〜3段時点でwasmスイートが未実行だった反省から、第4段a以降はllvm-wasmを必須スイートに含める）。
 
 ## テスト計画
 

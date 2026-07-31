@@ -314,8 +314,13 @@ bool ExprLowering::lower_place(const hir::HirExpr* expr, LoweringContext& ctx, M
             const bool elem_is_inline_slice = is_slice && elem &&
                                               elem->kind == hir::TypeKind::Array &&
                                               !elem->array_size.has_value();
+            // 構造体・ユニオンblob要素は要素ポインタ（cm_slice_get_element_ptr）＋Derefで場所化する（旧get_member_placeと同じ規約）。
+            // スライスへの生Index投影の書き込みはwasmバックエンドが未対応で変異が失われるため、blob要素はランタイム降下に統一する
+            const bool elem_is_blob =
+                is_slice && elem &&
+                (elem->kind == hir::TypeKind::Struct || elem->kind == hir::TypeKind::Union);
             LocalId iv = lower_expression(**iep, ctx);
-            if (elem_is_inline_slice) {
+            if (elem_is_inline_slice || elem_is_blob) {
                 // ベースに投影が残っている場合はヘッダポインタを一時へ取り出してから降下する
                 LocalId slice_local;
                 if (base.projections.empty()) {
@@ -325,27 +330,30 @@ bool ExprLowering::lower_place(const hir::HirExpr* expr, LoweringContext& ctx, M
                     ctx.push_statement(MirStatement::assign(
                         MirPlace{slice_local}, MirRvalue::use(MirOperand::copy(base))));
                 }
-                LocalId inner = ctx.new_temp(elem);
+                const char* descend_func =
+                    elem_is_inline_slice ? "cm_slice_get_subslice_ref" : "cm_slice_get_element_ptr";
+                hir::TypePtr result_type = elem_is_inline_slice ? elem : hir::make_pointer(elem);
+                LocalId inner = ctx.new_temp(result_type);
                 BlockId success_block = ctx.new_block();
                 std::vector<MirOperandPtr> args;
                 args.push_back(MirOperand::copy(MirPlace{slice_local}));
                 args.push_back(MirOperand::copy(MirPlace{iv}));
                 auto call_term = std::make_unique<MirTerminator>();
                 call_term->kind = MirTerminator::Call;
-                call_term->data =
-                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_get_subslice_ref"),
-                                            std::move(args),
-                                            MirPlace{inner},
-                                            success_block,
-                                            std::nullopt,
-                                            "",
-                                            "",
-                                            false};
+                call_term->data = MirTerminator::CallData{MirOperand::function_ref(descend_func),
+                                                          std::move(args),
+                                                          MirPlace{inner},
+                                                          success_block,
+                                                          std::nullopt,
+                                                          "",
+                                                          "",
+                                                          false};
                 ctx.set_terminator(std::move(call_term));
                 ctx.switch_to_block(success_block);
-                base = MirPlace{inner};
+                base = elem_is_inline_slice ? MirPlace{inner}
+                                            : MirPlace{inner, {PlaceProjection::deref()}};
             } else {
-                // 固定長配列・ポインタ・スライス（非インラインスライス要素）はIndex投影で場所化する。スライスへのIndex投影はcodegenがCmSliceヘッダ経由で要素アドレスを計算する
+                // 固定長配列・ポインタ・スライス（スカラ/ポインタ/文字列要素）はIndex投影で場所化する。スライスへのIndex投影はcodegenがCmSliceヘッダ経由で要素アドレスを計算する
                 base.projections.push_back(PlaceProjection::index(iv));
             }
             cur = elem;
