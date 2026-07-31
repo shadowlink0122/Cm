@@ -42,6 +42,10 @@ jobs:
       - name: Check C++ format
         run: scripts/ci/check_cpp_format.sh ${{ env.LLVM_VERSION }}
 
+      # src/internal層間の依存規律（逆依存・層違反の検出。compiler-architecture-restructure 第1段）
+      - name: Check layer dependencies
+        run: python3 scripts/check_layer_deps.py --matrix
+
   # ========================================
   # Extension Lint - VSCode拡張機能チェック（独立・並列）
   # ========================================

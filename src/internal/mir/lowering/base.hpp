@@ -1,9 +1,9 @@
 #pragma once
 
 #include "context.hpp"
+#include "internal/base/module_range.hpp"
 #include "internal/hir/nodes.hpp"
 #include "internal/mir/nodes.hpp"
-#include "internal/preprocessor/import.hpp"
 #include "internal/syntax/ast/typedef.hpp"
 
 #include <optional>
@@ -70,17 +70,14 @@ class MirLoweringBase {
     std::unordered_set<std::string> global_var_names;
 
     // モジュール範囲情報（ソースファイルベースのモジュール分割用）
-    const std::vector<preprocessor::ImportPreprocessor::ModuleRange>* module_ranges_ = nullptr;
+    const std::vector<cm::ModuleRange>* module_ranges_ = nullptr;
 
    public:
     MirLoweringBase() = default;
     virtual ~MirLoweringBase() = default;
 
     // モジュール範囲情報を設定（ソースファイルベースの分割用）
-    void set_module_ranges(
-        const std::vector<preprocessor::ImportPreprocessor::ModuleRange>* ranges) {
-        module_ranges_ = ranges;
-    }
+    void set_module_ranges(const std::vector<cm::ModuleRange>* ranges) { module_ranges_ = ranges; }
 
     // 共有impl_infoを設定
     void set_shared_impl_info(

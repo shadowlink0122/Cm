@@ -786,8 +786,13 @@ format-check:
 		echo "✅ Cm format check passed!" || \
 		(echo "❌ Cm format check failed! Run 'make format' to fix." && exit 1)
 
+.PHONY: layer-deps-check
+layer-deps-check:
+	@echo "Checking layer dependencies..."
+	@python3 scripts/check_layer_deps.py
+
 .PHONY: lint
-lint: format-check
+lint: format-check layer-deps-check
 
 # ========================================
 # Quick Shortcuts（マクロで自動生成）

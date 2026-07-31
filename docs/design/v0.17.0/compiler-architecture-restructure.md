@@ -78,3 +78,17 @@ cm_span ← cm_diag ← cm_syntax(cm_ast) ← cm_macro
 - 各段で全12スイート+O0検証を完走させる（挙動不変の証明）。
 - 層違反の回帰防止として、CMakeターゲットのINTERFACE include境界と、fmt/lintバイナリがcodegenシンボルを含まないことのリンク検査をCIへ追加する。
 - driver統合後、check/lint/fmt/compileの診断出力（行番号・source_map適用・i18n）が同一機構経由であることをi18nスイートで検証する。
+
+## 進捗
+
+### 第1段（依存の棚卸しと規律の強制）: 実装済み
+
+- src/internal全12層のinclude依存を実測した結果、依存は想定よりはるかに規律的で、逆依存はmir→preprocessorの1辺のみだった（base最下層・一方向・循環なし。fmtはテキストベース整形のためsyntaxにも依存せずbaseのみ）。
+- 唯一の層違反mir→preprocessor（MIR loweringがソースファイル解決に使うModuleRange型のinclude）は、ModuleRangeを最下層の共有型 `src/internal/base/module_range.hpp` へ移設し、preprocessor側をエイリアス化して解消した。
+- 依存規律の強制は `scripts/check_layer_deps.py` で実装した。許可依存の隣接リスト（本文書の依存図に対応）に対して全includeエッジを検査し、`make lint` とCIのLintジョブで層違反・未登録層を検出する。依存を増やす変更は本文書の依存図とALLOWEDの両方の更新を要求する運用とする。
+- CMakeのOBJECTライブラリ物理分割は見送った。unity build（バッチ16）と条件付きソース（LLVM有無・プラットフォーム別）の再バッチ化リスクに対し、include検査が同じ規律を先に強制できるため。物理分割は第2段以降（base再編・fmt隔離のリンク検査）で扱う。
+- 第3段が目標とする「fmtの隔離」は、include水準では既に成立している（fmt→baseのみ。ALLOWEDで固定済み）。リンク水準の検査（fmtバイナリがcodegenシンボルを含まない）は物理分割後に導入する。
+
+### 残り（第2段〜第6段）: 未実装
+
+第2段（base→cm_span+cm_diag再編）はdiagnostics-engine-unification.mdと同時実施、第6段（cm_resolve新設）はmodule-system-structural-imports.mdと同時実施の計画のまま。

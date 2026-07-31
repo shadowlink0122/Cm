@@ -1,5 +1,7 @@
 #pragma once
 
+#include "internal/base/module_range.hpp"
+
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -26,14 +28,8 @@ class ImportPreprocessor {
     // ソースマップ：プリプロセス後の行番号（1-indexed） -> 元の位置情報
     using SourceMap = std::vector<SourceMapEntry>;
 
-    // モジュール範囲：プリプロセス後のコードでモジュールがどの範囲にあるか
-    struct ModuleRange {
-        std::string file_path;    // モジュールファイルパス
-        std::string import_from;  // どのファイルからインポートされたか
-        size_t import_line;       // インポート文の行番号
-        size_t start_offset;      // プリプロセス後のコードでの開始オフセット
-        size_t end_offset;        // プリプロセス後のコードでの終了オフセット
-    };
+    // モジュール範囲（実体はbaseの共有型。MIR loweringが消費するため最下層に定義）
+    using ModuleRange = cm::ModuleRange;
 
     struct ProcessResult {
         std::string processed_source;               // 処理後のソースコード
