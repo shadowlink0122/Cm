@@ -3,6 +3,7 @@
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 
 #include <functional>
@@ -75,27 +76,8 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
                 field_type->element_type ? field_type->element_type : hir::make_int());
 
             // 要素サイズを取得
-            int64_t elem_size = 4;  // デフォルトはint
+            const int64_t elem_size = layout::slice_elem_stride(ctx, elem_type);
             auto elem_kind = elem_type->kind;
-            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                elem_size = 1;
-            } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
-                elem_size = 2;
-            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
-                       elem_kind == hir::TypeKind::Double) {
-                elem_size = 8;
-            } else if (elem_kind == hir::TypeKind::Float) {
-                elem_size = 4;
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
-                elem_size = 8;
-            } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
-                // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-                elem_size = ctx.layout_size(elem_type);
-            } else if (elem_kind == hir::TypeKind::Array) {
-                // 多次元スライス: 要素はCmSlice構造体（data/len/cap/elem_size）のインライン格納
-                elem_size = static_cast<int64_t>(sizeof(void*) * 4);
-            }
 
             // スライス用の一時変数を作成
             field_value = ctx.new_temp(field_type);
@@ -161,16 +143,8 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
                     elem->type->array_size.has_value()) {
                     const int64_t inner_size =
                         static_cast<int64_t>(elem->type->array_size.value_or(0));
-                    int64_t inner_elem_size = 4;
-                    if (elem->type->element_type) {
-                        auto inner_ek = ctx.resolve_typedef(elem->type->element_type);
-                        auto ik = inner_ek ? inner_ek->kind : elem->type->element_type->kind;
-                        if (auto iinfo = slice_scalar_info(ik)) {
-                            inner_elem_size = iinfo->elem_size;
-                        } else if (ik == hir::TypeKind::Pointer || ik == hir::TypeKind::String) {
-                            inner_elem_size = cm::target_pointer_size();
-                        }
-                    }
+                    const int64_t inner_elem_size =
+                        layout::array_elem_stride(ctx, elem->type->element_type);
                     LocalId addr_local = ctx.new_temp(hir::make_pointer(elem->type->element_type));
                     ctx.push_statement(MirStatement::assign(
                         MirPlace{addr_local}, MirRvalue::ref(MirPlace{elem_value}, false)));

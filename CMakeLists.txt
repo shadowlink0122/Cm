@@ -876,6 +876,15 @@ if(BUILD_TESTING)
         target_link_libraries(typekey_test gtest_main)
         gtest_discover_tests(typekey_test PROPERTIES LABELS "unit")
 
+        # Unit tests - レイアウト問い合わせAPI（layout-query-unification。スライス格納/配列実ストライドの2意味論）
+        add_executable(layout_test
+            tests/unit/layout_test.cpp
+        )
+        set_target_properties(layout_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(layout_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(layout_test gtest_main)
+        gtest_discover_tests(layout_test PROPERTIES LABELS "unit")
+
         # Unit tests - MIRモジュール分割（H14。モジュール名正規化・グローバル所有権・型定義の全配布）
         add_executable(mir_splitter_test
             tests/unit/mir_splitter_test.cpp

@@ -2,6 +2,7 @@
 #include "internal/base/debug.hpp"
 #include "internal/base/mangle.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 #include "lowering.hpp"
 
@@ -298,16 +299,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
                 // スライス型グローバルへ固定長配列で実体化された初期化子は
                 // cm_array_to_sliceでヒープスライスへ変換して格納
                 const int64_t arr_size = static_cast<int64_t>(vt->array_size.value_or(0));
-                int64_t elem_size = 4;
-                if (vt->element_type) {
-                    auto ek_type = ctx.resolve_typedef(vt->element_type);
-                    auto ek = ek_type ? ek_type->kind : vt->element_type->kind;
-                    if (auto info = slice_scalar_info(ek)) {
-                        elem_size = info->elem_size;
-                    } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
-                        elem_size = cm::target_pointer_size();
-                    }
-                }
+                const int64_t elem_size = layout::array_elem_stride(ctx, vt->element_type);
                 LocalId addr_local = ctx.new_temp(hir::make_pointer(vt->element_type));
                 ctx.push_statement(MirStatement::assign(MirPlace{addr_local},
                                                         MirRvalue::ref(MirPlace{init_val}, false)));

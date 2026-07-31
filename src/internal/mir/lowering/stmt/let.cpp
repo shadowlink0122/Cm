@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
@@ -249,21 +250,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             ctx.resolve_typedef(let.type->element_type ? let.type->element_type : hir::make_int());
 
         // 要素サイズを取得
-        int64_t elem_size = 4;  // デフォルトはint
-        auto elem_kind = elem_type->kind;
-        if (auto info = slice_scalar_info(elem_kind)) {
-            // スカラ型: elem_sizeをslice_dispatchから取得（アクセス幅と整合。C4）
-            elem_size = info->elem_size;
-        } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
-            elem_size = 8;
-        } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
-            // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-            elem_size = ctx.layout_size(elem_type);
-        } else if (elem_kind == hir::TypeKind::Array) {
-            // 多次元配列の場合、内側の配列サイズを計算
-            // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
-            elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
-        }
+        const int64_t elem_size = layout::slice_elem_stride(ctx, elem_type);
 
         // cm_slice_new(elem_size, initial_capacity) を呼び出し
         LocalId elem_size_local = ctx.new_temp(hir::make_long());
@@ -366,24 +353,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     hir::TypePtr elem_type = ctx.resolve_typedef(
                         let.type->element_type ? let.type->element_type : hir::make_int());
 
-                    // 要素サイズを取得
-                    int64_t elem_size = 4;  // デフォルトはint
+                    // 要素サイズを取得（push関数の選択にも要素kindを使う）
+                    const int64_t elem_size = layout::slice_elem_stride(ctx, elem_type);
                     auto elem_kind = elem_type->kind;
-                    if (auto info = slice_scalar_info(elem_kind)) {
-                        // スカラ型: elem_sizeをslice_dispatchから取得（アクセス幅と整合。C4）
-                        elem_size = info->elem_size;
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        elem_size = 8;
-                    } else if (elem_kind == hir::TypeKind::Struct ||
-                               elem_kind == hir::TypeKind::Union) {
-                        // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-                        elem_size = ctx.layout_size(elem_type);
-                    } else if (elem_kind == hir::TypeKind::Array) {
-                        // 多次元配列の場合、内側の配列サイズを計算
-                        // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
-                        elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
-                    }
 
                     // cm_slice_new(elem_size, initial_capacity) を呼び出し
                     LocalId elem_size_local_new = ctx.new_temp(hir::make_long());
@@ -451,18 +423,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
                             // 内側の配列のサイズと要素サイズを取得
                             int64_t inner_size = elem->type->array_size.value_or(0);
-                            int64_t inner_elem_size = 4;  // デフォルトはint
-                            if (elem->type->element_type) {
-                                auto inner_elem_kind = elem->type->element_type->kind;
-                                if (auto info = slice_scalar_info(inner_elem_kind)) {
-                                    // スカラ型: elem_sizeをslice_dispatchから取得（C4）
-                                    inner_elem_size = info->elem_size;
-                                } else if (inner_elem_kind == hir::TypeKind::Pointer ||
-                                           inner_elem_kind == hir::TypeKind::String) {
-                                    // cm_array_to_sliceのmemcpyは配列実ストライド（ポインタサイズ）基準
-                                    inner_elem_size = cm::target_pointer_size();
-                                }
-                            }
+                            const int64_t inner_elem_size =
+                                layout::array_elem_stride(ctx, elem->type->element_type);
 
                             // 配列のアドレスを取得
                             LocalId addr_local =
@@ -590,24 +552,8 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
 
                     // 配列のサイズと要素サイズを取得
                     int64_t array_size = let.init->type->array_size.value_or(0);
-                    int64_t elem_size = 4;  // デフォルトはint32
-                    if (let.init->type->element_type) {
-                        auto resolved_ek = ctx.resolve_typedef(let.init->type->element_type);
-                        auto ek =
-                            resolved_ek ? resolved_ek->kind : let.init->type->element_type->kind;
-                        if (auto info = slice_scalar_info(ek)) {
-                            // スカラ型: elem_sizeをslice_dispatchから取得（short/ushort欠落を解消。C4）
-                            elem_size = info->elem_size;
-                        } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
-                            // cm_array_to_sliceは配列をmemcpyするため、スロット幅は配列の実ストライド
-                            // （ターゲットのポインタサイズ）に合わせる。8固定だとwasm32(4バイト)で
-                            // 2要素目以降が範囲外読みになり文字列要素が壊れる
-                            elem_size = cm::target_pointer_size();
-                        } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
-                            // 構造体・ユニオンはblob要素としてインラインコピーされる
-                            elem_size = ctx.layout_size(let.init->type->element_type);
-                        }
-                    }
+                    const int64_t elem_size =
+                        layout::array_elem_stride(ctx, let.init->type->element_type);
 
                     // 配列のアドレスを取得
                     LocalId addr_local =

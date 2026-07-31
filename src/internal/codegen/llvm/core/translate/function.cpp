@@ -4,6 +4,7 @@
 #include "internal/base/debug/codegen.hpp"
 #include "internal/codegen/llvm/core/mir_to_llvm.hpp"
 #include "internal/codegen/llvm/monitoring/compilation_guard.hpp"
+#include "internal/mir/lowering/layout.hpp"
 
 #include <iostream>
 #include <llvm/IR/InlineAsm.h>
@@ -400,33 +401,12 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
                                                             "slice_" + std::to_string(i));
 
-                        // 要素サイズを計算
-                        int64_t elemSize = 4;
-                        if (local.type->element_type) {
-                            auto elemKind = local.type->element_type->kind;
-                            if (elemKind == hir::TypeKind::Array) {
-                                // 多次元スライス: 要素はCmSlice構造体（32バイト）
-                                elemSize = 32;
-                            } else if (elemKind == hir::TypeKind::Long ||
-                                       elemKind == hir::TypeKind::ULong ||
-                                       elemKind == hir::TypeKind::Double ||
-                                       elemKind == hir::TypeKind::Pointer ||
-                                       elemKind == hir::TypeKind::String) {
-                                elemSize = 8;
-                            } else if (elemKind == hir::TypeKind::Char ||
-                                       elemKind == hir::TypeKind::Bool) {
-                                elemSize = 1;
-                            } else if (elemKind == hir::TypeKind::Short ||
-                                       elemKind == hir::TypeKind::UShort) {
-                                elemSize = 2;
-                            } else if (elemKind == hir::TypeKind::Union ||
-                                       elemKind == hir::TypeKind::Struct) {
-                                // ユニオン・構造体: blob格納のため実サイズをDataLayoutから取得（MIR側の計算と一致させる）
-                                auto* elemTy = convertType(local.type->element_type);
-                                elemSize = static_cast<int64_t>(
-                                    module->getDataLayout().getTypeAllocSize(elemTy));
-                            }
-                        }
+                        // 要素サイズを計算（MIR側と同一のレイアウトAPIで一致させる。集約はDataLayoutの実サイズ）
+                        const int64_t elemSize = mir::layout::slice_elem_stride_of(
+                            local.type->element_type, [&](const hir::TypePtr& t) {
+                                return static_cast<int64_t>(
+                                    module->getDataLayout().getTypeAllocSize(convertType(t)));
+                            });
 
                         // cm_slice_new呼び出しでスライスを初期化
                         // std::cerr << "[MIR2LLVM]     Local " << i
@@ -542,32 +522,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                                             structLLVMType, alloca, fieldIdx,
                                             "slice_field_" + field.name);
 
-                                        // 要素サイズを計算
-                                        int64_t elemSize = 4;
-                                        if (field.type->element_type) {
-                                            auto elemKind = field.type->element_type->kind;
-                                            if (elemKind == hir::TypeKind::Long ||
-                                                elemKind == hir::TypeKind::ULong ||
-                                                elemKind == hir::TypeKind::Double ||
-                                                elemKind == hir::TypeKind::Pointer ||
-                                                elemKind == hir::TypeKind::String) {
-                                                elemSize = 8;
-                                            } else if (elemKind == hir::TypeKind::Char ||
-                                                       elemKind == hir::TypeKind::Bool) {
-                                                elemSize = 1;
-                                            } else if (elemKind == hir::TypeKind::Short ||
-                                                       elemKind == hir::TypeKind::UShort) {
-                                                elemSize = 2;
-                                            } else if (elemKind == hir::TypeKind::Struct ||
-                                                       elemKind == hir::TypeKind::Union) {
-                                                // 構造体・ユニオン: blob格納のため実サイズを使用
-                                                auto* elemTy =
-                                                    convertType(field.type->element_type);
-                                                elemSize = static_cast<int64_t>(
+                                        // 要素サイズを計算（内側スライス32・tiny系1の欠落もレイアウトAPIで補完）
+                                        const int64_t elemSize = mir::layout::slice_elem_stride_of(
+                                            field.type->element_type, [&](const hir::TypePtr& t) {
+                                                return static_cast<int64_t>(
                                                     module->getDataLayout().getTypeAllocSize(
-                                                        elemTy));
-                                            }
-                                        }
+                                                        convertType(t)));
+                                            });
 
                                         // cm_slice_new呼び出しでスライスを初期化
                                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");

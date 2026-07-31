@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
@@ -52,19 +53,7 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
                 value_type->array_size.has_value() && ret_type &&
                 ret_type->kind == hir::TypeKind::Array && !ret_type->array_size.has_value()) {
                 const int64_t array_size = value_type->array_size.value_or(0);
-                int64_t elem_size = 4;
-                if (value_type->element_type) {
-                    auto resolved_ek = ctx.resolve_typedef(value_type->element_type);
-                    auto ek = resolved_ek ? resolved_ek->kind : value_type->element_type->kind;
-                    if (auto info = slice_scalar_info(ek)) {
-                        elem_size = info->elem_size;
-                    } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
-                        // cm_array_to_sliceのmemcpyは配列実ストライド（ポインタサイズ）基準（wasm32=4）
-                        elem_size = cm::target_pointer_size();
-                    } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
-                        elem_size = ctx.layout_size(value_type->element_type);
-                    }
-                }
+                const int64_t elem_size = layout::array_elem_stride(ctx, value_type->element_type);
 
                 LocalId addr_local = ctx.new_temp(hir::make_pointer(value_type->element_type));
                 ctx.push_statement(
