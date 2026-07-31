@@ -36,3 +36,13 @@ MIR最適化パス群（SCCP・ConstantFolding・GVN・CopyPropagation・DSE・D
 - 全12スイート+O0/O1検証を各段で完走させる（B3/W4/X1の回帰テストが特に重要）。
 - unit: 効果モデルの文種別×属性の行列検証を追加する。
 - 移行完了後、意図的に効果モデルへ新属性を追加した場合に全パスへ自動反映されることを、グローバルクロバーの派生ケース（静的変数・ポインタ経由）で確認する。
+
+## 解決記録
+
+- `src/internal/mir/passes/core/effects.hpp` を新設し、効果モデルを `StmtEffects effects_of(const MirStatement&)`（writes/direct_write/deref_clobber/no_opt/asm_outputs）と共有述語 `is_call_clobbered`（W4のCall越しグローバル・静的クロバー）・`is_externally_visible`（DCE/DSEの外部観測可能性。集合は同一だが意味が異なるため別名）として定義した。
+- `detect_multi_assigned`（ASM出力の代入カウント特例含む）をfolding.cpp/propagation.cppの同一複製から効果モデルの共有実装へ統合し、両パスのメンバ実装を削除した。
+- 8パスすべてを効果モデル消費へ移行した: folding/propagation（ASM出力除外・no_opt書き込み無効化・Derefクロバー・W4グローバルガード）、SCCP（楽観格子のOverdefined初期化2箇所・can_bind_constant・ASM出力の事前マーキングとtransfer/rewriteの3箇所）、GVN（書き込み無効化とDerefクロバー）、DSE（no_opt文の書き込み追跡除外）、DCE（グローバル書き込みの外部観測ガード）、LICM（ループ内変更ローカル収集とis_invariantのW4ガード）、const_unroll（グローバル誘導変数の展開禁止）。
+- effects_ofのASM出力抽出は定数オペランド（i/n制約。local_idが0固定で無効）を除外する。従来この検査はLICMのみが持ち他7パスは欠落していたため、共有化で全パスに揃った。
+- no_opt文の意味論は「値の置換・削除・並べ替えの対象外だが、書き込み効果は有効なまま消費する（B3）」として効果モデルの1箇所に固定した。
+- unit: `tests/unit/mir_pass_test.cpp` に文種別×属性の行列（単純代入・投影付き代入・Deref代入・no_opt・ASM出力制約/入力制約/定数制約・複数回代入検出・グローバル/静的述語）を7テストとして追加した。
+- 検証: unit・regression・must/global_var/static/asm回帰のO0/O1/O3突き合わせ・全12スイート完走。

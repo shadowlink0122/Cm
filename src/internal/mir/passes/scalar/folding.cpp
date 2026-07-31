@@ -1,5 +1,6 @@
 #include "folding.hpp"
 
+#include "../core/effects.hpp"
 #include "const_eval.hpp"
 
 #include <optional>
@@ -12,7 +13,7 @@ namespace cm::mir::opt {
 bool ConstantFolding::run(MirFunction& func) {
     bool changed = false;
 
-    // 複数回代入される変数を検出（ループ変数など）
+    // 複数回代入される変数を検出（ループ変数など。効果モデル共有実装）
     auto multiAssigned = detect_multi_assigned(func);
 
     // 関数引数は定数追跡から除外（呼び出し元から任意の値が渡される）
@@ -34,43 +35,6 @@ bool ConstantFolding::run(MirFunction& func) {
     return changed;
 }
 
-std::unordered_set<LocalId> ConstantFolding::detect_multi_assigned(const MirFunction& func) {
-    std::unordered_set<LocalId> assigned;
-    std::unordered_set<LocalId> multiAssigned;
-    for (const auto& block : func.basic_blocks) {
-        if (!block)
-            continue;
-        for (const auto& stmt : block->statements) {
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    LocalId target = assign_data.place.local;
-                    if (assigned.count(target) > 0) {
-                        multiAssigned.insert(target);
-                    } else {
-                        assigned.insert(target);
-                    }
-                }
-            }
-            // ASM出力制約（=r, +r等）も代入としてカウント（Bug1修正）
-            if (stmt->kind == MirStatement::Asm) {
-                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                        if (assigned.count(operand.local_id) > 0) {
-                            multiAssigned.insert(operand.local_id);
-                        } else {
-                            assigned.insert(operand.local_id);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return multiAssigned;
-}
-
 bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
                                     std::unordered_map<LocalId, MirConstant>& constants,
                                     const std::unordered_set<LocalId>& multiAssigned) {
@@ -78,36 +42,25 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
 
     // 各文を処理
     for (auto& stmt : block.statements) {
-        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は常に定数追跡から除外する必要がある（インラインアセンブリは実行時に変数を変更するため）
+        // 文の効果（書き込み・クロバー・no_opt・ASM出力）は効果モデルから取得する
+        const StmtEffects effects = effects_of(*stmt);
+
+        // ASM出力オペランドはno_optに関わらず常に定数追跡から除外（インラインアセンブリは実行時に変数を変更するため）
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    constants.erase(operand.local_id);
-                }
+            for (LocalId out : effects.asm_outputs) {
+                constants.erase(out);
             }
             continue;
         }
 
-        // no_optフラグがtrueの場合は最適化スキップ
-        if (stmt->no_opt) {
-            // mustブロック内の代入も書き込みとして扱い、定数情報を無効化する
-            // フィールド・配列要素代入でもベース変数を無効化しないと、ブロック外の読み出しが古い定数へ畳み込まれる誤コンパイルになる（Bug B3）
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                // デリファレンス書き込みはエイリアスの可能性があるため全定数情報をクリア
-                bool has_deref = false;
-                for (const auto& proj : assign_data.place.projections) {
-                    if (proj.kind == ProjectionKind::Deref) {
-                        has_deref = true;
-                        break;
-                    }
-                }
-                if (has_deref) {
-                    constants.clear();
-                } else {
-                    constants.erase(assign_data.place.local);
+        // no_opt文は値の置換対象外だが、書き込み効果は消費して定数情報を無効化する
+        // フィールド・配列要素代入でもベース変数を無効化しないと、ブロック外の読み出しが古い定数へ畳み込まれる誤コンパイルになる（Bug B3）
+        if (effects.no_opt) {
+            if (effects.deref_clobber) {
+                constants.clear();
+            } else {
+                for (LocalId written : effects.writes) {
+                    constants.erase(written);
                 }
             }
             continue;
@@ -116,25 +69,14 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
         if (stmt->kind == MirStatement::Assign) {
             auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
 
-            // デリファレンス書き込みチェック（_p.* = ... の形式）
-            // エイリアスの可能性があるため、全ての定数情報をクリアする
-            bool has_deref = false;
-            for (const auto& proj : assign_data.place.projections) {
-                if (proj.kind == ProjectionKind::Deref) {
-                    has_deref = true;
-                    break;
-                }
-            }
-            if (has_deref) {
-                // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
-                // 保守的にすべての定数情報をクリア
+            // デリファレンス書き込み（_p.* = ... の形式）はエイリアスの可能性があるため全定数情報をクリア
+            if (effects.deref_clobber) {
                 constants.clear();
                 continue;
             }
 
-            // フィールドやインデックスへの代入の場合
-            // ベース変数に関する定数情報を無効化
-            if (!assign_data.place.projections.empty()) {
+            // フィールドやインデックスへの代入の場合、ベース変数に関する定数情報を無効化
+            if (!effects.direct_write) {
                 constants.erase(assign_data.place.local);
                 continue;
             }
@@ -142,11 +84,8 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
             // 単純な代入（_x = _y）の場合
             LocalId target = assign_data.place.local;
 
-            // グローバル/静的変数は関数呼び出しが書き換えうるため定数追跡しない（W4）。
-            // SCCPは格子から除外済みだがこちらは漏れており、mainエントリの初期化値が
-            // 呼び出し越しに伝播してループ内の読みが初期値へ固定されていた
-            if (target < func.locals.size() &&
-                (func.locals[target].is_global || func.locals[target].is_static)) {
+            // グローバル/静的変数は関数呼び出しが書き換えうるため定数追跡しない（W4。効果モデルの共有述語）
+            if (is_call_clobbered(func, target)) {
                 constants.erase(target);
                 continue;
             }

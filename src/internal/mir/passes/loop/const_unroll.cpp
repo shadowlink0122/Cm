@@ -1,5 +1,6 @@
 #include "const_unroll.hpp"
 
+#include "../core/effects.hpp"
 #include "internal/mir/analysis/dominators.hpp"
 
 #include <algorithm>
@@ -538,7 +539,8 @@ bool ConstantLoopUnroll::try_unroll_one(MirFunction& func) {
         }
 
         // 誘導変数の安全性チェックと初期値・増分の特定
-        if (iv < func.locals.size() && (func.locals[iv].is_global || func.locals[iv].is_static)) {
+        // グローバル・静的な誘導変数は呼び出し越しに書き換わりうるため展開しない（効果モデルの共有述語）
+        if (is_call_clobbered(func, iv)) {
             continue;
         }
         int64_t init_value = 0;

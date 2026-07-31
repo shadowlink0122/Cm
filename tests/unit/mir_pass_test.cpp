@@ -12,6 +12,7 @@
 #include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
 #include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
 #include "../../src/internal/mir/passes/cleanup/string_reassign_free.hpp"
+#include "../../src/internal/mir/passes/core/effects.hpp"
 #include "../../src/internal/mir/passes/instrumentation/undefined.hpp"
 #include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
 #include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
@@ -910,4 +911,111 @@ TEST(MirPassTest, UndefinedCheck_IsIdempotentPerRunOnCleanFunction) {
     opt::UndefinedCheckInstrumentation pass;
     EXPECT_FALSE(pass.run(*f));
     EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+// ============================================================
+// 効果モデル（core/effects.hpp）
+// 文種別×属性（must/ASM/Deref/グローバル）の行列を固定し、全パスが消費する意味論を1箇所で検証する
+// ============================================================
+
+TEST(MirPassTest, Effects_SimpleAssignIsDirectWrite) {
+    auto stmt = MirStatement::assign(MirPlace{5}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.writes.size(), 1u);
+    EXPECT_EQ(e.writes[0], 5u);
+    EXPECT_TRUE(e.direct_write);
+    EXPECT_FALSE(e.deref_clobber);
+    EXPECT_FALSE(e.no_opt);
+    EXPECT_TRUE(e.asm_outputs.empty());
+}
+
+TEST(MirPassTest, Effects_ProjectedAssignWritesBaseWithoutDirectWrite) {
+    // フィールド・添字代入でもベースローカルの無効化が必要（B3）
+    auto stmt = MirStatement::assign(MirPlace{7, {PlaceProjection::field(0)}}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.writes.size(), 1u);
+    EXPECT_EQ(e.writes[0], 7u);
+    EXPECT_FALSE(e.direct_write);
+    EXPECT_FALSE(e.deref_clobber);
+}
+
+TEST(MirPassTest, Effects_DerefAssignClobbersEverything) {
+    auto stmt = MirStatement::assign(MirPlace{7, {PlaceProjection::deref()}}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    EXPECT_TRUE(e.deref_clobber);
+    EXPECT_FALSE(e.direct_write);
+}
+
+TEST(MirPassTest, Effects_NoOptFlagIsPropagated) {
+    auto stmt = MirStatement::assign(MirPlace{5}, rv_use(cint(1)));
+    stmt->no_opt = true;
+    EXPECT_TRUE(opt::effects_of(*stmt).no_opt);
+}
+
+TEST(MirPassTest, Effects_AsmOutputsAreOutputConstraintsOnly) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = MirStatement::Asm;
+    MirStatement::AsmData ad;
+    ad.code = "nop";
+    ad.is_must = false;
+    ad.operands.emplace_back("=r", LocalId{3});
+    ad.operands.emplace_back("+r", LocalId{4});
+    ad.operands.emplace_back("r", LocalId{5});  // 入力のみは出力ではない
+    ad.operands.emplace_back("=r", int64_t{42});  // 定数オペランドはlocal_id無効のため除外
+    stmt->data = std::move(ad);
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.asm_outputs.size(), 2u);
+    EXPECT_EQ(e.asm_outputs[0], 3u);
+    EXPECT_EQ(e.asm_outputs[1], 4u);
+    EXPECT_TRUE(e.writes.empty());
+}
+
+TEST(MirPassTest, Effects_DetectMultiAssignedCountsDirectAndAsmWrites) {
+    auto f = make_function();
+    LocalId once = f->add_local("once", hir::make_int());
+    LocalId twice = f->add_local("twice", hir::make_int());
+    LocalId proj = f->add_local("proj", hir::make_int());
+    LocalId asm_out = f->add_local("asm_out", hir::make_int());
+    emit(*f, 0, once, rv_use(cint(1)));
+    emit(*f, 0, twice, rv_use(cint(1)));
+    emit(*f, 0, twice, rv_use(cint(2)));
+    // 投影付き代入は直接書き込みではないため複数回代入としてカウントしない（従来実装と同一）
+    f->basic_blocks[0]->add_statement(
+        MirStatement::assign(MirPlace{proj, {PlaceProjection::field(0)}}, rv_use(cint(1))));
+    f->basic_blocks[0]->add_statement(
+        MirStatement::assign(MirPlace{proj, {PlaceProjection::field(1)}}, rv_use(cint(2))));
+    // ASM出力も代入としてカウント（Bug1）: 直接代入1回+ASM出力1回で複数回になる
+    emit(*f, 0, asm_out, rv_use(cint(0)));
+    auto asm_stmt = std::make_unique<MirStatement>();
+    asm_stmt->kind = MirStatement::Asm;
+    MirStatement::AsmData ad;
+    ad.code = "nop";
+    ad.is_must = false;
+    ad.operands.emplace_back("+r", asm_out);
+    asm_stmt->data = std::move(ad);
+    f->basic_blocks[0]->add_statement(std::move(asm_stmt));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    const auto multi = opt::detect_multi_assigned(*f);
+    EXPECT_EQ(multi.count(once), 0u);
+    EXPECT_EQ(multi.count(twice), 1u);
+    EXPECT_EQ(multi.count(proj), 0u);
+    EXPECT_EQ(multi.count(asm_out), 1u);
+}
+
+TEST(MirPassTest, Effects_CallClobberedAndExternallyVisibleAreGlobalsAndStatics) {
+    auto f = make_function();
+    LocalId plain = f->add_local("plain", hir::make_int());
+    LocalId g = f->add_local("g", hir::make_int());
+    LocalId s = f->add_local("s", hir::make_int());
+    f->locals[g].is_global = true;
+    f->locals[s].is_static = true;
+    EXPECT_FALSE(opt::is_call_clobbered(*f, plain));
+    EXPECT_TRUE(opt::is_call_clobbered(*f, g));
+    EXPECT_TRUE(opt::is_call_clobbered(*f, s));
+    // 範囲外ローカルは保守的にfalse（呼び出し側の境界検査に依存しない）
+    EXPECT_FALSE(opt::is_call_clobbered(*f, static_cast<LocalId>(f->locals.size())));
+    EXPECT_TRUE(opt::is_externally_visible(*f, g));
+    EXPECT_TRUE(opt::is_externally_visible(*f, s));
+    EXPECT_FALSE(opt::is_externally_visible(*f, plain));
 }

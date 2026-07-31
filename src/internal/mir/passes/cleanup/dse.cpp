@@ -1,5 +1,7 @@
 #include "dse.hpp"
 
+#include "../core/effects.hpp"
+
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -43,10 +45,9 @@ bool DeadStoreElimination::process_block(BasicBlock& block, const MirFunction& f
                     last_def.erase(use);
                 }
             }
-            // mustブロック内の代入はフィールド・配列要素代入も含めて追跡から外し、前の定義を「生きている」として保持する
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                last_def.erase(assign_data.place.local);
+            // mustブロック内の代入はフィールド・配列要素代入も含めて追跡から外し、前の定義を「生きている」として保持する（書き込み効果は効果モデルから取得）
+            for (LocalId written : effects_of(*stmt).writes) {
+                last_def.erase(written);
             }
             continue;
         }

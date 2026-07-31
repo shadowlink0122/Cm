@@ -1,5 +1,7 @@
 #include "dce.hpp"
 
+#include "../core/effects.hpp"
+
 #include <set>
 #include <string>
 #include <variant>
@@ -94,7 +96,7 @@ bool DeadCodeElimination::remove_dead_stores(MirFunction& func) {
     // グローバル変数・static変数への代入は関数外から観測可能なため、関数内で読まれていなくても常に使用扱いにする（これがないと g = 999 のような単純代入がデッドストアとして
     //   削除され、グローバルへの書き込みが消失する）
     for (const auto& local : func.locals) {
-        if (local.is_global || local.is_static) {
+        if (is_externally_visible(func, local.id)) {
             used_locals.insert(local.id);
         }
     }

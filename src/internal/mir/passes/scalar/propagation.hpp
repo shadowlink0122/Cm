@@ -26,7 +26,6 @@ class CopyPropagation : public OptimizationPass {
 
    private:
     // 複数回代入される変数を検出
-    std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func);
 
     // 型比較
     bool same_type(const hir::TypePtr& a, const hir::TypePtr& b) const;

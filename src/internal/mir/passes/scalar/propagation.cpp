@@ -1,5 +1,7 @@
 #include "propagation.hpp"
 
+#include "../core/effects.hpp"
+
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,43 +34,6 @@ bool CopyPropagation::run(MirFunction& func) {
     return changed;
 }
 
-std::unordered_set<LocalId> CopyPropagation::detect_multi_assigned(const MirFunction& func) {
-    std::unordered_set<LocalId> assigned;
-    std::unordered_set<LocalId> multiAssigned;
-    for (const auto& block : func.basic_blocks) {
-        if (!block)
-            continue;
-        for (const auto& stmt : block->statements) {
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    LocalId target = assign_data.place.local;
-                    if (assigned.count(target) > 0) {
-                        multiAssigned.insert(target);
-                    } else {
-                        assigned.insert(target);
-                    }
-                }
-            }
-            // ASM出力制約（=r, +r等）も代入としてカウント（Bug1修正）
-            if (stmt->kind == MirStatement::Asm) {
-                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                        if (assigned.count(operand.local_id) > 0) {
-                            multiAssigned.insert(operand.local_id);
-                        } else {
-                            assigned.insert(operand.local_id);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return multiAssigned;
-}
-
 bool CopyPropagation::same_type(const hir::TypePtr& a, const hir::TypePtr& b) const {
     if (a == b)
         return true;
@@ -94,37 +59,25 @@ bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalI
 
     // 各文を処理
     for (auto& stmt : block.statements) {
-        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は常にコピー情報から削除する必要がある（インラインアセンブリは実行時に変数を変更するため）
+        // 文の効果（書き込み・クロバー・no_opt・ASM出力）は効果モデルから取得する
+        const StmtEffects effects = effects_of(*stmt);
+
+        // ASM出力オペランドはno_optに関わらず常にコピー情報から削除（インラインアセンブリは実行時に変数を変更するため）
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    copies.erase(operand.local_id);
-                }
+            for (LocalId out : effects.asm_outputs) {
+                copies.erase(out);
             }
             continue;
         }
 
-        // no_optフラグがtrueの場合は最適化スキップ
-        if (stmt->no_opt) {
-            // mustブロック内の代入も書き込みとして扱い、コピー情報を無効化する
-            // フィールド・配列要素代入でベース変数を無効化しないと、ブロック外の読み出しが初期化用一時変数へ付け替えられ古い値を読む誤コンパイルになる（Bug B3）
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                // デリファレンス書き込みはエイリアスの可能性があるため全コピー情報をクリア
-                bool has_deref = false;
-                for (const auto& proj : assign_data.place.projections) {
-                    if (proj.kind == ProjectionKind::Deref) {
-                        has_deref = true;
-                        break;
-                    }
-                }
-                if (has_deref) {
-                    copies.clear();
-                } else {
+        // no_opt文は値の置換対象外だが、書き込み効果は消費してコピー情報を無効化する
+        // フィールド・配列要素代入でベース変数を無効化しないと、ブロック外の読み出しが初期化用一時変数へ付け替えられ古い値を読む誤コンパイルになる（Bug B3）
+        if (effects.no_opt) {
+            if (effects.deref_clobber) {
+                copies.clear();
+            } else {
+                for (LocalId modified_base : effects.writes) {
                     // 書き込み先ベース変数を参照するコピー情報も含めて無効化する（通常パスのフィールド代入処理と同じ扱い）
-                    LocalId modified_base = assign_data.place.local;
                     std::vector<LocalId> to_remove;
                     for (const auto& [target, source] : copies) {
                         if (source == modified_base) {
@@ -143,18 +96,8 @@ bool CopyPropagation::process_block(BasicBlock& block, std::unordered_map<LocalI
         if (stmt->kind == MirStatement::Assign) {
             auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
 
-            // デリファレンス書き込みチェック（_p.* = ... の形式）
-            // エイリアスの可能性があるため、全てのコピー情報をクリアする
-            bool has_deref = false;
-            for (const auto& proj : assign_data.place.projections) {
-                if (proj.kind == ProjectionKind::Deref) {
-                    has_deref = true;
-                    break;
-                }
-            }
-            if (has_deref) {
-                // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
-                // 保守的にすべてのコピー情報をクリア
+            // デリファレンス書き込み（_p.* = ... の形式）はエイリアスの可能性があるため全コピー情報をクリア
+            if (effects.deref_clobber) {
                 copies.clear();
                 continue;
             }

@@ -1,5 +1,6 @@
 #include "sccp.hpp"
 
+#include "../core/effects.hpp"
 #include "const_eval.hpp"
 
 #include <optional>
@@ -68,7 +69,7 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
     // acc + g がUndefined・merge(Const, Undefined)=Const の楽観連鎖で
     // ループ内の読みが初期値の定数へ畳まれていた（実値は他関数の書き込みで変わる）
     for (LocalId i = 0; i < local_count; ++i) {
-        if (func.locals[i].is_global || func.locals[i].is_static) {
+        if (is_call_clobbered(func, i)) {
             for (size_t b = 0; b < block_count; ++b) {
                 in_states[b][i] = {LatticeKind::Overdefined, {}};
                 out_states[b][i] = {LatticeKind::Overdefined, {}};
@@ -85,14 +86,12 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         for (const auto& stmt : block->statements) {
             if (!stmt || stmt->kind != MirStatement::Asm)
                 continue;
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    if (operand.local_id < local_count) {
+            for (LocalId out : effects_of(*stmt).asm_outputs) {
+                {
+                    if (out < local_count) {
                         for (size_t b = 0; b < block_count; ++b) {
-                            in_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
-                            out_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
+                            in_states[b][out] = {LatticeKind::Overdefined, {}};
+                            out_states[b][out] = {LatticeKind::Overdefined, {}};
                         }
                     }
                 }
@@ -261,7 +260,7 @@ void SparseConditionalConstantPropagation::analyze(
         // 関数内に代入が無いグローバルはUndefined（楽観）のまま残り、
         // merge(Const, Undefined)=Constの楽観連鎖でループ内の読みが初期値定数へ畳まれていた
         for (LocalId li = 0; li < merged_in.size() && li < func.locals.size(); ++li) {
-            if (func.locals[li].is_global || func.locals[li].is_static) {
+            if (is_call_clobbered(func, li)) {
                 merged_in[li] = {LatticeKind::Overdefined, {}};
             }
         }
@@ -338,14 +337,10 @@ SparseConditionalConstantPropagation::transfer_block(const MirFunction& func,
         // Asmステートメント: 出力オペランドの変数をOverdefinedにマーク
         // インラインアセンブリは実行時に変数を変更するため、定数伝播を抑制
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                // 出力オペランド（+r, =rなど）は定数として扱えない
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    if (operand.local_id < state.size()) {
-                        state[operand.local_id] = {LatticeKind::Overdefined, {}};
-                    }
+            // 出力オペランド（+r, =rなど）は定数として扱えない（効果モデル参照）
+            for (LocalId out : effects_of(*stmt).asm_outputs) {
+                if (out < state.size()) {
+                    state[out] = {LatticeKind::Overdefined, {}};
                 }
             }
             continue;
@@ -567,8 +562,8 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
     if (local >= func.locals.size()) {
         return false;
     }
-    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、定数として束縛しない（callをまたいだ古い値の伝播を防ぐ）
-    if (func.locals[local].is_global || func.locals[local].is_static) {
+    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、定数として束縛しない（callをまたいだ古い値の伝播を防ぐ。効果モデルの共有述語）
+    if (is_call_clobbered(func, local)) {
         return false;
     }
     const auto& local_type = func.locals[local].type;
@@ -763,13 +758,10 @@ bool SparseConditionalConstantPropagation::apply_constants(
 
             // ASMステートメント: 出力オペランドをOverdefinedにマーク
             if (stmt->kind == MirStatement::Asm) {
-                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                        if (operand.local_id < state.size()) {
-                            state[operand.local_id] = {LatticeKind::Overdefined, {}};
-                        }
+                // 出力オペランドをOverdefinedにマーク（効果モデル参照）
+                for (LocalId out : effects_of(*stmt).asm_outputs) {
+                    if (out < state.size()) {
+                        state[out] = {LatticeKind::Overdefined, {}};
                     }
                 }
                 continue;
