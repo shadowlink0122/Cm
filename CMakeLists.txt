@@ -363,6 +363,7 @@ set(CM_SOURCES
     src/cmd/cm/util.cpp
     src/cmd/cm/check.cpp
     src/cmd/cm/frontend.cpp
+    src/internal/macro/derive.cpp
     src/cmd/cm/fmt.cpp
     src/cmd/cm/build.cpp
     src/cmd/cm/backend/run.cpp
@@ -879,6 +880,20 @@ if(BUILD_TESTING)
         target_include_directories(typekey_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
         target_link_libraries(typekey_test gtest_main)
         gtest_discover_tests(typekey_test PROPERTIES LABELS "unit")
+
+        # Regression tests - derive/withソース展開（合成ソースのスナップショット検証）
+        add_executable(derive_expansion_test
+            tests/regression/derive_expansion_test.cpp
+            src/internal/macro/derive.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(derive_expansion_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(derive_expansion_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(derive_expansion_test gtest_main)
+        gtest_discover_tests(derive_expansion_test PROPERTIES LABELS "regression")
 
         # Unit tests - レイアウト問い合わせAPI（layout-query-unification。スライス格納/配列実ストライドの2意味論）
         add_executable(layout_test

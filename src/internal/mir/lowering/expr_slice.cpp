@@ -7,6 +7,7 @@
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/base/i18n.hpp"
+#include "internal/base/target.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 #include "slice_dispatch.hpp"
 

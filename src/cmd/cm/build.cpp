@@ -11,6 +11,7 @@
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"
 #include "internal/hir/lowering/lowering.hpp"
+#include "internal/macro/derive.hpp"
 #include "internal/mir/lowering/lowering.hpp"
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
@@ -229,6 +230,10 @@ int run_build(cli::Options& opts, const char* argv0) {
             ast::TargetFilteringVisitor target_filter(active_target, opts.test_mode);
             target_filter.visit(program);
         }
+
+        // with/derive自動実装のソース展開（derive-as-source-expansion 第1段: Eq）。
+        // 合成implは通常の型検査→HIR→MIRを通り、手組みMIR生成は展開済みトレイトについて無効化されている
+        macro_expand::expand_derives(program);
 
         // ASTを表示
         if (opts.show_ast) {

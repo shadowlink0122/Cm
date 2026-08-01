@@ -98,8 +98,15 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
-    // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）
-    auto self_type = hir::make_named(type_name);
+    // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）。
+    // ジェネリックimpl（type_name="Wrap<T>"等）は基底名で型付けする。型引数付きの名前のままだと
+    // struct_defs（基底名キー）のフィールド解決に失敗し、self.xの代入文が<error>型で黙って欠落していた
+    // （otherパラメータはHIR解決済みで基底名になっており、selfだけが非対称だった）
+    std::string self_type_name = type_name;
+    if (auto lt = self_type_name.find('<'); lt != std::string::npos) {
+        self_type_name = self_type_name.substr(0, lt);
+    }
+    auto self_type = hir::make_named(self_type_name);
     LocalId self_id = ctx.new_local("self", self_type, false);
     mir_func->arg_locals.push_back(self_id);
     ctx.register_variable("self", self_id);

@@ -19,7 +19,7 @@ void AutoImplGenerator::generate_for_struct(const hir::HirStruct& st) {
 
     for (const auto& iface_name : st.auto_impls) {
         if (iface_name == "Eq") {
-            generate_builtin_eq_operator(st);
+            // ソース展開（macro/derive.cpp）へ移行済み。合成implが通常経路でop_eqを生成しimpl_infoへ登録する
         } else if (iface_name == "Ord") {
             generate_builtin_lt_operator(st);
         } else if (iface_name == "Copy") {
@@ -72,6 +72,8 @@ void AutoImplGenerator::generate_monomorphized_auto_impls() {
 
         for (const auto& iface_name : it->second) {
             if (iface_name == "Eq") {
+                // ジェネリック構造体は総称演算子implのモノモーフ化が未対応のため手組み生成を維持する
+                // （非ジェネリックはソース展開済み。macro/derive.cpp）
                 generate_builtin_eq_operator_for_monomorphized(*mir_struct);
             } else if (iface_name == "Ord") {
                 generate_builtin_lt_operator_for_monomorphized(*mir_struct);
