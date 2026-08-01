@@ -71,6 +71,14 @@ parent: v0.17.0 Design
 - `emitBuiltinCall`の実装を精査した結果、各caseはBigInt再解釈（asIntN/asUintN境界）・process.exitフォールバック・fmt_double正規化などjs固有の意味論を持ち、「基本写像を表から導出し特殊整形をフックに残す」と大半がフック側に残るため、表駆動化は複雑さの移動にしかならないと判断し不採用とした。名前集合の導出（isBuiltinFunctionのレジストリ照合化）までを第2段の成果とする。
 - js固有42件のレジストリ収容も、それらのLLVM宣言が別経路（system.cpp・MIRシグネチャ）にあり、収容には各宣言経路との優先順位整理が必要なため見送った（シグネチャ検査の対象拡大として将来検討）。
 
-### 残り（第4段）: 未実装
+### 第4段（ランタイムC共通ソース化）: slice系を実装済み
 
-ランタイムCの共通ソース化（native/wasm 8,088行の一本化。slice系→format系の順、wasm固有のゲート・アロケータ差はフック化）。
+- `src/internal/codegen/common/runtime_slice_core.inc` へスライス操作の全実装（関数60本+マクロ生成のcmp/sortファミリ21本）を一本化した（native 1,165行+wasm 1,232行 → 共通1,128行+nativeフック33行+wasmフック108行）。両プラットフォームの単一翻訳単位構成（runtime.c/runtime_wasm.cが.cを#include）に合わせ、共有は#include可能な.incとしビルド系は不変。
+- プラットフォーム差は5つのフックへ集約した: CM_RT_ALLOC/CM_RT_FREE（native=アロケータラッパ経由でset_allocator対応、wasm=バンプアロケータ+フリーリスト）・CM_RT_MEMCPY・CM_RT_MEMMOVE（wasmは後方コピーの手動実装）・CM_RT_GROW（native=realloc、wasm=alloc+旧len分copy+free。wasm reallocの旧サイズ不明問題を意味論として明文化）。
+- 二重実装の乖離15関数のうち、ポインタ要素のスロットアクセス（push/get/pop_ptr）はwasm版のuint64_t固定スロット形式（ターゲットポインタ幅に依らずelem_size=8のランタイム規約に一致）へ統一した。nativeのvoid**添字はポインタ幅=スロット幅の偶然で動作していた形で、統一により将来の幅差にも頑健になった。cm_slice_cmp_strはlibc非依存のバイト比較へ統一。wasm専用のqsort実装はwasmフック側に残置。
+- シグネチャ検査（第3段）はcommon/*.incを両プラットフォームの実装として走査するよう拡張し、照合数297+191件を維持。
+- 移行時の教訓: 関数定義の機械抽出ではマクロ生成シンボル（CM_DEFINE_CMP/CM_DEFINE_SORTファミリ）と関数外typedefが漏れる。移行後は「旧ソースの全公開シンボル集合⊆新ソース集合」の網羅検証を必須とした（sort系5シンボル欠落をスイートで検出→網羅検証で再発防止）。
+
+### 残り（第4段のformat系）: 未実装
+
+format系（native 86KB+wasm 81KB）の共通ソース化。SDSゲート差（H9第4段のページ境界検査）・出力先差など既知のプラットフォーム差のフック化を含む。

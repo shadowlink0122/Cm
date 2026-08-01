@@ -77,12 +77,24 @@ def c_type_to_tag(ctype, filename, warnings):
     return C_TYPE_MAP.get(t)
 
 
+COMMON_DIR = os.path.join(ROOT, "src", "internal", "codegen", "common")
+
+
 def parse_c_functions(directory):
     funcs = {}
-    for fn in sorted(os.listdir(directory)):
-        if not fn.endswith(".c"):
-            continue
-        path = os.path.join(directory, fn)
+    # native/wasm共通コア（common/*.inc。第4段の一本化ソース）は両プラットフォームの実装として扱う
+    sources = [os.path.join(COMMON_DIR, fn) for fn in sorted(os.listdir(COMMON_DIR)) if fn.endswith(".inc")]
+    sources += [os.path.join(directory, fn) for fn in sorted(os.listdir(directory)) if fn.endswith(".c")]
+    for path in sources:
+        _parse_c_file(path, funcs)
+    return funcs
+
+
+def _parse_c_file(path, funcs):
+    if True:
+        fn = os.path.basename(path)
+        if False:
+            pass
         text = open(path, encoding="utf-8", errors="ignore").read()
         # 定義のみ（末尾が'{'）。staticは内部関数のため除外
         for m in re.finditer(
@@ -97,7 +109,6 @@ def parse_c_functions(directory):
             funcs.setdefault(name, []).append(
                 {"ret_c": ret_c.strip(), "args_c": args_c.strip(), "file": path}
             )
-    return funcs
 
 
 def sig_from_c(fn, warnings):

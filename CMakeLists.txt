@@ -621,6 +621,7 @@ if(CM_USE_LLVM)
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_platform.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_print.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_slice_core.inc
             COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
@@ -648,6 +649,7 @@ if(CM_USE_LLVM)
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_format.c
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_print.c
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_slice_core.inc
                 COMMENT "Building Cm WASM runtime library (wasm32-wasi)"
             )
             add_custom_target(cm_runtime_wasm ALL DEPENDS ${CM_RUNTIME_WASM_OUTPUT})
