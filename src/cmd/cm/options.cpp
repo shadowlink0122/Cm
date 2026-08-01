@@ -64,7 +64,7 @@ namespace {
 struct BoolFlag {
     const char* name;
     const char* alias;  // 無ければnullptr
-    bool Options::* field;
+    bool Options::*field;
 };
 constexpr BoolFlag kBoolFlags[] = {
     {"--verbose", "-v", &Options::verbose},
@@ -106,8 +106,10 @@ struct CommandEntry {
     bool test_mode;
 };
 constexpr CommandEntry kCommands[] = {
-    {"run", Command::Run, false},   {"compile", Command::Compile, false},
-    {"check", Command::Check, false}, {"lint", Command::Lint, false},
+    {"run", Command::Run, false},
+    {"compile", Command::Compile, false},
+    {"check", Command::Check, false},
+    {"lint", Command::Lint, false},
     {"fmt", Command::Fmt, false},
     // #[test] 関数を実行（//! platform: でSVシミュレーション/JITを振り分け）
     {"test", Command::Test, true},
