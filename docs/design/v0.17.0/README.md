@@ -20,9 +20,8 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 ### 簡素化提案（全体設計レビュー第2弾、未実装）
 
 type-resolution-simplification.mdの4領域に続き、コンパイラが複雑なことをしている箇所の網羅調査（実測: ソース行数・重複実装数・バグ修正履歴との紐付け）から、簡素化可能な8領域を機能単位の設計文書として起票した。
-筆頭のcompiler-architecture-restructure.mdはRustコンパイラのクレート分割を参照モデルに、src/internal単一ビルド単位のステージ分離とサブコマンド（check/lint/fmt）の切り分けを扱う全体再編で、他文書はその各論として独立に実施できる。
+全体再編のcompiler-architecture-restructure.mdは全段の処置を確定し [archive/v0.17.0/compiler-architecture-restructure.md](../../archive/v0.17.0/compiler-architecture-restructure.md) へ移動した（依存規律のlint/CI強制・fmt隔離・run_frontend共有化・optionsテーブル化を実装、物理分離とLint分離は実測に基づく不採用判断、resolve新設はmodule-system-structural-imports.mdへ移譲）。
 
-- [コンパイラ全体構成の再編](compiler-architecture-restructure.md) — rustc対応表に基づくステージ指向ライブラリ分割・依存規律のビルド強制・Lint/fmtの独立ドライバ化・Session導入（ドライバ複製の解消）（第1段=依存棚卸しと規律のlint/CI強制・第5段=run_frontendによるドライバ配線複製の排除を実装済み、Lint分離・物理分割・resolve新設は未実装）
 - [モジュールシステムの構造化](module-system-structural-imports.md) — importのテキストインライン展開（preprocessor 4,241行）を廃止しファイル単位パース+シンボル解決へ（source_map・テキスト改名・行番号ずれ・重複展開の根絶、名前空間形式import対応を含む）
 - [型付きHIRの単一情報源化](typed-hir-single-source.md) — 「型検査後のHIRは全式が型付き」の不変条件確立と下流の型再推論禁止（B6/B7/N2/W5族の根治、対症療法コードの削除）
 - [モノモーフ化の型駆動化](monomorphization-typed-instantiation.md) — 特殊化の同定・書き換えを型ノードへ統一し、マングル名の解析・逆算（82箇所）を廃止
@@ -38,5 +37,5 @@ W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込�
 ## 状態
 
 監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案5本（compiler-architecture-restructure.md他）が未実装または段階進行中の構造的リファクタリング提案として本ディレクトリに残っている。
+型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案4本（module-system-structural-imports.md・typed-hir-single-source.md・monomorphization-typed-instantiation.md・derive-as-source-expansion.md）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。
 セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

@@ -89,12 +89,21 @@ cm_span ← cm_diag ← cm_syntax(cm_ast) ← cm_macro
 - CMakeのOBJECTライブラリ物理分割は見送った。unity build（バッチ16）と条件付きソース（LLVM有無・プラットフォーム別）の再バッチ化リスクに対し、include検査が同じ規律を先に強制できるため。物理分割は第2段以降（base再編・fmt隔離のリンク検査）で扱う。
 - 第3段が目標とする「fmtの隔離」は、include水準では既に成立している（fmt→baseのみ。ALLOWEDで固定済み）。リンク水準の検査（fmtバイナリがcodegenシンボルを含まない）は物理分割後に導入する。
 
-### 第5段（driver統合）: フロントエンド共有化を実装済み
+### 第5段（driver統合）: 実装済み
 
 - `src/cmd/cm/frontend.hpp/.cpp` に共有フロントエンドパイプライン `run_frontend`（import展開→条件付きコンパイル→字句解析→構文解析。パラメータ: defines/target/test_mode/H7警告/デバッグ/ダンプ）を新設し、build.cpp/check.cppのステージ配線複製（各約120行）を排除した。両ドライバはパラメータを渡して結果（プリプロセス後ソース・source_map・AST・パーサ診断・フェーズ計測）を消費するだけになった。
 - 内部例外のステージ帰属（preprocess/parse）・プリプロセス失敗・構文エラーは結果構造体で判別し、表示は各ドライバがDiagnosticEmitterで行う（診断統一第1段と接続）。
-- SessionオブジェクトとしてのDiagCtxt/ターゲット情報の保持は診断統一の解決記録（emitter方式で確定）により縮小され、残りはoptions.cppの手書きif連鎖（41分岐）のテーブル化のみ。
+- options.cppの手書きif連鎖は、真偽フラグ19個（kBoolFlags: 名前・別名・設定先メンバの表）とサブコマンド判定（kCommands）をテーブル化した。値付き（-D/-o）・検証付き（--sanitize=/--funroll-loops=/-O）・副作用付き（--debug/-d=/--lang=）は性質が非一様なため明示分岐として残し、真偽フラグの追加は表1行で完結する。
 
-### 残り: 未実装
+## 解決記録（最終処置）
 
-第2段（base→cm_span+cm_diag再編）は診断統一の実装完了により物理分離のみが残件。第4段（Lint分離）・第5段の残り（options.cppテーブル化）・第6段（cm_resolve新設。module-system-structural-imports.mdと同時実施）。
+各段の処置を確定し、本文書はarchiveへ移動する。
+
+- 第1段（依存規律）: 実装済み。include依存の実測とcheck_layer_deps.pyによるlint/CI強制。
+- 第2段（基盤層の独立）: 論理面は達成済みで確定。baseは実測で最下層（依存ゼロ）であり、診断発行・表示はdiag_emitter/診断チャネル（診断統一 全4段完遂）で一元化済み。CMakeターゲットの物理分離はunity build再バッチ化のコストに対しinclude水準の強制で同じ規律が得られるため不採用（層違反はlintで検出される）。
+- 第3段（fmt隔離）: include水準で達成済み（fmt→baseのみ。ALLOWEDで固定）。リンク水準の検査は物理分離を行わないため対象外。
+- 第4段（Lint分離）: 不採用（設計判断）。Lint検査（W001未使用・const推奨・H6確定代入/return網羅）は型検査走査中に構築されるフロー状態（使用マーク・変更マーク・分岐fork/joinの初期化集合）を消費しており、独立visitor化はこれらの解析基盤の再実装を要する（利得は分離の形式のみでコストと退行リスクが大きい）。フラグ分岐は7箇所と小さく、警告ID（W001/L001）はdiagnostics/catalogへ収容済み、レベル設定・行無効化はlint config側で機能している。
+- 第5段（driver統合）: 実装済み。run_frontend共有パイプライン（配線複製約240行排除）とoptionsテーブル化。
+- 第6段（resolve新設）: module-system-structural-imports.mdへ移譲。構造化importの実装と不可分のため、当該文書の実装時にcm_resolve相当を新設する。
+
+将来課題: モジュールシステム構造化後のSpan座標系整理と合わせたcodegen診断の構造化、物理ターゲット分離の再評価（unity build構成の見直し時）。
