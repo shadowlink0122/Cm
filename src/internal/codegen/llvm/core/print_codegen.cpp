@@ -332,15 +332,9 @@ void MIRToLLVM::generatePrintFormatCall(const mir::MirTerminator::CallData& call
     auto formatStr = convertOperand(*callData.args[0]);
     llvm::Value* currentStr = formatStr;
 
-    // {{と}}のエスケープ処理
-    auto unescapeFunc = module->getOrInsertFunction(
-        "cm_format_unescape_braces",
-        llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
-    // LLVM 15以降ではopaque pointerなのでキャスト不要
-
-    currentStr = builder->CreateCall(unescapeFunc, {formatStr});
-
-    // 引数インデックス2以降が実際の値
+    // 引数インデックス2以降が実際の値。
+    // プレースホルダ置換を先に行い、{{/}}のエスケープ復元は最後に行う
+    // （先にunescapeするとリテラル{a}が置換対象に誤認され、値の挿入位置がずれていた）
     for (size_t i = 2; i < callData.args.size(); ++i) {
         auto value = convertOperand(*callData.args[i]);
         auto hirType = getOperandType(*callData.args[i]);
@@ -403,6 +397,14 @@ void MIRToLLVM::generatePrintFormatCall(const mir::MirTerminator::CallData& call
         currentStr = generateFormatReplace(currentStr, value, hirType);
     }
 
+    // {{と}}のエスケープ復元（置換後に行う）
+    {
+        auto unescapeBraces = module->getOrInsertFunction(
+            "cm_format_unescape_braces",
+            llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
+        currentStr = builder->CreateCall(unescapeBraces, {currentStr});
+    }
+
     // 結果を出力
     auto printFunc = module->getOrInsertFunction(
         isNewline ? "cm_println_string" : "cm_print_string",
@@ -422,20 +424,20 @@ void MIRToLLVM::generateFormatStringCall(const mir::MirTerminator::CallData& cal
     auto formatStr = convertOperand(*callData.args[0]);
     llvm::Value* currentStr = formatStr;
 
-    // {{と}}のエスケープ処理
-    auto unescapeFunc = module->getOrInsertFunction(
-        "cm_format_unescape_braces",
-        llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
-    // LLVM 15以降ではopaque pointerなのでキャスト不要
-
-    currentStr = builder->CreateCall(unescapeFunc, {formatStr});
-
-    // 引数インデックス2以降が実際の値
+    // 引数インデックス2以降が実際の値。
+    // プレースホルダ置換を先に行い、{{/}}のエスケープ復元は最後に行う
+    // （先にunescapeするとリテラル{a}が置換対象に誤認され、値の挿入位置がずれていた）
     for (size_t i = 2; i < callData.args.size(); ++i) {
         auto value = convertOperand(*callData.args[i]);
         auto hirType = getOperandType(*callData.args[i]);
         currentStr = generateFormatReplace(currentStr, value, hirType);
     }
+
+    // {{と}}のエスケープ復元
+    auto unescapeFunc = module->getOrInsertFunction(
+        "cm_format_unescape_braces",
+        llvm::FunctionType::get(ctx.getPtrType(), {ctx.getPtrType()}, false));
+    currentStr = builder->CreateCall(unescapeFunc, {currentStr});
 
     // 結果をローカル変数に格納
     if (callData.destination.has_value()) {

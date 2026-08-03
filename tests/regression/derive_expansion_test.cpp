@@ -83,10 +83,10 @@ struct Point with Eq {
     EXPECT_NE(impl, nullptr);
 }
 
-TEST(DeriveExpansionTest, OtherTraitsRemainForMirPath) {
-    // 未移行トレイト（Ord等）はauto_implsに残り、従来の手組みMIR経路が処理する
+TEST(DeriveExpansionTest, MarkerTraitRemainsForMirPath) {
+    // 生成物の無いマーカートレイト（Copy）はauto_implsに残り、従来のimpl_info登録経路が処理する
     auto program = parse_source(R"(
-struct Point with Eq, Ord {
+struct Point with Eq, Copy {
     int x;
 }
 )");
@@ -94,7 +94,7 @@ struct Point with Eq, Ord {
     auto* st = program.declarations[0]->as<ast::StructDecl>();
     ASSERT_NE(st, nullptr);
     ASSERT_EQ(st->auto_impls.size(), 1u);
-    EXPECT_EQ(st->auto_impls[0], "Ord");
+    EXPECT_EQ(st->auto_impls[0], "Copy");
 }
 
 TEST(DeriveExpansionTest, EqSnapshotForArrayField) {
@@ -113,4 +113,85 @@ struct Buf with Eq {
         "    }\n"
         "}\n";
     EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
+}
+
+TEST(DeriveExpansionTest, OrdSnapshot) {
+    auto program = parse_source(R"(
+struct Point with Ord {
+    int x;
+    int y;
+}
+)");
+    const std::string expected =
+        "impl Point for Ord {\n"
+        "    operator bool <(Point other) {\n"
+        "        if (self.x < other.x) {\n"
+        "            return true;\n"
+        "        }\n"
+        "        if (self.x > other.x) {\n"
+        "            return false;\n"
+        "        }\n"
+        "        if (self.y < other.y) {\n"
+        "            return true;\n"
+        "        }\n"
+        "        if (self.y > other.y) {\n"
+        "            return false;\n"
+        "        }\n"
+        "        return false;\n"
+        "    }\n"
+        "}\n";
+    EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
+}
+
+TEST(DeriveExpansionTest, HashSnapshotWithNestedAndArray) {
+    // FNV-1a（基数はi32ビットパターン維持の負数リテラル）。ネストはhash()再帰、配列は要素展開
+    auto program = parse_source(R"(
+struct Inner with Hash {
+    int v;
+}
+)");
+    const std::string expected =
+        "impl Inner for Hash {\n"
+        "    int hash() {\n"
+        "        int h = -2128831035;\n"
+        "        h = (h ^ (self.v as int)) * 16777619;\n"
+        "        return h;\n"
+        "    }\n"
+        "}\n";
+    EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
+}
+
+TEST(DeriveExpansionTest, DebugSnapshotUsesConcatenation) {
+    // 挿入値が波括弧を含みうるネスト・文字列は直接連結、スカラは単独プレースホルダで整形
+    auto program = parse_source(R"(
+struct P with Debug {
+    int x;
+    string name;
+}
+)");
+    const std::string expected =
+        "impl P for Debug {\n"
+        "    string debug() {\n"
+        "        return \"P { x: \" + \"{self.x}\" + \", name: \" + self.name + \" }\";\n"
+        "    }\n"
+        "}\n";
+    EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
+}
+
+TEST(DeriveExpansionTest, CssSnapshotSortsKeysAndAliases) {
+    // kebab名昇順・boolは条件付き"key; "・to_css/is_css/isCssを提供
+    auto program = parse_source(R"(
+struct Style with Css {
+    string font_size;
+    bool bold;
+}
+)");
+    const std::string synthesized = macro_expand::synthesize_derive_impls(program);
+    EXPECT_NE(synthesized.find("if (self.bold) {"), std::string::npos);
+    EXPECT_NE(synthesized.find("\"bold; \""), std::string::npos);
+    EXPECT_NE(synthesized.find("\"font-size: \" + self.font_size + \"; \""), std::string::npos);
+    EXPECT_NE(synthesized.find("bool isCss()"), std::string::npos);
+    EXPECT_NE(synthesized.find("string to_css()"), std::string::npos);
+    // bold（b...）がfont-size（f...）より先（kebab名昇順）
+    EXPECT_LT(synthesized.find("bold; "), synthesized.find("font-size"));
 }

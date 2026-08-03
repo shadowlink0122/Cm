@@ -1526,6 +1526,11 @@ char* cm_format_replace(const char* format, const char* value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -1590,6 +1595,11 @@ char* cm_format_replace_int(const char* format, int value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -1723,6 +1733,11 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -1783,6 +1798,11 @@ char* cm_format_replace_ptr(const char* format, long long value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -1853,6 +1873,11 @@ char* cm_format_replace_long(const char* format, long long value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -1920,6 +1945,11 @@ char* cm_format_replace_double(const char* format, double value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;
@@ -2001,6 +2031,11 @@ char* cm_format_replace_string(const char* format, const char* value) {
     int found = 0;
     for (size_t i = 0; i < fmt_len; i++) {
         if (format[i] == '{') {
+            if (i + 1 < fmt_len && format[i + 1] == '{') {
+                // エスケープされた{{はプレースホルダ開始とみなさない
+                i++;
+                continue;
+            }
             start = i;
             found = 1;
             break;

@@ -2383,13 +2383,29 @@ char* cm_double_to_string(double value) {
 // ============================================================
 // Format Replace Functions
 // ============================================================
+// エスケープされた{{を飛ばして次のプレースホルダ開始位置を返す（cm_format_replace系の共通スキャン。
+// 従来は最初の'{'を無条件に開始とみなし、エスケープ済みリテラル{a}が誤って置換対象になっていた）
+static const char* cm_find_placeholder_start(const char* s) {
+    while (s && *s) {
+        if (*s == '{') {
+            if (*(s + 1) == '{') {
+                s += 2;
+                continue;
+            }
+            return s;
+        }
+        s++;
+    }
+    return NULL;
+}
+
 char* cm_format_replace(const char* format, const char* value) {
     if (!format)
         return NULL;
     if (!value)
         value = "";
 
-    const char* start = cm_strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(cm_strlen_impl(format) + 1);
         if (result)
@@ -2427,7 +2443,7 @@ char* cm_format_replace_int(const char* format, int value) {
     if (!format)
         return NULL;
 
-    const char* start = strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(strlen(format) + 1);
         if (result)
@@ -2494,7 +2510,7 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
 
     // 基数書式（:x/:X/:b/:o）は32bit値を符号なし基数表記する（従来は10進のみでjsと分裂していた）
     char* formatted_value = NULL;
-    const char* spec_start = strchr(format, '{');
+    const char* spec_start = cm_find_placeholder_start(format);
     const char* spec_end = spec_start ? strchr(spec_start, '}') : NULL;
     char specifier[32] = {0};
     if (spec_start && spec_end && spec_end - spec_start - 1 > 0 &&
@@ -2525,7 +2541,7 @@ char* cm_format_replace_ptr(const char* format, long long value) {
     if (!format)
         return NULL;
 
-    const char* start = strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(strlen(format) + 1);
         if (result)
@@ -2595,7 +2611,7 @@ char* cm_format_replace_long(const char* format, long long value) {
     if (!format)
         return NULL;
 
-    const char* start = cm_strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(cm_strlen_impl(format) + 1);
         if (result)
@@ -2709,7 +2725,7 @@ char* cm_format_replace_double(const char* format, double value) {
     if (!format)
         return NULL;
 
-    const char* start = cm_strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(cm_strlen_impl(format) + 1);
         if (result)
@@ -2757,7 +2773,7 @@ char* cm_format_replace_string(const char* format, const char* value) {
     if (!value)
         value = "";
 
-    const char* start = strchr(format, '{');
+    const char* start = cm_find_placeholder_start(format);
     if (!start) {
         char* result = (char*)cm_alloc(strlen(format) + 1);
         if (result)
@@ -2843,6 +2859,17 @@ char* cm_format_string(const char* format, int num_args, ...) {
     int arg_idx = 0;
 
     while (*p) {
+        if (*p == '{' && *(p + 1) == '{') {
+            // エスケープされた{{は置換対象にせず素通しする（後段のunescapeが{へ復元する）
+            result = (char*)realloc(result, result_len + 3);
+            if (result) {
+                result[result_len++] = '{';
+                result[result_len++] = '{';
+                result[result_len] = '\0';
+            }
+            p += 2;
+            continue;
+        }
         if (*p == '{' && *(p + 1) == '}') {
             if (arg_idx < num_args) {
                 const char* arg = va_arg(args, const char*);

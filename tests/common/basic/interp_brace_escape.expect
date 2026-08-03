@@ -1,0 +1,5 @@
+a {b} c
+v=5 and {lit}
+p { q: 5 }
+{a} 5 {b}
+pre { mid 5 post }

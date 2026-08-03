@@ -25,7 +25,6 @@ type-resolution-simplification.mdの4領域に続き、コンパイラが複雑�
 - [モジュールシステムの構造化](module-system-structural-imports.md) — importのテキストインライン展開（preprocessor 4,241行）を廃止しファイル単位パース+シンボル解決へ（source_map・テキスト改名・行番号ずれ・重複展開の根絶、名前空間形式import対応を含む）
 - [型付きHIRの単一情報源化](typed-hir-single-source.md) — 「型検査後のHIRは全式が型付き」の不変条件確立と下流の型再推論禁止（B6/B7/N2/W5族の根治、対症療法コードの削除）
 - [モノモーフ化の型駆動化](monomorphization-typed-instantiation.md) — 特殊化の同定・書き換えを型ノードへ統一し、マングル名の解析・逆算（82箇所）を廃止
-- [自動実装のソース展開化](derive-as-source-expansion.md) — with/deriveの手組みMIR生成4,408行をAST合成+通常パイプラインへ置換
 
 このうちランタイムビルトインのレジストリ化は全段を完了し [archive/v0.17.0/runtime-builtin-registry.md](../../archive/v0.17.0/runtime-builtin-registry.md) へ移動した（レジストリ表188件・宣言表引き化・シグネチャ検査lint/CI化・slice系ランタイム一本化。format系はアーキテクチャ差のため二重実装維持+検査防衛の設計判断を記録）。診断エンジンの統一も全4段を実装完了し [archive/v0.17.0/diagnostics-engine-unification.md](../../archive/v0.17.0/diagnostics-engine-unification.md) へ移動した（DiagnosticEmitter表示一元化・MIRエラー昇格とcodegen前停止・__error__検査・診断207呼び出しのMsgId化）。レイアウト計算の一元化と最適化パスの共有解析基盤も実装完了し、[archive/v0.17.0/layout-query-unification.md](../../archive/v0.17.0/layout-query-unification.md)（スライス格納/配列実ストライドの2意味論API・MIR/LLVM共有コア）と [archive/v0.17.0/optimizer-shared-analysis.md](../../archive/v0.17.0/optimizer-shared-analysis.md)（効果モデルeffects.hppへの8パス統合）へ移動した。
 
@@ -37,5 +36,5 @@ W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込�
 ## 状態
 
 監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案4本（module-system-structural-imports.md・typed-hir-single-source.md・monomorphization-typed-instantiation.md・derive-as-source-expansion.md）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。
+型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案3本（module-system-structural-imports.md・typed-hir-single-source.md・monomorphization-typed-instantiation.md）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。自動実装のソース展開化は全3段を完了し [archive/v0.17.0/derive-as-source-expansion.md](../../archive/v0.17.0/derive-as-source-expansion.md) へ移動した（非ジェネリック全トレイトの通常パイプライン化・波括弧エスケープ修正・死んだ生成器約1,700行の削除。ジェネリックの単一総称化は演算子mono対応後）。
 セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

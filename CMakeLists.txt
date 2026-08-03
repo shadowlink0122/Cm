@@ -393,11 +393,6 @@ set(CM_SOURCES
     ${CM_MIR_SOURCES}
     src/internal/mir/printer.cpp
     # auto_impl (トレイト別自動実装)
-    src/internal/mir/lowering/auto_impl/generator.cpp
-    src/internal/mir/lowering/auto_impl/eq.cpp
-    src/internal/mir/lowering/auto_impl/ord.cpp
-    src/internal/mir/lowering/auto_impl/clone_hash.cpp
-    src/internal/mir/lowering/auto_impl/debug_display_css.cpp
     # MIR分割ユーティリティ（モジュール別分離コンパイル用）
     src/internal/mir/mir_splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)

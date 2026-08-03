@@ -3,6 +3,7 @@
 #include "internal/syntax/lexer/lexer.hpp"
 #include "internal/syntax/parser/parser.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,9 +12,53 @@ namespace cm::macro_expand {
 
 namespace {
 
-// ソース展開へ移行済みのトレイト（第1段: Eq。第2段以降でOrd/Clone/Hash/Debug/Display/Cssを追加する）
+// ソース展開へ移行済みのトレイト（Eq/Ord/Clone/Hash/Debug/Display/Css。Copyはマーカーのみで生成物が無いため対象外）
 bool is_source_expanded_trait(const std::string& name) {
-    return name == "Eq";
+    return name == "Eq" || name == "Ord" || name == "Clone" || name == "Hash" || name == "Debug" ||
+           name == "Display" || name == "Css";
+}
+
+// フィールド型がトレイトのderive対象として妥当か（checkerのvalidate（types/checking/auto_impl.cpp）と同一の規則）。
+// 不正な場合は展開せずauto_implsへ残し、従来のderive検証診断（Cannot derive ...）を発火させる
+bool fields_derivable(const ast::StructDecl& st, const std::string& iface) {
+    if (iface == "Clone" || iface == "Copy" || iface == "Css") {
+        return true;
+    }
+    for (const auto& field : st.fields) {
+        const auto& t = field.type;
+        if (!t) {
+            continue;
+        }
+        if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
+            return false;
+        }
+        if (t->kind == ast::TypeKind::Array) {
+            const bool fixed_1d =
+                !t->is_multidim_array() && (t->array_size.has_value() || t->dimensions.size() == 1);
+            const auto& elem = t->element_type;
+            if (iface == "Eq") {
+                if (!fixed_1d || !elem || !elem->is_primitive() ||
+                    elem->kind == ast::TypeKind::Void) {
+                    return false;
+                }
+            } else if (iface == "Hash") {
+                if (!fixed_1d || !elem ||
+                    !(elem->is_integer() || elem->kind == ast::TypeKind::Bool ||
+                      elem->kind == ast::TypeKind::Char)) {
+                    return false;
+                }
+            } else {
+                // Ord / Debug / Display は配列フィールド非対応
+                return false;
+            }
+        } else if (iface == "Hash") {
+            if (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString ||
+                t->is_floating() || t->kind == ast::TypeKind::Pointer) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 // 構造体の型表記（ジェネリックは型引数付き。例: Pair<T, U>）
@@ -73,6 +118,183 @@ std::string synthesize_eq_impl(const ast::StructDecl& st) {
     return source;
 }
 
+// Ord: 辞書式比較（各フィールドで<ならtrue・>ならfalse・等しければ次へ。全等はfalse。手組み実装と同一）
+std::string synthesize_ord_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::string body;
+    for (const auto& field : st.fields) {
+        body += "        if (self." + field.name + " < other." + field.name +
+                ") {\n            return true;\n        }\n";
+        body += "        if (self." + field.name + " > other." + field.name +
+                ") {\n            return false;\n        }\n";
+    }
+    body += "        return false;\n";
+    std::string source;
+    source += "impl " + type_text + " for Ord {\n";
+    source += "    operator bool <(" + type_text + " other) {\n";
+    source += body;
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
+// Clone: 自己の値コピーを返す（構造体代入の集約コピー意味論に委譲。手組み実装と同一）
+std::string synthesize_clone_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::string source;
+    source += "impl " + type_text + " for Clone {\n";
+    source += "    " + type_text + " clone() {\n";
+    source += "        return self;\n";
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
+// Hash: FNV-1a（基数0x811c9dc5・素数16777619。整数/bool/charは値を、ネスト構造体はhash()結果を、
+// 固定長配列は要素を順に混合する。基数はi32ビットパターンを保つため負数リテラルで表記）
+std::string synthesize_hash_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::string body = "        int h = -2128831035;\n";
+    auto mix = [&body](const std::string& value_expr) {
+        body += "        h = (h ^ " + value_expr + ") * 16777619;\n";
+    };
+    for (const auto& field : st.fields) {
+        const auto& t = field.type;
+        if (t && t->kind == ast::TypeKind::Struct) {
+            mix("self." + field.name + ".hash()");
+        } else if (t && t->kind == ast::TypeKind::Array && t->array_size.has_value()) {
+            for (uint32_t j = 0; j < t->array_size.value(); ++j) {
+                mix("(self." + field.name + "[" + std::to_string(j) + "] as int)");
+            }
+        } else {
+            mix("(self." + field.name + " as int)");
+        }
+    }
+    body += "        return h;\n";
+    std::string source;
+    source += "impl " + type_text + " for Hash {\n";
+    source += "    int hash() {\n";
+    if (st.fields.empty()) {
+        source += "        return -2128831035;\n";
+    } else {
+        source += body;
+    }
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
+// Debug/Display/Cssのフィールド値の連結片。
+// 挿入値が波括弧を含みうるもの（文字列フィールド・ネストのdebug/toString/css結果）は
+// 補間を使わず直接連結する（補間の逐次置換は挿入値内の{...}を後続プレースホルダと誤認するため）。
+// スカラは単独プレースホルダのリテラル（後続置換が無く安全）で整形する
+std::string field_value_piece(const ast::Field& field, const std::string& method) {
+    if (field.type && field.type->kind == ast::TypeKind::Struct) {
+        return "self." + field.name + "." + method + "()";
+    }
+    if (field.type &&
+        (field.type->kind == ast::TypeKind::String || field.type->kind == ast::TypeKind::CString)) {
+        return "self." + field.name;
+    }
+    return "\"{self." + field.name + "}\"";
+}
+
+// Debug: "S { f1: v1, f2: v2 }"（空は"S {}"。ネスト構造体はdebug()。手組み実装と同一の書式）
+std::string synthesize_debug_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::string expr = "\"" + st.name + " {";
+    for (size_t i = 0; i < st.fields.size(); ++i) {
+        expr += (i == 0 ? " " : ", ");
+        expr += st.fields[i].name + ": \" + " + field_value_piece(st.fields[i], "debug") + " + \"";
+    }
+    expr += st.fields.empty() ? "}\"" : " }\"";
+    std::string source;
+    source += "impl " + type_text + " for Debug {\n";
+    source += "    string debug() {\n";
+    source += "        return " + expr + ";\n";
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
+// Display: "(v1, v2)"（ネスト構造体はtoString()。手組み実装と同一の書式）
+std::string synthesize_display_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::string expr = "\"(\"";
+    for (size_t i = 0; i < st.fields.size(); ++i) {
+        if (i > 0) {
+            expr += " + \", \"";
+        }
+        expr += " + " + field_value_piece(st.fields[i], "toString");
+    }
+    expr += " + \")\"";
+    std::string source;
+    source += "impl " + type_text + " for Display {\n";
+    source += "    string toString() {\n";
+    source += "        return " + expr + ";\n";
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
+// フィールド名のkebab-case（アンダースコア→ダッシュ。手組みCss実装と同一）
+std::string css_key(const std::string& name) {
+    std::string result;
+    for (char c : name) {
+        result += (c == '_') ? '-' : c;
+    }
+    return result;
+}
+
+// Css: kebab名の昇順で "key: value; " を連結（boolは真のとき"key; "のみ・ネスト構造体は"key { 内容 } "。
+// 手組み実装と同一の書式）。to_cssはcss()のエイリアス、is_cssは常にtrue
+std::string synthesize_css_impl(const ast::StructDecl& st) {
+    const std::string type_text = struct_type_text(st);
+    std::vector<size_t> order(st.fields.size());
+    for (size_t i = 0; i < order.size(); ++i) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return css_key(st.fields[a].name) < css_key(st.fields[b].name);
+    });
+
+    std::string body = "        string s = \"\";\n";
+    for (size_t idx : order) {
+        const auto& field = st.fields[idx];
+        const std::string key = css_key(field.name);
+        if (field.type && field.type->kind == ast::TypeKind::Bool) {
+            body += "        if (self." + field.name + ") {\n";
+            body += "            s = s + \"" + key + "; \";\n";
+            body += "        }\n";
+        } else if (field.type && field.type->kind == ast::TypeKind::Struct) {
+            body +=
+                "        s = s + \"" + key + " { \" + self." + field.name + ".css() + \" } \";\n";
+        } else {
+            body += "        s = s + \"" + key + ": \" + " + field_value_piece(field, "css") +
+                    " + \"; \";\n";
+        }
+    }
+    body += "        return s;\n";
+
+    std::string source;
+    source += "impl " + type_text + " for Css {\n";
+    source += "    string css() {\n";
+    source += body;
+    source += "    }\n";
+    source += "    string to_css() {\n";
+    source += "        return self.css();\n";
+    source += "    }\n";
+    source += "    bool is_css() {\n";
+    source += "        return true;\n";
+    source += "    }\n";
+    // 呼び出し側の解決名差（checker登録はisCss・従来関数はis_css）を両名の提供で吸収する
+    source += "    bool isCss() {\n";
+    source += "        return true;\n";
+    source += "    }\n";
+    source += "}\n";
+    return source;
+}
+
 }  // namespace
 
 std::string synthesize_derive_impls(const ast::Program& program) {
@@ -91,7 +313,7 @@ std::string synthesize_derive_impls(const ast::Program& program) {
             continue;
         }
         for (const auto& iface : st->auto_impls) {
-            if (!is_source_expanded_trait(iface)) {
+            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface)) {
                 continue;
             }
             if (!source.empty()) {
@@ -99,6 +321,18 @@ std::string synthesize_derive_impls(const ast::Program& program) {
             }
             if (iface == "Eq") {
                 source += synthesize_eq_impl(*st);
+            } else if (iface == "Ord") {
+                source += synthesize_ord_impl(*st);
+            } else if (iface == "Clone") {
+                source += synthesize_clone_impl(*st);
+            } else if (iface == "Hash") {
+                source += synthesize_hash_impl(*st);
+            } else if (iface == "Debug") {
+                source += synthesize_debug_impl(*st);
+            } else if (iface == "Display") {
+                source += synthesize_display_impl(*st);
+            } else if (iface == "Css") {
+                source += synthesize_css_impl(*st);
             }
         }
     }
@@ -123,7 +357,7 @@ int expand_derives(ast::Program& program) {
         }
         std::vector<std::string> remaining;
         for (const auto& iface : st->auto_impls) {
-            if (!is_source_expanded_trait(iface)) {
+            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface)) {
                 remaining.push_back(iface);
             }
         }
