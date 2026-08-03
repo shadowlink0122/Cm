@@ -638,7 +638,16 @@ struct Builder {
             return;
         }
         FileInfo& info = fit->second;
-        if (info.functions.count(name)) {
+        auto fnit = info.functions.find(name);
+        if (fnit != info.functions.end()) {
+            // 可視性検査: 非exportシンボルの選択importは診断エラー（第3段。旧経路の警告から昇格）
+            if (!fnit->second.is_export && !info.export_list.count(name)) {
+                if (error.empty()) {
+                    error = "function '" + name + "' is not exported by module '" + info.path +
+                            "' (add 'export' to the definition or an export list to import it)";
+                }
+                return;
+            }
             include_function(info, name);
             return;
         }
@@ -739,6 +748,17 @@ struct Builder {
                 for (const auto& [name, alias] : edge.aliased_items) {
                     auto dit = files.find(edge.dep);
                     if (dit != files.end() && dit->second.functions.count(name)) {
+                        const auto& dep_info = dit->second;
+                        if (!dep_info.functions.at(name).is_export &&
+                            !dep_info.export_list.count(name)) {
+                            if (error.empty()) {
+                                error = "function '" + name + "' is not exported by module '" +
+                                        dep_info.path +
+                                        "' (add 'export' to the definition or an export list to "
+                                        "import it)";
+                            }
+                            continue;
+                        }
                         // 別名複製として出力する（元名の平坦出力は要求しない）。同一ファイル内の依存関数のみ包含する
                         dit->second.rename_copies.push_back({name, alias});
                         for (const auto& ref : dit->second.functions[name].refs) {
@@ -819,6 +839,11 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
         return result;
     }
     builder.resolve_inclusion();
+    if (!builder.error.empty()) {
+        // 包含解決の診断（可視性検査等）
+        result.error = builder.error;
+        return result;
+    }
     builder.finalize_usage();
 
     // 依存順に連結する。未包含関数は行保存で空行化し、module形importはnamespaceで包んだ複製を出力する

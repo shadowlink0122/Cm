@@ -72,6 +72,11 @@ rustcがファイルごとに独立へパースしてクレート内で名前解
 - バックエンド既存バグ2件を修正した（構造化経路が露出させたが、従来経路でも単一ファイルで再現する独立バグ）: (1) MIR loweringがグローバル変数をパラメータより先にローカル登録し「パラメータ=ローカル1..N」の規約を崩していた（グローバルconstが1つでもあるとプリミティブimplメソッドのselfが誤型になりLLVM検証エラー）。パラメータ先行+同名はパラメータ優先へ変更。 (2) LLVM関数翻訳のプリミティブself複製先の判定が添字ヒューリスティック（local番号≤2）だったため番号ずれで破綻していた。MIR文の事前走査による推移的なself複製先集合（selfのcopy/moveを直接代入される*prim型一時変数）へ置換。
 - 計測: modules系25件が全て通過（第1段時点は7件）。interpreterスイートは612件中599件通過見込み+既知差分1件=advanced_modules/simple（従来経路のprivate改名バグ`__cm_priv_...`をexpected-errorとして固定化したテストで、構造化経路では正しく動作する。第4段の既定切替時にテスト期待値を更新する）。
 
-### 残り（第3段〜第4段）: 未実装
+### 第3段（可視性の診断昇格）: 実装済み
 
-第3段=可視性の診断昇格。第4段=既定切替とテキスト展開系（extract/rewrite/expand・source_map機構）の削除（advanced_modules/simpleの期待値更新を含む）。
+- 構造化import経路のrequest_item・エイリアス項目解決で、選択importが非exportシンボル（export修飾もexportリスト掲載もない関数）へ到達した場合を確定診断にした: `function 'X' is not exported by module 'Y'`。従来経路のH7警告（checkで警告・buildは--strict時のみ）からの昇格で、同一ファイル内の非公開ヘルパー参照（include_functionのクロージャ）は従来どおり自由。
+- 既存テストへの影響なし（interpreterスイート606/612を維持）。従来経路の警告文言テスト（tests/i18n/non_export_import）は既定切替（第4段）時にエラー期待へ更新する。
+
+### 残り（第4段）: 未実装
+
+第4段=既定切替とテキスト展開系（extract/rewrite/expand・source_map機構）の削除（advanced_modules/simpleとtests/i18n/non_export_importの期待値更新を含む）。
