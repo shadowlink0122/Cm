@@ -255,6 +255,47 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             }
         }
 
+        // プリミティブimplメソッドのself複製先一時変数を事前走査する。
+        // 「self（arg_locals[0]）のcopy/moveを直接代入される*prim型一時変数」を推移的に集め、
+        // プリミティブ値のallocaとして割り付ける（ローカル番号のずれに依存しない）
+        std::unordered_set<unsigned int> selfCopyTargets;
+        if (func.name.find("__") != std::string::npos && !func.arg_locals.empty()) {
+            selfCopyTargets.insert(static_cast<unsigned int>(func.arg_locals[0]));
+            bool changed = true;
+            while (changed) {
+                changed = false;
+                for (const auto& bb : func.basic_blocks) {
+                    if (!bb) {
+                        continue;
+                    }
+                    for (const auto& stmt : bb->statements) {
+                        if (stmt->kind != mir::MirStatement::Assign) {
+                            continue;
+                        }
+                        auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+                        if (!ad.place.projections.empty() || !ad.rvalue ||
+                            ad.rvalue->kind != mir::MirRvalue::Use) {
+                            continue;
+                        }
+                        auto& use = std::get<mir::MirRvalue::UseData>(ad.rvalue->data);
+                        if (!use.operand || (use.operand->kind != mir::MirOperand::Copy &&
+                                             use.operand->kind != mir::MirOperand::Move)) {
+                            continue;
+                        }
+                        auto* src = std::get_if<mir::MirPlace>(&use.operand->data);
+                        if (!src || !src->projections.empty()) {
+                            continue;
+                        }
+                        if (selfCopyTargets.count(static_cast<unsigned int>(src->local)) &&
+                            selfCopyTargets.insert(static_cast<unsigned int>(ad.place.local))
+                                .second) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
         builder->SetInsertPoint(entryBB);
@@ -433,9 +474,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // 名前が_tで始まる場合は一時変数
                     bool isTempVar =
                         (local.name.size() >= 2 && local.name[0] == '_' && local.name[1] == 't');
-                    // さらに、最初の数個のローカル変数（selfのコピー先として使われる）のみに適用
-                    // local_0はself引数、local_1/local_2が最初の一時変数として使われることが多い
-                    bool isSelfCopyTarget = (i <= 2);
+                    // selfのcopy/moveを直接代入される一時変数のみに適用（事前走査の推移的集合）
+                    bool isSelfCopyTarget = selfCopyTargets.count(static_cast<unsigned int>(i)) > 0;
                     if (isPrimitiveImplMethod && isTempVar && isSelfCopyTarget &&
                         local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
                         auto elemKind = local.type->element_type->kind;

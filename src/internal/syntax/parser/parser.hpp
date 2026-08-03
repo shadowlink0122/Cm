@@ -57,7 +57,8 @@ class Parser {
     std::optional<ast::OperatorKind> parse_operator_kind();
     ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {});
-    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<ast::AttributeNode> attributes,
+    ast::DeclPtr parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
+                                 std::vector<ast::AttributeNode> attributes,
                                  std::vector<std::string> generic_params = {},
                                  std::vector<ast::GenericParam> generic_params_v2 = {});
     std::vector<ast::StmtPtr> parse_block();

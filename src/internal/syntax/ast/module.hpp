@@ -68,6 +68,9 @@ struct ImportDecl {
     ModulePath path;                // モジュールパス
     std::vector<ImportItem> items;  // 選択的インポート項目
     bool is_wildcard = false;       // ワイルドカード（*）インポート
+    bool is_reexport = false;  // export import（取り込んだ項目を自モジュールの公開面へ再輸出）
+    // セグメント間の区切り（'/'=パス連結・':'=::・'.'=ドット。相対パスとモジュール指定子の再構成に使用）
+    std::vector<char> separators;
     std::vector<AttributeNode> attributes;
 
     ImportDecl(ModulePath p) : path(std::move(p)) {}

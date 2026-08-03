@@ -680,6 +680,7 @@ std::optional<ast::OperatorKind> Parser::parse_operator_kind() {
 
 // インターフェース
 ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes) {
+    uint32_t start_pos = current().start;
     expect(TokenKind::KwInterface);
 
     std::string name = expect_ident();
@@ -737,11 +738,12 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
         decl->generic_params_v2 = std::move(generic_params_v2);
     }
 
-    return std::make_unique<ast::Decl>(std::move(decl));
+    return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
 }
 
 // impl
 ast::DeclPtr Parser::parse_impl(std::vector<ast::AttributeNode> attributes) {
+    uint32_t start_pos = current().start;
     expect(TokenKind::KwImpl);
 
     std::vector<std::string> generic_params;
@@ -856,15 +858,15 @@ ast::DeclPtr Parser::parse_impl(std::vector<ast::AttributeNode> attributes) {
         }
 
         expect(TokenKind::RBrace);
-        return std::make_unique<ast::Decl>(std::move(decl));
+        return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
     } else {
-        return parse_impl_ctor(std::move(target), std::move(attributes), std::move(generic_params),
-                               std::move(generic_params_v2));
+        return parse_impl_ctor(start_pos, std::move(target), std::move(attributes),
+                               std::move(generic_params), std::move(generic_params_v2));
     }
 }
 
 // コンストラクタ/デストラクタ専用implの解析
-ast::DeclPtr Parser::parse_impl_ctor(ast::TypePtr target,
+ast::DeclPtr Parser::parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
                                      std::vector<ast::AttributeNode> attributes,
                                      std::vector<std::string> generic_params,
                                      std::vector<ast::GenericParam> generic_params_v2) {
@@ -966,7 +968,7 @@ ast::DeclPtr Parser::parse_impl_ctor(ast::TypePtr target,
     }
 
     expect(TokenKind::RBrace);
-    return std::make_unique<ast::Decl>(std::move(decl));
+    return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
 }
 
 // ブロック

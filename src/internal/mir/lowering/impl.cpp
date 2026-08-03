@@ -225,21 +225,14 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
-    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）
-    for (const auto& gv : mir_program.global_vars) {
-        if (!gv)
-            continue;
-        // グローバル変数をローカル変数として登録（is_global=true）
-        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
-        ctx.register_variable(gv->name, gv_id);
-    }
-
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
         ctx.register_type_with_destructor(type_name);
     }
 
-    // 関数パラメータをローカル変数として登録（typedefを解決）
+    // 関数パラメータをローカル変数として登録（typedefを解決）。
+    // グローバル変数より先に登録し「パラメータ=ローカル1..N」の規約を保つ
+    // （LLVM側のself判定・一時変数割り付けはこの番号付けを前提とする）
     for (const auto& param : func.params) {
         auto resolved_param_type = resolve_typedef(param.type);
 
@@ -250,6 +243,18 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
         debug::log(
             debug::Stage::Mir, debug::Level::Debug,
             "Registered parameter '" + param.name + "' as local " + std::to_string(param_id));
+    }
+
+    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）。
+    // パラメータ登録後に行い、同名はパラメータ側を優先する
+    for (const auto& gv : mir_program.global_vars) {
+        if (!gv)
+            continue;
+        if (ctx.resolve_variable(gv->name)) {
+            continue;
+        }
+        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
+        ctx.register_variable(gv->name, gv_id);
     }
 
     // mainのエントリでグローバル変数の非定数初期化子を評価する。
