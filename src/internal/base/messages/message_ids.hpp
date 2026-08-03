@@ -515,6 +515,7 @@ enum class MsgId : int {
     SvSv002PointerTypesNotSupported,
     SvSv005NonConstStringTooLong,
     SvSv002PointerTypesNotSupportedLocal,
+    CliEntryPointMainNotFound,
     Count,
 };
 

@@ -1479,6 +1479,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv002PointerTypesNotSupportedLocal
     {"error[SV002]: Pointer types are not supported in SV target: {0}::{1}\n",
      "エラー[SV002]: ポインタ型はSVターゲットではサポートされません: {0}::{1}\n"},
+    // CliEntryPointMainNotFound
+    {"error: entry point 'main' not found (the file is a module; import it from a program with main)\n",
+     "エラー: エントリポイント 'main' が見つかりません（このファイルはモジュールです。mainを持つプログラムからimportしてください）\n"},
 };
 // clang-format on
 

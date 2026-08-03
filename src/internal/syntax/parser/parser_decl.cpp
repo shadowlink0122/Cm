@@ -125,10 +125,11 @@ ast::DeclPtr Parser::parse_top_level() {
             return parse_macro(true);
         }
 
-        // export function (型から始まる関数、または修飾子から始まる関数の場合)
+        // export function (型・ジェネリックパラメータ・修飾子から始まる関数の場合)
         // 修飾子: static, inline, async, always, always_ff, always_comb, always_latch
-        if (is_type_start() || check(TokenKind::KwStatic) || check(TokenKind::KwInline) ||
-            check(TokenKind::KwAsync) || check(TokenKind::KwAlways) ||
+        // <T: Eq> void assert_eq(...) のようなジェネリック関数のexportも受理する
+        if (is_type_start() || check(TokenKind::Lt) || check(TokenKind::KwStatic) ||
+            check(TokenKind::KwInline) || check(TokenKind::KwAsync) || check(TokenKind::KwAlways) ||
             check(TokenKind::KwAlwaysFF) || check(TokenKind::KwAlwaysComb) ||
             check(TokenKind::KwAlwaysLatch)) {
             // 修飾子を収集

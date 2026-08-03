@@ -27,7 +27,8 @@ ALLOWED = {
     "types": {"base", "syntax"},
     "lint": {"base", "diagnostics", "syntax"},
     "mir": {"base", "hir", "syntax"},
-    "module": {"base", "hir", "mir", "syntax"},
+    # preprocessorへの依存は構造化import共存期間の解決意味論共有（module/graph.cpp）。テキスト展開系の削除（第4段）で解消する
+    "module": {"base", "hir", "mir", "preprocessor", "syntax"},
     "codegen": {"base", "hir", "mir", "syntax"},
 }
 

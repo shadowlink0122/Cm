@@ -385,6 +385,7 @@ set(CM_SOURCES
     src/internal/preprocessor/module_resolve.cpp
     src/internal/preprocessor/conditional.cpp
     src/internal/module/resolver.cpp
+    src/internal/module/graph.cpp
     # Lint configuration
     src/internal/lint/config.cpp
     # HIR lowering (AST -> HIR)

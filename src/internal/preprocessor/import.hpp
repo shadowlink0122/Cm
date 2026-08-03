@@ -164,9 +164,13 @@ class ImportPreprocessor {
     std::filesystem::path find_project_root(const std::filesystem::path& current_path);
 
     // モジュールパスを解決（相対/絶対パスのサポート）
+   public:
+    // モジュール指定子の解決（mod.cm・相対import・階層import対応）。
+    // 構造化importのモジュールグラフ（module/graph.cpp）が同一の解決意味論を共有するため公開する
     std::filesystem::path resolve_module_path(const std::string& module_specifier,
                                               const std::filesystem::path& current_file);
 
+   private:
     // module文でエントリーポイントを検出
     std::filesystem::path find_module_entry_point(const std::filesystem::path& directory);
 

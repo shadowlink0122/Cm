@@ -146,14 +146,25 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
 
     path.segments.push_back(expect_ident());
 
-    // スラッシュで区切られた深い階層パス: import ./io/file
-    while (consume_if(TokenKind::Slash)) {
-        path.segments.push_back(expect_ident());
-    }
-
-    // または :: で区切られた階層パス: import std::io
-    while (consume_if(TokenKind::ColonColon)) {
-        path.segments.push_back(expect_ident());
+    // 階層パス: 区切りは :: / . のいずれも受け付ける（モジュールファイル方言はドット区切り）。
+    // :: の直後が * / { の場合はパスを終端し、後続のアイテム解析（::* / ::{...}）へ委ねる
+    while (true) {
+        if (check(TokenKind::Slash) && peek_kind() == TokenKind::Ident) {
+            advance();
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        if (check(TokenKind::Dot) && peek_kind() == TokenKind::Ident) {
+            advance();
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        if (check(TokenKind::ColonColon) && peek_kind() == TokenKind::Ident) {
+            advance();
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        break;
     }
 
     ast::ImportDecl import_decl(std::move(path));
@@ -222,6 +233,12 @@ ast::DeclPtr Parser::parse_export() {
     }
 
     // v4: エクスポートは名前のリストまたは再エクスポートのみ
+
+    // export import PATH...; （再エクスポート付きimport。モジュールファイル方言）
+    // 第1段（構造化importの全公開）では通常importと同じ扱いで依存辺だけを張る
+    if (check(TokenKind::KwImport)) {
+        return parse_import_stmt({});
+    }
 
     // export * from module; (ワイルドカード再エクスポート)
     if (consume_if(TokenKind::Star)) {
@@ -303,14 +320,16 @@ ast::DeclPtr Parser::parse_export() {
             while (consume_if(TokenKind::ColonColon)) {
                 from_path.segments.push_back(expect_ident());
             }
-            expect(TokenKind::Semicolon);
+            // モジュールファイル方言では末尾セミコロンを省略できる
+            consume_if(TokenKind::Semicolon);
 
             auto export_decl =
                 std::make_unique<ast::ExportDecl>(std::move(items), std::move(from_path));
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});
         } else {
-            expect(TokenKind::Semicolon);
+            // モジュールファイル方言では末尾セミコロンを省略できる
+            consume_if(TokenKind::Semicolon);
             auto export_decl = std::make_unique<ast::ExportDecl>(std::move(items));
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});

@@ -312,6 +312,29 @@ int run_build(cli::Options& opts, const char* argv0) {
         mir = mir_lowering.lower(hir);
         debug::log(debug::Stage::Mir, debug::Level::Info, "MIR lowering completed");
 
+        // 実行系コマンドでmainが無い場合は明示エラーにする
+        // （従来はモジュール単体ファイルが構文エラーで早期失敗していたが、モジュール方言のパーサ対応で
+        // ここまで到達するようになった。main無しのJIT実行は未定義動作系の不定挙動だったため確定診断へ）
+        // js/ts/webターゲットのcompileはNodeで実行されるスクリプトを生成するため、
+        // nativeのリンクエラー（_main未定義）に相当する検査としてここで確定させる
+        const bool is_executable_script_target =
+            opts.command == Command::Compile &&
+            (opts.target == "js" || opts.target == "ts" || opts.target == "web");
+        // テストモード（cm test / --test）は#[test]関数を個別エントリで実行するためmainを要求しない
+        if ((opts.command == Command::Run || is_executable_script_target) && !opts.test_mode) {
+            bool has_main = false;
+            for (const auto& func : mir.functions) {
+                if (func && func->name == "main") {
+                    has_main = true;
+                    break;
+                }
+            }
+            if (!has_main) {
+                std::cerr << i18n::msg(i18n::MsgId::CliEntryPointMainNotFound);
+                return 1;
+            }
+        }
+
         // MIR段階の診断を表示し、エラーがあればcodegenへ進まない（diagnostics-engine-unification 第2段。従来はログのみでコンパイル続行し黙って壊れたコードを出していた）
         if (!mir_lowering.mir_diagnostics().empty()) {
             DiagnosticEmitter emitter(code, opts.input_file, &preprocess_result.source_map);
