@@ -213,8 +213,9 @@ ast::ExprPtr parse_interp_content(const std::string& content) {
 }  // namespace
 
 // 文字列リテラルの補間プレースホルダを一度だけ実ASTへ脱糖する（type-resolution-simplification 領域1第4段b）。
-// 従来はチェッカーの検査用パース・MIRのミニパイプライン・影の型チェッカーが同じテキストを個別に再パースしていたが、脱糖後は本物の推論・loweringが部分式をそのまま消費する
-void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
+// 従来はチェッカーの検査用パース・MIRのミニパイプライン・影の型チェッカーが同じテキストを個別に再パースしていたが、脱糖後は本物の推論・loweringが部分式をそのまま消費する。
+// match/enumメソッドのscrutinee退避プリパス（match_hoist）が型検査前に部分式を走査できるよう自由関数として公開する
+void desugar_string_interpolation(ast::LiteralExpr& lit, const Span& span) {
     if (lit.interp_scanned || !lit.is_string()) {
         return;
     }
@@ -225,9 +226,13 @@ void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
             // パース不能な内容は従来どおりリテラル文字として扱う（診断はMIR側のフォールバックが行う）
             continue;
         }
-        stamp_spans(*expr, current_span_);
+        stamp_spans(*expr, span);
         lit.interp_parts.emplace_back(content, std::shared_ptr<ast::Expr>(std::move(expr)));
     }
+}
+
+void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
+    desugar_string_interpolation(lit, current_span_);
 }
 
 }  // namespace cm

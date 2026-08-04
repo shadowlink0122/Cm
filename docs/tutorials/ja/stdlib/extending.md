@@ -216,4 +216,4 @@ C++:  delete (Resource*)handle;
 ---
 
 <!-- nav -->
-← 前: [std::collections::hashmap - 連想配列](collections/hashmap.html) ｜ [目次](index.html) ｜ 次: [コンパイラ編](../compiler/index.html) →
+← 前: [std::json — JSONパーサ](json.html) ｜ [目次](index.html) ｜ 次: [コンパイラ編](../compiler/index.html) →

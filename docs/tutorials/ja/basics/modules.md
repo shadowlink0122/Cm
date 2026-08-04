@@ -212,16 +212,32 @@ import std::io::println;
 ### 2. 未エクスポートのシンボル
 
 ```cm
-// ⚠️ 警告: internal_helper は export されていない
+// ❌ エラー: internal_helper は export されていない
 import ./utils::internal_helper;
+// → function 'internal_helper' selected by import is not exported from './utils.cm'
 
 // ✅ 正しい: export されたシンボルのみ使用可能
 import ./utils::add;
 ```
 
-非export関数の選択importは現在は動作しますが、`cm check` / `cm lint` と `--strict` 付きコンパイルで警告が出ます（将来のバージョンでエラーになります）。
-公開したい関数には定義に `export` を付けてください。
-struct / enum / const / typedef などの型定義は透過的に参照できます。
+**v0.17.0から非export関数の選択importはコンパイルエラーになりました**（従来は警告のみ）。
+公開したい関数には定義に `export` を付けるか、exportリスト（`export { fn1, fn2 };`）へ追加してください。
+struct / enum / const / typedef などの型定義は従来どおり透過的に参照できます。
+
+### 3. 同名シンボルの多重import
+
+異なるモジュールから同名シンボルを取り込むと曖昧なためエラーになります（v0.17.0から。従来は先勝ちで黙って解決されていました）。
+
+```cm
+// ❌ エラー: 'compute' が2つのモジュールから来て曖昧
+import ./a::{compute};
+import ./b::{compute};
+// → symbol 'compute' is imported from both './a.cm' and './b.cm' and is ambiguous
+
+// ✅ 正しい: エイリアスで公開名を分ける
+import ./a::{compute};
+import ./b::{compute as compute_b};
+```
 
 ---
 

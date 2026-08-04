@@ -2,9 +2,9 @@
 title: std::core
 ---
 
-# std::core — コアユーティリティ
+# std::core / std::debug — コアユーティリティ
 
-汎用関数、型エイリアス、パニック機能を提供する基盤モジュールです。
+汎用関数、型エイリアス、アサーション・パニック機能を提供する基盤モジュールです。
 
 > **対応バックエンド:** Native (LLVM) のみ
 
@@ -64,6 +64,31 @@ import std::core::panic;
 
 panic("unreachable code");  // メッセージを出力して終了
 ```
+
+---
+
+## std::debug — アサーション（v0.17.0で追加）
+
+```cm
+import std::debug::{assert, assert_eq, assert_ne, panic};
+
+int main() {
+    assert(1 + 1 == 2, "math is broken");
+    assert_eq(2 + 3, 5);       // 一致しなければ期待値・実測値を表示して異常終了
+    assert_ne("abc", "abd");
+    return 0;
+}
+```
+
+| 関数 | 説明 |
+|------|------|
+| `assert(cond, msg)` | 条件が偽ならメッセージを表示して異常終了 |
+| `assert_eq<T: Eq>(left, right)` | 不一致なら両方の値を表示して異常終了 |
+| `assert_ne<T: Eq>(left, right)` | 一致なら両方の値を表示して異常終了 |
+| `panic(msg)` | メッセージを表示して即座に異常終了 |
+
+`assert_eq` / `assert_ne` は `<T: Eq>` ジェネリックで、プリミティブ・`string`・`with Eq` 構造体に使えます。
+成功時は何も出力しません（`#[test]` 関数や回帰テストの検証に向きます）。
 
 ---
 

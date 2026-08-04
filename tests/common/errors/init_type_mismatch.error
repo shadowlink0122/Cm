@@ -1,0 +1,1 @@
+Type mismatch in variable declaration 'x': expected 'int', got 'string'

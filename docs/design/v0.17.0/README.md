@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y1〜Y6）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y1〜Y6・Z1〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -18,6 +18,16 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 - [Y4: int×double混合二項演算が不正IR・SIGBUS](numeric-promotion-binary-ops.md) — `i + d`等でsitofp昇格が挿入されず検証エラーまたは無出力SIGBUS。checkerは受理（Critical・最頻出パターン）
 - [Y5: 固定長配列→スライス引数の暗黙変換欠落](fixed-array-to-slice-argument.md) — `sum_slice(fixed)`で固定長blobをヘッダ誤読しゴミ値（Critical・メソッドレシーバ経路には変換実装済み）
 - [Y6: スライスof固定長配列の要素格納表現が未定義](slice-of-fixed-array-elements.md) — `int[2][]`でpushはヘッダ格納・読みはblob仮定の不一致（High・仕様確定を含む）
+
+### 第4ラウンド追補: ユニオン・文字列要素の配列/スライス整合性（Z1〜Z3）
+
+要素サイズが型依存（ポインタ幅・タグ付き・可変ペイロード）の配列/スライスについて、サイズ決定サイトと実行の整合性を調査した。基本レイアウト（string固定長配列の全操作・ユニオン固定長配列の読み書き・大型構造体バリアント・構造体内string配列）はnative/jit/wasmで整合を確認済み。
+
+- [Z1: 配列検索ビルトインの要素型ディスパッチ欠落](array-builtin-elem-dispatch.md) — includes/indexOf/contains/some/every/findIndexが一律`_i32`固定。stringはポインタ切り詰め比較で3バックエンド3様、short/tiny/longは誤値、float/doubleはコンパイル不能（Critical・map/filterのi64対応と非対称）
+- [Z2: 固定長配列→スライス変換の手書き要素サイズ残存](array-to-slice-elem-size.md) — expr_member.cppの手書きswitchがshort/tiny/構造体/wasmポインタ幅で誤サイズ（High・layout-query-unificationの取り残し。死コードunion_slice_elem_sizeの削除を含む）
+- [Z3: 構造体内ユニオンフィールドのタグがwasmで読めない](wasm-union-in-struct-tag.md) — native/jit=true・wasm=falseの分裂。ポインタ幅8仮定のオフセット計算残存の見立て（High・Y1のサイト依存性の追加証拠も記録）
+- [Z4: 型検査のエラー検出漏れ3件](checker-error-coverage-holes.md) — push引数型不一致（内部エラー漏れ）・ユニオン非変種への`as`（無診断ゴミ値）・ループ外break（黙って無視）。エラーパターンテスト13本の整備で発覚（Critical×2）
+- [Z5: 暗黙変換と明示キャストの設計整理](implicit-explicit-cast-design.md) — 縮小変換が全て暗黙受理され、double→int暗黙代入は変換命令欠落でゴミ値・バックエンド分裂。stdlibの`as`127箇所の一部はY4の回避策。conversion_kind一元化と段階的エラー化の方針（Critical）
 
 ## コンパイラ基盤の構造的リファクタリング
 

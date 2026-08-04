@@ -5,10 +5,10 @@ parent: Tutorials
 
 # Cm 標準ライブラリ (Native向け)
 
-Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提供します。  
-すべてのモジュールは C/C++/Objective-C++ のバッキングコードで実装されています。
+Cm標準ライブラリのモジュール群です。
+ランタイム連携が必要なモジュール（io・mem・net・thread等）はNative (LLVM) 中心で、純Cm実装のモジュール（json・path・bytes・collections・strings等）は全バックエンドで使えます。
 
-> **注意:** WASM/JSバックエンドでは使用できません。
+> **注意:** 各ページ冒頭の「対応バックエンド」を確認してください（無印はNative中心）。
 
 **最終更新:** 2026-02-08
 
@@ -23,8 +23,10 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 | `std::mem` | メモリ管理 (alloc, size_of, Allocator) | [メモリ管理](mem.html) |
 | `std::math` | 数学関数 (sin, sqrt, PI, gcd等) | [数学関数](math.html) |
 | `std::core` | ユーティリティ (min, max, clamp, 型エイリアス) | [コア](core-utils.html) |
-| `std::env` / `std::process` | 環境変数・サブプロセス (Native/JIT) | [OS連携](os.html) |
+| `std::env` / `std::process` | 環境変数・args・サブプロセス (Native/JIT) | [OS連携](os.html) |
 | `std::path` / `std::bytes` | パス操作・バイト詰め (純Cm・全バックエンド) | [OS連携](os.html) |
+| `std::json` | JSONパース・直列化 (純Cm・全バックエンド) | [JSON](json.html) |
+| `std::debug` | assert / assert_eq / assert_ne / panic | [コア](core-utils.html) |
 
 ---
 
@@ -65,7 +67,8 @@ Cm標準ライブラリはNative (LLVM) バックエンド向けの機能を提�
 |-----------|------|------------|
 | `std::collections::vector` | `Vector<T>` 動的配列 | [Vector](collections/vector.html) |
 | `std::collections::queue` | `Queue<T>` FIFO | [Queue](collections/queue.html) |
-| `std::collections::hashmap` | `HashMap<K,V>` ハッシュマップ | [HashMap](collections/hashmap.html) |
+| `std::collections::hashmap` | `HashMap<K,V>` ハッシュマップ（getはOption返し） | [HashMap](collections/hashmap.html) |
+| `std::collections::treemap` | `TreeMap<K,V>` 順序付きマップ（AVL木・O(log n)） | [TreeMap](collections/treemap.html) |
 
 ---
 

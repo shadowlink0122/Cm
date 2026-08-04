@@ -202,13 +202,29 @@ import std::io::println;
 ### ❌ Using Unexported Symbols
 
 ```cm
-// Warning: internal_helper is not exported
+// Error: internal_helper is not exported
 import ./utils::internal_helper;
+// → function 'internal_helper' selected by import is not exported from './utils.cm'
 ```
 
-Selectively importing a non-exported function currently works, but `cm check` / `cm lint` and compiles with `--strict` emit a warning (it will become an error in a future version).
-Add `export` to the definition of functions you want to expose.
+**Since v0.17.0, selectively importing a non-exported function is a compile error** (previously it was only a warning).
+Add `export` to the definition of functions you want to expose, or list them in an export list (`export { fn1, fn2 };`).
 Type definitions (struct / enum / const / typedef) remain transparently accessible.
+
+### ❌ Importing the Same Symbol from Multiple Modules
+
+Importing the same symbol name from different modules is ambiguous and is rejected (since v0.17.0; previously the first import silently won).
+
+```cm
+// Error: 'compute' comes from two modules
+import ./a::{compute};
+import ./b::{compute};
+// → symbol 'compute' is imported from both './a.cm' and './b.cm' and is ambiguous
+
+// Correct: disambiguate with an item alias
+import ./a::{compute};
+import ./b::{compute as compute_b};
+```
 
 ---
 

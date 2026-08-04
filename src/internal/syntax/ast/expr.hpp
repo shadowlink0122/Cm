@@ -34,6 +34,8 @@ struct LiteralExpr {
     // 要素は（プレースホルダ内容文字列, パース済み式）。パース不能な内容は登録されず従来のリテラル扱いに落ちる
     std::vector<std::pair<std::string, std::shared_ptr<Expr>>> interp_parts;
     bool interp_scanned = false;  // 脱糖を一度だけ行うためのフラグ
+    bool interp_inferred =
+        false;  // 補間部分式を型検査で推論済みか（脱糖と推論はパスが異なるため別フラグ）
 
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}

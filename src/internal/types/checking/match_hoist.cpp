@@ -285,6 +285,17 @@ class MatchHoister {
             }
             return;
         }
+        if (auto* lit = e.as<ast::LiteralExpr>()) {
+            // 文字列リテラルの補間部分式は文の実行時に無条件で評価されるため退避対象に含める。
+            // 脱糖は型検査より前のここで一度だけ行う（型検査側の脱糖は冪等ガードで素通り）
+            desugar_string_interpolation(*lit, e.span);
+            for (auto& [content, part] : lit->interp_parts) {
+                if (part) {
+                    collect(*part, out);
+                }
+            }
+            return;
+        }
         if (auto* sl = e.as<ast::SliceExpr>()) {
             if (sl->object) {
                 collect(*sl->object, out);

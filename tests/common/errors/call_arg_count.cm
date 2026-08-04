@@ -1,0 +1,8 @@
+// 回帰(エラーパターン): 引数個数の不一致
+int f(int a) {
+    return a;
+}
+int main() {
+    int v = f(1, 2);
+    return 0;
+}

@@ -1,0 +1,8 @@
+// 回帰(エラーパターン): 存在しないフィールドの参照
+struct P { int x; }
+int main() {
+    P p;
+    p.x = 1;
+    int v = p.nofield;
+    return 0;
+}

@@ -335,10 +335,12 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
         return ast::make_char();
     if (lit.is_string()) {
         // 補間プレースホルダを一度だけ実ASTへ脱糖し、現在のスコープで通常の式として推論する（第4段b）。
-        // スコープ・move・未定義変数・型の検査が本物の検査器で行われ、HIR/MIRは脱糖済み式を消費する
-        if (!lit.interp_scanned) {
+        // スコープ・move・未定義変数・型の検査が本物の検査器で行われ、HIR/MIRは脱糖済み式を消費する。
+        // 脱糖はscrutinee退避プリパス（match_hoist）が先に行う場合があるため、推論は別フラグで必ず実行する
+        desugar_interpolation_parts(lit);
+        if (!lit.interp_inferred) {
+            lit.interp_inferred = true;
             Span lit_span = current_span_;
-            desugar_interpolation_parts(lit);
             for (auto& [content, pexpr] : lit.interp_parts) {
                 if (pexpr) {
                     infer_type(*pexpr);

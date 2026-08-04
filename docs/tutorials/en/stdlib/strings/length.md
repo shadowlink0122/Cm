@@ -40,3 +40,4 @@ int main() {
 - `indexOf()` returns a code-point index (`"あいうえお".indexOf("うえ")` is 2; -1 when not found)
 - `charAt()` / `at()` remain byte-based access (the byte-level API paired with `byte_len()`)
 - The JS backend counts surrogate pairs (such as emoji) as one code point
+- To build a string from raw bytes, use `std::strings::from_bytes(utiny[])` (byte sequences containing embedded NUL (0x00) are preserved; v0.17.0)

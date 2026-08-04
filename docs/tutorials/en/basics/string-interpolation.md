@@ -111,14 +111,38 @@ int main() {
 }
 ```
 
-## Escaping Braces
+## Escaping Braces and Combining with Interpolation
 
 To output literal `{` `}`, write `{{` `}}`.
+**As of v0.17.0, escaping and interpolation can be combined in every form**: you can embed placeholders inside escaped braces, as in `{{ ... {value} ... }}`.
 
 ```cm
-println("JSON: {{\"key\": {value}}}");
-// when value=42 → JSON: {"key": 42}
+import std::io::println;
+
+int main() {
+    int val = 42;
+    string name = "cm";
+
+    // placeholders inside escaped braces
+    println("{{text {val} ...}}");   // → {text 42 ...}
+    println("{{{val}}}");            // → {42}  ({{ + {val} + }})
+
+    // JSON template
+    println("json: {{\"key\": {val}, \"name\": \"{name}\"}}");
+    // → json: {"key": 42, "name": "cm"}
+
+    // CSS template (plain string literals interpolate the same way)
+    string css = "css {{ width: {val}px; }}";
+    println(css);                    // → css { width: 42px; }
+    return 0;
+}
 ```
+
+**Interpolation works in every string literal (v0.17.0)**: placeholders are evaluated not only in `println` arguments but also in ordinary string literals such as `string s = "sum: {x + 1}";`.
+Whenever you need literal braces, escape them with `{{` `}}` regardless of context (`string braces = "{{x}}";` yields the string `{x}`).
+
+**Known limitation**: if an interpolated value itself contains `{` or `}`, later placeholders in the same string may be mis-detected (for example, embedding a variable whose content is `{x}` can break the placeholders that follow).
+When embedding values that contain braces, build the string with `+` concatenation instead.
 
 ## Interpolation on the SV Backend
 
