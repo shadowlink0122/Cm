@@ -463,9 +463,50 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         }
     }
 
+    // 検索ビルトインの要素型サポート判定（Z1）。
+    // 値比較系（indexOf/includes/contains）はスカラ+stringの変種、述語系（some/every/findIndex）はi32/i64変種のみ存在する。
+    // 未対応の要素型は黙ってi32変種へ落とさず診断で停止する
+    auto search_elem_supported = [&](bool value_compare) -> bool {
+        auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
+        if (!elem) {
+            return true;
+        }
+        switch (elem->kind) {
+            case ast::TypeKind::Bool:
+            case ast::TypeKind::Char:
+            case ast::TypeKind::Tiny:
+            case ast::TypeKind::UTiny:
+            case ast::TypeKind::Short:
+            case ast::TypeKind::UShort:
+            case ast::TypeKind::Float:
+            case ast::TypeKind::UFloat:
+            case ast::TypeKind::Double:
+            case ast::TypeKind::UDouble:
+            case ast::TypeKind::String:
+                return value_compare;
+            case ast::TypeKind::Int:
+            case ast::TypeKind::UInt:
+            case ast::TypeKind::Long:
+            case ast::TypeKind::ULong:
+            case ast::TypeKind::ISize:
+            case ast::TypeKind::USize:
+                return true;
+            default:
+                return false;
+        }
+    };
+    auto diag_unsupported_elem = [&](const std::string& method) {
+        auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
+        error(current_span_, i18n::msgf(i18n::MsgId::TcArraySearchUnsupportedElem, method,
+                                        elem ? ast::type_to_string(*elem) : "unknown"));
+    };
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayIndexofTakes1Argument));
+        }
+        if (!search_elem_supported(true)) {
+            diag_unsupported_elem("indexOf");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -476,6 +517,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msgf(i18n::MsgId::TcArrayTakes1Argument, member.member));
         }
+        if (!search_elem_supported(true)) {
+            diag_unsupported_elem(member.member);
+            return ast::make_error();
+        }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
         }
@@ -484,6 +529,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     if (member.member == "some") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArraySomeTakes1Predicate));
+        }
+        if (!search_elem_supported(false)) {
+            diag_unsupported_elem("some");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -494,6 +543,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayEveryTakes1Predicate));
         }
+        if (!search_elem_supported(false)) {
+            diag_unsupported_elem("every");
+            return ast::make_error();
+        }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
         }
@@ -502,6 +555,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     if (member.member == "findIndex") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayFindindexTakes1Predicate));
+        }
+        if (!search_elem_supported(false)) {
+            diag_unsupported_elem("findIndex");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);

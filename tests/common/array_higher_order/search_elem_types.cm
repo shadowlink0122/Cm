@@ -1,0 +1,38 @@
+// 回帰(Z1): 検索ビルトイン（indexOf/includes/contains）の要素型ディスパッチ
+// 従来は一律_i32でstringがポインタ切り詰め比較（バックエンド分裂）・short/tiny/longが誤値・float/doubleが不正IRだった
+import std::io::println;
+int main() {
+    string[3] sarr = ["aa", "bb", "cc"];
+    bool s1 = sarr.contains("bb");
+    bool s2 = sarr.contains("zz");
+    int s3 = sarr.indexOf("cc");
+    println("{s1} {s2} {s3}");
+    string[] ss = [];
+    ss.push("aa");
+    ss.push("bb");
+    string dyn = "b" + "b";
+    bool s4 = ss.contains(dyn);
+    int s5 = ss.indexOf(dyn);
+    int s6 = ss.indexOf("zz");
+    println("{s4} {s5} {s6}");
+    short[4] sh = [10, 20, 30, 40];
+    println("{sh.contains(20)} {sh.contains(99)} {sh.indexOf(30)}");
+    tiny[3] tn = [1, 2, 3];
+    println("{tn.contains(2)} {tn.indexOf(3)}");
+    long[3] ls = [9000000000, 2, 3];
+    println("{ls.contains(9000000000)} {ls.indexOf(3)}");
+    long[] lsl = [];
+    lsl.push(9000000000);
+    println("{lsl.contains(9000000000)} {lsl.contains(1)}");
+    float[3] fl = [1.5, 2.5, 3.5];
+    println("{fl.contains(2.5)} {fl.indexOf(3.5)}");
+    double[3] dl = [1.5, 2.5, 3.5];
+    println("{dl.contains(2.5)} {dl.indexOf(9.9)}");
+    int[4] ia = [5, 6, 7, 8];
+    println("{ia.contains(7)} {ia.indexOf(8)}");
+    char[3] ca = ['a', 'b', 'c'];
+    bool c1 = ca.contains('b');
+    int c2 = ca.indexOf('c');
+    println("{c1} {c2}");
+    return 0;
+}

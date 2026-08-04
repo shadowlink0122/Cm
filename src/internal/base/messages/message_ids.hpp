@@ -396,6 +396,7 @@ enum class MsgId : int {
     TcSliceTakes1IndexArgument,
     TcSliceClearTakesNoArguments,
     TcArrayIndexofTakes1Argument,
+    TcArraySearchUnsupportedElem,
     TcArrayTakes1Argument,
     TcArraySomeTakes1Predicate,
     TcArrayEveryTakes1Predicate,

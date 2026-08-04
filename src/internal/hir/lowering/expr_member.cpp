@@ -16,6 +16,47 @@ namespace cm::hir {
 
 namespace {
 
+// 検索ビルトイン（値比較系: indexOf/includes/contains）の要素型サフィックス（Z1）。
+// 従来は一律_i32でstringがポインタ切り詰め比較・short/tiny/longがstride誤り・float/doubleが不正IRになっていた。
+// 未対応の要素型（構造体・ユニオン等）はnulloptを返し、型検査が診断済みである
+std::optional<std::string> array_search_suffix(const ast::TypePtr& elem) {
+    if (!elem) {
+        return std::nullopt;
+    }
+    switch (elem->kind) {
+        case ast::TypeKind::Bool:
+        case ast::TypeKind::Char:
+        case ast::TypeKind::Tiny:
+        case ast::TypeKind::UTiny:
+            return std::string("i8");
+        case ast::TypeKind::Short:
+        case ast::TypeKind::UShort:
+            return std::string("i16");
+        case ast::TypeKind::Int:
+        case ast::TypeKind::UInt:
+            return std::string("i32");
+        case ast::TypeKind::Long:
+        case ast::TypeKind::ULong:
+        case ast::TypeKind::ISize:
+        case ast::TypeKind::USize:
+            return std::string("i64");
+        case ast::TypeKind::Float:
+        case ast::TypeKind::UFloat:
+            return std::string("f32");
+        case ast::TypeKind::Double:
+        case ast::TypeKind::UDouble:
+            return std::string("f64");
+        case ast::TypeKind::String:
+            return std::string("str");
+        default:
+            return std::nullopt;
+    }
+}
+
+}  // namespace
+
+namespace {
+
 // 配列HOF（map/filter/reduce等）共通のデータ引数・サイズ引数を構築する。
 // 固定長配列: 配列アドレス(&arr) + 静的サイズ。
 // スライス: CmSlice*値そのもの + サイズ-1（ランタイムが負サイズをCmSlice*として展開する。
@@ -412,7 +453,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "indexOf") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_indexOf_i32";
+                // 要素型でランタイム変種を選択する（Z1。未対応型は型検査が診断済みのためi32へフォールバック）
+                auto idx_suffix = array_search_suffix(obj_type->element_type);
+                hir->func_name =
+                    "__builtin_array_indexOf_" + (idx_suffix ? *idx_suffix : std::string("i32"));
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
@@ -425,7 +469,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "includes" || mem.member == "contains") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_includes_i32";
+                // 要素型でランタイム変種を選択する（Z1。未対応型は型検査が診断済みのためi32へフォールバック）
+                auto inc_suffix = array_search_suffix(obj_type->element_type);
+                hir->func_name =
+                    "__builtin_array_includes_" + (inc_suffix ? *inc_suffix : std::string("i32"));
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {

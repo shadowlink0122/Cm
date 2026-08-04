@@ -352,11 +352,22 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
     }
 
     // 配列メソッド
-    if ((name == "__builtin_array_indexOf_i32" || name == "__builtin_array_indexOf_i64") &&
+    if ((name == "__builtin_array_indexOf_i64") && argStrs.size() >= 3) {
+        // long要素はNumber（固定長配列）とBigInt（スライス）が混在するため、緩い等価（==）で数値比較する
+        return "__cm_unwrap(" + argStrs[0] + ").findIndex((__e) => __e == " + argStrs[2] + ")";
+    }
+    if ((name == "__builtin_array_includes_i64") && argStrs.size() >= 3) {
+        return "__cm_unwrap(" + argStrs[0] + ").some((__e) => __e == " + argStrs[2] + ")";
+    }
+    if ((name == "__builtin_array_indexOf_i32" || name == "__builtin_array_indexOf_i8" ||
+         name == "__builtin_array_indexOf_i16" || name == "__builtin_array_indexOf_f32" ||
+         name == "__builtin_array_indexOf_f64" || name == "__builtin_array_indexOf_str") &&
         argStrs.size() >= 3) {
         return "__cm_unwrap(" + argStrs[0] + ").indexOf(" + argStrs[2] + ")";
     }
-    if ((name == "__builtin_array_includes_i32" || name == "__builtin_array_includes_i64") &&
+    if ((name == "__builtin_array_includes_i32" || name == "__builtin_array_includes_i8" ||
+         name == "__builtin_array_includes_i16" || name == "__builtin_array_includes_f32" ||
+         name == "__builtin_array_includes_f64" || name == "__builtin_array_includes_str") &&
         argStrs.size() >= 3) {
         return "__cm_unwrap(" + argStrs[0] + ").includes(" + argStrs[2] + ")";
     }

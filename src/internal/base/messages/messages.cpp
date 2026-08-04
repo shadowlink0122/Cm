@@ -1122,6 +1122,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcArrayIndexofTakes1Argument
     {"Array indexOf() takes 1 argument",
      "配列の indexOf() は1つの引数を取ります"},
+    // TcArraySearchUnsupportedElem
+    {"Array {0}() does not support element type '{1}'",
+     "配列の {0}() は要素型 '{1}' に対応していません"},
     // TcArrayTakes1Argument
     {"Array {0}() takes 1 argument",
      "配列の {0}() は1つの引数を取ります"},

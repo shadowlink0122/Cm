@@ -1984,6 +1984,101 @@ bool __builtin_array_includes_i32(int32_t* arr, int64_t size, int32_t value) {
     return __builtin_array_indexOf_i32(arr, size, value) >= 0;
 }
 
+int32_t __builtin_array_indexOf_i8(int8_t* arr, int64_t size, int8_t value) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+bool __builtin_array_includes_i8(int8_t* arr, int64_t size, int8_t value) {
+    return __builtin_array_indexOf_i8(arr, size, value) >= 0;
+}
+
+int32_t __builtin_array_indexOf_i16(int16_t* arr, int64_t size, int16_t value) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+bool __builtin_array_includes_i16(int16_t* arr, int64_t size, int16_t value) {
+    return __builtin_array_indexOf_i16(arr, size, value) >= 0;
+}
+
+int32_t __builtin_array_indexOf_f32(float* arr, int64_t size, float value) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+bool __builtin_array_includes_f32(float* arr, int64_t size, float value) {
+    return __builtin_array_indexOf_f32(arr, size, value) >= 0;
+}
+
+int32_t __builtin_array_indexOf_f64(double* arr, int64_t size, double value) {
+    CM_HOF_UNWRAP(arr, size);
+    if (!arr)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        if (arr[i] == value) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+bool __builtin_array_includes_f64(double* arr, int64_t size, double value) {
+    return __builtin_array_indexOf_f64(arr, size, value) >= 0;
+}
+
+// 文字列要素はポインタ値でなく内容（strcmp）で比較する（Z1: ポインタ切り詰め比較でjit/native/wasmが分裂していた）。
+// スライスのポインタ要素ストライドはヘッダのelem_sizeに従う（wasm32ではMIR側の格納ストライドとCのchar**幅が一致しないため必須）
+int32_t __builtin_array_indexOf_str(char** arr, int64_t size, const char* value) {
+    int64_t stride = (int64_t)sizeof(char*);
+    if (size < 0) {
+        CmHofSlice* __cm_s = (CmHofSlice*)arr;
+        arr = (char**)__cm_s->data;
+        size = __cm_s->len;
+        if (__cm_s->elem_size > 0) {
+            stride = __cm_s->elem_size;
+        }
+    }
+    if (!arr)
+        return -1;
+    for (int64_t i = 0; i < size; i++) {
+        char* elem = *(char**)((char*)arr + i * stride);
+        if (elem == value) {
+            return (int32_t)i;
+        }
+        if (elem && value && strcmp(elem, value) == 0) {
+            return (int32_t)i;
+        }
+    }
+    return -1;
+}
+
+bool __builtin_array_includes_str(char** arr, int64_t size, const char* value) {
+    return __builtin_array_indexOf_str(arr, size, value) >= 0;
+}
+
+
 // ============================================================
 // Escape Processing
 // ============================================================

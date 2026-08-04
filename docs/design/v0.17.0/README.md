@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y5〜Y6・Z1〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y5〜Y6・Z2〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -23,7 +23,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 
 要素サイズが型依存（ポインタ幅・タグ付き・可変ペイロード）の配列/スライスについて、サイズ決定サイトと実行の整合性を調査した。基本レイアウト（string固定長配列の全操作・ユニオン固定長配列の読み書き・大型構造体バリアント・構造体内string配列）はnative/jit/wasmで整合を確認済み。
 
-- [Z1: 配列検索ビルトインの要素型ディスパッチ欠落](array-builtin-elem-dispatch.md) — includes/indexOf/contains/some/every/findIndexが一律`_i32`固定。stringはポインタ切り詰め比較で3バックエンド3様、short/tiny/longは誤値、float/doubleはコンパイル不能（Critical・map/filterのi64対応と非対称）
+- Z1: 配列検索ビルトインの要素型ディスパッチ欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/array-builtin-elem-dispatch.md)。値比較系の全幅+str変種を両ランタイムへ追加・js緩い等価対応・未対応要素の診断化）
 - [Z2: 固定長配列→スライス変換の手書き要素サイズ残存](array-to-slice-elem-size.md) — expr_member.cppの手書きswitchがshort/tiny/構造体/wasmポインタ幅で誤サイズ（High・layout-query-unificationの取り残し。死コードunion_slice_elem_sizeの削除を含む）
 - [Z3: 構造体内ユニオンフィールドのタグがwasmで読めない](wasm-union-in-struct-tag.md) — native/jit=true・wasm=falseの分裂。ポインタ幅8仮定のオフセット計算残存の見立て（High・Y1のサイト依存性の追加証拠も記録）
 - [Z4: 型検査のエラー検出漏れ3件](checker-error-coverage-holes.md) — push引数型不一致（内部エラー漏れ）・ユニオン非変種への`as`（無診断ゴミ値）・ループ外break（黙って無視）。エラーパターンテスト13本の整備で発覚（Critical×2）

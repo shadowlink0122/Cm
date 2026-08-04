@@ -56,3 +56,18 @@ int main() {
 ## 検出経緯
 
 第4ラウンド追補（ユニオン・文字列要素の配列/スライス整合性調査）で検出。最小再現は `.tmp/bughunt4/z/z02_string_array_receiver.cm` / `z/z03_short_array_receiver.cm` / `z07_short_only.cm` / `z09_long_contains.cm`。
+
+## 実装記録（2026-08-05）
+
+- HIR脱糖（expr_member.cpp）へ値比較系（indexOf/includes/contains）の要素型サフィックス選択`array_search_suffix`（i8/i16/i32/i64/f32/f64/str）を導入した。述語系（some/every/findIndex）は既存のi32/i64ディスパッチを維持し、他の幅は型検査で診断する。
+- ランタイム変種10本（indexOf/includes × i8/i16/f32/f64/str）をnative/wasm両runtime_format.cへ追加し、ビルトインレジストリ（builtin_registry.hpp）へ登録した。レジストリは名前昇順の二分探索表のため挿入時にソートを崩さないこと（崩すと既存関数まで未解決になる）。既存変種と同じCM_HOF_UNWRAP（負サイズ→CmSlice*展開）を適用する。
+- str変種はstrcmpの内容比較とし、スライスの要素ストライドはヘッダのelem_size駆動で歩く。wasm32ではMIR側の格納ストライド（8）とCのchar**幅（4）が一致せず2要素目以降がずれるため必須（Z2のポインタ幅仮定の顕在化。Z2修正後も安全側の実装として維持する）。
+- jsバックエンドは_i64変種を緩い等価（==）の述語検索（some/findIndex）へマッピングした。long要素が固定長配列=Number・スライス=BigIntと混在表現のため、SameValueZeroのincludesでは一致しない（H5の残余）。他の幅とstrは既存の.includes/.indexOfマッピングを共有する。
+- 型検査（method.cpp）に要素型サポート判定を追加した。値比較系はスカラ+string以外（構造体・ユニオン等）、述語系はi32/i64系以外を`Array {0}() does not support element type '{1}'`（i18n新設）で診断する。jsのみ参照同一性で動いていた構造体要素のindexOf/includes（tests/js/slice/struct_slice_methods.cm）はバックエンド分裂のため診断対象へ変更し、テストから該当行を撤去した。
+- 回帰テスト`tests/common/array_higher_order/search_elem_types.cm`（string固定/スライス・動的生成文字列・short/tiny/long/float/double/int/char × contains/indexOf）をnative/jit/wasm/jsの4系一致で追加。全スイート通過。
+
+### 将来課題
+
+- 述語系（some/every/findIndex）のi8/i16/f32/f64変種追加（現在は診断で停止）。
+- 構造体要素の検索はEq（op_eq）ベースの比較変種を設計してから許可する。
+- jsのlong要素表現（固定長=Number/スライス=BigInt）の統一はH5の残余としてjs-ts-value-semanticsの将来課題に含める。
