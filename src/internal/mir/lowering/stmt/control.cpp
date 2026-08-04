@@ -98,11 +98,13 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         }
 
         if (!returned_as_slice) {
-            // 整数値を浮動小数戻り値型で返す場合はsitofp/uitofp相当のCastを挿入する（B2）
+            // 整数値を浮動小数戻り値型で返す場合はsitofp/uitofp相当のCastを、
+            // ユニオン戻り値型へ変種値を返す場合はユニオン構築Cast（タグ+ペイロード書き込み）を挿入する（B2/Y2）
             if (return_src.projections.empty() &&
                 ctx.func->return_local < ctx.func->locals.size()) {
-                LocalId coerced = ctx.coerce_to_float_context(
-                    return_src.local, ctx.func->locals[ctx.func->return_local].type);
+                const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+                LocalId coerced = ctx.coerce_to_float_context(return_src.local, ret_type);
+                coerced = ctx.coerce_to_union(coerced, ret_type);
                 return_src = MirPlace{coerced};
             }
             // 戻り値をreturn用ローカル変数に代入

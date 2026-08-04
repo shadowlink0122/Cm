@@ -467,6 +467,26 @@ LocalId LoweringContext::coerce_to_float_context(LocalId value, const hir::TypeP
     return casted;
 }
 
+// 宛先型がユニオンで値が変種型の場合、ユニオン構築Cast（タグ+ペイロード書き込み）を経由した一時を返す（Y1〜Y3）。
+// let初期化・単純代入は宛先placeへ直接Castするため本ヘルパを使わないが、意味論は同一である
+LocalId LoweringContext::coerce_to_union(LocalId value, const hir::TypePtr& dest_type) {
+    if (!dest_type || value >= func->locals.size()) {
+        return value;
+    }
+    hir::TypePtr dest = resolve_typedef(dest_type);
+    if (!dest || dest->kind != hir::TypeKind::Union) {
+        return value;
+    }
+    hir::TypePtr src = resolve_typedef(func->locals[value].type);
+    if (src && src->kind == hir::TypeKind::Union) {
+        return value;
+    }
+    LocalId casted = new_temp(dest);
+    push_statement(MirStatement::assign(MirPlace{casted},
+                                        MirRvalue::cast(MirOperand::copy(MirPlace{value}), dest)));
+    return casted;
+}
+
 // LLVMのDataLayout（自然アライメント・パッキングなし）と一致するアライメントを計算する
 int64_t LoweringContext::layout_align(const hir::TypePtr& type) const {
     if (!type) {

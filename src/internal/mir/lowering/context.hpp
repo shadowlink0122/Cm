@@ -267,6 +267,11 @@ class LoweringContext {
     // float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
     LocalId coerce_to_float_context(LocalId value, const hir::TypePtr& target_type);
 
+    // 宛先型がユニオンで値が変種型の場合、タグ+ペイロードを書き込むユニオン構築Castを経由した一時を返す（Y1〜Y3）。
+    // 該当しない（宛先が非ユニオン・値が既にユニオン）場合はvalueをそのまま返す。
+    // 値消費サイト（return・構造体リテラルフィールド・push引数・スライスリテラル要素等）はこのヘルパを通し、タグ未構築のペイロード直書きを防ぐ
+    LocalId coerce_to_union(LocalId value, const hir::TypePtr& dest_type);
+
     // LLVMのDataLayout（自然アライメント）と一致する型サイズ/アライメントを計算する
     // スライスのblob要素サイズ算出用（calculate_type_sizeは見積もりでありレイアウト非互換）
     int64_t layout_size(const hir::TypePtr& type) const;

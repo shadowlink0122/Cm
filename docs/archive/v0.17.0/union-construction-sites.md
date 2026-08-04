@@ -75,3 +75,16 @@ MIRのlet初期化・代入loweringはユニオン型宛先を検出して `MirR
 ## 検出経緯
 
 v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出。最小再現は `.tmp/bughunt4/min_u_field.cm` / `min_u_ret.cm` / `min_u_sites.cm`、網羅バッテリーは同 `u/`。
+
+## 実装記録（2026-08-05）
+
+- LoweringContextへ`coerce_to_union(value, dest_type)`を追加した（`src/internal/mir/lowering/context.cpp`）。宛先の解決型がユニオンかつ値が非ユニオンの場合のみ、ユニオン構築Cast（タグ+ペイロード書き込み）を経由した一時を返す。
+- 適用サイト: return（stmt/control.cpp、coerce_to_float_contextと連鎖）・構造体リテラルフィールド（expr/construct.cpp）・スライスpush引数（expr_slice.cpp）・スライスリテラル要素（stmt/let.cpp）・呼び出し引数とMIR側デフォルト引数補完（expr_call.cpp）。let初期化・単純代入は宛先placeへの直接Cast（一時を作らない既存実装）を維持した（意味論同一・コピー1回少ない）。
+- 固定長配列リテラル要素は既存の汎用型不一致Castが既に構築しており変更不要だった。デフォルト引数はHIR補完経由でi32がそのままユニオンパラメータへ渡りLLVM検証エラーになる破損を本実装中に追加検出し、引数サイトの適用で同時に修正した。
+- 回帰テスト`tests/common/types/union_construction_sites.cm`（サイト別マトリクス: 単一/複数フィールドリテラル・フィールド代入・int/double戻り値・push・スライス/固定長リテラル・引数・デフォルト引数・24バイト構造体バリアント）を追加し、native/jit/wasmで値一致を確認。unit・regression・interpreter・llvm・llvm-wasm・js・svの全スイート通過。
+
+### 残課題（別対応）
+
+- 混在変種の三項/match腕（`Num t = c ? 1 : 2.5;`）は腕の型が先に統一（2.5→int変換）されてからユニオン構築されるため誤変種になる。checkerが期待型（ユニオン）を腕へ伝播し腕ごとに構築する拡張が必要（infer_ternary/infer_matchへの期待型配線）。
+- 生変種値の直接引数はcheckerが拒否する（`show(7)`→Argument type mismatch）。let/return/フィールドは受理するため受理規則の非対称があり、暗黙変換設計（Z5のconversion_kind）で統一判断する。
+- 構造体内ユニオンのwasmタグ読み分裂はZ3（wasm-union-in-struct-tag.md）が扱う。

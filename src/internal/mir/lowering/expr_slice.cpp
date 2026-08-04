@@ -167,6 +167,9 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
     if (is_push) {
         LocalId value_local = lower_expression(*call.args[1], ctx);
 
+        // ユニオン要素スライスへ変種値をpushする場合はユニオン構築Cast経由でタグ+ペイロードを揃えてからblob格納する（Y3）
+        value_local = ctx.coerce_to_union(value_local, elem_type);
+
         // 多次元スライスへの配列リテラル直接push（X3）: リテラルは固定長配列blobとしてlowerされるためcm_slice_push_sliceが期待するCmSliceヘッダにならない。cm_array_to_sliceでヒープスライスへ実体化してからpushする（空リテラルはlen=0の正規ヘッダ）
         if (disp.cls == SliceElemClass::InnerSlice && value_local < ctx.func->locals.size()) {
             hir::TypePtr vt = ctx.func->locals[value_local].type;

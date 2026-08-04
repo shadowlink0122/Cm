@@ -476,6 +476,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                         } else {
                             elem_value = expr_lowering->lower_expression(*elem, ctx);
 
+                            // ユニオン要素スライスの変種値要素はユニオン構築Cast経由でタグ+ペイロードを揃える（Y3）
+                            elem_value = ctx.coerce_to_union(elem_value, elem_type);
+
                             // インターフェイス要素スライスへの具象構造体要素:
                             // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
                             if (elem_kind == hir::TypeKind::Struct && ctx.interface_names &&
