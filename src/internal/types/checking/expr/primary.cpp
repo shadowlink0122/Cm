@@ -141,6 +141,34 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             // ターゲット型を返す
             inferred_type = cast_expr->target_type;
+            // ユニオン値のasダウンキャストは変種のいずれかであること（Z4穴2）。
+            // isには同検査があるがasに無く、非変種型への`v as double`がペイロードのビット再解釈ゴミ値になっていた
+            {
+                auto op_resolved = resolve_typedef(operand_type);
+                if (op_resolved && op_resolved->kind == ast::TypeKind::Union &&
+                    cast_expr->target_type) {
+                    auto tgt_resolved = resolve_typedef(cast_expr->target_type);
+                    // 同一ユニオンへの恒等キャスト（typedef別名経由を含む）は許可する
+                    const bool same_union =
+                        tgt_resolved && tgt_resolved->kind == ast::TypeKind::Union &&
+                        ast::type_to_string(*tgt_resolved) == ast::type_to_string(*op_resolved);
+                    if (!same_union) {
+                        std::string target_name = ast::type_to_string(*cast_expr->target_type);
+                        bool found = false;
+                        for (const auto& v : ast::union_variant_types(op_resolved)) {
+                            if (v && ast::type_to_string(*v) == target_name) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            error(expr.span,
+                                  i18n::msgf(i18n::MsgId::TypeTheTargetTypeIsNot, target_name));
+                            inferred_type = ast::make_error();
+                        }
+                    }
+                }
+            }
             // 不正な as キャストを拒否する（C10）。
             // 数値スカラ → string はビット再解釈になりクラッシュ・空文字化の原因のため型検査で弾く。
             // ユニオン downcast（union as variant）やポインタ/cstring → string は正当なので対象外。

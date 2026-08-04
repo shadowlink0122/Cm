@@ -1,0 +1,7 @@
+// 回帰(Z4穴2): ユニオンの変種に無い型へのasダウンキャストは拒否（従来はビット再解釈のゴミ値）
+typedef V = int | string;
+int main() {
+    V v = 1;
+    double d = v as double;
+    return 0;
+}

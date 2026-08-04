@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y6・Z3〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y6・Z3・Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -26,7 +26,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 - Z1: 配列検索ビルトインの要素型ディスパッチ欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/array-builtin-elem-dispatch.md)。値比較系の全幅+str変種を両ランタイムへ追加・js緩い等価対応・未対応要素の診断化）
 - Z2: 固定長配列→スライス変換の手書き要素サイズ残存 — **修正済み**（[archive移動](../../archive/v0.17.0/array-to-slice-elem-size.md)。要素サイズ決定をMIRのlayout API 1系統へ統一・死コード削除）
 - [Z3: 構造体内ユニオンフィールドのタグがwasmで読めない](wasm-union-in-struct-tag.md) — native/jit=true・wasm=falseの分裂。ポインタ幅8仮定のオフセット計算残存の見立て（High・Y1のサイト依存性の追加証拠も記録）
-- [Z4: 型検査のエラー検出漏れ3件](checker-error-coverage-holes.md) — push引数型不一致（内部エラー漏れ）・ユニオン非変種への`as`（無診断ゴミ値）・ループ外break（黙って無視）。エラーパターンテスト13本の整備で発覚（Critical×2）
+- Z4: 型検査のエラー検出漏れ3件 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-error-coverage-holes.md)。push要素型検査・非変種as拒否・ループ深度によるbreak/continue診断、エラーテスト4本追加）
 - [Z5: 暗黙変換と明示キャストの設計整理](implicit-explicit-cast-design.md) — 縮小変換が全て暗黙受理され、double→int暗黙代入は変換命令欠落でゴミ値・バックエンド分裂。stdlibの`as`127箇所の一部はY4の回避策。conversion_kind一元化と段階的エラー化の方針（Critical）
 
 ## コンパイラ基盤の構造的リファクタリング

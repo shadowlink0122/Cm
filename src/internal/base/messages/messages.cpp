@@ -1125,6 +1125,15 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcArraySearchUnsupportedElem
     {"Array {0}() does not support element type '{1}'",
      "配列の {0}() は要素型 '{1}' に対応していません"},
+    // TcSlicePushTypeMismatch
+    {"Slice push() element type mismatch: expected '{0}', got '{1}'",
+     "スライスの push() の要素型が一致しません: 期待 '{0}'、実際 '{1}'"},
+    // TcBreakOutsideLoop
+    {"'break' outside of a loop",
+     "ループの外では 'break' を使えません"},
+    // TcContinueOutsideLoop
+    {"'continue' outside of a loop",
+     "ループの外では 'continue' を使えません"},
     // TcArrayTakes1Argument
     {"Array {0}() takes 1 argument",
      "配列の {0}() は1つの引数を取ります"},

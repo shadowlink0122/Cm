@@ -56,3 +56,10 @@ checkerにループ/switchネスト深度を持たせ、外側での`break`/`con
 ## 検出経緯
 
 第4ラウンド追補（エラーパターンテスト整備）で検出。当初のプローブは`grep "error"`が集計行`errors: 0`へ誤マッチして穴を見逃しており、終了コード判定へ修正して発覚した（検査スクリプトの教訓として記録）。
+
+## 実装記録（2026-08-05）
+
+- 穴1（push引数型不一致）: method.cppのpush検査で`infer_type_expecting`の結果と要素型を`types_compatible`で照合し、不一致は新設i18n診断（TcSlicePushTypeMismatch）で拒否する。ユニオン要素への変種値push（Y3のユニオン構築対象）は変種集合との互換で許可する。
+- 穴2（非変種as）: primary.cppのCastExpr検査（非type_check側）で、オペランドの解決型がユニオンの場合に`is`と同一の変種集合検査を追加した（メッセージはTypeTheTargetTypeIsNotを共用）。typedef別名経由を含む同一ユニオンへの恒等キャストは許可する。
+- 穴3（ループ外break/continue）: checkerへ`loop_depth_`を追加し、while/for/for-in本体で増減させ、深度0でのbreak/continueを新設i18n診断で拒否する。Cmのswitchは自動break（明示breakはループ専用）のためswitch深度の追跡は不要。defer内のbreak（defer_break.cm）はループ内チェックのため影響しない。
+- エラーテスト4本（push_elem_type_mismatch・union_as_nonvariant・break_outside_loop・continue_outside_loop）をtests/common/errorsへ追加した。正当パターン（ユニオン変種push・有効なasダウンキャスト・ループ内break/continue・deferとの併用）の非退行を確認し、全スイート通過。

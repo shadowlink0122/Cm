@@ -201,6 +201,10 @@ class TypeChecker {
     // ============================================================
     ScopeStack scopes_;
     ast::TypePtr current_return_type_;
+
+    // ループ本体のネスト深度（break/continueのループ外使用診断用。Z4穴3。
+    // Cmのswitchは自動breakのため明示break/continueはループ専用）
+    int loop_depth_ = 0;
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
 

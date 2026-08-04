@@ -198,6 +198,15 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
             }
             scopes_.pop();
         }
+    } else if (stmt.as<ast::BreakStmt>()) {
+        // ループ外のbreakは黙って消えるため診断する（Z4穴3。switchは自動breakで明示breakはループ専用）
+        if (loop_depth_ == 0) {
+            error(current_span_, i18n::msg(i18n::MsgId::TcBreakOutsideLoop));
+        }
+    } else if (stmt.as<ast::ContinueStmt>()) {
+        if (loop_depth_ == 0) {
+            error(current_span_, i18n::msg(i18n::MsgId::TcContinueOutsideLoop));
+        }
     } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
         if (defer_stmt->body) {
             check_statement(*defer_stmt->body);
@@ -616,9 +625,11 @@ void TypeChecker::check_while(ast::WhileStmt& while_stmt) {
     }
 
     scopes_.push();
+    loop_depth_++;
     for (auto& s : while_stmt.body) {
         check_statement(*s);
     }
+    loop_depth_--;
     scopes_.pop();
 }
 
@@ -640,9 +651,11 @@ void TypeChecker::check_for(ast::ForStmt& for_stmt) {
         infer_type(*for_stmt.update);
     }
 
+    loop_depth_++;
     for (auto& s : for_stmt.body) {
         check_statement(*s);
     }
+    loop_depth_--;
 
     scopes_.pop();
 }
@@ -730,9 +743,11 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     // ループ変数はイテレーションで毎回代入されるため初期化済みとして扱う
     mark_variable_initialized(for_in.var_name);
 
+    loop_depth_++;
     for (auto& s : for_in.body) {
         check_statement(*s);
     }
+    loop_depth_--;
 
     scopes_.pop();
 }

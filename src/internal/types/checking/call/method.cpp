@@ -429,7 +429,30 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
             }
             if (!member.args.empty()) {
                 // レシーバの要素型を期待型として引数へ渡す（X3/X4。無名リテラルの型決定はinfer_type_expectingへ一元化）
-                infer_type_expecting(*member.args[0], obj_type->element_type);
+                auto push_arg_type = infer_type_expecting(*member.args[0], obj_type->element_type);
+                // 要素型と引数型の互換検査（Z4穴1: 従来は無検査でエラー型が下流へ漏れ内部エラーになっていた）。
+                // ユニオン要素への変種値push（Y3）はユニオン構築で受けるため互換とみなす
+                if (obj_type->element_type && push_arg_type &&
+                    push_arg_type->kind != ast::TypeKind::Error) {
+                    auto elem_resolved = resolve_typedef(obj_type->element_type);
+                    auto arg_resolved = resolve_typedef(push_arg_type);
+                    bool ok = types_compatible(obj_type->element_type, push_arg_type);
+                    if (!ok && elem_resolved && arg_resolved &&
+                        elem_resolved->kind == ast::TypeKind::Union) {
+                        for (const auto& v : ast::union_variant_types(elem_resolved)) {
+                            if (v && types_compatible(v, push_arg_type)) {
+                                ok = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!ok) {
+                        error(current_span_, i18n::msgf(i18n::MsgId::TcSlicePushTypeMismatch,
+                                                        ast::type_to_string(*elem_resolved),
+                                                        ast::type_to_string(*arg_resolved)));
+                        return ast::make_void();
+                    }
+                }
                 // キャプチャ付きクロージャのスライス格納は環境喪失・未解決シンボルになるため拒否（V7）
                 if (obj_type->element_type &&
                     obj_type->element_type->kind == ast::TypeKind::Function &&
