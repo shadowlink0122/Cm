@@ -11,7 +11,7 @@
 3. HIR段: `HirLowering::lower_member`（`src/internal/hir/lowering/expr_member.cpp:44`）がメソッド呼び出しを`mangle::method_name`による`Type__method`名の`HirCall`へ脱糖し、レシーバ式を第0引数に据える（expr_member.cpp:1070-1119）。
 4. MIR段: `ExprLowering::lower_call`（`src/internal/mir/lowering/expr_call.cpp:20`）が構造体レシーバへの参照渡しを構成し、`lower_member`（`src/internal/mir/lowering/expr/access.cpp:17`）とスライスbuiltin（`src/internal/mir/lowering/expr_slice.cpp:19`）がチェーン中間結果の実体化を行う。
 
-添字式をレシーバとする`m[0].push(x)`の場所解決（`resolve_receiver_place`）の詳細は[チェーンレシーバの解決](../slices/chain-receiver.md)が担当し、本書はチェーン全体を貫く段横断の設計を扱う。
+添字式をレシーバとする`m[0].push(x)`の場所解決（唯一の場所化API`lower_place`）の詳細は[チェーンレシーバの解決](../slices/chain-receiver.md)が担当し、本書はチェーン全体を貫く段横断の設計を扱う。
 
 ## データ構造とアルゴリズム
 
@@ -61,7 +61,7 @@ return std::make_unique<HirExpr>(std::move(hir), type);  // typeは型検査済�
 - `->`レシーバ（`ptr->method()`）: ポインタをデリファレンスした一時コピーへの参照を渡し、呼び出し後に`*ptr`へ書き戻す（expr_call.cpp:106-164, :368-380）。
 - それ以外（チェーン中間の呼び出し戻り値等）: `lower_expression`で式を評価して一時ローカルへ実体化し、その一時への`Ref`を渡す（expr_call.cpp:181-186）。これが「呼び出し戻り値レシーバの一時実体化」であり、`p.translate(5,5).translate(10,10)`の2段目はこの経路を通る。
 
-フィールドアクセスがチェーン末尾に来る場合（`p.translate(100, 200).y`）は、MIR側`lower_member`がベース式を`lower_expression`で一時へ実体化してから（access.cpp:46）フィールドプロジェクションで読み出す（access.cpp:250-255）。スライスbuiltinのレシーバは`resolve_receiver_place`で場所解決を試み、場所を持たない`make_slice().len()`は同様に一時へ実体化して読む（expr_slice.cpp:31-39）。
+フィールドアクセスがチェーン末尾に来る場合（`p.translate(100, 200).y`）は、MIR側`lower_member`がベース式を`lower_expression`で一時へ実体化してから（access.cpp:46）フィールドプロジェクションで読み出す（access.cpp:250-255）。スライスbuiltinのレシーバは`lower_place`で場所解決を試み、場所を持たない`make_slice().len()`は同様に一時へ実体化して読む（expr_slice.cpp:119-125）。
 
 ### `return self`ビルダーチェーンが同一オブジェクトへ作用する仕組み
 
@@ -115,7 +115,7 @@ println(a + (b + c) + d);    // 括弧の内側も再帰展開されて同じく
 
 ## 関連資料
 
-- [チェーンレシーバの解決](../slices/chain-receiver.md) — 添字レシーバ`m[0].push(x)`の場所化と`resolve_receiver_place`の詳細
+- [チェーンレシーバの解決](../slices/chain-receiver.md) — 添字レシーバ`m[0].push(x)`の場所化と`lower_place`の詳細
 - [dropパスと所有権](../memory/drop-and-ownership.md) — ユーザー定義デストラクタのスコープ終端dropと一時解放の全体像
 - [文字列のランタイム表現](../strings/representation.md) — `cm_string_concat`系が扱うSDSヘッダ方式の文字列表現
 - [StringBuilder](../strings/stringbuilder.md) — ハンドル方式ビルダーのABI設計と`+`連結との使い分け
