@@ -501,11 +501,13 @@ std::vector<ast::Param> Parser::parse_extern_params() {
 
 // extern宣言の個別解析（DeclPtr版）
 ast::DeclPtr Parser::parse_extern_decl(std::vector<ast::AttributeNode> attributes) {
+    // 呼び出し元（parse_extern）でexternキーワードは消費済み。宣言全体のSpanは現在位置から張る
+    uint32_t start_pos = current().start;
     auto func = parse_extern_func_decl();
     if (func) {
         func->attributes = std::move(attributes);
     }
-    return std::make_unique<ast::Decl>(std::move(func));
+    return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
 }
 
 // ============================================================

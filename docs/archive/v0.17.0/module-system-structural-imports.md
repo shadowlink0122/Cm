@@ -77,6 +77,11 @@ rustcがファイルごとに独立へパースしてクレート内で名前解
 - 構造化import経路のrequest_item・エイリアス項目解決で、選択importが非exportシンボル（export修飾もexportリスト掲載もない関数）へ到達した場合を確定診断にした: `function 'X' is not exported by module 'Y'`。従来経路のH7警告（checkで警告・buildは--strict時のみ）からの昇格で、同一ファイル内の非公開ヘルパー参照（include_functionのクロージャ）は従来どおり自由。
 - 既存テストへの影響なし（interpreterスイート606/612を維持）。従来経路の警告文言テスト（tests/i18n/non_export_import）は既定切替（第4段）時にエラー期待へ更新する。
 
-### 残り（第4段）: 未実装
+### 第4段（既定切替とテキスト展開系の削除）: 実装済み
 
-第4段=既定切替とテキスト展開系（extract/rewrite/expand・source_map機構）の削除（advanced_modules/simpleとtests/i18n/non_export_importの期待値更新を含む）。
+- 構造化importを唯一のimport実装経路にした。frontend.cppの旧テキスト展開分岐と`CM_STRUCTURED_IMPORTS`切替を削除し、モジュールグラフが全コマンド（run/compile/check/lint/test・全ターゲット）で使われる。
+- テキスト展開系を削除した: import/expand.cpp（852行）・import/parse.cpp（337行）・export/extract.cpp（987行）・export/rewrite.cpp（658行）・import_internal.hpp、およびImportPreprocessorの展開系メンバ（キャッシュ群・H7改名・M2追跡・process()）。ImportPreprocessorはモジュール指定子リゾルバ（resolve_module_path/find_module_file/find_module_entry_point/find_project_root）とProcessResult共有型のみへ縮退した（module層との共有は当初計画の「依存解消」でなく「リゾルバ+条件コンパイルの共有」として確定し、check_layer_deps.pyの注記を更新）。
+- source_mapの扱いの確定: 展開時のオフセット補正・写像複製の機構は展開系と共に消滅した。行単位のsource_map生成はモジュールグラフの連結出力が持ち（診断のファイル直参照写像）、結合バッファをファイルID+オフセットのSpanへ置換する将来の整理まで保持する。
+- 既定切替に伴う挙動差の吸収: (1) 選択的再export（`export import x::{items}`）は要求伝播で辿らない素通しにした（io/mod.cmのprintln等はMIR組み込みが実体で、Cm定義の取り込みはjs/svターゲットのvoid*/FFI非対応でエラーになる）。 (2) M2同名シンボル多重import診断をグラフへ移植した（rootの選択importが同名を異なるモジュールから取り込む場合はi18n済みメッセージでエラー）。 (3) H7段階4の非修飾遮断を出力時の`__cm_priv_`改名として復元した（閉包で取り込んだ非exportヘルパーはexport関数の内部実装としてのみ機能し、直接呼び出しは不能）。 (4) 可視性エラー（第3段）のメッセージをi18nへ収容し、ImportNonExportedSymbolの文言を警告形からエラー形へ更新した。
+- テスト期待値の更新: advanced_modules/simple（従来経路のprivate改名バグをexpected-errorとして固定化していたもの→正常出力の.expectへ）、tests/i18n/run_tests.shのnon_export_import（警告期待→エラー期待）。
+- 計測: interpreterスイート607/612（skip 5、失敗0）・llvm・js・sv・llvm-wasm・unit/regression・cm-test/libs/i18n/sanitize/tsの全スイートを既定経路=構造化importで完走。

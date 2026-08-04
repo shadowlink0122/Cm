@@ -20,10 +20,8 @@ struct FrontendParams {
     std::string input_file;            // 診断表示・importの基準パス
     std::vector<std::string> defines;  // -D のユーザ定義
     std::string target;  // 条件コンパイル定数・SVレキサー判定（空=ディレクティブ自動検出）
-    bool test_mode = false;          // TEST を自動定義（#[test] 連動）
-    bool warn_non_exported = false;  // 非export関数の選択import警告（H7）
-    bool debug = false;              // ステージごとのデバッグ出力
-    bool dump_preprocessed = false;  // .tmp/preprocessed.cm への常時ダンプ（build経路）
+    bool test_mode = false;  // TEST を自動定義（#[test] 連動）
+    bool debug = false;      // ステージごとのデバッグ出力
 };
 
 struct FrontendResult {

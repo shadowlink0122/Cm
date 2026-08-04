@@ -378,10 +378,6 @@ set(CM_SOURCES
     src/cmd/cm/options.cpp
     ${CM_TYPECHECK_SOURCES}
     src/internal/preprocessor/import/setup.cpp
-    src/internal/preprocessor/import/expand.cpp
-    src/internal/preprocessor/import/parse.cpp
-    src/internal/preprocessor/export/extract.cpp
-    src/internal/preprocessor/export/rewrite.cpp
     src/internal/preprocessor/module_resolve.cpp
     src/internal/preprocessor/conditional.cpp
     src/internal/module/resolver.cpp

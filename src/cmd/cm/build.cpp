@@ -173,10 +173,7 @@ int run_build(cli::Options& opts, const char* argv0) {
         fparams.defines = opts.defines;
         fparams.target = opts.target;
         fparams.test_mode = opts.test_mode;
-        // --force-check/--strict指定時は非export関数の選択importへ警告を出す（H7の段階導入）
-        fparams.warn_non_exported = opts.force_check;
         fparams.debug = opts.debug;
-        fparams.dump_preprocessed = true;
         auto front = cli::run_frontend(fparams, std::move(code));
 
         if (!front.internal_error_stage.empty()) {

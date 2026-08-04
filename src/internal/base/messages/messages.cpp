@@ -910,8 +910,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"symbol '{0}' is imported from both '{1}' and '{2}' and is ambiguous; use an alias (import ... as ...) or a qualified name",
      "シンボル '{0}' は '{1}' と '{2}' の両方からimportされ曖昧です。エイリアス（import ... as ...）か修飾名を使ってください"},
     // ImportNonExportedSymbol
-    {"warning: function '{0}' selected by import is not exported from '{1}' (currently allowed, but will become an error in a future version; add 'export' to the definition)",
-     "警告: importで指定された関数 '{0}' は '{1}' でexportされていません（現在は許容されますが将来のバージョンでエラーになります。定義にexportを付けてください）"},
+    {"function '{0}' selected by import is not exported from '{1}' (add 'export' to the definition or an export list)",
+     "importで指定された関数 '{0}' は '{1}' でexportされていません（定義にexportを付けるかexportリストへ追加してください）"},
     // MirSliceReceiverUnresolved
     {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
      "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},

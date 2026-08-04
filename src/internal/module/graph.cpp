@@ -1,5 +1,6 @@
 #include "graph.hpp"
 
+#include "internal/base/i18n.hpp"
 #include "internal/preprocessor/conditional.hpp"
 #include "internal/preprocessor/import.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
@@ -43,6 +44,7 @@ struct FuncInfo {
     size_t span_start = 0;
     size_t span_end = 0;
     bool is_export = false;
+    bool is_extern = false;  // extern宣言（ランタイムシンボルへの橋渡し。改名対象外）
     std::unordered_set<std::string> refs;  // 本文が参照する識別子（テキストスキャン）
 };
 
@@ -460,11 +462,13 @@ struct Builder {
 
         // 宣言走査: import/export指示の収集と空行化・関数表の構築
         std::vector<std::pair<size_t, size_t>> func_spans;
-        auto record_function = [&](const std::string& name, const Span& span, bool is_export) {
+        auto record_function = [&](const std::string& name, const Span& span, bool is_export,
+                                   bool is_extern) {
             FuncInfo fi;
             fi.span_start = span.start;
             fi.span_end = span.end;
             fi.is_export = is_export;
+            fi.is_extern = is_extern;
             info.functions[name] = std::move(fi);
             func_spans.push_back({span.start, span.end});
         };
@@ -539,13 +543,14 @@ struct Builder {
                 } else if (exp->declaration) {
                     // export fn 等の宣言付きexport（定義そのものなので残す）
                     if (auto* fn = exp->declaration->as<ast::FunctionDecl>()) {
-                        record_function(fn->name, decl->span, true);
+                        record_function(fn->name, decl->span, true, fn->is_extern);
                     }
                 }
                 continue;
             }
             if (auto* fn = decl->as<ast::FunctionDecl>()) {
-                record_function(fn->name, decl->span, fn->visibility == ast::Visibility::Export);
+                record_function(fn->name, decl->span, fn->visibility == ast::Visibility::Export,
+                                fn->is_extern);
                 continue;
             }
             if (auto* use = decl->as<ast::UseDecl>()) {
@@ -643,8 +648,7 @@ struct Builder {
             // 可視性検査: 非exportシンボルの選択importは診断エラー（第3段。旧経路の警告から昇格）
             if (!fnit->second.is_export && !info.export_list.count(name)) {
                 if (error.empty()) {
-                    error = "function '" + name + "' is not exported by module '" + info.path +
-                            "' (add 'export' to the definition or an export list to import it)";
+                    error = i18n::msgf(i18n::MsgId::ImportNonExportedSymbol, name, info.path);
                 }
                 return;
             }
@@ -655,8 +659,10 @@ struct Builder {
             if (!edge.is_reexport) {
                 continue;
             }
-            if (edge.wildcard || edge.items.empty() ||
-                std::find(edge.items.begin(), edge.items.end(), name) != edge.items.end()) {
+            // 選択的再export（export import x::{items}）は辿らない: io/mod.cmのprintln等は
+            // MIR組み込みが実体であり、Cm定義を取り込むと組み込みの書式処理を影で置き換えて
+            // 挙動が変わる（js/svターゲットではvoid*/FFIが非対応でエラーになる）。従来経路と同一の素通し
+            if (edge.wildcard || edge.items.empty()) {
                 request_item(edge.dep, name, guard);
             }
         }
@@ -684,14 +690,32 @@ struct Builder {
             if (!edge.is_reexport) {
                 continue;
             }
+            // 選択的再exportは辿らない（request_itemと同じ素通し規則）
             if (edge.wildcard || edge.items.empty()) {
                 request_wildcard(edge.dep, importer, filter, guard);
-            } else {
-                for (const auto& item : edge.items) {
-                    if (filter.count(item)) {
-                        request_item(edge.dep, item, guard);
+            }
+        }
+    }
+
+    // 同名シンボルの多重import診断（M2）: rootの選択importが同名を異なるモジュールから取り込む場合は曖昧
+    void check_duplicate_imports(const FileInfo& info) {
+        auto rel = [](const std::string& p) {
+            std::error_code ec;
+            auto r = std::filesystem::relative(p, std::filesystem::current_path(), ec);
+            return ec ? p : r.string();
+        };
+        std::unordered_map<std::string, std::string> exposed;
+        for (const auto& edge : info.edges) {
+            for (const auto& name : edge.items) {
+                auto it = exposed.find(name);
+                if (it != exposed.end() && it->second != edge.dep) {
+                    if (error.empty()) {
+                        error = i18n::msgf(i18n::MsgId::ImportDuplicateSymbol, name,
+                                           rel(it->second), rel(edge.dep));
                     }
+                    return;
                 }
+                exposed[name] = edge.dep;
             }
         }
     }
@@ -705,6 +729,7 @@ struct Builder {
             const auto& path = *rit;
             FileInfo& info = files[path];
             if (info.is_root) {
+                check_duplicate_imports(info);
                 for (auto& [name, fi] : info.functions) {
                     include_function(info, name);
                 }
@@ -752,10 +777,8 @@ struct Builder {
                         if (!dep_info.functions.at(name).is_export &&
                             !dep_info.export_list.count(name)) {
                             if (error.empty()) {
-                                error = "function '" + name + "' is not exported by module '" +
-                                        dep_info.path +
-                                        "' (add 'export' to the definition or an export list to "
-                                        "import it)";
+                                error = i18n::msgf(i18n::MsgId::ImportNonExportedSymbol, name,
+                                                   dep_info.path);
                             }
                             continue;
                         }
@@ -902,6 +925,35 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
                 Builder::blank_lines(filtered, s, e);
             }
         }
+        // 閉包で取り込んだ非exportヘルパー関数は改名して非修飾の直接呼び出しを遮断する
+        // （export関数の内部実装としてのみ機能させる。従来経路のH7段階4と同一の可視性遮断）
+        std::vector<std::pair<std::string, std::string>> priv_renames;
+        if (!info.is_root) {
+            std::string prefix = std::filesystem::path(path).stem().string();
+            for (auto& c : prefix) {
+                if (!std::isalnum(static_cast<unsigned char>(c))) {
+                    c = '_';
+                }
+            }
+            size_t priv_index = 0;
+            for (const auto& name : info.included) {
+                auto fit = info.functions.find(name);
+                if (fit == info.functions.end() || fit->second.is_export || fit->second.is_extern ||
+                    info.export_list.count(name) || name == "main" || name == "efi_main") {
+                    continue;
+                }
+                if (std::getenv("CM_GRAPH_DEBUG")) {
+                    std::fprintf(stderr, "[PRIV] %s rename %s (export=%d extern=%d)\n",
+                                 path.c_str(), name.c_str(), (int)fit->second.is_export,
+                                 (int)fit->second.is_extern);
+                }
+                priv_renames.push_back({name, "__cm_priv_" + prefix + "_" +
+                                                  std::to_string(priv_index++) + "_" + name});
+            }
+            for (const auto& [name, renamed] : priv_renames) {
+                filtered = std::regex_replace(filtered, std::regex("\\b" + name + "\\b"), renamed);
+            }
+        }
         append_source(path, filtered);
 
         // エイリアス付き選択importの改名複製（関数本文を複製し名前のみ別名へ置換）
@@ -914,6 +966,9 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
             const size_t e = std::min(fit->second.span_end, info.source.size());
             std::string text = info.source.substr(s, e - s);
             text = std::regex_replace(text, std::regex("\\b" + name + "\\b"), alias);
+            for (const auto& [pname, renamed] : priv_renames) {
+                text = std::regex_replace(text, std::regex("\\b" + pname + "\\b"), renamed);
+            }
             append_source(path, text);
         }
 
