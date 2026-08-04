@@ -668,12 +668,15 @@ struct Builder {
         }
     }
 
-    // ワイルドカード要求: 公開面（export関数+exportリスト）のうちimporter側が参照する名前のみ包含し、再export辺へ伝播する。
-    // 全包含にしないのは、無関係な公開関数の平坦展開が他モジュールの同名定義と衝突するため（従来経路と同じ使用箇所駆動）
+    // ワイルドカード要求: 公開面（export関数+exportリスト）を包含し、再export辺へ伝播する。
+    // filter非nullは「importer側が参照する名前のみ」の使用箇所駆動（import x::*用。無関係な公開関数の
+    // 平坦展開が他モジュールの同名定義と衝突するのを防ぐ）。null（module形importの平坦直接アクセス）は
+    // 全export包含で、後続ファイルが未importの兄弟モジュールへ平坦参照する従来連結の可視性を保つ
     void request_wildcard(const std::string& file, const std::string& importer,
-                          const std::unordered_set<std::string>& filter,
+                          const std::unordered_set<std::string>* filter,
                           std::unordered_set<std::string>& guard) {
-        if (!guard.insert(file + "\n*\n" + importer).second) {
+        const std::string guard_key = file + "\n*\n" + (filter ? importer : std::string("<all>"));
+        if (!guard.insert(guard_key).second) {
             return;
         }
         auto fit = files.find(file);
@@ -682,7 +685,8 @@ struct Builder {
         }
         FileInfo& info = fit->second;
         for (auto& [name, fi] : info.functions) {
-            if ((fi.is_export || info.export_list.count(name)) && filter.count(name)) {
+            if ((fi.is_export || info.export_list.count(name)) &&
+                (!filter || filter->count(name))) {
                 include_function(info, name);
             }
         }
@@ -758,13 +762,13 @@ struct Builder {
                         dit->second.namespace_wraps.push_back(edge.namespace_name);
                     }
                     if (!edge.module_aliased) {
-                        // 非aliasのモジュールimportは公開関数の平坦直接アクセスも提供する（従来経路と同一）
-                        request_wildcard(edge.dep, path, usage, guard);
+                        // 非aliasのモジュールimportは公開関数の平坦直接アクセスを全export包含で提供する（従来経路と同一）
+                        request_wildcard(edge.dep, path, nullptr, guard);
                     }
                     continue;
                 }
                 if (edge.wildcard) {
-                    request_wildcard(edge.dep, path, usage, guard);
+                    request_wildcard(edge.dep, path, &usage, guard);
                     continue;
                 }
                 for (const auto& item : edge.items) {
