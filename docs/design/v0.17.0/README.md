@@ -4,29 +4,56 @@ nav_order: -3
 has_children: true
 ---
 
-# v0.17.0 設計文書
+# v0.17.0 設計文書（索引）
 
-大規模開発ボトルネック監査（[large-scale-bottleneck-audit.md](../../archive/v0.17.0/large-scale-bottleneck-audit.md)、全57所見対応完了・archiveへ移動）で検出した所見に対する実装設計文書の索引。局所修正で対応済みの所見はリリースノート（`docs/releases/v0.17.0.md`）に記録し、残りの構造的リファクタリング項目を項目ごとの設計文書としてまとめている。
+v0.17.0の設計文書は全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
+変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
-## 対応済み（リリースノート参照）
+## コンパイラ基盤の構造的リファクタリング
 
-C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スライス一時)・C13・C14(Phase1)・C15・C16・M2・M6・M7・H1・H2・H3・H4・H8・H11・H13・H15・L8・M4・M5・M1・M8・M9・M11・M15・M16・M17・M18・L1・L2・L3・L6(assert_eq)、およびスライス要素型ディスパッチの一元化は実装・テスト済み。実装完了した設計文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（H4: uninitialized-struct-fields、C7/C8/C9: type-identity-recursive-keys、C16: mangling-collision-detection、H15/L8: generic-instantiation-diagnostics、M8/M9: numeric-output-and-cast-consistency、H8/M17: collections-option-api-and-errors、M1: bounds-checking-policy、C6: closures-multi-capture、H1/H2: interface-values-in-aggregates）。
+大規模開発ボトルネック監査と修正履歴の原因分析に基づき、同族バグの再発を構造的に防ぐ再編を実施した。
 
-## 簡素化提案（全体設計レビュー第2弾、全件処置完了）
+- [compiler-architecture-restructure.md](../../archive/v0.17.0/compiler-architecture-restructure.md) — 12層のinclude依存規律のlint/CI強制・run_frontend共有化・optionsテーブル化（物理分離とLint分離は実測に基づく不採用判断）
+- [module-system-structural-imports.md](../../archive/v0.17.0/module-system-structural-imports.md) — importのテキストインライン展開を廃止し、モジュールグラフ+AST駆動の選択的包含へ全面移行（テキスト展開系約2,800行を削除）
+- [type-resolution-simplification.md](../../archive/v0.17.0/type-resolution-simplification.md) — 場所解決のlower_place一本化・スライスビルトイン表引き化・期待型伝播の正式API化・補間のパース時脱糖とミニパイプライン完全削除
+- [typed-hir-single-source.md](../../archive/v0.17.0/typed-hir-single-source.md) — 「型検査後のHIRは全式が型付き」不変条件の機械的検証と違反6クラスの上流修正（物理的単一walk化は不採用判断）
+- [monomorphization-typed-instantiation.md](../../archive/v0.17.0/monomorphization-typed-instantiation.md) — 特殊化の同定・書き換えの型ノード駆動化と名前マングリング逆算の廃止・無置換特殊化の常時検査
+- [diagnostics-engine-unification.md](../../archive/v0.17.0/diagnostics-engine-unification.md) — DiagnosticEmitter表示一元化・MIRエラーの診断昇格・`__error__`成果物検査・診断207呼び出しの完全i18n化
+- [runtime-builtin-registry.md](../../archive/v0.17.0/runtime-builtin-registry.md) — ビルトイン188件のレジストリ表・シグネチャ乖離のlint/CI検査・slice系ランタイムの共通ソース化
+- [derive-as-source-expansion.md](../../archive/v0.17.0/derive-as-source-expansion.md) — with/derive自動実装のCmソース合成化と死んだ生成器約1,700行の削除
+- [layout-query-unification.md](../../archive/v0.17.0/layout-query-unification.md) — 型→要素ストライドの2意味論API集約（elem_size手書きスイッチ10箇所の置換）
+- [optimizer-shared-analysis.md](../../archive/v0.17.0/optimizer-shared-analysis.md) — 最適化8パスの効果モデル（effects.hpp）一元化
+- [type-identity-recursive-keys.md](../../archive/v0.17.0/type-identity-recursive-keys.md) — ジェネリック特殊化の型同一性の構造化と可逆型キーtypekey（C7/C8/C9）
 
-type-resolution-simplification.mdの4領域に続き、コンパイラが複雑なことをしている箇所の網羅調査（実測: ソース行数・重複実装数・バグ修正履歴との紐付け）から、簡素化可能な8領域を機能単位の設計文書として起票した。
-全体再編のcompiler-architecture-restructure.mdは全段の処置を確定し [archive/v0.17.0/compiler-architecture-restructure.md](../../archive/v0.17.0/compiler-architecture-restructure.md) へ移動した（依存規律のlint/CI強制・fmt隔離・run_frontend共有化・optionsテーブル化を実装、物理分離とLint分離は実測に基づく不採用判断、resolve新設はmodule-system-structural-imports.mdへ移譲）。
+## 機能テーマ別の設計文書
 
+- [strings-utf8-and-stringbuilder.md](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md) — 文字列基盤の刷新全5段（StringBuilder・UTF-8 len・SDSヘッダ・連結チェーン、H9）
+- [memory-drop-and-lifetime.md](../../archive/v0.17.0/memory-drop-and-lifetime.md) — 一時オブジェクトのdropパス全系統とループRAII（C12/C13/M15/H12）
+- [allocator-and-temp-pool.md](../../archive/v0.17.0/allocator-and-temp-pool.md) — wasmフリーリストアロケータとアロケータ差し替えの到達可能化（H11/M14）
+- [aggregate-copy-lowering.md](../../archive/v0.17.0/aggregate-copy-lowering.md) — 大構造体のmemcpy化・sret化と値渡し隔離（C14全Phase）
+- [incremental-build-and-parallel-codegen.md](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) — コード生成のfork分離・モジュール別キャッシュ・並列化・同一コード折り畳み（M6/H14/M10）
+- [module-visibility-and-import-dedup.md](../../archive/v0.17.0/module-visibility-and-import-dedup.md) — モジュール可視性の段階的強制とimport重複排除（H7/M2/M7）
+- [collections-option-api-and-errors.md](../../archive/v0.17.0/collections-option-api-and-errors.md) — マップのOption返しAPIとエラー型の統合（H8/M17）
+- [const-aggregate-enforcement.md](../../archive/v0.17.0/const-aggregate-enforcement.md) — const集約の段階的強制（M3、エラー化は将来バージョン）
+- [definite-assignment-and-correctness-lints.md](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md) — 確定代入・return網羅の検査と--strict昇格（H6/L4）
+- [bounds-checking-policy.md](../../archive/v0.17.0/bounds-checking-policy.md) — スライス境界チェックの全バックエンド統一（M1）
+- [numeric-output-and-cast-consistency.md](../../archive/v0.17.0/numeric-output-and-cast-consistency.md) — double出力round-trip化とキャスト飽和の統一（M8/M9）
+- [closures-multi-capture.md](../../archive/v0.17.0/closures-multi-capture.md) — 複数キャプチャクロージャの環境ポインタ化と高階関数対応（C6）
+- [interface-values-in-aggregates.md](../../archive/v0.17.0/interface-values-in-aggregates.md) — 集約に入るインターフェイス値のfat pointer構築（H1/H2）
+- [js-ts-value-semantics.md](../../archive/v0.17.0/js-ts-value-semantics.md) — js/tsの値セマンティクス統一とlong/ulongのBigInt化（H3/H5）
+- [chain-receiver-resolution.md](../../archive/v0.17.0/chain-receiver-resolution.md) — チェーンレシーバ解決の共通化と添字レシーバ対応（H10全5段）
+- [self-hosting-preparation.md](../../archive/v0.17.0/self-hosting-preparation.md) — OS連携API・argv・セルフホスト素振りの全4段（S1〜S9。セルフホスト本体は1.0以降に別文書で扱う）
+- [mangling-collision-detection.md](../../archive/v0.17.0/mangling-collision-detection.md) — マングリング名衝突のハードエラー化（C16）
+- [generic-instantiation-diagnostics.md](../../archive/v0.17.0/generic-instantiation-diagnostics.md) — ジェネリックインスタンス化の診断（H15/L8）
+- [misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — 補間ネスト・var・assert_eq・SV黙殺解消・fmt演算子空白ほか（M18/L1〜L6）
+- [01_js_npm_interop.md](../../archive/v0.17.0/01_js_npm_interop.md) — npmパッケージ連携の実装設計（ロードマップは`docs/design/js_interop_roadmap.md`）
 
-モジュールシステムの構造化は全4段（モジュールグラフ・AST駆動の選択的包含・可視性の診断昇格・既定切替とテキスト展開系約2,800行の削除）を完了し [archive/v0.17.0/module-system-structural-imports.md](../../archive/v0.17.0/module-system-structural-imports.md) へ移動した。型付きHIRの単一情報源化は全段の処置を確定し（不変条件の機械的検証と違反6クラスの上流修正・単一walk化の不採用判断） [archive/v0.17.0/typed-hir-single-source.md](../../archive/v0.17.0/typed-hir-single-source.md) へ移動した。モノモーフ化の型駆動化は全3段（特殊化要求の型キー化と構造的単一化・呼び出しサイト表書き換え・置換完了検査と逆算ヘルパ削除）を完了し [archive/v0.17.0/monomorphization-typed-instantiation.md](../../archive/v0.17.0/monomorphization-typed-instantiation.md) へ移動した。このうちランタイムビルトインのレジストリ化は全段を完了し [archive/v0.17.0/runtime-builtin-registry.md](../../archive/v0.17.0/runtime-builtin-registry.md) へ移動した（レジストリ表188件・宣言表引き化・シグネチャ検査lint/CI化・slice系ランタイム一本化。format系はアーキテクチャ差のため二重実装維持+検査防衛の設計判断を記録）。診断エンジンの統一も全4段を実装完了し [archive/v0.17.0/diagnostics-engine-unification.md](../../archive/v0.17.0/diagnostics-engine-unification.md) へ移動した（DiagnosticEmitter表示一元化・MIRエラー昇格とcodegen前停止・__error__検査・診断207呼び出しのMsgId化）。レイアウト計算の一元化と最適化パスの共有解析基盤も実装完了し、[archive/v0.17.0/layout-query-unification.md](../../archive/v0.17.0/layout-query-unification.md)（スライス格納/配列実ストライドの2意味論API・MIR/LLVM共有コア）と [archive/v0.17.0/optimizer-shared-analysis.md](../../archive/v0.17.0/optimizer-shared-analysis.md)（効果モデルeffects.hppへの8パス統合）へ移動した。
+## 監査・網羅検証
 
-### native/jit網羅検証 第2・第3ラウンド（W1〜W5・X1〜X6、全件修正済み・archiveへ移動）
-
-move・クロージャ・深いネスト・最適化・static・private・複合pushの網羅検証で検出した11件は全件修正し、個別文書を [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した。
-W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込みのsubslice降下、W3=構造体popのblob脱糖、W4=最適化パス（LICM/SCCP/folding）のグローバル・静的ガード、W5=補間チェーンの式パイプライン委譲＋再帰型補完、X1=static初期化ガード、X2=privateフィールド検査、X3=push配列リテラルのスライス実体化、X5=構文エラーのsource_map写像と予約語表示、X6=可視性仕様の確定（構造体単位）を参照。
-
-## 状態
-
-監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-型解決とチェーンloweringの単純化は全段（lower_place一本化・スライスディスパッチ表化・期待型伝播の正式API化・補間のパース時脱糖とミニパイプライン完全削除）を完了し [archive/v0.17.0/type-resolution-simplification.md](../../archive/v0.17.0/type-resolution-simplification.md) へ移動した。簡素化提案は全件の処置が完了し、本ディレクトリに残る設計文書は無い（本READMEが索引として残る）。自動実装のソース展開化は全3段を完了し [archive/v0.17.0/derive-as-source-expansion.md](../../archive/v0.17.0/derive-as-source-expansion.md) へ移動した（非ジェネリック全トレイトの通常パイプライン化・波括弧エスケープ修正・死んだ生成器約1,700行の削除。ジェネリックの単一総称化は演算子mono対応後）。
-セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。
+- [large-scale-bottleneck-audit.md](../../archive/v0.17.0/large-scale-bottleneck-audit.md) — 大規模開発ボトルネック監査の全57所見（C/H/M/L系、全件対応完了）
+- [syntax-audit-bugfixes.md](../../archive/v0.17.0/syntax-audit-bugfixes.md) — 構文網羅検証 第1ラウンド（B1〜B9の総括）
+- [move-closure-interp-audit.md](../../archive/v0.17.0/move-closure-interp-audit.md) — move・クロージャ・補間式添字の検証（V1〜V8の総括）
+- 5バックエンド差分プローブ（N1〜N8）の個別文書: [interp-nested-slice-index.md](../../archive/v0.17.0/interp-nested-slice-index.md)・[generic-slice-element-garbage.md](../../archive/v0.17.0/generic-slice-element-garbage.md)・[string-switch-miscompile.md](../../archive/v0.17.0/string-switch-miscompile.md)・[wasm-reduce-closure-trap.md](../../archive/v0.17.0/wasm-reduce-closure-trap.md)・[generic-struct-literal.md](../../archive/v0.17.0/generic-struct-literal.md)・[enum-multi-payload-match.md](../../archive/v0.17.0/enum-multi-payload-match.md)・[negative-radix-format.md](../../archive/v0.17.0/negative-radix-format.md)・[js-string-index-bigint.md](../../archive/v0.17.0/js-string-index-bigint.md)
+- native/jit網羅検証 第2・第3ラウンド（W1〜W5・X1〜X6）の個別文書: [nested-anonymous-struct-literal-loss.md](../../archive/v0.17.0/nested-anonymous-struct-literal-loss.md)・[nested-slice-element-write-crash.md](../../archive/v0.17.0/nested-slice-element-write-crash.md)・[slice-struct-pop-value-crash.md](../../archive/v0.17.0/slice-struct-pop-value-crash.md)・[licm-global-clobber-miscompile.md](../../archive/v0.17.0/licm-global-clobber-miscompile.md)・[interp-chain-lowering-failures.md](../../archive/v0.17.0/interp-chain-lowering-failures.md)・[static-block-scope-init-loss.md](../../archive/v0.17.0/static-block-scope-init-loss.md)・[private-field-access-unchecked.md](../../archive/v0.17.0/private-field-access-unchecked.md)・[slice-push-array-literal-corruption.md](../../archive/v0.17.0/slice-push-array-literal-corruption.md)・[slice-push-anonymous-struct-literal.md](../../archive/v0.17.0/slice-push-anonymous-struct-literal.md)・[syntax-error-position-and-token-display.md](../../archive/v0.17.0/syntax-error-position-and-token-display.md)・[private-method-cross-impl-visibility.md](../../archive/v0.17.0/private-method-cross-impl-visibility.md)
+- 個別バグ文書（B系ほか）: [must-block-field-assignment.md](../../archive/v0.17.0/must-block-field-assignment.md)・[int-literal-to-float-conversion.md](../../archive/v0.17.0/int-literal-to-float-conversion.md)・[nested-member-slice-chain.md](../../archive/v0.17.0/nested-member-slice-chain.md)・[cast-null-pointer-comparison.md](../../archive/v0.17.0/cast-null-pointer-comparison.md)・[interface-bound-method-return-type.md](../../archive/v0.17.0/interface-bound-method-return-type.md)・[interface-method-interpolation-type.md](../../archive/v0.17.0/interface-method-interpolation-type.md)・[typedef-struct-literal-resolution.md](../../archive/v0.17.0/typedef-struct-literal-resolution.md)・[defer-implicit-function-end.md](../../archive/v0.17.0/defer-implicit-function-end.md)・[const-global-aggregate-init.md](../../archive/v0.17.0/const-global-aggregate-init.md)・[uninitialized-struct-fields.md](../../archive/v0.17.0/uninitialized-struct-fields.md)
