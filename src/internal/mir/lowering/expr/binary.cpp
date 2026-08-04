@@ -863,6 +863,56 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
         (mir_op == MirBinaryOp::Eq || mir_op == MirBinaryOp::Ne || mir_op == MirBinaryOp::Lt ||
          mir_op == MirBinaryOp::Le || mir_op == MirBinaryOp::Gt || mir_op == MirBinaryOp::Ge);
 
+    // 防衛層（Y4）: 浮動小数×整数の混合オペランドは型検査の昇格Cast挿入で解消されている前提。
+    // ここへ混合が到達した場合は上流の欠陥であり、fadd i32, double等の不正IRを黙って発行せず診断で停止する
+    {
+        auto floatness = [&](const hir::TypePtr& t0, LocalId local) -> int {
+            hir::TypePtr t = t0;
+            if ((!t || t->is_error()) && local < ctx.func->locals.size()) {
+                t = ctx.func->locals[local].type;
+            }
+            t = t ? ctx.resolve_typedef(t) : nullptr;
+            if (!t) {
+                return -1;  // 不明（判定不能なら防衛層は発火させない）
+            }
+            switch (t->kind) {
+                case hir::TypeKind::Float:
+                case hir::TypeKind::UFloat:
+                case hir::TypeKind::Double:
+                case hir::TypeKind::UDouble:
+                    return 1;
+                case hir::TypeKind::Tiny:
+                case hir::TypeKind::UTiny:
+                case hir::TypeKind::Short:
+                case hir::TypeKind::UShort:
+                case hir::TypeKind::Int:
+                case hir::TypeKind::UInt:
+                case hir::TypeKind::Long:
+                case hir::TypeKind::ULong:
+                case hir::TypeKind::ISize:
+                case hir::TypeKind::USize:
+                case hir::TypeKind::Char:
+                case hir::TypeKind::Bool:
+                    return 0;
+                default:
+                    return -1;
+            }
+        };
+        const bool op_is_numeric = is_comparison || mir_op == MirBinaryOp::Add ||
+                                   mir_op == MirBinaryOp::Sub || mir_op == MirBinaryOp::Mul ||
+                                   mir_op == MirBinaryOp::Div || mir_op == MirBinaryOp::Mod;
+        if (op_is_numeric) {
+            int lf = floatness(bin.lhs->type, lhs);
+            int rf = floatness(bin.rhs->type, rhs);
+            if (lf >= 0 && rf >= 0 && lf != rf) {
+                debug::log(debug::Stage::Mir, debug::Level::Error,
+                           "二項演算の浮動小数×整数混合オペランドがMIRへ到達しました（型検査の昇格"
+                           "挿入漏れ）");
+                return ctx.new_temp(hir::make_error());
+            }
+        }
+    }
+
     if (is_comparison) {
         result_type = hir::make_bool();
     } else {

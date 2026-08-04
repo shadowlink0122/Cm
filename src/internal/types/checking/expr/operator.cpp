@@ -17,6 +17,19 @@
 
 namespace cm {
 
+namespace {
+
+// オペランドを昇格先型へ包む明示Castノードを挿入する（Y4）。
+// 型検査を変換判断の唯一の点とし、HIR/MIR/コード生成は「二項演算のオペランドは同型」を前提にできる
+void wrap_operand_cast(ast::ExprPtr& operand, const ast::TypePtr& target) {
+    Span span = operand->span;
+    auto cast = std::make_unique<ast::CastExpr>(std::move(operand), target);
+    operand = std::make_unique<ast::Expr>(std::move(cast), span);
+    operand->type = target;
+}
+
+}  // namespace
+
 ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     // 代入演算子の場合、左辺がmove済み変数ならエラー
     // move後の変数は完全に無効化され、再代入も禁止
@@ -81,6 +94,43 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     // typedef型を基底型に解決（算術演算のis_numeric()チェック用）
     ltype = resolve_typedef(ltype);
     rtype = resolve_typedef(rtype);
+
+    // 混合数値オペランドの暗黙昇格（Y4）。
+    // 従来は型検査が混合を受理したままオペランド昇格を挿入せず、fadd i32, double等の不正IRや無出力SIGBUSになっていた。
+    // 浮動小数が絡む混合のみ共通型へ揃える（整数同士の幅混在は既存のコード生成幅合わせが機能しているため挙動を変えない）
+    {
+        const bool is_arith_or_cmp =
+            binary.op == ast::BinaryOp::Add || binary.op == ast::BinaryOp::Sub ||
+            binary.op == ast::BinaryOp::Mul || binary.op == ast::BinaryOp::Div ||
+            binary.op == ast::BinaryOp::Mod || binary.op == ast::BinaryOp::Eq ||
+            binary.op == ast::BinaryOp::Ne || binary.op == ast::BinaryOp::Lt ||
+            binary.op == ast::BinaryOp::Gt || binary.op == ast::BinaryOp::Le ||
+            binary.op == ast::BinaryOp::Ge;
+        const bool is_arith_compound =
+            binary.op == ast::BinaryOp::AddAssign || binary.op == ast::BinaryOp::SubAssign ||
+            binary.op == ast::BinaryOp::MulAssign || binary.op == ast::BinaryOp::DivAssign ||
+            binary.op == ast::BinaryOp::ModAssign;
+        const bool mixed_with_float = ltype->is_numeric() && rtype->is_numeric() &&
+                                      ltype->kind != rtype->kind &&
+                                      (ltype->is_floating() || rtype->is_floating());
+        if (mixed_with_float && is_arith_or_cmp) {
+            auto target = common_type(ltype, rtype);
+            if (target) {
+                if (ltype->kind != target->kind) {
+                    wrap_operand_cast(binary.left, target);
+                    ltype = target;
+                }
+                if (rtype->kind != target->kind) {
+                    wrap_operand_cast(binary.right, target);
+                    rtype = target;
+                }
+            }
+        } else if (mixed_with_float && is_arith_compound) {
+            // 複合代入は宛先型（左辺）へ右辺を揃える。double += int はsitofp、int += double はfptosi（切り詰め）
+            wrap_operand_cast(binary.right, ltype);
+            rtype = ltype;
+        }
+    }
 
     switch (binary.op) {
         case ast::BinaryOp::Eq:

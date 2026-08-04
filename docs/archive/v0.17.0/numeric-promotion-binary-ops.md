@@ -56,3 +56,11 @@ SIGBUSになる形は、検証前のcodegen段階（fcmp/fadd構築時のLLVM内
 ## 検出経緯
 
 v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出。最小再現は `.tmp/bughunt4/min_promo*.cm`、網羅は同 `c/c08_promo_mixed.cm`。
+
+## 実装記録（2026-08-05）
+
+- 型検査`infer_binary`（`src/internal/types/checking/expr/operator.cpp`）のtypedef解決直後に昇格挿入を実装した。算術・比較は`common_type`の共通型へ両オペランドをCastノードで包み、複合代入（`+= -= *= /= %=`）は宛先型（左辺）へ右辺を揃える。浮動小数が絡む混合のみ対象とし、整数同士の幅混在は既存のコード生成幅合わせを変えない。
+- MIR lowering（`src/internal/mir/lowering/expr/binary.cpp`）に防衛層を追加した。算術・比較で浮動小数×整数の混合オペランドが到達した場合は不正IRを発行せず診断で停止する（型検査を唯一の判断点とする設計の維持）。
+- 昇格規則をCANONICAL_SPEC.md 10.2へ明文化し、回帰テスト`tests/common/types/mixed_numeric_promotion.cm`（両方向・リテラル混合・比較・複合代入・float×double・long×double・float剰余・intのみ複合代入の非影響）を追加した。
+- 検証: 全再現（`d+i`/`i+d`/`d>i`/`acc+=i`/`i+1.5`）が正値化し、unit・regression・interpreter・llvm・llvm-wasm・js・svの全スイート通過。wasmでもc08バッテリーの値一致を確認した。
+- 残課題はZ5（implicit-explicit-cast-design.md）が引き継ぐ: 縮小変換の段階的エラー化・double→int暗黙代入の変換命令欠落・stdlibの回避策as削減。

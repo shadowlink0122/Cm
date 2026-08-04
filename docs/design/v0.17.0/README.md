@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y1〜Y6・Z1〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y1〜Y3・Y5〜Y6・Z1〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -15,7 +15,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 全修正完了後のフロント〜コード生成レイヤー別レビュー（ユニオン・リテラル型・const伝搬・戻り値解決・配列/スライス境界・型昇格の差分検証）で検出。バグ1項目につき1文書。
 
 - [Y1〜Y3: ユニオン構築（タグ書き込み）の消費サイト欠落](union-construction-sites.md) — 構造体リテラルフィールド・return・スライスpush/リテラル要素でタグ未構築となりis判定全false・asで実行時パニック（Critical・W1/X3/X4と同型の消費サイト欠落）
-- [Y4: int×double混合二項演算が不正IR・SIGBUS](numeric-promotion-binary-ops.md) — `i + d`等でsitofp昇格が挿入されず検証エラーまたは無出力SIGBUS。checkerは受理（Critical・最頻出パターン）
+- Y4: int×double混合二項演算が不正IR・SIGBUS — **修正済み**（[archive移動](../../archive/v0.17.0/numeric-promotion-binary-ops.md)。infer_binaryの昇格Cast挿入+MIR防衛層+CANONICAL_SPEC 10.2明文化）
 - [Y5: 固定長配列→スライス引数の暗黙変換欠落](fixed-array-to-slice-argument.md) — `sum_slice(fixed)`で固定長blobをヘッダ誤読しゴミ値（Critical・メソッドレシーバ経路には変換実装済み）
 - [Y6: スライスof固定長配列の要素格納表現が未定義](slice-of-fixed-array-elements.md) — `int[2][]`でpushはヘッダ格納・読みはblob仮定の不一致（High・仕様確定を含む）
 
