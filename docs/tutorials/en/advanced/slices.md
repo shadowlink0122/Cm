@@ -187,6 +187,27 @@ int main() {
 
 ---
 
+## Passing Fixed-Size Arrays to Slice Parameters
+
+Fixed-size arrays can be passed directly to slice-typed (`T[]`) parameters. The array contents are copied into a heap slice at the call site, so `push` or element assignments in the callee do not affect the caller's array.
+
+```cm
+int sum(int[] xs) {
+    int s = 0;
+    for (int i = 0; i < xs.len(); i++) {
+        s = s + xs[i];
+    }
+    return s;
+}
+
+int main() {
+    int[3] fixed = [1, 2, 3];
+    println("{sum(fixed)}");
+    // 6 (a copy is passed; mutations inside sum do not change fixed)
+    return 0;
+}
+```
+
 ## Next Steps
 
 - [Arrays](../basics/arrays.html) - array basics and the method reference

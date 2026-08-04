@@ -1,0 +1,55 @@
+// 回帰(Y5): 固定長配列→スライスパラメータの暗黙変換（cm_array_to_sliceによるヒープ実体化）
+// 従来はC流のarray decayで生ポインタが渡り、CmSlice*として誤読されゴミ値になっていた
+import std::io::println;
+int sum_slice(int[] xs) {
+    int s = 0;
+    for (int i = 0; i < xs.len(); i++) {
+        s = s + xs[i];
+    }
+    return s;
+}
+string join_slice(string[] ss) {
+    string r = "";
+    for (int i = 0; i < ss.len(); i++) {
+        r = r + ss[i] + ";";
+    }
+    return r;
+}
+struct P { int v; }
+int sum_structs(P[] ps) {
+    int s = 0;
+    for (int i = 0; i < ps.len(); i++) {
+        s = s + ps[i].v;
+    }
+    return s;
+}
+int sum_shorts(short[] ss) {
+    int s = 0;
+    for (int i = 0; i < ss.len(); i++) {
+        s = s + ss[i];
+    }
+    return s;
+}
+void try_mutate(int[] xs) {
+    xs.push(999);
+    xs[0] = 111;
+}
+int main() {
+    int[3] fixed = [1, 2, 3];
+    println("{sum_slice(fixed)}");
+    int[] sl = [];
+    sl.push(10);
+    sl.push(20);
+    println("{sum_slice(sl)}");
+    string[2] names = ["aa", "bb"];
+    string j = join_slice(names);
+    println("{j}");
+    P[2] ps = [P { v: 5 }, P { v: 7 }];
+    println("{sum_structs(ps)}");
+    short[4] sh = [10, 20, 30, 40];
+    println("{sum_shorts(sh)}");
+    // 変換はヒープコピーであり、呼び出し先の変異は元配列へ反映されない
+    try_mutate(fixed);
+    println("{fixed[0]} {sum_slice(fixed)}");
+    return 0;
+}

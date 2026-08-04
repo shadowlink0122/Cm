@@ -209,11 +209,47 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         } else {
             hir::TypePtr arg_type = arg->type;
 
+            // パラメータ宣言型を解決する（名前付き関数はHIR定義、間接呼び出し・関数ポインタは関数型注釈から）。
+            // 配列decay判定とパラメータ型への暗黙変換の両方で使う
+            hir::TypePtr param_type = nullptr;
+            if (ctx.hir_func_defs) {
+                auto fit = ctx.hir_func_defs->find(call.func_name);
+                if (fit == ctx.hir_func_defs->end()) {
+                    fit = ctx.hir_func_defs->find(effective_call_name);
+                }
+                if (fit != ctx.hir_func_defs->end() && fit->second &&
+                    i < fit->second->params.size()) {
+                    param_type = fit->second->params[i].type;
+                }
+            }
+            if (!param_type) {
+                hir::TypePtr fn_type = nullptr;
+                if (call.indirect_callee && call.indirect_callee->type) {
+                    fn_type = call.indirect_callee->type;
+                } else if (call.is_indirect) {
+                    if (auto vid = ctx.resolve_variable(call.func_name)) {
+                        if (*vid < ctx.func->locals.size()) {
+                            fn_type = ctx.func->locals[*vid].type;
+                        }
+                    }
+                }
+                fn_type = fn_type ? ctx.resolve_typedef(fn_type) : nullptr;
+                if (fn_type && fn_type->kind == hir::TypeKind::Function &&
+                    i < fn_type->param_types.size()) {
+                    param_type = fn_type->param_types[i];
+                }
+            }
+            hir::TypePtr resolved_param = param_type ? ctx.resolve_typedef(param_type) : nullptr;
+            const bool param_is_slice = resolved_param &&
+                                        resolved_param->kind == hir::TypeKind::Array &&
+                                        !resolved_param->array_size.has_value();
+
             // 固定サイズ配列の変数参照をポインタに自動変換（array decay）
             // C言語セマンティクス: 配列を関数に渡すとポインタにdecayする
-            // 注意: スライス（動的配列、array_sizeなし）はすでに参照型なのでdecay不要
+            // 注意: スライス（動的配列、array_sizeなし）はすでに参照型なのでdecay不要。
+            // パラメータがスライス型の場合はdecayせず、後段のcoerce_fixed_array_to_sliceでヒープスライスへ実体化する（Y5: 生ポインタをCmSlice*として誤読しゴミ値になっていた）
             if (arg_type && arg_type->kind == hir::TypeKind::Array &&
-                arg_type->array_size.has_value()) {
+                arg_type->array_size.has_value() && !param_is_slice) {
                 // 変数参照の場合、アドレスを取得
                 if (auto var_ref_ptr = std::get_if<std::unique_ptr<hir::HirVarRef>>(&arg->kind)) {
                     const auto& var_ref = **var_ref_ptr;
@@ -233,18 +269,11 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             }
 
             LocalId arg_local = lower_expression(*arg, ctx);
-            // 整数引数を浮動小数パラメータへ渡す場合はsitofp/uitofp相当のCastを挿入する（B2）
-            if (ctx.hir_func_defs) {
-                auto fit = ctx.hir_func_defs->find(call.func_name);
-                if (fit == ctx.hir_func_defs->end()) {
-                    fit = ctx.hir_func_defs->find(effective_call_name);
-                }
-                if (fit != ctx.hir_func_defs->end() && fit->second &&
-                    i < fit->second->params.size()) {
-                    arg_local = ctx.coerce_to_float_context(arg_local, fit->second->params[i].type);
-                    // ユニオンパラメータへ変種値を渡す場合はユニオン構築Castでタグ+ペイロードを揃える（Y3網羅: デフォルト引数のHIR補完経由等）
-                    arg_local = ctx.coerce_to_union(arg_local, fit->second->params[i].type);
-                }
+            if (param_type) {
+                // 整数→浮動小数（B2）・変種値→ユニオン構築（Y1〜Y3）・固定長配列→スライス実体化（Y5）のパラメータ型への暗黙変換を一括適用する
+                arg_local = ctx.coerce_to_float_context(arg_local, param_type);
+                arg_local = ctx.coerce_to_union(arg_local, param_type);
+                arg_local = ctx.coerce_fixed_array_to_slice(arg_local, param_type);
             }
             args.push_back(MirOperand::copy(MirPlace{arg_local}));
         }
@@ -323,9 +352,10 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             for (size_t di = call.args.size(); di < hf->params.size(); ++di) {
                 if (hf->params[di].default_value) {
                     LocalId dv = lower_expression(*hf->params[di].default_value, ctx);
-                    // デフォルト値もパラメータ型への暗黙変換（浮動小数・ユニオン構築）を通す（B2/Y3）
+                    // デフォルト値もパラメータ型への暗黙変換（浮動小数・ユニオン構築・配列→スライス）を通す（B2/Y3/Y5）
                     dv = ctx.coerce_to_float_context(dv, hf->params[di].type);
                     dv = ctx.coerce_to_union(dv, hf->params[di].type);
+                    dv = ctx.coerce_fixed_array_to_slice(dv, hf->params[di].type);
                     args.push_back(MirOperand::copy(MirPlace{dv}));
                 }
             }

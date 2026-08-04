@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y5〜Y6・Z3〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Y6・Z3〜Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -16,7 +16,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 
 - Y1〜Y3: ユニオン構築（タグ書き込み）の消費サイト欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/union-construction-sites.md)。coerce_to_union共通ヘルパをreturn・フィールド・push・リテラル要素・引数/デフォルト引数へ適用。混在変種の三項/match腕は残課題として記録）
 - Y4: int×double混合二項演算が不正IR・SIGBUS — **修正済み**（[archive移動](../../archive/v0.17.0/numeric-promotion-binary-ops.md)。infer_binaryの昇格Cast挿入+MIR防衛層+CANONICAL_SPEC 10.2明文化）
-- [Y5: 固定長配列→スライス引数の暗黙変換欠落](fixed-array-to-slice-argument.md) — `sum_slice(fixed)`で固定長blobをヘッダ誤読しゴミ値（Critical・メソッドレシーバ経路には変換実装済み）
+- Y5: 固定長配列→スライス引数の暗黙変換欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/fixed-array-to-slice-argument.md)。coerce_fixed_array_to_sliceを引数/デフォルト引数へ適用・decay抑止・コピー意味論をチュートリアル明文化）
 - [Y6: スライスof固定長配列の要素格納表現が未定義](slice-of-fixed-array-elements.md) — `int[2][]`でpushはヘッダ格納・読みはblob仮定の不一致（High・仕様確定を含む）
 
 ### 第4ラウンド追補: ユニオン・文字列要素の配列/スライス整合性（Z1〜Z3）

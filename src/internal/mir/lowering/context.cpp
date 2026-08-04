@@ -3,6 +3,7 @@
 #include "context.hpp"
 
 #include "internal/base/target.hpp"
+#include "layout.hpp"
 
 #include <memory>
 #include <optional>
@@ -485,6 +486,62 @@ LocalId LoweringContext::coerce_to_union(LocalId value, const hir::TypePtr& dest
     push_statement(MirStatement::assign(MirPlace{casted},
                                         MirRvalue::cast(MirOperand::copy(MirPlace{value}), dest)));
     return casted;
+}
+
+// 宛先型がスライスで値が固定長配列の場合、cm_array_to_sliceでヒープスライスへ実体化した一時を返す（Y5）。
+// 要素ストライドはlayout API（array_elem_stride相当）で計算する。メソッドレシーバ（HIRのneeds_array_to_slice）と同じ意味論
+LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::TypePtr& dest_type) {
+    if (!dest_type || value >= func->locals.size()) {
+        return value;
+    }
+    hir::TypePtr dest = resolve_typedef(dest_type);
+    if (!dest || dest->kind != hir::TypeKind::Array || dest->array_size.has_value()) {
+        return value;
+    }
+    hir::TypePtr src = resolve_typedef(func->locals[value].type);
+    if (!src || src->kind != hir::TypeKind::Array || !src->array_size.has_value()) {
+        return value;
+    }
+    const int64_t array_size = static_cast<int64_t>(src->array_size.value_or(0));
+    const int64_t elem_stride = layout::array_elem_stride(*this, src->element_type);
+
+    LocalId addr_local = new_temp(hir::make_pointer(src->element_type));
+    push_statement(
+        MirStatement::assign(MirPlace{addr_local}, MirRvalue::ref(MirPlace{value}, false)));
+
+    LocalId size_local = new_temp(hir::make_long());
+    MirConstant size_const;
+    size_const.value = array_size;
+    size_const.type = hir::make_long();
+    push_statement(MirStatement::assign(MirPlace{size_local},
+                                        MirRvalue::use(MirOperand::constant(size_const))));
+
+    LocalId stride_local = new_temp(hir::make_long());
+    MirConstant stride_const;
+    stride_const.value = elem_stride;
+    stride_const.type = hir::make_long();
+    push_statement(MirStatement::assign(MirPlace{stride_local},
+                                        MirRvalue::use(MirOperand::constant(stride_const))));
+
+    LocalId slice_local = new_temp(dest);
+    BlockId success_block = new_block();
+    std::vector<MirOperandPtr> conv_args;
+    conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
+    conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
+    conv_args.push_back(MirOperand::copy(MirPlace{stride_local}));
+    auto conv_term = std::make_unique<MirTerminator>();
+    conv_term->kind = MirTerminator::Call;
+    conv_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
+                                              std::move(conv_args),
+                                              MirPlace{slice_local},
+                                              success_block,
+                                              std::nullopt,
+                                              "",
+                                              "",
+                                              false};
+    set_terminator(std::move(conv_term));
+    switch_to_block(success_block);
+    return slice_local;
 }
 
 // LLVMのDataLayout（自然アライメント・パッキングなし）と一致するアライメントを計算する

@@ -226,6 +226,10 @@ class LoweringContext {
     // float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
     LocalId coerce_to_float_context(LocalId value, const hir::TypePtr& target_type);
 
+    // 宛先型がスライスで値が固定長配列の場合、cm_array_to_sliceでヒープスライスへ実体化した一時を返す（Y5）。
+    // 該当しない場合はvalueをそのまま返す。変換はヒープコピーであり、呼び出し先での変異は元配列へ反映されない
+    LocalId coerce_fixed_array_to_slice(LocalId value, const hir::TypePtr& dest_type);
+
     // 宛先型がユニオンで値が変種型の場合、タグ+ペイロードを書き込むユニオン構築Castを経由した一時を返す（Y1〜Y3）。
     // 該当しない（宛先が非ユニオン・値が既にユニオン）場合はvalueをそのまま返す。
     // 値消費サイト（return・構造体リテラルフィールド・push引数・スライスリテラル要素等）はこのヘルパを通し、タグ未構築のペイロード直書きを防ぐ
