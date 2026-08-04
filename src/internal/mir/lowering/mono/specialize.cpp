@@ -6,6 +6,7 @@
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
 
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <optional>
@@ -22,35 +23,10 @@ namespace cm::mir {
 void Monomorphization::generate_generic_specializations(
     MirProgram& program,
     const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
-    const std::map<std::pair<std::string, std::vector<std::string>>,
-                   std::vector<std::tuple<std::string, size_t>>>& needed) {
-    // 生成済みの特殊化を追跡
-    std::unordered_set<std::string> generated;
-
-    for (const auto& [key, call_sites] : needed) {
-        const auto& [func_name, type_args_raw] = key;
-
-        // type_argsを正規化（カンマ区切りの1要素を分割）
-        // 例: ["int, int"] -> ["int", "int"]
-        std::vector<std::string> type_args;
-        for (const auto& arg : type_args_raw) {
-            if (arg.find(',') != std::string::npos) {
-                auto split_args = split_type_args(arg);
-                for (const auto& split_arg : split_args) {
-                    type_args.push_back(split_arg);
-                }
-            } else {
-                type_args.push_back(arg);
-            }
-        }
-
-        // 特殊化関数名を生成
-        std::string specialized_name = make_specialized_name(func_name, type_args);
-
-        // すでに生成済みならスキップ
-        if (generated.count(specialized_name) > 0)
-            continue;
-        generated.insert(specialized_name);
+    const SpecRequests& needed) {
+    for (const auto& [specialized_name, req] : needed) {
+        const std::string& func_name = req.generic_name;
+        const std::vector<hir::TypePtr>& type_args = req.type_args;
 
         debug_msg("MONO", "Generating specialization: " + specialized_name);
 
@@ -72,66 +48,33 @@ void Monomorphization::generate_generic_specializations(
             continue;
         const auto* hir_func = hir_it->second;
 
-        // 型置換マップを作成（TypePtr版）
+        // 型置換マップを作成（パラメータ名→型引数ツリー。名前からの型復元は行わない）
         std::unordered_map<std::string, hir::TypePtr> type_subst;
-        // 型名置換マップ（string版 - メソッド呼び出し書き換え用）
+        // 型名置換マップ（クローン本体内のマングル済み呼び出し名の書き換え用。
+        // arg_symbol_keyのフラット規約でエンコードし、次パスのスキャンが同じ規約で復元する）
         std::unordered_map<std::string, std::string> type_name_subst;
 
+        // 型パラメータ名の取得: 総称関数はgeneric_params、implメソッドは総称シンボル名の<...>部
+        std::vector<std::string> param_names;
         if (!hir_func->generic_params.empty()) {
-            // 通常のジェネリック関数: generic_paramsから型パラメータを取得
-            for (size_t i = 0; i < hir_func->generic_params.size() && i < type_args.size(); ++i) {
-                const auto& param_name = hir_func->generic_params[i].name;
-                type_subst[param_name] = make_type_from_name(type_args[i]);
-                type_name_subst[param_name] = type_args[i];
-                debug_msg("MONO", "Type substitution: " + param_name + " -> " + type_args[i]);
+            for (const auto& gp : hir_func->generic_params) {
+                param_names.push_back(gp.name);
             }
-        } else if (func_name.find('<') != std::string::npos) {
-            // ジェネリックimplメソッドの場合: 関数名Vector<T>__methodから型パラメータを推論
-            // type_args[0]が実際の型（例: "int"）、Tがパラメータ名
+        } else {
             auto angle_start = func_name.find('<');
             auto angle_end = func_name.find('>');
             if (angle_start != std::string::npos && angle_end != std::string::npos) {
-                std::string params_str =
-                    func_name.substr(angle_start + 1, angle_end - angle_start - 1);
-                // 型パラメータを抽出（カンマ区切り）
-                std::vector<std::string> param_names;
-                std::string current;
-                int depth = 0;
-                for (char c : params_str) {
-                    if (c == '<')
-                        depth++;
-                    else if (c == '>')
-                        depth--;
-                    else if (c == ',' && depth == 0) {
-                        if (!current.empty()) {
-                            // 空白をトリム
-                            size_t start = current.find_first_not_of(" ");
-                            size_t end = current.find_last_not_of(" ");
-                            if (start != std::string::npos) {
-                                param_names.push_back(current.substr(start, end - start + 1));
-                            }
-                            current.clear();
-                        }
-                        continue;
-                    }
-                    current += c;
-                }
-                if (!current.empty()) {
-                    size_t start = current.find_first_not_of(" ");
-                    size_t end = current.find_last_not_of(" ");
-                    if (start != std::string::npos) {
-                        param_names.push_back(current.substr(start, end - start + 1));
-                    }
-                }
-
-                // type_argsと対応付け
-                for (size_t i = 0; i < param_names.size() && i < type_args.size(); ++i) {
-                    type_subst[param_names[i]] = make_type_from_name(type_args[i]);
-                    type_name_subst[param_names[i]] = type_args[i];
-                    debug_msg("MONO", "Impl method type substitution: " + param_names[i] + " -> " +
-                                          type_args[i]);
+                for (auto& p : split_type_args(
+                         func_name.substr(angle_start + 1, angle_end - angle_start - 1))) {
+                    param_names.push_back(std::move(p));
                 }
             }
+        }
+        for (size_t i = 0; i < param_names.size() && i < type_args.size(); ++i) {
+            type_subst[param_names[i]] = type_args[i];
+            type_name_subst[param_names[i]] = arg_symbol_key(type_args[i]);
+            debug_msg("MONO", "Type substitution: " + param_names[i] + " -> " +
+                                  get_type_name(type_args[i]));
         }
 
         // 特殊化関数を生成（MIR関数をコピーして型を置換）
@@ -142,18 +85,12 @@ void Monomorphization::generate_generic_specializations(
         specialized->arg_locals = original_mir->arg_locals;
 
         // ローカル変数をコピーして型を置換
-        // ジェネリックimplメソッドの場合、self型を関数名から推測
+        // ジェネリックimplメソッドの場合、self型は基底構造体名+型引数ツリーのシンボルキーで確定する
         std::string inferred_self_type;
         auto angle_pos = func_name.find("<");
         auto dunder_pos = func_name.find(">__");
         if (angle_pos != std::string::npos && dunder_pos != std::string::npos) {
-            // func_name = "Container<T>__get" -> base = "Container"
-            std::string base_struct = func_name.substr(0, angle_pos);
-            // 置換後の構造体名を生成: Container__int
-            inferred_self_type = base_struct;
-            for (const auto& arg : type_args) {
-                inferred_self_type += "__" + arg;
-            }
+            inferred_self_type = struct_symbol_key(func_name.substr(0, angle_pos), type_args);
         }
 
         for (const auto& local : original_mir->locals) {
@@ -507,8 +444,8 @@ void Monomorphization::generate_generic_specializations(
         // ========== デストラクタループ挿入（Vector<T>等の要素デストラクタ呼び出し） ==========
         // 関数名が__dtorで終わり、type_argsが存在し、要素型にデストラクタがある場合
         if (specialized_name.find("__dtor") != std::string::npos && !type_args.empty()) {
-            // 要素型のデストラクタ名を構築（ネストジェネリックの場合は正規化）
-            std::string element_type = normalize_type_arg(type_args[0]);
+            // 要素型のデストラクタ名を型引数ツリーのシンボルキーから構築する
+            std::string element_type = arg_symbol_key(type_args[0]);
             std::string element_dtor_name = element_type + "__dtor";
 
             // 要素型にデストラクタが存在するかチェック
@@ -691,10 +628,24 @@ void Monomorphization::generate_generic_specializations(
             }
         }
 
+        // 置換完了の検証（monomorphization-typed-instantiation 第3段）:
+        // 生成した特殊化関数のローカル型に未置換のジェネリック型パラメータが残っていないことを検査する。
+        // 残存は無置換特殊化（N2の根因）であり、警告出力でテストスイートが検出する
+        for (size_t li = 0; li < specialized->locals.size(); ++li) {
+            const auto& lt = specialized->locals[li].type;
+            if (lt && tree_has_generic_param(lt)) {
+                std::fprintf(stderr,
+                             "[MONO] WARNING: unsubstituted generic type remains in %s "
+                             "(local %zu '%s': %s)\n",
+                             specialized_name.c_str(), li, specialized->locals[li].name.c_str(),
+                             get_type_name(lt).c_str());
+            }
+        }
+
         program.functions.push_back(std::move(specialized));
 
         // 呼び出し箇所を書き換え
-        for (const auto& [caller_name, block_idx] : call_sites) {
+        for (const auto& [caller_name, block_idx] : req.call_sites) {
             for (auto& func : program.functions) {
                 if (func && func->name == caller_name) {
                     if (block_idx < func->basic_blocks.size()) {
@@ -721,8 +672,7 @@ void Monomorphization::generate_generic_specializations(
                                             for (size_t gi = 0;
                                                  gi < gps.size() && gi < type_args.size(); ++gi) {
                                                 if (dtype->name == gps[gi].name) {
-                                                    func->locals[dl].type =
-                                                        make_type_from_name(type_args[gi]);
+                                                    func->locals[dl].type = type_args[gi];
                                                     patched = true;
                                                     break;
                                                 }
@@ -730,8 +680,7 @@ void Monomorphization::generate_generic_specializations(
                                                     dtype->element_type &&
                                                     dtype->element_type->name == gps[gi].name) {
                                                     auto nt = std::make_shared<hir::Type>(*dtype);
-                                                    nt->element_type =
-                                                        make_type_from_name(type_args[gi]);
+                                                    nt->element_type = type_args[gi];
                                                     func->locals[dl].type = nt;
                                                     patched = true;
                                                     break;

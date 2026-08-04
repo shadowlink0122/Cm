@@ -61,9 +61,7 @@ void Monomorphization::monomorphize(
     const int MAX_PASSES = 64;
 
     for (int pass = 0; pass < MAX_PASSES; ++pass) {
-        std::map<std::pair<std::string, std::vector<std::string>>,
-                 std::vector<std::tuple<std::string, size_t>>>
-            needed;
+        SpecRequests needed;
 
         for (auto& func : program.functions) {
             if (!func)
@@ -74,14 +72,11 @@ void Monomorphization::monomorphize(
             scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
         }
 
-        // 既に生成済みの特殊化を除外
-        std::map<std::pair<std::string, std::vector<std::string>>,
-                 std::vector<std::tuple<std::string, size_t>>>
-            new_needed;
-        for (const auto& [key, call_sites] : needed) {
-            std::string specialized_name = make_specialized_name(key.first, key.second);
-            if (all_generated.count(specialized_name) == 0) {
-                new_needed[key] = call_sites;
+        // 既に生成済みの特殊化を除外（キー=特殊化シンボル名）
+        SpecRequests new_needed;
+        for (auto& [spec_name, req] : needed) {
+            if (all_generated.count(spec_name) == 0) {
+                new_needed.emplace(spec_name, std::move(req));
             }
         }
 
@@ -95,9 +90,8 @@ void Monomorphization::monomorphize(
 
         generate_generic_specializations(program, hir_functions, new_needed);
 
-        for (const auto& [key, _] : new_needed) {
-            std::string specialized_name = make_specialized_name(key.first, key.second);
-            all_generated.insert(specialized_name);
+        for (const auto& [spec_name, _] : new_needed) {
+            all_generated.insert(spec_name);
         }
 
         rewrite_generic_calls(program, new_needed);

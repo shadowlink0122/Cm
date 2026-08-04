@@ -20,6 +20,16 @@ namespace cm::mir {
 // ============================================================
 class Monomorphization : public MirLoweringBase {
    public:
+    // 特殊化要求（typed-instantiation）: 総称シンボル名+型引数ツリー+呼び出しサイト表。
+    // 特殊化の同定は型ノードで行い、シンボル名はエンコード終端（make_specialized_name）でのみ生成する
+    struct SpecRequest {
+        std::string generic_name;             // 総称シンボル名（HIR関数キー）
+        std::vector<hir::TypePtr> type_args;  // 型引数ツリー
+        std::vector<std::pair<std::string, size_t>> call_sites;  // (呼び出し元関数名, block index)
+    };
+    // キー=特殊化シンボル名（型引数はarg_symbol_keyで一意にエンコード済みのため重複判定を兼ねる）
+    using SpecRequests = std::map<std::string, SpecRequest>;
+
     // プログラム全体のモノモーフィゼーション
     void monomorphize(
         MirProgram& program,
@@ -39,10 +49,9 @@ class Monomorphization : public MirLoweringBase {
     // 単相化で型が確定したローカルのprintln/print系ディスパッチ補正（N2）
     void fixup_println_dispatch(MirFunction* caller, LocalId local_id);
 
-    // ジェネリック関数呼び出しを特殊化関数呼び出しに書き換え
-    void rewrite_generic_calls(
-        MirProgram& program, const std::map<std::pair<std::string, std::vector<std::string>>,
-                                            std::vector<std::tuple<std::string, size_t>>>& needed);
+    // ジェネリック呼び出しを特殊化呼び出しへ書き換える（スキャンで記録した呼び出しサイト表の引き当てのみ。
+    // 名前パターン照合・型パラメータ名の仮定（T/U/V/W）は行わない）
+    void rewrite_generic_calls(MirProgram& program, const SpecRequests& needed);
 
     // MIR内の全型を走査し、必要な構造体特殊化を収集（型引数はhir::Typeツリーで保持する）
     void collect_struct_specializations(
@@ -90,42 +99,41 @@ class Monomorphization : public MirLoweringBase {
     // 構造体メソッドのself引数を参照に修正
     void fix_struct_method_self_args(MirProgram& program);
 
-    // ポインタ型名を正規化
-    std::string normalize_type_arg(const std::string& type_arg);
-
-    // 型名から特殊化構造体名を生成
-    std::string make_specialized_struct_name(const std::string& base_name,
-                                             const std::vector<std::string>& type_args);
-
     // 型からtype_argsを文字列として抽出
     std::vector<std::string> extract_type_args_strings(const hir::TypePtr& type);
 
-    // ジェネリック関数呼び出しをスキャン
+    // ジェネリック関数呼び出しをスキャンし、特殊化要求（型引数ツリー+呼び出しサイト）を収集する
     void scan_generic_calls(
         MirFunction* func, const std::unordered_set<std::string>& generic_funcs,
         const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
-        std::map<std::pair<std::string, std::vector<std::string>>,
-                 std::vector<std::tuple<std::string, size_t>>>& needed);
+        SpecRequests& needed);
 
     // ジェネリック関数の特殊化を生成
     void generate_generic_specializations(
         MirProgram& program,
         const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
-        const std::map<std::pair<std::string, std::vector<std::string>>,
-                       std::vector<std::tuple<std::string, size_t>>>& needed);
+        const SpecRequests& needed);
 
     // ジェネリック関数を削除
     void cleanup_generic_functions(MirProgram& program,
                                    const std::unordered_set<std::string>& generic_funcs);
 
-    // 引数の型から型パラメータを推論
-    std::vector<std::string> infer_type_args(const MirFunction* caller,
-                                             const MirTerminator::CallData& call_data,
-                                             const hir::HirFunction* callee);
+    // 呼び出しサイトの実引数型・戻り値格納先型（MIRローカルの型ツリー）から型パラメータを構造的単一化で推論する
+    std::vector<hir::TypePtr> infer_type_args(const MirFunction* caller,
+                                              const MirTerminator::CallData& call_data,
+                                              const hir::HirFunction* callee);
 
-    // 型名から特殊化関数名を生成
+    // パラメータ型と実引数型の構造的単一化（Pointer/Array/Structのtype_argsを再帰照合し型パラメータを束縛する）
+    void unify_type_param(const hir::TypePtr& param_type, const hir::TypePtr& arg_type,
+                          const hir::HirFunction* callee,
+                          std::unordered_map<std::string, hir::TypePtr>& inferred) const;
+
+    // フラット名/表示名を型ツリーへ復元する単一の境界（Vector__int / Vector<int> / ptr_int / int）
+    hir::TypePtr decode_type_name(const std::string& name) const;
+
+    // 特殊化関数名を生成（型引数ツリーからarg_symbol_keyでエンコード。名前生成の終端）
     std::string make_specialized_name(const std::string& base_name,
-                                      const std::vector<std::string>& type_args);
+                                      const std::vector<hir::TypePtr>& type_args) const;
 
     // インターフェース型かチェック
     bool is_interface_type(const std::string& type_name) const;
