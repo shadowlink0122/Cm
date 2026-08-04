@@ -146,6 +146,16 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                     auto method_it = git->second.find(member.member);
                     if (method_it != git->second.end()) {
                         const auto& method_info = method_it->second;
+                        // 引数へ型を注釈する（typed-hir-single-source 第2段）。
+                        // 期待型は型引数を代入したパラメータ型（無名リテラルの型決定にも必要）
+                        for (size_t i = 0; i < member.args.size(); ++i) {
+                            ast::TypePtr expected =
+                                (i < method_info.param_types.size())
+                                    ? substitute_generic_type(method_info.param_types[i],
+                                                              gen_it->second, obj_type->type_args)
+                                    : nullptr;
+                            infer_type_expecting(*member.args[i], expected);
+                        }
                         ast::TypePtr return_type = method_info.return_type;
                         if (return_type && gen_it != generic_structs_.end()) {
                             return_type = substitute_generic_type(return_type, gen_it->second,

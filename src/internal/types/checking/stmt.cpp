@@ -5,6 +5,7 @@
 #include "internal/base/i18n.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -170,7 +171,27 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
         if (switch_stmt->expr) {
             infer_type(*switch_stmt->expr);
         }
+        // caseパターン値（単一値・範囲・ORパターン）にも型を注釈する（typed-hir-single-source 第2段）
+        std::function<void(ast::Pattern&)> infer_pattern = [&](ast::Pattern& p) {
+            if (p.value) {
+                infer_type(*p.value);
+            }
+            if (p.range_start) {
+                infer_type(*p.range_start);
+            }
+            if (p.range_end) {
+                infer_type(*p.range_end);
+            }
+            for (auto& op : p.or_patterns) {
+                if (op) {
+                    infer_pattern(*op);
+                }
+            }
+        };
         for (auto& c : switch_stmt->cases) {
+            if (c.pattern) {
+                infer_pattern(*c.pattern);
+            }
             scopes_.push();
             for (auto& s : c.stmts) {
                 check_statement(*s);

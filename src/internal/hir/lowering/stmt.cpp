@@ -322,6 +322,9 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         iter_call->func_name = type_name + "__iter";
         iter_call->args.push_back(lower_expr(*for_in.iterable));
         iter_let->init = std::make_unique<HirExpr>(std::move(iter_call), iter_let->type);
+        // 合成ノードへ付与するイテレータ型（moveされる前に捕捉する）
+        const auto iter_struct_type =
+            iter_let->type ? iter_let->type : ast::make_named(for_in.iterator_type_name);
 
         hir_block->stmts.push_back(std::make_unique<HirStmt>(std::move(iter_let)));
 
@@ -331,13 +334,15 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         // 条件: __iter.has_next()
         auto has_next_call = std::make_unique<HirCall>();
         has_next_call->func_name = for_in.iterator_type_name + "__has_next";
-        // イテレータのアドレスを渡す（selfはポインタとして受け取る）
+        // イテレータのアドレスを渡す（selfはポインタとして受け取る）。
+        // 合成ノードにも実型を付与する（typed-hir-single-source 第2段）
         auto iter_ref = std::make_unique<HirVarRef>();
         iter_ref->name = iter_name;
         auto iter_addr = std::make_unique<HirUnary>();
         iter_addr->op = HirUnaryOp::AddrOf;
-        iter_addr->operand = std::make_unique<HirExpr>(std::move(iter_ref), nullptr);
-        has_next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr), nullptr));
+        iter_addr->operand = std::make_unique<HirExpr>(std::move(iter_ref), iter_struct_type);
+        has_next_call->args.push_back(
+            std::make_unique<HirExpr>(std::move(iter_addr), ast::make_pointer(iter_struct_type)));
         hir_while->cond = std::make_unique<HirExpr>(std::move(has_next_call), ast::make_bool());
 
         // ループ本体
@@ -353,8 +358,9 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         iter_ref2->name = iter_name;
         auto iter_addr2 = std::make_unique<HirUnary>();
         iter_addr2->op = HirUnaryOp::AddrOf;
-        iter_addr2->operand = std::make_unique<HirExpr>(std::move(iter_ref2), nullptr);
-        next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr2), nullptr));
+        iter_addr2->operand = std::make_unique<HirExpr>(std::move(iter_ref2), iter_struct_type);
+        next_call->args.push_back(
+            std::make_unique<HirExpr>(std::move(iter_addr2), ast::make_pointer(iter_struct_type)));
         elem_let->init = std::make_unique<HirExpr>(std::move(next_call), for_in.var_type);
 
         hir_while->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
@@ -417,19 +423,23 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     }
     hir_for->cond = std::make_unique<HirExpr>(std::move(cond_binary), ast::make_bool());
 
-    // update: __i = __i + 1
-    auto ast_idx_ref_left = std::make_unique<ast::IdentExpr>(idx_name);
-    auto ast_idx_ref_right = std::make_unique<ast::IdentExpr>(idx_name);
-    auto ast_one = std::make_unique<ast::LiteralExpr>(int64_t{1});
-    auto ast_add = std::make_unique<ast::BinaryExpr>(
-        ast::BinaryOp::Add, std::make_unique<ast::Expr>(std::move(ast_idx_ref_right)),
-        std::make_unique<ast::Expr>(std::move(ast_one)));
-    auto ast_assign = std::make_unique<ast::BinaryExpr>(
-        ast::BinaryOp::Assign, std::make_unique<ast::Expr>(std::move(ast_idx_ref_left)),
-        std::make_unique<ast::Expr>(std::move(ast_add)));
-    ast::Expr update_expr(std::move(ast_assign));
-    update_expr.type = ast::make_int();
-    hir_for->update = lower_expr(update_expr);
+    // update: __i = __i + 1（合成ASTのlower_expr経由では部分式が型注釈を持たずerror型になるため、
+    // 型付きHIRを直接構築する。typed-hir-single-source 第2段）
+    auto upd_lhs_ref = std::make_unique<HirVarRef>();
+    upd_lhs_ref->name = idx_name;
+    auto upd_rhs_ref = std::make_unique<HirVarRef>();
+    upd_rhs_ref->name = idx_name;
+    auto upd_one = std::make_unique<HirLiteral>();
+    upd_one->value = int64_t{1};
+    auto upd_add = std::make_unique<HirBinary>();
+    upd_add->op = HirBinaryOp::Add;
+    upd_add->lhs = std::make_unique<HirExpr>(std::move(upd_rhs_ref), ast::make_int());
+    upd_add->rhs = std::make_unique<HirExpr>(std::move(upd_one), ast::make_int());
+    auto upd_assign = std::make_unique<HirBinary>();
+    upd_assign->op = HirBinaryOp::Assign;
+    upd_assign->lhs = std::make_unique<HirExpr>(std::move(upd_lhs_ref), ast::make_int());
+    upd_assign->rhs = std::make_unique<HirExpr>(std::move(upd_add), ast::make_int());
+    hir_for->update = std::make_unique<HirExpr>(std::move(upd_assign), ast::make_int());
 
     // ループ変数の初期化
     auto elem_let = std::make_unique<HirLet>();

@@ -382,6 +382,7 @@ set(CM_SOURCES
     src/internal/preprocessor/conditional.cpp
     src/internal/module/resolver.cpp
     src/internal/module/graph.cpp
+    src/internal/hir/type_audit.cpp
     # Lint configuration
     src/internal/lint/config.cpp
     # HIR lowering (AST -> HIR)
@@ -755,6 +756,22 @@ if(BUILD_TESTING)
         target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(hir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "regression")
+
+        # Integration tests - HIR型不変条件の監査（typed-hir-single-source）
+        add_executable(hir_type_audit_test
+            tests/regression/hir_type_audit_test.cpp
+            src/internal/hir/type_audit.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(hir_type_audit_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(hir_type_audit_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(hir_type_audit_test gtest_main cm_frontend)
+        gtest_discover_tests(hir_type_audit_test PROPERTIES LABELS "regression")
 
         # Integration tests - MIR Lowering
         # （Cmプログラムを tests/regression/cases/mir_lowering/ から読み込む）

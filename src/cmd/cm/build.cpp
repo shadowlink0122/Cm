@@ -11,6 +11,7 @@
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"
 #include "internal/hir/lowering/lowering.hpp"
+#include "internal/hir/type_audit.hpp"
 #include "internal/macro/derive.hpp"
 #include "internal/mir/lowering/lowering.hpp"
 #include "internal/mir/passes/cleanup/dce.hpp"
@@ -285,6 +286,12 @@ int run_build(cli::Options& opts, const char* argv0) {
         auto phase_hir_start = std::chrono::steady_clock::now();
         hir::HirLowering hir_lowering;
         hir = hir_lowering.lower(program);
+        // HIR型不変条件の監査（typed-hir-single-source）: CM_HIR_TYPE_AUDIT=1で違反集計、=2でサンプル出力
+        if (const char* audit_env = std::getenv("CM_HIR_TYPE_AUDIT");
+            audit_env && audit_env[0] != '0') {
+            auto audit = hir::audit_types(hir);
+            hir::report_type_audit(audit, opts.input_file, std::string(audit_env) == "2");
+        }
         ctx.phase_hir_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - phase_hir_start)
                                .count();

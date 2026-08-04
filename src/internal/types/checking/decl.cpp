@@ -376,10 +376,12 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
             }
         }
 
-        // 初期化式の型チェック
+        // 初期化式の型チェック（宣言型を期待型として渡す。無名構造体リテラル等の型決定に必要。
+        // typed-hir-single-source 第2段）
         ast::TypePtr init_type;
         if (gv->init_expr) {
-            init_type = infer_type(*gv->init_expr);
+            init_type = infer_type_expecting(*gv->init_expr,
+                                             gv->type ? resolve_typedef(gv->type) : nullptr);
         }
 
         // 型を決定
@@ -902,6 +904,24 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
         initialized_variables_.clear();  // 次のメソッド用にクリア
         scopes_.pop();
     }
+
+    // 演算子実装の本体も型検査する（typed-hir-single-source 第2段）。
+    // 従来は未検査でexpr.typeが注釈されず、HIRの演算子本体が全ノードerror型になっていた
+    for (auto& op : impl.operators) {
+        scopes_.push();
+        current_return_type_ = op->return_type;
+        scopes_.current().define("self", impl.target_type, false);
+        mark_variable_initialized("self");
+        for (const auto& param : op->params) {
+            scopes_.current().define(param.name, param.type, param.qualifiers.is_const);
+            mark_variable_initialized(param.name);
+        }
+        for (auto& stmt : op->body) {
+            check_statement(*stmt);
+        }
+        initialized_variables_.clear();
+        scopes_.pop();
+    }
     current_return_type_ = nullptr;
     current_impl_target_type_.clear();
     generic_context_.clear();
@@ -1077,7 +1097,7 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         current_return_type_ = func.return_type;
     }
 
-    for (const auto& param : func.params) {
+    for (auto& param : func.params) {
         if (!is_valid_type(param.type)) {
             error(func.name_span,
                   i18n::msgf(i18n::MsgId::TcUndefinedParameterTypeParameterFunction,
@@ -1090,6 +1110,10 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
         scopes_.current().define(param.name, resolved_type, param.qualifiers.is_const);
         // パラメータは初期化されているとみなす
         mark_variable_initialized(param.name);
+        // デフォルト引数式へ型を注釈する（typed-hir-single-source 第2段。期待型=パラメータ型）
+        if (param.default_value) {
+            infer_type_expecting(*param.default_value, resolved_type);
+        }
     }
 
     for (auto& stmt : func.body) {
