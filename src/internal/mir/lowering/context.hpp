@@ -17,47 +17,6 @@
 namespace cm::mir {
 
 // ============================================================
-// ユニオン型のスライス要素サイズ
-// codegenのtagged union表現 {tag: i32, payload: [N x i8]} と一致させる
-// ============================================================
-inline int64_t union_slice_elem_size(const hir::TypePtr& union_type) {
-    int64_t payload = 8;  // デフォルト（int/long等の8バイトペイロード）
-    if (union_type && !union_type->type_args.empty()) {
-        payload = 0;
-        for (const auto& variant : union_type->type_args) {
-            if (!variant) {
-                continue;
-            }
-            int64_t size = 8;
-            switch (variant->kind) {
-                case hir::TypeKind::Bool:
-                case hir::TypeKind::Tiny:
-                case hir::TypeKind::UTiny:
-                case hir::TypeKind::Char:
-                    size = 1;
-                    break;
-                case hir::TypeKind::Short:
-                case hir::TypeKind::UShort:
-                    size = 2;
-                    break;
-                case hir::TypeKind::Int:
-                case hir::TypeKind::UInt:
-                case hir::TypeKind::Float:
-                case hir::TypeKind::UFloat:
-                    size = 4;
-                    break;
-                default:
-                    size = 8;  // long/double/ポインタ/string等
-                    break;
-            }
-            payload = std::max(payload, size);
-        }
-        payload = std::max<int64_t>(payload, 8);
-    }
-    return 4 + payload;  // tag(i32) + ペイロード
-}
-
-// ============================================================
 // ループコンテキスト
 // break/continue先のブロックを管理
 // ============================================================

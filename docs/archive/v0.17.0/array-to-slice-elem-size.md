@@ -38,3 +38,11 @@ layout-query-unification（実装済み・archive）が「型→要素ストラ�
 ## 検出経緯
 
 第4ラウンド追補（ユニオン・文字列要素の配列/スライス整合性調査）で検出。最小再現は `.tmp/bughunt4/z10_short_map.cm`。
+
+## 実装記録（2026-08-05）
+
+- 修正方針の選択肢のうち「HIR脱糖では要素サイズを埋め込まずMIR側で解決する」を採用した。HIRの手書きswitchはプレースホルダ0の発行に縮退させ、MIRのcm_array_to_slice引数lowering（expr_call.cpp）が第1引数のポインタ要素型から`layout::array_elem_stride`（typedef解決・集約レイアウト・ターゲット依存ポインタ幅）で第3引数を再計算する。
+- これによりHIR層へのレイアウトAPI公開が不要になり、サイズ決定はMIRのlayout 1系統に閉じる。return・スライスリテラル・push（X3）の直接構築サイトは従来からlayout APIを使用しており、全サイトが同一APIに揃った。
+- 死コード`union_slice_elem_size`（context.hpp、呼び出し元ゼロ・構造体バリアントを一律8と誤る旧実装）を削除した。
+- 実害の確認: wasm32で`string[3]`の`impl string[]`メソッドが`aa;cc;;`（1つ飛び読み）になる再現を修正前に取得し、修正後にnative/jit/wasm一致（`aa;bb;cc;`）を確認した。short/tinyの合計は型ベース読みとの偶然一致で値は合うが、変換時の過剰memcpy（スタック外読み）も同時に解消している。
+- 回帰テスト`tests/common/impl/fixed_array_elem_stride.cm`（short/tiny/string×impl T[]メソッド）を追加し、全スイート（unit/regression/interpreter/llvm/llvm-wasm/js/sv）通過を確認した。

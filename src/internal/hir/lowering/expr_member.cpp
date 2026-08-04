@@ -1153,19 +1153,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             convert_call->args.push_back(
                 std::make_unique<HirExpr>(std::move(size_lit), ast::make_long()));
 
-            // 要素サイズを計算
-            int64_t elem_size = 4;  // デフォルトはint
-            auto elem_kind = obj_type->element_type->kind;
-            if (elem_kind == ast::TypeKind::Char || elem_kind == ast::TypeKind::Bool) {
-                elem_size = 1;
-            } else if (elem_kind == ast::TypeKind::Long || elem_kind == ast::TypeKind::ULong ||
-                       elem_kind == ast::TypeKind::Double) {
-                elem_size = 8;
-            } else if (elem_kind == ast::TypeKind::Pointer || elem_kind == ast::TypeKind::String) {
-                elem_size = 8;
-            }
+            // 要素サイズはHIRでは決めない（プレースホルダ0）。
+            // MIRのcm_array_to_slice引数loweringがlayout API（array_elem_stride: typedef解決・集約レイアウト・ターゲット依存ポインタ幅）で再計算する（Z2: 手書きswitchはshort/tiny/構造体/wasmポインタ幅を誤っていた）
             auto elem_size_lit = std::make_unique<HirLiteral>();
-            elem_size_lit->value = elem_size;
+            elem_size_lit->value = int64_t{0};
             convert_call->args.push_back(
                 std::make_unique<HirExpr>(std::move(elem_size_lit), ast::make_long()));
 

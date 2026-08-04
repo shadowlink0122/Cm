@@ -3,6 +3,7 @@
 #include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/hir/lowering/fwd.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
 #include "internal/syntax/parser/parser.hpp"
 
@@ -91,6 +92,24 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         const auto& arg = call.args[i];
+
+        // cm_array_to_sliceの要素サイズ引数（第3引数）はHIRの埋め込み値を使わず、
+        // 第1引数のポインタ要素型からlayout APIで再計算する（Z2）。
+        // HIR層の手書きサイズはshort/tiny/構造体/ターゲット依存ポインタ幅を誤っており、
+        // 変換後スライスのヘッダstride依存操作（wasmの文字列要素読み等）が崩れていた
+        if (call.func_name == "cm_array_to_slice" && i == 2 && call.args.size() == 3 &&
+            call.args[0] && call.args[0]->type &&
+            call.args[0]->type->kind == hir::TypeKind::Pointer) {
+            const int64_t stride = layout::array_elem_stride(ctx, call.args[0]->type->element_type);
+            LocalId stride_local = ctx.new_temp(hir::make_long());
+            MirConstant stride_const;
+            stride_const.value = stride;
+            stride_const.type = hir::make_long();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{stride_local}, MirRvalue::use(MirOperand::constant(stride_const))));
+            args.push_back(MirOperand::copy(MirPlace{stride_local}));
+            continue;
+        }
 
         // メソッド呼び出しの第1引数（self）は特別な処理が必要
         // selfが変数参照の場合、コピーを避けて直接元の変数への参照を取る
