@@ -1045,17 +1045,12 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         // 関数型フィールドの呼び出し（obj.field(args)）: implメソッドではなく関数値を保持するフィールドを起動する
         // （JSオブジェクトのメソッド等。呼び出し先はメンバ式のまま保持し、JSバックエンドでのthis束縛を保てるようにする）
         if (obj_type && obj_type->kind == ast::TypeKind::Struct) {
-            // 構造体フィールドの解決: 通常経路はstruct_defs_、文字列補間ミニパイプラインではseeded_struct_fields_を参照する
+            // 構造体フィールドの解決（struct_defs_）
             std::vector<std::pair<std::string, TypePtr>> field_types;
             auto struct_it = struct_defs_.find(obj_type->name);
             if (struct_it != struct_defs_.end() && struct_it->second) {
                 for (const auto& field : struct_it->second->fields) {
                     field_types.emplace_back(field.name, field.type);
-                }
-            } else {
-                auto seeded_it = seeded_struct_fields_.find(obj_type->name);
-                if (seeded_it != seeded_struct_fields_.end()) {
-                    field_types = seeded_it->second;
                 }
             }
             {
@@ -1146,19 +1141,6 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
     auto hir = std::make_unique<HirMember>();
     hir->object = lower_expr(*mem.object);
     hir->member = mem.member;
-    // 型チェッカーを通らない経路（文字列補間のミニパイプライン）では、シードされた構造体フィールド定義からメンバ型を補完する
-    if ((!type || type->is_error()) && !seeded_struct_fields_.empty() && hir->object &&
-        hir->object->type) {
-        auto sit = seeded_struct_fields_.find(hir->object->type->name);
-        if (sit != seeded_struct_fields_.end()) {
-            for (const auto& [field_name, field_type] : sit->second) {
-                if (field_name == mem.member) {
-                    type = field_type;
-                    break;
-                }
-            }
-        }
-    }
     debug::hir::log(debug::hir::Id::FieldName, "field: " + mem.member, debug::Level::Trace);
     return std::make_unique<HirExpr>(std::move(hir), type);
 }

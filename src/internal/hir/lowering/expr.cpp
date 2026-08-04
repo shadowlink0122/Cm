@@ -133,13 +133,6 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
             debug::hir::log(debug::hir::Id::IdentifierRef, "function reference: " + ident->name,
                             debug::Level::Debug);
         }
-        // 型未設定/エラー型の場合はシード型（補間ミニパイプライン）から補完
-        if ((!type || type->is_error()) && !seeded_var_types_.empty()) {
-            auto sit = seeded_var_types_.find(ident->name);
-            if (sit != seeded_var_types_.end()) {
-                type = sit->second;
-            }
-        }
         return std::make_unique<HirExpr>(std::move(var_ref), type);
     } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
         return lower_binary(*binary, type);

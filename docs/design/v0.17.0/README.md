@@ -14,9 +14,6 @@ C1・C2・C3・C4・C5・C6・C7・C8・C9・C10・C11・C12(文字列・スラ�
 
 ## 残りの設計文書（テーマ別）
 
-### 構造的リファクタリング（第1〜4段実装済み・ミニパイプライン完全削除のみ監視期間後）
-- [型解決とチェーンloweringの単純化](type-resolution-simplification.md) — B/N/V/W/X系バグの原因分析に基づく重複実装の統合。第1段（lower_place一本化）・第2段（スライスディスパッチ表化）・第3段（期待型伝播のinfer_type_expecting正式API化）・第4段a（補間解決の式パイプライン一本化）・第4段b（型検査時脱糖: 実AST部分式をHIR/MIRが消費、検査用テキストパース削除）まで実装済み。ミニパイプラインはフォールバックとして休眠（発火0件確認済み）、完全削除は監視期間後
-
 ### 簡素化提案（全体設計レビュー第2弾、未実装）
 
 type-resolution-simplification.mdの4領域に続き、コンパイラが複雑なことをしている箇所の網羅調査（実測: ソース行数・重複実装数・バグ修正履歴との紐付け）から、簡素化可能な8領域を機能単位の設計文書として起票した。
@@ -35,5 +32,5 @@ W1/X4=無名リテラルの期待型伝播、W2=多次元スライス書き込�
 ## 状態
 
 監査全57所見・セルフホスト準備（S1〜S9）・構文網羅検証で検出したバグ（B1〜B9・N1〜N8・V1〜V8・W1〜W5・X1〜X6）は全て実装完了し、[archive/v0.17.0/](../../archive/v0.17.0/) へ移動済み（各文書に将来課題を記録）。
-型解決とチェーンloweringの単純化（type-resolution-simplification.md、補間フォールバック完全削除の監視期間のみ残）と、簡素化提案2本（typed-hir-single-source.md・monomorphization-typed-instantiation.md）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。自動実装のソース展開化は全3段を完了し [archive/v0.17.0/derive-as-source-expansion.md](../../archive/v0.17.0/derive-as-source-expansion.md) へ移動した（非ジェネリック全トレイトの通常パイプライン化・波括弧エスケープ修正・死んだ生成器約1,700行の削除。ジェネリックの単一総称化は演算子mono対応後）。
+型解決とチェーンloweringの単純化は全段（lower_place一本化・スライスディスパッチ表化・期待型伝播の正式API化・補間のパース時脱糖とミニパイプライン完全削除）を完了し [archive/v0.17.0/type-resolution-simplification.md](../../archive/v0.17.0/type-resolution-simplification.md) へ移動した。簡素化提案2本（typed-hir-single-source.md・monomorphization-typed-instantiation.md）が未実装の構造的リファクタリング提案として本ディレクトリに残っている。自動実装のソース展開化は全3段を完了し [archive/v0.17.0/derive-as-source-expansion.md](../../archive/v0.17.0/derive-as-source-expansion.md) へ移動した（非ジェネリック全トレイトの通常パイプライン化・波括弧エスケープ修正・死んだ生成器約1,700行の削除。ジェネリックの単一総称化は演算子mono対応後）。
 セルフホスト本体（CmコンパイラのCm実装）は1.0以降に別設計文書で扱う。

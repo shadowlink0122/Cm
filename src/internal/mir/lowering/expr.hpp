@@ -71,16 +71,10 @@ class ExprLowering : public MirLoweringBase {
     std::pair<std::vector<std::string>, std::string> extract_named_placeholders(
         const std::string& format_str, LoweringContext& ctx);
 
-    // 補間プレースホルダの内容を式としてパースしMIRへ降下する（{a + b} 等、変数名パターンで扱えない一般式のフォールバック。
-    //  パースに失敗した場合は std::nullopt を返す）
-    std::optional<LocalId> lower_interp_expression(const std::string& content,
-                                                   LoweringContext& ctx);
-
-    // 補間プレースホルダを値ローカルへ解決（識別子直接参照 or 式パーサ経由）
+    // 補間プレースホルダを値ローカルへ解決（脱糖済み部分式が無い場合の識別子直接参照）
     LocalId resolve_interp_placeholder(const std::string& content, LoweringContext& ctx);
 
-    // 脱糖済みの補間部分式（HirLiteral.interp_parts）を優先して各プレースホルダを値ローカルへ解決する（第4段b）。
-    // 部分式が無い内容のみ従来のテキスト解決（resolve_interp_placeholder）へフォールバックする
+    // 脱糖済みの補間部分式（HirLiteral.interp_parts）から各プレースホルダを値ローカルへ解決する（第4段b）
     std::vector<LocalId> lower_interp_arg_values(const hir::HirLiteral& lit,
                                                  const std::vector<std::string>& var_names,
                                                  LoweringContext& ctx);
