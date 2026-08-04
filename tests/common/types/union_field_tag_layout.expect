@@ -1,0 +1,9 @@
+head: true b 10
+mid: true c 20
+midpayload: mid
+tail: true f 30
+tailpayload: 42
+reassign: true
+swapped
+afterstruct: true 200
+7
