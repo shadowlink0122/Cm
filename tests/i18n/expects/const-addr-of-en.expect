@@ -1,0 +1,2 @@
+taking a mutable pointer to const value 'c'
+!const value 'ok'

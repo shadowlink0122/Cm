@@ -1,0 +1,2 @@
+error: non-void function 'bad_return'
+error: Variable 'y' may be used before initialization
