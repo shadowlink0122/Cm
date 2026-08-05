@@ -40,8 +40,9 @@ export const strings: TmRepositoryEntry = {
         },
         {
           comment:
-            '補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト',
-          match: '(\\{)([^{}"]*)(\\})',
+            '補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト。式内のエスケープ文字（\\"等）と構造体リテラルの波括弧2段までを許容する（{x.f(\\"s\\")}や{Point{x: 1}}が対象。文字列リテラル内の裸の"は文字列終端なので式に現れない）',
+          match:
+            '(\\{)((?:[^{}"\\\\]|\\\\.|\\{(?:[^{}"\\\\]|\\\\.|\\{(?:[^{}"\\\\]|\\\\.)*\\})*\\})*)(\\})',
           captures: {
             '1': { name: 'punctuation.definition.template-expression.begin.cm' },
             '2': { patterns: [{ include: '#interpolation-expression' }] },

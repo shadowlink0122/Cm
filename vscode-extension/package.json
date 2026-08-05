@@ -96,7 +96,9 @@
     "eslint-config-prettier": "^10.0.0",
     "prettier": "^3.9.5",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.64.0"
+    "typescript-eslint": "^8.64.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
   "main": "./out/src/extension.js",
   "activationEvents": [
