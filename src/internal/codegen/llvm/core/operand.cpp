@@ -761,9 +761,12 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         currentType && currentType->kind == hir::TypeKind::Array &&
                         !currentType->array_size.has_value() &&
                         (currentType->dimensions.empty() || currentType->dimensions[0] == 0);
+                    // 内側「スライス」要素のみインラインヘッダ格納として従来経路へ委ねる。
+                    // 固定長配列要素はN×要素ストライドのインラインblobであり、ヘッダ経由のGEPで正しく届く（Y6）
                     const bool elem_is_inline_slice =
                         cur_is_slice && currentType->element_type &&
-                        currentType->element_type->kind == hir::TypeKind::Array;
+                        currentType->element_type->kind == hir::TypeKind::Array &&
+                        !currentType->element_type->array_size.has_value();
                     if (cur_is_slice && !elem_is_inline_slice) {
                         // 添字値を取得（alloca格納の場合はロードしてi64へ拡張）
                         llvm::Value* sliceIndexVal = nullptr;
@@ -865,9 +868,17 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
                     } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
-                        // Deref後（LoadInst結果へのインデックスアクセス）:
-                        // currentType自体が要素型
-                        elemType = convertType(currentType);
+                        // Deref後（LoadInst結果へのインデックスアクセス）。
+                        // pointeeが固定長配列の場合、Indexは「配列内の要素」への添字であり、
+                        // 配列型ストライド（N×要素）でGEPすると要素ずれになる（Y6: rows[0][1]=vが隣要素へ書かれていた）。
+                        // 要素型ストライドでGEPする
+                        if (currentType->kind == hir::TypeKind::Array &&
+                            currentType->array_size.has_value() && currentType->element_type) {
+                            elemType = convertType(currentType->element_type);
+                        } else {
+                            // currentType自体が要素型
+                            elemType = convertType(currentType);
+                        }
                     }
 
                     // addrがポインタ変数を格納している場合、まずポインタ値をロード

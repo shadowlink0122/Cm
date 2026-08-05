@@ -394,29 +394,17 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                     ctx.set_terminator(std::move(new_term));
                     ctx.switch_to_block(new_block);
 
-                    // push関数名を決定
-                    std::string push_func = "cm_slice_push_i32";
-                    if (auto info = slice_scalar_info(elem_kind)) {
-                        // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
-                        push_func = std::string("cm_slice_push_") + info->width;
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        push_func = "cm_slice_push_ptr";
-                    } else if (elem_kind == hir::TypeKind::Union ||
-                               elem_kind == hir::TypeKind::Struct) {
-                        // ユニオン・構造体要素はblobとしてメモリコピー（push側と統一）
-                        push_func = "cm_slice_push_blob";
-                    } else if (elem_kind == hir::TypeKind::Array) {
-                        // 配列要素（多次元スライス）はスライス構造体をコピー
-                        push_func = "cm_slice_push_slice";
-                    }
+                    // push関数はslice_elem_dispatchの表引きで選ぶ（Z1/Y6: 固定長配列要素はN×要素のインラインblob、スライス要素はヘッダ格納）
+                    const SliceElemDispatch elem_disp = slice_elem_dispatch(elem_type);
+                    std::string push_func = std::string("cm_slice_push_") + elem_disp.suffix;
 
                     // 各要素をpushで追加
                     for (const auto& elem : elements) {
                         LocalId elem_value;
 
-                        // 要素が配列の場合、スライスに変換
-                        if (elem_kind == hir::TypeKind::Array && elem->type &&
+                        // 要素がスライス（内側スライス格納）で値が固定長配列リテラルの場合のみヒープスライスへ変換する。
+                        // 固定長配列要素（Blobクラス）はそのままblobアドレス渡しで格納する（Y6）
+                        if (elem_disp.cls == SliceElemClass::InnerSlice && elem->type &&
                             elem->type->array_size.has_value()) {
                             // 配列リテラルをスライスに変換
                             LocalId arr_value = expr_lowering->lower_expression(*elem, ctx);

@@ -1,0 +1,24 @@
+// 回帰(Y6): スライスof固定長配列（T[N][]）のインラインblob格納
+// 従来はpushがヘッダ格納・読みがblob仮定と表現が食い違い、要素がゴミ値になっていた
+import std::io::println;
+int main() {
+    int[2][] rows = [];
+    rows.push([1, 2]);
+    rows.push([3, 4]);
+    println("{rows.len()}");
+    println("{rows[0][0]} {rows[0][1]} {rows[1][0]} {rows[1][1]}");
+    rows[0][1] = 22;
+    println("{rows[0][1]}");
+    int[2] popped = rows.pop();
+    println("{popped[0]} {popped[1]} {rows.len()}");
+    string[2][] srows = [];
+    srows.push(["aa", "bb"]);
+    srows.push(["cc", "dd"]);
+    println("{srows[0][1]} {srows[1][0]}");
+    long[3][] lrows = [];
+    lrows.push([9000000000, 2, 3]);
+    println("{lrows[0][0]} {lrows[0][2]}");
+    int[2][] lit = [[10, 20], [30, 40]];
+    println("{lit.len()} {lit[1][0]} {lit[0][1]}");
+    return 0;
+}

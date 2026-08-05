@@ -21,6 +21,9 @@ inline int64_t slice_header_size() {
     return static_cast<int64_t>(sizeof(void*) * 4);
 }
 
+template <typename AggregateSizeFn>
+int64_t array_elem_stride_of(const hir::TypePtr& resolved_elem, AggregateSizeFn&& aggregate_size);
+
 // スライス格納内の要素ストライド（cm_slice_newへ渡すelem_size）のコア選択。
 // ポインタ・文字列はランタイムのスロット規約（8バイト固定。wasm32でもget/set/pushが
 // 同じelem_sizeでオフセット計算するため一貫する）、集約はblobの実サイズ、
@@ -41,6 +44,13 @@ int64_t slice_elem_stride_of(const hir::TypePtr& resolved_elem, AggregateSizeFn&
         case hir::TypeKind::Union:
             return aggregate_size(resolved_elem);
         case hir::TypeKind::Array:
+            // 固定長配列要素はN×要素「実ストライド」のインラインblob（Y6）。
+            // スロット規約（ポインタ8固定）ではなく配列レイアウト（array_elem_stride_of: wasm32ポインタ=4）を使う。
+            // blobのmemcpy・codegenのGEPと同じ実レイアウトでヘッダelem_sizeを揃えるため
+            if (resolved_elem->array_size.has_value()) {
+                return static_cast<int64_t>(resolved_elem->array_size.value()) *
+                       array_elem_stride_of(resolved_elem->element_type, aggregate_size);
+            }
             return slice_header_size();
         default:
             return 4;
@@ -65,6 +75,11 @@ int64_t array_elem_stride_of(const hir::TypePtr& resolved_elem, AggregateSizeFn&
         case hir::TypeKind::Union:
             return aggregate_size(resolved_elem);
         case hir::TypeKind::Array:
+            // 固定長配列要素はN×要素ストライドのインラインblob、スライス要素はヘッダのインライン格納（Y6）
+            if (resolved_elem->array_size.has_value()) {
+                return static_cast<int64_t>(resolved_elem->array_size.value()) *
+                       array_elem_stride_of(resolved_elem->element_type, aggregate_size);
+            }
             return slice_header_size();
         default:
             return 4;

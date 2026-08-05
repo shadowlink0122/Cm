@@ -69,15 +69,22 @@ struct SliceElemDispatch {
     const char* suffix;  // ランタイム関数サフィックス: width/"ptr"/"slice"/"blob"
 };
 
-// 要素型kindから格納クラスとサフィックスを引く。
-// 未知のkind（enum等の整数表現）は従来既定のScalar/i32に落とす
-inline SliceElemDispatch slice_elem_dispatch(hir::TypeKind kind) {
-    if (auto info = slice_scalar_info(kind)) {
+// 要素型から格納クラスとサフィックスを引く。
+// 未知のkind（enum等の整数表現）は従来既定のScalar/i32に落とす。
+// Array要素はスライス（ヘッダのインライン格納=InnerSlice）と固定長配列（N×要素のインラインblob=Blob）を
+// array_sizeで区別する（Y6: kindのみの判別では固定長要素がヘッダ格納扱いになり、pushと読みの表現が食い違っていた）
+inline SliceElemDispatch slice_elem_dispatch(const hir::TypePtr& elem) {
+    if (!elem) {
+        return {SliceElemClass::Scalar, "i32"};
+    }
+    if (auto info = slice_scalar_info(elem->kind)) {
         return {SliceElemClass::Scalar, info->width};
     }
-    switch (kind) {
+    switch (elem->kind) {
         case hir::TypeKind::Array:
-            return {SliceElemClass::InnerSlice, "slice"};
+            return elem->array_size.has_value()
+                       ? SliceElemDispatch{SliceElemClass::Blob, "blob"}
+                       : SliceElemDispatch{SliceElemClass::InnerSlice, "slice"};
         case hir::TypeKind::Struct:
         case hir::TypeKind::Union:
             return {SliceElemClass::Blob, "blob"};

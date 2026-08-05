@@ -9,6 +9,7 @@
 #include "internal/base/i18n.hpp"
 #include "internal/base/target.hpp"
 #include "internal/hir/lowering/fwd.hpp"
+#include "layout.hpp"
 #include "slice_dispatch.hpp"
 
 #include <memory>
@@ -59,28 +60,9 @@ LocalId make_addr(LoweringContext& ctx, LocalId value_local) {
     return addr;
 }
 
-// 要素型の確保バイト幅（スカラは表、ポインタ/文字列はターゲットポインタ幅、集約はレイアウト、内側スライスはヘッダサイズ）
+// 要素型の確保バイト幅はlayout APIへ一元化（Z2/Y6。手書き表の再複製を避ける）
 int64_t elem_size_of(LoweringContext& ctx, const hir::TypePtr& t) {
-    if (!t) {
-        return 4;
-    }
-    auto r = ctx.resolve_typedef(t);
-    auto k = r ? r->kind : t->kind;
-    if (auto info = slice_scalar_info(k)) {
-        return info->elem_size;
-    }
-    switch (k) {
-        case hir::TypeKind::Pointer:
-        case hir::TypeKind::String:
-            return cm::target_pointer_size();
-        case hir::TypeKind::Struct:
-        case hir::TypeKind::Union:
-            return ctx.layout_size(r ? r : t);
-        case hir::TypeKind::Array:
-            return static_cast<int64_t>(sizeof(void*) * 4);
-        default:
-            return 4;
-    }
+    return layout::array_elem_stride(ctx, t);
 }
 
 }  // namespace
@@ -161,8 +143,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         auto r = ctx.resolve_typedef(slice_type->element_type);
         elem_type = r ? r : slice_type->element_type;
     }
-    const SliceElemDispatch disp =
-        slice_elem_dispatch(elem_type ? elem_type->kind : hir::TypeKind::Int);
+    const SliceElemDispatch disp = slice_elem_dispatch(elem_type);
 
     if (is_push) {
         LocalId value_local = lower_expression(*call.args[1], ctx);
