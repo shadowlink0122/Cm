@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Z5）と「第5ラウンド」の新規所見（Q1〜Q5・Q7）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1〜Q5・Q7）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -27,7 +27,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 - Z2: 固定長配列→スライス変換の手書き要素サイズ残存 — **修正済み**（[archive移動](../../archive/v0.17.0/array-to-slice-elem-size.md)。要素サイズ決定をMIRのlayout API 1系統へ統一・死コード削除）
 - Z3: 構造体内ユニオンフィールドのタグがwasmで読めない — **解決確認**（[archive移動](../../archive/v0.17.0/wasm-union-in-struct-tag.md)。バイセクトでY1〜Y3のタグ書き込み統一が真因と特定——nativeは偶然一致だった。マトリクス回帰を4系一致で追加）
 - Z4: 型検査のエラー検出漏れ3件 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-error-coverage-holes.md)。push要素型検査・非変種as拒否・ループ深度によるbreak/continue診断、エラーテスト4本追加）
-- [Z5: 暗黙変換と明示キャストの設計整理](implicit-explicit-cast-design.md) — 縮小変換が全て暗黙受理され、double→int暗黙代入は変換命令欠落でゴミ値・バックエンド分裂。stdlibの`as`127箇所の一部はY4の回避策。conversion_kind一元化と段階的エラー化の方針（Critical）
+- Z5: 暗黙変換と明示キャストの設計整理 — **修正済み**（[archive移動](../../archive/v0.17.0/implicit-explicit-cast-design.md)。classify_numeric_conversion一元化・縮小/符号変化の警告と--strictエラー昇格・coerce_numeric_context一般化でdouble→intの全文脈修正・CANONICAL_SPEC 10.3変換表・stdlib回避策as削減。uint/usize→intはlen/sizeofイディオム維持のため現段階無診断と仕様決定）
 
 ## 未修正バグ調査 第5ラウンド（Q1〜Q7）
 

@@ -145,6 +145,22 @@ class TypeChecker {
     ast::TypePtr resolve_typedef(ast::TypePtr type);
     bool types_compatible(ast::TypePtr expected, ast::TypePtr actual);
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
+
+    // 数値変換の意味論分類（Z5: 暗黙変換と明示キャストの設計整理。utils/conversion.cpp）。
+    // 「暗黙可（拡大）／要as（縮小・符号解釈変化）」の判断をこの表1箇所から導く
+    enum class NumericConversion {
+        NotNumeric,  // どちらかが数値型でない（本表の対象外）
+        Identity,    // 同一型
+        Widening,    // 値を保存する拡大（暗黙可）
+        Narrowing,   // 情報を失いうる縮小（要as）
+        SignChange,  // 符号解釈が変わる変換（要as）
+    };
+    NumericConversion classify_numeric_conversion(const ast::TypePtr& target,
+                                                  const ast::TypePtr& source);
+    // 受理サイト（let初期化・代入・return）での縮小/符号変化の診断。
+    // 宛先に適合するリテラルは対象外。通常は警告、--strict（check/lint）ではエラーへ昇格する（段階導入）
+    void check_numeric_conversion_policy(const ast::TypePtr& target, const ast::TypePtr& source,
+                                         const ast::Expr* value_expr, Span span);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
 
     // 文字列リテラルの補間プレースホルダを一度だけ実ASTへ脱糖する（第4段b）。

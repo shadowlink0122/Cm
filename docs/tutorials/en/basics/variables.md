@@ -148,15 +148,25 @@ int main() {
 
 ### Implicit Conversion
 
+Value-preserving widening conversions (`int→long`, `short→int`, `int→double`, `float→double`, ...) happen implicitly.
+
 ```cm
 int i = 10;
-double d = i;    // int -> double (OK)
+double d = i;    // int -> double (OK: widening)
+long l = i;      // int -> long (OK: widening)
+```
 
+Narrowing conversions that may lose information (`double→int`, `long→int`, `int→short`, ...) and sign-changing conversions (`int→uint`, ...) produce a warning (an error under `check/lint --strict`).
+Literals that fit the declared type (`short s = 5;`, `float f = 2.5;`) are exempt.
+
+```cm
 double pi = 3.14;
-// int x = pi;   // double -> int (Precision loss)
+// int x = pi;   // double -> int: narrowing warning (suggests adding 'as')
 ```
 
 ### Explicit Conversion (Cast)
+
+Use `as` to state the narrowing intent explicitly.
 
 ```cm
 double pi = 3.14159;

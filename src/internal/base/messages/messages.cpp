@@ -1494,6 +1494,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // CliEntryPointMainNotFound
     {"error: entry point 'main' not found (the file is a module; import it from a program with main)\n",
      "エラー: エントリポイント 'main' が見つかりません（このファイルはモジュールです。mainを持つプログラムからimportしてください）\n"},
+    // TcImplicitNarrowingConversion
+    {"Implicit narrowing conversion from '{0}' to '{1}' may lose information; use an explicit cast 'as {1}'",
+     "'{0}' から '{1}' への暗黙の縮小変換は情報を失う可能性があります。明示キャスト 'as {1}' を使用してください"},
+    // TcImplicitSignConversion
+    {"Implicit conversion from '{0}' to '{1}' changes the sign interpretation; use an explicit cast 'as {1}'",
+     "'{0}' から '{1}' への暗黙変換は符号の解釈を変えます。明示キャスト 'as {1}' を使用してください"},
 };
 // clang-format on
 

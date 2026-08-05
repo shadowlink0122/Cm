@@ -222,9 +222,9 @@ class LoweringContext {
     // typedefとenumを解決（必要に応じて再帰的に）
     hir::TypePtr resolve_typedef(const hir::TypePtr& type);
 
-    // 整数値を浮動小数文脈へ渡す際の暗黙変換としてCast（sitofp/uitofp相当）を挿入する（B2: 整数ビットのdouble再解釈で5e-324になる誤りの修正）
-    // float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
-    LocalId coerce_to_float_context(LocalId value, const hir::TypePtr& target_type);
+    // 浮動小数が絡む数値文脈の暗黙変換Castを挿入する（B2/Z5）。整数→浮動小数（sitofp/uitofp相当）・
+    // float/double幅違い（fpext/fptrunc相当）・浮動小数→整数（fptosi/fptoui相当）を宛先型へ揃える。変換不要ならvalueをそのまま返す
+    LocalId coerce_numeric_context(LocalId value, const hir::TypePtr& target_type);
 
     // 宛先型がスライスで値が固定長配列の場合、cm_array_to_sliceでヒープスライスへ実体化した一時を返す（Y5）。
     // 該当しない場合はvalueをそのまま返す。変換はヒープコピーであり、呼び出し先での変異は元配列へ反映されない

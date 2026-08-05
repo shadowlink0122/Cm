@@ -103,7 +103,7 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
             if (return_src.projections.empty() &&
                 ctx.func->return_local < ctx.func->locals.size()) {
                 const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
-                LocalId coerced = ctx.coerce_to_float_context(return_src.local, ret_type);
+                LocalId coerced = ctx.coerce_numeric_context(return_src.local, ret_type);
                 coerced = ctx.coerce_to_union(coerced, ret_type);
                 return_src = MirPlace{coerced};
             }

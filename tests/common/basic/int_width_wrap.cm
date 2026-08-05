@@ -14,7 +14,8 @@ int main() {
     }
 
     const tiny t = 127;
-    const tiny t2 = t + 1;
+    // tiny + int の演算結果はintのため、tinyへの格納（縮小）は明示asで意図を示す（Z5）
+    const tiny t2 = (t + 1) as tiny;
     println("t2 = {t2}");
     if (t2 < 0) {
         println("t2 < 0: true");

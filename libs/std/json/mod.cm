@@ -180,7 +180,7 @@ double parse_number_raw() {
         char c = peek();
         if (c >= '0' && c <= '9') {
             int digit = (c as int) - ('0' as int);
-            int_part = int_part * 10.0 + (digit as double);
+            int_part = int_part * 10.0 + digit;
             advance();
         } else {
             break;
@@ -195,7 +195,7 @@ double parse_number_raw() {
             char c = peek();
             if (c >= '0' && c <= '9') {
                 int digit = (c as int) - ('0' as int);
-                frac = frac + (digit as double) * scale;
+                frac = frac + digit * scale;
                 scale = scale * 0.1;
                 advance();
             } else {

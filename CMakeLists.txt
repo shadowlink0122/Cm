@@ -261,6 +261,7 @@ set(CM_TYPECHECK_SOURCES
     src/internal/types/checking/generic/bounds.cpp
     src/internal/types/checking/auto_impl.cpp
     src/internal/types/checking/utils/compat.cpp
+    src/internal/types/checking/utils/conversion.cpp
     src/internal/types/checking/utils/interp.cpp
     src/internal/types/checking/utils/diagnostics.cpp
     src/internal/types/checking/utils/naming.cpp

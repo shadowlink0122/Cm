@@ -424,7 +424,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             }
 
             // 整数右辺を浮動小数左辺へ代入する場合はsitofp/uitofp相当のCastを挿入する（B2）
-            rhs_value = ctx.coerce_to_float_context(rhs_value, lhs_resolved);
+            rhs_value = ctx.coerce_numeric_context(rhs_value, lhs_resolved);
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             return rhs_value;

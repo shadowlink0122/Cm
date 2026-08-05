@@ -148,15 +148,25 @@ int main() {
 
 ### 暗黙的な型変換
 
+値を保存する拡大変換（`int→long`・`short→int`・`int→double`・`float→double`等）は暗黙に行えます。
+
 ```cm
 int i = 10;
-double d = i;    // int → double（OK）
+double d = i;    // int → double（OK: 拡大変換）
+long l = i;      // int → long（OK: 拡大変換）
+```
 
+情報を失いうる縮小変換（`double→int`・`long→int`・`int→short`等）や符号解釈が変わる変換（`int→uint`等）は警告になります（`check/lint --strict` ではエラー）。
+宣言型に適合するリテラル（`short s = 5;`・`float f = 2.5;`）は例外として無診断です。
+
+```cm
 double pi = 3.14;
-// int x = pi;   // double → int（精度が失われる）
+// int x = pi;   // double → int は縮小変換の警告（asの付与を提案される）
 ```
 
 ### 明示的な型変換（キャスト）
+
+縮小の意図があるときは `as` で明示します。
 
 ```cm
 double pi = 3.14159;

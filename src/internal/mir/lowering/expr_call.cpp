@@ -271,7 +271,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
             LocalId arg_local = lower_expression(*arg, ctx);
             if (param_type) {
                 // 整数→浮動小数（B2）・変種値→ユニオン構築（Y1〜Y3）・固定長配列→スライス実体化（Y5）のパラメータ型への暗黙変換を一括適用する
-                arg_local = ctx.coerce_to_float_context(arg_local, param_type);
+                arg_local = ctx.coerce_numeric_context(arg_local, param_type);
                 arg_local = ctx.coerce_to_union(arg_local, param_type);
                 arg_local = ctx.coerce_fixed_array_to_slice(arg_local, param_type);
             }
@@ -353,7 +353,7 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                 if (hf->params[di].default_value) {
                     LocalId dv = lower_expression(*hf->params[di].default_value, ctx);
                     // デフォルト値もパラメータ型への暗黙変換（浮動小数・ユニオン構築・配列→スライス）を通す（B2/Y3/Y5）
-                    dv = ctx.coerce_to_float_context(dv, hf->params[di].type);
+                    dv = ctx.coerce_numeric_context(dv, hf->params[di].type);
                     dv = ctx.coerce_to_union(dv, hf->params[di].type);
                     dv = ctx.coerce_fixed_array_to_slice(dv, hf->params[di].type);
                     args.push_back(MirOperand::copy(MirPlace{dv}));

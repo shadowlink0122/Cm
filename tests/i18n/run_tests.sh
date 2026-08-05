@@ -95,6 +95,11 @@ run_case h6-check-warn-en   "$CM" check "$DIR/h6_strict_promotion.cm"
 run_case h6-strict-error-en "$CM" check --strict "$DIR/h6_strict_promotion.cm"
 run_case h6-strict-error-ja "$CM" check --strict --lang=ja "$DIR/h6_strict_promotion.cm"
 
+# ---------- 縮小/符号変化の暗黙変換診断と--strictエラー昇格（Z5） ----------
+run_case z5-check-warn-en   "$CM" check "$DIR/z5_narrowing.cm"
+run_case z5-strict-error-en "$CM" check --strict "$DIR/z5_narrowing.cm"
+run_case z5-strict-error-ja "$CM" check --strict --lang=ja "$DIR/z5_narrowing.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
 run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"

@@ -432,6 +432,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                             ast::type_to_string(*init_type)));
             }
         }
+        // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
+        if (init_type) {
+            check_numeric_conversion_policy(resolved_type, init_type, let.init.get(), stmt_span);
+        }
         // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
         if (let.init) {
             check_literal_assignment(resolved_type, let.init.get(), stmt_span);
@@ -536,6 +540,8 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                                  (val_type ? ast::type_to_string(*val_type) : "unknown")));
             }
         }
+        // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
+        check_numeric_conversion_policy(current_return_type_, val_type, ret.value.get(), stmt_span);
 
         // ライフタイムチェック: ローカル変数への参照を返すことを禁止
         // return &x の場合、xがローカル変数ならダングリングポインタになる

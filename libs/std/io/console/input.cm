@@ -176,7 +176,7 @@ export Option<long> parse_long(string s) {
     while (i < len) {
         int c = s[i] as int;
         if (c >= 48 && c <= 57) {
-            result = result * 10 + (c - 48) as long;
+            result = result * 10 + (c - 48);
         } else {
             break;
         }

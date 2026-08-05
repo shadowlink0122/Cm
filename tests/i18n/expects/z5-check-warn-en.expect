@@ -1,0 +1,5 @@
+warning: Implicit narrowing conversion from 'long' to 'int'
+warning: Implicit narrowing conversion from 'double' to 'float'
+warning: Implicit conversion from 'int' to 'uint' changes the sign interpretation
+!Implicit narrowing conversion from 'usize' to 'int'
+!error: Implicit

@@ -428,9 +428,12 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
     return type;
 }
 
-// 整数値を浮動小数文脈へ渡す際の暗黙変換としてCast（sitofp/uitofp相当）を挿入する（B2: 整数ビットのdouble再解釈で5e-324になる誤りの修正）
-// float/double間の幅違いもfpext/fptrunc相当のCastで揃える。変換不要ならvalueをそのまま返す
-LocalId LoweringContext::coerce_to_float_context(LocalId value, const hir::TypePtr& target_type) {
+// 浮動小数が絡む数値文脈の暗黙変換としてCastを挿入する（B2/Z5）。
+// 整数値→浮動小数宛先はsitofp/uitofp相当（B2: 整数ビットのdouble再解釈で5e-324になる誤りの修正）、
+// float/double間の幅違いはfpext/fptrunc相当、浮動小数値→整数宛先はfptosi/fptoui相当のCastで揃える
+// （Z5: 受理された暗黙変換に変換命令が挿入されず、let/引数/returnのdouble→intがビット再解釈のゴミ値やLLVM検証エラーになっていた）。
+// 変換不要ならvalueをそのまま返す
+LocalId LoweringContext::coerce_numeric_context(LocalId value, const hir::TypePtr& target_type) {
     if (!target_type || value >= func->locals.size()) {
         return value;
     }
@@ -449,17 +452,25 @@ LocalId LoweringContext::coerce_to_float_context(LocalId value, const hir::TypeP
         return (k == hir::TypeKind::Float || k == hir::TypeKind::UFloat) ? 32 : 64;
     };
     auto target = resolve_typedef(target_type);
-    if (!target || !is_float_kind(target->kind)) {
+    if (!target) {
         return value;
     }
     auto value_type = resolve_typedef(func->locals[value].type);
     if (!value_type) {
         return value;
     }
-    const bool needs_int_to_float = is_int_kind(value_type->kind);
-    const bool needs_float_resize = is_float_kind(value_type->kind) &&
-                                    float_width(value_type->kind) != float_width(target->kind);
-    if (!needs_int_to_float && !needs_float_resize) {
+    bool needs_cast = false;
+    if (is_float_kind(target->kind)) {
+        const bool needs_int_to_float = is_int_kind(value_type->kind);
+        const bool needs_float_resize = is_float_kind(value_type->kind) &&
+                                        float_width(value_type->kind) != float_width(target->kind);
+        needs_cast = needs_int_to_float || needs_float_resize;
+    } else if (is_int_kind(target->kind)) {
+        // 浮動小数→整数宛先はfptosi/fptoui相当のCastが必須（未挿入だと型不一致のIRになる）。
+        // 整数同士の幅違いは既存のコード生成幅合わせが機能しているためここでは変換しない
+        needs_cast = is_float_kind(value_type->kind);
+    }
+    if (!needs_cast) {
         return value;
     }
     LocalId casted = new_temp(target);

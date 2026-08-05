@@ -1,0 +1,62 @@
+import std::io::println;
+// Z5回帰: 受理された数値暗黙変換に変換命令が挿入されることの値検証。
+// 従来はdouble→intのlet/代入がビット再解釈のゴミ値（jit/nativeで別値）、引数はLLVM検証エラー、jsは2.9素通しだった
+
+struct Holder { int i; double d; }
+
+int takes_int(int x) { return x; }
+double takes_double(double x) { return x; }
+int ret_int_from_double() {
+    double d = 7.9;
+    return d as int;
+}
+
+int main() {
+    // 引数文脈: double→int（fptosi）・int→double（sitofp）
+    double dv = 2.9;
+    int iv = 5;
+    println("arg: {takes_int(dv as int)} {takes_double(iv)}");
+
+    // let/代入文脈: 縮小はasで明示（値はfptosi切り捨てで全バックエンド一致）
+    int let_narrow = dv as int;
+    int assign_narrow = 0;
+    assign_narrow = (dv + 1.0) as int;
+    println("narrow: {let_narrow} {assign_narrow}");
+
+    // return文脈
+    println("ret: {ret_int_from_double()}");
+
+    // 構造体フィールド初期化: int→double拡大とdouble→int明示縮小
+    Holder h = Holder{i: dv as int, d: iv};
+    println("field: {h.i} {h.d}");
+
+    // 拡大変換（暗黙・無診断）の値
+    int base = 42;
+    long wl = base;
+    double wd = base;
+    float wf = base;
+    double wdd = wf;
+    println("widen: {wl} {wd} {wf} {wdd}");
+
+    // 符号なし→符号付き（現段階は暗黙・無診断）: len/cap読み出しイディオム
+    int[] arr;
+    arr.push(10);
+    arr.push(20);
+    int n = arr.len();
+    println("uread: {n}");
+
+    // 明示asの縮小・符号変化の値（2の補数ラップ・fptosi切り捨て）
+    long big = 5000000001;
+    int wrapped = big as int;
+    int seventy = 70000;
+    short shortened = seventy as short;
+    uint reinterpreted = (0 - 1) as uint;
+    float rounded = 2.9 as float;
+    println("as: {wrapped} {shortened} {reinterpreted} {rounded}");
+
+    // 複合代入の混合（Y4/Z5: int += double はfptosi切り詰め、asで明示不要の拡大方向も確認）
+    double acc = 1.5;
+    acc += iv;
+    println("compound: {acc}");
+    return 0;
+}

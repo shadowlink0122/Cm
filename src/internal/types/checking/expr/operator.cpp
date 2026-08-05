@@ -95,6 +95,38 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
     ltype = resolve_typedef(ltype);
     rtype = resolve_typedef(rtype);
 
+    // 代入系演算の縮小/符号変化診断用に、Y4の昇格Cast挿入前の右辺型と式を退避する（Z5）
+    const auto rtype_before_promotion = rtype;
+    const ast::Expr* rhs_expr_before_promotion = binary.right.get();
+
+    // floatオペランド×浮動小数リテラルは、doubleへの共通昇格でなくリテラル側をfloat文脈へ適合させる（Z5）。
+    // 「return v / 2.0;」（vはfloat）が双方doubleへ昇格されると戻り値でdouble→floatの縮小警告になる誤検出を防ぎ、
+    // 演算自体もユーザーの意図どおりfloat幅で行う
+    {
+        auto is_float32 = [](const ast::TypePtr& t) {
+            return t->kind == ast::TypeKind::Float || t->kind == ast::TypeKind::UFloat;
+        };
+        auto is_plain_float_literal = [](const ast::ExprPtr& e) {
+            const ast::Expr* p = e.get();
+            if (const auto* unary = p->as<ast::UnaryExpr>()) {
+                if (unary->op == ast::UnaryOp::Neg && unary->operand) {
+                    p = unary->operand.get();
+                }
+            }
+            const auto* lit = p->as<ast::LiteralExpr>();
+            return lit && lit->is_float();
+        };
+        if (is_float32(ltype) && rtype->kind == ast::TypeKind::Double &&
+            is_plain_float_literal(binary.right)) {
+            wrap_operand_cast(binary.right, ltype);
+            rtype = ltype;
+        } else if (is_float32(rtype) && ltype->kind == ast::TypeKind::Double &&
+                   is_plain_float_literal(binary.left)) {
+            wrap_operand_cast(binary.left, rtype);
+            ltype = rtype;
+        }
+    }
+
     // 混合数値オペランドの暗黙昇格（Y4）。
     // 従来は型検査が混合を受理したままオペランド昇格を挿入せず、fadd i32, double等の不正IRや無出力SIGBUSになっていた。
     // 浮動小数が絡む混合のみ共通型へ揃える（整数同士の幅混在は既存のコード生成幅合わせが機能しているため挙動を変えない）
@@ -130,6 +162,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             wrap_operand_cast(binary.right, ltype);
             rtype = ltype;
         }
+    }
+
+    // 代入・複合代入の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
+    if (is_assignment) {
+        check_numeric_conversion_policy(
+            ltype, rtype_before_promotion, rhs_expr_before_promotion,
+            binary.right->span.start != 0 ? binary.right->span : current_span_);
     }
 
     switch (binary.op) {

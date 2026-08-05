@@ -520,6 +520,8 @@ enum class MsgId : int {
     SvSv005NonConstStringTooLong,
     SvSv002PointerTypesNotSupportedLocal,
     CliEntryPointMainNotFound,
+    TcImplicitNarrowingConversion,
+    TcImplicitSignConversion,
     Count,
 };
 
