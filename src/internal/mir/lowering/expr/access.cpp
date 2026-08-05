@@ -635,11 +635,15 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
 
     // スライスの場合は関数呼び出しを生成（多次元は非対応）
     if (is_slice && index_locals.size() == 1) {
-        // 要素型が配列の場合（多次元スライス）はサブスライスを取得
-        bool is_multidim = elem_type && elem_type->kind == hir::TypeKind::Array;
+        // 要素型が可変長スライスの場合はインラインヘッダをサブスライスとして取得する。
+        // 固定長配列要素はインラインblob格納（Y6）のため、構造体と同じ要素ポインタ+デリファレンスで読む
+        const bool elem_is_inner_slice = elem_type && elem_type->kind == hir::TypeKind::Array &&
+                                         !elem_type->array_size.has_value();
+        const bool elem_is_fixed_array = elem_type && elem_type->kind == hir::TypeKind::Array &&
+                                         elem_type->array_size.has_value();
 
         std::string get_func = "cm_slice_get_i32";
-        if (is_multidim) {
+        if (elem_is_inner_slice) {
             get_func = "cm_slice_get_subslice";
         } else if (elem_type) {
             auto elem_kind = elem_type->kind;
@@ -648,8 +652,9 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
                 get_func = std::string("cm_slice_get_") + info->width;
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
                 get_func = "cm_slice_get_ptr";
-            } else if (elem_kind == hir::TypeKind::Union || elem_kind == hir::TypeKind::Struct) {
-                // ユニオン・構造体要素: blob格納のため要素先頭へのポインタを取得する
+            } else if (elem_kind == hir::TypeKind::Union || elem_kind == hir::TypeKind::Struct ||
+                       elem_is_fixed_array) {
+                // ユニオン・構造体・固定長配列要素: blob格納のため要素先頭へのポインタを取得する
                 get_func = "cm_slice_get_element_ptr";
             }
         }

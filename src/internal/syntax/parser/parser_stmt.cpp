@@ -510,21 +510,26 @@ bool Parser::is_type_start() {
                         return true;
                     }
                 }
-                // 配列型: Type[N] name
+                // 配列型: Type[N] name / Type[N][M] name / Type[] name（多次元・スライス連鎖に対応）。
+                // 添字が整数リテラルまたは空のブラケット連鎖に限って型サフィックスとみなすため、
+                // 変数への添字式（arr[i]・arr[2][j]）と衝突しない
                 if (next_kind == TokenKind::LBracket) {
-                    // [N] の後に識別子があるかチェック
-                    size_t i = pos_ + 2;
-                    // 配列サイズをスキップ
-                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::IntLiteral) {
+                    size_t i = pos_ + 1;
+                    bool suffix_ok = true;
+                    while (i < tokens_.size() && tokens_[i].kind == TokenKind::LBracket) {
                         i++;
-                    }
-                    // ] を期待
-                    if (i < tokens_.size() && tokens_[i].kind == TokenKind::RBracket) {
-                        i++;
-                        // ] の後に識別子があれば変数宣言
-                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
-                            return true;
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::IntLiteral) {
+                            i++;
                         }
+                        if (i < tokens_.size() && tokens_[i].kind == TokenKind::RBracket) {
+                            i++;
+                        } else {
+                            suffix_ok = false;
+                            break;
+                        }
+                    }
+                    if (suffix_ok && i < tokens_.size() && tokens_[i].kind == TokenKind::Ident) {
+                        return true;
                     }
                 }
                 // ジェネリック型: Type<...> name
@@ -546,15 +551,16 @@ bool Parser::is_type_start() {
                     }
                     // depth == 0 なら閉じている（depth < 0 は >> で過剰消費した場合）
                     if (depth <= 0 && i < tokens_.size()) {
-                        // ジェネリック型の後に[N]が来る可能性もチェック
-                        if (tokens_[i].kind == TokenKind::LBracket) {
-                            // [N]をスキップ
+                        // ジェネリック型の後の[N]/[]サフィックス連鎖（多次元・スライス）をスキップ
+                        while (i < tokens_.size() && tokens_[i].kind == TokenKind::LBracket) {
                             i++;
                             if (i < tokens_.size() && tokens_[i].kind == TokenKind::IntLiteral) {
                                 i++;
                             }
                             if (i < tokens_.size() && tokens_[i].kind == TokenKind::RBracket) {
                                 i++;
+                            } else {
+                                break;
                             }
                         }
                         // ポインタ型をスキップ: Type<T>* name や Type<T>** name

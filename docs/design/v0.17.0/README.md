@@ -67,6 +67,7 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 - [generic-instantiation-diagnostics.md](../../archive/v0.17.0/generic-instantiation-diagnostics.md) — ジェネリックインスタンス化の診断（H15/L8）
 - [misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — 補間ネスト・var・assert_eq・SV黙殺解消・fmt演算子空白ほか（M18/L1〜L6）
 - [01_js_npm_interop.md](../../archive/v0.17.0/01_js_npm_interop.md) — npmパッケージ連携の実装設計（ロードマップは`docs/design/js_interop_roadmap.md`）
+- [multidim-partial-array-extraction.md](../../archive/v0.17.0/multidim-partial-array-extraction.md) — 多次元配列の低次元部分取り出し（ユーザー型多次元宣言パース・要素数不一致の診断化・スライスof固定長配列の要素コピー・js固定長配列の値セマンティクス）
 
 ## 監査・網羅検証
 

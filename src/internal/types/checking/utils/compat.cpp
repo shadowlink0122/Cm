@@ -234,6 +234,17 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
             // 要素型の互換性をチェック
             return types_compatible(a->element_type, b->element_type);
         }
+        // 固定長配列同士の要素数不一致を拒否する（多次元配列の行コピー int[3] b = a[1]（実体int[2]）が
+        // 無診断でゴミ値になっていたため）。空リテラル（要素数0）による初期化と、
+        // 固定長↔スライス（どちらかが未サイズ）の変換経路は従来どおり許容する。
+        // 要素型の厳格比較はジェネリック互換（T[]等）への影響が大きいため従来のまま
+        if (a->kind == ast::TypeKind::Array) {
+            if (a->array_size.has_value() && b->array_size.has_value() && *b->array_size != 0 &&
+                *a->array_size != *b->array_size) {
+                return false;
+            }
+            return true;
+        }
         // 関数ポインタ型の互換性チェック
         if (a->kind == ast::TypeKind::Function) {
             if (!types_compatible(a->return_type, b->return_type)) {

@@ -690,6 +690,30 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
                                             const mir::MirFunction& func) {
     if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
         const auto& place = std::get<mir::MirPlace>(operand.data);
+        // Copy対象のplaceが固定長配列値になるか（Index/Deref射影を型で辿る）。
+        // 固定長配列は値セマンティクスのため、JS配列の参照共有を__cm_cloneで断つ
+        // （int[3] x = y; や int[3] b = a[1]; の部分配列取り出しがLLVM系のコピーと分裂していた）。
+        // スライス（未サイズArray）は参照セマンティクスなのでクローンしない
+        auto copies_fixed_array = [&]() {
+            if (operand.kind != mir::MirOperand::Copy || place.local >= func.locals.size()) {
+                return false;
+            }
+            ast::TypePtr t = func.locals[place.local].type;
+            for (const auto& proj : place.projections) {
+                if (!t) {
+                    return false;
+                }
+                if (proj.kind == mir::ProjectionKind::Index && t->kind == ast::TypeKind::Array) {
+                    t = t->element_type;
+                } else if (proj.kind == mir::ProjectionKind::Deref &&
+                           t->kind == ast::TypeKind::Pointer) {
+                    t = t->element_type;
+                } else {
+                    return false;  // Field等は従来挙動を維持
+                }
+            }
+            return t && t->kind == ast::TypeKind::Array && t->array_size.has_value();
+        };
         if (place.projections.empty()) {
             auto it = inline_values_.find(place.local);
             if (it != inline_values_.end()) {
@@ -699,6 +723,9 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
                         !structIsForeignObject(local.type->name)) {
                         return "__cm_clone(" + it->second + ")";
                     }
+                }
+                if (copies_fixed_array()) {
+                    return "__cm_clone(" + it->second + ")";
                 }
                 return it->second;
             }
@@ -716,6 +743,9 @@ std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
                     }
                     // impl selfソース: クローンなしで参照渡し
                 }
+            }
+            if (copies_fixed_array() && impl_self_sources_.count(place.local) == 0) {
+                return "__cm_clone(" + result + ")";
             }
             return result;
         }

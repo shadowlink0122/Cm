@@ -212,16 +212,18 @@ int main() {
 
 ## 多次元配列
 
+配列サフィックスは左から積みます: `int[4][3]` は「`int[4]` が3個」、つまり3行×4列の2次元配列です。
+
 ```cm
 int main() {
-    // 2次元配列
-    int[3][4] matrix;
+    // 2次元配列（int[4]の行が3個）
+    int[4][3] matrix;
 
     // 初期化
     matrix[0][0] = 1;
     matrix[0][1] = 2;
 
-    // ループでアクセス
+    // ループでアクセス（外側の添字が行、内側が列）
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 4; j++) {
             matrix[i][j] = i * 4 + j;
@@ -229,6 +231,31 @@ int main() {
     }
 
     int d = matrix.dim();  // 2（次元数）
+    return 0;
+}
+```
+
+### 低次元部分配列の取り出し（v0.17.0以降）
+
+多次元配列に低次元の添字を与えると、部分配列がコピーで取り出せます。
+`auto` による推論、関数引数・戻り値、任意の要素型（`double`・`string`・構造体等）とスライスにも対応します。
+
+```cm
+import std::io::println;
+
+int main() {
+    int[3][3][3] cube;
+    cube[2][1][0] = 7;
+
+    int[3] row = cube[2][1];   // 最内1次元をコピーで取り出す
+    auto plane = cube[2];      // int[3][3] と推論される
+    println(row[0]);           // 7
+
+    row[0] = 99;               // コピーなので元のcubeへは波及しない
+    println(cube[2][1][0]);    // 7
+
+    // 要素数が合わない取り出しは型エラーになる
+    // int[2] bad = cube[2][1];  // error: expected 'int[2]', got 'int[3]'
     return 0;
 }
 ```

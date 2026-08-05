@@ -204,14 +204,17 @@ int main() {
 
 ## Multidimensional Arrays
 
+Array suffixes stack from the left: `int[4][3]` means "3 elements of `int[4]`", i.e. a 3-row × 4-column 2D array.
+
 ```cm
 int main() {
-    // 2D array
-    int[3][4] matrix;
+    // 2D array (3 rows of int[4])
+    int[4][3] matrix;
 
     matrix[0][0] = 1;
     matrix[0][1] = 2;
 
+    // outer index selects the row, inner index the column
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 4; j++) {
             matrix[i][j] = i * 4 + j;
@@ -219,6 +222,31 @@ int main() {
     }
 
     int d = matrix.dim();  // 2 (number of dimensions)
+    return 0;
+}
+```
+
+### Extracting Lower-Dimensional Subarrays (v0.17.0+)
+
+Indexing a multidimensional array with fewer indices extracts a subarray as a copy.
+This works with `auto` inference, function parameters / return values, any element type (`double`, `string`, structs, ...), and slices.
+
+```cm
+import std::io::println;
+
+int main() {
+    int[3][3][3] cube;
+    cube[2][1][0] = 7;
+
+    int[3] row = cube[2][1];   // copy out the innermost dimension
+    auto plane = cube[2];      // inferred as int[3][3]
+    println(row[0]);           // 7
+
+    row[0] = 99;               // it is a copy, so cube is unaffected
+    println(cube[2][1][0]);    // 7
+
+    // extracting with a mismatched element count is a type error
+    // int[2] bad = cube[2][1];  // error: expected 'int[2]', got 'int[3]'
     return 0;
 }
 ```
