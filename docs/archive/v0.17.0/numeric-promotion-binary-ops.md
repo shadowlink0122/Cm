@@ -64,3 +64,10 @@ v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出
 - 昇格規則をCANONICAL_SPEC.md 10.2へ明文化し、回帰テスト`tests/common/types/mixed_numeric_promotion.cm`（両方向・リテラル混合・比較・複合代入・float×double・long×double・float剰余・intのみ複合代入の非影響）を追加した。
 - 検証: 全再現（`d+i`/`i+d`/`d>i`/`acc+=i`/`i+1.5`）が正値化し、unit・regression・interpreter・llvm・llvm-wasm・js・svの全スイート通過。wasmでもc08バッテリーの値一致を確認した。
 - 残課題はZ5（implicit-explicit-cast-design.md）が引き継ぐ: 縮小変換の段階的エラー化・double→int暗黙代入の変換命令欠落・stdlibの回避策as削減。
+
+## 追補: O0での浮動小数`%`のlibmリンク欠落（2026-08-05）
+
+本修正の回帰テストが露出させた別問題として、浮動小数の`%`（LLVMの`frem`）はO0で`fmod`/`fmodf`のライブラリコールに残る（O2以上は定数畳み込み・インライン化で消えるためCIのO3ジョブでは未露見）。
+LinuxネイティブはリンクコマンドにlibmがなくCIのllvm O0ジョブがリンクエラー（`undefined reference to fmod`）、wasmは`-nostdlib`でlibmが存在せず`unknown import: env::fmod`のインスタンス化失敗になっていた（macOSネイティブはlibSystemにlibm同梱のため通過）。
+対処: Linuxネイティブのリンクへ`-lm`を常時付与（noStdターゲット除く）し、wasmランタイムに`fmod`/`fmodf`のビット操作による正確な剰余実装（musl方式）を追加した（`src/internal/codegen/llvm/wasm/runtime_math.c`）。
+`x - trunc(x/y)*y`の近似は商が大きい場合（例: `1e18 % 3`）に誤るため採用せず、大値・負値・非正規化数・floatの各ケースでjit/native/wasmの値一致を確認した。

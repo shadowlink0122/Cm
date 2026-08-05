@@ -641,6 +641,7 @@ if(CM_USE_LLVM)
                     -I${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm
                 DEPENDS ${CM_RUNTIME_WASM_SOURCE}
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_format.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_math.c
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_print.c
                     ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_slice.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_slice_core.inc

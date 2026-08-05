@@ -1239,6 +1239,10 @@ void LLVMCodeGen::emitExecutable() {
         if (needsPthread)
             linkCmd += " -lpthread";
 
+        // LLVMが浮動小数の%をfmod等のlibmコールへ落とすためlibmをリンクする（O0では畳み込まれず残る。macOSはlibSystem同梱のため不要）
+        if (!context->getTargetConfig().noStd)
+            linkCmd += " -lm";
+
         linkCmd += " -o " + options.outputFile;
 #endif
     }

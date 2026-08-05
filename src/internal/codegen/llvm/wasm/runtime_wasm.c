@@ -70,6 +70,7 @@ void* memset(void* s, int c, size_t n) {
 
 // Include runtime components
 #include "runtime_format.c"
+#include "runtime_math.c"
 #include "runtime_print.c"
 #include "runtime_slice.c"
 
