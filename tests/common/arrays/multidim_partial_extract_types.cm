@@ -1,0 +1,83 @@
+import std::io::println;
+// 多次元部分取り出しの型マトリクス回帰: スカラ全幅・ジェネリック構造体・混在サイズ構造体・4次元・スライス変種
+
+struct Wide { double d; int i; }
+
+struct Box<T> { T v; }
+
+int main() {
+    // 1バイト要素（tiny/bool/char）の非正方行コピー
+    tiny[3][2] tm;
+    tm[1][2] = 7;
+    tiny[3] trow = tm[1];
+    bool[2][3] bm;
+    bm[2][1] = true;
+    auto brow = bm[2];
+    char[2][2] cm;
+    cm[1][1] = 'z';
+    char[2] crow = cm[1];
+    println("byte1: {trow[2]} {brow[1]} {crow[1]}");
+
+    // 2バイト・4バイト要素（short/ushort/uint/float）
+    short[2][2] sm;
+    sm[1][0] = -300;
+    short[2] srow = sm[1];
+    ushort[2][2] um;
+    um[1][0] = 60000;
+    auto urow = um[1];
+    uint[3][2] uim;
+    uim[1][2] = 4000000000;
+    uint[3] uirow = uim[1];
+    float[2][3] fm;
+    fm[2][1] = 1.25;
+    auto frow = fm[2];
+    println("scalar: {srow[0]} {urow[0]} {uirow[2]} {frow[1]}");
+
+    // 混在サイズ構造体（double+int、パディング込みstride）の行コピーと独立性
+    Wide[2][2] wg;
+    wg[1][0].d = 3.5;
+    wg[1][1].i = 42;
+    Wide[2] wrow = wg[1];
+    wrow[0].d = 9.9;
+    println("wide: {wrow[1].i} {wg[1][0].d}");
+
+    // ジェネリック構造体の多次元宣言と部分取り出し
+    Box<int>[2][2] bg;
+    bg[1][0].v = 55;
+    Box<int>[2] boxrow = bg[1];
+    auto boxrow2 = bg[1];
+    println("generic: {boxrow[0].v} {boxrow2[0].v}");
+
+    // 4次元 → 各深さの取り出しとauto
+    int[2][2][2][2] h;
+    h[1][1][1][0] = 4444;
+    auto h3 = h[1];
+    auto h2 = h[1][1];
+    int[2] h1 = h[1][1][1];
+    println("dim4: {h3[1][1][0]} {h2[1][0]} {h1[0]}");
+
+    // 3段スライスの中間深さ取り出し
+    int[][][] tri;
+    int[][] mid0;
+    int[] leaf;
+    leaf.push(31);
+    mid0.push(leaf);
+    tri.push(mid0);
+    auto mid = tri[0];
+    int[] deep = tri[0][0];
+    println("tri: {mid[0][0]} {deep[0]}");
+
+    // スライスof固定長配列: double要素と構造体要素
+    double[2][] dcells;
+    double[2] dc;
+    dc[1] = 6.5;
+    dcells.push(dc);
+    auto dgot = dcells[0];
+    Wide[2][] wcells;
+    Wide[2] wc;
+    wc[0].i = 77;
+    wcells.push(wc);
+    Wide[2] wgot = wcells[0];
+    println("soa2: {dgot[1]} {wgot[0].i}");
+    return 0;
+}

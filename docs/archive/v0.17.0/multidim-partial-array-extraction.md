@@ -51,6 +51,7 @@ emitOperandのCopyで、Index/Deref射影を型で辿った結果が固定長配
 ## 回帰テスト
 
 - `tests/common/arrays/multidim_partial_extract.cm`: 正方/非正方×{int, double, long, string, 構造体}×{2D, 3D}×{行コピー, auto, 関数境界, 値セマンティクス}と、スライスofスライス・スライスof固定長配列の要素コピー（jit/native/wasm/js/tsの出力一致）。
+- `tests/common/arrays/multidim_partial_extract_types.cm`: 型マトリクスの網羅。1バイト要素（tiny/bool/char）・short/ushort/uint/floatの非正方行コピー、混在サイズ構造体（double+int、パディング込みstride）の行コピーと独立性、ジェネリック構造体（`Box<int>[2][2]`）、4次元の各深さ取り出し、3段スライスの中間深さ取り出し、スライスof固定長配列のdouble/構造体要素（jit・native O0/O2・wasm O0/O2・js・tsの7経路で出力一致）。
 - `tests/common/errors/multidim_dim_mismatch.cm`: 要素数不一致の行コピーが型エラーになることを固定。
 
 ## 将来課題
