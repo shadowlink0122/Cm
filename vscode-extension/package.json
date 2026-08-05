@@ -5,7 +5,7 @@
   "version": "0.17.0",
   "publisher": "cm-lang",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Programming Languages"
@@ -89,14 +89,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/vscode": "^1.125.0",
     "@vscode/vsce": "^3.9.2",
-    "eslint": "^10.7.0",
-    "eslint-config-prettier": "^10.0.0",
-    "prettier": "^3.9.5",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.64.0",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.66.0",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
