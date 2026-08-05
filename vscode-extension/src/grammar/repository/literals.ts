@@ -3,7 +3,13 @@
 // ============================================================
 
 import { TmRepositoryEntry } from '../tmTypes';
-import { BOOLEAN_CONSTANTS, ESCAPE_RULE, NULL_CONSTANTS, words } from '../terms';
+import {
+  BOOLEAN_CONSTANTS,
+  ESCAPE_RULE,
+  NULL_CONSTANTS,
+  PRELUDE_VALUE_VARIANTS,
+  words,
+} from '../terms';
 
 export const comments: TmRepositoryEntry = {
   patterns: [
@@ -97,6 +103,11 @@ export const constants: TmRepositoryEntry = {
     {
       name: 'constant.language.null.cm',
       match: words(NULL_CONSTANTS),
+    },
+    {
+      comment: 'OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする',
+      name: 'storage.type.primitive.cm',
+      match: words(PRELUDE_VALUE_VARIANTS),
     },
     {
       name: 'constant.numeric.cm',

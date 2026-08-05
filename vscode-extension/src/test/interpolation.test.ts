@@ -8,43 +8,12 @@
 
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as oniguruma from 'vscode-oniguruma';
-import * as vsctm from 'vscode-textmate';
+import { loadGrammar, tokensWithScope } from './tokenize';
 
 const BEGIN_SCOPE = 'punctuation.definition.template-expression.begin.cm';
 const END_SCOPE = 'punctuation.definition.template-expression.end.cm';
 const ESCAPE_SCOPE = 'constant.character.escape.cm';
 const EMBEDDED_STRING_SCOPE = 'string.quoted.double.interpolation.cm';
-
-// 文法ファイルとonig.wasmを読み込み、source.cm文法を1度だけ初期化する
-async function loadGrammar(): Promise<vsctm.IGrammar> {
-  const wasmPath = path.join(__dirname, '../../../node_modules/vscode-oniguruma/release/onig.wasm');
-  const wasmBin = fs.readFileSync(wasmPath).buffer;
-  const onigLib = oniguruma.loadWASM(wasmBin).then(() => ({
-    createOnigScanner: (sources: string[]) => new oniguruma.OnigScanner(sources),
-    createOnigString: (s: string) => new oniguruma.OnigString(s),
-  }));
-  const registry = new vsctm.Registry({
-    onigLib,
-    loadGrammar: async () => {
-      const grammarPath = path.join(__dirname, '../../../syntaxes/cm.tmLanguage.json');
-      return vsctm.parseRawGrammar(fs.readFileSync(grammarPath).toString(), grammarPath);
-    },
-  });
-  const grammar = await registry.loadGrammar('source.cm');
-  assert.ok(grammar, 'source.cm文法をロードできない');
-  return grammar;
-}
-
-// 1行をトークナイズし、指定スコープを含むトークンのテキスト一覧を返す
-function tokensWithScope(grammar: vsctm.IGrammar, line: string, scope: string): string[] {
-  const result = grammar.tokenizeLine(line, vsctm.INITIAL);
-  return result.tokens
-    .filter((t) => t.scopes.includes(scope))
-    .map((t) => line.slice(t.startIndex, t.endIndex));
-}
 
 test('連続プレースホルダ: エスケープ引用符入りでも全て開閉括弧がハイライトされる', async () => {
   const grammar = await loadGrammar();

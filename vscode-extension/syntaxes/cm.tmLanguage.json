@@ -562,6 +562,11 @@
           "match": "\\b(nullptr|null)\\b"
         },
         {
+          "comment": "OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする",
+          "name": "storage.type.primitive.cm",
+          "match": "\\b(None)\\b"
+        },
+        {
           "name": "constant.numeric.cm",
           "match": "\\b[A-Z][A-Z0-9_]*\\b"
         },

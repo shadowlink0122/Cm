@@ -110,6 +110,8 @@ export const PRIMITIVE_TYPES = [
 ] as const;
 export const BOOLEAN_CONSTANTS = ['true', 'false'] as const;
 export const NULL_CONSTANTS = ['nullptr', 'null'] as const;
+// Optionの値なしバリアント。bareのNoneは型名（PascalCase→entity.name.type）でなくプリミティブ型と同色で着色する
+export const PRELUDE_VALUE_VARIANTS = ['None'] as const;
 export const BUILTIN_FUNCTIONS = [
   'print',
   'println',
