@@ -1,14 +1,16 @@
 // ============================================================
-// Cm言語拡張ランタイム - 非アクティブコードのトーンダウン表示
+// Cm言語拡張ランタイム - 非アクティブコードのトーンダウン表示・コードナビゲーション
 // ============================================================
-// 判定ロジックはinactiveCode.ts（VSCode API非依存）にあり、本ファイルはエディタ連携（デコレーション適用・イベント購読）のみを担う。
+// 判定ロジックはinactiveCode.ts / navigation/symbols.ts（いずれもVSCode API非依存）にあり、本ファイルはエディタ連携（デコレーション適用・イベント購読・プロバイダ登録）のみを担う。
 
 import * as vscode from 'vscode';
 import { findInactiveRanges } from './inactiveCode';
+import { registerNavigation } from './navigation/providers';
 
 export { findInactiveRanges };
 
 export function activate(context: vscode.ExtensionContext): void {
+  registerNavigation(context);
   const decoration = vscode.window.createTextEditorDecorationType({
     opacity: '0.45',
   });
