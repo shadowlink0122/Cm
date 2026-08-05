@@ -1,0 +1,65 @@
+import std::collections::hashmap::*;
+import std::io::println;
+// Q7回帰: HashMapの容量自動拡張（従来はresize未実装で初期容量16を超えるinsertが黙って喪失し、getがNoneになっていた）
+
+int main() {
+    // 容量境界前後: 16 / 17 / 33件の全件取得
+    HashMap<int, int> m16();
+    for (int i = 0; i < 16; i++) { m16.insert(i, i * 10); }
+    int ok16 = 0;
+    for (int i = 0; i < 16; i++) {
+        if (m16.get_or(i, -1) == i * 10) { ok16++; }
+    }
+    println("b16: {m16.len()} {ok16}");
+
+    HashMap<int, int> m17();
+    for (int i = 0; i < 17; i++) { m17.insert(i, i * 10); }
+    int ok17 = 0;
+    for (int i = 0; i < 17; i++) {
+        if (m17.get_or(i, -1) == i * 10) { ok17++; }
+    }
+    println("b17: {m17.len()} {ok17} {m17.get_or(16, -1)}");
+
+    HashMap<int, int> m33();
+    for (int i = 0; i < 33; i++) { m33.insert(i, i * 10); }
+    int ok33 = 0;
+    for (int i = 0; i < 33; i++) {
+        if (m33.get_or(i, -1) == i * 10) { ok33++; }
+    }
+    println("b33: {m33.len()} {ok33}");
+
+    // 複数回のgrowをまたぐ大量挿入と、拡張後の上書き・contains
+    HashMap<int, int> big();
+    for (int i = 0; i < 200; i++) { big.insert(i, i); }
+    big.insert(5, 5555);
+    int okbig = 0;
+    for (int i = 0; i < 200; i++) {
+        int want = i;
+        if (i == 5) { want = 5555; }
+        if (big.get_or(i, -1) == want) { okbig++; }
+    }
+    println("big: {big.len()} {okbig} {big.contains(199)} {big.contains(200)}");
+
+    // 拡張をまたいだremove後の再取得（残存キーは全件取得できる）
+    HashMap<int, int> rm();
+    for (int i = 0; i < 40; i++) { rm.insert(i, i + 100); }
+    rm.remove(0);
+    rm.remove(39);
+    int okrm = 0;
+    for (int i = 1; i < 39; i++) {
+        if (rm.get_or(i, -1) == i + 100) { okrm++; }
+    }
+    bool gone = !rm.contains(0) && !rm.contains(39);
+    println("rm: {rm.len()} {okrm} {gone}");
+
+    // 文字列値・負のintキーの拡張またぎ
+    HashMap<int, string> sv();
+    for (int i = 0; i < 24; i++) {
+        int k = i - 12;
+        sv.insert(k, "s{k}");
+    }
+    Option<string> neg = sv.get(0 - 12);
+    Option<string> pos = sv.get(11);
+    println("sv: {sv.len()} {neg.unwrap_or(\"none\")} {pos.unwrap_or(\"none\")}");
+    return 0;
+}

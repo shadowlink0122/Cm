@@ -41,8 +41,45 @@ export impl<K, V> HashMap<K, V> {
         }
     }
 
+    // 容量を2倍へ拡張し全エントリを再ハッシュする（Q7: 従来はresize未実装で、満杯時のinsertが黙って喪失していた）
+    void grow() {
+        const int old_cap = self.cap;
+        Entry<K, V>* old_entries = self.entries;
+        const int new_cap = old_cap * 2;
+        const long entry_size = 64;
+        const long alloc_size = (new_cap as long) * entry_size;
+        void* raw_ptr = malloc(alloc_size);
+        Entry<K, V>* new_entries = raw_ptr as Entry<K, V>*;
+        for (int i = 0; i < new_cap; i++) {
+            new_entries[i].occupied = false;
+        }
+        for (int i = 0; i < old_cap; i++) {
+            if (old_entries[i].occupied) {
+                int h = old_entries[i].key as int;
+                if (h < 0) { h = 0 - h; }
+                const int idx = h % new_cap;
+                for (int j = 0; j < new_cap; j++) {
+                    const int pos = (idx + j) % new_cap;
+                    if (!new_entries[pos].occupied) {
+                        new_entries[pos].key = old_entries[i].key;
+                        new_entries[pos].value = old_entries[i].value;
+                        new_entries[pos].occupied = true;
+                        break;
+                    }
+                }
+            }
+        }
+        self.entries = new_entries;
+        self.cap = new_cap;
+        free(old_entries as void*);
+    }
+
     // 挿入（intキー専用ハッシュ）
     void insert(K key, V value) {
+        // 負荷率50%で拡張する（線形探索の探索列を短く保ち、空スロットの存在を常に保証する）
+        if (self.size * 2 >= self.cap) {
+            self.grow();
+        }
         // 簡易ハッシュ（intとして扱う）
         int h = key as int;
         if (h < 0) { h = 0 - h; }
