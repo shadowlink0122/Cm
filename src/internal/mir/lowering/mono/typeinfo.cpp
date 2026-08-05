@@ -66,7 +66,9 @@ std::string Monomorphization::struct_symbol_key(const std::string& base_name,
     bool simple = true;
     for (const auto& arg : type_args) {
         keys.push_back(arg_symbol_key(arg));
-        if (keys.back().find('$') != std::string::npos) {
+        // Q2: 複数引数基底で引数キー自体が特殊化（__入り）だとフラット名が曖昧になる（Pair__Box__int__Box__stringがBox|int|Box|stringへ誤分割される）ため$エンコードへ退避する。1引数基底は全セグメント結合で可逆のためフラット名を維持する
+        if (keys.back().find('$') != std::string::npos ||
+            (type_args.size() > 1 && keys.back().find("__") != std::string::npos)) {
             simple = false;
         }
     }

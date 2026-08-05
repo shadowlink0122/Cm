@@ -23,7 +23,7 @@ monomorphization-typed-instantiation（archive済み）は「型ノード駆動�
 
 ## リファクタリング方針
 
-1. **即修（R1）**: `struct_symbol_key`のsimple高速パスを、引数キーが`__`を含む場合（=引数自体が特殊化）にも`$`エンコード分岐へ強制する。`$`エンコード名の消費側（resolve_struct_field_types:193-201・mono_structs.cpp:499-506等）は既に対応済みのため、Q2はこの1箇所で修正できる。
+1. **即修（R1・実施済み）**: `struct_symbol_key`のsimple高速パスを、複数引数基底で引数キーが`__`を含む場合（=引数自体が特殊化）に`$`エンコード分岐へ強制した（1引数基底は結合特例で可逆のためフラット名を維持）。Q2自体はこの修正と内側リテラル型注釈の上書き抑止（checker側）で修正済み（[nested-generic-type-arg-string.md](../../archive/v0.17.0/nested-generic-type-arg-string.md)の実装記録を参照）。
 2. **全廃（R2）**: 特殊化の同定を全経路typekeyへ統一し、`parse_flat_type_args`とmono_internal.cppの文字列置換分岐を削除する。表示用の名前はtypekey::display_nameで生成し、同定（identity）と表示（display）を分離する。
 3. ベース名抽出15箇所は、`$`エンコード名でも正しくベースを取れる共通関数（typekey側に既存のdecode系を利用）へ置換する。
 

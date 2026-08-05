@@ -140,3 +140,18 @@ Pair<int, string> p = {first: 7, second: "seven"}; // 無名リテラル（推�
 ```
 
 明示型引数付きリテラル（`Box<int>{v: 7}`）は比較演算子との構文曖昧性のため未対応です。フィールド個別代入（`Box<int> b; b.v = 7;`）も従来どおり使えます。
+
+## ネストした特殊化を型引数に持つ構造体
+
+ジェネリック特殊化を別のジェネリックの型引数として渡せます。内側リテラルの型も宣言型から推論されます。
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Pair<Box<int>, Box<string>> nested = Pair { first: Box { v: 42 }, second: Box { v: "deep" } };
+println("{nested.first.v} {nested.second.v}");  // 42 deep
+
+Box<Pair<int, string>> outer = Box { v: Pair { first: 5, second: "inner" } };
+println("{outer.v.first} {outer.v.second}");    // 5 inner
+```

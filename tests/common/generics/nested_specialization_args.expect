@@ -1,0 +1,7 @@
+fwd: 42 deep
+rev: head 7
+mixed: mix 9
+tri: 1 mid 3
+outer: 5 inner
+made: 100 made
+chain: deep

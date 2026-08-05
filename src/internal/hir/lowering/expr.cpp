@@ -1194,7 +1194,9 @@ HirExprPtr HirLowering::lower_struct_literal(ast::StructLiteralExpr& lit, TypePt
         }
     }
 
-    debug::hir::log(debug::hir::Id::LiteralLower, "Lowering struct literal: " + type_name,
+    debug::hir::log(debug::hir::Id::LiteralLower,
+                    "Lowering struct literal: " + type_name + " expected " +
+                        (expected_type ? ast::type_to_string(*expected_type) : std::string("null")),
                     debug::Level::Debug);
 
     auto hir_lit = std::make_unique<HirStructLiteral>();

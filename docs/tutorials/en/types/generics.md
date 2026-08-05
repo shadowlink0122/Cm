@@ -139,3 +139,18 @@ Pair<int, string> p = {first: 7, second: "seven"}; // anonymous literal (inferre
 ```
 
 Explicit type arguments in literals (`Box<int>{v: 7}`) are not supported due to parsing ambiguity with comparison operators. Field-by-field assignment (`Box<int> b; b.v = 7;`) also keeps working.
+
+## Structs with Nested Specializations as Type Arguments
+
+A generic specialization can be passed as a type argument of another generic. Inner literal types are also inferred from the declared type.
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Pair<Box<int>, Box<string>> nested = Pair { first: Box { v: 42 }, second: Box { v: "deep" } };
+println("{nested.first.v} {nested.second.v}");  // 42 deep
+
+Box<Pair<int, string>> outer = Box { v: Pair { first: 5, second: "inner" } };
+println("{outer.v.first} {outer.v.second}");    // 5 inner
+```

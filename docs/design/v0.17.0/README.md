@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1・Q2・Q4・Q5）と「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1・Q4・Q5）と「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -34,7 +34,7 @@ v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1・Q2�
 過去ラウンドで未検証だった領域（複雑左辺値の複合代入・for-inイテレータ・Try演算子・グローバル初期化・ポインタ演算・複数型引数ジェネリクス・インターフェース戻り値・演算子オーバーロード・match式・defer・文字列/enumメソッド・ビット演算・HashMap負荷）を6経路差分（jit O0/O2・native O0〜O3）で調査した。バグ1項目につき1文書。
 健全確認済み: 複合代入/inc-decの複雑左辺値・for-in（スライス/固定長配列）・Try連鎖・グローバル依存初期化・ポインタ演算stride・inherent演算子オーバーロード・match式全値位置・defer順序/キャプチャ・文字列メソッド群・has_next形イテレータ・ビット/char演算・sizeof。
 
-- [Q2: ネストしたジェネリック型引数のstringフィールド読みが無言死](nested-generic-type-arg-string.md) — `Pair<Box<int>, Box<string>>`経由のstring読みでrc=0のまま無言終了（全バックエンド・checker無診断。Critical）
+- Q2: ネストしたジェネリック型引数のstringフィールド読みが無言死 — **修正済み**（[archive移動](../../archive/v0.17.0/nested-generic-type-arg-string.md)。真因は2系統: struct_symbol_keyのsimple高速パスが生成する曖昧フラット名の誤逆算（複数引数基底×特殊化引数を$エンコードへ退避）と、内側リテラルの型注釈がフィールド宣言型のジェネリックパラメータ名で上書きされ裸のBoxのままlowerされる問題（propagate_literal_expected_typeの上書き抑止+実引数置換）。ネスト特殊化マトリクスの回帰をjit/native O0〜O3/wasm/jsで追加。フラット名逆算の全廃は[mono-flat-name-elimination.md](mono-flat-name-elimination.md)が引き続き扱う）
 - Q3: インターフェース戻り値のfat pointer構築欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/interface-return-fat-pointer.md)。真因はペイロードが呼び出し先スタックを指すダングリング（O0のみ偶然動作）。upcast時のfat pointerペイロードをヒープboxing化し、jsの転送引数の再ラップ（Shape_Shape_vtable未定義参照）も修正。ペイロードのdrop対応は将来課題）
 - Q7: HashMapが17要素以上で挿入済み要素を喪失 — **修正済み**（[archive移動](../../archive/v0.17.0/hashmap-resize-loses-entries.md)。真因はresize未実装で満杯後のinsertが黙って喪失。負荷率50%で2倍拡張・全エントリ再ハッシュのgrow()を実装し、境界16/17/33・200件・remove/上書きまたぎの回帰を追加。removeの探索列分断とstringキーハッシュは将来課題として記録）
 - [Q1: for-inイテレータプロトコルの検査穴](forin-iterator-protocol-checks.md) — has_next欠如が未解決シンボルまで無診断・Option返しnextの要素型未unwrap（Medium）

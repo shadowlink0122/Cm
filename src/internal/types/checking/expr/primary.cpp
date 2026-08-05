@@ -419,17 +419,36 @@ void TypeChecker::propagate_literal_expected_type(ast::Expr& expr, const ast::Ty
         if (resolved->kind != ast::TypeKind::Struct) {
             return;
         }
+        // Q2: 構造体表にない名前（フィールド宣言型のジェネリックパラメータ名A等）は、外側リテラルからの伝播で設定済みのより具体的な注釈（Box<string>等）を上書きしない
+        const ast::StructDecl* sd = get_struct(resolved->name);
+        if (!sd) {
+            if (!expr.type) {
+                expr.type = resolved;
+            }
+            return;
+        }
         if (slit->type_name.empty()) {
             slit->type_name = resolved->name;
         }
         expr.type = resolved;
         // フィールド値へ再帰伝播（フィールド型は構造体定義から引く）
-        const ast::StructDecl* sd = get_struct(resolved->name);
-        if (sd) {
+        {
             for (auto& fv : slit->fields) {
                 for (const auto& sf : sd->fields) {
                     if (sf.name == fv.name && fv.value) {
-                        propagate_literal_expected_type(*fv.value, sf.type);
+                        // Q2: 期待型が特殊化型（type_args付き）のときはフィールド型中のジェネリックパラメータを実引数へ置換してから伝播する。Pair<Box<int>, Box<string>>の内側リテラルがBox<string>と型付けされ、モノモーフ化の特殊化・型書き換え対象になる（従来は裸のBoxのままレイアウトが壊れ、stringフィールド読みが無言死していた）
+                        ast::TypePtr field_expected = sf.type;
+                        if (!sd->generic_params.empty() &&
+                            resolved->type_args.size() == sd->generic_params.size()) {
+                            field_expected = substitute_generic_type(sf.type, sd->generic_params,
+                                                                     resolved->type_args);
+                        }
+                        debug::tc::log(debug::tc::Id::TypeInfer,
+                                       "propagate field " + fv.name + " expected " +
+                                           (field_expected ? ast::type_to_string(*field_expected)
+                                                           : std::string("null")),
+                                       debug::Level::Debug);
+                        propagate_literal_expected_type(*fv.value, field_expected);
                         break;
                     }
                 }
