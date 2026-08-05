@@ -100,6 +100,10 @@ run_case z5-check-warn-en   "$CM" check "$DIR/z5_narrowing.cm"
 run_case z5-strict-error-en "$CM" check --strict "$DIR/z5_narrowing.cm"
 run_case z5-strict-error-ja "$CM" check --strict --lang=ja "$DIR/z5_narrowing.cm"
 
+# ---------- for-inイテレータプロトコル検査（Q1） ----------
+run_case q1-forin-iter-en "$CM" check "$DIR/q1_forin_iterator.cm"
+run_case q1-forin-iter-ja "$CM" check --lang=ja "$DIR/q1_forin_iterator.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
 run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"

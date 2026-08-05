@@ -1452,6 +1452,18 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcRequiresIterableTypeArray
     {"For-in requires an iterable type (array), got '{0}'",
      "for-inには反復可能な型（配列）が必要ですが、'{0}' が指定されました"},
+    // TcIteratorMissingHasNext
+    {"For-in iterator type '{0}' must implement 'bool has_next()'",
+     "for-inのイテレータ型 '{0}' には 'bool has_next()' の実装が必要です"},
+    // TcIteratorHasNextMustReturnBool
+    {"'has_next()' of for-in iterator type '{0}' must return bool, got '{1}'",
+     "for-inのイテレータ型 '{0}' の 'has_next()' はboolを返す必要がありますが、'{1}' が指定されています"},
+    // TcIteratorMissingNext
+    {"For-in iterator type '{0}' must implement 'next()' returning the element type",
+     "for-inのイテレータ型 '{0}' には要素型を返す 'next()' の実装が必要です"},
+    // TcIteratorNextMustNotReturnOption
+    {"'next()' of for-in iterator type '{0}' must return the element type directly, got '{1}' (implement 'bool has_next()' and a non-Option 'next()')",
+     "for-inのイテレータ型 '{0}' の 'next()' は要素型を直接返す必要がありますが、'{1}' が指定されています（'bool has_next()' と非Optionの 'next()' を実装してください）"},
     // TcVariableTypeMismatchExpected
     {"For-in variable type mismatch: expected '{0}', got '{1}'",
      "for-in変数の型が一致しません: 期待 '{0}'、実際 '{1}'"},

@@ -40,3 +40,10 @@ for (v in c) { sum = sum + v; }
 ## 検出経緯
 
 第5ラウンドで検出。最小再現は `.tmp/bughunt5/q2x3.cm`（Option形）・`q2x4.cm`（has_next欠如の未解決シンボル）。
+
+## 実装記録（修正済み）
+
+1. `check_for_in`（src/internal/types/checking/stmt.cpp）のiter()発見直後に、イテレータ型のプロトコル検査を追加した: `has_next`の存在と`bool`戻り値、`next`の存在（void不可）、`next`の戻り値がOptionでないことを検査し、違反はi18n診断（TcIteratorMissingHasNext / TcIteratorHasNextMustReturnBool / TcIteratorMissingNext / TcIteratorNextMustNotReturnOption、ja訳付き）で停止する。
+2. 修正方針2の仕様決定: Option返しnextは(a)プロトコル外として診断を採用した。has_next+非Option nextが実プロトコルであり、Option形の暗黙unwrapは全バックエンドのlowering追加を要する新機能で、従来もOption形は一度も動作していなかった（破壊的変更にならない）ため。診断文で正プロトコル（`bool has_next()` + 非Option `next()`）を案内する。
+3. エラーテスト4本（has_next欠如・next欠如・has_next非bool戻り・Option返しnext）をtests/common/errors/forin_iterator_*.cmへ追加し、i18n E2E（q1-forin-iter-en/ja）でen/ja両表示を固定した。既存イテレータスイート12件・errorsスイート70件は全通過。
+4. チュートリアルのfor-in節（basics/control-flow.md ja/en）へ「独自イテレータ（iter()プロトコル）」を新設し、プロトコル要件と診断を明文化した（従来はイテレータプロトコル自体が未記載だった）。

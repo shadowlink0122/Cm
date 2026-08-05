@@ -183,6 +183,32 @@ for (n in arr) {
 }
 ```
 
+### 独自イテレータ（iter()プロトコル）
+
+`iter()` メソッドを持つ構造体はfor-inで反復できます。`iter()` が返すイテレータ型は `bool has_next()` と要素型を直接返す `next()` の両方を実装する必要があります。
+
+```cm
+struct Counter { int cur; int max; }
+struct CounterIter { int cur; int max; }
+
+impl Counter {
+    CounterIter iter() { return CounterIter { cur: self.cur, max: self.max }; }
+}
+
+impl CounterIter {
+    bool has_next() { return self.cur < self.max; }
+    int next() { self.cur = self.cur + 1; return self.cur; }
+}
+
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    for (v in c) { println("{v}"); }  // 1 2 3
+    return 0;
+}
+```
+
+`has_next()` や `next()` の欠如・`has_next()` のbool以外の戻り値・`Option<T>` を返す `next()` はコンパイルエラーになります（v0.17.0。従来はリンクエラーや的外れな型エラーになっていました）。`next()` は要素型を直接返し、終端判定は `has_next()` が担います。
+
 ---
 
 ## switch文

@@ -195,6 +195,32 @@ int main() {
 }
 ```
 
+### Custom Iterators (the iter() Protocol)
+
+A struct with an `iter()` method can be used in for-in. The iterator type returned by `iter()` must implement both `bool has_next()` and a `next()` that returns the element type directly.
+
+```cm
+struct Counter { int cur; int max; }
+struct CounterIter { int cur; int max; }
+
+impl Counter {
+    CounterIter iter() { return CounterIter { cur: self.cur, max: self.max }; }
+}
+
+impl CounterIter {
+    bool has_next() { return self.cur < self.max; }
+    int next() { self.cur = self.cur + 1; return self.cur; }
+}
+
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    for (v in c) { println("{v}"); }  // 1 2 3
+    return 0;
+}
+```
+
+A missing `has_next()` or `next()`, a non-bool `has_next()` return type, and an `Option<T>`-returning `next()` are compile errors (v0.17.0; these previously surfaced as link errors or misleading type errors). `next()` returns the element type directly; termination is decided by `has_next()`.
+
 ---
 
 ## switch Statement

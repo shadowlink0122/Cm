@@ -1,0 +1,20 @@
+// 回帰(Q1穴2): Option返しnextはプロトコル外として診断（従来はループ変数がOption<int>のまま的外れな型エラーになっていた）
+struct Counter { int cur; int max; }
+struct CI { int cur; int max; }
+impl Counter {
+    CI iter() { return CI { cur: self.cur, max: self.max }; }
+}
+impl CI {
+    bool has_next() { return self.cur < self.max; }
+    Option<int> next() {
+        if (self.cur >= self.max) { return Option::None; }
+        self.cur = self.cur + 1;
+        return Option::Some(self.cur);
+    }
+}
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    int sum = 0;
+    for (v in c) { sum = sum + v; }
+    return sum;
+}

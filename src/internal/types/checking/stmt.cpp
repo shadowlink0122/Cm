@@ -695,13 +695,63 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
                 if (method_it->second.return_type) {
                     for_in.iterator_type_name = ast::type_to_string(*method_it->second.return_type);
 
-                    // イテレータのnext()メソッドから要素型を推定
+                    // Q1: イテレータプロトコル（bool has_next() + 要素型を直接返すnext()）の充足を検査する。従来はhas_next欠如がMIRの未解決シンボル（_CI__has_next）まで無診断、Option返しnextはループ変数がOption<T>のまま後続の的外れな型エラーになっていた
+                    const MethodInfo* has_next_info = nullptr;
+                    const MethodInfo* next_info = nullptr;
                     auto iter_it = type_methods_.find(for_in.iterator_type_name);
                     if (iter_it != type_methods_.end()) {
-                        auto next_it = iter_it->second.find("next");
-                        if (next_it != iter_it->second.end() && next_it->second.return_type) {
-                            element_type = next_it->second.return_type;
+                        auto hn_it = iter_it->second.find("has_next");
+                        if (hn_it != iter_it->second.end()) {
+                            has_next_info = &hn_it->second;
                         }
+                        auto next_it = iter_it->second.find("next");
+                        if (next_it != iter_it->second.end()) {
+                            next_info = &next_it->second;
+                        }
+                    }
+
+                    bool protocol_ok = true;
+                    if (!has_next_info) {
+                        error(stmt_span, i18n::msgf(i18n::MsgId::TcIteratorMissingHasNext,
+                                                    for_in.iterator_type_name));
+                        protocol_ok = false;
+                    } else if (!has_next_info->return_type ||
+                               resolve_typedef(has_next_info->return_type)->kind !=
+                                   ast::TypeKind::Bool) {
+                        error(stmt_span,
+                              i18n::msgf(i18n::MsgId::TcIteratorHasNextMustReturnBool,
+                                         for_in.iterator_type_name,
+                                         has_next_info->return_type
+                                             ? ast::type_to_string(*has_next_info->return_type)
+                                             : "void"));
+                        protocol_ok = false;
+                    }
+                    if (!next_info || !next_info->return_type ||
+                        next_info->return_type->kind == ast::TypeKind::Void) {
+                        error(stmt_span, i18n::msgf(i18n::MsgId::TcIteratorMissingNext,
+                                                    for_in.iterator_type_name));
+                        protocol_ok = false;
+                    } else {
+                        // Option<T>返しnextはプロトコル外（has_next + 非Option nextが正）と仕様決定。要素型の暗黙unwrapは行わない
+                        auto next_ret = resolve_typedef(next_info->return_type);
+                        std::string ret_base = next_ret ? next_ret->name : "";
+                        auto lt_pos = ret_base.find('<');
+                        if (lt_pos != std::string::npos) {
+                            ret_base = ret_base.substr(0, lt_pos);
+                        }
+                        if (ret_base == "Option") {
+                            error(stmt_span,
+                                  i18n::msgf(i18n::MsgId::TcIteratorNextMustNotReturnOption,
+                                             for_in.iterator_type_name,
+                                             ast::type_to_string(*next_info->return_type)));
+                            protocol_ok = false;
+                        } else {
+                            element_type = next_info->return_type;
+                        }
+                    }
+                    if (!protocol_ok) {
+                        scopes_.pop();
+                        return;
                     }
                 }
 
