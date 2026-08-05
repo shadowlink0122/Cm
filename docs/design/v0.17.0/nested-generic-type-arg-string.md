@@ -31,16 +31,19 @@ int main() {
 
 `Pair<Box<string>, Box<int>>`（第1引数側）でも同様に`rev.first.v`の読みで死ぬため、引数位置には依存しない。
 
-## 原因の見立て
+## 真因（静的追跡で特定済み）
 
-モノモーフ化（typed instantiation化後）の型引数がそれ自体特殊化名（`Box__string`）である場合の置換・レイアウト解決に欠陥があり、`Pair__Box__int__Box__string`のフィールドから取り出した`Box<string>`のフィールド読みが誤った位置/型で行われるとみられる。
-rc=0の無言終了は、壊れた文字列ポインタがランタイムのprint系でEOF/exit相当の挙動を踏んでいる可能性がある（要調査: クラッシュですらない点が異常）。
+`struct_symbol_key`（src/internal/mir/lowering/mono/typeinfo.cpp:60）の「simple高速パス」（:74-81）が、引数キーに`$`が含まれない限りフラット名`base__k1__k2…`を生成するため、`Pair<Box<int>, Box<string>>`は曖昧なフラット名`Pair__Box__int__Box__string`になる。
+このフラット名しか持たない経路（mono_structs.cpp:114-137のマングリング名からの発見等）で逆算器`parse_flat_type_args`（typeinfo.cpp:89-128）が呼ばれると、`Box|int|Box|string`の4セグメントを4つの型引数と誤解し、substが先頭2つだけを採用して`A:=Box（裸）, B:=int`になる。
+結果、フィールド`second`が`Box<string>`（ポインタ8バイト）でなく`int`（4バイト）としてレイアウトされ、`.second.v`が壊れたポインタを読み、printランタイムがそれを辿ってrc=0のまま無言終了する。
+`Box<string>`単独が正常なのはparam_count==1の結合特例（:114-122）があるため、兄弟共存が正常なのは各Boxが構造化された型ツリー経路（mono_structs.cpp:100-112）で直接発見されるためで、症状の限定条件と完全に一致する。
+可逆な`$`長さ接頭辞エンコーダ（typekey.cpp:216 make_struct_key）は存在するが、simple高速パスがネスト特殊化のときに限ってそれを迂回するのが設計欠陥である。
 
 ## 修正方針
 
-1. `Pair<Box<int>, Box<string>>`のモノモーフ化結果（MIR構造体定義とフィールド型）をダンプし、`second`フィールドの型が`Box__string`として正しく特殊化されているかを確認する。
-2. ネストした特殊化名の型引数分解（`Box__int`と`Box__string`の区別）を типed instantiationの型キー（typekey）で検証する回帰をunitテストに追加する。
-3. 無言終了の経路（printランタイムか、それ以前のロードか）を特定し、いかなる場合もrc=0で死なないようにする（診断またはクラッシュへ）。
+1. 即修: `struct_symbol_key`のsimple高速パス判定に「引数キーが`__`を含む（=引数自体が特殊化）場合は`$`エンコード分岐へ」を追加する。`$`エンコード名の消費側（resolve_struct_field_types:193-201・mono_structs.cpp:499-506等）は対応済みのため、この1箇所でQ2は修正できる。
+2. 恒久: フラット名逆算そのものの全廃は[mono-flat-name-elimination.md](mono-flat-name-elimination.md)で扱う（parse_flat_type_args削除・typekey全面化）。
+3. 回帰: ネスト特殊化のマトリクス（`Pair<Box<int>, Box<string>>`・逆順・3型引数・`Box<Pair<int,string>>`）を6経路+wasm/jsで追加し、いかなる場合もrc=0で無言死しないことを検証する。
 
 ## 検出経緯
 

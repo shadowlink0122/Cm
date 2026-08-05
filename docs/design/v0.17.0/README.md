@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1〜Q5・Q7）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1・Q2・Q4・Q5・Q7）と「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -35,12 +35,25 @@ v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q1〜Q5�
 健全確認済み: 複合代入/inc-decの複雑左辺値・for-in（スライス/固定長配列）・Try連鎖・グローバル依存初期化・ポインタ演算stride・inherent演算子オーバーロード・match式全値位置・defer順序/キャプチャ・文字列メソッド群・has_next形イテレータ・ビット/char演算・sizeof。
 
 - [Q2: ネストしたジェネリック型引数のstringフィールド読みが無言死](nested-generic-type-arg-string.md) — `Pair<Box<int>, Box<string>>`経由のstring読みでrc=0のまま無言終了（全バックエンド・checker無診断。Critical）
-- [Q3: インターフェース戻り値のfat pointer構築欠落](interface-return-fat-pointer.md) — 戻り値経由のメソッド呼び出しがjit=ゴミ値/native=誤値（ローカルupcast・引数は正常。returnサイト欠落ファミリ。Critical）
+- Q3: インターフェース戻り値のfat pointer構築欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/interface-return-fat-pointer.md)。真因はペイロードが呼び出し先スタックを指すダングリング（O0のみ偶然動作）。upcast時のfat pointerペイロードをヒープboxing化し、jsの転送引数の再ラップ（Shape_Shape_vtable未定義参照）も修正。ペイロードのdrop対応は将来課題）
 - [Q7: HashMapが17要素以上で挿入済み要素を喪失](hashmap-resize-loses-entries.md) — 容量16境界のリサイズで要素喪失、getがNone（stdlib。Critical）
 - [Q1: for-inイテレータプロトコルの検査穴](forin-iterator-protocol-checks.md) — has_next欠如が未解決シンボルまで無診断・Option返しnextの要素型未unwrap（Medium）
 - [Q4: 算術演算子インターフェースのimpl形が内部エラー](arith-operator-interface-decl.md) — `impl T for Add`が内部エラー（Add系未宣言+例外漏れ。inherent形は正常。Medium）
 - [Q5: enumへのinherent implメソッドが未サポート](enum-inherent-impl-methods.md) — impl宣言は黙って受理され呼び出しで「Unknown method for type 'int'」（Medium）
 - Q6（文書化なし・注記のみ）: `replace()`が最初の一致のみ置換する仕様がドキュメント未記載（全置換との区別を文字列チュートリアルへ明記すべき。Low）
+
+## 全体複雑度レビュー（未実装のリファクタリング提案）
+
+修正履歴の同族バグ分析（変換サイト欠落族・メソッド解決分裂族・名前逆算族）と全ソースの実測（サイト×変換種マトリクス・キー計算箇所の棚卸し・ランタイムdiff・関数長スキャン）に基づき、複雑すぎる実装をシンプルかつバグが再発しない構造へ変えるための提案。優先度順。
+
+- [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — 変換挿入が11サイトに手組み散在（全種連鎖は2サイトのみ・ユニオンは2方式併存・インターフェースupcastは変換系外で各バックエンド個別）。coerce_to_expected一本化＋upcastのMIR化＋checker受理との同表化で、B2→Y1〜Y3→Y5→Z5→Q3と続いた「受理したのに未挿入」バグ族を構造的に封止する（Critical）
+- [モノモーフ化のフラット名逆算の完全廃止](mono-flat-name-elimination.md) — 可逆$エンコーダ（typekey）があるのにstruct_symbol_keyのsimple高速パスがネスト特殊化で曖昧フラット名を生成し、parse_flat_type_argsの誤逆算がQ2の真因。逆算器の削除とtypekey全面化でQ2族を表現不能にする（Critical）
+- [メソッド解決の一元化](method-resolution-unification.md) — メソッド表キー計算が12箇所別実装・解決機構4系統・types/の全throw4件が内部エラー漏れ。正準キー関数＋resolve_method APIでQ1/Q4/Q5族を封止する（High）
+- [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
+- [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — 構造化import後も包含判定は正規表現識別子スキャン・出力はスパン消し込み+改名テキスト複製のまま。判定のAST化→出力のAST化の2段で座標ズレ（X5同根）と誤包含を解消する（Medium）
+- [型サイズ照会の一本化](layout-size-single-source.md) — サイズ実装が4系統（HIRの暫定256バイト・MIRのフィールド数×8見積もり・monoのフラット名依存・真実のlayout系）でsizeofが見積もりを答えうる。全照会をlayout API 1系統へ（Medium）
+- [derive自動実装の残存MIR生成の整理](auto-impl-generic-gaps-and-cleanup.md) — 源展開移行後も約2,970行のMIR直生成が残存（非ジェネリック分は死に体）。ジェネリックパスはSlice/Unionフィールド未対応で無言誤動作。削除→ギャップ封鎖→単一ソース化完遂の3段（Medium）
+- [配列HOFランタイムの共通ソース化](runtime-hof-common-source.md) — native/wasmのruntime_format.cは名前79%共有・本体35〜40%一致で二重実装が常態。slice方式（共通.inc+5フック）をHOF/検索ビルトイン群へ適用。文字列フォーマット系はwasm SDS化まで非対象の既存判断を維持（Low）
 
 ## コンパイラ基盤の構造的リファクタリング
 
