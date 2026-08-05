@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Z5）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド」の未修正所見（Z5）と「第5ラウンド」の新規所見（Q1〜Q5・Q7）を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -28,6 +28,19 @@ v0.17.0の設計文書は下記「レイヤー別レビュー 第4ラウンド�
 - Z3: 構造体内ユニオンフィールドのタグがwasmで読めない — **解決確認**（[archive移動](../../archive/v0.17.0/wasm-union-in-struct-tag.md)。バイセクトでY1〜Y3のタグ書き込み統一が真因と特定——nativeは偶然一致だった。マトリクス回帰を4系一致で追加）
 - Z4: 型検査のエラー検出漏れ3件 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-error-coverage-holes.md)。push要素型検査・非変種as拒否・ループ深度によるbreak/continue診断、エラーテスト4本追加）
 - [Z5: 暗黙変換と明示キャストの設計整理](implicit-explicit-cast-design.md) — 縮小変換が全て暗黙受理され、double→int暗黙代入は変換命令欠落でゴミ値・バックエンド分裂。stdlibの`as`127箇所の一部はY4の回避策。conversion_kind一元化と段階的エラー化の方針（Critical）
+
+## 未修正バグ調査 第5ラウンド（Q1〜Q7）
+
+過去ラウンドで未検証だった領域（複雑左辺値の複合代入・for-inイテレータ・Try演算子・グローバル初期化・ポインタ演算・複数型引数ジェネリクス・インターフェース戻り値・演算子オーバーロード・match式・defer・文字列/enumメソッド・ビット演算・HashMap負荷）を6経路差分（jit O0/O2・native O0〜O3）で調査した。バグ1項目につき1文書。
+健全確認済み: 複合代入/inc-decの複雑左辺値・for-in（スライス/固定長配列）・Try連鎖・グローバル依存初期化・ポインタ演算stride・inherent演算子オーバーロード・match式全値位置・defer順序/キャプチャ・文字列メソッド群・has_next形イテレータ・ビット/char演算・sizeof。
+
+- [Q2: ネストしたジェネリック型引数のstringフィールド読みが無言死](nested-generic-type-arg-string.md) — `Pair<Box<int>, Box<string>>`経由のstring読みでrc=0のまま無言終了（全バックエンド・checker無診断。Critical）
+- [Q3: インターフェース戻り値のfat pointer構築欠落](interface-return-fat-pointer.md) — 戻り値経由のメソッド呼び出しがjit=ゴミ値/native=誤値（ローカルupcast・引数は正常。returnサイト欠落ファミリ。Critical）
+- [Q7: HashMapが17要素以上で挿入済み要素を喪失](hashmap-resize-loses-entries.md) — 容量16境界のリサイズで要素喪失、getがNone（stdlib。Critical）
+- [Q1: for-inイテレータプロトコルの検査穴](forin-iterator-protocol-checks.md) — has_next欠如が未解決シンボルまで無診断・Option返しnextの要素型未unwrap（Medium）
+- [Q4: 算術演算子インターフェースのimpl形が内部エラー](arith-operator-interface-decl.md) — `impl T for Add`が内部エラー（Add系未宣言+例外漏れ。inherent形は正常。Medium）
+- [Q5: enumへのinherent implメソッドが未サポート](enum-inherent-impl-methods.md) — impl宣言は黙って受理され呼び出しで「Unknown method for type 'int'」（Medium）
+- Q6（文書化なし・注記のみ）: `replace()`が最初の一致のみ置換する仕様がドキュメント未記載（全置換との区別を文字列チュートリアルへ明記すべき。Low）
 
 ## コンパイラ基盤の構造的リファクタリング
 
