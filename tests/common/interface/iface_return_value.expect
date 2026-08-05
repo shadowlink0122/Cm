@@ -1,0 +1,7 @@
+var: 12 rect
+direct: 12 circle
+forward: 12
+vialocal: 30 local
+two: 12 12 rect circle
+alias: 56 alias
+snapshot: 6

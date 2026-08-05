@@ -413,7 +413,9 @@ void JSCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             const auto& targetLocal = calleeFunc->locals[targetLocalId];
                             if (targetLocal.type && targetLocal.type->kind == TypeKind::Interface) {
                                 auto sourceType = getOperandType(*arg, func);
-                                if (sourceType && sourceType->kind == TypeKind::Struct) {
+                                // 既にインターフェース値（fat pointer）の転送は再ラップしない（Q3: Shape_Shape_vtable未定義参照になっていた）
+                                if (sourceType && sourceType->kind == TypeKind::Struct &&
+                                    interface_names_.count(sourceType->name) == 0) {
                                     std::string vtableName =
                                         sanitizeIdentifier(sourceType->name) + "_" +
                                         sanitizeIdentifier(targetLocal.type->name) + "_vtable";
@@ -731,7 +733,9 @@ void JSCodeGen::emitLinearTerminator(const mir::MirTerminator& term, const mir::
 
                             if (isTargetInterface) {
                                 auto sourceType = getOperandType(*arg, func);
-                                if (sourceType && sourceType->kind == TypeKind::Struct) {
+                                // 既にインターフェース値（fat pointer）の転送は再ラップしない（Q3）
+                                if (sourceType && sourceType->kind == TypeKind::Struct &&
+                                    interface_names_.count(sourceType->name) == 0) {
                                     std::string vtableName =
                                         sanitizeIdentifier(sourceType->name) + "_" +
                                         sanitizeIdentifier(targetLocal.type->name) + "_vtable";

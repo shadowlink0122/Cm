@@ -54,8 +54,34 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
                         // 具象構造体のallocaをdataポインタとしてfat pointerを構築
                         auto srcAddr = locals[srcPlace.local];
                         if (srcAddr) {
+                            llvm::Value* dataPtr = srcAddr;
+                            // fat pointerのペイロードはヒープへ実体化（boxing）してから包む（Q3）。
+                            // スタックのローカルを指したままだと戻り値経由（return Rect{...}; や Shape s = r; return s;）で
+                            // return後にダングリングになり、O0では偶然正しく読めO2でゴミ値・wasmで誤値という分裂を起こしていた。
+                            // upcastはMIRがコピー一時を挟むスナップショット（値）意味論のためboxingしても観測挙動は変わらない。
+                            // ヒープペイロードの解放は将来のdrop対応課題。
+                            // wasmはnoStdだがランタイム（runtime_wasm.c）がmallocを提供するため自前宣言で呼ぶ。
+                            // malloc無しのベアメタル系noStdターゲットのみ実体化をスキップする（リンク不能を避ける）
+                            const auto& targetConfig = ctx.getTargetConfig();
+                            const bool has_malloc =
+                                !targetConfig.noStd || targetConfig.target == BuildTarget::Wasm;
+                            if (has_malloc) {
+                                auto structTy = convertType(srcType);
+                                const auto& dl = module->getDataLayout();
+                                const uint64_t payload_size = dl.getTypeAllocSize(structTy);
+                                auto sizeTy = dl.getIntPtrType(module->getContext());
+                                auto mallocCallee = module->getOrInsertFunction(
+                                    "malloc",
+                                    llvm::FunctionType::get(ctx.getPtrType(), {sizeTy}, false));
+                                auto heap = builder->CreateCall(
+                                    mallocCallee, {llvm::ConstantInt::get(sizeTy, payload_size)},
+                                    "iface_box");
+                                builder->CreateMemCpy(heap, llvm::MaybeAlign(), srcAddr,
+                                                      llvm::MaybeAlign(), payload_size);
+                                dataPtr = heap;
+                            }
                             auto fat =
-                                createInterfaceFatPtr(srcAddr, srcType->name, destType->name);
+                                createInterfaceFatPtr(dataPtr, srcType->name, destType->name);
                             if (allocatedLocals.count(assign.place.local) > 0 &&
                                 locals[assign.place.local]) {
                                 builder->CreateStore(fat, locals[assign.place.local]);

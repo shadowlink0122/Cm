@@ -1,0 +1,50 @@
+import std::io::println;
+// Q3回帰: インターフェース戻り値のfat pointerペイロードboxing。
+// 従来はペイロードが呼び出し先スタックのローカルを指したまま返り、O0では偶然読めO2でゴミ値・wasmで誤値、
+// jsは転送引数でShape_Shape_vtable未定義参照になっていた
+interface Shape {
+    int area();
+    string label();
+}
+struct Rect { int w; int h; string name; }
+struct Circle { int r; string name; }
+impl Rect for Shape {
+    int area() { return self.w * self.h; }
+    string label() { return self.name; }
+}
+impl Circle for Shape {
+    int area() { return 3 * self.r * self.r; }
+    string label() { return self.name; }
+}
+Shape make_rect() {
+    return Rect { w: 3, h: 4, name: "rect" };
+}
+Shape make_circle() {
+    return Circle { r: 2, name: "circle" };
+}
+Shape via_local() {
+    Rect r = Rect { w: 5, h: 6, name: "local" };
+    return r;
+}
+int consume(Shape s) { return s.area(); }
+Shape via_iface_alias() {
+    Rect r = Rect { w: 7, h: 8, name: "alias" };
+    Shape s = r;
+    return s;
+}
+int main() {
+    Shape s = make_rect();
+    println("var: {s.area()} {s.label()}");
+    println("direct: {make_circle().area()} {make_circle().label()}");
+    println("forward: {consume(make_rect())}");
+    println("vialocal: {via_local().area()} {via_local().label()}");
+    Shape a = make_rect();
+    Shape b = make_circle();
+    println("two: {a.area()} {b.area()} {a.label()} {b.label()}");
+    println("alias: {via_iface_alias().area()} {via_iface_alias().label()}");
+    Rect mut_r = Rect { w: 2, h: 3, name: "snap" };
+    Shape snap = mut_r;
+    mut_r.w = 100;
+    println("snapshot: {snap.area()}");
+    return 0;
+}
