@@ -16,6 +16,7 @@ import * as vsctm from 'vscode-textmate';
 const BEGIN_SCOPE = 'punctuation.definition.template-expression.begin.cm';
 const END_SCOPE = 'punctuation.definition.template-expression.end.cm';
 const ESCAPE_SCOPE = 'constant.character.escape.cm';
+const EMBEDDED_STRING_SCOPE = 'string.quoted.double.interpolation.cm';
 
 // 文法ファイルとonig.wasmを読み込み、source.cm文法を1度だけ初期化する
 async function loadGrammar(): Promise<vsctm.IGrammar> {
@@ -47,11 +48,31 @@ function tokensWithScope(grammar: vsctm.IGrammar, line: string, scope: string): 
 
 test('連続プレースホルダ: エスケープ引用符入りでも全て開閉括弧がハイライトされる', async () => {
   const grammar = await loadGrammar();
-  const line = 'println("sv: {sv.len()} {neg.unwrap_or(\\"none\\")} {pos.unwrap_or(\\"none\\")}");';
+  const line = 'println("sv: {sv.len()} {neg.unwrap_or(\\"None\\")} {pos.unwrap_or(\\"None\\")}");';
   const begins = tokensWithScope(grammar, line, BEGIN_SCOPE);
   const ends = tokensWithScope(grammar, line, END_SCOPE);
   assert.equal(begins.length, 3, `開き括弧が3個ハイライトされるべき: ${JSON.stringify(begins)}`);
   assert.equal(ends.length, 3, `閉じ括弧が3個ハイライトされるべき: ${JSON.stringify(ends)}`);
+});
+
+test('プレースホルダ内のエスケープ文字列リテラルは区切りの\\"ごと文字列として着色される', async () => {
+  const grammar = await loadGrammar();
+  const line = 'println("sv: {neg.unwrap_or(\\"None\\")} {pos.unwrap_or(\\"None\\")}");';
+  const strings = tokensWithScope(grammar, line, EMBEDDED_STRING_SCOPE);
+  assert.deepEqual(
+    strings.join(''),
+    '\\"None\\"\\"None\\"',
+    `文字列トークン: ${JSON.stringify(strings)}`,
+  );
+});
+
+test('1プレースホルダ内の複数リテラルは別々の文字列として着色され間の式は文字列にならない', async () => {
+  const grammar = await loadGrammar();
+  const line = 'string s = "{concat(\\"a\\", \\"b\\")}";';
+  const strings = tokensWithScope(grammar, line, EMBEDDED_STRING_SCOPE);
+  assert.equal(strings.join(''), '\\"a\\"\\"b\\"', `文字列トークン: ${JSON.stringify(strings)}`);
+  const commas = tokensWithScope(grammar, line, 'meta.embedded.punctuation.comma.cm');
+  assert.deepEqual(commas, [','], `区切りカンマは文字列色にならない: ${JSON.stringify(commas)}`);
 });
 
 test('連続プレースホルダ: 区切りなしの隣接{a}{b}が両方ハイライトされる', async () => {

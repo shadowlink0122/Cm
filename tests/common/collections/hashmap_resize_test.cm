@@ -60,6 +60,6 @@ int main() {
     }
     Option<string> neg = sv.get(0 - 12);
     Option<string> pos = sv.get(11);
-    println("sv: {sv.len()} {neg.unwrap_or(\"none\")} {pos.unwrap_or(\"none\")}");
+    println("sv: {sv.len()} {neg.unwrap_or(\"None\")} {pos.unwrap_or(\"None\")}");
     return 0;
 }

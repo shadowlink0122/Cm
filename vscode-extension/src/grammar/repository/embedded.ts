@@ -48,7 +48,15 @@ export const backtickBlock: TmRepositoryEntry = {
 export const interpolationExpression: TmRepositoryEntry = {
   comment:
     'プレースホルダ内の式: トップレベルと同じinclude構成で任意の式（キャスト・namespace参照・ネストした関数呼び出し・演算子等）を通常コードと同様にハイライトする',
-  patterns: codeIncludes({ punctuation: '#string-interpolation-punctuation' }),
+  patterns: [
+    {
+      comment:
+        'プレースホルダ内のエスケープ文字列リテラル: \\"...\\" を区切りの\\"ごと文字列色で着色する（{o.unwrap_or(\\"None\\")}等）。1プレースホルダに複数リテラルがあっても跨いで繋げないよう非貪欲で閉じる',
+      name: 'string.quoted.double.interpolation.cm',
+      match: '\\\\"(?:\\\\.|[^"\\\\])*?\\\\"',
+    },
+    ...codeIncludes({ punctuation: '#string-interpolation-punctuation' }),
+  ],
 };
 
 export const stringInterpolationPunctuation: TmRepositoryEntry = {
