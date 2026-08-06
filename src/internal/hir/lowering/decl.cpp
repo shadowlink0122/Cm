@@ -352,7 +352,19 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         // staticメソッドではselfパラメータを追加しない
         if (impl.target_type && !method->is_static) {
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
-            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type), nullptr});
+            // Q5: 値enum（ペイロードなし）のselfは素の値渡しにする。実体はintで呼び出し側も値を渡すため、ポインタ形だとjs等のバックエンドで表現が割れる（LLVMはself特別処理で偶然整合していた）。メソッド内のself再代入はコピーに閉じる（enumは値意味論）
+            bool value_enum_self = false;
+            if (impl.target_type->kind == ast::TypeKind::Struct &&
+                !impl.target_type->name.empty()) {
+                auto en_it = enum_defs_.find(impl.target_type->name);
+                if (en_it != enum_defs_.end() && en_it->second &&
+                    !en_it->second->is_tagged_union()) {
+                    value_enum_self = true;
+                }
+            }
+            hir_func->params.push_back(
+                {"self", value_enum_self ? impl.target_type : ast::make_pointer(impl.target_type),
+                 nullptr});
         }
 
         for (const auto& param : method->params) {

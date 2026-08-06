@@ -47,6 +47,9 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         // 構造体名として有効かチェック
         if (ctx.struct_defs && ctx.struct_defs->count(type_name) > 0) {
             is_method_call = true;
+        } else if (ctx.enum_defs && ctx.enum_defs->count(type_name) > 0) {
+            // Q5: enumのinherent implメソッド（Shape__area10等）もメソッド呼び出しとして扱う。タグ付きenumのselfはポインタ渡しのため、値渡しのままだと被呼側のデリファレンスで壊れていた（値enumのselfはInt kindでアドレス経路に乗らず従来どおり）
+            is_method_call = true;
         }
     }
 
@@ -115,6 +118,15 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
         // selfが変数参照の場合、コピーを避けて直接元の変数への参照を取る
         if (is_method_call && i == 0) {
             hir::TypePtr arg_type = arg->type;
+
+            // Q5: 値enumレシーバのselfは常に値渡しへ正規化する。表現はintで被呼側も値selfを受けるが、宣言戻り値型経由などでは未解決のStruct kind名（Color等）のまま届き、構造体扱いのアドレス渡しに乗って表現が割れる
+            if (arg_type && !arg_type->name.empty() && ctx.enum_defs &&
+                ctx.enum_defs->count(arg_type->name) > 0 &&
+                (!ctx.tagged_union_names || ctx.tagged_union_names->count(arg_type->name) == 0)) {
+                LocalId arg_local = lower_expression(*arg, ctx);
+                args.push_back(MirOperand::copy(MirPlace{arg_local}));
+                continue;
+            }
 
             // 引数が構造体型の場合、アドレスを取得
             if (arg_type && arg_type->kind == hir::TypeKind::Struct) {

@@ -1015,6 +1015,12 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             method_type_name = type_name.substr(last_colon + 2);
         }
 
+        // Q5: int正規化された値enum（checkerのresolve_typedefがnameへ元enum名を保持）は、enum名のinherent implメソッド（Color__name等）へディスパッチする
+        if (obj_type && obj_type->kind == ast::TypeKind::Int && !obj_type->name.empty() &&
+            enum_defs_.count(obj_type->name) > 0) {
+            method_type_name = obj_type->name;
+        }
+
         // ジェネリック型名（例：Vector<int>）をマングリング形式（例：Vector__int）に変換
         // Struct<T1, T2, ...> -> Struct__T1__T2__...
         size_t angle_pos = method_type_name.find('<');

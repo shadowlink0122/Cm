@@ -26,7 +26,7 @@ parent: v0.17.0 Design
 2. **統一解決API**: `resolve_method(recv_type, name) -> optional<Resolution>` を新設し、infer_memberの9分岐・function.cppの静的分岐・for-inのiter/next検索を同一入口へ集約する。ビルトインラダー（method.cpp:403-906の約500行）も段階的に表駆動へ移す。
 3. **例外の診断化（実施済み）**: types/内のthrow4件はQ4修正でerror(span, …)へ置換済み（[arith-operator-interface-decl.md](../../archive/v0.17.0/arith-operator-interface-decl.md)。二重検査はregister_impl側で診断・check_impl側は打ち切りのみに整理）。
 4. **for-inプロトコル検証（実施済み）**: iter発見時のhas_next(): bool・next()の存在/シグネチャ検査はQ1修正で実装済み（[forin-iterator-protocol-checks.md](../../archive/v0.17.0/forin-iterator-protocol-checks.md)）。現状はtype_methods_直接参照のため、resolve_method API導入時にその上へ乗せ替える。
-5. **enum正体の保持**: enum→int正規化を解決キー計算より後段へ遅延させる（またはenum名を保持する型表現を導入する）。これはcodegen・算術・matchのint前提に触れる最高リスク項目のため独立変更とする（enum-inherent-impl-methods.mdの修正本体）。
+5. **enum正体の保持（Q5は名前保持方式で実施済み）**: Q5修正は正規化の全面遅延でなく「int解決時にenum名をnameへ保持する」ピギーバック方式で実装した（[enum-inherent-impl-methods.md](../../archive/v0.17.0/enum-inherent-impl-methods.md)の実装記録を参照。表示・互換・codegenはkind駆動のため不変）。正規化遅延そのもの（解決キー計算の後段化）はメソッド表キー正準化と合わせて本提案の残課題とする。
 
 ## 段階分割
 

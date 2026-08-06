@@ -80,6 +80,11 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
         if (last_colon != std::string::npos) {
             type_names_to_search.push_back(type_name.substr(last_colon + 2));
         }
+        // Q5: int正規化された値enum（resolve_typedefがnameへ元enum名を保持）はenum名でもメソッド表を引く（impl Color { string name() {...} }のinherent implを解決可能にする）
+        if (obj_type->kind == ast::TypeKind::Int && !obj_type->name.empty() &&
+            enum_names_.count(obj_type->name) > 0) {
+            type_names_to_search.push_back(obj_type->name);
+        }
 
         // 通常のメソッドを探す
         for (const auto& search_type : type_names_to_search) {

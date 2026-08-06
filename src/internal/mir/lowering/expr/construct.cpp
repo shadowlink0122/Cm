@@ -377,6 +377,13 @@ LocalId ExprLowering::lower_enum_payload(const hir::HirEnumPayload& ep, Lowering
 
     // scrutinee.field[1]（ペイロード）を抽出
     MirPlace payload_place{scrutinee_local};
+    // Q5: selfポインタ経由のmatch（enumのinherent implメソッド内等）はderefしてからペイロードを射影する（タグ読みのlower_memberは自動derefするがこちらは手組み射影のため明示する）
+    hir::TypePtr scrutinee_type = (scrutinee_local < ctx.func->locals.size())
+                                      ? ctx.func->locals[scrutinee_local].type
+                                      : nullptr;
+    if (scrutinee_type && scrutinee_type->kind == hir::TypeKind::Pointer) {
+        payload_place.projections.push_back(PlaceProjection::deref());
+    }
     payload_place.projections.push_back(PlaceProjection::field(1));
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(payload_place))));

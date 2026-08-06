@@ -50,7 +50,10 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     }
                 }
                 if (!is_tagged_union) {
-                    return ast::make_int();
+                    // Q5: int解決でも元のenum名をnameへ保持する（表示・互換判定・codegenはkind駆動で不変。メソッド解決がenum名でtype_methods_を引けるようになる）
+                    auto int_type = ast::make_int();
+                    int_type->name = type->name;
+                    return int_type;
                 }
             } else {
                 // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）はTagged Unionとして保持し、値enum（従来型）のみintへ解決する（一律int化すると関数返却・match束縛でペイロードが失われる）
@@ -65,7 +68,10 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     }
                 }
                 if (!is_tagged_union) {
-                    return ast::make_int();
+                    // Q5: 同上（値enumのint解決でenum名を保持）
+                    auto int_type = ast::make_int();
+                    int_type->name = type->name;
+                    return int_type;
                 }
             }
         }

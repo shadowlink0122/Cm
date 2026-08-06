@@ -179,7 +179,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     hir::TypePtr actual_type = let.type;
 
     if (let.type && !let.type->name.empty() && ctx.enum_defs &&
-        ctx.enum_defs->count(let.type->name)) {
+        ctx.enum_defs->count(let.type->name) &&
+        (!ctx.tagged_union_names || ctx.tagged_union_names->count(let.type->name) > 0)) {
+        // Q5: 他サイト（context.cpp/base.cpp）と同様にペイロード付きenumのみを__TaggedUnion_構造体へ変換する。値enum（checkerのint解決がenum名をnameへ保持するようになった）を無条件変換すると16バイト構造体ローカルになり値が壊れる
         auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
         tagged_union_type->name = "__TaggedUnion_" + let.type->name;
         // 元の型引数を保持（補間ミニパイプラインでのペイロード型復元に使用）

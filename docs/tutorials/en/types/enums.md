@@ -146,6 +146,48 @@ int main() {
 
 ---
 
+## Enum Methods (inherent impl)
+
+Like structs, enums can have methods defined in an `impl` block (v0.17.0). Both plain enums and enums with associated data are supported, and `match (self)` is the idiomatic way to branch on variants.
+
+```cm
+enum Color { Red, Green, Blue }
+
+impl Color {
+    string name() {
+        return match (self) {
+            Color::Red => "red",
+            Color::Green => "green",
+            Color::Blue => "blue",
+        };
+    }
+    bool is_warm() { return self == Color::Red; }
+}
+
+enum Shape { Circle(int), Square(int) }
+
+impl Shape {
+    int area10() {
+        return match (self) {
+            Shape::Circle(r) => r * r * 3,
+            Shape::Square(s) => s * s,
+        };
+    }
+}
+
+int main() {
+    Color c = Color::Green;
+    println("{c.name()} {c.is_warm()}");   // green false
+    Shape s = Shape::Square(4);
+    println("{s.area10()}");               // 16
+    return 0;
+}
+```
+
+For plain enums, `self` is passed by value (int representation), so reassigning `self` inside a method only affects the copy and is not visible to the caller.
+
+---
+
 ## Union Type Arrays as Tuples
 
 Cm has union types defined with `typedef`. Using an array of union types, you can return multiple values of different types — like a tuple.

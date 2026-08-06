@@ -1,0 +1,64 @@
+import std::io::println;
+// Q5回帰: enumへのinherent implメソッド（従来はimpl宣言が黙って受理され、呼び出しで「Unknown method 'name' for type 'int'」になっていた）
+// 値enum: selfはint値渡し。タグ付きenum: selfは__TaggedUnion_構造体のポインタ渡し
+
+enum Color { Red, Green, Blue }
+impl Color {
+    string name() {
+        return match (self) {
+            Color::Red => "red",
+            Color::Green => "green",
+            Color::Blue => "blue",
+        };
+    }
+    bool is_warm() { return self == Color::Red; }
+    int shifted(int base) { return base + self as int; }
+}
+
+enum Shape { Circle(int), Square(int) }
+impl Shape {
+    int area10() {
+        return match (self) {
+            Shape::Circle(r) => r * r * 3,
+            Shape::Square(s) => s * s,
+        };
+    }
+}
+
+Color pick(int i) {
+    if (i == 0) { return Color::Red; }
+    return Color::Blue;
+}
+
+int main() {
+    // 変数レシーバ・補間内呼び出し
+    Color c = Color::Green;
+    println("name: {c.name()}");
+
+    // メソッド内のself比較・関数戻り値レシーバのチェーン
+    println("warm: {c.is_warm()} {pick(0).is_warm()}");
+    println("chain: {pick(3).name()}");
+
+    // 引数付きメソッドとself as int
+    println("arg: {c.shifted(10)}");
+
+    // 配列要素→for-inループ変数レシーバ
+    Color[3] cs;
+    cs[0] = Color::Red;
+    cs[1] = Color::Green;
+    cs[2] = Color::Blue;
+    string joined = "";
+    for (x in cs) { joined = joined + x.name() + ";"; }
+    println("loop: {joined}");
+
+    // メソッド追加後もint互換・比較が不変
+    int as_int = c as int;
+    int plain = c;
+    println("int: {as_int} {plain} {c == Color::Green}");
+
+    // タグ付きenumのメソッド（match+ペイロード束縛）
+    Shape a = Shape::Circle(2);
+    Shape b = Shape::Square(4);
+    println("tagged: {a.area10()} {b.area10()}");
+    return 0;
+}

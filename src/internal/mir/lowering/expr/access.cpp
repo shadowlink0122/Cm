@@ -68,7 +68,13 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 
     // 単純enum（ペイロードなし、int表現）の __tag は値そのもの。
     // Tagged Union化されないenum変数への c.__tag は恒等アクセスとして扱う（enum比較のHIR書き換えが一律に __tag 抽出を挿入するため）
-    if (member.member == "__tag" && (!obj_type || obj_type->kind != hir::TypeKind::Struct)) {
+    // Q5: 値enumはHIR型がStruct kindの名前付き（Color等）で届く場合も恒等（int表現のためfield射影すると壊れる）
+    auto is_value_enum_type = [&](const hir::TypePtr& t) {
+        return t && !t->name.empty() && ctx.enum_defs && ctx.enum_defs->count(t->name) > 0 &&
+               (!ctx.tagged_union_names || ctx.tagged_union_names->count(t->name) == 0);
+    };
+    if (member.member == "__tag" &&
+        (!obj_type || obj_type->kind != hir::TypeKind::Struct || is_value_enum_type(obj_type))) {
         if (!needs_deref) {
             return object;
         }
@@ -101,7 +107,8 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
         const std::string& field_name = it->second;
 
         // チェーン途中の単純enumメンバへの __tag も恒等（プロジェクション追加なし）
-        if (field_name == "__tag" && current_type && current_type->kind != hir::TypeKind::Struct) {
+        if (field_name == "__tag" && current_type &&
+            (current_type->kind != hir::TypeKind::Struct || is_value_enum_type(current_type))) {
             continue;
         }
 
@@ -126,8 +133,9 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
         std::optional<size_t> field_idx = std::nullopt;
         bool is_tagged_union = (current_type->name.find("__TaggedUnion_") == 0);
 
-        // enum_defs に登録されている場合もTagged Unionとして扱う
-        if (!is_tagged_union && ctx.enum_defs && ctx.enum_defs->count(current_type->name)) {
+        // enum_defs に登録されている場合もTagged Unionとして扱う（値enumはint表現のため除外。Q5）
+        if (!is_tagged_union && ctx.enum_defs && ctx.enum_defs->count(current_type->name) &&
+            !is_value_enum_type(current_type)) {
             is_tagged_union = true;
         }
 
