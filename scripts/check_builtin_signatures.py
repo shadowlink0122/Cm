@@ -197,7 +197,22 @@ def main():
                             f"[{plat}] {name}: 引数{i}の型が不一致（レジストリ={ra}, C実装={ca}） {fn['file']}"
                         )
 
-    # 2) native vs wasm の二重実装同士
+    # 2) 共通.incとプラットフォーム.cの重複定義検査（runtime-hof-common-source 第2段）
+    # 共通コアへ一本化した関数がnative/wasm側の.cへ再実装されるとリンク時の多重定義・実装ドリフトの再発源になるため機械的に禁止する
+    dup_checked = 0
+    for plat, funcs in impls.items():
+        for name, defs in funcs.items():
+            inc_files = sorted({d["file"] for d in defs if d["file"].endswith(".inc")})
+            c_files = sorted({d["file"] for d in defs if d["file"].endswith(".c")})
+            if inc_files:
+                dup_checked += 1
+            if inc_files and c_files:
+                errors.append(
+                    f"[{plat}] {name}: 共通コア（{os.path.basename(inc_files[0])}）に定義があるのにプラットフォーム側で重複定義されています: "
+                    + ", ".join(os.path.relpath(f, ROOT) for f in c_files)
+                )
+
+    # 3) native vs wasm の二重実装同士
     cross_checked = 0
     for name in sorted(set(impls["native"]) & set(impls["wasm"])):
         n_ret, n_args, n_va = sig_from_c(impls["native"][name][0], [])
@@ -219,7 +234,9 @@ def main():
     if errors:
         print("レジストリ（codegen/common/builtin_registry.hpp）とランタイムC実装のどちらが正か確認して修正してください")
         return 1
-    print(f"✅ ビルトインシグネチャ検査通過（レジストリ照合{checked}件・native/wasm突き合わせ{cross_checked}件）")
+    print(
+        f"✅ ビルトインシグネチャ検査通過（レジストリ照合{checked}件・native/wasm突き合わせ{cross_checked}件・共通コア重複検査{dup_checked // 2}件）"
+    )
     return 0
 
 

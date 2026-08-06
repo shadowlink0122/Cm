@@ -26,3 +26,11 @@ native/runtime_format.c（3,058行）とwasm/runtime_format.c（2,888行）は�
 ## 検出経緯
 
 全体複雑度レビュー（2026-08-05）で両ランタイムをdiff実測し、slice方式の適用可能領域を切り分けた。
+
+## 実装記録（修正済み・第1段+第2段完遂）
+
+1. **第1段**: `__builtin_array_*`全54関数（slice/HOF/検索・全幅+str+closure変種）とヘルパー（CmHofSlice/CM_HOF_UNWRAP/CmSlice_fmt/compare_i32/64）を`src/internal/codegen/common/runtime_hof_core.inc`（826行）へ抽出し、slice方式のフック（CM_RT_ALLOC/FREE/MEMCPY）で両targetから包含した。native/runtime_format.cは3,058→2,255行、wasmは2,888→2,129行。ソートはcm_qsort（両target定義済み）へ統一し、文字列比較はstrcmp（wasmは自前定義がinclude位置より前にある）を使う。CMakeの両ランタイムビルドDEPENDSへ.incを追加した。
+2. **抽出時に確定した実装差の解消**: 文書起票時にnative-onlyだったevery/some/includes変種はZ1で既に両targetへ追加済みで名前集合は一致していた（新規有効化はなし）。本体差分31関数は表記（bool/_Bool・波括弧）とフック差が主で、実質差は3点を統一で解消した——wasm sort_i32/i64のalloc失敗時のスライスヘッダリーク（nativeの解放パスを採用）、wasmの自前挿入ソート（cm_qsortへ統一・int配列で結果同一）、nativeの委譲ラッパの冗長CM_HOF_UNWRAP（無害・native形を維持）。
+3. **第2段**: `scripts/check_builtin_signatures.py`へ「共通.incに定義があるのにプラットフォーム.cへ重複定義がある」検査を追加した（共通コア重複検査111件・make lint/CIで常時実行）。ネガティブテスト（重複定義の一時追加）で検出を確認済み。
+4. **検証**: array/array_higher_order/dynamic_arrayスイートをjit/llvm/llvm-wasmで全通過、make test全スイート緑。ユーザー可視の挙動変更はなし（純内部統合）。
+5. 文字列フォーマット系（約85関数）はwasm SDS化まで非対象の既存判断を維持する（方針3のとおり将来の別文書）。
