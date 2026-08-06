@@ -6,10 +6,10 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し（第5ラウンドQ1〜Q7は全て修正済み）、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案8件と、下記**第6ラウンド（R1〜R14）で新規に検出したバグ14文書（未修正）**である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
-あわせて、全検証ラウンドでまだバグ調査の対象になっていない構文・機能の棚卸しを後述の「構文・機能カバレッジの棚卸し」セクションに表で列挙している。
+第6ラウンドは、それ以前のラウンドでバグ調査の対象になっていなかった構文・機能（後述の棚卸し表のA〜D）を実機プローブしたもの。未着手のバックエンド・ターゲット（E）は第7ラウンド候補として棚卸し表に残している。
 
 ## レイヤー別レビュー 第4ラウンド（未修正の新規所見 Y1〜Y6）
 
@@ -43,74 +43,93 @@ v0.17.0の設計文書は「全体複雑度レビュー」のリファクタリ�
 - Q5: enumへのinherent implメソッドが未サポート — **修正済み・(a)サポートを採用**（[archive移動](../../archive/v0.17.0/enum-inherent-impl-methods.md)。enum正規化の全面遅延でなく「int解決時にenum名をnameへ保持」する名前ピギーバック方式で、checker解決・HIRマングル・MIRのself渡し規約（値enum=値渡し・タグ付き=ポインタ渡し）・__tag恒等化・ペイロード射影derefの5箇所を修正。タグ付きenumのメソッドも動作。値enumメソッド内のself再代入はコピーに閉じる値意味論と仕様決定）
 - Q6（文書化なし・注記のみ）: `replace()`が最初の一致のみ置換する仕様がドキュメント未記載（全置換との区別を文字列チュートリアルへ明記すべき。Low）
 
-## 構文・機能カバレッジの棚卸し（未調査項目一覧・第6ラウンド候補）
+## 構文網羅バグ調査 第6ラウンド（R1〜R14）
 
-CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていない構文・機能を棚卸しした。
-診断状況の凡例: **未調査** = どのラウンドでもプローブ未実施、**一部調査** = 特定側面のみ調査済みで残りが未対象。
+下記「構文・機能カバレッジの棚卸し」で列挙した未調査項目のうち、属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）の全項目を6並列で実機プローブ（jit O0/O2・native O0〜O3・wasm・js/ts）した。過去ラウンドと異なり、未実装構文の受理/診断/黙殺の別・仕様書との乖離まで対象にした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
+健全確認済み: async/await（js/ts動作+他経路の明示拒否）・macro正常系（6経路一致）・`${}`補間本体（`{}`と同値）・`...`範囲パターン（両端含む・先勝ち・網羅性強制、9実行一致）・TreeMap（1000件/10万件の挿入喪失なし・自動拡張）・対話入力のOption返し（M17適用）・`namespace`（実装済み動作）・extern（native/jit動作・未解決シンボル診断）・予約語誤用診断（X5の空表示バグ再発なし）・数値リテラルの拒否は安全側（誤値化なし）。
+
+- [R1: std::jsonパーサの堅牢性](json-parser-robustness.md) — **Critical**: アリーナ容量1024を2ノード超過するJSONで`json_parse`が無限ループ（`append_child`自己サイクル、jit/nativeともハング=DoS）。加えて末尾ゴミ/単独マイナス/複数値の甘い受理・`\uXXXX`の黙ったデータ破壊（Medium）
+- [R2: 文字列APIのコードポイント/バイト単位不一致](string-codepoint-byte-api-split.md) — **High**: `len()`=コードポイント数（H9）と`charAt()`=生バイトの添字単位不一致で、非ASCII文字列を走査するコードが破綻。std::jsonの非ASCIIパースがnative/jit失敗・js成功のバックエンド分岐に
+- [R3: ジェネリック`T*`引数の型パラメータ束縛失敗](generic-pointer-param-inference.md) — **Critical**: `<T> void swap(T*, T*)`等のポインタ引数からTが推論も明示指定もされず、本体でのデリファレンス時に型未解決のままcodegenへ落ちて全経路SIGSEGV
+- [R4: クロージャの外側変数書き込み黙殺・構造体キャプチャのjs分岐](closure-mutation-semantics.md) — **High**: 同一関数内クロージャからの外側変数への代入が全経路で無診断棄却（読みは最新値・書きは無効の非対称）。構造体キャプチャ書き込みはjsだけ伝播しバックエンド分岐
+- [R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能](string-escape-and-raw-semantics.md) — **High**: `\x`/`\u`/`\U`・未知エスケープでバックスラッシュが黙って脱落し誤った文字列を生成（--strictでも無診断）。バッククォートraw文字列がエスケープを解釈・`\${x}`がエスケープ不能・charリテラルとの不一致（Medium）
+- [R6: 条件付きコンパイルディレクティブの堅牢性](preprocessor-conditional-robustness.md) — **High**: `#endif`が非認識（`#end`のみ対応）で偽条件ブロックが後続コード全体を無診断で飲み込み、`cm check --strict`は緑・`cm run`は「mainが無い/モジュールです」と誤誘導。閉じ忘れ・過剰`#end`も無診断、`#define`は文法書にあるが未実装
+- [R7: 属性の検証レジストリ](attribute-validation-registry.md) — **High**: `#[tset]`等のtest属性タイポでテストが黙って実行されず`cm test`が緑（テスト漏れ）。`#[cfg(...)]`は完全に不活性、`#[target("jss")]`未知名は無診断でNative縮退（意味反転）、`#[deprecated]`等は無警告黙殺
+- [R8: デフォルト引数での前引数参照が無診断でゼロ値](default-arg-prev-param-zero.md) — **High**: `int f(int a, int b = a)`が名前解決を通過して値だけ0になる（`f(3)=30`、期待33か診断拒否）。全経路一致・--strict素通り
+- [R9: stdlibの出荷不良](stdlib-shipping-defects.md) — **High/Medium**: `std::iter`モジュール自体が`range`多重定義と型エラーでコンパイル不能（`import std::iter::*`常時失敗）。Vector/HashMap/Queueが生malloc直呼びでアロケータ差し替えを素通し。`std::io`の入力API再exportが選択import/`*`とも解決不能
+- [R10: 型検査の黙殺穴](checker-silent-holes.md) — **Medium**: 未定義型の変数宣言が無診断で実行まで通る・型不一致マクロ（`macro int X = "str";`）がcheck素通りでLLVM内部エラー/js黙殺の三分裂・const generic宣言が無警告受理されるが実体化手段が存在しない（半黙殺）
+- [R11: 修飾子の未実装・黙殺](modifier-implementation-gaps.md) — **Medium/Low**: `constexpr`変数がパーサTODOのnullptr返しで壊れた診断・`inline`は無警告黙殺（IR不変）・`volatile`はパーサ未対応・`ufloat`/`udouble`のunsigned語義が未実装で負値も無診断
+- [R12: matchの負数パターン不可・網羅matchのreturn漏れ誤検知](match-pattern-and-flow-gaps.md) — **Medium**: matchパターンに負数リテラル（`-1 =>`・`-5...-1`）が書けない。全arm returnの網羅matchに「falls off the end」を誤検知し--strictでビルド阻害
+- [R13: 文法書・仕様書に定義があるが未実装の構文](unimplemented-documented-syntax.md) — **Low**: タプル・参照型`T&`・演算子`[]`/`()`・overloadメソッド（仕様書は実装済みと例示するがパース不能+黙殺）・IFデフォルト実装・可変長引数・デフォルト型引数・エスケープ識別子・数値サフィックスが未実装（診断ありだが仕様書と乖離）。実装かドキュメント追従かの判断待ち一覧
+- [R14: 構文・プリプロセッサ診断の品質](syntax-error-diagnostic-quality.md) — **Medium（横断）**: パーサ/プリプロセッサ経由の構文エラーに行番号・桁がなく自ファイルを「imported module」と誤表記、誤誘導メッセージ（`main not found`・`assign`を型名扱い等）。X5で意味解析側は改善済みだがパーサ段が取り残されている
+
+## 構文・機能カバレッジの棚卸し（残りの未調査項目・第7ラウンド候補）
+
+CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていない構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は上記第6ラウンド（R1〜R14）で調査完了し、各項目の診断状況欄に対応文書を記した。**バックエンド・ターゲット（E）は今回未着手で、第7ラウンド候補として残る。**
+診断状況の凡例: **調査済み** = 第6ラウンドでプローブ完了（→対応文書 or 健全）、**未調査** = どのラウンドでもプローブ未実施、**一部調査** = 特定側面のみ調査済みで残りが未対象。
 「統合テスト」はtests/配下の.cmテストの有無（機能テストの存在はバグ調査済みを意味しない——HashMapはテストが存在したままQ7の要素喪失を見逃していた）。
-調査済みで未修正・将来課題として文書化済みの項目（Q6 replace文書化・混在変種ユニオンの三項/match腕・jsのblob意味論・`<T: Add>`境界の総称本体内算術・値enumメソッド内self再代入の値意味論・インターフェースペイロードのdrop・HashMap removeの探索列分断など）はこの表に含めない（各ラウンド文書を参照）。
 
 ### A. 属性・ディレクティブ・プリプロセッサ
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 未調査 | 一部あり（`#[test]`はcmtest/libsランナーの正常系のみ） | deprecated警告・inline効果などディレクティブの意味解釈の検証なし |
-| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 一部調査 | あり（with_eq/with_ord/derive_basic） | C3（with Ordのstringアドレス比較）は修正済み。ジェネリック構造体deriveのSlice/Unionフィールド無言誤動作が既知（[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)） |
-| A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 未調査 | 見つからず | 未知ターゲット名・否定形`!js`・誤指定時の診断有無が未検証（誤除去・黙殺リスク） |
-| A4 | 未知属性・タイポ属性の黙認 | 未調査 | なし | 属性パーサは任意識別子の`#[名前]`を構文受理するため、`#[tset]`等が無診断で無視される疑い |
-| A5 | プリプロセッサ`#define` | 未調査 | なし | cm_grammar.mdに文法定義があるが実装はディレクティブ非対応（conditional.cppのdefine()はCLI/組み込みシンボル用）。仕様文書と実装の不一致 |
-| A6 | プリプロセッサ`#endif` | 未調査 | なし | 実装は`#end`のみ認識し`#endif`は通常行として黙って素通り（conditional.cpp parse_directive）。cm_grammar.md・VSCode文法は`#endif`を記載しており不一致 |
-| A7 | `#ifdef`/`#ifndef`/`#else`/`#end`のネスト・異常系 | 一部調査 | 基本テストあり（preprocessor/ifdef_basic等） | 閉じ忘れ・過剰`#end`・ネスト境界の診断が未検証 |
-| A8 | `//! platform:`・`//! test:`・`//! sv:`ディレクティブの異常系 | 未調査 | 正常系はSVスイートで常用 | 誤記・未知プラットフォーム名指定時の診断が未検証 |
+| A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 調査済み → [R7](attribute-validation-registry.md)・[R11](modifier-implementation-gaps.md) | 一部あり | `#[deprecated]`等は無警告黙殺（High）、`#inline`は記述不能。`#[test]`正常系は健全 |
+| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 一部調査 | あり（with_eq/with_ord/derive_basic） | C3（with Ordのstringアドレス比較）は修正済み。ジェネリック構造体deriveのSlice/Unionフィールド無言誤動作が既知（[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)）。第6ラウンドでは深掘り対象外 |
+| A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 調査済み → [R7](attribute-validation-registry.md) | 見つからず | `#[cfg]`完全不活性・未知ターゲット名の無診断Native縮退（High）。否定形`!js`は健全 |
+| A4 | 未知属性・タイポ属性の黙認 | 調査済み → [R7](attribute-validation-registry.md) | なし | `#[tset]`等でテスト黙殺（High）を実証 |
+| A5 | プリプロセッサ`#define` | 調査済み → [R6](preprocessor-conditional-robustness.md) | なし | 文法書に定義があるが実装未対応（拒否はされる） |
+| A6 | プリプロセッサ`#endif` | 調査済み → [R6](preprocessor-conditional-robustness.md) | なし | `#end`のみ認識・偽条件で後続コード無診断消滅+check緑（High） |
+| A7 | `#ifdef`/`#ifndef`/`#else`/`#end`のネスト・異常系 | 調査済み → [R6](preprocessor-conditional-robustness.md) | 基本テストあり | 閉じ忘れ・過剰`#end`が無診断。2段ネスト+`#else`は健全 |
+| A8 | `//! platform:`・`//! test:`・`//! sv:`ディレクティブの異常系 | 調査済み → [R7](attribute-validation-registry.md)・[R14](syntax-error-diagnostic-quality.md) | 正常系はSVスイートで常用 | 不正`//! test:`が常時PASSの空テストベンチに化ける、platformタイポの診断品質難 |
 
 ### B. 構文・式
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| B1 | async/await | 未調査 | jsの基本テストのみ（tests/js/async） | native/wasm/ts経路の挙動・エラーパス・await式の型検査が未プローブ |
-| B2 | macro宣言（定数マクロ・関数マクロ） | 未調査 | 基本テストあり（common/macro） | 6経路差分プローブ未実施でバックエンド分裂リスク未確認 |
-| B3 | ラムダの参照キャプチャ`[&x]` | 未調査 | なし | 値キャプチャはC6/V5〜V7で調査済み。参照キャプチャは文法定義がありテストゼロ |
-| B4 | raw string（`r"..."`/`r#"..."#`） | 未調査 | なし | バッククォート文字列はテストあり。raw stringのエスケープ無効化・`${}`補間保持が未検証 |
-| B5 | エスケープ識別子（バッククォート`` `名前` ``） | 未調査 | なし | マングリング・モジュール解決との相互作用が未検証 |
-| B6 | エスケープシーケンス`\xHH`/`\uHHHH`/`\UHHHHHHHH` | 未調査 | なし | UTF-8基盤刷新（H9）後のコードポイント整合が未検証 |
-| B7 | 数値リテラルの桁区切り`_`・型サフィックス（u/l/f/d等） | 未調査 | なし | 16進/2進/8進リテラルはテストあり。サフィックスと型推論・縮小警告（Z5）の相互作用が未検証 |
-| B8 | `${...}`形式の文字列補間 | 未調査 | なし | `{...}`形式はV/W/L2で徹底調査済み。lexerは`${`も受理する |
-| B9 | タプル型・タプル式 | 未調査 | 専用テストなし | 文法定義はあるが実装到達度自体が不明 |
-| B10 | 参照型`T&` | 未調査 | なし | 文法定義はあるが実装到達度不明（設計はポインタ代替が正準） |
-| B11 | 演算子オーバーロードの`[]`/`()` | 未調査 | なし | 算術・比較・複合代入はQ4と既存テストで調査済み |
-| B12 | `overload`メソッド（コンストラクタ以外） | 未調査 | コンストラクタのみ（basic/constructor_overload） | メソッドの同名オーバーロードはテスト・プローブなし |
-| B13 | インターフェースのデフォルト実装（本体付き宣言） | 未調査 | なし | 文法定義はあるが実装状況不明 |
-| B14 | ユーザー定義関数の可変長引数`...` | 未調査 | FFIのprintf経由のみ | ユーザー定義関数での受理・実行の検証なし |
-| B15 | matchの範囲パターン`a..b` | 未調査 | なし（masked_patternはあり） | パーサはmake_rangeを持つがテストゼロ |
-| B16 | ジェネリクスのデフォルト型引数`<T = int>` | 未調査 | なし | 文法定義あり |
-| B17 | const genericパラメータの境界・演算 | 一部調査 | 基本テストあり（generics/const_generics） | 差分プローブ・エラーパスが未実施 |
+| B1 | async/await | 調査済み → 健全 | jsの基本テストのみ | js/ts動作・他経路は明示拒否。await式の型も正しい（軽微: check非対称・全角括弧混入は[R14](syntax-error-diagnostic-quality.md)） |
+| B2 | macro宣言（定数マクロ・関数マクロ） | 調査済み → [R10](checker-silent-holes.md) | 基本テストあり | 正常系は6経路一致で健全。型不一致マクロがcheck素通り（Medium） |
+| B3 | ラムダの参照キャプチャ`[&x]` | 調査済み → [R4](closure-mutation-semantics.md)・[R13](unimplemented-documented-syntax.md) | なし | `[&x]`構文は未実装。クロージャ書き込み黙殺（High） |
+| B4 | raw string（`r"..."`/`r#"..."#`） | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | `r"..."`未実装。バッククォートraw文字列がエスケープを解釈（rawでない、Medium） |
+| B5 | エスケープ識別子（バッククォート`` `名前` ``） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（バッククォートはraw文字列に割当・診断あり） |
+| B6 | エスケープシーケンス`\xHH`/`\uHHHH`/`\UHHHHHHHH` | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | `\x`/`\u`/`\U`・未知エスケープが黙って`\`脱落（High） |
+| B7 | 数値リテラルの桁区切り`_`・型サフィックス（u/l/f/d等） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（拒否は安全側・誤値化なし）。基数リテラル値は健全 |
+| B8 | `${...}`形式の文字列補間 | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | 補間本体は`{}`と同値で健全。`\${x}`のエスケープ不能（Medium） |
+| B9 | タプル型・タプル式 | 調査済み → [R13](unimplemented-documented-syntax.md) | 専用テストなし | 未実装（文法書と乖離・診断あり・黙殺なし） |
+| B10 | 参照型`T&` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（CANONICAL_SPEC §3.2で明記済み・診断あり） |
+| B11 | 演算子オーバーロードの`[]`/`()` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（operator_symbolに`[]`/`()`なし・診断あり） |
+| B12 | `overload`メソッド（コンストラクタ以外） | 調査済み → [R13](unimplemented-documented-syntax.md) | コンストラクタのみ | 仕様書§4が実装済みと例示するがパース不能+inherentで黙殺（Medium） |
+| B13 | インターフェースのデフォルト実装（本体付き宣言） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
+| B14 | ユーザー定義関数の可変長引数`...` | 調査済み → [R13](unimplemented-documented-syntax.md) | FFIのprintf経由のみ | 未実装（文法書と乖離・FFI専用・診断あり） |
+| B15 | matchの範囲パターン`a...b` | 調査済み → [R12](match-pattern-and-flow-gaps.md) | なし（masked_patternはあり） | `...`範囲は健全（両端含む・9実行一致）。負数パターン不可（Medium） |
+| B16 | ジェネリクスのデフォルト型引数`<T = int>` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
+| B17 | const genericパラメータの境界・演算 | 調査済み → [R10](checker-silent-holes.md) | 基本テストあり | 宣言のみ無警告受理・実体化手段なしの半黙殺（Medium） |
 
 ### C. 修飾子・宣言
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| C1 | `constexpr` | 未調査 | なし | チュートリアルに記載があるがテストゼロ |
-| C2 | `inline`修飾子/`#inline` | 未調査 | なし | 効果・診断とも未検証 |
-| C3 | `volatile` | 未調査 | asm最適化テストでの付随使用のみ | 単体の意味論が未検証 |
-| C4 | 語彙のみのキーワード（`mutable`/`namespace`/`template`/`typename`/`pub`/`from`） | 未調査 | なし | トークン定義はあるが実装利用が不明。使用時に黙殺されるか診断されるか未確認 |
-| C5 | `ufloat`/`udouble` | 未調査 | なし | 語彙はあるが実装・意味論が不明 |
-| C6 | `extern`宣言（native一般） | 未調査 | SVのextern_instance等のみ | |
-| C7 | デフォルト引数 | 一部調査 | あり（functions/default_args等） | Y1〜Y3/Y5で変換適用サイトとして検証済み。評価順・複雑な既定式などの異常系は未対象 |
+| C1 | `constexpr` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | 変数はパーサTODOのnullptr返しで壊れた診断・関数は無警告で通常関数化（Medium） |
+| C2 | `inline`修飾子/`#inline` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | キーワードは無警告黙殺（IR不変）、`#inline`は仕様記載ありなのに拒否 |
+| C3 | `volatile` | 調査済み → [R11](modifier-implementation-gaps.md) | asm最適化テストの付随のみ | パーサ未対応で全位置構文エラー（最適化検証不能） |
+| C4 | 語彙のみのキーワード（`mutable`/`namespace`/`template`/`typename`/`pub`/`from`） | 調査済み → 概ね健全 | なし | 識別子誤用は6語とも正しく診断（X5空表示バグ再発なし）。`namespace`は実装済み動作。他は診断で拒否 |
+| C5 | `ufloat`/`udouble` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | 受理・6経路値一致だがunsigned語義未実装（負値も無診断、Medium） |
+| C6 | `extern`宣言（native一般） | 調査済み → 健全 | SVのextern_instance等のみ | native/jitで動作・未解決シンボル診断も明確。js経路のみ実行時エラー（Low） |
+| C7 | デフォルト引数 | 調査済み → [R8](default-arg-prev-param-zero.md) | あり（functions/default_args等） | 部分省略・関数呼び出し既定式・メソッド既定は健全。前引数参照が無診断でゼロ値（High） |
 
 ### D. 標準ライブラリ・ランタイム
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| D1 | TreeMap | 未調査 | 機能テストあり | Q7（HashMap要素喪失）と同型の負荷・境界・removeプローブ未実施（アリーナのノード再利用など） |
-| D2 | std::json | 未調査 | libテストあり（json/mod_test.cm） | 異常系JSON・深いネスト・大入力の差分プローブ未実施 |
-| D3 | std::env/process/path/bytes/fs | 一部調査 | selfhost素振りのCI検証（S1〜S9） | エラーパス・プラットフォーム差の個別プローブ未実施 |
-| D4 | std::ioの対話入力（input/input_int等） | 未調査 | なし（自動化困難） | パース失敗時のOption返し（M17）の入力系適用が未検証 |
-| D5 | native::sync/thread | 一部調査 | 機能テストあり（tests/llvm/sync・thread） | L7（native専用・int64のみ）の所見のみで、実並行実行・競合の検証なし |
-| D6 | native::net/http | 未調査 | 機能テストあり | ラウンド未対象 |
-| D7 | native::gpu（Metal） | 未調査 | 機能テストあり | ラウンド未対象 |
-| D8 | web::html・js::fetch/timer | 未調査 | libテスト・jsスイートあり | 差分プローブの枠外 |
-| D9 | std::iterのadapters（map/filter等） | 未調査 | — | mod.cmに「将来実装」と記載があり実装到達度不明 |
-| D10 | アロケータ差し替え（set_allocator_fns） | 一部調査 | M14実装時の検証のみ | 差し替え後の全確保経路・マルチバックエンドの検証は未実施 |
+| D1 | TreeMap | 調査済み → 健全 | 機能テストあり | 1000件/10万件の挿入喪失なし・自動拡張が効く（6経路一致）。remove/走査APIは診断ありの未実装 |
+| D2 | std::json | 調査済み → [R1](json-parser-robustness.md)・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 容量超過で無限ループ（Critical）・非ASCII失敗（High）・甘い受理・\u破壊 |
+| D3 | std::env/process/path/bytes/fs | 一部調査 | selfhost素振りのCI検証（S1〜S9） | 第6ラウンドでは深掘り対象外（エラーパス・プラットフォーム差は未実施のまま） |
+| D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](stdlib-shipping-defects.md)） | なし | パイプ入力で正常・非数値でNone（M17適用）・クラッシュなし。ただし`std::io`窓口の入力再exportが解決不能 |
+| D5 | native::sync/thread | 一部調査 | 機能テストあり（tests/llvm/sync・thread） | 第6ラウンドでは深掘り対象外（実並行・競合は未検証のまま） |
+| D6 | native::net/http | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
+| D7 | native::gpu（Metal） | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
+| D8 | web::html・js::fetch/timer | 未調査 | libテスト・jsスイートあり | ラウンド未対象（第7ラウンド候補） |
+| D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](stdlib-shipping-defects.md)・[R3](generic-pointer-param-inference.md) | — | mod.cm自体がコンパイル不能（High）・swapがSIGSEGV（Critical）。組み込みmap/filterは健全 |
+| D10 | アロケータ差し替え（set_allocator_fns） | 調査済み → [R9](stdlib-shipping-defects.md) | M14実装時の検証のみ | 文字列/スライス/直接確保は経由・reset復帰も健全。Vector/HashMap/Queueが素通し（Medium） |
 
 ### E. バックエンド・ターゲット
 
