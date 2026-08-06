@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q4・Q5）と「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
+v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q5）と「全体複雑度レビュー」のリファクタリング提案8件を除き全件の処置が完了し、実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動した（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 
@@ -38,7 +38,7 @@ v0.17.0の設計文書は下記「第5ラウンド」の新規所見（Q4・Q5�
 - Q3: インターフェース戻り値のfat pointer構築欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/interface-return-fat-pointer.md)。真因はペイロードが呼び出し先スタックを指すダングリング（O0のみ偶然動作）。upcast時のfat pointerペイロードをヒープboxing化し、jsの転送引数の再ラップ（Shape_Shape_vtable未定義参照）も修正。ペイロードのdrop対応は将来課題）
 - Q7: HashMapが17要素以上で挿入済み要素を喪失 — **修正済み**（[archive移動](../../archive/v0.17.0/hashmap-resize-loses-entries.md)。真因はresize未実装で満杯後のinsertが黙って喪失。負荷率50%で2倍拡張・全エントリ再ハッシュのgrow()を実装し、境界16/17/33・200件・remove/上書きまたぎの回帰を追加。removeの探索列分断とstringキーハッシュは将来課題として記録）
 - Q1: for-inイテレータプロトコルの検査穴 — **修正済み**（[archive移動](../../archive/v0.17.0/forin-iterator-protocol-checks.md)。check_for_inのiter()発見時にhas_next存在+bool戻り・next存在・非Option戻りを検査しi18n診断で停止。Option返しnextはプロトコル外と仕様決定（暗黙unwrap非対応・従来も一度も動作していないため非破壊）。エラーテスト4本+i18n E2E追加、チュートリアルへiter()プロトコル節を新設）
-- [Q4: 算術演算子インターフェースのimpl形が内部エラー](arith-operator-interface-decl.md) — `impl T for Add`が内部エラー（Add系未宣言+例外漏れ。inherent形は正常。Medium）
+- Q4: 算術演算子インターフェースのimpl形が内部エラー — **修正済み**（[archive移動](../../archive/v0.17.0/arith-operator-interface-decl.md)。算術・ビット演算子インターフェース10種をEq/Ordと同形で組み込み宣言し`impl T for Add`形を受理、decl.cppのthrow4件（未宣言インターフェース・重複impl・重複メソッド）を通常診断へ置換。肯定+エラーテスト・i18n E2E追加、チュートリアルへインターフェース指定形を明記。`<T: Add>`境界の総称本体内算術は未対応の既知制約として記録）
 - [Q5: enumへのinherent implメソッドが未サポート](enum-inherent-impl-methods.md) — impl宣言は黙って受理され呼び出しで「Unknown method for type 'int'」（Medium）
 - Q6（文書化なし・注記のみ）: `replace()`が最初の一致のみ置換する仕様がドキュメント未記載（全置換との区別を文字列チュートリアルへ明記すべき。Low）
 

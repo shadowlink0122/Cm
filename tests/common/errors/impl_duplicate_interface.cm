@@ -1,0 +1,9 @@
+// 回帰(Q4): 同一インターフェースへの重複implは内部エラーでなく通常診断
+struct T1 { int v; }
+impl T1 for Eq {
+    operator bool ==(T1 o) { return self.v == o.v; }
+}
+impl T1 for Eq {
+    operator bool ==(T1 o) { return self.v == o.v; }
+}
+int main() { return 0; }

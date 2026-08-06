@@ -115,7 +115,27 @@ int main() {
 }
 ```
 
-> **Note:** `Eq`/`Ord`は組み込みinterfaceのため`impl T for Eq`構文が使えます。算術・ビット演算子は`impl T`構文で定義します。
+> **Note:** `Eq`/`Ord`は組み込みinterfaceのため`impl T for Eq`構文が使えます。
+
+## インターフェース指定付きの算術・ビット演算子impl
+
+算術・ビット演算子にも組み込みinterfaceがあり、`impl T`（inherent形）と`impl T for Add`（インターフェース指定形）のどちらでも定義できます（v0.17.0）。対応は `+`=Add・`-`=Sub・`*`=Mul・`/`=Div・`%`=Mod・`&`=BitAnd・`|`=BitOr・`^`=BitXor・`<<`=Shl・`>>`=Shr です。
+
+```cm
+impl Vec2 for Add {
+    operator Vec2 +(Vec2 other) {
+        return Vec2{x: self.x + other.x, y: self.y + other.y};
+    }
+}
+
+impl Vec2 for Sub {
+    operator Vec2 -(Vec2 other) {
+        return Vec2{x: self.x - other.x, y: self.y - other.y};
+    }
+}
+```
+
+どちらの形でも演算子の使い方・複合代入の自動対応は同じです。存在しないインターフェース名を指定した場合（`impl T for Nope`）はコンパイルエラーになります。ジェネリック関数本体での境界付き算術（`<T: Add> T sum(T a, T b) { return a + b; }`）は現時点では未対応です（比較演算子の`<T: Ord>`は使用可能）。
 
 ## ビット演算子
 

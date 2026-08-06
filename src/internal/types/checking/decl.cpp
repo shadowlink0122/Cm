@@ -359,6 +359,7 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
     } else if (auto* td = decl.as<ast::TypedefDecl>()) {
         register_typedef(*td);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+        current_span_ = decl.span;
         register_impl(*impl);
     } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
         // グローバル変数/定数の登録（const強化）
@@ -622,6 +623,7 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
     } else if (auto* import = decl.as<ast::ImportDecl>()) {
         check_import(*import);
     } else if (auto* impl = decl.as<ast::ImplDecl>()) {
+        current_span_ = decl.span;
         check_impl(*impl);
     }
 }
@@ -660,13 +662,16 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
     }
 
     if (!impl.interface_name.empty()) {
-        // インターフェースの存在チェック
+        // インターフェースの存在チェック（Q4: 例外→通常診断。従来はbuild側のcatchで内部エラー表示になっていた）
         if (interface_names_.find(impl.interface_name) == interface_names_.end()) {
-            throw std::runtime_error("'" + impl.interface_name + "' is not a declared interface");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcNotDeclaredInterface, impl.interface_name));
+            return;
         }
         if (impl_interfaces_[type_name].count(impl.interface_name) > 0) {
-            throw std::runtime_error("Duplicate impl: " + type_name + " already implements " +
-                                     impl.interface_name);
+            error(current_span_, i18n::msgf(i18n::MsgId::TcDuplicateImplInterface, type_name,
+                                            impl.interface_name));
+            return;
         }
         impl_interfaces_[type_name].insert(impl.interface_name);
         debug::tc::log(debug::tc::Id::Resolved, type_name + " implements " + impl.interface_name,
@@ -730,9 +735,11 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
     }
 
     for (const auto& method : impl.methods) {
+        // Q4: 例外→通常診断（重複メソッドは当該メソッドの登録だけを飛ばし他は処理継続する）
         if (type_methods_[type_name].count(method->name) > 0) {
-            throw std::runtime_error("Duplicate method: " + type_name + " already has method '" +
-                                     method->name + "'");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcDuplicateMethodOnType, type_name, method->name));
+            continue;
         }
 
         MethodInfo info;
@@ -787,9 +794,9 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     std::string type_name = ast::type_to_string(*impl.target_type);
 
     if (!impl.interface_name.empty()) {
-        // インターフェースの存在チェック
+        // インターフェースの存在チェック（未宣言はregister_implが診断済みのため、ここでは重複報告せず本文検査だけ打ち切る）
         if (interface_names_.find(impl.interface_name) == interface_names_.end()) {
-            throw std::runtime_error("'" + impl.interface_name + "' is not a declared interface");
+            return;
         }
         impl_interfaces_[type_name].insert(impl.interface_name);
         debug::tc::log(debug::tc::Id::Resolved, type_name + " implements " + impl.interface_name,

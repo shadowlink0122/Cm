@@ -24,13 +24,13 @@ parent: v0.17.0 Design
 
 1. **正準キー関数**: `std::string method_table_key(const ast::TypePtr&)` を1つ定義し、登録（register_impl/auto_impl）と参照（infer_member/静的呼び出し/for-in/演算子）の全側で共有する。enum・ジェネリック・namespace・配列の剥ぎ/再構築ロジックをこの1関数へ畳む。
 2. **統一解決API**: `resolve_method(recv_type, name) -> optional<Resolution>` を新設し、infer_memberの9分岐・function.cppの静的分岐・for-inのiter/next検索を同一入口へ集約する。ビルトインラダー（method.cpp:403-906の約500行）も段階的に表駆動へ移す。
-3. **例外の診断化**: types/内のthrow4件をerror(span, …)へ置換し、二重検査（:665/:792）を1箇所に統合する（diagnostics-engine-unificationの残作業として）。
+3. **例外の診断化（実施済み）**: types/内のthrow4件はQ4修正でerror(span, …)へ置換済み（[arith-operator-interface-decl.md](../../archive/v0.17.0/arith-operator-interface-decl.md)。二重検査はregister_impl側で診断・check_impl側は打ち切りのみに整理）。
 4. **for-inプロトコル検証（実施済み）**: iter発見時のhas_next(): bool・next()の存在/シグネチャ検査はQ1修正で実装済み（[forin-iterator-protocol-checks.md](../../archive/v0.17.0/forin-iterator-protocol-checks.md)）。現状はtype_methods_直接参照のため、resolve_method API導入時にその上へ乗せ替える。
 5. **enum正体の保持**: enum→int正規化を解決キー計算より後段へ遅延させる（またはenum名を保持する型表現を導入する）。これはcodegen・算術・matchのint前提に触れる最高リスク項目のため独立変更とする（enum-inherent-impl-methods.mdの修正本体）。
 
 ## 段階分割
 
-- 第1段（即効・低リスク）: throw4件の診断化（Q4修正）とfor-inプロトコル検証（Q1修正・実施済み）。統一APIを待たずに実施できる。
+- 第1段（実施済み）: throw4件の診断化（Q4修正）とfor-inプロトコル検証（Q1修正）。いずれも統一APIを待たずに実施した。
 - 第2段: method_table_key共有化とresolve_method導入。ジェネリックキー再構築2箇所・namespace3方式をこの段で1本化する。
 - 第3段: enum正体保持（Q5修正）と演算子解決のresolve_method統合（演算子はLHS型を返す現挙動を保存する）。
 

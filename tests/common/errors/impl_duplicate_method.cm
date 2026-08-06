@@ -1,0 +1,7 @@
+// 回帰(Q4): 同名メソッドの重複定義は内部エラーでなく通常診断
+struct T1 { int v; }
+impl T1 {
+    int get() { return self.v; }
+    int get() { return self.v + 1; }
+}
+int main() { return 0; }

@@ -1245,6 +1245,14 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcInterfaceSpecifiedMoreThanOnce
     {"Interface '{0}' is specified more than once in 'with' / #[derive] for struct '{1}'",
      "インターフェース '{0}' が構造体 '{1}' の 'with' / #[derive] で複数回指定されています"},
+    // TcNotDeclaredInterface
+    {"'{0}' is not a declared interface", "'{0}' は宣言されたインターフェースではありません"},
+    // TcDuplicateImplInterface
+    {"Duplicate impl: '{0}' already implements '{1}'",
+     "implが重複しています: '{0}' は既にインターフェース '{1}' を実装しています"},
+    // TcDuplicateMethodOnType
+    {"Duplicate method: '{0}' already has method '{1}'",
+     "メソッドが重複しています: '{0}' には既にメソッド '{1}' が定義されています"},
     // TcUndefinedTypeGlobalVariable
     {"Undefined type: '{0}' for global variable '{1}'",
      "未定義の型: グローバル変数 '{1}' の '{0}'"},

@@ -104,6 +104,10 @@ run_case z5-strict-error-ja "$CM" check --strict --lang=ja "$DIR/z5_narrowing.cm
 run_case q1-forin-iter-en "$CM" check "$DIR/q1_forin_iterator.cm"
 run_case q1-forin-iter-ja "$CM" check --lang=ja "$DIR/q1_forin_iterator.cm"
 
+# ---------- 未宣言インターフェースへのimpl診断（Q4） ----------
+run_case q4-undeclared-iface-en "$CM" check "$DIR/q4_undeclared_interface.cm"
+run_case q4-undeclared-iface-ja "$CM" check --lang=ja "$DIR/q4_undeclared_interface.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
 run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"

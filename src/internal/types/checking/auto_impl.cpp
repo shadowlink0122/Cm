@@ -256,6 +256,28 @@ void TypeChecker::register_builtin_interfaces() {
         builtin_derived_operators_["Ord"][">="] = "<";
     }
 
+    // 算術・ビット演算子インターフェース（Q4）: Eq/Ordと同様に組み込み宣言し、impl T for Add等のインターフェース指定付き演算子implを受理する（operator定義からの自動登録名と同一名で整合する）
+    {
+        struct OperatorInterface {
+            const char* iface;
+            const char* op;
+        };
+        static const OperatorInterface kOperatorInterfaces[] = {
+            {"Add", "+"},    {"Sub", "-"},   {"Mul", "*"},    {"Div", "/"},  {"Mod", "%"},
+            {"BitAnd", "&"}, {"BitOr", "|"}, {"BitXor", "^"}, {"Shl", "<<"}, {"Shr", ">>"},
+        };
+        for (const auto& entry : kOperatorInterfaces) {
+            interface_names_.insert(entry.iface);
+            builtin_interface_generic_params_[entry.iface] = {"T"};
+
+            MethodInfo op_method;
+            op_method.name = entry.op;
+            op_method.return_type = ast::make_generic_param("T");
+            op_method.param_types.push_back(ast::make_generic_param("T"));
+            interface_methods_[entry.iface][entry.op] = op_method;
+        }
+    }
+
     // Copy - コピー可能（マーカーインターフェース）
     { interface_names_.insert("Copy"); }
 

@@ -115,7 +115,27 @@ int main() {
 }
 ```
 
-> **Note:** `Eq`/`Ord` are built-in interfaces, so `impl T for Eq` syntax works. Arithmetic and bitwise operators use `impl T` syntax.
+> **Note:** `Eq`/`Ord` are built-in interfaces, so `impl T for Eq` syntax works.
+
+## Arithmetic and Bitwise Operator impl with Interface Names
+
+Arithmetic and bitwise operators also have built-in interfaces, so both `impl T` (inherent form) and `impl T for Add` (interface form) work (v0.17.0). The mapping is `+`=Add, `-`=Sub, `*`=Mul, `/`=Div, `%`=Mod, `&`=BitAnd, `|`=BitOr, `^`=BitXor, `<<`=Shl, `>>`=Shr.
+
+```cm
+impl Vec2 for Add {
+    operator Vec2 +(Vec2 other) {
+        return Vec2{x: self.x + other.x, y: self.y + other.y};
+    }
+}
+
+impl Vec2 for Sub {
+    operator Vec2 -(Vec2 other) {
+        return Vec2{x: self.x - other.x, y: self.y - other.y};
+    }
+}
+```
+
+Operator usage and automatic compound-assignment support are identical in both forms. Specifying an undeclared interface name (`impl T for Nope`) is a compile error. Bounded arithmetic inside generic function bodies (`<T: Add> T sum(T a, T b) { return a + b; }`) is not supported yet (comparison with `<T: Ord>` is available).
 
 ## Bitwise Operators
 
