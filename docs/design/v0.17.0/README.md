@@ -6,10 +6,10 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6ラウンド（R1〜R14）・第7ラウンド（R15〜R20）で新規に検出したバグ**のうち未修正分（第6ラウンドはR3修正済み・archive移動で13件、第7ラウンドはR15〜R20の6件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR3修正済み・archive移動で13件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
-第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
+第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）、第8ラウンドは残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
 
 ## レイヤー別レビュー 第4ラウンド（未修正の新規所見 Y1〜Y6）
 
@@ -76,10 +76,22 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない](ts-bigint-number-generation.md) — **Medium**: structフィールド代入が`_t.v = 5`（`number`を`bigint`フィールドへ）でTS2322。「生成TSがtscを通る」第一級保証に違反（実行値は正）。戻り値・let初期化サイトは修正済みでフィールド代入サイト固有
 - [R20: 文字列補間・書式指定子のバックエンド分岐](interpolation-format-backend-divergence.md) — **Medium**: 単項`~`を含む補間（`{~a}`）がjs/tsで全プレースホルダをundefined破壊・jit/nativeで文字列素通し。書式の幅/科学記法（`:6`/`.2e`）をnative/jitが無視しjs/tsが適用（3経路不一致）
 
+## ライブラリ・自動実装 深掘り調査 第8ラウンド（R21〜R25）
+
+棚卸し表で「一部調査」「未調査」のまま残っていたderive/with自動実装（A2）とライブラリモジュール（D3 OS連携・D5 sync/thread・D6 net/http・D7 gpu・D8 web）を4並列で実機プローブした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは現行バイナリで裏取り済み。
+**教訓（第7ラウンドに続き再発）**: 調査中にユーザーがcmを複数回リビルドした（19:18→19:39→19:44）ため、旧バイナリ由来の所見（A2スライス型引数EqのJIT-O2 SIGSEGVはクラッシュが消え誤値のみ残存等）は現行バイナリで取り直した。下記は全て現行バイナリでの再確認済み。
+健全確認済み: derive非ジェネリック全トレイト（6経路一致）・Ord全順序性/C3回帰・std::env/process/path/bytes/fs（バイナリ安全性・不在/空の区別・エラーパス非クラッシュ）・native::sync/threadのランタイム挙動（実並行・Mutex排他・macOS RwLock SIGILL回避・O2/O3無破壊）・net/http・gpu（実Metal実行）・web::htmlエスケープ（XSS遮断）。
+
+- [R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ](derive-generic-and-field-gaps.md) — **Critical**: ジェネリック×スライス型引数のEqが無言誤値・6経路が3種に分裂（既知ギャップ[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)の実証）。ユニオン型引数はリンク失敗（High）・非Eq/OrdトレイトのClone/Hash/Debug/Displayが無言no-op（High）・enumフィールド+Debug/Hashが型検査失敗（Medium）
+- [R22: implメソッドの`export`修飾子がパースエラー](export-on-impl-method-parse-error.md) — **High**: `impl Pt { export int getx() {...} }`が`Expected type`で停止。`native::sync`の高レベルOOP API（Mutex<T>/RwLock<T>/Channel）が全メソッドexportで全滅し一度もimportできない死んだコード。`native::io`も連鎖。メンテナが回避策のfree-functionサブモジュールを用意済み
+- [R23: クロスターゲットFFIの能力ガード欠如](cross-target-ffi-capability-gaps.md) — **Medium**: native専用モジュール（env/process/fs/net/gpu/sync/thread）が`--target=wasm`で無診断コンパイル成功し実行時に難解な`unknown import`で破綻（jsは`void*`禁止で明確に拒否）。js::timerのコールバックがint型宣言で使用不能・node例外（Low〜Medium）
+- [R24: 文字列補間が実行時値の波括弧で破壊される](interpolation-brace-from-runtime-value.md) — **Medium**: `{a.debug()}`の戻り値`P { x: 1 }`が含む波括弧を補間エンジンが再スキャンし、その値と後続プレースホルダが総崩れ（`dbg=P (1, 2) disp={}`）。L2のリテラル波括弧とは別経路（評価済み値の再スキャン）
+- [R25: 並行処理の最適化・戻り値の穴](concurrency-optimizer-and-join-gaps.md) — **Medium**: プレーン共有フラグのspin-waitがO1+で「Infinite loop risk」でコンパイル中断（atomic版は全レベル動作）。join()が64bitスレッド戻り値をint32に切り詰め（Low〜Medium）
+
 ## 構文・機能カバレッジの棚卸し（全ラウンド調査完了）
 
-CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていなかった構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は第6ラウンド（R1〜R14）、バックエンド・ターゲット（E）は第7ラウンド（R15〜R20）で**全項目の調査を完了**し、各項目の診断状況欄に対応文書を記した。
-診断状況の凡例: **調査済み** = 第6/第7ラウンドでプローブ完了（→対応文書 or 健全）、**一部調査** = 特定側面のみ調査済みで残りが未対象。
+CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていなかった構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は第6ラウンド（R1〜R14）、バックエンド・ターゲット（E）は第7ラウンド（R15〜R20）、残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）は第8ラウンド（R21〜R25）で**全項目の調査を完了**し、各項目の診断状況欄に対応文書を記した。
+診断状況の凡例: **調査済み** = 第6〜第8ラウンドでプローブ完了（→対応文書 or 健全）。
 「統合テスト」はtests/配下の.cmテストの有無（機能テストの存在はバグ調査済みを意味しない——HashMapはテストが存在したままQ7の要素喪失を見逃していた）。
 
 ### A. 属性・ディレクティブ・プリプロセッサ
@@ -87,7 +99,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
 | A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 調査済み → [R7](attribute-validation-registry.md)・[R11](modifier-implementation-gaps.md) | 一部あり | `#[deprecated]`等は無警告黙殺（High）、`#inline`は記述不能。`#[test]`正常系は健全 |
-| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 一部調査 | あり（with_eq/with_ord/derive_basic） | C3（with Ordのstringアドレス比較）は修正済み。ジェネリック構造体deriveのSlice/Unionフィールド無言誤動作が既知（[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)）。第6ラウンドでは深掘り対象外 |
+| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 調査済み → [R21](derive-generic-and-field-gaps.md) | あり（with_eq/with_ord/derive_basic） | 非ジェネリックは全トレイト健全。ジェネリック×スライス型引数EqがCritical誤値・ユニオン型引数リンク失敗・非Eq/Ordトレイトno-op |
 | A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 調査済み → [R7](attribute-validation-registry.md) | 見つからず | `#[cfg]`完全不活性・未知ターゲット名の無診断Native縮退（High）。否定形`!js`は健全 |
 | A4 | 未知属性・タイポ属性の黙認 | 調査済み → [R7](attribute-validation-registry.md) | なし | `#[tset]`等でテスト黙殺（High）を実証 |
 | A5 | プリプロセッサ`#define` | 調査済み → [R6](preprocessor-conditional-robustness.md) | なし | 文法書に定義があるが実装未対応（拒否はされる） |
@@ -135,12 +147,12 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 |---|---------|---------|-----------|------|
 | D1 | TreeMap | 調査済み → 健全 | 機能テストあり | 1000件/10万件の挿入喪失なし・自動拡張が効く（6経路一致）。remove/走査APIは診断ありの未実装 |
 | D2 | std::json | 調査済み → [R1](json-parser-robustness.md)・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 容量超過で無限ループ（Critical）・非ASCII失敗（High）・甘い受理・\u破壊 |
-| D3 | std::env/process/path/bytes/fs | 一部調査 | selfhost素振りのCI検証（S1〜S9） | 第6ラウンドでは深掘り対象外（エラーパス・プラットフォーム差は未実施のまま） |
+| D3 | std::env/process/path/bytes/fs | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | selfhost素振りのCI検証（S1〜S9） | env/process/path/bytes/fsは健全（バイナリ安全・不在/空区別・エラーパス非クラッシュ）。wasmで能力ガード欠如。配列添字OOB無検査（Low〜Medium・言語共通） |
 | D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](stdlib-shipping-defects.md)） | なし | パイプ入力で正常・非数値でNone（M17適用）・クラッシュなし。ただし`std::io`窓口の入力再exportが解決不能 |
-| D5 | native::sync/thread | 一部調査 | 機能テストあり（tests/llvm/sync・thread） | 第6ラウンドでは深掘り対象外（実並行・競合は未検証のまま） |
-| D6 | native::net/http | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
-| D7 | native::gpu（Metal） | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
-| D8 | web::html・js::fetch/timer | 未調査 | libテスト・jsスイートあり | ラウンド未対象（第7ラウンド候補） |
+| D5 | native::sync/thread | 調査済み → [R22](export-on-impl-method-parse-error.md)・[R25](concurrency-optimizer-and-join-gaps.md) | 機能テストあり（tests/llvm/sync・thread） | ランタイム挙動は健全（実並行・Mutex排他・RwLock SIGILL回避・O2/O3無破壊）。高レベルAPIがexport-implパースエラーで全損（High）・spin-waitがO1+でコンパイル不能 |
+| D6 | native::net/http | 調査済み → 健全 | 機能テストあり | 実行・接続拒否/DNS失敗のエラーパスとも健全（クラッシュ/ハングなし） |
+| D7 | native::gpu（Metal） | 調査済み → 健全 | 機能テストあり | 実Metal実行成功・不正シェーダ/関数名の誤用診断も良好 |
+| D8 | web::html・js::fetch/timer | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | libテスト・jsスイートあり | web::htmlエスケープはXSS遮断（native/js一致）。js::timerのコールバックがint型で使用不能 |
 | D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](stdlib-shipping-defects.md)・[R3](../../archive/v0.17.0/generic-pointer-param-inference.md)（R3修正済み） | — | mod.cm自体がコンパイル不能（High・R9未修正）・swapのSIGSEGVはR3で修正済み。組み込みmap/filterは健全 |
 | D10 | アロケータ差し替え（set_allocator_fns） | 調査済み → [R9](stdlib-shipping-defects.md) | M14実装時の検証のみ | 文字列/スライス/直接確保は経由・reset復帰も健全。Vector/HashMap/Queueが素通し（Medium） |
 
