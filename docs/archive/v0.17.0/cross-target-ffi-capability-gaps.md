@@ -1,6 +1,6 @@
 # R23: クロスターゲットFFIの能力ガード欠如（native専用モジュールがwasmへ黙ってコンパイル・js::timerコールバック型不能）
 
-**ステータス:** 未修正（ライブラリ・自動実装調査で検出）
+**ステータス:** 修正済み（wasmリンクの--allow-undefined全面許可を廃止しコンパイル時検出へ。js::timerの死んだコールバックAPIは撤去し制限を明文化）
 **重大度:** Medium
 
 ネイティブ専用のFFIモジュール（`std::env`/`std::process`/`std::fs`・`native::net`/`http`/`gpu`/`sync`/`thread`）を`--target=wasm`でコンパイルすると、jsが明確に拒否するのに対しwasmは無診断でコンパイルが通り、実行時（wasmインスタンス化時）に難解な`unknown import`で破綻する。同調査のD3・D5・D6/D7/D8で横断的に観測された同一根の問題。
@@ -46,3 +46,10 @@ js方向のクロスターゲット診断（`void*`禁止による拒否）は�
 ## テスト計画
 
 `tests/`へ: native専用モジュールを各非対応ターゲット（wasm/js）でコンパイルしたとき専用診断で停止する負のテスト（`unknown import`まで先送りしない）。js::timerのコールバック正常系または誤用診断。純Cmモジュール（bytes/path）はwasmで正常動作の回帰。
+
+## 実装記録
+
+- **バグ1（wasmの能力ガード欠如）**: 根本原因はwasmリンクコマンドの`--allow-undefined`全面許可で、未解決のネイティブFFIシンボルが黙ってenv importになっていた。フラグを撤去し、正当なWASI import（`__attribute__((import_module))`付き宣言）はそのまま機能させつつ、native専用FFI（getenv・cm_tcp_*・gpu_*・pthread等）は**コンパイル時にwasm-ldのundefined symbolエラー**（シンボル名つき）で停止するようにした。両リンクサイトの失敗時に「native専用FFIモジュールはwasm未対応」のヒントを追加。wasmスイート全件（600超）が無修正で通過し、正当なプログラムが全面許可へ依存していなかったことも確認した。理想形（レジストリのターゲット対応集合との照合による事前診断）はランタイムビルトインレジストリ拡張と合流する将来課題。
+- **バグ2（js::timerのコールバック型不能）**: `int callback`宣言のsetTimeout/setInterval/clear系は実関数を渡す手段が無く、何を渡してもNode.jsのTypeErrorで未捕捉クラッシュする「死んだAPI」だった（動くコードが存在し得ないため撤去は非破壊）。宣言を撤去し、モジュールへ制限事項（FFIコールバックの関数型宣言は言語未サポート・遅延実行はasync/await推奨・関数型FFIサポートは将来課題）を明文化した。
+- **テスト**: `tests/common/modules/wasm_native_ffi_reject.cm`（std::envのwasmコンパイルがリンク段で失敗することの負のテスト、platform: wasm限定）。純Cmモジュール（bytes/path）のwasm動作は既存スイートで担保。
+- **教訓**: 「リンカの全面許可フラグ」は能力ガードの穴そのもの——許可は個別・属性ベース（import_module）で行い、未解決シンボルは既定でエラーにする。

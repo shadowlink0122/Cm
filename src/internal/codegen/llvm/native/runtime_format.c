@@ -1830,10 +1830,19 @@ char* cm_format_replace(const char* format, const char* value) {
         return result;
     }
 
+    // 値中の波括弧はエスケープ（{→{{・}→}}）して挿入する（R24: Debug出力等の評価済み値に含まれる
+    // 波括弧を後続のプレースホルダ走査が再解釈し、以降の対応が総崩れになるのを防ぐ。
+    // 最終段のcm_format_unescape_bracesが{{/}}をリテラルへ復元する）
+    size_t extra = 0;
+    for (const char* p = value; *p; p++) {
+        if (*p == '{' || *p == '}')
+            extra++;
+    }
+
     size_t placeholder_len = end - start + 1;
     size_t formatLen = cm_strlen_impl(format);
     size_t valueLen = strlen(value);
-    size_t resultLen = formatLen - placeholder_len + valueLen + 1;
+    size_t resultLen = formatLen - placeholder_len + valueLen + extra + 1;
 
     char* result = (char*)cm_alloc(resultLen);
     if (!result)
@@ -1841,8 +1850,13 @@ char* cm_format_replace(const char* format, const char* value) {
 
     size_t prefixLen = start - format;
     strncpy(result, format, prefixLen);
-    result[prefixLen] = '\0';
-    strcat(result, value);
+    size_t w = prefixLen;
+    for (const char* p = value; *p; p++) {
+        if (*p == '{' || *p == '}')
+            result[w++] = *p;
+        result[w++] = *p;
+    }
+    result[w] = '\0';
     strcat(result, end + 1);
 
     return result;

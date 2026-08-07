@@ -525,8 +525,8 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
                   obj_list;
     } else if (target == BuildTarget::Wasm) {
         std::string runtimePath = findRuntimeLibrary();
-        linkCmd = "wasm-ld --entry=_start --allow-undefined -z stack-size=1048576 " + obj_list +
-                  runtimePath + " -o " + output_file;
+        linkCmd = "wasm-ld --entry=_start -z stack-size=1048576 " + obj_list + runtimePath +
+                  " -o " + output_file;
     } else {
         // ネイティブリンク
         std::string runtimePath = findRuntimeLibrary();
@@ -661,6 +661,15 @@ void LLVMCodeGen::linkObjects(const std::vector<std::filesystem::path>& objects,
                      "binaries can cause this)\n";
     }
     if (ret != 0) {
+        // R23: wasmのundefined symbolは、native専用FFIモジュール（std::env/fs・native::net/gpu/sync/thread等）を
+        // wasmターゲットでコンパイルした場合に発生する（従来は--allow-undefinedで黙って通り、実行時のunknown importで破綻していた）
+        if (target == BuildTarget::Wasm) {
+            throw std::runtime_error(
+                "リンクコマンド失敗: " + linkCmd +
+                "\nhint: undefined "
+                "symbolはネイティブ専用FFI（std::env/std::fs・native::net/gpu/sync/thread等）を"
+                "wasmターゲットで使用した場合に発生します。これらのモジュールはwasmでは未対応です");
+        }
         throw std::runtime_error("リンクコマンド失敗: " + linkCmd);
     }
 }
@@ -1087,8 +1096,8 @@ void LLVMCodeGen::emitExecutable() {
                   " " + objFile;
     } else if (context->getTargetConfig().target == BuildTarget::Wasm) {
         std::string runtimePath = findRuntimeLibrary();
-        linkCmd = "wasm-ld --entry=_start --allow-undefined -z stack-size=1048576 " + objFile +
-                  " " + runtimePath + " -o " + options.outputFile;
+        linkCmd = "wasm-ld --entry=_start -z stack-size=1048576 " + objFile + " " + runtimePath +
+                  " -o " + options.outputFile;
     } else {
         // ネイティブ：システムリンカ使用
         std::string runtimePath = findRuntimeLibrary();
@@ -1263,6 +1272,14 @@ void LLVMCodeGen::emitExecutable() {
                      "binaries can cause this)\n";
     }
     if (result != 0) {
+        // R23: wasmのundefined symbolは、native専用FFIモジュール（std::env/fs・native::net/gpu/sync/thread等）を
+        // wasmターゲットでコンパイルした場合に発生する（従来は--allow-undefinedで黙って通り、実行時のunknown importで破綻していた）
+        if (options.target == BuildTarget::Wasm) {
+            throw std::runtime_error(
+                "Linking failed\nhint: undefined symbols occur when native-only FFI modules "
+                "(std::env/std::fs, native::net/gpu/sync/thread, etc.) are compiled for the wasm "
+                "target; these modules are not available on wasm");
+        }
         throw std::runtime_error("Linking failed");
     }
 

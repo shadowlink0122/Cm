@@ -37,7 +37,7 @@ int main() {
     // Test 1: join - スレッド完了まで待機
     println("Test: join");
     const ulong t1 = spawn(worker as void*);
-    const int result = join(t1);
+    const int result = join(t1) as int;
     print("Result: ");
     println(result);
 

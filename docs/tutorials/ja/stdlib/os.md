@@ -7,6 +7,7 @@ title: OS連携 (env / process / path / bytes)
 コンパイラのようなCLIツールを書くためのOS連携APIです（セルフホスト準備・v0.17.0）。
 
 > **対応バックエンド:** env / process は Native・JIT のみ。path / bytes / strings::split は全バックエンド共通（純Cm実装）
+> native専用モジュールをwasmターゲットでコンパイルすると、リンク段のundefined symbolエラー（native専用FFIの案内つき）で停止します（v0.17.0で無診断コンパイル→実行時unknown import破綻を解消）
 
 名前空間形式（`env::get(...)`）は未対応のため、選択的importとエイリアスを使います。
 

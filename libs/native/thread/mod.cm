@@ -28,11 +28,11 @@ export ulong spawn_with_arg(void* fn, void* arg) {
     return cm_thread_spawn_with_arg(fn, arg);
 }
 
-// スレッドの終了を待機し、結果を取得
-export int join(ulong handle) {
+// スレッドの終了を待機し、結果を取得（戻り値は64bit。R25: 従来はintでpthreadのvoid*戻り値の上位32bitが無言で欠落していた）
+export long join(ulong handle) {
     void* result = 0 as void*;
     cm_thread_join(handle, &result);
-    return result as int;
+    return result as long;
 }
 
 // 複数スレッドを一括待機

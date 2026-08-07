@@ -1,6 +1,6 @@
 # R25: 並行処理の最適化・戻り値の穴（spin-waitがO1+でコンパイル不能・join戻り値のint32切り詰め）
 
-**ステータス:** 未修正（ライブラリ・自動実装調査で検出）
+**ステータス:** 修正済み（join()の64bit化・spin-wait検出へのatomic誘導ヒント追加。volatile実装はR11残置・wasm付随はR23で解消）
 **重大度:** Medium（spin-wait）/ Low〜Medium（join切り詰め）
 
 `native::sync`/`native::thread`の低レベルAPI（mutex/rwlock/channel/atomic + thread spawn/join）はランタイム挙動が健全（実並行実行・Mutex排他・macOS RwLock SIGILL回避・O2/O3での共有変数無破壊をD5で確認）。残る穴は2点で、いずれもコンパイル時または戻り値経路の欠陥。
@@ -45,3 +45,9 @@ thread spawn/join（実測0.11sで真の並行実行）・Mutex排他（イン�
 ## テスト計画
 
 `tests/llvm/{thread,sync}/`へ: atomicポーリングのO0〜O3動作・join()の64bit戻り値保持の回帰。プレーン共有フラグspin-waitがO1+で（緩和後は）コンパイルできる、または「atomicを使え」の誘導診断が出ることの確認。
+
+## 実装記録
+
+- **バグ2（join切り詰め）**: `native::thread::join()`の戻り型を`int`→`long`（64bit）へ変更し、pthreadの`void*`戻り値を全幅で返す（L7の「int64」仕様と実装が一致）。既存テストのint受けは`as int`明示へ更新し、`0x1_0000_0007`の上位ビット保持回帰（join_64bit_test）を追加。
+- **バグ1（spin-waitのO1+コンパイル中断）**: 方針の最低線（誘導診断）を実施——無限ループ検出ガードの失敗メッセージへ「プレーン共有変数のポーリングは最適化器がループ不変化する。cross-threadポーリングは`native::sync::atomic_load_i32`/`AtomicInt.load()`を使えば全最適化レベルで動作する」のヒントを追加した。atomic spin-waitがO0〜O3で動作することは調査済み（正しいパターンは全レベルで動く）。`volatile`セマンティクスの言語実装はR11（修飾子の実装ギャップ）の領分として残置。
+- **付随（wasmのthread/sync無言コンパイル）**: R23のwasmリンク段undefined symbol検出で解消（同修正を参照）。

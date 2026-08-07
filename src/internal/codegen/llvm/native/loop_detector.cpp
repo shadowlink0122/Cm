@@ -172,6 +172,12 @@ bool PreCodeGenValidator::validate(llvm::Module& module) {
     if (InfiniteLoopDetector::detectInfiniteLoopRisk(module)) {
         std::cerr << "Error: Infinite loop risk detected\n";
         std::cerr << "Hint: Try -O1 or -O0 option\n";
+        // R25: プレーン共有変数のspin-wait（while (flag == 0) {}）は最適化器が別スレッド更新を
+        // 認識できず不変条件化されてここで検出される。atomic経由なら全最適化レベルで動作する
+        std::cerr << "Hint: If this loop polls a flag shared with another thread, plain variables "
+                     "are hoisted as loop-invariant by the optimizer. Use "
+                     "native::sync::atomic_load_i32 / AtomicInt.load() for cross-thread polling "
+                     "(works at all optimization levels)\n";
         return false;
     }
 

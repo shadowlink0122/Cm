@@ -52,7 +52,7 @@ void* compute(void* arg) {
 
 int main() {
     ulong t = spawn_with_arg(compute as void*, 21 as void*);
-    int result = join(t);
+    const long result = join(t);  // v0.17.0でlong（64bit）に。pthreadのvoid*戻り値を全幅で受ける
     println("Result: {result}");  // 42
     return 0;
 }
@@ -84,7 +84,7 @@ int main() {
 |------|------|
 | `spawn(fn)` | スレッド生成（引数なし） |
 | `spawn_with_arg(fn, arg)` | スレッド生成（引数あり） |
-| `join(handle)` | 完了待機、戻り値取得 |
+| `join(handle)` | 完了待機、戻り値取得（`long`・64bit。v0.17.0で32bit切り詰めを解消） |
 | `join_all(handles, count)` | 複数スレッド一括待機 |
 | `detach(handle)` | バックグラウンド実行 |
 | `current_id()` | 現在のスレッドID取得 |

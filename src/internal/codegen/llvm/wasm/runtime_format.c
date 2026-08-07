@@ -1612,9 +1612,17 @@ char* cm_format_replace(const char* format, const char* value) {
         return result;
     }
 
+    // 値中の波括弧はエスケープ（{→{{・}→}}）して挿入する（R24: 評価済み値の{}を後続の
+    // プレースホルダ走査が再解釈し補間が総崩れになるのを防ぐ。最終段のunescapeが復元する）
+    size_t extra = 0;
+    for (size_t i = 0; value[i]; i++) {
+        if (value[i] == '{' || value[i] == '}')
+            extra++;
+    }
+
     size_t placeholder_len = end - start + 1;
     size_t val_len = wasm_strlen(value);
-    size_t result_len = fmt_len - placeholder_len + val_len + 1;
+    size_t result_len = fmt_len - placeholder_len + val_len + extra + 1;
     char* result = (char*)wasm_alloc(result_len);
 
     size_t result_idx = 0;
@@ -1623,6 +1631,8 @@ char* cm_format_replace(const char* format, const char* value) {
     }
 
     for (size_t i = 0; i < val_len; i++) {
+        if (value[i] == '{' || value[i] == '}')
+            result[result_idx++] = value[i];
         result[result_idx++] = value[i];
     }
 
@@ -1705,26 +1715,9 @@ char* cm_format_replace_int(const char* format, int value) {
     }
 
     char* formatted_value = wasm_apply_numeric_spec(specifier, value_str);
-    
-    // 置換を実行
-    size_t placeholder_len = end - start + 1;
-    size_t formatted_len = wasm_strlen(formatted_value);
-    size_t result_len = fmt_len - placeholder_len + formatted_len + 1;
-    char* result = (char*)wasm_alloc(result_len);
-    
-    size_t result_idx = 0;
-    for (size_t i = 0; i < start; i++) {
-        result[result_idx++] = format[i];
-    }
-    for (size_t i = 0; i < formatted_len; i++) {
-        result[result_idx++] = formatted_value[i];
-    }
-    for (size_t i = end + 1; i < fmt_len; i++) {
-        result[result_idx++] = format[i];
-    }
-    result[result_idx] = '\0';
-    
-    return result;
+
+    // 置換は共通のcm_format_replaceへ委譲する（R24の波括弧エスケープを共有）
+    return cm_format_replace(format, formatted_value);
 }
 
 char* cm_format_replace_uint(const char* format, unsigned int value) {
@@ -2136,24 +2129,8 @@ char* cm_format_replace_string(const char* format, const char* value) {
         formatted_value[val_len] = '\0';
     }
     
-    // 置換を実行
-    size_t formatted_len = wasm_strlen(formatted_value);
-    size_t result_len = fmt_len - placeholder_len + formatted_len + 1;
-    char* result = (char*)wasm_alloc(result_len);
-    
-    size_t result_idx = 0;
-    for (size_t i = 0; i < start; i++) {
-        result[result_idx++] = format[i];
-    }
-    for (size_t i = 0; i < formatted_len; i++) {
-        result[result_idx++] = formatted_value[i];
-    }
-    for (size_t i = end + 1; i < fmt_len; i++) {
-        result[result_idx++] = format[i];
-    }
-    result[result_idx] = '\0';
-    
-    return result;
+    // 置換は共通のcm_format_replaceへ委譲する（R24の波括弧エスケープを共有）
+    return cm_format_replace(format, formatted_value);
 }
 
 // ============================================================
