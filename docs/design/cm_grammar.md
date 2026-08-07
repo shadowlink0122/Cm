@@ -75,8 +75,11 @@ trait_member ::= type identifier '(' param_list? ')' ';'
 impl_decl ::= 'impl' generic_params? trait_name 'for' type where_clause? '{' impl_member* '}'
             | 'impl' generic_params? type where_clause? '{' impl_member* '}'  # inherent impl
 
-impl_member ::= function_decl
+impl_member ::= method_modifier* function_decl
               | 'type' identifier '=' type ';'  # 関連型
+
+# メソッド修飾子。exportは既定可視性（公開）の明示（exportとprivateの併用はエラー）
+method_modifier ::= 'export' | 'private' | 'static'
 ```
 
 ### typedef・マクロ・Enum・演算子

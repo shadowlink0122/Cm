@@ -977,6 +977,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsExpectedFromExport
     {"Expected 'from' after 'export *'",
      "'export *' の後には 'from' が必要です"},
+    // PsExportAndPrivateConflict
+    {"a method cannot be both 'export' and 'private'",
+     "メソッドに 'export' と 'private' は同時に指定できません"},
     // PsExpectedGlobalVariableInitializer
     {"Expected '=' for global variable initializer",
      "グローバル変数の初期化子には '=' が必要です"},

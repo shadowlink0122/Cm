@@ -308,6 +308,77 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                             return ast::make_error();
                         }
 
+                        // 型名の型引数（Mutex<int>のint等）を抽出する。プリミティブ名は正しいTypeKindで
+                        // 作らないと型同一性が壊れる（make_namedはStruct kindになり、Mutex<int>同士の
+                        // 比較がkind不一致で失敗し「expected Mutex<int>, got Mutex<int>」になる。R22）
+                        // 注: 文字列切り出しはmethod-resolution-unification（resolve_method API）で構造化予定
+                        std::vector<ast::TypePtr> concrete_type_args;
+                        std::vector<std::string> generic_param_names;
+                        size_t lt_pos = type_name.find('<');
+                        if (lt_pos != std::string::npos) {
+                            std::string base_name = type_name.substr(0, lt_pos);
+                            auto gen_it = generic_structs_.find(base_name);
+                            if (gen_it != generic_structs_.end()) {
+                                generic_param_names = gen_it->second;
+                                std::string type_args_str = type_name.substr(lt_pos + 1);
+                                type_args_str = type_args_str.substr(0, type_args_str.size() - 1);
+                                auto make_type_arg = [](const std::string& n) -> ast::TypePtr {
+                                    if (n == "int")
+                                        return ast::make_int();
+                                    if (n == "uint")
+                                        return ast::make_uint();
+                                    if (n == "long")
+                                        return ast::make_long();
+                                    if (n == "ulong")
+                                        return ast::make_ulong();
+                                    if (n == "short")
+                                        return ast::make_short();
+                                    if (n == "ushort")
+                                        return ast::make_ushort();
+                                    if (n == "tiny")
+                                        return ast::make_tiny();
+                                    if (n == "utiny")
+                                        return ast::make_utiny();
+                                    if (n == "isize")
+                                        return ast::make_isize();
+                                    if (n == "usize")
+                                        return ast::make_usize();
+                                    if (n == "float")
+                                        return ast::make_float();
+                                    if (n == "double")
+                                        return ast::make_double();
+                                    if (n == "bool")
+                                        return ast::make_bool();
+                                    if (n == "char")
+                                        return ast::make_char();
+                                    if (n == "string")
+                                        return ast::make_string();
+                                    return ast::make_named(n);
+                                };
+                                std::istringstream iss(type_args_str);
+                                std::string type_arg_name;
+                                while (std::getline(iss, type_arg_name, ',')) {
+                                    size_t start = type_arg_name.find_first_not_of(" ");
+                                    size_t end = type_arg_name.find_last_not_of(" ");
+                                    if (start != std::string::npos && end != std::string::npos) {
+                                        type_arg_name =
+                                            type_arg_name.substr(start, end - start + 1);
+                                    }
+                                    concrete_type_args.push_back(make_type_arg(type_arg_name));
+                                }
+                            }
+                        }
+
+                        // パラメータ型へ型引数を代入する（従来は未置換のTと比較して
+                        // 「expected T, got int」の誤診断だった。R22）
+                        auto substituted_param = [&](size_t i) -> ast::TypePtr {
+                            if (concrete_type_args.empty()) {
+                                return method_info.param_types[i];
+                            }
+                            return substitute_generic_type(method_info.param_types[i],
+                                                           generic_param_names, concrete_type_args);
+                        };
+
                         // 引数の型チェック
                         if (call.args.size() != method_info.param_types.size()) {
                             error(
@@ -317,10 +388,11 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                                            std::to_string(call.args.size())));
                         } else {
                             for (size_t i = 0; i < call.args.size(); ++i) {
+                                ast::TypePtr expected_type = substituted_param(i);
+                                propagate_literal_expected_type(*call.args[i], expected_type);
                                 auto arg_type = infer_type(*call.args[i]);
-                                if (!types_compatible(method_info.param_types[i], arg_type)) {
-                                    std::string expected =
-                                        ast::type_to_string(*method_info.param_types[i]);
+                                if (!types_compatible(expected_type, arg_type)) {
+                                    std::string expected = ast::type_to_string(*expected_type);
                                     std::string actual = ast::type_to_string(*arg_type);
                                     error(
                                         current_span_,
@@ -330,41 +402,11 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                             }
                         }
 
-                        // 戻り値型を返す（ジェネリック型パラメータを具体化する必要がある場合がある）
+                        // 戻り値型を返す（ジェネリック型パラメータを具体化する）
                         auto return_type = method_info.return_type;
-
-                        // 戻り値型がジェネリック型の場合、具体的な型引数で置き換え
-                        size_t lt_pos = type_name.find('<');
-                        if (lt_pos != std::string::npos && return_type) {
-                            std::string base_name = type_name.substr(0, lt_pos);
-                            auto gen_it = generic_structs_.find(base_name);
-                            if (gen_it != generic_structs_.end()) {
-                                // type_nameから型引数を抽出: Vec<int> -> ["int"]
-                                std::string type_args_str = type_name.substr(lt_pos + 1);
-                                type_args_str = type_args_str.substr(
-                                    0, type_args_str.size() - 1);  // 末尾の > を削除
-
-                                // 型引数をvectorに変換
-                                std::vector<ast::TypePtr> concrete_type_args;
-                                // 簡易パース（カンマ区切り）
-                                std::istringstream iss(type_args_str);
-                                std::string type_arg_name;
-                                while (std::getline(iss, type_arg_name, ',')) {
-                                    // 空白をトリム
-                                    size_t start = type_arg_name.find_first_not_of(" ");
-                                    size_t end = type_arg_name.find_last_not_of(" ");
-                                    if (start != std::string::npos && end != std::string::npos) {
-                                        type_arg_name =
-                                            type_arg_name.substr(start, end - start + 1);
-                                    }
-                                    // 型名を作成
-                                    concrete_type_args.push_back(ast::make_named(type_arg_name));
-                                }
-
-                                // substitute_generic_typeで戻り値型を置換
-                                return_type = substitute_generic_type(return_type, gen_it->second,
-                                                                      concrete_type_args);
-                            }
+                        if (!concrete_type_args.empty() && return_type) {
+                            return_type = substitute_generic_type(return_type, generic_param_names,
+                                                                  concrete_type_args);
                         }
 
                         debug::tc::log(debug::tc::Id::Resolved,

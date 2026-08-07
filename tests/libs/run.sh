@@ -31,9 +31,8 @@ GATE_FAIL=0
 GATE_TMP=$(mktemp -d)
 trap 'rm -rf "$GATE_TMP"' EXIT
 
-# 既知の失敗（実装済みの言語機能不足でモジュール自体が未対応構文を使っているもの）
-# native/io・native/io/stream・native/sync: implメソッドのexport修飾子がパース不能（R22。修正時にこのリストから除去する）
-KNOWN_BROKEN="libs/native/io/mod.cm libs/native/io/stream/mod.cm libs/native/sync/mod.cm"
+# 既知の失敗リスト（言語機能不足でモジュールが未対応構文を使っている場合にここへ列挙する。現在は空 = 全モジュール検証。R22で3件を解消済み）
+KNOWN_BROKEN=""
 
 while IFS= read -r mod_file; do
     rel="${mod_file#./}"

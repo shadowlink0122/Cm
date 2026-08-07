@@ -348,6 +348,7 @@ enum class MsgId : int {
     PsExpected,
     PsExpected2,
     PsExpectedFromExport,
+    PsExportAndPrivateConflict,
     PsExpectedGlobalVariableInitializer,
     PsDeriveNotSupportedEnumsYet,
     PsParserStuckNoProgressMade,

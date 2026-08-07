@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21・R22修正済みで残3件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -83,7 +83,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 健全確認済み: derive非ジェネリック全トレイト（6経路一致）・Ord全順序性/C3回帰・std::env/process/path/bytes/fs（バイナリ安全性・不在/空の区別・エラーパス非クラッシュ）・native::sync/threadのランタイム挙動（実並行・Mutex排他・macOS RwLock SIGILL回避・O2/O3無破壊）・net/http・gpu（実Metal実行）・web::htmlエスケープ（XSS遮断）。
 
 - R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ — **修正済み**（[archive移動](../../archive/v0.17.0/derive-generic-and-field-gaps.md)。特殊化時の置換後フィールド型検証（validate_derive_instantiation）でスライス/ユニオン型引数の無言誤値・リンク失敗を使用箇所診断へ。ジェネリックのClone/Hash/Debug/Displayはchecker側のG<T>キー登録漏れが真因でメソッド解決を配線し全バックエンド動作化。値enumフィールドはint意味論でEq/Hash/Debug/Display対応・タグ付きenumは明示診断。derive診断の位置もname_span化でstdlib誤指しを解消。スライス/ユニオンを動作させる構造的解消は[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)第3段へ委譲）
-- [R22: implメソッドの`export`修飾子がパースエラー](export-on-impl-method-parse-error.md) — **High**: `impl Pt { export int getx() {...} }`が`Expected type`で停止。`native::sync`の高レベルOOP API（Mutex<T>/RwLock<T>/Channel）が全メソッドexportで全滅し一度もimportできない死んだコード。`native::io`も連鎖。メンテナが回避策のfree-functionサブモジュールを用意済み
+- R22: implメソッドの`export`修飾子がパースエラー — **修正済み・方針1（正式受理）を採用**（[archive移動](../../archive/v0.17.0/export-on-impl-method-parse-error.md)。parse_impl両形のメソッドループでexportを既定可視性の明示として受理（export+privateは専用診断）。併発の静的ジェネリック呼び出し2段バグ——checkerのパラメータ型未置換とHIRの名前未変換でcallが黙って消えゼロ値——も修正し、Mutex<T>::new等が正値動作。native::sync/ioの未コンパイル起因バグ（ポインタへの`.`・式位置ジェネリック構造体リテラル・AtomicBoolの4バイト書き込み・ドットenum構築・架空match構文・再export名不一致）を修理し高レベルAPI一式を実行検証。ジェネリックenumのimplメソッドと境界付きブランケットimplは言語未対応と判明し正直な診断を維持して見送り。importゲートのKNOWN_BROKENリストは空になり全30モジュール検証）
 - [R23: クロスターゲットFFIの能力ガード欠如](cross-target-ffi-capability-gaps.md) — **Medium**: native専用モジュール（env/process/fs/net/gpu/sync/thread）が`--target=wasm`で無診断コンパイル成功し実行時に難解な`unknown import`で破綻（jsは`void*`禁止で明確に拒否）。js::timerのコールバックがint型宣言で使用不能・node例外（Low〜Medium）
 - [R24: 文字列補間が実行時値の波括弧で破壊される](interpolation-brace-from-runtime-value.md) — **Medium**: `{a.debug()}`の戻り値`P { x: 1 }`が含む波括弧を補間エンジンが再スキャンし、その値と後続プレースホルダが総崩れ（`dbg=P (1, 2) disp={}`）。L2のリテラル波括弧とは別経路（評価済み値の再スキャン）
 - [R25: 並行処理の最適化・戻り値の穴](concurrency-optimizer-and-join-gaps.md) — **Medium**: プレーン共有フラグのspin-waitがO1+で「Infinite loop risk」でコンパイル中断（atomic版は全レベル動作）。join()が64bitスレッド戻り値をint32に切り詰め（Low〜Medium）
@@ -149,7 +149,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | D2 | std::json | 調査済み → [R1](../../archive/v0.17.0/json-parser-robustness.md)（修正済み）・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 無限ループ・甘い受理・\u破壊はR1で修正済み。非ASCII失敗（High）はR2未修正 |
 | D3 | std::env/process/path/bytes/fs | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | selfhost素振りのCI検証（S1〜S9） | env/process/path/bytes/fsは健全（バイナリ安全・不在/空区別・エラーパス非クラッシュ）。wasmで能力ガード欠如。配列添字OOB無検査（Low〜Medium・言語共通） |
 | D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](../../archive/v0.17.0/stdlib-shipping-defects.md)修正済み） | あり（io_reexport_input） | パイプ入力で正常・非数値でNone（M17適用）。`std::io`窓口の入力再exportはR9で解決済み |
-| D5 | native::sync/thread | 調査済み → [R22](export-on-impl-method-parse-error.md)・[R25](concurrency-optimizer-and-join-gaps.md) | 機能テストあり（tests/llvm/sync・thread） | ランタイム挙動は健全（実並行・Mutex排他・RwLock SIGILL回避・O2/O3無破壊）。高レベルAPIがexport-implパースエラーで全損（High）・spin-waitがO1+でコンパイル不能 |
+| D5 | native::sync/thread | 調査済み → [R22](../../archive/v0.17.0/export-on-impl-method-parse-error.md)（修正済み）・[R25](concurrency-optimizer-and-join-gaps.md) | 機能テストあり（tests/llvm/sync・thread・mutex_highlevel） | ランタイム挙動は健全。高レベルAPI（Mutex<T>/RwLock<T>/Atomic/Channel）はR22で復旧・実行検証済み。spin-waitのO1+コンパイル不能はR25未修正 |
 | D6 | native::net/http | 調査済み → 健全 | 機能テストあり | 実行・接続拒否/DNS失敗のエラーパスとも健全（クラッシュ/ハングなし） |
 | D7 | native::gpu（Metal） | 調査済み → 健全 | 機能テストあり | 実Metal実行成功・不正シェーダ/関数名の誤用診断も良好 |
 | D8 | web::html・js::fetch/timer | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | libテスト・jsスイートあり | web::htmlエスケープはXSS遮断（native/js一致）。js::timerのコールバックがint型で使用不能 |

@@ -852,8 +852,13 @@ ast::DeclPtr Parser::parse_impl(std::vector<ast::AttributeNode> attributes) {
                     op_impl->body = parse_block();
                     decl->operators.push_back(std::move(op_impl));
                 } else {
+                    // export修飾子はメソッドの既定可視性（Export）の明示として受理する（R22。従来はExpected typeでパース不能）
+                    bool is_export = consume_if(TokenKind::KwExport);
                     bool is_private = consume_if(TokenKind::KwPrivate);
                     bool is_static = consume_if(TokenKind::KwStatic);
+                    if (is_export && is_private) {
+                        error(i18n::msg(i18n::MsgId::PsExportAndPrivateConflict));
+                    }
 
                     auto func = parse_function(false, is_static, false, std::move(method_attrs));
                     if (auto* f = func->as<ast::FunctionDecl>()) {
@@ -963,8 +968,13 @@ ast::DeclPtr Parser::parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
                     method_attrs.push_back(parse_attribute());
                 }
 
+                // export修飾子はメソッドの既定可視性（Export）の明示として受理する（R22。従来はExpected typeでパース不能）
+                bool is_export = consume_if(TokenKind::KwExport);
                 bool is_private = consume_if(TokenKind::KwPrivate);
                 bool is_static = consume_if(TokenKind::KwStatic);
+                if (is_export && is_private) {
+                    error(i18n::msg(i18n::MsgId::PsExportAndPrivateConflict));
+                }
 
                 auto func = parse_function(false, is_static, false, std::move(method_attrs));
                 if (auto* f = func->as<ast::FunctionDecl>()) {

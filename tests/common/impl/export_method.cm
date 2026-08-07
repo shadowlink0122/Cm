@@ -1,0 +1,25 @@
+// 回帰(R22): implメソッドのexport修飾子が受理される（従来はExpected typeでパース不能でnative::sync/ioの高レベルAPIが全損だった）
+// exportは既定可視性（公開）の明示として扱われ、挙動はexportなしと同じ
+import std::io::println;
+
+struct Pt {
+    int x;
+}
+
+impl Pt {
+    export int getx() {
+        return self.x;
+    }
+
+    export static Pt make(int v) {
+        Pt p;
+        p.x = v;
+        return p;
+    }
+}
+
+int main() {
+    Pt p = Pt::make(7);
+    println("{p.getx()}");
+    return 0;
+}

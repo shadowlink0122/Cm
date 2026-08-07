@@ -112,24 +112,25 @@ export struct MutexGuard<T> {
 impl<T> MutexGuard<T> {
     // 内部値への参照を取得
     export T* get() {
-        return &self.mutex.value;
+        return &self.mutex->value;
     }
 
     // 内部値への不変参照を取得
     export const T* get_const() {
-        return &self.mutex.value;
+        return &self.mutex->value;
     }
 
     // 明示的なアンロック（通常はデストラクタで呼ばれる）
     export void unlock() {
-        pthread_mutex_unlock(&self.mutex.raw);
+        pthread_mutex_unlock(&self.mutex->raw);
     }
 }
 
 impl<T> Mutex<T> {
     // 新しいMutexを作成
     export static Mutex<T> new(T value) {
-        Mutex<T> m = Mutex<T> { value: value, initialized: false };
+        Mutex<T> m;
+        m.value = value;
         void* null_ptr = 0 as void*;
         pthread_mutex_init(&m.raw, null_ptr);
         m.initialized = true;
@@ -139,7 +140,9 @@ impl<T> Mutex<T> {
     // ロックを取得（ブロッキング）
     export MutexGuard<T> lock() {
         pthread_mutex_lock(&self.raw);
-        return MutexGuard<T> { mutex: &self };
+        MutexGuard<T> g;
+        g.mutex = &self;
+        return g;
     }
 
     // ロックを試行（非ブロッキング）
@@ -172,27 +175,28 @@ export struct RwLockWriteGuard<T> {
 
 impl<T> RwLockReadGuard<T> {
     export const T* get() {
-        return &self.lock.value;
+        return &self.lock->value;
     }
 
     export void unlock() {
-        pthread_rwlock_unlock(&self.lock.raw);
+        pthread_rwlock_unlock(&self.lock->raw);
     }
 }
 
 impl<T> RwLockWriteGuard<T> {
     export T* get() {
-        return &self.lock.value;
+        return &self.lock->value;
     }
 
     export void unlock() {
-        pthread_rwlock_unlock(&self.lock.raw);
+        pthread_rwlock_unlock(&self.lock->raw);
     }
 }
 
 impl<T> RwLock<T> {
     export static RwLock<T> new(T value) {
-        RwLock<T> l = RwLock<T> { value: value, initialized: false };
+        RwLock<T> l;
+        l.value = value;
         void* null_ptr = 0 as void*;
         pthread_rwlock_init(&l.raw, null_ptr);
         l.initialized = true;
@@ -201,12 +205,16 @@ impl<T> RwLock<T> {
 
     export RwLockReadGuard<T> read() {
         pthread_rwlock_rdlock(&self.raw);
-        return RwLockReadGuard<T> { lock: &self };
+        RwLockReadGuard<T> g;
+        g.lock = &self;
+        return g;
     }
 
     export RwLockWriteGuard<T> write() {
         pthread_rwlock_wrlock(&self.raw);
-        return RwLockWriteGuard<T> { lock: &self };
+        RwLockWriteGuard<T> g;
+        g.lock = &self;
+        return g;
     }
 }
 
@@ -223,7 +231,8 @@ export struct AtomicLong {
 }
 
 export struct AtomicBool {
-    bool value;
+    // 32bitアトミック命令で操作するためintで保持する（boolだと1バイトへの4バイト書き込みになる）
+    int value;
 }
 
 // アトミック操作はC++ <atomic>でbackingが必要なためランタイムC++で実装
@@ -293,12 +302,11 @@ impl AtomicLong {
 
 impl AtomicBool {
     export static AtomicBool new(bool value) {
-        return AtomicBool { value: value };
+        return AtomicBool { value: value ? 1 : 0 };
     }
 
     export bool load() {
-        int v = cm_atomic_load_i32(&self.value);
-        return v != 0;
+        return cm_atomic_load_i32(&self.value) != 0;
     }
 
     export void store(bool value) {
@@ -350,7 +358,7 @@ impl Channel {
     // バウンデッドチャネルを作成
     // capacity: バッファサイズ
     export static Channel new(int capacity) {
-        long h = cm_channel_create(capacity);
+        const long h = cm_channel_create(capacity);
         return Channel { handle: h };
     }
 

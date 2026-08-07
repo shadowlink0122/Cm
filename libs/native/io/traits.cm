@@ -60,33 +60,6 @@ export interface Seek {
     IoResult<long> seek(SeekFrom pos);
 }
 
-// ============================================================
-// 拡張メソッド - Reader
-// ============================================================
-
-impl<R : Reader> R {
-    /// すべてのデータを読み取ってバッファに追加
-    IoResult<int> read_to_end(utiny[] buf) {
-        int total = 0;
-        utiny[1024] temp;
-
-        while (true) {
-            IoResult<int> result = self.read(temp);
-            match result {
-                Ok(n) => {
-                    if (n == 0) {
-                        // EOF
-                        break;
-                    }
-                    // バッファにコピー（簡易実装）
-                    for (int i = 0; i < n; i++) {
-                        buf.push(temp[i]);
-                    }
-                    total = total + n;
-                }
-                Err(e) => return IoResult.Err(e);
-            }
-        }
-        return IoResult.Ok(total);
-    }
-}
+// 注: 「impl<R : Reader> R { read_to_end(...) }」のような境界付きブランケットimpl
+// （インターフェース実装型への一括メソッド追加）は言語未対応のため見送り（R22）。
+// read_to_end相当の処理は呼び出し側でread()ループを書く

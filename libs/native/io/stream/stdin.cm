@@ -40,16 +40,16 @@ impl Stdin {
     /// バッファにデータを読み込む
     IoResult<int> read_bytes(utiny[] buf) {
         if (buf.len() == 0) {
-            return IoResult.Ok(0);
+            return IoResult::Ok(0);
         }
 
-        long n = read(self._fd, &buf[0] as void*, buf.len() as long);
+        const long n = read(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
-            return IoResult.Err(IoError.other("read failed"));
+            return IoResult::Err(IoError::other("read failed"));
         }
 
-        return IoResult.Ok(n as int);
+        return IoResult::Ok(n as int);
     }
 
     /// 1行読み取り（改行を含まない）
@@ -60,7 +60,7 @@ impl Stdin {
 
         // 1バイトずつ読み込んで改行を探す
         while (total < 4095) {
-            long n = read(self._fd, &temp_buf[total as int] as void*, 1);
+            const long n = read(self._fd, &temp_buf[total as int] as void*, 1);
 
             if (n <= 0) {
                 break;
@@ -85,7 +85,7 @@ impl Stdin {
         }
         result[total as int] = 0 as char;  // null終端
 
-        return IoResult.Ok(result as string);
+        return IoResult::Ok(result as string);
     }
 }
 

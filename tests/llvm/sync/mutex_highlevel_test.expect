@@ -1,0 +1,6 @@
+mutex=15
+rwlock=7
+atomic=8
+abool=true
+once=false
+chan=1 recv=42

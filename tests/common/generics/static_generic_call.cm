@@ -1,0 +1,29 @@
+// 回帰(R22): ジェネリック構造体の静的メソッド呼び出し Box<int>::new(v) で型引数がパラメータ・戻り値へ正しく代入される
+// （従来はパラメータ型が未置換で「expected T, got int」、戻り値の型引数がStruct kindの偽intになり「expected Box<int>, got Box<int>」の誤診断だった）
+import std::io::println;
+
+struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> {
+    static Box<T> new(T value) {
+        Box<T> b;
+        b.v = value;
+        return b;
+    }
+
+    T get() {
+        return self.v;
+    }
+}
+
+int main() {
+    Box<int> bi = Box<int>::new(42);
+    println("bi={bi.get()}");
+    Box<string> bs = Box<string>::new("hi");
+    println("bs={bs.get()}");
+    Box<long> bl = Box<long>::new(10000000000);
+    println("bl={bl.get()}");
+    return 0;
+}
