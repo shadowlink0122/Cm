@@ -109,6 +109,7 @@ Note that **constructor overloading** IS supported via the `overload self(...)` 
 ## Default Arguments
 
 You can set default values for parameters. If omitted during the call, the default value is used.
+A default value expression can be a literal, a function call, or a global variable, but it cannot reference other parameters of the same function (default arguments are evaluated at the call site before parameters are bound, so `int f(int a, int b = a)` is a compile error; v0.17.0).
 
 ```cm
 void log(string message, int level = 1) {

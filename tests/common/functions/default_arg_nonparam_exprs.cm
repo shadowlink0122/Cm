@@ -1,0 +1,15 @@
+import std::io::println;
+// R8回帰（正常系）: パラメータ以外を参照するデフォルト引数（リテラル・関数呼び出し・グローバル）は従来どおり動作する
+int g() { return 7; }
+int base = 100;
+int f(int x = 5, int y = g(), int z = base) { return x + y + z; }
+struct P { int v; }
+impl P {
+    int scaled(int k = 2) { return self.v * k; }
+}
+int main() {
+    println("{f()} {f(1)} {f(1, 2)} {f(1, 2, 3)}");
+    P p = P { v: 10 };
+    println("{p.scaled()} {p.scaled(3)}");
+    return 0;
+}

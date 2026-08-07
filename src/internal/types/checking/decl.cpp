@@ -8,10 +8,12 @@
 #include "match_hoist.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -628,6 +630,66 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
     }
 }
 
+// デフォルト引数式が同じ宣言のパラメータを参照していないか検査する。
+// R8: 従来は前パラメータ名の参照が名前解決を通過し、呼び出し時のデフォルト補完が呼び出し側の文脈で式をloweringするため値だけが黙って0になっていた（f(int a, int b = a)でf(3)=30）。
+// デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のため、パラメータ参照は診断で拒否する（C++と同じ方針）
+void TypeChecker::check_default_param_refs(const std::vector<ast::Param>& params,
+                                           const Span& span) {
+    std::unordered_set<std::string> param_names;
+    for (const auto& p : params) {
+        param_names.insert(p.name);
+    }
+
+    // デフォルト式に現れうる主要な式種を再帰走査して識別子を検査する（lambda.cppのキャプチャ検出と同型の局所ウォーカー）
+    std::function<void(ast::Expr&, const std::string&)> walk = [&](ast::Expr& expr,
+                                                                   const std::string& def_param) {
+        if (auto* ident = expr.as<ast::IdentExpr>()) {
+            if (param_names.count(ident->name) > 0) {
+                error(span,
+                      i18n::msgf(i18n::MsgId::TcDefaultArgReferencesParam, def_param, ident->name));
+            }
+        } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
+            walk(*binary->left, def_param);
+            walk(*binary->right, def_param);
+        } else if (auto* unary = expr.as<ast::UnaryExpr>()) {
+            walk(*unary->operand, def_param);
+        } else if (auto* call = expr.as<ast::CallExpr>()) {
+            // 呼び出し先は関数名のため引数のみ検査する（同名パラメータでの関数呼び出しシャドウは別診断の領分）
+            for (auto& arg : call->args) {
+                walk(*arg, def_param);
+            }
+        } else if (auto* member = expr.as<ast::MemberExpr>()) {
+            walk(*member->object, def_param);
+            for (auto& arg : member->args) {
+                walk(*arg, def_param);
+            }
+        } else if (auto* index = expr.as<ast::IndexExpr>()) {
+            walk(*index->object, def_param);
+            walk(*index->index, def_param);
+        } else if (auto* ternary = expr.as<ast::TernaryExpr>()) {
+            walk(*ternary->condition, def_param);
+            walk(*ternary->then_expr, def_param);
+            walk(*ternary->else_expr, def_param);
+        } else if (auto* arr = expr.as<ast::ArrayLiteralExpr>()) {
+            for (auto& elem : arr->elements) {
+                walk(*elem, def_param);
+            }
+        } else if (auto* slit = expr.as<ast::StructLiteralExpr>()) {
+            for (auto& field : slit->fields) {
+                if (field.value) {
+                    walk(*field.value, def_param);
+                }
+            }
+        }
+    };
+
+    for (const auto& p : params) {
+        if (p.default_value) {
+            walk(*p.default_value, p.name);
+        }
+    }
+}
+
 void TypeChecker::register_impl(ast::ImplDecl& impl) {
     if (!impl.target_type)
         return;
@@ -898,6 +960,8 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
     for (auto& method : impl.methods) {
         scopes_.push();
         current_return_type_ = method->return_type;
+        // R8: メソッドのデフォルト引数もパラメータ参照を診断する
+        check_default_param_refs(method->params, method->name_span);
         scopes_.current().define("self", impl.target_type, false);
         mark_variable_initialized("self");  // selfは常に初期化済み
         for (const auto& param : method->params) {
@@ -1103,6 +1167,9 @@ void TypeChecker::check_function(ast::FunctionDecl& func) {
     if (generic_context_.has_type_param(ast::type_to_string(*func.return_type))) {
         current_return_type_ = func.return_type;
     }
+
+    // R8: デフォルト引数式のパラメータ参照を診断する（パラメータをスコープへ定義する前に検査する）
+    check_default_param_refs(func.params, func.name_span);
 
     for (auto& param : func.params) {
         if (!is_valid_type(param.type)) {

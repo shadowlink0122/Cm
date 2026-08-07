@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3・R6修正済み・archive移動で11件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3・R6・R8修正済み・archive移動で10件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）、第8ラウンドは残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -55,7 +55,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能](string-escape-and-raw-semantics.md) — **High**: `\x`/`\u`/`\U`・未知エスケープでバックスラッシュが黙って脱落し誤った文字列を生成（--strictでも無診断）。バッククォートraw文字列がエスケープを解釈・`\${x}`がエスケープ不能・charリテラルとの不一致（Medium）
 - R6: 条件付きコンパイルディレクティブの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/preprocessor-conditional-robustness.md)。#endifを#endの別名として認識、閉じ忘れ（開始行・シンボル付き）・対応ブロックのない#end/#endif/#else・#define使用をi18n診断化（-D/組み込みシンボル案内）、cm_grammar.mdを実態へ追従。パーサ段の行番号・imported module誤表記はR14へ委譲）
 - [R7: 属性の検証レジストリ](attribute-validation-registry.md) — **High**: `#[tset]`等のtest属性タイポでテストが黙って実行されず`cm test`が緑（テスト漏れ）。`#[cfg(...)]`は完全に不活性、`#[target("jss")]`未知名は無診断でNative縮退（意味反転）、`#[deprecated]`等は無警告黙殺
-- [R8: デフォルト引数での前引数参照が無診断でゼロ値](default-arg-prev-param-zero.md) — **High**: `int f(int a, int b = a)`が名前解決を通過して値だけ0になる（`f(3)=30`、期待33か診断拒否）。全経路一致・--strict素通り
+- R8: デフォルト引数での前引数参照が無診断でゼロ値 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/default-arg-prev-param-zero.md)。デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のためC++同様にパラメータ参照を拒否。check_default_param_refsで宣言時に式を再帰走査し関数・implメソッド両経路で診断（自己参照・後方参照も検出）。エラーテスト3本+i18n E2E+正常系回帰を追加、チュートリアルへ制約を明記）
 - [R9: stdlibの出荷不良](stdlib-shipping-defects.md) — **High/Medium**: `std::iter`モジュール自体が`range`多重定義と型エラーでコンパイル不能（`import std::iter::*`常時失敗）。Vector/HashMap/Queueが生malloc直呼びでアロケータ差し替えを素通し。`std::io`の入力API再exportが選択import/`*`とも解決不能
 - [R10: 型検査の黙殺穴](checker-silent-holes.md) — **Medium**: 未定義型の変数宣言が無診断で実行まで通る・型不一致マクロ（`macro int X = "str";`）がcheck素通りでLLVM内部エラー/js黙殺の三分裂・const generic宣言が無警告受理されるが実体化手段が存在しない（半黙殺）
 - [R11: 修飾子の未実装・黙殺](modifier-implementation-gaps.md) — **Medium/Low**: `constexpr`変数がパーサTODOのnullptr返しで壊れた診断・`inline`は無警告黙殺（IR不変）・`volatile`はパーサ未対応・`ufloat`/`udouble`のunsigned語義が未実装で負値も無診断
@@ -139,7 +139,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | C4 | 語彙のみのキーワード（`mutable`/`namespace`/`template`/`typename`/`pub`/`from`） | 調査済み → 概ね健全 | なし | 識別子誤用は6語とも正しく診断（X5空表示バグ再発なし）。`namespace`は実装済み動作。他は診断で拒否 |
 | C5 | `ufloat`/`udouble` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | 受理・6経路値一致だがunsigned語義未実装（負値も無診断、Medium） |
 | C6 | `extern`宣言（native一般） | 調査済み → 健全 | SVのextern_instance等のみ | native/jitで動作・未解決シンボル診断も明確。js経路のみ実行時エラー（Low） |
-| C7 | デフォルト引数 | 調査済み → [R8](default-arg-prev-param-zero.md) | あり（functions/default_args等） | 部分省略・関数呼び出し既定式・メソッド既定は健全。前引数参照が無診断でゼロ値（High） |
+| C7 | デフォルト引数 | 調査済み → [R8](../../archive/v0.17.0/default-arg-prev-param-zero.md)（修正済み） | あり（functions/default_args等+R8回帰） | 部分省略・関数呼び出し既定式・メソッド既定は健全。前引数参照は診断拒否へ修正済み |
 
 ### D. 標準ライブラリ・ランタイム
 

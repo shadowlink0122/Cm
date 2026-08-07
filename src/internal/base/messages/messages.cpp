@@ -921,6 +921,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PpDefineNotSupported
     {"'#define' is not supported in '{0}' (line {1}); define symbols with the CLI option -D<name> (#ifdef also accepts built-in symbols like __macos__)",
      "'#define' は未対応です（'{0}' の {1} 行目）。シンボルはCLIオプション -D<名前> で定義してください（#ifdefは__macos__等の組み込みシンボルも参照できます）"},
+    // TcDefaultArgReferencesParam
+    {"default value of parameter '{0}' cannot reference parameter '{1}' (default arguments are evaluated at the call site, before parameters are bound)",
+     "パラメータ '{0}' のデフォルト値はパラメータ '{1}' を参照できません（デフォルト引数はパラメータ束縛前に呼び出し側で評価されます）"},
     // MirSliceReceiverUnresolved
     {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
      "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},

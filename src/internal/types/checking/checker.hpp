@@ -83,6 +83,9 @@ class TypeChecker {
     void check_for(ast::ForStmt& for_stmt);
     void check_for_in(ast::ForInStmt& for_in);
 
+    // デフォルト引数式が同じ宣言のパラメータを参照していないか検査する（R8。関数・implメソッド・演算子で共用）
+    void check_default_param_refs(const std::vector<ast::Param>& params, const Span& span);
+
     // ============================================================
     // 式の型推論 (expr.cpp)
     // ============================================================

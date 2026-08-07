@@ -329,6 +329,7 @@ enum class MsgId : int {
     PpUnclosedConditional,
     PpUnmatchedDirective,
     PpDefineNotSupported,
+    TcDefaultArgReferencesParam,
     MirSliceReceiverUnresolved,
     MirErrorSymbol,
     PsExpectedBindingVariableNamePattern,

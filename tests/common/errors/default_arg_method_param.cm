@@ -1,0 +1,6 @@
+// 回帰(R8): implメソッドのデフォルト引数の前パラメータ参照も診断
+struct P { int v; }
+impl P {
+    int bad(int a, int b = a * 2) { return a + b; }
+}
+int main() { return 0; }

@@ -1,0 +1,3 @@
+// R8: デフォルト引数の前パラメータ参照診断の表示
+int f(int a, int b = a) { return a + b; }
+int main() { return 0; }

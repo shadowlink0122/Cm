@@ -1,0 +1,5 @@
+// 回帰(R8): デフォルト引数式の自己参照も診断
+int f(int a, int b = b + 1) {
+    return a + b;
+}
+int main() { return 0; }
