@@ -27,6 +27,8 @@ Cm標準ライブラリのモジュール群です。
 | `std::path` / `std::bytes` | パス操作・バイト詰め (純Cm・全バックエンド) | [OS連携](os.html) |
 | `std::json` | JSONパース・直列化 (純Cm・全バックエンド) | [JSON](json.html) |
 | `std::debug` | assert / assert_eq / assert_ne / panic | [コア](core-utils.html) |
+| `std::iter` | Range・range/range_to・for-in対応イテレータ | [コア](core-utils.html) |
+| `std::core::time` | now_ms・sleep_ms・Timer（旧std.core.asyncから改名） | [コア](core-utils.html) |
 
 ---
 

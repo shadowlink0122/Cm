@@ -18,6 +18,50 @@ if [ ! -x "$CM" ]; then
     exit 1
 fi
 
+echo "=== libs import gate (cm check) ==="
+
+# ============================================================
+# libs 全モジュールのimportゲート（R9）
+# 各 mod.cm の module ヘッダから import 文を生成して cm check し、
+# 出荷されているstdlibが自身のエラーで壊れていないことを常時検証する
+# （std::iterのコンパイル不能・native::mathのfloat接尾辞等が素通りしていた再発防止）
+# ============================================================
+GATE_PASS=0
+GATE_FAIL=0
+GATE_TMP=$(mktemp -d)
+trap 'rm -rf "$GATE_TMP"' EXIT
+
+# 既知の失敗（実装済みの言語機能不足でモジュール自体が未対応構文を使っているもの）
+# native/io・native/io/stream・native/sync: implメソッドのexport修飾子がパース不能（R22。修正時にこのリストから除去する）
+KNOWN_BROKEN="libs/native/io/mod.cm libs/native/io/stream/mod.cm libs/native/sync/mod.cm"
+
+while IFS= read -r mod_file; do
+    rel="${mod_file#./}"
+    case " $KNOWN_BROKEN " in
+        *" $rel "*)
+            echo "[SKIP] import gate: $rel (known broken: R22 export-on-impl)"
+            continue
+            ;;
+    esac
+    mod_name=$(grep -m1 "^module " "$mod_file" | sed 's/^module //; s/;.*//' | tr -d ' ' | sed 's/\./::/g')
+    if [ -z "$mod_name" ]; then
+        echo "[FAIL] import gate: $rel (module header not found)"
+        GATE_FAIL=$((GATE_FAIL + 1))
+        continue
+    fi
+    printf 'import %s::*;\nint main() { return 0; }\n' "$mod_name" > "$GATE_TMP/gate.cm"
+    if out=$("$CM" check "$GATE_TMP/gate.cm" 2>&1); then
+        GATE_PASS=$((GATE_PASS + 1))
+    else
+        echo "[FAIL] import gate: $rel (import $mod_name::*)"
+        echo "$out" | sed 's/^/    /' | head -8
+        GATE_FAIL=$((GATE_FAIL + 1))
+    fi
+done < <(find libs -name 'mod.cm' | sort)
+
+echo "libs import gate: PASS=$GATE_PASS FAIL=$GATE_FAIL"
+
+echo ""
 echo "=== libs unit tests (cm test) ==="
 
 # libs 配下の *_test.cm を再帰的に探して実行する
@@ -37,5 +81,5 @@ while IFS= read -r test_file; do
 done < <(find libs -name '*_test.cm' | sort)
 
 echo ""
-echo "libs tests: files PASS=$FILES_PASS FAIL=$FILES_FAIL"
-[ "$FILES_FAIL" -eq 0 ]
+echo "libs tests: files PASS=$FILES_PASS FAIL=$FILES_FAIL (import gate FAIL=$GATE_FAIL)"
+[ "$FILES_FAIL" -eq 0 ] && [ "$GATE_FAIL" -eq 0 ]

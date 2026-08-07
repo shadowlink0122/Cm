@@ -67,6 +67,7 @@ da.dealloc(ptr);
 ## グローバルアロケータの差し替え
 
 `set_allocator_fns` にCm関数ポインタ3本（alloc / dealloc / realloc）を渡すと、以降の `std::mem` 経由の確保がそのアロケータを経由します。
+`std::collections` のVector/HashMap/Queueの内部確保も `std::mem` 経由のため、登録したアロケータを通ります（v0.17.0で生malloc直呼びの素通しを解消）。
 `reset_allocator()` で既定のアロケータへ戻ります。
 
 > **対応バックエンド:** JIT / Native のみ（WASMは独自フリーリストアロケータ固定のためno-op、JS/TSはGC管理のため対象外）

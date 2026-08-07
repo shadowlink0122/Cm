@@ -2,10 +2,8 @@
 // Queue<T> - 任意の型Tを格納できるFIFOキュー
 module std.collections.queue;
 
-use libc {
-    void* malloc(int size);
-    void free(void* ptr);
-}
+// 確保はstd::mem経由にして、set_allocator_fnsで登録したカスタムアロケータを通す（R9。従来は生malloc直呼びで素通しだった）
+import std::mem::{alloc, dealloc};
 
 // =============================================================
 // QueueNode<T> - キューの内部ノード
@@ -38,7 +36,7 @@ export impl<T> Queue<T> {
     // 末尾に追加（enqueue）
     void enqueue(T value) {
         const long node_size = __sizeof__(QueueNode<T>) as long;
-        void* raw_ptr = malloc(node_size);
+        void* raw_ptr = alloc(node_size as int);
         QueueNode<T>* new_node = raw_ptr as QueueNode<T>*;
 
         new_node->data = value;
@@ -67,7 +65,7 @@ export impl<T> Queue<T> {
         }
 
         void* ptr = head as void*;
-        free(ptr);
+        dealloc(ptr);
         self.size = self.size - 1;
         return data;
     }
@@ -94,7 +92,7 @@ export impl<T> Queue<T> {
             QueueNode<T>* temp = self.front;
             self.front = self.front->next;
             void* ptr = temp as void*;
-            free(ptr);
+            dealloc(ptr);
         }
         self.rear = null_ptr as QueueNode<T>*;
         self.size = 0;

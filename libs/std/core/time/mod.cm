@@ -1,7 +1,8 @@
-// std/core/async/mod.cm - 非同期ランタイムモジュール
+// std/core/time/mod.cm - 時刻・タイマーモジュール
 // C実装(runtime_async.c + runtime_event_loop.c)のCmラッパー
 // シングルスレッド非同期エグゼキュータ基盤を提供
-module std.core.async;
+// 旧名std.core.asyncはasyncが予約語のためimport不能だった（R9でstd.core.timeへ改名）
+module std.core.time;
 
 // ============================================================
 // C runtime extern宣言
@@ -52,17 +53,17 @@ export struct Timer {
 
 impl Timer {
     // タイマーを開始
-    export static Timer start() {
+    static Timer start() {
         return Timer { start: cm_now_ms() };
     }
 
     // 経過時間を取得（ミリ秒）
-    export ulong elapsed_ms() {
+    ulong elapsed_ms() {
         return cm_now_ms() - self.start;
     }
 
     // リセット
-    export void reset() {
+    void reset() {
         self.start = cm_now_ms();
     }
 }

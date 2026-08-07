@@ -65,6 +65,7 @@ da.dealloc(ptr);
 ## Replacing the Global Allocator
 
 Passing three Cm function pointers (alloc / dealloc / realloc) to `set_allocator_fns` routes all subsequent `std::mem` allocations through that allocator.
+The internal allocations of `std::collections` (Vector/HashMap/Queue) also go through `std::mem`, so they use the registered allocator as well (v0.17.0 removed the raw-malloc bypass).
 `reset_allocator()` restores the default allocator.
 
 > **Supported backends:** JIT / Native only (WASM uses its own fixed free-list allocator so the facade is a no-op; JS/TS are GC-managed and out of scope)

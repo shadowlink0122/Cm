@@ -1,0 +1,30 @@
+// 回帰(R9): std::iterモジュールが自身のエラーでコンパイル不能だった問題（rangeの自由関数オーバーロード・IntArrayIterator.nextのデリファレンス欠落）
+// range/range_to・Range::iter()によるfor-in・IntArrayIteratorの基本動作を検証する
+import std::io::println;
+import std::iter::*;
+
+int main() {
+    const Range r = range(2, 11, 3);
+    println("len={len(r)} at1={at(r, 1)} empty={is_empty(r)}");
+
+    int sum = 0;
+    for (int x in range_to(3)) {
+        sum = sum + x;
+    }
+    println("sum={sum}");
+
+    int total = 0;
+    for (int v in range(1, 4)) {
+        total = total + v;
+    }
+    println("total={total}");
+
+    int[3] arr = [10, 20, 30];
+    IntArrayIterator it(&arr[0], 3);
+    int asum = 0;
+    while (it.has_next()) {
+        asum = asum + it.next();
+    }
+    println("asum={asum}");
+    return 0;
+}

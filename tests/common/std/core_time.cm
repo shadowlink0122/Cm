@@ -1,0 +1,16 @@
+//! platform: !wasm|js|sv
+// 回帰(R9): std::core::time（旧std.core.asyncはasyncが予約語のためimport不能だった）のnow_ms/sleep_ms/Timerが動作する
+// cm_now_msランタイムがコアランタイム（runtime.c）へ包含されJIT/Nativeで解決されることも検証する
+import std::io::println;
+import std::core::time::*;
+
+int main() {
+    const ulong t0 = now_ms();
+    const Timer t = Timer::start();
+    sleep_ms(2);
+    const ulong elapsed = t.elapsed_ms();
+    const ulong t1 = now_ms();
+    println("monotonic={t1 >= t0}");
+    println("slept={elapsed >= 1}");
+    return 0;
+}

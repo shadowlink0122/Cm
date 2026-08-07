@@ -13,11 +13,11 @@ module native.math;
 
 // 円周率
 export double PI = 3.14159265358979323846;
-export float PI_F = 3.14159265f;
+export float PI_F = 3.14159265 as float;
 
 // 自然対数の底
 export double E = 2.71828182845904523536;
-export float E_F = 2.71828182f;
+export float E_F = 2.71828182 as float;
 
 // 無限大
 export double INFINITY = 1.0 / 0.0;
@@ -74,7 +74,7 @@ export double sin(double x) {
     return sin(x);
 }
 
-export float sin(float x) {
+export float sin_f(float x) {
     return sinf(x);
 }
 
@@ -83,7 +83,7 @@ export double cos(double x) {
     return cos(x);
 }
 
-export float cos(float x) {
+export float cos_f(float x) {
     return cosf(x);
 }
 
@@ -92,7 +92,7 @@ export double tan(double x) {
     return tan(x);
 }
 
-export float tan(float x) {
+export float tan_f(float x) {
     return tanf(x);
 }
 
@@ -161,7 +161,7 @@ export double pow(double base, double exponent) {
     return pow(base, exponent);
 }
 
-export float pow(float base, float exponent) {
+export float pow_f(float base, float exponent) {
     return powf(base, exponent);
 }
 
@@ -174,7 +174,7 @@ export double sqrt(double x) {
     return sqrt(x);
 }
 
-export float sqrt(float x) {
+export float sqrt_f(float x) {
     return sqrtf(x);
 }
 
@@ -197,7 +197,7 @@ export double ceil(double x) {
     return ceil(x);
 }
 
-export float ceil(float x) {
+export float ceil_f(float x) {
     return ceilf(x);
 }
 
@@ -206,7 +206,7 @@ export double floor(double x) {
     return floor(x);
 }
 
-export float floor(float x) {
+export float floor_f(float x) {
     return floorf(x);
 }
 
@@ -215,7 +215,7 @@ export double round(double x) {
     return round(x);
 }
 
-export float round(float x) {
+export float round_f(float x) {
     return roundf(x);
 }
 
@@ -233,7 +233,7 @@ export double abs(double x) {
     return fabs(x);
 }
 
-export float abs(float x) {
+export float abs_f(float x) {
     return fabsf(x);
 }
 
@@ -251,8 +251,8 @@ export double to_radians(double degrees) {
     return degrees * PI / 180.0;
 }
 
-export float to_radians(float degrees) {
-    return degrees * PI_F / 180.0f;
+export float to_radians_f(float degrees) {
+    return degrees * PI_F / (180.0 as float);
 }
 
 // ラジアンから度へ
@@ -260,6 +260,6 @@ export double to_degrees(double radians) {
     return radians * 180.0 / PI;
 }
 
-export float to_degrees(float radians) {
-    return radians * 180.0f / PI_F;
+export float to_degrees_f(float radians) {
+    return radians * (180.0 as float) / PI_F;
 }

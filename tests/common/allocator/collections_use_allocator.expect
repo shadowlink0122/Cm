@@ -1,0 +1,2 @@
+vector=true hashmap=true queue=true
+vlen=3 mget=10 qfront=1

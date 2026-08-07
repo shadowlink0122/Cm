@@ -14,7 +14,7 @@
 //   MyStruct* obj = alloc.alloc(size_of<MyStruct>()) as MyStruct*;
 //   alloc.dealloc(obj as void*);
 //
-module mem;
+module std.mem;
 
 // ============================================================
 // libc FFI宣言

@@ -2,10 +2,8 @@
 // HashMap<K, V> - キーと値の両方がジェネリック
 module std.collections.hashmap;
 
-use libc {
-    void* malloc(int size);
-    void free(void* ptr);
-}
+// 確保はstd::mem経由にして、set_allocator_fnsで登録したカスタムアロケータを通す（R9。従来は生malloc直呼びで素通しだった）
+import std::mem::{alloc, dealloc};
 
 // =============================================================
 // HashMap<K, V> - ジェネリック連想配列（線形探索）
@@ -32,7 +30,7 @@ export impl<K, V> HashMap<K, V> {
         // Entryサイズは64バイト固定（十分なサイズ確保）
         const long entry_size = 64;
         const long alloc_size = (capacity as long) * entry_size;
-        void* raw_ptr = malloc(alloc_size);
+        void* raw_ptr = alloc(alloc_size as int);
         self.entries = raw_ptr as Entry<K, V>*;
         self.cap = capacity;
         self.size = 0;
@@ -48,7 +46,7 @@ export impl<K, V> HashMap<K, V> {
         const int new_cap = old_cap * 2;
         const long entry_size = 64;
         const long alloc_size = (new_cap as long) * entry_size;
-        void* raw_ptr = malloc(alloc_size);
+        void* raw_ptr = alloc(alloc_size as int);
         Entry<K, V>* new_entries = raw_ptr as Entry<K, V>*;
         for (int i = 0; i < new_cap; i++) {
             new_entries[i].occupied = false;
@@ -71,7 +69,7 @@ export impl<K, V> HashMap<K, V> {
         }
         self.entries = new_entries;
         self.cap = new_cap;
-        free(old_entries as void*);
+        dealloc(old_entries as void*);
     }
 
     // 挿入（intキー専用ハッシュ）
@@ -190,7 +188,7 @@ export impl<K, V> HashMap<K, V> {
         void* ptr = self.entries as void*;
         void* null_ptr = 0 as void*;
         if (ptr != null_ptr) {
-            free(ptr);
+            dealloc(ptr);
         }
         self.entries = null_ptr as Entry<K, V>*;
         self.size = 0;

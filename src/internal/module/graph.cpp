@@ -683,13 +683,23 @@ struct Builder {
             if (!edge.is_reexport) {
                 continue;
             }
-            // 選択的再export（export import x::{items}）は辿らない: io/mod.cmのprintln等は
-            // MIR組み込みが実体であり、Cm定義を取り込むと組み込みの書式処理を影で置き換えて
-            // 挙動が変わる（js/svターゲットではvoid*/FFIが非対応でエラーになる）。従来経路と同一の素通し
             if (edge.wildcard || edge.items.empty()) {
+                request_item(edge.dep, name, guard);
+                continue;
+            }
+            // 選択的再export（export import x::{items}）は要求名がitemsに含まれる場合に辿る（R9）。
+            // ただしMIR組み込みが実体のI/O系はCm定義を取り込むと組み込みの書式処理を影で
+            // 置き換えて挙動が変わるため（js/svターゲットではvoid*/FFIが非対応でエラー）従来どおり素通しする
+            if (!is_builtin_io_name(name) &&
+                std::find(edge.items.begin(), edge.items.end(), name) != edge.items.end()) {
                 request_item(edge.dep, name, guard);
             }
         }
+    }
+
+    // MIR組み込みが実体のI/O関数名（Cm定義の取り込みで影置換してはならないもの）
+    static bool is_builtin_io_name(const std::string& name) {
+        return name == "print" || name == "println" || name == "eprint" || name == "eprintln";
     }
 
     // ワイルドカード要求: 公開面（export関数+exportリスト）を包含し、再export辺へ伝播する。
@@ -718,9 +728,17 @@ struct Builder {
             if (!edge.is_reexport) {
                 continue;
             }
-            // 選択的再exportは辿らない（request_itemと同じ素通し規則）
             if (edge.wildcard || edge.items.empty()) {
                 request_wildcard(edge.dep, importer, filter, guard);
+                continue;
+            }
+            // 選択的再export項目は個別要求で辿る（R9。request_itemと同じ組み込みI/O素通し規則。
+            // filter付き＝使用箇所駆動のワイルドカードでは参照される名前のみ）
+            for (const auto& item : edge.items) {
+                if (is_builtin_io_name(item) || (filter && !filter->count(item))) {
+                    continue;
+                }
+                request_item(edge.dep, item, guard);
             }
         }
     }

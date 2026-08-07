@@ -613,6 +613,7 @@ if(CM_USE_LLVM)
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_asm.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_format.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_io.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_time.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_platform.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_print.c
                 ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_slice.c

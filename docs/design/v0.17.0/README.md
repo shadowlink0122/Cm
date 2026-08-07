@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8修正済み・archive移動で7件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -56,7 +56,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 - R6: 条件付きコンパイルディレクティブの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/preprocessor-conditional-robustness.md)。#endifを#endの別名として認識、閉じ忘れ（開始行・シンボル付き）・対応ブロックのない#end/#endif/#else・#define使用をi18n診断化（-D/組み込みシンボル案内）、cm_grammar.mdを実態へ追従。パーサ段の行番号・imported module誤表記はR14へ委譲）
 - R7: 属性の検証レジストリ — **修正済み**（[archive移動](../../archive/v0.17.0/attribute-validation-registry.md)。checkerの検証パスで3値分類を実装: 未知・タイポ属性=警告/--strictエラー、既知未実装（bench/optimize/inline/cfg）=専用診断、#[deprecated]=呼び出しサイト警告として実装昇格。#[target]未知名の意味反転を許可リスト検証で診断化、#[inline]の予約語パース特例、AttributeNode.spanで診断位置を属性自身に。cfg条件評価の実装はR13の領分として残置）
 - R8: デフォルト引数での前引数参照が無診断でゼロ値 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/default-arg-prev-param-zero.md)。デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のためC++同様にパラメータ参照を拒否。check_default_param_refsで宣言時に式を再帰走査し関数・implメソッド両経路で診断（自己参照・後方参照も検出）。エラーテスト3本+i18n E2E+正常系回帰を追加、チュートリアルへ制約を明記）
-- [R9: stdlibの出荷不良](stdlib-shipping-defects.md) — **High/Medium**: `std::iter`モジュール自体が`range`多重定義と型エラーでコンパイル不能（`import std::iter::*`常時失敗）。Vector/HashMap/Queueが生malloc直呼びでアロケータ差し替えを素通し。`std::io`の入力API再exportが選択import/`*`とも解決不能
+- R9: stdlibの出荷不良 — **修正済み**（[archive移動](../../archive/v0.17.0/stdlib-shipping-defects.md)。std::iterはrangeオーバーロードのデフォルト引数化+range_to・デリファレンス修正・Range::iter()のfor-in対応で復旧。Vector/HashMap/Queueはstd::mem経由へ置換しカスタムアロケータを通す。std::io入力再exportはmodule graphの選択的再export辿り（組み込みI/O名のみ素通し）で解決。掃引で発見した同類4件——std::coreのusize typedef衝突とabs多重定義・std.core.asyncの予約語パス（std.core.timeへ改名+runtime_time.c新設）・native::mathのfloat接尾辞と11組オーバーロード・std::memのヘッダ不一致——も同時修正し、libs全mod.cmのimportゲートをtest-libsへ常設）
 - [R10: 型検査の黙殺穴](checker-silent-holes.md) — **Medium**: 未定義型の変数宣言が無診断で実行まで通る・型不一致マクロ（`macro int X = "str";`）がcheck素通りでLLVM内部エラー/js黙殺の三分裂・const generic宣言が無警告受理されるが実体化手段が存在しない（半黙殺）
 - [R11: 修飾子の未実装・黙殺](modifier-implementation-gaps.md) — **Medium/Low**: `constexpr`変数がパーサTODOのnullptr返しで壊れた診断・`inline`は無警告黙殺（IR不変）・`volatile`はパーサ未対応・`ufloat`/`udouble`のunsigned語義が未実装で負値も無診断
 - [R12: matchの負数パターン不可・網羅matchのreturn漏れ誤検知](match-pattern-and-flow-gaps.md) — **Medium**: matchパターンに負数リテラル（`-1 =>`・`-5...-1`）が書けない。全arm returnの網羅matchに「falls off the end」を誤検知し--strictでビルド阻害
@@ -148,13 +148,13 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | D1 | TreeMap | 調査済み → 健全 | 機能テストあり | 1000件/10万件の挿入喪失なし・自動拡張が効く（6経路一致）。remove/走査APIは診断ありの未実装 |
 | D2 | std::json | 調査済み → [R1](../../archive/v0.17.0/json-parser-robustness.md)（修正済み）・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 無限ループ・甘い受理・\u破壊はR1で修正済み。非ASCII失敗（High）はR2未修正 |
 | D3 | std::env/process/path/bytes/fs | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | selfhost素振りのCI検証（S1〜S9） | env/process/path/bytes/fsは健全（バイナリ安全・不在/空区別・エラーパス非クラッシュ）。wasmで能力ガード欠如。配列添字OOB無検査（Low〜Medium・言語共通） |
-| D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](stdlib-shipping-defects.md)） | なし | パイプ入力で正常・非数値でNone（M17適用）・クラッシュなし。ただし`std::io`窓口の入力再exportが解決不能 |
+| D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](../../archive/v0.17.0/stdlib-shipping-defects.md)修正済み） | あり（io_reexport_input） | パイプ入力で正常・非数値でNone（M17適用）。`std::io`窓口の入力再exportはR9で解決済み |
 | D5 | native::sync/thread | 調査済み → [R22](export-on-impl-method-parse-error.md)・[R25](concurrency-optimizer-and-join-gaps.md) | 機能テストあり（tests/llvm/sync・thread） | ランタイム挙動は健全（実並行・Mutex排他・RwLock SIGILL回避・O2/O3無破壊）。高レベルAPIがexport-implパースエラーで全損（High）・spin-waitがO1+でコンパイル不能 |
 | D6 | native::net/http | 調査済み → 健全 | 機能テストあり | 実行・接続拒否/DNS失敗のエラーパスとも健全（クラッシュ/ハングなし） |
 | D7 | native::gpu（Metal） | 調査済み → 健全 | 機能テストあり | 実Metal実行成功・不正シェーダ/関数名の誤用診断も良好 |
 | D8 | web::html・js::fetch/timer | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | libテスト・jsスイートあり | web::htmlエスケープはXSS遮断（native/js一致）。js::timerのコールバックがint型で使用不能 |
-| D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](stdlib-shipping-defects.md)・[R3](../../archive/v0.17.0/generic-pointer-param-inference.md)（R3修正済み） | — | mod.cm自体がコンパイル不能（High・R9未修正）・swapのSIGSEGVはR3で修正済み。組み込みmap/filterは健全 |
-| D10 | アロケータ差し替え（set_allocator_fns） | 調査済み → [R9](stdlib-shipping-defects.md) | M14実装時の検証のみ | 文字列/スライス/直接確保は経由・reset復帰も健全。Vector/HashMap/Queueが素通し（Medium） |
+| D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](../../archive/v0.17.0/stdlib-shipping-defects.md)・[R3](../../archive/v0.17.0/generic-pointer-param-inference.md)（両方修正済み） | あり（std_iter_module） | mod.cmはR9で復旧（for-in対応含む）・swapのSIGSEGVはR3で修正済み。組み込みmap/filterは健全 |
+| D10 | アロケータ差し替え（set_allocator_fns） | 調査済み → [R9](../../archive/v0.17.0/stdlib-shipping-defects.md)（修正済み） | あり（collections_use_allocator） | 文字列/スライス/直接確保に加えVector/HashMap/Queueもstd::mem経由でカスタムアロケータを通る |
 
 ### E. バックエンド・ターゲット
 

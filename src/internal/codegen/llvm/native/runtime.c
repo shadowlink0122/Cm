@@ -9,6 +9,7 @@
 // - runtime_slice.c   : Slice (dynamic array) functions
 // - runtime_file.c    : File I/O and stdin input functions
 // - runtime_io.c      : Low-level POSIX I/O wrapper functions
+// - runtime_time.c    : Monotonic clock (cm_now_ms for std::core::time)
 //
 // This file includes all components to create a single compilation unit
 
@@ -20,6 +21,7 @@
 #include "runtime_asm.c"
 #include "runtime_format.c"
 #include "runtime_io.c"
+#include "runtime_time.c"
 #include "runtime_platform.c"
 #include "runtime_print.c"
 #include "runtime_slice.c"
