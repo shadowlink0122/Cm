@@ -6,10 +6,10 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6ラウンド（R1〜R14）で新規に検出したバグ14文書（未修正）**である（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6ラウンド（R1〜R14）・第7ラウンド（R15〜R20）で新規に検出したバグ**のうち未修正分（第6ラウンドはR3修正済み・archive移動で13件、第7ラウンドはR15〜R20の6件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
-第6ラウンドは、それ以前のラウンドでバグ調査の対象になっていなかった構文・機能（後述の棚卸し表のA〜D）を実機プローブしたもの。未着手のバックエンド・ターゲット（E）は第7ラウンド候補として棚卸し表に残している。
+第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
 
 ## レイヤー別レビュー 第4ラウンド（未修正の新規所見 Y1〜Y6）
 
@@ -50,7 +50,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 
 - [R1: std::jsonパーサの堅牢性](json-parser-robustness.md) — **Critical**: アリーナ容量1024を2ノード超過するJSONで`json_parse`が無限ループ（`append_child`自己サイクル、jit/nativeともハング=DoS）。加えて末尾ゴミ/単独マイナス/複数値の甘い受理・`\uXXXX`の黙ったデータ破壊（Medium）
 - [R2: 文字列APIのコードポイント/バイト単位不一致](string-codepoint-byte-api-split.md) — **High**: `len()`=コードポイント数（H9）と`charAt()`=生バイトの添字単位不一致で、非ASCII文字列を走査するコードが破綻。std::jsonの非ASCIIパースがnative/jit失敗・js成功のバックエンド分岐に
-- [R3: ジェネリック`T*`引数の型パラメータ束縛失敗](generic-pointer-param-inference.md) — **Critical**: `<T> void swap(T*, T*)`等のポインタ引数からTが推論も明示指定もされず、本体でのデリファレンス時に型未解決のままcodegenへ落ちて全経路SIGSEGV
+- R3: ジェネリック`T*`引数の型パラメータ束縛失敗 — **修正済み**（[archive移動](../../archive/v0.17.0/generic-pointer-param-inference.md)。真因2系統: checkerのinfer_generic_callが`T*`/`T[]`/`T**`を推論できず3ケース個別実装だったのを構造再帰unifyへ置換、LLVM codegenのselfコピー最適化が特殊化名`deref__int`のT*引数をプリミティブimplメソッドのselfと誤認し要素型で確保していたのをシード条件へ「第0引数名=self」を追加。swap/deref/T[]/T**/ジェネリック構造体の回帰をjit/native O0〜O3/wasm/jsで追加）
 - [R4: クロージャの外側変数書き込み黙殺・構造体キャプチャのjs分岐](closure-mutation-semantics.md) — **High**: 同一関数内クロージャからの外側変数への代入が全経路で無診断棄却（読みは最新値・書きは無効の非対称）。構造体キャプチャ書き込みはjsだけ伝播しバックエンド分岐
 - [R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能](string-escape-and-raw-semantics.md) — **High**: `\x`/`\u`/`\U`・未知エスケープでバックスラッシュが黙って脱落し誤った文字列を生成（--strictでも無診断）。バッククォートraw文字列がエスケープを解釈・`\${x}`がエスケープ不能・charリテラルとの不一致（Medium）
 - [R6: 条件付きコンパイルディレクティブの堅牢性](preprocessor-conditional-robustness.md) — **High**: `#endif`が非認識（`#end`のみ対応）で偽条件ブロックが後続コード全体を無診断で飲み込み、`cm check --strict`は緑・`cm run`は「mainが無い/モジュールです」と誤誘導。閉じ忘れ・過剰`#end`も無診断、`#define`は文法書にあるが未実装
@@ -63,10 +63,23 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R13: 文法書・仕様書に定義があるが未実装の構文](unimplemented-documented-syntax.md) — **Low**: タプル・参照型`T&`・演算子`[]`/`()`・overloadメソッド（仕様書は実装済みと例示するがパース不能+黙殺）・IFデフォルト実装・可変長引数・デフォルト型引数・エスケープ識別子・数値サフィックスが未実装（診断ありだが仕様書と乖離）。実装かドキュメント追従かの判断待ち一覧
 - [R14: 構文・プリプロセッサ診断の品質](syntax-error-diagnostic-quality.md) — **Medium（横断）**: パーサ/プリプロセッサ経由の構文エラーに行番号・桁がなく自ファイルを「imported module」と誤表記、誤誘導メッセージ（`main not found`・`assign`を型名扱い等）。X5で意味解析側は改善済みだがパーサ段が取り残されている
 
-## 構文・機能カバレッジの棚卸し（残りの未調査項目・第7ラウンド候補）
+## バックエンド網羅バグ調査 第7ラウンド（R15〜R20）
 
-CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていない構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は上記第6ラウンド（R1〜R14）で調査完了し、各項目の診断状況欄に対応文書を記した。**バックエンド・ターゲット（E）は今回未着手で、第7ラウンド候補として残る。**
-診断状況の凡例: **調査済み** = 第6ラウンドでプローブ完了（→対応文書 or 健全）、**未調査** = どのラウンドでもプローブ未実施、**一部調査** = 特定側面のみ調査済みで残りが未対象。
+棚卸し表のバックエンド・ターゲット（E）を3並列で実機プローブした（SVはiverilog+vvpシミュレーション、baremetal-arm/x86・UEFIはコンパイル成否と制約強制、TSは生成物の型注釈妥当性とts/js/jit値差分）。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
+**教訓**: 調査中にユーザーがcmをリビルドした（HOF共通化コミット、cmバイナリmtime 19:15）ため、TSエージェントの旧バイナリ由来の所見3件（long戻り値のnumber混入・ulong定数の符号喪失・`as char`縮小欠落）は現行バイナリでは非再現だった。**バイナリが変わりうる環境では最終判定を現行バイナリで取り直すこと**——下記は全て現行バイナリでの再確認済みのみを記載する。
+健全確認済み: native↔SVの数値意味論一致・SV固有構文の正常系（`bit[N]`・幅付きリテラル・マスクmatch・ビットスライス・always系）・baremetal-x86とUEFIの正常系コンパイル・malloc/println直呼びとラッパー経由の正しい拒否・TSのプリミティブ/struct interface/配列/クロージャ/ジェネリック/async→Promise/macro/エラー診断。
+
+- [R15: SVテスト検証の健全性](sv-test-verification-soundness.md) — **Critical**: `//! test: ... -> 期待値`が生成テストベンチで一度もアサートされず（testbench.cpp:296-300が`$display`のみ・比較/`$fatal`なし）、誤った期待値でも壊れた回路でも`✓ SV test passed`。加えて`#[test]`+assertが未駆動(x)信号で誤PASS（x楽観性、High）。`cm test`単体のSV合否が信頼できず外部`.expect`突合に依存
+- [R16: SVコード生成が不正な構文を無診断で受理](sv-codegen-silent-invalid.md) — **Medium**: `#[sv::pinn]`タイポでピン制約が静かに欠落・`#[input]`ポートへの代入が不正SV（iverilog l-valueエラー）・エッジ無し`always_ff`が`always_comb`へ黙殺変換・`bit[0]`が不正SV（`0'd0`）。桁あふれ`4'd99`・非文字列pin引数・native流入診断の低品質（Low）
+- [R17: baremetal-armターゲットが起動コードのmemcpy型不一致で全滅](baremetal-arm-startup-broken.md) — **Critical**: `_start`の`memcpy`/`memset`をi32宣言・i64実引数（arm=32bitポインタ）で呼びLLVM検証失敗。最小`int main`すら通らずターゲット全滅（x86は`generateStartupCode`早期returnで難を逃れテストスイートも露見せず）
+- [R18: フリースタンディング制約の強制漏れ](freestanding-nostd-enforcement-gaps.md) — **High**: 文字列連結（`cm_string_concat`＝malloc依存）がbaremetal/UEFIで無診断コンパイル（ブロックリストに`cm_string_*`漏れ）・`&putchar`の関数ポインタ間接呼び出しでブロックリスト回避。floatがbaremetal-x86失敗/UEFI成功の非対称（Medium）
+- [R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない](ts-bigint-number-generation.md) — **Medium**: structフィールド代入が`_t.v = 5`（`number`を`bigint`フィールドへ）でTS2322。「生成TSがtscを通る」第一級保証に違反（実行値は正）。戻り値・let初期化サイトは修正済みでフィールド代入サイト固有
+- [R20: 文字列補間・書式指定子のバックエンド分岐](interpolation-format-backend-divergence.md) — **Medium**: 単項`~`を含む補間（`{~a}`）がjs/tsで全プレースホルダをundefined破壊・jit/nativeで文字列素通し。書式の幅/科学記法（`:6`/`.2e`）をnative/jitが無視しjs/tsが適用（3経路不一致）
+
+## 構文・機能カバレッジの棚卸し（全ラウンド調査完了）
+
+CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていなかった構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は第6ラウンド（R1〜R14）、バックエンド・ターゲット（E）は第7ラウンド（R15〜R20）で**全項目の調査を完了**し、各項目の診断状況欄に対応文書を記した。
+診断状況の凡例: **調査済み** = 第6/第7ラウンドでプローブ完了（→対応文書 or 健全）、**一部調査** = 特定側面のみ調査済みで残りが未対象。
 「統合テスト」はtests/配下の.cmテストの有無（機能テストの存在はバグ調査済みを意味しない——HashMapはテストが存在したままQ7の要素喪失を見逃していた）。
 
 ### A. 属性・ディレクティブ・プリプロセッサ
@@ -128,18 +141,18 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | D6 | native::net/http | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
 | D7 | native::gpu（Metal） | 未調査 | 機能テストあり | ラウンド未対象（第7ラウンド候補） |
 | D8 | web::html・js::fetch/timer | 未調査 | libテスト・jsスイートあり | ラウンド未対象（第7ラウンド候補） |
-| D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](stdlib-shipping-defects.md)・[R3](generic-pointer-param-inference.md) | — | mod.cm自体がコンパイル不能（High）・swapがSIGSEGV（Critical）。組み込みmap/filterは健全 |
+| D9 | std::iterのadapters（map/filter等） | 調査済み → [R9](stdlib-shipping-defects.md)・[R3](../../archive/v0.17.0/generic-pointer-param-inference.md)（R3修正済み） | — | mod.cm自体がコンパイル不能（High・R9未修正）・swapのSIGSEGVはR3で修正済み。組み込みmap/filterは健全 |
 | D10 | アロケータ差し替え（set_allocator_fns） | 調査済み → [R9](stdlib-shipping-defects.md) | M14実装時の検証のみ | 文字列/スライス/直接確保は経由・reset復帰も健全。Vector/HashMap/Queueが素通し（Medium） |
 
 ### E. バックエンド・ターゲット
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| E1 | SVバックエンドの網羅バグ調査 | 一部調査 | 専用スイートあり（tests/sv） | 検証ラウンドはnative/jit/wasm/js中心でSVはM18のみ。SVテストのx楽観性（不定値のassert素通り）リスクが残る |
-| E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 未調査 | 正常系はSVスイートにあり | 誤用時の診断・非SVターゲットでの使用時の挙動が未検証 |
-| E3 | UEFIターゲット | 未調査 | 機能テストあり（tests/uefi） | ラウンド未対象 |
-| E4 | baremetal-arm | 未調査 | 機能テストあり（tests/baremetal） | ラウンド未対象 |
-| E5 | TSバックエンド固有経路 | 一部調査 | tests/tsと`tsc --noEmit`ゲート | js統合分の調査のみで、TS固有の型注釈生成の意味論プローブは未実施 |
+| E1 | SVバックエンドの網羅バグ調査 | 調査済み → [R15](sv-test-verification-soundness.md) | 専用スイートあり（tests/sv） | `//! test:`期待値が非検証（Critical）・assertのx楽観性（High）。数値意味論はnative↔SV一致で健全 |
+| E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 調査済み → [R16](sv-codegen-silent-invalid.md) | 正常系はSVスイートにあり | 不正構文の無診断受理・属性タイポでピン制約欠落（Medium）。正常系は健全 |
+| E3 | UEFIターゲット | 調査済み → [R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/uefi） | 文字列連結のヒープ確保・間接呼び出しが制約をすり抜け（High）。正常系コンパイルは健全 |
+| E4 | baremetal-arm/x86 | 調査済み → [R17](baremetal-arm-startup-broken.md)・[R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/baremetal） | armは起動コードのmemcpy型不一致で全滅（Critical）。x86正常系は健全 |
+| E5 | TSバックエンド固有経路 | 調査済み → [R19](ts-bigint-number-generation.md)・[R20](interpolation-format-backend-divergence.md) | tests/tsと`tsc --noEmit`ゲート | long/ulongフィールド代入がTS2322・補間/書式のバックエンド分岐（Medium）。型注釈の大半は健全 |
 
 ## 全体複雑度レビュー（未実装のリファクタリング提案）
 
