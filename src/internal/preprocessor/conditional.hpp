@@ -2,11 +2,12 @@
 
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace cm::preprocessor {
 
 /// 条件付きコンパイル プリプロセッサ
-/// #ifdef, #ifndef, #else, #end ディレクティブを処理し、アーキテクチャ/OS/コンパイラ情報に基づいてソースコードをフィルタリングする。
+/// #ifdef, #ifndef, #else, #end（別名 #endif）ディレクティブを処理し、アーキテクチャ/OS/コンパイラ情報に基づいてソースコードをフィルタリングする。
 ///
 /// 使用例:
 ///   #ifdef __x86_64__
@@ -22,10 +23,25 @@ class ConditionalPreprocessor {
    public:
     ConditionalPreprocessor();
 
+    /// 構造検査の違反種別（R6: 従来は閉じ忘れ・過剰#end・#defineが全て無診断だった）
+    enum class IssueKind {
+        UnclosedConditional,  // #ifdef/#ifndef がEOFまで閉じない
+        UnmatchedDirective,   // 対応するブロックのない #end/#endif/#else
+        DefineNotSupported,  // #define は未実装（-D または組み込みシンボルを案内）
+    };
+
+    /// 構造検査の違反1件。lineは1始まりの行番号、detailはディレクティブ名やシンボル名
+    struct Issue {
+        IssueKind kind;
+        int line;
+        std::string detail;
+    };
+
     /// ソースコードを処理し、条件付きコンパイルを適用
     /// @param source 入力ソースコード
+    /// @param issues 構造検査の違反出力（閉じ忘れ・過剰#end・#define）
     /// @return フィルタリング済みソースコード
-    std::string process(const std::string& source) const;
+    std::string process(const std::string& source, std::vector<Issue>& issues) const;
 
     /// カスタム定義を追加（-D オプション等）
     void define(const std::string& name);
@@ -48,7 +64,8 @@ class ConditionalPreprocessor {
         Ifdef,   // #ifdef
         Ifndef,  // #ifndef
         Else,    // #else
-        End,     // #end
+        End,     // #end（別名 #endif）
+        Define,  // #define（未実装。専用診断を出す）
         None,    // ディレクティブではない
     };
 

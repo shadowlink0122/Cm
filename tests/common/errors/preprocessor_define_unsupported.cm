@@ -1,0 +1,3 @@
+// 回帰(R6): #defineは未実装の専用診断（従来はパーサ段の分かりにくいエラー）
+#define MY_FLAG
+int main() { return 0; }

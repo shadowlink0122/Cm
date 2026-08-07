@@ -912,6 +912,15 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ImportNonExportedSymbol
     {"function '{0}' selected by import is not exported from '{1}' (add 'export' to the definition or an export list)",
      "importで指定された関数 '{0}' は '{1}' でexportされていません（定義にexportを付けるかexportリストへ追加してください）"},
+    // PpUnclosedConditional
+    {"unclosed conditional block for symbol '{0}' in '{1}' (opened at line {2}; close it with #end or #endif)",
+     "シンボル '{0}' の条件ブロックが閉じていません（'{1}' の {2} 行目で開始。#end または #endif で閉じてください）"},
+    // PpUnmatchedDirective
+    {"'#{0}' without a matching #ifdef/#ifndef in '{1}' (line {2})",
+     "対応する #ifdef/#ifndef のない '#{0}' があります（'{1}' の {2} 行目）"},
+    // PpDefineNotSupported
+    {"'#define' is not supported in '{0}' (line {1}); define symbols with the CLI option -D<name> (#ifdef also accepts built-in symbols like __macos__)",
+     "'#define' は未対応です（'{0}' の {1} 行目）。シンボルはCLIオプション -D<名前> で定義してください（#ifdefは__macos__等の組み込みシンボルも参照できます）"},
     // MirSliceReceiverUnresolved
     {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
      "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},

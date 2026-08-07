@@ -418,11 +418,11 @@ whitespace ::= [ \t\n\r]+
 ```bnf
 preprocessor ::= '#' preprocessor_directive
 
-preprocessor_directive ::= 'define' identifier replacement?
-                         | 'ifdef' identifier
+preprocessor_directive ::= 'ifdef' identifier
                          | 'ifndef' identifier
                          | 'else'
+                         | 'end'
                          | 'endif'
 ```
 
-> **注意:** `#include`、`#pragma`、`#if`/`#elif` は現在未実装です。
+> **注意:** `#end` と `#endif` は同義（別名）です。`#define` は未実装です——シンボル定義はCLIオプション `-D<名前>` と組み込みシンボル（`__macos__` 等）のみで、`#define` の使用は専用診断になります。`#include`、`#pragma`、`#if`/`#elif` も現在未実装です。閉じ忘れ・対応ブロックのない `#end`/`#endif`/`#else` はコンパイルエラーになります。

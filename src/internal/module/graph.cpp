@@ -187,7 +187,8 @@ struct Builder {
 
     explicit Builder(const GraphParams& p) : params(p), resolver(p.debug) {}
 
-    std::string apply_conditional(const std::string& source) const {
+    // 条件付きコンパイルを適用する。構造違反（閉じ忘れ・過剰#end・#define）はerrorへ格納する（R6: 従来は全て無診断で、偽条件の閉じ忘れは後続コードを丸ごと飲み込んでいた）
+    std::string apply_conditional(const std::string& source, const std::string& path) {
         preprocessor::ConditionalPreprocessor conditional;
         for (const auto& def : params.defines) {
             conditional.define(def);
@@ -205,7 +206,27 @@ struct Builder {
             conditional.define("__UEFI__");
             conditional.define("__EFI__");
         }
-        return conditional.process(source);
+        std::vector<preprocessor::ConditionalPreprocessor::Issue> issues;
+        std::string processed = conditional.process(source, issues);
+        if (!issues.empty() && error.empty()) {
+            const auto& issue = issues.front();
+            using IssueKind = preprocessor::ConditionalPreprocessor::IssueKind;
+            switch (issue.kind) {
+                case IssueKind::UnclosedConditional:
+                    error = i18n::msgf(i18n::MsgId::PpUnclosedConditional, issue.detail, path,
+                                       std::to_string(issue.line));
+                    break;
+                case IssueKind::UnmatchedDirective:
+                    error = i18n::msgf(i18n::MsgId::PpUnmatchedDirective, issue.detail, path,
+                                       std::to_string(issue.line));
+                    break;
+                case IssueKind::DefineNotSupported:
+                    error = i18n::msgf(i18n::MsgId::PpDefineNotSupported, path,
+                                       std::to_string(issue.line));
+                    break;
+            }
+        }
+        return processed;
     }
 
     // オフセット範囲を行単位で空行化する（行数を保存し座標を崩さない）
@@ -445,7 +466,10 @@ struct Builder {
         FileInfo info;
         info.path = canonical;
         info.is_root = is_root;
-        info.source = apply_conditional(raw_source);
+        info.source = apply_conditional(raw_source, canonical);
+        if (!error.empty()) {
+            return false;
+        }
         rewrite_dir_wildcards(info.source);
 
         Lexer lexer(info.source);

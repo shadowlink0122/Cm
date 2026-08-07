@@ -1,6 +1,6 @@
 # R6: 条件付きコンパイルディレクティブの堅牢性（#endif非認識・閉じ忘れ黙殺・診断位置欠落）
 
-**ステータス:** 未修正（第6ラウンド検出）
+**ステータス:** 修正済み
 **重大度:** High
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt6/attrs/`）
@@ -25,3 +25,13 @@ conditional.cppのparse_directiveへ`endif`分岐を追加し、process()へ行�
 ## テスト計画
 
 `tests/common/preprocessor/`へ: `#endif`受理（真/偽条件×後続コード保存）・閉じ忘れエラー・過剰`#end`エラー・`#define`専用診断のエラーテスト。既存ifdef系テストの回帰確認。
+
+## 実装記録（修正済み）
+
+1. **#endif別名**: `parse_directive`（src/internal/preprocessor/conditional.cpp）へ`endif`分岐を追加し`#end`の別名として認識する（文法書・VSCode文法の記載に実装を合わせる互換案を採用）。偽条件`#ifdef __NEVER_DEFINED__ ... #endif`の後続コードが保存されることを真/偽/else/ネスト（#endと#endifの混在）で回帰固定した。
+2. **構造検査の診断化**: `process()`へ行番号追跡とIssue出力（UnclosedConditional/UnmatchedDirective/DefineNotSupported）を追加した。EOF時のスタック非空は開始行・シンボル名付きの「unclosed conditional block」、空スタックへの`#end`/`#endif`/`#else`は「without a matching #ifdef/#ifndef」、`#define`は「not supported」+`-D<name>`と組み込みシンボルの案内を専用診断にした（従来は順に全消滅・黙殺・パーサ段の分かりにくいエラー）。
+3. **エラー伝播**: module graphの`apply_conditional`がIssueをファイルパス・行番号付きのi18nメッセージ（en/ja）へ整形しgraph.errorへ格納、既存のCliPreprocessorError経路で表示される。importされたモジュール内の違反もそのモジュールのパスで特定できる。
+4. **文法書の追従**: cm_grammar.mdのプリプロセッサ節から実装されていない`define`を削除して`end`を追記し、`#end`/`#endif`同義・`#define`未実装（-D/組み込みシンボル案内）・構造違反のエラー化を明記した。
+5. **回帰**: tests/common/preprocessor/endif_alias.cm（真/偽/else/ネスト混在の後続コード保存）・エラーテスト3本（閉じ忘れ・過剰#end・#define）・i18n E2E 2ケース（en/ja）を追加し、既存ifdef系テストの非回帰を確認した。
+6. **スコープ外（R14へ委譲）**: パーサ段の構文エラー全般の行番号・桁欠落と「imported module」誤表記（症状5）は[syntax-error-diagnostic-quality.md](../../design/v0.17.0/syntax-error-diagnostic-quality.md)の横断課題として残る。本修正で追加したプリプロセッサ診断自体はファイル・行番号付きで表示される。
+

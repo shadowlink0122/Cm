@@ -134,15 +134,22 @@ ConditionalPreprocessor::Directive ConditionalPreprocessor::parse_directive(
         return Directive::Else;
     }
 
-    if (directive_name == "end") {
+    // R6: #endifを#endの別名として認識する（cm_grammar.md・VSCode文法とも#endifを記載済み。従来はDirective::None扱いで素通りし、偽条件ブロックが閉じないままEOFまで後続コードを無診断で飲み込んでいた）
+    if (directive_name == "end" || directive_name == "endif") {
         return Directive::End;
+    }
+
+    // R6: #defineは未実装ディレクティブとして専用診断を出す（従来はパーサ段の分かりにくいエラーになっていた）
+    if (directive_name == "define") {
+        return Directive::Define;
     }
 
     // 未知のディレクティブ → 通常の行として扱う
     return Directive::None;
 }
 
-std::string ConditionalPreprocessor::process(const std::string& source) const {
+std::string ConditionalPreprocessor::process(const std::string& source,
+                                             std::vector<Issue>& issues) const {
     std::istringstream stream(source);
     std::string line;
     std::string result;
@@ -154,6 +161,8 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
         bool active;         // 現在のブランチがアクティブか
         bool parent_active;  // 親ブロックがアクティブか
         bool had_true;       // いずれかのブランチが真だったか（else用）
+        int open_line;       // 開始ディレクティブの行番号（閉じ忘れ診断用）
+        std::string symbol;  // 開始ディレクティブのシンボル名（閉じ忘れ診断用）
     };
     std::vector<CondState> stack;
 
@@ -164,7 +173,9 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
         return stack.back().active && stack.back().parent_active;
     };
 
+    int line_no = 0;
     while (std::getline(stream, line)) {
+        line_no++;
         std::string symbol;
         auto directive = parse_directive(line, symbol);
 
@@ -172,7 +183,7 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
             case Directive::Ifdef: {
                 bool parent = should_output();
                 bool defined = is_defined(symbol);
-                stack.push_back({defined, parent, defined});
+                stack.push_back({defined, parent, defined, line_no, symbol});
                 // ディレクティブ行自体は出力しない（空行で置換して行番号を保持）
                 result += '\n';
                 break;
@@ -181,7 +192,7 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
             case Directive::Ifndef: {
                 bool parent = should_output();
                 bool not_defined = !is_defined(symbol);
-                stack.push_back({not_defined, parent, not_defined});
+                stack.push_back({not_defined, parent, not_defined, line_no, symbol});
                 result += '\n';
                 break;
             }
@@ -194,6 +205,9 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
                     if (should_be_active) {
                         stack.back().had_true = true;
                     }
+                } else {
+                    // R6: 対応ブロックのない#elseは診断する（従来は黙って無視）
+                    issues.push_back({IssueKind::UnmatchedDirective, line_no, "else"});
                 }
                 result += '\n';
                 break;
@@ -202,7 +216,17 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
             case Directive::End: {
                 if (!stack.empty()) {
                     stack.pop_back();
+                } else {
+                    // R6: 対応ブロックのない#end/#endifは診断する（従来は空スタックpopを黙って無視）
+                    issues.push_back({IssueKind::UnmatchedDirective, line_no, "end"});
                 }
+                result += '\n';
+                break;
+            }
+
+            case Directive::Define: {
+                // R6: #defineは未実装（シンボル定義はCLIの-D<name>と組み込みシンボルのみ）
+                issues.push_back({IssueKind::DefineNotSupported, line_no, ""});
                 result += '\n';
                 break;
             }
@@ -215,6 +239,11 @@ std::string ConditionalPreprocessor::process(const std::string& source) const {
                 break;
             }
         }
+    }
+
+    // R6: EOF時にスタック非空なら閉じ忘れを診断する（従来は偽条件ブロックが後続コード全体を無診断で飲み込んでいた）
+    for (const auto& open : stack) {
+        issues.push_back({IssueKind::UnclosedConditional, open.open_line, open.symbol});
     }
 
     // 末尾の余分な改行を除去（元のソースが改行で終わっていない場合）

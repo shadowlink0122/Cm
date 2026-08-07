@@ -108,6 +108,10 @@ run_case q1-forin-iter-ja "$CM" check --lang=ja "$DIR/q1_forin_iterator.cm"
 run_case q4-undeclared-iface-en "$CM" check "$DIR/q4_undeclared_interface.cm"
 run_case q4-undeclared-iface-ja "$CM" check --lang=ja "$DIR/q4_undeclared_interface.cm"
 
+# ---------- プリプロセッサの閉じ忘れ診断（R6） ----------
+run_case r6-unclosed-en "$CM" check "$DIR/r6_unclosed_ifdef.cm"
+run_case r6-unclosed-ja "$CM" check --lang=ja "$DIR/r6_unclosed_ifdef.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
 run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"

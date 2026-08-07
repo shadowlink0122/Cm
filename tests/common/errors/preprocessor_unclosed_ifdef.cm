@@ -1,0 +1,4 @@
+// 回帰(R6): #ifdefの閉じ忘れは診断（従来は偽条件で後続コード全体が無診断消滅していた）
+#ifdef __NEVER_DEFINED__
+    int hidden() { return 1; }
+    int main() { return 0; }
