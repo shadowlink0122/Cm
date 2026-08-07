@@ -1,0 +1,9 @@
+// 回帰(R4): 値キャプチャした外側変数へのクロージャ内代入は反映されないため診断付き拒否
+import std::io::println;
+int main() {
+    int x = 1;
+    const void*() f = () => { x = 42; };
+    f();
+    println("after call: {x}");
+    return 0;
+}

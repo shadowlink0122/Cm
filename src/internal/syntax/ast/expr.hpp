@@ -173,6 +173,26 @@ inline const char* binary_op_str(BinaryOp op) {
     return "?";
 }
 
+// 代入系演算子（単純代入・複合代入）かどうか
+inline bool is_assign_op(BinaryOp op) {
+    switch (op) {
+        case BinaryOp::Assign:
+        case BinaryOp::AddAssign:
+        case BinaryOp::SubAssign:
+        case BinaryOp::MulAssign:
+        case BinaryOp::DivAssign:
+        case BinaryOp::ModAssign:
+        case BinaryOp::BitAndAssign:
+        case BinaryOp::BitOrAssign:
+        case BinaryOp::BitXorAssign:
+        case BinaryOp::ShlAssign:
+        case BinaryOp::ShrAssign:
+            return true;
+        default:
+            return false;
+    }
+}
+
 struct BinaryExpr {
     BinaryOp op;
     ExprPtr left;

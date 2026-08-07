@@ -1,0 +1,10 @@
+// 回帰(R4): 外側変数の変更はポインタキャプチャ経由の間接書き込みで行う（値キャプチャへの直接代入は診断拒否）
+import std::io::println;
+int main() {
+    int x = 1;
+    int* px = &x;
+    const void*() f = () => { *px = 42; };
+    f();
+    println("after call: {x}");
+    return 0;
+}

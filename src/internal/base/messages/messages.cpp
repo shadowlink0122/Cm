@@ -1312,6 +1312,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcLambdaParameterMustHaveExplicit
     {"Lambda parameter '{0}' must have an explicit type. Use: (Type param_name) => { ... }",
      "ラムダパラメータ '{0}' には明示的な型が必要です。次の形式を使用してください: (Type param_name) => { ... }"},
+    // TcCannotAssignCapturedVar
+    {"Cannot assign to captured variable '{0}' inside a closure: closures capture by value, so the write would not affect the original variable (capture a pointer and write through it if mutation is needed)",
+     "クロージャ内でキャプチャした変数 '{0}' へ代入できません: クロージャは値キャプチャのため書き込みは元の変数に反映されません（変更が必要な場合はポインタをキャプチャして間接的に書き込んでください）"},
     // TcCannotInferTypeMatchScrutinee
     {"Cannot infer type of match scrutinee",
      "matchの対象式の型を推論できません"},

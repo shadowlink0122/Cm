@@ -112,6 +112,10 @@ run_case q4-undeclared-iface-ja "$CM" check --lang=ja "$DIR/q4_undeclared_interf
 run_case r6-unclosed-en "$CM" check "$DIR/r6_unclosed_ifdef.cm"
 run_case r6-unclosed-ja "$CM" check --lang=ja "$DIR/r6_unclosed_ifdef.cm"
 
+# ---------- クロージャのキャプチャ変数書き込み診断（R4） ----------
+run_case r4-capture-assign-en "$CM" check "$DIR/r4_closure_capture_assign.cm"
+run_case r4-capture-assign-ja "$CM" check --lang=ja "$DIR/r4_closure_capture_assign.cm"
+
 # ---------- デフォルト引数の前パラメータ参照診断（R8） ----------
 run_case r8-default-arg-en "$CM" check "$DIR/r8_default_arg_param.cm"
 run_case r8-default-arg-ja "$CM" check --lang=ja "$DIR/r8_default_arg_param.cm"

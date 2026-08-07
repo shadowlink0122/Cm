@@ -460,6 +460,7 @@ enum class MsgId : int {
     TcUndefinedReturnTypeFunction,
     TcUndefinedParameterTypeParameterFunction,
     TcLambdaParameterMustHaveExplicit,
+    TcCannotAssignCapturedVar,
     TcCannotInferTypeMatchScrutinee,
     TcMatchGuardMustBooleanExpression,
     TcMatchArmHasIncompatibleType,
