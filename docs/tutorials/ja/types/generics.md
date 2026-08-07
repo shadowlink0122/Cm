@@ -78,6 +78,33 @@ int main() {
 }
 ```
 
+## ポインタ・配列引数からの型推論
+
+型パラメータが引数のポインタ（`T*`）・配列（`T[]`）の内側に現れる場合も、実引数の対応する部分型から`T`が推論されます。
+
+```cm
+<T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+<T> T first(T[] xs) {
+    return xs[0];
+}
+
+int main() {
+    int a = 1;
+    int b = 2;
+    swap(&a, &b);           // T=int（&a・&bのint*からintを推論）
+    println("{a} {b}");     // 2 1
+
+    int[] xs = [10, 20, 30];
+    println("{first(xs)}"); // 10
+    return 0;
+}
+```
+
 ## ジェネリックコレクションのRAII
 
 ジェネリックコレクション（`Vector<T>`など）は、`self()`コンストラクタと`~self()`デストラクタを持ちます。

@@ -1,6 +1,6 @@
 # R3: ジェネリック`T*`引数の型パラメータ束縛失敗（swap等が全経路SIGSEGV）
 
-**ステータス:** 未修正（第6ラウンド検出）
+**ステータス:** 修正済み
 **重大度:** Critical
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt6/{stdlib,verify}/`）
@@ -38,3 +38,11 @@ int main() {
 ## テスト計画
 
 `tests/common/generics/`へ: `<T> void swap(T*, T*)`・`<T> T deref(T*)`（推論・明示型引数の両方）・`T[]`引数・ネスト`T**`の値一致をjit/native O0〜O3/wasm/jsで確認。無置換で残った場合にSIGSEGVでなく診断で止まる負のテスト。stdlibの`std::iter::adapters::swap`の実動作テスト（R9のmod.cm修正後）。
+
+## 実装記録（修正済み）
+
+見立てどおり2系統の欠落で、checker推論とcodegen最適化の両方を修正した。
+
+1. **checker側（型推論の構造再帰化）**: `infer_generic_call`（src/internal/types/checking/generic.cpp）は「`T`」「`Box<T>`」「`Node<T>*`（内側がジェネリック構造体のポインタ）」の3ケースを個別のif連鎖で扱い、**裸の型変数へのポインタ`T*`・配列`T[]`・多段`T**`が漏れていた**。宣言型と実引数型を並行に辿る再帰unifyヘルパー（型変数→束縛・Pointer/Reference/Array→要素型を剥がして再帰・同名ジェネリック構造体→型引数を1対1で再帰）へ置換し、既存3ケースを包含した。これにより`deref`の戻り値`T`もTが束縛されるようになった。
+2. **codegen側（selfコピー最適化の誤ヒット）**: checker修正だけでは無言死がSIGSEGVのまま残った。真因はLLVM codegen（src/internal/codegen/llvm/core/translate/function.cpp）の「プリミティブimplメソッドのselfコピー先一時変数を要素型で確保する」最適化のシード条件が**「関数名に`__`を含む」だけ**だったこと。特殊化されたジェネリック関数`deref__int`も`__`を含むため第0引数`a`（`*int`）がselfと誤認され、`_6 = copy(a)`のコピー先が`int`（i32）で確保→ポインタ値をi32として読み、ユーザーの`*a`が壊れたアドレスを辿ってクラッシュしていた。シード条件へ「第0引数のローカル名が`self`である」を追加した（プリミティブimplメソッドのselfは名前が`self`・ジェネリック関数の引数は`a`等で区別できる）。
+3. **回帰**: `tests/common/generics/pointer_param_inference.cm`（swapのint/double/string値スワップ・推論deref・`T[]`のfirst・`T**`のderef2・ジェネリック構造体unboxの非回帰）をjit・native O0/O2/O3・wasm・jsの出力一致で確認。プリミティブimplメソッド（`impl int { doubled() }`）の非回帰も確認した。stdlibの`std::iter::adapters::swap`は直接importで動作確認済み（`import std::iter::*`はR9で別途未解決）。

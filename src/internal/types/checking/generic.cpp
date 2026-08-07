@@ -5,6 +5,7 @@
 #include "internal/base/i18n.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -51,72 +52,43 @@ ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::str
     // 型パラメータをセットに変換
     std::set<std::string> type_param_set(type_params.begin(), type_params.end());
 
-    // 型パラメータの推論
+    // 型パラメータの推論（宣言型と実引数型を構造再帰でマッチし、宣言側の型変数へ実引数の対応部分型を束縛する）
+    // R3: 従来は「T」「Box<T>」「Node<T>*」の3ケースを個別に扱い、裸の型変数へのポインタ「T*」・配列「T[]」・多段「T**」が漏れて型未解決のままcodegenに落ちSIGSEGVしていた
     std::unordered_map<std::string, ast::TypePtr> inferred_types;
-    for (size_t i = 0; i < arg_types.size(); ++i) {
-        auto& param_type = sym->param_types[i];
-        auto& arg_type = arg_types[i];
-
-        if (param_type && arg_type) {
+    std::function<void(const ast::TypePtr&, const ast::TypePtr&)> unify =
+        [&](const ast::TypePtr& param_type, const ast::TypePtr& arg_type) {
+            if (!param_type || !arg_type)
+                return;
             std::string param_str = ast::type_to_string(*param_type);
-            // パラメータ型が型パラメータの場合
+            // 宣言側が型変数そのもの: 実引数型を束縛（先勝ち）
             if (type_param_set.count(param_str)) {
-                auto it = inferred_types.find(param_str);
-                if (it == inferred_types.end()) {
+                if (inferred_types.find(param_str) == inferred_types.end()) {
                     inferred_types[param_str] = arg_type;
                     debug::tc::log(debug::tc::Id::Resolved,
                                    "Inferred " + param_str + " = " + ast::type_to_string(*arg_type),
                                    debug::Level::Debug);
                 }
+                return;
             }
-            // パラメータがジェネリック構造体の場合（例：Box<T>）
-            else if (param_type->kind == ast::TypeKind::Struct && !param_type->type_args.empty() &&
-                     arg_type->kind == ast::TypeKind::Struct &&
-                     param_type->name == arg_type->name) {
-                // 型引数を一致させて推論
+            // ポインタ・参照・配列: 要素型を剥がして再帰（T* ↔ int*、T[] ↔ int[]、T** ↔ int**）
+            if ((param_type->kind == ast::TypeKind::Pointer ||
+                 param_type->kind == ast::TypeKind::Reference ||
+                 param_type->kind == ast::TypeKind::Array) &&
+                param_type->kind == arg_type->kind) {
+                unify(param_type->element_type, arg_type->element_type);
+                return;
+            }
+            // ジェネリック構造体: 同名なら型引数を1対1で再帰（Box<T> ↔ Box<int>）
+            if (param_type->kind == ast::TypeKind::Struct && !param_type->type_args.empty() &&
+                arg_type->kind == ast::TypeKind::Struct && param_type->name == arg_type->name) {
                 for (size_t j = 0;
                      j < param_type->type_args.size() && j < arg_type->type_args.size(); ++j) {
-                    std::string type_arg_str = ast::type_to_string(*param_type->type_args[j]);
-                    if (type_param_set.count(type_arg_str)) {
-                        auto it = inferred_types.find(type_arg_str);
-                        if (it == inferred_types.end()) {
-                            inferred_types[type_arg_str] = arg_type->type_args[j];
-                            debug::tc::log(debug::tc::Id::Resolved,
-                                           "Inferred " + type_arg_str + " = " +
-                                               ast::type_to_string(*arg_type->type_args[j]),
-                                           debug::Level::Debug);
-                        }
-                    }
+                    unify(param_type->type_args[j], arg_type->type_args[j]);
                 }
             }
-            // パラメータがポインタ型で内部がジェネリック構造体の場合（例：Node<T>*）
-            else if (param_type->kind == ast::TypeKind::Pointer && param_type->element_type &&
-                     arg_type->kind == ast::TypeKind::Pointer && arg_type->element_type) {
-                auto inner_param = param_type->element_type;
-                auto inner_arg = arg_type->element_type;
-
-                if (inner_param->kind == ast::TypeKind::Struct && !inner_param->type_args.empty() &&
-                    inner_arg->kind == ast::TypeKind::Struct &&
-                    inner_param->name == inner_arg->name) {
-                    // ポインタを剥がしてジェネリック構造体から型引数を推論
-                    for (size_t j = 0;
-                         j < inner_param->type_args.size() && j < inner_arg->type_args.size();
-                         ++j) {
-                        std::string type_arg_str = ast::type_to_string(*inner_param->type_args[j]);
-                        if (type_param_set.count(type_arg_str)) {
-                            auto it = inferred_types.find(type_arg_str);
-                            if (it == inferred_types.end()) {
-                                inferred_types[type_arg_str] = inner_arg->type_args[j];
-                                debug::tc::log(debug::tc::Id::Resolved,
-                                               "Inferred (from pointer) " + type_arg_str + " = " +
-                                                   ast::type_to_string(*inner_arg->type_args[j]),
-                                               debug::Level::Debug);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        };
+    for (size_t i = 0; i < arg_types.size(); ++i) {
+        unify(sym->param_types[i], arg_types[i]);
     }
 
     // 推論された型情報を保存（後でモノモーフィゼーションで使用）

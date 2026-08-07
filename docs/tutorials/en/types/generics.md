@@ -78,6 +78,33 @@ int main() {
 }
 ```
 
+## Type Inference from Pointer and Array Arguments
+
+When a type parameter appears inside a pointer (`T*`) or array (`T[]`) argument, `T` is inferred from the corresponding part of the actual argument type.
+
+```cm
+<T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+<T> T first(T[] xs) {
+    return xs[0];
+}
+
+int main() {
+    int a = 1;
+    int b = 2;
+    swap(&a, &b);           // T=int (inferred from the int* of &a/&b)
+    println("{a} {b}");     // 2 1
+
+    int[] xs = [10, 20, 30];
+    println("{first(xs)}"); // 10
+    return 0;
+}
+```
+
 ## Generic Collections and RAII
 
 Generic collections (like `Vector<T>`) have `self()` constructors and `~self()` destructors.

@@ -259,7 +259,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // 「self（arg_locals[0]）のcopy/moveを直接代入される*prim型一時変数」を推移的に集め、
         // プリミティブ値のallocaとして割り付ける（ローカル番号のずれに依存しない）
         std::unordered_set<unsigned int> selfCopyTargets;
-        if (func.name.find("__") != std::string::npos && !func.arg_locals.empty()) {
+        // R3: 第0引数がプリミティブimplメソッドのself（名前が"self"）である場合のみシードする。
+        // 従来は「関数名に__を含む」だけで判定していたため、特殊化されたジェネリック関数（deref__int等）の
+        // `T* a`引数がselfと誤認され、そのコピー先一時変数が要素型（int）で確保されてポインタ値を値として読み、
+        // ユーザーのデリファレンスで壊れたアドレスを辿ってSIGSEGVしていた
+        bool firstArgIsSelf = !func.arg_locals.empty() && func.arg_locals[0] < func.locals.size() &&
+                              func.locals[func.arg_locals[0]].name == "self";
+        if (func.name.find("__") != std::string::npos && firstArgIsSelf) {
             selfCopyTargets.insert(static_cast<unsigned int>(func.arg_locals[0]));
             bool changed = true;
             while (changed) {
