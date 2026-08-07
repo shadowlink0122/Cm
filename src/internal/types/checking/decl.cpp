@@ -76,6 +76,9 @@ bool TypeChecker::check(ast::Program& program) {
     // 式形式matchの呼び出しscrutineeを一時変数へ退避するASTプリパス（HIRの三項演算子脱糖でのクローン多重評価を避け、単一評価を保証する）
     hoist_match_call_scrutinees(program);
 
+    // 属性の検証レジストリ（R7）: タイポ・未実装属性の診断と#[deprecated]収集（Pass 2の呼び出し検査より前に実行する）
+    check_attributes(program);
+
     // Pass 1: 関数シグネチャを登録
     for (auto& decl : program.declarations) {
         register_declaration(*decl);
@@ -688,6 +691,120 @@ void TypeChecker::check_default_param_refs(const std::vector<ast::Param>& params
             walk(*p.default_value, p.name);
         }
     }
+}
+
+// 属性の検証レジストリ（R7）。既知属性の単一ソース表と突き合わせ、(a)未知・タイポ属性は警告（--strictエラー）、
+// (b)既知だが未実装の属性は未実装診断、(c)実装済み属性は解釈（#[deprecated]は関数名を収集し呼び出しサイトで警告）に3分類する。
+// 従来は属性パーサが任意識別子を構文受理しフィルタリング側がtest/target以外を全て無視したため、#[tset]等のタイポでテストが黙って実行されずcm testが緑になっていた
+void TypeChecker::check_attribute_list(const std::vector<ast::AttributeNode>& attrs,
+                                       const Span& fallback_span) {
+    // 実装済み（コンパイラのいずれかの段で解釈される）属性
+    static const std::unordered_set<std::string> kImplemented = {
+        "test",          "target",          "derive",         "deprecated",
+        "input",         "output",          "inout",          "sv::param",
+        "sv::parameter", "sv::module_name", "sv::pin",        "sv::iostandard",
+        "sv::bram",      "sv::lutram",      "sv::memfile",    "sv::clock_domain",
+        "sv::latch",     "sv::packed",      "sv::pipeline",   "sv::share",
+        "sv::sync",      "sv::tri",         "verilog::param", "verilog::parameter",
+        "verilog::bram", "verilog::lutram",
+    };
+    // 既知だが未実装（付けても効果がない）属性
+    static const std::unordered_set<std::string> kUnimplemented = {"bench", "optimize", "inline",
+                                                                   "cfg"};
+    // #[target(...)]の条件に書ける名前（string_to_targetが認識する名前+native+active。tsはjs出力の別名だがtarget条件では未認識のため案内する）
+    static const std::unordered_set<std::string> kTargetNames = {
+        "native", "js", "web",           "wasm",          "sv",     "verilog", "systemverilog",
+        "uefi",   "bm", "baremetal-arm", "baremetal-x86", "active",
+    };
+
+    for (const auto& attr : attrs) {
+        // 内部マーカー（prelude注入等）は診断対象外
+        if (attr.name.rfind("__", 0) == 0) {
+            continue;
+        }
+        const Span span = (attr.span.start == 0 && attr.span.end == 0) ? fallback_span : attr.span;
+        if (kUnimplemented.count(attr.name) > 0) {
+            const std::string msg = i18n::msgf(i18n::MsgId::TcUnimplementedAttribute, attr.name);
+            if (enable_naming_check_) {
+                error(span, msg);
+            } else {
+                warning(span, msg);
+            }
+            continue;
+        }
+        if (kImplemented.count(attr.name) == 0) {
+            const std::string msg = i18n::msgf(i18n::MsgId::TcUnknownAttribute, attr.name);
+            if (enable_naming_check_) {
+                error(span, msg);
+            } else {
+                warning(span, msg);
+            }
+            continue;
+        }
+        // #[target(...)]の未知ターゲット名はNative縮退で意味が反転するため検証する
+        if (attr.name == "target") {
+            for (const auto& raw : attr.args) {
+                std::string name = raw;
+                if (!name.empty() && name[0] == '!') {
+                    name = name.substr(1);
+                }
+                if (kTargetNames.count(name) == 0) {
+                    const std::string msg = i18n::msgf(i18n::MsgId::TcUnknownTargetName, name);
+                    if (enable_naming_check_) {
+                        error(span, msg);
+                    } else {
+                        warning(span, msg);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void TypeChecker::check_attributes(const ast::Program& program) {
+    // 宣言ツリーを辿って全属性を検証し、#[deprecated]関数を収集する（名前空間内は修飾名でも登録する）
+    std::function<void(const std::vector<ast::DeclPtr>&, const std::string&)> walk =
+        [&](const std::vector<ast::DeclPtr>& decls, const std::string& ns) {
+            for (const auto& decl : decls) {
+                if (!decl) {
+                    continue;
+                }
+                if (const auto* func = decl->as<ast::FunctionDecl>()) {
+                    check_attribute_list(func->attributes, func->name_span);
+                    for (const auto& attr : func->attributes) {
+                        if (attr.name == "deprecated") {
+                            deprecated_functions_.insert(func->name);
+                            if (!ns.empty()) {
+                                deprecated_functions_.insert(ns + "::" + func->name);
+                            }
+                        }
+                    }
+                } else if (const auto* st = decl->as<ast::StructDecl>()) {
+                    check_attribute_list(st->attributes, st->name_span);
+                    for (const auto& field : st->fields) {
+                        check_attribute_list(field.attributes, st->name_span);
+                    }
+                } else if (const auto* en = decl->as<ast::EnumDecl>()) {
+                    check_attribute_list(en->attributes, decl->span);
+                } else if (const auto* impl = decl->as<ast::ImplDecl>()) {
+                    check_attribute_list(impl->attributes, decl->span);
+                    for (const auto& method : impl->methods) {
+                        if (method) {
+                            check_attribute_list(method->attributes, method->name_span);
+                        }
+                    }
+                } else if (const auto* ib = decl->as<ast::InitialBlockDecl>()) {
+                    check_attribute_list(ib->attributes, decl->span);
+                } else if (auto* mod = const_cast<ast::Decl&>(*decl).as<ast::ModuleDecl>()) {
+                    std::string inner_ns = mod->path.to_string();
+                    if (!ns.empty()) {
+                        inner_ns = ns + "::" + inner_ns;
+                    }
+                    walk(mod->declarations, inner_ns);
+                }
+            }
+        };
+    walk(program.declarations, "");
 }
 
 void TypeChecker::register_impl(ast::ImplDecl& impl) {

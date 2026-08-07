@@ -116,6 +116,13 @@ run_case r6-unclosed-ja "$CM" check --lang=ja "$DIR/r6_unclosed_ifdef.cm"
 run_case r8-default-arg-en "$CM" check "$DIR/r8_default_arg_param.cm"
 run_case r8-default-arg-ja "$CM" check --lang=ja "$DIR/r8_default_arg_param.cm"
 
+# ---------- 属性の検証レジストリ（R7） ----------
+run_case r7-attr-typo-en "$CM" check "$DIR/r7_attr_typo.cm"
+run_case r7-attr-typo-ja "$CM" check --lang=ja "$DIR/r7_attr_typo.cm"
+run_case r7-deprecated-en "$CM" check "$DIR/r7_deprecated.cm"
+run_case r7-deprecated-ja "$CM" check --lang=ja "$DIR/r7_deprecated.cm"
+run_case r7-inline-parses "$CM" run "$DIR/r7_inline_attr.cm"
+
 # ---------- 同名シンボルの多重import診断（M2） ----------
 run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
 run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"

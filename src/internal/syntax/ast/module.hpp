@@ -1,5 +1,7 @@
 #pragma once
 
+#include "internal/base/span.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +22,7 @@ struct Type;  // FFI関数宣言用
 struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
     std::string name;   // アトリビュート名
     std::vector<std::string> args;  // 引数
+    Span span{};  // 属性の位置（R7: タイポ診断・derive診断の位置に使用）
 
     AttributeNode(std::string n) : name(std::move(n)) {}
     AttributeNode(std::string n, std::vector<std::string> a)

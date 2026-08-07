@@ -86,6 +86,11 @@ class TypeChecker {
     // デフォルト引数式が同じ宣言のパラメータを参照していないか検査する（R8。関数・implメソッド・演算子で共用）
     void check_default_param_refs(const std::vector<ast::Param>& params, const Span& span);
 
+    // 属性の検証レジストリ（R7）: 未知・タイポ属性と未実装属性の診断・#[target]名検証・#[deprecated]関数の収集
+    void check_attributes(const ast::Program& program);
+    void check_attribute_list(const std::vector<ast::AttributeNode>& attrs,
+                              const Span& fallback_span);
+
     // ============================================================
     // 式の型推論 (expr.cpp)
     // ============================================================
@@ -259,6 +264,8 @@ class TypeChecker {
 
     // enum名のセット
     std::unordered_set<std::string> enum_names_;
+    // #[deprecated]が付いた関数名（修飾名含む。呼び出しサイトで警告する。R7）
+    std::unordered_set<std::string> deprecated_functions_;
 
     // ジェネリックenumの登録情報（enum名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_enums_;

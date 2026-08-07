@@ -15,6 +15,7 @@ parent: Advanced Features
 ## Writing a test
 
 Mark a function with the `#[test]` attribute and assert inside it with `assert(cond, message)` from `std::debug`.
+A typo in the attribute name (an unknown attribute like `#[tset]`) is a compile warning (error with `--strict`), so a typo can no longer silently skip your tests (v0.17.0).
 
 ```cm
 import std::debug::assert;

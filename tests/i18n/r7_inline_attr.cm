@@ -1,0 +1,8 @@
+import std::io::println;
+// R7: #[inline]は予約語だが属性名として受理される（未実装警告つきで動作は通常どおり）
+#[inline]
+int fast(int x) { return x * 2; }
+int main() {
+    println("{fast(21)}");
+    return 0;
+}

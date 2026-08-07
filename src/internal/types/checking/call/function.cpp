@@ -21,6 +21,11 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         // 関数ポインタ・ラムダを保持する変数経由の呼び出しを使用としてマークする（W001未使用の誤検出防止。関数名の場合はlookup対象外なので影響しない）
         scopes_.current().mark_used(ident->name);
 
+        // R7: #[deprecated]が付いた関数の呼び出しを警告する
+        if (deprecated_functions_.count(ident->name) > 0) {
+            warning(current_span_, i18n::msgf(i18n::MsgId::TcDeprecatedFunctionCall, ident->name));
+        }
+
         // __asm__ / __llvm__ intrinsic - インラインアセンブリ
         // __asm__: ネイティブアセンブリ（x86, ARM64等）- 推奨
         // __llvm__: 後方互換性のため残す（将来はLLVM IR対応予定）

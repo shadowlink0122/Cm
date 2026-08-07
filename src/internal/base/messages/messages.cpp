@@ -924,6 +924,17 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcDefaultArgReferencesParam
     {"default value of parameter '{0}' cannot reference parameter '{1}' (default arguments are evaluated at the call site, before parameters are bound)",
      "パラメータ '{0}' のデフォルト値はパラメータ '{1}' を参照できません（デフォルト引数はパラメータ束縛前に呼び出し側で評価されます）"},
+    // TcUnknownAttribute
+    {"unknown attribute '#[{0}]' is ignored (check the spelling; known attributes include #[test], #[derive(...)], #[target(...)], #[input], #[output], sv::*)",
+     "未知の属性 '#[{0}]' は無視されます（綴りを確認してください。既知の属性: #[test]・#[derive(...)]・#[target(...)]・#[input]・#[output]・sv::* 等）"},
+    // TcUnimplementedAttribute
+    {"attribute '#[{0}]' is not implemented yet and has no effect",
+     "属性 '#[{0}]' は未実装のため効果がありません"},
+    // TcUnknownTargetName
+    {"unknown target name '{0}' in #[target(...)] (known: native, js, web, wasm, sv, uefi, bm, baremetal-arm, baremetal-x86; use \"js\" for TypeScript output)",
+     "#[target(...)] の未知のターゲット名 '{0}' です（既知: native・js・web・wasm・sv・uefi・bm・baremetal-arm・baremetal-x86。TypeScript出力は \"js\" を使用してください）"},
+    // TcDeprecatedFunctionCall
+    {"function '{0}' is deprecated", "関数 '{0}' は非推奨（deprecated）です"},
     // MirSliceReceiverUnresolved
     {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
      "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},

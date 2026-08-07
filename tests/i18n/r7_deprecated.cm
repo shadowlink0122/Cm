@@ -1,0 +1,4 @@
+// R7: deprecated関数呼び出し警告の表示
+#[deprecated]
+int old_api() { return 1; }
+int main() { return old_api(); }

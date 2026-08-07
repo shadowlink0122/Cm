@@ -15,6 +15,7 @@ parent: Advanced Features
 ## テストを書く
 
 関数に `#[test]` 属性を付け、`std::debug` の `assert(cond, message)` で検証する。
+属性名のタイポ（`#[tset]` 等の未知属性）はコンパイル警告（`--strict` でエラー）になるため、タイポでテストが黙ってスキップされることはない（v0.17.0）。
 
 ```cm
 import std::debug::assert;

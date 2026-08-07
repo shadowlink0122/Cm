@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3・R6・R8修正済み・archive移動で10件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3・R6・R7・R8修正済み・archive移動で9件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）、第8ラウンドは残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -54,7 +54,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R4: クロージャの外側変数書き込み黙殺・構造体キャプチャのjs分岐](closure-mutation-semantics.md) — **High**: 同一関数内クロージャからの外側変数への代入が全経路で無診断棄却（読みは最新値・書きは無効の非対称）。構造体キャプチャ書き込みはjsだけ伝播しバックエンド分岐
 - [R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能](string-escape-and-raw-semantics.md) — **High**: `\x`/`\u`/`\U`・未知エスケープでバックスラッシュが黙って脱落し誤った文字列を生成（--strictでも無診断）。バッククォートraw文字列がエスケープを解釈・`\${x}`がエスケープ不能・charリテラルとの不一致（Medium）
 - R6: 条件付きコンパイルディレクティブの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/preprocessor-conditional-robustness.md)。#endifを#endの別名として認識、閉じ忘れ（開始行・シンボル付き）・対応ブロックのない#end/#endif/#else・#define使用をi18n診断化（-D/組み込みシンボル案内）、cm_grammar.mdを実態へ追従。パーサ段の行番号・imported module誤表記はR14へ委譲）
-- [R7: 属性の検証レジストリ](attribute-validation-registry.md) — **High**: `#[tset]`等のtest属性タイポでテストが黙って実行されず`cm test`が緑（テスト漏れ）。`#[cfg(...)]`は完全に不活性、`#[target("jss")]`未知名は無診断でNative縮退（意味反転）、`#[deprecated]`等は無警告黙殺
+- R7: 属性の検証レジストリ — **修正済み**（[archive移動](../../archive/v0.17.0/attribute-validation-registry.md)。checkerの検証パスで3値分類を実装: 未知・タイポ属性=警告/--strictエラー、既知未実装（bench/optimize/inline/cfg）=専用診断、#[deprecated]=呼び出しサイト警告として実装昇格。#[target]未知名の意味反転を許可リスト検証で診断化、#[inline]の予約語パース特例、AttributeNode.spanで診断位置を属性自身に。cfg条件評価の実装はR13の領分として残置）
 - R8: デフォルト引数での前引数参照が無診断でゼロ値 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/default-arg-prev-param-zero.md)。デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のためC++同様にパラメータ参照を拒否。check_default_param_refsで宣言時に式を再帰走査し関数・implメソッド両経路で診断（自己参照・後方参照も検出）。エラーテスト3本+i18n E2E+正常系回帰を追加、チュートリアルへ制約を明記）
 - [R9: stdlibの出荷不良](stdlib-shipping-defects.md) — **High/Medium**: `std::iter`モジュール自体が`range`多重定義と型エラーでコンパイル不能（`import std::iter::*`常時失敗）。Vector/HashMap/Queueが生malloc直呼びでアロケータ差し替えを素通し。`std::io`の入力API再exportが選択import/`*`とも解決不能
 - [R10: 型検査の黙殺穴](checker-silent-holes.md) — **Medium**: 未定義型の変数宣言が無診断で実行まで通る・型不一致マクロ（`macro int X = "str";`）がcheck素通りでLLVM内部エラー/js黙殺の三分裂・const generic宣言が無警告受理されるが実体化手段が存在しない（半黙殺）
@@ -98,14 +98,14 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 調査済み → [R7](attribute-validation-registry.md)・[R11](modifier-implementation-gaps.md) | 一部あり | `#[deprecated]`等は無警告黙殺（High）、`#inline`は記述不能。`#[test]`正常系は健全 |
+| A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み）・[R11](modifier-implementation-gaps.md) | 一部あり | `#[deprecated]`等は無警告黙殺（High）、`#inline`は記述不能。`#[test]`正常系は健全 |
 | A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 調査済み → [R21](derive-generic-and-field-gaps.md) | あり（with_eq/with_ord/derive_basic） | 非ジェネリックは全トレイト健全。ジェネリック×スライス型引数EqがCritical誤値・ユニオン型引数リンク失敗・非Eq/Ordトレイトno-op |
-| A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 調査済み → [R7](attribute-validation-registry.md) | 見つからず | `#[cfg]`完全不活性・未知ターゲット名の無診断Native縮退（High）。否定形`!js`は健全 |
-| A4 | 未知属性・タイポ属性の黙認 | 調査済み → [R7](attribute-validation-registry.md) | なし | `#[tset]`等でテスト黙殺（High）を実証 |
+| A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み） | 見つからず | `#[cfg]`完全不活性・未知ターゲット名の無診断Native縮退（High）。否定形`!js`は健全 |
+| A4 | 未知属性・タイポ属性の黙認 | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み） | なし | `#[tset]`等でテスト黙殺（High）を実証 |
 | A5 | プリプロセッサ`#define` | 調査済み → [R6](../../archive/v0.17.0/preprocessor-conditional-robustness.md)（修正済み） | なし | 未実装の専用診断化（-D/組み込みシンボル案内）・文法書を実態へ追従 |
 | A6 | プリプロセッサ`#endif` | 調査済み → [R6](../../archive/v0.17.0/preprocessor-conditional-robustness.md)（修正済み） | あり（preprocessor/endif_alias） | #endの別名として認識・後続コード保存を回帰固定 |
 | A7 | `#ifdef`/`#ifndef`/`#else`/`#end`のネスト・異常系 | 調査済み → [R6](../../archive/v0.17.0/preprocessor-conditional-robustness.md)（修正済み） | エラーテスト3本追加 | 閉じ忘れ・過剰`#end`/`#else`を診断化 |
-| A8 | `//! platform:`・`//! test:`・`//! sv:`ディレクティブの異常系 | 調査済み → [R7](attribute-validation-registry.md)・[R14](syntax-error-diagnostic-quality.md) | 正常系はSVスイートで常用 | 不正`//! test:`が常時PASSの空テストベンチに化ける、platformタイポの診断品質難 |
+| A8 | `//! platform:`・`//! test:`・`//! sv:`ディレクティブの異常系 | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み）・[R14](syntax-error-diagnostic-quality.md) | 正常系はSVスイートで常用 | 不正`//! test:`が常時PASSの空テストベンチに化ける、platformタイポの診断品質難 |
 
 ### B. 構文・式
 
