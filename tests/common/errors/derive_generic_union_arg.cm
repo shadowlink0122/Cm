@@ -1,0 +1,16 @@
+// 回帰(R21): derive付きジェネリック構造体のユニオン型引数特殊化は診断で拒否される
+// （従来はユニオンの等価演算子が未生成のまま参照され、Undefined symbolsの難読リンク失敗だった）
+import std::io::println;
+
+typedef IU = int | string;
+
+struct Box<T> with Eq {
+    T v;
+}
+
+int main() {
+    Box<IU> a = { v: 1 };
+    Box<IU> b = { v: 1 };
+    println("{a == b}");
+    return 0;
+}

@@ -1,0 +1,14 @@
+// 回帰(R21): derive付きジェネリック構造体のスライス型引数特殊化は診断で拒否される
+// （従来はスライスヘッダの生バイナリ比較へ落ち、バックエンドごとに結論が分裂する無言の誤値だった）
+import std::io::println;
+
+struct Box<T> with Eq {
+    T v;
+}
+
+int main() {
+    Box<int[]> a = { v: [1, 2, 3] };
+    Box<int[]> b = { v: [1, 2, 3] };
+    println("{a == b}");
+    return 0;
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -137,6 +138,12 @@ class TypeChecker {
     // ============================================================
     void register_auto_impl(const ast::StructDecl& st, const std::string& iface_name);
     bool validate_derive_field_types(const ast::StructDecl& st, const std::string& iface_name);
+    // フィールド型がトレイトのderive対象として未対応なら理由文字列を返す（対応済みなら空。宣言時と特殊化時の検証で共有）
+    std::string derive_field_unsupported_reason(const std::string& iface_name,
+                                                const ast::TypePtr& t);
+    // derive付きジェネリック構造体の特殊化（例: Box<int[]>）で置換後フィールド型を検証する（R21: 無言の誤値・リンク失敗を診断化）
+    void validate_derive_instantiation(const ast::StructDecl& st, const ast::TypePtr& type);
+    std::set<std::string> validated_derive_instantiations_;  // 特殊化検証の重複診断抑止
     void register_auto_eq_impl(const ast::StructDecl& st);
     void register_auto_ord_impl(const ast::StructDecl& st);
     void register_auto_clone_impl(const ast::StructDecl& st);

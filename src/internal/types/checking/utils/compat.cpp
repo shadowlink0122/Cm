@@ -599,6 +599,13 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
                                                         ast::type_to_string(*arg), type->name));
                     }
                 }
+                // R21: derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
+                // （宣言時はTのため検査不能。従来はスライス型引数のEqが生バイナリ比較の無言誤値、ユニオン型引数がリンク失敗へ落ちていた）
+                if (sd_it != struct_defs_.end() && sd_it->second && !type->type_args.empty() &&
+                    type->type_args.size() == sd_it->second->generic_params.size() &&
+                    !sd_it->second->auto_impls.empty()) {
+                    validate_derive_instantiation(*sd_it->second, type);
+                }
                 return true;
             }
             // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする

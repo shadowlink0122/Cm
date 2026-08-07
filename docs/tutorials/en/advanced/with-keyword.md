@@ -107,6 +107,8 @@ struct Pair<T, U> {
 ```
 
 Auto implementations for generic structs are generated per instantiation after monomorphization.
+In addition to the Eq/Ord operators, the Clone/Hash/Debug/Display methods (`clone()`/`hash()`/`debug()`/`toString()`) are callable on specialized receivers such as `G<int>`.
+Type arguments are validated against the table below at every instantiation, so unsupported combinations (e.g. Eq on `Box<int[]>`) become compile errors at the usage site.
 
 ## Supported Field Types
 
@@ -116,10 +118,12 @@ Auto implementations for generic structs are generated per instantiation after m
 | float / double | ✅ | ✅ | ❌ | ✅ | ✅ |
 | string | ✅ | ✅ | ❌ | ✅ | ✅ |
 | nested struct | ✅ | ✅ | ✅ | ✅ | ✅ |
+| value enum (no payload) | ✅ | ✅ | ✅ as int | ✅ as int | ✅ |
 | fixed-size 1-D array | ✅ | ❌ | ✅ integer elements only | ❌ | ✅ |
-| multi-dim array / slice / union | ❌ | ❌ | ❌ | ❌ | ✅ |
+| multi-dim array / slice / union / payload enum | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-Combinations marked ❌ produce a compile error (never invalid code generation).
+Combinations marked ❌ produce a compile error (never invalid code generation). For generic structs the same rules are checked on the field types after substituting the type arguments.
+Value-enum fields use int semantics: Debug/Display format them as their numeric value (e.g. `c: 5`).
 
 ## Invalid Usages
 

@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -82,7 +82,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 **教訓（バックエンド網羅バグ調査に続き再発）**: 調査中にユーザーがcmを複数回リビルドした（19:18→19:39→19:44）ため、旧バイナリ由来の所見（A2スライス型引数EqのJIT-O2 SIGSEGVはクラッシュが消え誤値のみ残存等）は現行バイナリで取り直した。下記は全て現行バイナリでの再確認済み。
 健全確認済み: derive非ジェネリック全トレイト（6経路一致）・Ord全順序性/C3回帰・std::env/process/path/bytes/fs（バイナリ安全性・不在/空の区別・エラーパス非クラッシュ）・native::sync/threadのランタイム挙動（実並行・Mutex排他・macOS RwLock SIGILL回避・O2/O3無破壊）・net/http・gpu（実Metal実行）・web::htmlエスケープ（XSS遮断）。
 
-- [R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ](derive-generic-and-field-gaps.md) — **Critical**: ジェネリック×スライス型引数のEqが無言誤値・6経路が3種に分裂（既知ギャップ[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)の実証）。ユニオン型引数はリンク失敗（High）・非Eq/OrdトレイトのClone/Hash/Debug/Displayが無言no-op（High）・enumフィールド+Debug/Hashが型検査失敗（Medium）
+- R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ — **修正済み**（[archive移動](../../archive/v0.17.0/derive-generic-and-field-gaps.md)。特殊化時の置換後フィールド型検証（validate_derive_instantiation）でスライス/ユニオン型引数の無言誤値・リンク失敗を使用箇所診断へ。ジェネリックのClone/Hash/Debug/Displayはchecker側のG<T>キー登録漏れが真因でメソッド解決を配線し全バックエンド動作化。値enumフィールドはint意味論でEq/Hash/Debug/Display対応・タグ付きenumは明示診断。derive診断の位置もname_span化でstdlib誤指しを解消。スライス/ユニオンを動作させる構造的解消は[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)第3段へ委譲）
 - [R22: implメソッドの`export`修飾子がパースエラー](export-on-impl-method-parse-error.md) — **High**: `impl Pt { export int getx() {...} }`が`Expected type`で停止。`native::sync`の高レベルOOP API（Mutex<T>/RwLock<T>/Channel）が全メソッドexportで全滅し一度もimportできない死んだコード。`native::io`も連鎖。メンテナが回避策のfree-functionサブモジュールを用意済み
 - [R23: クロスターゲットFFIの能力ガード欠如](cross-target-ffi-capability-gaps.md) — **Medium**: native専用モジュール（env/process/fs/net/gpu/sync/thread）が`--target=wasm`で無診断コンパイル成功し実行時に難解な`unknown import`で破綻（jsは`void*`禁止で明確に拒否）。js::timerのコールバックがint型宣言で使用不能・node例外（Low〜Medium）
 - [R24: 文字列補間が実行時値の波括弧で破壊される](interpolation-brace-from-runtime-value.md) — **Medium**: `{a.debug()}`の戻り値`P { x: 1 }`が含む波括弧を補間エンジンが再スキャンし、その値と後続プレースホルダが総崩れ（`dbg=P (1, 2) disp={}`）。L2のリテラル波括弧とは別経路（評価済み値の再スキャン）
@@ -99,7 +99,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
 | A1 | `#[test]`/`#bench`/`#deprecated`/`#inline`/`#optimize`関数ディレクティブ | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み）・[R11](modifier-implementation-gaps.md) | 一部あり | `#[deprecated]`等は無警告黙殺（High）、`#inline`は記述不能。`#[test]`正常系は健全 |
-| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 調査済み → [R21](derive-generic-and-field-gaps.md) | あり（with_eq/with_ord/derive_basic） | 非ジェネリックは全トレイト健全。ジェネリック×スライス型引数EqがCritical誤値・ユニオン型引数リンク失敗・非Eq/Ordトレイトno-op |
+| A2 | `#[derive(...)]`/`with`自動実装（Eq/Ord/Clone/Hash/Debug/Display/Css） | 調査済み → [R21](../../archive/v0.17.0/derive-generic-and-field-gaps.md)（修正済み） | あり（with_eq/with_ord/derive_basic・generic_derive_methods・derive_enum_field） | 非ジェネリックは全トレイト健全。ジェネリックのメソッド解決・特殊化時検証・値enumフィールド対応はR21で修正済み |
 | A3 | `#[target(...)]`/`#[cfg(...)]`条件付きコンパイル | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み） | 見つからず | `#[cfg]`完全不活性・未知ターゲット名の無診断Native縮退（High）。否定形`!js`は健全 |
 | A4 | 未知属性・タイポ属性の黙認 | 調査済み → [R7](../../archive/v0.17.0/attribute-validation-registry.md)（修正済み） | なし | `#[tset]`等でテスト黙殺（High）を実証 |
 | A5 | プリプロセッサ`#define` | 調査済み → [R6](../../archive/v0.17.0/preprocessor-conditional-robustness.md)（修正済み） | なし | 未実装の専用診断化（-D/組み込みシンボル案内）・文法書を実態へ追従 |

@@ -18,12 +18,12 @@ derive-as-source-expansion（archive済み）で非ジェネリック構造体�
 ## リファクタリング方針
 
 1. **第1段（削除）**: 非ジェネリック用MIR生成器の本体を削除し、expand_derivesが処理しなかったderiveは（無言でMIR生成に落とすのではなく）診断で停止する。到達しないコード約1,500行の削減と、「どちらの生成系が動いたのか」の曖昧さの解消。
-2. **第2段（ギャップ封鎖）**: ジェネリックMIRパスにSlice/Unionフィールドの対応を追加するか、対応するまで型検査時に「このフィールド型はジェネリックderive未対応」の診断で停止する（無言の誤動作だけは残さない）。
+2. **第2段（ギャップ封鎖・実施済み）**: R21修正（[derive-generic-and-field-gaps.md](../../archive/v0.17.0/derive-generic-and-field-gaps.md)）で、特殊化時の置換後フィールド型検証（validate_derive_instantiation）によりSlice/Union/タグ付きenum型引数を型検査診断で停止するようにした。あわせてジェネリックのClone/Hash/Debug/Displayメソッド解決の配線と値enumフィールドのint意味論対応も実施済み。MIRパス自体へのSlice/Union対応（診断でなく動作）は第3段の単一ソース化に委ねる。
 3. **第3段（単一ソース化の完遂）**: monomorphization-typed-instantiationの残課題であるジェネリック演算子implのモノモーフ化登録を実装し、ジェネリック構造体も単一のジェネリックimplソース合成→特殊化の経路へ載せて、*_for_monomorphized系と特例群（auto_impl_info_等）を全廃する。
 
 ## テスト計画
 
-- ジェネリック構造体×フィールド型（スカラ/string/ネスト構造体/固定長配列/スライス/ユニオン）×derive種別（eq/ord/clone/hash/debug）のマトリクス。現状のSlice/Unionケースは誤動作の実挙動を先に確定してから診断/対応を選ぶ。
+- ジェネリック構造体×フィールド型（スカラ/string/ネスト構造体/固定長配列/スライス/ユニオン）×derive種別（eq/ord/clone/hash/debug）のマトリクス。Slice/Unionケースは診断化済み（tests/common/errors/derive_generic_{slice,union}_arg.cm）、正常系はtests/common/interface/generic_derive_methods.cm。
 - 第1段後にderiveスイート全数で生成系の切り替わりが無いことを確認する。
 
 ## 検出経緯

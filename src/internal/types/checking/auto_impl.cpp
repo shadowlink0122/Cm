@@ -13,17 +13,38 @@
 
 namespace cm {
 
+namespace {
+
+// ジェネリック構造体のメソッド表キー（例: G<T, U>）。implブロックの登録キー（type_to_string形）と同形にし、
+// 特殊化レシーバのメソッド解決（method.cppのジェネリック検索）から自動実装メソッドを引けるようにする（R21）
+std::string generic_method_table_key(const ast::StructDecl& st) {
+    std::string key = st.name + "<";
+    for (size_t i = 0; i < st.generic_params.size(); ++i) {
+        if (i > 0) {
+            key += ", ";
+        }
+        key += st.generic_params[i];
+    }
+    key += ">";
+    return key;
+}
+
+}  // namespace
+
 void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::string& iface_name) {
     // 導出可能セット（コンパイラ組み込み）。with / #[derive] 共通の検証
     static const std::set<std::string> derivable_interfaces = {"Eq",   "Ord",   "Copy",    "Clone",
                                                                "Hash", "Debug", "Display", "Css"};
 
+    // 診断位置は宣言登録パスのcurrent_span_（直前に処理した無関係な宣言を指す）でなく構造体名の位置にする（R21付随）
+    Span derive_span = st.name_span.is_empty() ? current_span_ : st.name_span;
+
     if (derivable_interfaces.find(iface_name) == derivable_interfaces.end()) {
         if (interface_names_.find(iface_name) == interface_names_.end()) {
-            error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownInterfaceDerive, iface_name));
+            error(derive_span, i18n::msgf(i18n::MsgId::TcUnknownInterfaceDerive, iface_name));
         } else {
-            error(current_span_, i18n::msgf(i18n::MsgId::TcInterfaceNotDerivableImpl, iface_name,
-                                            st.name, iface_name));
+            error(derive_span, i18n::msgf(i18n::MsgId::TcInterfaceNotDerivableImpl, iface_name,
+                                          st.name, iface_name));
         }
         return;
     }
@@ -74,62 +95,115 @@ void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::strin
 }
 
 // 導出対象フィールド型の検証。未対応の組み合わせは不正なコード生成の代わりに明示エラーを出す
-bool TypeChecker::validate_derive_field_types(const ast::StructDecl& st,
-                                              const std::string& iface_name) {
+// 1フィールド型のderive可否判定（未対応なら理由・対応済みなら空文字列）。
+// 宣言時（validate_derive_field_types）と特殊化時（validate_derive_instantiation）の両方から共有する
+std::string TypeChecker::derive_field_unsupported_reason(const std::string& iface_name,
+                                                         const ast::TypePtr& t) {
     // Clone/Copy は集約コピー、Css は専用生成のためフィールド型の制限なし
     if (iface_name == "Clone" || iface_name == "Copy" || iface_name == "Css") {
-        return true;
+        return "";
+    }
+    if (!t) {
+        return "";
     }
 
-    for (const auto& field : st.fields) {
-        const auto& t = field.type;
-        if (!t) {
-            continue;
-        }
-        std::string reason;
-
-        if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
-            reason = "union-typed fields are not supported";
-        } else if (t->kind == ast::TypeKind::Array) {
-            bool fixed_1d =
-                !t->is_multidim_array() && (t->array_size.has_value() || t->dimensions.size() == 1);
-            const auto& elem = t->element_type;
-            if (iface_name == "Eq") {
-                bool elem_ok = elem && elem->is_primitive() && elem->kind != ast::TypeKind::Void;
-                if (!fixed_1d) {
-                    reason = "only fixed-size one-dimensional arrays can be compared";
-                } else if (!elem_ok) {
-                    reason = "array elements must be primitive types";
-                }
-            } else if (iface_name == "Hash") {
-                bool elem_ok = elem && (elem->is_integer() || elem->kind == ast::TypeKind::Bool ||
-                                        elem->kind == ast::TypeKind::Char);
-                if (!fixed_1d) {
-                    reason = "only fixed-size one-dimensional arrays can be hashed";
-                } else if (!elem_ok) {
-                    reason = "array elements must be integer, bool, or char";
-                }
-            } else {
-                // Ord / Debug / Display
-                reason = "array fields are not supported";
+    if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
+        return "union-typed fields are not supported";
+    }
+    if (t->kind == ast::TypeKind::Array) {
+        bool fixed_1d =
+            !t->is_multidim_array() && (t->array_size.has_value() || t->dimensions.size() == 1);
+        const auto& elem = t->element_type;
+        if (iface_name == "Eq") {
+            bool elem_ok = elem && elem->is_primitive() && elem->kind != ast::TypeKind::Void;
+            if (!fixed_1d) {
+                return "only fixed-size one-dimensional arrays can be compared";
+            }
+            if (!elem_ok) {
+                return "array elements must be primitive types";
             }
         } else if (iface_name == "Hash") {
-            if (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString) {
-                reason = "string fields are not supported";
-            } else if (t->is_floating()) {
-                reason = "floating-point fields are not supported";
-            } else if (t->kind == ast::TypeKind::Pointer) {
-                reason = "pointer fields are not supported";
+            bool elem_ok = elem && (elem->is_integer() || elem->kind == ast::TypeKind::Bool ||
+                                    elem->kind == ast::TypeKind::Char);
+            if (!fixed_1d) {
+                return "only fixed-size one-dimensional arrays can be hashed";
             }
+            if (!elem_ok) {
+                return "array elements must be integer, bool, or char";
+            }
+        } else {
+            // Ord / Debug / Display
+            return "array fields are not supported";
         }
+        return "";
+    }
+    // ペイロード付きenumフィールドは全比較・整形系トレイトで未対応（値enumはint意味論で対応済み）
+    if ((t->kind == ast::TypeKind::Struct || t->kind == ast::TypeKind::Generic) &&
+        !t->name.empty()) {
+        auto en_it = enum_defs_.find(t->name);
+        if (en_it != enum_defs_.end() && en_it->second && en_it->second->is_tagged_union()) {
+            return "tagged enum fields are not supported";
+        }
+    }
+    if (iface_name == "Hash") {
+        if (t->kind == ast::TypeKind::String || t->kind == ast::TypeKind::CString) {
+            return "string fields are not supported";
+        }
+        if (t->is_floating()) {
+            return "floating-point fields are not supported";
+        }
+        if (t->kind == ast::TypeKind::Pointer) {
+            return "pointer fields are not supported";
+        }
+    }
+    return "";
+}
 
+bool TypeChecker::validate_derive_field_types(const ast::StructDecl& st,
+                                              const std::string& iface_name) {
+    // 診断位置は構造体名の位置にする（従来はcurrent_span_のままで無関係なstdlib位置を指していた。R21付随）
+    Span derive_span = st.name_span.is_empty() ? current_span_ : st.name_span;
+    for (const auto& field : st.fields) {
+        std::string reason = derive_field_unsupported_reason(iface_name, field.type);
         if (!reason.empty()) {
-            error(current_span_, i18n::msgf(i18n::MsgId::TcCannotDeriveStructField, iface_name,
-                                            st.name, field.name, reason));
+            error(derive_span, i18n::msgf(i18n::MsgId::TcCannotDeriveStructField, iface_name,
+                                          st.name, field.name, reason));
             return false;
         }
     }
     return true;
+}
+
+// derive付きジェネリック構造体の特殊化検証（R21）。宣言時はT（型変数）のため検査できず、
+// 従来はBox<int[]>のEqがスライスヘッダの生バイナリ比較（無言の誤値）・Box<ユニオン>がリンク失敗へ落ちていた
+void TypeChecker::validate_derive_instantiation(const ast::StructDecl& st,
+                                                const ast::TypePtr& type) {
+    if (st.auto_impls.empty() || st.generic_params.empty() || !type ||
+        type->type_args.size() != st.generic_params.size()) {
+        return;
+    }
+    std::string inst_name = ast::type_to_string(*type);
+    if (!validated_derive_instantiations_.insert(inst_name).second) {
+        return;
+    }
+    for (const auto& iface_name : st.auto_impls) {
+        for (const auto& field : st.fields) {
+            if (!field.type) {
+                continue;
+            }
+            auto substituted =
+                substitute_generic_type(field.type, st.generic_params, type->type_args);
+            // typedef経由の型引数（typedef IU = int | string等）は実体へ解決してから判定する
+            if (auto resolved = resolve_typedef(substituted)) {
+                substituted = resolved;
+            }
+            std::string reason = derive_field_unsupported_reason(iface_name, substituted);
+            if (!reason.empty()) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcCannotDeriveStructField, iface_name,
+                                                inst_name, field.name, reason));
+            }
+        }
+    }
 }
 
 void TypeChecker::register_auto_eq_impl(const ast::StructDecl& st) {
@@ -192,6 +266,17 @@ void TypeChecker::register_auto_clone_impl(const ast::StructDecl& st) {
     clone_method.return_type = struct_type;
     type_methods_[struct_name]["clone"] = clone_method;
 
+    // ジェネリック構造体は特殊化レシーバから解決できるようG<T>キーでも登録する（戻り値は型引数付きにして代入時にG<int>へ置換される）
+    if (!st.generic_params.empty()) {
+        auto generic_ret = ast::make_named(struct_name);
+        for (const auto& p : st.generic_params) {
+            generic_ret->type_args.push_back(ast::make_generic_param(p));
+        }
+        MethodInfo generic_clone = clone_method;
+        generic_clone.return_type = generic_ret;
+        type_methods_[generic_method_table_key(st)]["clone"] = generic_clone;
+    }
+
     // グローバル関数としても登録
     std::string mangled_name = struct_name + "__clone";
     std::vector<ast::TypePtr> param_types;
@@ -212,6 +297,9 @@ void TypeChecker::register_auto_hash_impl(const ast::StructDecl& st) {
     hash_method.name = "hash";
     hash_method.return_type = ast::make_int();
     type_methods_[struct_name]["hash"] = hash_method;
+    if (!st.generic_params.empty()) {
+        type_methods_[generic_method_table_key(st)]["hash"] = hash_method;
+    }
 
     // グローバル関数としても登録
     std::string mangled_name = struct_name + "__hash";
@@ -356,6 +444,9 @@ void TypeChecker::register_auto_debug_impl(const ast::StructDecl& st) {
     debug_method.name = "debug";
     debug_method.return_type = ast::make_string();
     type_methods_[struct_name]["debug"] = debug_method;
+    if (!st.generic_params.empty()) {
+        type_methods_[generic_method_table_key(st)]["debug"] = debug_method;
+    }
 
     // グローバル関数としても登録
     std::string mangled_name = struct_name + "__debug";
@@ -377,6 +468,9 @@ void TypeChecker::register_auto_display_impl(const ast::StructDecl& st) {
     tostring_method.name = "toString";
     tostring_method.return_type = ast::make_string();
     type_methods_[struct_name]["toString"] = tostring_method;
+    if (!st.generic_params.empty()) {
+        type_methods_[generic_method_table_key(st)]["toString"] = tostring_method;
+    }
 
     // グローバル関数としても登録
     std::string mangled_name = struct_name + "__toString";

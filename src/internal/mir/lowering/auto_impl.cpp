@@ -578,7 +578,12 @@ void MirLowering::generate_builtin_debug_method_for_monomorphized(const MirStruc
     BlockId entry_block = mir_func->add_block();
     auto* block = mir_func->get_block(entry_block);
 
-    std::string initial_str = st.name + " { ";
+    // 表示名はマングル名（G__int）でなく基底の構造体名（G）にする（非ジェネリックのdebug書式と整合）
+    std::string display_name = st.name;
+    if (auto sep = display_name.find("__"); sep != std::string::npos) {
+        display_name = display_name.substr(0, sep);
+    }
+    std::string initial_str = display_name + " { ";
     LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
 
     auto const_init = std::make_unique<MirOperand>();

@@ -1,6 +1,6 @@
 # R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ（無言誤値・no-op・リンク失敗）
 
-**ステータス:** 未修正（ライブラリ・自動実装調査で検出。既知ギャップ [auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md) の実証＋新規詳細）
+**ステータス:** 修正済み（バグ1〜4＋付随の診断位置まで全件処置。方針は特殊化時検証＋メソッド登録＋enumフィールドのint意味論対応）
 **重大度:** Critical（ジェネリック×スライス型引数のEq）/ High（ユニオン型引数・非Eq/Ordトレイトのno-op）/ Medium（enumフィールド）
 
 `with`/`#[derive(...)]`の自動実装は、非ジェネリック構造体では全トレイト（Eq/Ord/Clone/Hash/Debug/Display/Css）が健全に動作するが、ジェネリック型引数とフィールド型に穴が集中している。既知ギャップ文書は「モノモーフ化MIRパスにSlice/Union分岐がない」ことを記録済みで、本調査で具体的な破綻を実機実証し、新規詳細（バックエンド分裂・非Eq/Ordトレイトの無言no-op・enumフィールド）を追加した。
@@ -48,3 +48,15 @@ deriveした構造体がenum（ペイロード付き）フィールドを持つ�
 ## テスト計画
 
 `tests/common/interface/`へ: ジェネリック構造体×（プリミティブ/string/スライス/ユニオン/enum/ネスト）フィールド型引数の全トレイト（Eq/Ord/Clone/Hash/Debug/Display）が全バックエンドで値一致するマトリクス回帰。未対応の組み合わせは診断で停止する負のテスト。derive診断のソース位置検証。
+
+## 実装記録
+
+構造的解消（derive-as-source-expansionのジェネリック拡張）は[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)第3段の領分として残し、本修正は「無言の誤動作・no-opを全て診断または動作に置き換える」方針で4バグ＋付随を処置した。
+
+- **バグ1・2（スライス/ユニオン型引数の無言誤値・リンク失敗）→特殊化時検証で診断化**: checkerへ`validate_derive_instantiation`を新設し、derive付きジェネリック構造体の特殊化（`Box<int[]>`等）で型引数を代入した後のフィールド型を宣言時と同じ規則（`derive_field_unsupported_reason`として宣言時検証`validate_derive_field_types`と共通化）で検証する。検証フックはlet宣言のH15検査（stmt.cpp）とis_valid_type（compat.cpp: グローバル/フィールド/パラメータ/戻り値等）の2箇所で、typedef経由の型引数はresolve_typedefで実体化してから判定、重複診断は特殊化名のメモで抑止。`Box<int[]>`のEq（6経路で結論3分裂の生バイナリ比較）と`Box<IU>`のEq（`_IntOrStr__op_eq`未定義の難読リンク失敗）が使用箇所を指す「Cannot derive」診断になる。
+- **バグ3（ジェネリック×Clone/Hash/Debug/Displayの無言no-op）→メソッド解決を配線して動作化**: MIR側の`generate_*_for_monomorphized`は全トレイト生成済みだったが、checker側の`register_auto_{clone,hash,debug,display}_impl`がメソッドを基底名（`G`）でしか登録せず、特殊化レシーバの検索キー（`G<T>`）から到達不能だった。ジェネリック構造体は`G<T>`キー（implブロック登録と同形）でも登録し、cloneの戻り値型は型引数付き（`G<T>`）にして呼び出し時に`G<int>`へ置換されるようにした。jit/native/wasm/js/tsの全経路で`clone()`/`hash()`/`debug()`/`toString()`が動作。あわせてモノモーフ化Debug/Displayの表示名をマングル名（`G__int`）から基底名（`G`）へ修正。
+- **バグ4（enumフィールド＋Debug/Hashの型検査失敗）→値enumはint意味論で動作化・タグ付きは診断**: derive展開（macro/derive.cpp）へプログラム中のenum宣言の収集（`EnumTaggedMap`）を追加し、値enumフィールドはHashで`(self.f as int)`混合・Debug/Displayで数値整形（`c: 5`）に振り分けた（従来はStruct扱いで`.debug()`/`.hash()`を呼びenumのint正規化後にUnknown methodだった）。ペイロード付きenumフィールドは展開対象外にしてchecker検証（`tagged enum fields are not supported`）で明示拒否する（checkerの共通判定にもenum_defs_参照のタグ付きenum規則を追加）。
+- **付随（derive診断の位置が全件stdlibを指す）**: 宣言登録パスの`current_span_`（直前に処理した無関係の宣言）でなく構造体名の`name_span`を診断位置に使うよう修正。
+- **テスト**: `tests/common/interface/`へジェネリック×（int/string/ネスト構造体）×全トレイトの実行回帰と値enumフィールドのEq/Hash/Debug/Display回帰、`tests/common/errors/`へスライス型引数・ユニオン型引数・タグ付きenumフィールドの診断3本。unit/regression/interpreter/llvm/wasm/js/ts/sv/libsの全スイートPASS。
+- **チュートリアル**: with-keyword.md（ja/en）の対応範囲表へ値enum行とペイロード付きenumの区別を追加し、特殊化時検証とジェネリックメソッド対応を明文化。
+- **残課題（本修正の範囲外）**: スライス/ユニオン型引数のderiveを「動作」させる構造的解消は単一ソース化（同文書第3段）の領分。値enumのDebug表示を変種名（`Green`）にする改善は将来検討。debug()結果を同一補間内の後続プレースホルダと混在させると出力が崩れるのはR24（補間の実行時値再スキャン）の既知バグで別件。

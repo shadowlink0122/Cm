@@ -1,0 +1,14 @@
+// 回帰(R21): ペイロード付きenumフィールドを持つ構造体のDebug deriveは診断で拒否される
+// （従来は生成コードがenumをintとみなして.debug()を呼び、stdlib位置を指す的外れなUnknown methodだった）
+enum Shape {
+    Circle(int),
+    Dot,
+}
+
+struct T with Debug {
+    Shape s;
+}
+
+int main() {
+    return 0;
+}

@@ -5,12 +5,34 @@
 
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace cm::macro_expand {
 
 namespace {
+
+// enum名 → タグ付きユニオンか（値enumはfalse）。enumフィールドの扱い分岐に使う（R21）
+using EnumTaggedMap = std::unordered_map<std::string, bool>;
+
+// フィールド型が値enum（int意味論で比較・整形できる）か
+bool is_value_enum_field(const ast::TypePtr& t, const EnumTaggedMap& enums) {
+    if (!t || (t->kind != ast::TypeKind::Struct && t->kind != ast::TypeKind::Generic)) {
+        return false;
+    }
+    auto it = enums.find(t->name);
+    return it != enums.end() && !it->second;
+}
+
+// フィールド型がタグ付きenum（ペイロード付き。derive未対応）か
+bool is_tagged_enum_field(const ast::TypePtr& t, const EnumTaggedMap& enums) {
+    if (!t || (t->kind != ast::TypeKind::Struct && t->kind != ast::TypeKind::Generic)) {
+        return false;
+    }
+    auto it = enums.find(t->name);
+    return it != enums.end() && it->second;
+}
 
 // ソース展開へ移行済みのトレイト（Eq/Ord/Clone/Hash/Debug/Display/Css。Copyはマーカーのみで生成物が無いため対象外）
 bool is_source_expanded_trait(const std::string& name) {
@@ -20,7 +42,8 @@ bool is_source_expanded_trait(const std::string& name) {
 
 // フィールド型がトレイトのderive対象として妥当か（checkerのvalidate（types/checking/auto_impl.cpp）と同一の規則）。
 // 不正な場合は展開せずauto_implsへ残し、従来のderive検証診断（Cannot derive ...）を発火させる
-bool fields_derivable(const ast::StructDecl& st, const std::string& iface) {
+bool fields_derivable(const ast::StructDecl& st, const std::string& iface,
+                      const EnumTaggedMap& enums) {
     if (iface == "Clone" || iface == "Copy" || iface == "Css") {
         return true;
     }
@@ -28,6 +51,10 @@ bool fields_derivable(const ast::StructDecl& st, const std::string& iface) {
         const auto& t = field.type;
         if (!t) {
             continue;
+        }
+        // タグ付きenumフィールドは未対応（展開せずchecker側のCannot derive診断へ委ねる）
+        if (is_tagged_enum_field(t, enums)) {
+            return false;
         }
         if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
             return false;
@@ -152,7 +179,7 @@ std::string synthesize_clone_impl(const ast::StructDecl& st) {
 
 // Hash: FNV-1a（基数0x811c9dc5・素数16777619。整数/bool/charは値を、ネスト構造体はhash()結果を、
 // 固定長配列は要素を順に混合する。基数はi32ビットパターンを保つため負数リテラルで表記）
-std::string synthesize_hash_impl(const ast::StructDecl& st) {
+std::string synthesize_hash_impl(const ast::StructDecl& st, const EnumTaggedMap& enums) {
     const std::string type_text = struct_type_text(st);
     std::string body = "        int h = -2128831035;\n";
     auto mix = [&body](const std::string& value_expr) {
@@ -160,7 +187,8 @@ std::string synthesize_hash_impl(const ast::StructDecl& st) {
     };
     for (const auto& field : st.fields) {
         const auto& t = field.type;
-        if (t && t->kind == ast::TypeKind::Struct) {
+        // 値enumフィールドはint値として混合する（.hash()呼び出しはenumのint正規化後に解決不能。R21）
+        if (t && t->kind == ast::TypeKind::Struct && !is_value_enum_field(t, enums)) {
             mix("self." + field.name + ".hash()");
         } else if (t && t->kind == ast::TypeKind::Array && t->array_size.has_value()) {
             for (uint32_t j = 0; j < t->array_size.value(); ++j) {
@@ -188,8 +216,11 @@ std::string synthesize_hash_impl(const ast::StructDecl& st) {
 // 挿入値が波括弧を含みうるもの（文字列フィールド・ネストのdebug/toString/css結果）は
 // 補間を使わず直接連結する（補間の逐次置換は挿入値内の{...}を後続プレースホルダと誤認するため）。
 // スカラは単独プレースホルダのリテラル（後続置換が無く安全）で整形する
-std::string field_value_piece(const ast::Field& field, const std::string& method) {
-    if (field.type && field.type->kind == ast::TypeKind::Struct) {
+std::string field_value_piece(const ast::Field& field, const std::string& method,
+                              const EnumTaggedMap& enums) {
+    // 値enumフィールドはint値として整形する（debug()/toString()呼び出しはenumのint正規化後に解決不能。R21）
+    if (field.type && field.type->kind == ast::TypeKind::Struct &&
+        !is_value_enum_field(field.type, enums)) {
         return "self." + field.name + "." + method + "()";
     }
     if (field.type &&
@@ -200,12 +231,13 @@ std::string field_value_piece(const ast::Field& field, const std::string& method
 }
 
 // Debug: "S { f1: v1, f2: v2 }"（空は"S {}"。ネスト構造体はdebug()。手組み実装と同一の書式）
-std::string synthesize_debug_impl(const ast::StructDecl& st) {
+std::string synthesize_debug_impl(const ast::StructDecl& st, const EnumTaggedMap& enums) {
     const std::string type_text = struct_type_text(st);
     std::string expr = "\"" + st.name + " {";
     for (size_t i = 0; i < st.fields.size(); ++i) {
         expr += (i == 0 ? " " : ", ");
-        expr += st.fields[i].name + ": \" + " + field_value_piece(st.fields[i], "debug") + " + \"";
+        expr += st.fields[i].name + ": \" + " + field_value_piece(st.fields[i], "debug", enums) +
+                " + \"";
     }
     expr += st.fields.empty() ? "}\"" : " }\"";
     std::string source;
@@ -218,14 +250,14 @@ std::string synthesize_debug_impl(const ast::StructDecl& st) {
 }
 
 // Display: "(v1, v2)"（ネスト構造体はtoString()。手組み実装と同一の書式）
-std::string synthesize_display_impl(const ast::StructDecl& st) {
+std::string synthesize_display_impl(const ast::StructDecl& st, const EnumTaggedMap& enums) {
     const std::string type_text = struct_type_text(st);
     std::string expr = "\"(\"";
     for (size_t i = 0; i < st.fields.size(); ++i) {
         if (i > 0) {
             expr += " + \", \"";
         }
-        expr += " + " + field_value_piece(st.fields[i], "toString");
+        expr += " + " + field_value_piece(st.fields[i], "toString", enums);
     }
     expr += " + \")\"";
     std::string source;
@@ -248,7 +280,7 @@ std::string css_key(const std::string& name) {
 
 // Css: kebab名の昇順で "key: value; " を連結（boolは真のとき"key; "のみ・ネスト構造体は"key { 内容 } "。
 // 手組み実装と同一の書式）。to_cssはcss()のエイリアス、is_cssは常にtrue
-std::string synthesize_css_impl(const ast::StructDecl& st) {
+std::string synthesize_css_impl(const ast::StructDecl& st, const EnumTaggedMap& enums) {
     const std::string type_text = struct_type_text(st);
     std::vector<size_t> order(st.fields.size());
     for (size_t i = 0; i < order.size(); ++i) {
@@ -266,12 +298,13 @@ std::string synthesize_css_impl(const ast::StructDecl& st) {
             body += "        if (self." + field.name + ") {\n";
             body += "            s = s + \"" + key + "; \";\n";
             body += "        }\n";
-        } else if (field.type && field.type->kind == ast::TypeKind::Struct) {
+        } else if (field.type && field.type->kind == ast::TypeKind::Struct &&
+                   !is_value_enum_field(field.type, enums)) {
             body +=
                 "        s = s + \"" + key + " { \" + self." + field.name + ".css() + \" } \";\n";
         } else {
-            body += "        s = s + \"" + key + ": \" + " + field_value_piece(field, "css") +
-                    " + \"; \";\n";
+            body += "        s = s + \"" + key + ": \" + " +
+                    field_value_piece(field, "css", enums) + " + \"; \";\n";
         }
     }
     body += "        return s;\n";
@@ -297,7 +330,23 @@ std::string synthesize_css_impl(const ast::StructDecl& st) {
 
 }  // namespace
 
+// プログラム中のenum宣言を収集する（enumフィールドの扱い分岐用。R21）
+EnumTaggedMap collect_enum_tagged_map(const ast::Program& program) {
+    EnumTaggedMap enums;
+    for (const auto& decl : program.declarations) {
+        if (!decl) {
+            continue;
+        }
+        const auto* en = const_cast<ast::Decl&>(*decl).as<ast::EnumDecl>();
+        if (en) {
+            enums[en->name] = en->is_tagged_union();
+        }
+    }
+    return enums;
+}
+
 std::string synthesize_derive_impls(const ast::Program& program) {
+    const EnumTaggedMap enums = collect_enum_tagged_map(program);
     std::string source;
     for (const auto& decl : program.declarations) {
         if (!decl) {
@@ -313,7 +362,7 @@ std::string synthesize_derive_impls(const ast::Program& program) {
             continue;
         }
         for (const auto& iface : st->auto_impls) {
-            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface)) {
+            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface, enums)) {
                 continue;
             }
             if (!source.empty()) {
@@ -326,13 +375,13 @@ std::string synthesize_derive_impls(const ast::Program& program) {
             } else if (iface == "Clone") {
                 source += synthesize_clone_impl(*st);
             } else if (iface == "Hash") {
-                source += synthesize_hash_impl(*st);
+                source += synthesize_hash_impl(*st, enums);
             } else if (iface == "Debug") {
-                source += synthesize_debug_impl(*st);
+                source += synthesize_debug_impl(*st, enums);
             } else if (iface == "Display") {
-                source += synthesize_display_impl(*st);
+                source += synthesize_display_impl(*st, enums);
             } else if (iface == "Css") {
-                source += synthesize_css_impl(*st);
+                source += synthesize_css_impl(*st, enums);
             }
         }
     }
@@ -344,6 +393,7 @@ int expand_derives(ast::Program& program) {
     if (source.empty()) {
         return 0;
     }
+    const EnumTaggedMap enums = collect_enum_tagged_map(program);
 
     // 展開済みトレイトはauto_implsから除去する。合成implが唯一の実装となり、
     // 型検査の重複impl検出・インターフェース適合・MIRの手組み生成はすべて通常のimplとして扱われる
@@ -357,7 +407,7 @@ int expand_derives(ast::Program& program) {
         }
         std::vector<std::string> remaining;
         for (const auto& iface : st->auto_impls) {
-            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface)) {
+            if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface, enums)) {
                 remaining.push_back(iface);
             }
         }
