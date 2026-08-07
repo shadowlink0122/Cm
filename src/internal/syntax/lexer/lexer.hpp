@@ -58,8 +58,15 @@ class Lexer {
     // 文字リテラルスキャン
     Token scan_char(uint32_t start);
 
-    // エスケープ文字処理
-    char scan_escape_char();
+    // エスケープシーケンス処理（バックスラッシュ消費後に呼ぶ。\xHH/\uHHHH/\UHHHHHHHHはUTF-8バイト列を返す。
+    // 不正なシーケンスはpending_error_tokens_へ診断を積み、従来互換のフォールバック文字列を返して継続する）
+    std::string scan_escape_sequence();
+
+    // エスケープ診断の登録（Errorトークンとしてトークン列へ挿入され、パーサが診断へ変換する）
+    void escape_error(uint32_t esc_start, const std::string& message);
+
+    // コードポイントのUTF-8エンコード
+    static std::string encode_utf8(uint32_t cp);
 
     // 演算子スキャン
     Token scan_operator(uint32_t start, char c);
@@ -96,6 +103,8 @@ class Lexer {
     uint32_t pos_;
     LexerPlatform platform_;
     std::unordered_map<std::string, TokenKind> keywords_;
+    // 字句エラー（不正エスケープ等）。tokenize()がトークン列へ挿入し、パーサが診断へ変換する
+    std::vector<Token> pending_error_tokens_;
 };
 
 }  // namespace cm

@@ -256,9 +256,11 @@ enum class MsgId : int {
     NostdForbiddenCall,
     // ===== parse =====
     ParseASwitchStatementRequiresCase,
+    ParseCharEscapeNotSingleByte,
     ParseDuplicateElseClause,
     ParseEnumValueIsAlreadyUsed,
     ParseEnumValuesRequireAnInteger,
+    ParseInvalidEscapeSequence,
     ParseIsRequiredAfterMatchMatch,
     ParseLiteralTypesRequireAString,
     ParseParserStalledWhileParsingMatch,

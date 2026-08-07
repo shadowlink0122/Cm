@@ -1,0 +1,9 @@
+hex=AB len=2
+uni=é len=1 blen=2
+emoji=😀 len=1 blen=4
+ctrl_blen=3
+char=A
+braces={literal}
+raw=C:\path\n len=9
+tick=a`b len=3
+interp=42 lit=${x}

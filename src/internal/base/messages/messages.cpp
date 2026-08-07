@@ -706,6 +706,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ParseASwitchStatementRequiresCase
     {"a switch statement requires case or else",
      "switch文内にはcaseまたはelseが必要です"},
+    // ParseCharEscapeNotSingleByte
+    {"escape sequence '{0}' decodes to multiple bytes and cannot be used in a char literal (use a string literal instead)",
+     "エスケープシーケンス '{0}' は複数バイトへデコードされるため文字リテラルでは使用できません（文字列リテラルを使用してください）"},
     // ParseDuplicateElseClause
     {"duplicate else clause",
      "重複するelse節"},
@@ -715,6 +718,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ParseEnumValuesRequireAnInteger
     {"enum values require an integer or character literal",
      "enum値には整数リテラルまたは文字リテラルが必要です"},
+    // ParseInvalidEscapeSequence
+    {"invalid escape sequence '{0}' in string/char literal (supported: \\n \\t \\r \\b \\f \\v \\a \\0 \\\\ \\\" \\' \\$ \\{ \\} \\xHH \\uHHHH \\UHHHHHHHH; use \\\\ for a literal backslash)",
+     "文字列/文字リテラルの不正なエスケープシーケンス '{0}'（対応: \\n \\t \\r \\b \\f \\v \\a \\0 \\\\ \\\" \\' \\$ \\{ \\} \\xHH \\uHHHH \\UHHHHHHHH。バックスラッシュ自体は \\\\ と書いてください）"},
     // ParseIsRequiredAfterMatchMatch
     {"'{' is required after match; 'match' is a reserved word in Cm and cannot be used as a variable name",
      "'{' is required after match; 'match' is a reserved word in Cm and cannot be used as a variable name"},

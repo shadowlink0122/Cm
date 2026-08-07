@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8修正済み・archive移動で7件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21修正済みで残4件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -52,7 +52,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 - [R2: 文字列APIのコードポイント/バイト単位不一致](string-codepoint-byte-api-split.md) — **High**: `len()`=コードポイント数（H9）と`charAt()`=生バイトの添字単位不一致で、非ASCII文字列を走査するコードが破綻。std::jsonの非ASCIIパースがnative/jit失敗・js成功のバックエンド分岐に
 - R3: ジェネリック`T*`引数の型パラメータ束縛失敗 — **修正済み**（[archive移動](../../archive/v0.17.0/generic-pointer-param-inference.md)。真因2系統: checkerのinfer_generic_callが`T*`/`T[]`/`T**`を推論できず3ケース個別実装だったのを構造再帰unifyへ置換、LLVM codegenのselfコピー最適化が特殊化名`deref__int`のT*引数をプリミティブimplメソッドのselfと誤認し要素型で確保していたのをシード条件へ「第0引数名=self」を追加。swap/deref/T[]/T**/ジェネリック構造体の回帰をjit/native O0〜O3/wasm/jsで追加）
 - R4: クロージャの外側変数書き込み黙殺・構造体キャプチャのjs分岐 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/closure-mutation-semantics.md)。値キャプチャは読み取り専用と明確化し、キャプチャ変数への代入・複合代入・inc/dec（メンバ・添字書き込み含む）をi18n診断で拒否。ポインタキャプチャ経由の間接書き込み`*px = v`は伝播するため許可し公式の回避策としてチュートリアルへ明文化。構造体キャプチャのjs分岐は診断拒否により消滅。識別子収集のfor-in/ブロック/switch/defer/must走査漏れも同時修正。参照キャプチャ`[&x]`はR13/R15の未実装構文として残置）
-- [R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能](string-escape-and-raw-semantics.md) — **High**: `\x`/`\u`/`\U`・未知エスケープでバックスラッシュが黙って脱落し誤った文字列を生成（--strictでも無診断）。バッククォートraw文字列がエスケープを解釈・`\${x}`がエスケープ不能・charリテラルとの不一致（Medium）
+- R5: 文字列エスケープの黙殺・raw文字列のエスケープ解釈・補間エスケープ不能 — **修正済み**（[archive移動](../../archive/v0.17.0/string-escape-and-raw-semantics.md)。`\xHH`/`\uHHHH`/`\UHHHHHHHH`のデコード（UTF-8エンコード・仕様書は元々約束済みで実装欠落だった）とC標準`\b`/`\f`/`\v`/`\a`を実装、未知エスケープはレクサ発行のErrorトークン→パーサ診断で位置つき拒否。std::jsonの`"\b"`が文字bへ化ける潜在stdlibバグも同時解消。charリテラルはエスケープ表を共用し複数バイトは専用診断。raw文字列は`` \` ``（デリミタ）以外エスケープ無効のリテラル保持へ。`\${x}`でリテラル`${x}`が書けるようMIRの`${{`時の`$`喪失も修正。VSCode拡張は対応/不正エスケープの2色化）
 - R6: 条件付きコンパイルディレクティブの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/preprocessor-conditional-robustness.md)。#endifを#endの別名として認識、閉じ忘れ（開始行・シンボル付き）・対応ブロックのない#end/#endif/#else・#define使用をi18n診断化（-D/組み込みシンボル案内）、cm_grammar.mdを実態へ追従。パーサ段の行番号・imported module誤表記はR14へ委譲）
 - R7: 属性の検証レジストリ — **修正済み**（[archive移動](../../archive/v0.17.0/attribute-validation-registry.md)。checkerの検証パスで3値分類を実装: 未知・タイポ属性=警告/--strictエラー、既知未実装（bench/optimize/inline/cfg）=専用診断、#[deprecated]=呼び出しサイト警告として実装昇格。#[target]未知名の意味反転を許可リスト検証で診断化、#[inline]の予約語パース特例、AttributeNode.spanで診断位置を属性自身に。cfg条件評価の実装はR13の領分として残置）
 - R8: デフォルト引数での前引数参照が無診断でゼロ値 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/default-arg-prev-param-zero.md)。デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のためC++同様にパラメータ参照を拒否。check_default_param_refsで宣言時に式を再帰走査し関数・implメソッド両経路で診断（自己参照・後方参照も検出）。エラーテスト3本+i18n E2E+正常系回帰を追加、チュートリアルへ制約を明記）
@@ -114,11 +114,11 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | B1 | async/await | 調査済み → 健全 | jsの基本テストのみ | js/ts動作・他経路は明示拒否。await式の型も正しい（軽微: check非対称・全角括弧混入は[R14](syntax-error-diagnostic-quality.md)） |
 | B2 | macro宣言（定数マクロ・関数マクロ） | 調査済み → [R10](checker-silent-holes.md) | 基本テストあり | 正常系は6経路一致で健全。型不一致マクロがcheck素通り（Medium） |
 | B3 | ラムダの参照キャプチャ`[&x]` | 調査済み → [R4](../../archive/v0.17.0/closure-mutation-semantics.md)（修正済み）・[R13](unimplemented-documented-syntax.md) | なし | `[&x]`構文は未実装。クロージャ書き込みは診断拒否へ修正済み |
-| B4 | raw string（`r"..."`/`r#"..."#`） | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | `r"..."`未実装。バッククォートraw文字列がエスケープを解釈（rawでない、Medium） |
+| B4 | raw string（`r"..."`/`r#"..."#`） | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | `r"..."`構文は不採用（仕様書から削除）。バッククォートraw文字列は非エスケープ化済み（`` \` ``のみ例外） |
 | B5 | エスケープ識別子（バッククォート`` `名前` ``） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（バッククォートはraw文字列に割当・診断あり） |
-| B6 | エスケープシーケンス`\xHH`/`\uHHHH`/`\UHHHHHHHH` | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | `\x`/`\u`/`\U`・未知エスケープが黙って`\`脱落（High） |
+| B6 | エスケープシーケンス`\xHH`/`\uHHHH`/`\UHHHHHHHH` | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | デコード実装済み・未知エスケープは診断拒否 |
 | B7 | 数値リテラルの桁区切り`_`・型サフィックス（u/l/f/d等） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（拒否は安全側・誤値化なし）。基数リテラル値は健全 |
-| B8 | `${...}`形式の文字列補間 | 調査済み → [R5](string-escape-and-raw-semantics.md) | なし | 補間本体は`{}`と同値で健全。`\${x}`のエスケープ不能（Medium） |
+| B8 | `${...}`形式の文字列補間 | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | 補間本体は`{}`と同値で健全。`\${x}`のリテラル出力対応済み |
 | B9 | タプル型・タプル式 | 調査済み → [R13](unimplemented-documented-syntax.md) | 専用テストなし | 未実装（文法書と乖離・診断あり・黙殺なし） |
 | B10 | 参照型`T&` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（CANONICAL_SPEC §3.2で明記済み・診断あり） |
 | B11 | 演算子オーバーロードの`[]`/`()` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（operator_symbolに`[]`/`()`なし・診断あり） |

@@ -277,8 +277,16 @@
               "end": "\"",
               "patterns": [
                 {
-                  "name": "constant.character.escape.cm",
-                  "match": "\\\\."
+                  "patterns": [
+                    {
+                      "name": "constant.character.escape.cm",
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                    },
+                    {
+                      "name": "invalid.illegal.escape.cm",
+                      "match": "\\\\."
+                    }
+                  ]
                 }
               ]
             },
@@ -338,8 +346,16 @@
               "end": "\"",
               "patterns": [
                 {
-                  "name": "constant.character.escape.cm",
-                  "match": "\\\\."
+                  "patterns": [
+                    {
+                      "name": "constant.character.escape.cm",
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                    },
+                    {
+                      "name": "invalid.illegal.escape.cm",
+                      "match": "\\\\."
+                    }
+                  ]
                 }
               ]
             },
@@ -397,6 +413,10 @@
       },
       "patterns": [
         {
+          "name": "constant.character.escape.cm",
+          "match": "\\\\`"
+        },
+        {
           "include": "#comments"
         },
         {
@@ -436,8 +456,16 @@
           "end": "\"",
           "patterns": [
             {
-              "name": "constant.character.escape.cm",
-              "match": "\\\\."
+              "patterns": [
+                {
+                  "name": "constant.character.escape.cm",
+                  "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                },
+                {
+                  "name": "invalid.illegal.escape.cm",
+                  "match": "\\\\."
+                }
+              ]
             },
             {
               "name": "constant.character.escape.cm",
@@ -466,7 +494,7 @@
         },
         {
           "name": "string.quoted.single.cm",
-          "match": "'(\\\\.|[^'\\\\])'"
+          "match": "'(\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)|[^'\\\\])'"
         }
       ]
     },

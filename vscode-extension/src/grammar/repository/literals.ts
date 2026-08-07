@@ -58,8 +58,9 @@ export const strings: TmRepositoryEntry = {
       ],
     },
     {
+      // charリテラル: \xHH等の複数文字エスケープにも対応（R5でcharと文字列のエスケープ表を共用化）
       name: 'string.quoted.single.cm',
-      match: "'(\\\\.|[^'\\\\])'",
+      match: "'(\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)|[^'\\\\])'",
     },
   ],
 };

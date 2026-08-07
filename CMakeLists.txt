@@ -735,9 +735,11 @@ if(BUILD_TESTING)
     set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 
         # Unit tests - Lexer
+        # （エスケープ診断がi18nメッセージ本文を参照するためCM_I18N_SOURCESも必要）
         add_executable(lexer_test
             tests/unit/lexer_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(lexer_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})

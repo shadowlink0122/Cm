@@ -14,6 +14,22 @@ namespace cm {
 ast::Program Parser::parse() {
     debug::par::log(debug::par::Id::Start);
 
+    // 字句エラー（不正エスケープ等）はメッセージ付きErrorトークンとして届く。
+    // 診断へ変換してからトークン列から除去し、残りは通常どおりパースして後続の診断も収集する（R5）
+    {
+        std::vector<Token> rest;
+        rest.reserve(tokens_.size());
+        for (auto& tok : tokens_) {
+            if (tok.kind == TokenKind::Error && std::holds_alternative<std::string>(tok.value)) {
+                diagnostics_.emplace_back(DiagKind::Error, Span{tok.start, tok.end},
+                                          std::get<std::string>(tok.value));
+            } else {
+                rest.push_back(std::move(tok));
+            }
+        }
+        tokens_ = std::move(rest);
+    }
+
     ast::Program program;
     // 宣言数の固定上限は設けない（M5）。無限ループは pos_ が進まないことの検出で防ぐ。
     // 機械生成コードのように宣言数が多くても、進捗がある限り最後まで解析する。

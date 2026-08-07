@@ -112,6 +112,10 @@ run_case q4-undeclared-iface-ja "$CM" check --lang=ja "$DIR/q4_undeclared_interf
 run_case r6-unclosed-en "$CM" check "$DIR/r6_unclosed_ifdef.cm"
 run_case r6-unclosed-ja "$CM" check --lang=ja "$DIR/r6_unclosed_ifdef.cm"
 
+# ---------- 文字列エスケープ診断（R5） ----------
+run_case r5-invalid-escape-en "$CM" check "$DIR/r5_invalid_escape.cm"
+run_case r5-invalid-escape-ja "$CM" check --lang=ja "$DIR/r5_invalid_escape.cm"
+
 # ---------- クロージャのキャプチャ変数書き込み診断（R4） ----------
 run_case r4-capture-assign-en "$CM" check "$DIR/r4_closure_capture_assign.cm"
 run_case r4-capture-assign-ja "$CM" check --lang=ja "$DIR/r4_closure_capture_assign.cm"

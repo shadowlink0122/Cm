@@ -139,7 +139,8 @@ int main() {
 ```
 
 **Interpolation works in every string literal (v0.17.0)**: placeholders are evaluated not only in `println` arguments but also in ordinary string literals such as `string s = "sum: {x + 1}";`.
-Whenever you need literal braces, escape them with `{{` `}}` regardless of context (`string braces = "{{x}}";` yields the string `{x}`).
+Whenever you need literal braces, escape them with `{{` `}}` regardless of context (`string braces = "{{x}}";` yields the string `{x}`). `\{` `\}` are equivalent escapes.
+To emit a `${x}`-style placeholder literally, escape the leading `$` with `\$` (`"\${x}"` yields the string `${x}`).
 
 **Known limitation**: if an interpolated value itself contains `{` or `}`, later placeholders in the same string may be mis-detected (for example, embedding a variable whose content is `{x}` can break the placeholders that follow).
 When embedding values that contain braces, build the string with `+` concatenation instead.

@@ -42,7 +42,14 @@ export const backtickBlock: TmRepositoryEntry = {
   endCaptures: {
     '0': { name: 'string.quoted.backtick.cm' },
   },
-  patterns: codeIncludes({ comments: true, punctuation: '#punctuation' }),
+  patterns: [
+    {
+      // raw文字列で唯一のエスケープ \`（デリミタのエスケープ。R5でrawの他のバックスラッシュはリテラル化）
+      name: 'constant.character.escape.cm',
+      match: '\\\\`',
+    },
+    ...codeIncludes({ comments: true, punctuation: '#punctuation' }),
+  ],
 };
 
 export const interpolationExpression: TmRepositoryEntry = {

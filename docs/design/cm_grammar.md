@@ -369,13 +369,14 @@ char_literal ::= "'" (escape_sequence | [^'\\\n]) "'"
 string_literal ::= '"' (escape_sequence | [^"\\\n])* '"'
                  | raw_string_literal
 
-raw_string_literal ::= 'r"' [^"]* '"'
-                     | 'r#"' .* '"#'  # Rust風のraw string
+# raw文字列はバッククォート区切り。エスケープは解釈されずバックスラッシュはリテラル
+# （唯一の例外はデリミタのエスケープ \`）。補間は ${expr} のみ有効
+raw_string_literal ::= '`' ( '\\`' | [^`] )* '`'
 
-escape_sequence ::= '\\' ['"\\nrtbfav]
-                  | '\\x' hex_digit hex_digit
-                  | '\\u' hex_digit{4}
-                  | '\\U' hex_digit{8}
+escape_sequence ::= '\\' ['"\\nrtbfav0$}{]
+                  | '\\x' hex_digit hex_digit    # 1バイト
+                  | '\\u' hex_digit{4}           # Unicodeコードポイント（UTF-8へエンコード）
+                  | '\\U' hex_digit{8}           # Unicodeコードポイント（UTF-8へエンコード）
 
 bool_literal ::= 'true' | 'false'
 

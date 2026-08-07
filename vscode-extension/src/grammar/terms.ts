@@ -136,10 +136,20 @@ export const PREPROCESSOR_BUILTINS = [
 export const ASM_CONSTRAINT_KEYWORDS = ['in', 'out', 'inout', 'clobber'] as const;
 
 // ---- 共有ルール断片 ----
-// 文字列内のエスケープシーケンス（"..." / asmブロック内文字列 / use文の文字列で共用）
+// 文字列内のエスケープシーケンス（"..." / asmブロック内文字列 / use文の文字列で共用）。
+// 対応エスケープ（\n \t \r \b \f \v \0 \\ \" \' \$ \{ \} \xHH \uHHHH \UHHHHHHHH）は
+// エスケープ色、それ以外の \. はコンパイラ診断（R5）と整合する不正エスケープ色にする
 export const ESCAPE_RULE: TmRule = {
-  name: 'constant.character.escape.cm',
-  match: '\\\\.',
+  patterns: [
+    {
+      name: 'constant.character.escape.cm',
+      match: '\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\"\'$\\{\\}])',
+    },
+    {
+      name: 'invalid.illegal.escape.cm',
+      match: '\\\\.',
+    },
+  ],
 };
 
 // モジュール名（module/import/use文で共用）
