@@ -1,0 +1,15 @@
+//! platform: sv
+// 回帰(R15): #[test]のassertは対象信号がx（不定）のとき!== 1'b1で正しくFAILする（従来はif(!(x))=偽で誤PASS）
+import std::debug::assert;
+
+#[input] posedge clk;
+#[output] uint dout;
+
+async void ff(posedge clk) {
+}
+
+#[test]
+void assert_on_x() {
+    step(1);
+    assert(dout == 12345, "dout should be 12345");
+}

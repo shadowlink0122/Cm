@@ -277,6 +277,11 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCombMultiCase) {
     expect_contains(tb, "a = 10;");
     expect_contains(tb, "b = 20;");
     expect_contains(tb, "TEST 2: sum=%0d");
+    // 期待値がアサートされ、不一致（xも!==で不一致扱い）は$fatalで終了コードに反映される（R15）
+    expect_contains(tb, "if (sum !== (8)) begin");
+    expect_contains(tb, "FAIL: TEST 1: sum=%0d expected=8");
+    expect_contains(tb, "if (sum !== (30)) begin");
+    expect_contains(tb, "$fatal(1);");
     // クロックポートが無いのでクロック生成は出力されない
     expect_not_contains(tb, "always #5");
 }
@@ -287,7 +292,19 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCyclesWithInput) {
     expect_contains(tb, "en = 1;");
     expect_contains(tb, "repeat(3) @(posedge clk);");
     expect_contains(tb, "TEST 1: count=%0d");
+    expect_contains(tb, "if (count !== (");
     expect_contains(tb, "always #5 clk = ~clk;");
+}
+
+// #[test] 関数のassertはx安全な比較（!== 1'b1）で生成される（R15: if(!(x))=偽の誤PASS封止）
+TEST_F(SVCodegenTest, TestbenchAssertXSafeComparison) {
+    std::string tb = compile_to_tb("testbench/test_fn_assert");
+    expect_contains(tb, "!== 1'b1) begin");
+    expect_contains(tb, "$display(\"FAIL: value latched\");");
+    expect_contains(tb, "$fatal(1);");
+    expect_contains(tb, "$display(\"PASS: value latched\");");
+    // 旧形式 if(!(cond)) は生成されない（cond=xでif(x)=偽となり誤PASSする）
+    expect_not_contains(tb, "if (!(");
 }
 
 // 出力ポートの宣言初期値が電源投入時初期値として出力される（従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）

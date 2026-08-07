@@ -1,0 +1,8 @@
+//! platform: sv
+//! test: a=3 -> result=8
+// 回帰(R15): 未駆動出力（x）は!==比較で不一致となり非0終了する（x楽観性の封止）
+#[input] int a = 0;
+#[output] int result;
+
+void nothing() {
+}

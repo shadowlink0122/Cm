@@ -79,6 +79,8 @@ void bitops() {
 ```
 
 Each `//! test:` line becomes one test case: the inputs are set and the outputs are verified.
+Each expectation is asserted in the generated testbench with a `!==` comparison; on mismatch it prints `FAIL: TEST k: name=actual expected=value` and exits non-zero via `$fatal` (so `cm test` detects the failure).
+Because `!==` is a 4-state comparison, an undriven `x` (unknown) output also counts as a mismatch and fails.
 
 ### Testing Sequential Logic (with cycles)
 
@@ -175,7 +177,7 @@ cm test logic.cm      # no platform → run each #[test] function via JIT
 Notes:
 
 - **`step(n)`**: wait n clocks (builtin available only in `#[test]` functions on the SV platform)
-- **`assert(cond, msg)`**: prints PASS, or prints FAIL and `$fatal`s (non-zero sim exit → detected by the test runner)
+- **`assert(cond, msg)`**: prints PASS, or prints FAIL and `$fatal`s (non-zero sim exit → detected by the test runner). The comparison is a 4-state `!== 1'b1` check, so an `x` (unknown) signal never passes the assertion
 - **`println("...")`** → `$display` (string literals only)
 - Assignments drive DUT inputs as blocking assigns
 - Clock ports named other than `clk` (e.g. `pixel_clk`) are auto-detected from process clocks

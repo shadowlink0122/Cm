@@ -1,0 +1,10 @@
+//! platform: sv
+//! test: a=3, b=5 -> result=8
+// 回帰(R15): //! test: の期待値が生成テストベンチでアサートされ、一致時はrc=0でPASSする
+#[input] int a = 0;
+#[input] int b = 0;
+#[output] int result = 0;
+
+void add() {
+    result = a + b;
+}

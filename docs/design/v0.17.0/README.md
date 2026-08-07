@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15〜R20の6件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15修正済みで残5件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -69,7 +69,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 **教訓**: 調査中にユーザーがcmをリビルドした（HOF共通化コミット、cmバイナリmtime 19:15）ため、TSエージェントの旧バイナリ由来の所見3件（long戻り値のnumber混入・ulong定数の符号喪失・`as char`縮小欠落）は現行バイナリでは非再現だった。**バイナリが変わりうる環境では最終判定を現行バイナリで取り直すこと**——下記は全て現行バイナリでの再確認済みのみを記載する。
 健全確認済み: native↔SVの数値意味論一致・SV固有構文の正常系（`bit[N]`・幅付きリテラル・マスクmatch・ビットスライス・always系）・baremetal-x86とUEFIの正常系コンパイル・malloc/println直呼びとラッパー経由の正しい拒否・TSのプリミティブ/struct interface/配列/クロージャ/ジェネリック/async→Promise/macro/エラー診断。
 
-- [R15: SVテスト検証の健全性](sv-test-verification-soundness.md) — **Critical**: `//! test: ... -> 期待値`が生成テストベンチで一度もアサートされず（testbench.cpp:296-300が`$display`のみ・比較/`$fatal`なし）、誤った期待値でも壊れた回路でも`✓ SV test passed`。加えて`#[test]`+assertが未駆動(x)信号で誤PASS（x楽観性、High）。`cm test`単体のSV合否が信頼できず外部`.expect`突合に依存
+- R15: SVテスト検証の健全性 — **修正済み**（[archive移動](../../archive/v0.17.0/sv-test-verification-soundness.md)。`//! test:`期待値ごとに`!==`比較+`$fatal`をテストベンチへ生成し（4値比較でx/zも不一致扱い・既存`$display`行は維持し.expect突合は不変）、`#[test]`のassertを`if (!(cond))`から`if ((cond) !== 1'b1)`のx安全形へ変更。ディレクティブ検出の行中誤認識（コメント中の`//! test:`言及をテストケース化）も行頭限定で修正。negative check 4本（不一致/x出力/assert対象xがrc=1でFAIL）をcm test E2Eへ、アサート生成の固定をregressionへ追加。tests/sv 125件は無修正で全PASS＝既存期待値の正しさも確認）
 - [R16: SVコード生成が不正な構文を無診断で受理](sv-codegen-silent-invalid.md) — **Medium**: `#[sv::pinn]`タイポでピン制約が静かに欠落・`#[input]`ポートへの代入が不正SV（iverilog l-valueエラー）・エッジ無し`always_ff`が`always_comb`へ黙殺変換・`bit[0]`が不正SV（`0'd0`）。桁あふれ`4'd99`・非文字列pin引数・native流入診断の低品質（Low）
 - [R17: baremetal-armターゲットが起動コードのmemcpy型不一致で全滅](baremetal-arm-startup-broken.md) — **Critical**: `_start`の`memcpy`/`memset`をi32宣言・i64実引数（arm=32bitポインタ）で呼びLLVM検証失敗。最小`int main`すら通らずターゲット全滅（x86は`generateStartupCode`早期returnで難を逃れテストスイートも露見せず）
 - [R18: フリースタンディング制約の強制漏れ](freestanding-nostd-enforcement-gaps.md) — **High**: 文字列連結（`cm_string_concat`＝malloc依存）がbaremetal/UEFIで無診断コンパイル（ブロックリストに`cm_string_*`漏れ）・`&putchar`の関数ポインタ間接呼び出しでブロックリスト回避。floatがbaremetal-x86失敗/UEFI成功の非対称（Medium）
@@ -160,7 +160,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| E1 | SVバックエンドの網羅バグ調査 | 調査済み → [R15](sv-test-verification-soundness.md) | 専用スイートあり（tests/sv） | `//! test:`期待値が非検証（Critical）・assertのx楽観性（High）。数値意味論はnative↔SV一致で健全 |
+| E1 | SVバックエンドの網羅バグ調査 | 調査済み → [R15](../../archive/v0.17.0/sv-test-verification-soundness.md)（修正済み） | 専用スイートあり（tests/sv） | `//! test:`期待値の非検証・assertのx楽観性は修正済み。数値意味論はnative↔SV一致で健全 |
 | E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 調査済み → [R16](sv-codegen-silent-invalid.md) | 正常系はSVスイートにあり | 不正構文の無診断受理・属性タイポでピン制約欠落（Medium）。正常系は健全 |
 | E3 | UEFIターゲット | 調査済み → [R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/uefi） | 文字列連結のヒープ確保・間接呼び出しが制約をすり抜け（High）。正常系コンパイルは健全 |
 | E4 | baremetal-arm/x86 | 調査済み → [R17](baremetal-arm-startup-broken.md)・[R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/baremetal） | armは起動コードのmemcpy型不一致で全滅（Critical）。x86正常系は健全 |

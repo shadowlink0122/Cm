@@ -79,6 +79,8 @@ void bitops() {
 ```
 
 各 `//! test:` 行が1つのテストケースになり、入力を設定して出力を検証します。
+期待値はテストベンチ内で `!==` 比較としてアサートされ、不一致のときは `FAIL: TEST k: name=実測 expected=期待値` を表示して `$fatal` で非0終了します（`cm test` が失敗を検出します）。
+`!==` は4値比較のため、出力が未駆動で `x`（不定）の場合も不一致としてFAILします。
 
 ### 順序回路のテスト（cycles指定）
 
@@ -190,7 +192,7 @@ cm test logic.cm      # platform指定なし → 各#[test]関数をJITで直接
 din = 5;
 repeat (1) @(posedge clk);
 #1; // NBA確定待ち
-if (!((dout == 5))) begin
+if (((dout == 5)) !== 1'b1) begin
     $display("FAIL: first value latched");
     $fatal(1);
 end else begin
@@ -199,7 +201,7 @@ end
 ```
 
 - **`step(n)`**: nクロック待機（`#[test]` 関数・SVプラットフォーム専用の組み込み）
-- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`（シミュレーションが非0終了するためテストランナーが失敗を検出）
+- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`（シミュレーションが非0終了するためテストランナーが失敗を検出）。比較は `!== 1'b1` の4値判定で、対象信号が `x`（不定）のときも成立扱いにならずFAILします
 - **`println("...")`**: `$display`（文字列リテラルのみ）
 - 代入はブロッキング代入としてDUT入力を駆動します
 - クロックポートが `clk` 以外の名前（`pixel_clk` 等）でも、プロセスのクロックに使われている入力ポートを自動検出します

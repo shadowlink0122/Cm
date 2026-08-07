@@ -33,9 +33,9 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         if (src.is_open()) {
             std::string line;
             while (std::getline(src, line)) {
-                // "//! test:" プレフィックスを検出
+                // "//! test:" プレフィックスを検出（行頭のみ。通常コメント中の言及をディレクティブと誤認しない）
                 auto pos = line.find("//! test:");
-                if (pos == std::string::npos)
+                if (pos == std::string::npos || line.find_first_not_of(" \t") != pos)
                     continue;
                 std::string test_spec = line.substr(pos + 9);
 
@@ -293,10 +293,15 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
                 ss << "        #10;\n";
             }
 
-            // 出力値の表示と検証
+            // 出力値の表示と検証（!==でx/zも不一致として検出し、失敗は$fatalで終了コードに反映する）
             for (const auto& [name, val] : tc.expected) {
                 ss << "        $display(\"TEST " << test_num << ": " << name << "=%0d\", " << name
                    << ");\n";
+                ss << "        if (" << name << " !== (" << val << ")) begin\n";
+                ss << "            $display(\"FAIL: TEST " << test_num << ": " << name
+                   << "=%0d expected=" << val << "\", " << name << ");\n";
+                ss << "            $fatal(1);\n";
+                ss << "        end\n";
             }
             ss << "\n";
             test_num++;
@@ -400,7 +405,9 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
                     }
                 }
                 std::string out;
-                out += ind + "if (!(" + cond + ")) begin\n";
+                // 条件はCm側でbool（1-bit比較結果）が保証される。!(cond)はcond=xでif(x)=偽となり誤PASSするため、
+                // !== 1'b1でx/zを不一致（FAIL）側に倒す
+                out += ind + "if ((" + cond + ") !== 1'b1) begin\n";
                 out += ind + "    $display(\"FAIL: " + msg + "\");\n";
                 out += ind + "    $fatal(1);\n";
                 out += ind + "end else begin\n";

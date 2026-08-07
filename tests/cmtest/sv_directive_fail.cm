@@ -1,0 +1,10 @@
+//! platform: sv
+//! test: a=3, b=5 -> result=999
+// 回帰(R15): //! test: の期待値不一致は$fatalで非0終了する（従来は$displayのみで常時PASSだった）
+#[input] int a = 0;
+#[input] int b = 0;
+#[output] int result = 0;
+
+void add() {
+    result = a + b;
+}
