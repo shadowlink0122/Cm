@@ -369,6 +369,14 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
     } else if (auto* gv = decl.as<ast::GlobalVarDecl>()) {
         // グローバル変数/定数の登録（const強化）
         current_span_ = decl.span;
+        // SVプラットフォーム: #[input]ポートを記録する（プロセス内からの代入を診断するため。R16）
+        if (sv_platform_) {
+            for (const auto& attr : gv->attributes) {
+                if (attr.name == "input") {
+                    sv_input_ports_.insert(gv->name);
+                }
+            }
+        }
         std::optional<int64_t> const_int_value = std::nullopt;
 
         // const変数の値を評価
@@ -741,6 +749,16 @@ void TypeChecker::check_attribute_list(const std::vector<ast::AttributeNode>& at
             }
             continue;
         }
+        // #[sv::pin]は引数（ピン名文字列）必須（R16。非文字列リテラルはパーサ段で診断される）
+        if ((attr.name == "sv::pin" || attr.name == "verilog::pin") && attr.args.empty()) {
+            const std::string msg =
+                i18n::msgf(i18n::MsgId::TcSvPinRequiresStringArgument, attr.name);
+            if (enable_naming_check_) {
+                error(span, msg);
+            } else {
+                warning(span, msg);
+            }
+        }
         // #[target(...)]の未知ターゲット名はNative縮退で意味が反転するため検証する
         if (attr.name == "target") {
             for (const auto& raw : attr.args) {
@@ -793,6 +811,10 @@ void TypeChecker::check_attributes(const ast::Program& program) {
                             check_attribute_list(method->attributes, method->name_span);
                         }
                     }
+                } else if (const auto* gv = decl->as<ast::GlobalVarDecl>()) {
+                    // SVポート宣言（#[output] int led等）の属性もここで検証する（R16: 従来は
+                    // グローバル変数が走査外で#[sv::pinn]等のタイポが黙殺されピン制約が静かに欠落した）
+                    check_attribute_list(gv->attributes, decl->span);
                 } else if (const auto* ib = decl->as<ast::InitialBlockDecl>()) {
                     check_attribute_list(ib->attributes, decl->span);
                 } else if (auto* mod = const_cast<ast::Decl&>(*decl).as<ast::ModuleDecl>()) {
@@ -1240,6 +1262,15 @@ void TypeChecker::register_print() {
 void TypeChecker::check_function(ast::FunctionDecl& func) {
     // キャプチャ付きクロージャ変数の追跡は関数単位（V5〜V7の診断用）
     closure_vars_.clear();
+
+    // #[test]テストベンチはDUTの外部として入力ポートを駆動できる（R16の入力ポート代入診断の除外）
+    in_test_function_ = false;
+    for (const auto& attr : func.attributes) {
+        if (attr.name == "test") {
+            in_test_function_ = true;
+            break;
+        }
+    }
 
     // #[test] 関数は「引数なし・戻り値void」に限定する（SVテストベンチ/JITテストランナーの両方が前提とするシグネチャ）
     for (const auto& attr : func.attributes) {

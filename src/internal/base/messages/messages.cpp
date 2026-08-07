@@ -803,6 +803,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv007UnsupportedStatementOnThe
     {"error[SV007]: unsupported statement on the SV target (MirStatement kind={0}）",
      "エラー[SV007]: SVターゲットで非対応の文です（MirStatement kind={0}）"},
+    // SvSv008AlwaysFfRequiresEdge
+    {"error[SV008]: always_ff function '{0}' has no edge parameter (add 'posedge clk' or similar; edge-less sequential logic would silently become combinational)",
+     "エラー[SV008]: always_ff関数 '{0}' にエッジパラメータがありません（'posedge clk'等を追加してください。エッジ無し順序回路は黙って組み合わせ回路になります）"},
     // SvSvTargetFunctionAssignsState
     {"warning: SV target: function '{0}' assigns state variable '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n",
      "警告: SVターゲット: 関数 '{0}' 内で代入した状態変数 '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n"},
@@ -947,6 +950,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
      "#[target(...)] の未知のターゲット名 '{0}' です（既知: native・js・web・wasm・sv・uefi・bm・baremetal-arm・baremetal-x86。TypeScript出力は \"js\" を使用してください）"},
     // TcDeprecatedFunctionCall
     {"function '{0}' is deprecated", "関数 '{0}' は非推奨（deprecated）です"},
+    // TcSvCannotAssignInputPort
+    {"cannot assign to input port '{0}' (input ports are driven by the outside; use #[output] or an internal signal)",
+     "入力ポート '{0}' へは代入できません（inputポートは外部から駆動されます。#[output]または内部信号を使用してください）"},
+    // TcSvPinRequiresStringArgument
+    {"attribute '{0}' requires a pin name argument (e.g. #[{0}(\"38\")])",
+     "属性 '{0}' にはピン名引数が必要です（例: #[{0}(\"38\")]）"},
     // MirSliceReceiverUnresolved
     {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
      "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},
@@ -986,6 +995,15 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsExportAndPrivateConflict
     {"a method cannot be both 'export' and 'private'",
      "メソッドに 'export' と 'private' は同時に指定できません"},
+    // PsSvBitWidthZero
+    {"bit width must be at least 1 (bit[0] would generate invalid SystemVerilog)",
+     "bitの幅は1以上が必要です（bit[0]は不正なSystemVerilogを生成します）"},
+    // PsSvLiteralOverflowsWidth
+    {"sized literal '{0}' overflows its bit width (the value would be silently truncated by simulators)",
+     "幅付きリテラル '{0}' が指定ビット幅に収まりません（シミュレータで黙って切り詰められます）"},
+    // PsSvPinRequiresStringArgument
+    {"attribute '{0}' requires a string pin name (write #[{0}(\"38\")], not a numeric literal)",
+     "属性 '{0}' のピン名は文字列で指定してください（数値リテラルでなく #[{0}(\"38\")] と書きます）"},
     // PsExpectedGlobalVariableInitializer
     {"Expected '=' for global variable initializer",
      "グローバル変数の初期化子には '=' が必要です"},

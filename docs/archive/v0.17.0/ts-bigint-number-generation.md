@@ -1,6 +1,6 @@
 # R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない
 
-**ステータス:** 未修正（バックエンド網羅バグ調査で検出）
+**ステータス:** 修正済み（フィールド・要素代入サイトへwide64リテラルのBigInt化を適用）
 **重大度:** Medium（TS第一級保証「生成TSがtscを型エラーなく通る」に違反。実行値は正）
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt7/{ts,verify}/`）
@@ -34,3 +34,9 @@ TSコード生成の整数リテラル出力で、代入先・格納先の型が
 ## テスト計画
 
 `tests/ts/cases/`へ: long/ulongのフィールド代入・配列要素・関数引数・複合代入で生成TSがbigintリテラルを使うことの検証（生成物のgrepまたはtsc導入後の型検査）。実行値のts/js/jit一致も併せて固定。
+
+## 実装記録
+
+- js/tsコード生成の代入文（emit_statements.cpp）で、射影付きplace（フィールド`_t.v`・配列要素`arr[i]`）の代入にも「射影後スロット型がwide64（long/ulong/isize/usize）なら素の整数リテラルをBigIntリテラル化」を適用した（H2のinterface coercionと同じ射影歩行でスロット型を解決）。従来はlet初期化・戻り値サイトのみで、フィールド代入が`_t.v = 5`のまま出てTS2322だった。BigInt化ロジックは`wrapWide64PlainIntLiteral`ヘルパへ抽出してサイト間の複製を防止。
+- 回帰: `tests/common/types/wide64_field_assign.cm`（フィールド・配列要素・負数の代入で実行値が全バックエンド一致し、生成TSが`5n`/`(-3n)`等のbigintリテラルを使うことを確認）。TSスイートの広域ゲート（501プログラムの生成TS検証）もPASS。
+- 補足のunion typedef→any退化疑いは未確定のまま（要追検証と記録）。

@@ -205,6 +205,13 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                           i18n::msgf(i18n::MsgId::TcCannotAssignConstVariable, ident->name));
                     return ast::make_error();
                 }
+                // SVの#[input]ポートへの代入は不正SV（input wireへの手続き代入）を生成する前に診断する（R16。
+                // #[test]テストベンチはDUTの外部として入力を駆動するため対象外）
+                if (sv_platform_ && !in_test_function_ && sv_input_ports_.count(ident->name) > 0) {
+                    error(binary.left->span,
+                          i18n::msgf(i18n::MsgId::TcSvCannotAssignInputPort, ident->name));
+                    return ast::make_error();
+                }
                 // 借用チェック: 借用中の変数への代入を禁止（DRY原則）
                 if (scopes_.current().is_borrowed(ident->name)) {
                     error(binary.left->span,

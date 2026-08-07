@@ -411,6 +411,12 @@ Token Lexer::scan_number(uint32_t start) {
             return Token(TokenKind::Error, start, pos_);
         }
 
+        // 幅付きリテラルの桁あふれ検査（R16: 4'd99等はiverilogが黙って切り詰めるためCm側で診断する）
+        if (bit_width > 0 && bit_width < 64 && uval > ((1ULL << bit_width) - 1ULL)) {
+            escape_error(start, i18n::msgf(i18n::MsgId::PsSvLiteralOverflowsWidth,
+                                           width_str + "'" + norm_base + value_str));
+        }
+
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::debug_mode())

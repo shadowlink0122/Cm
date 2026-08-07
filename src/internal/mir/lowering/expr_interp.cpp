@@ -202,6 +202,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                             }
                         } else if (!var_name.empty() &&
                                    (std::isalpha(var_name[0]) || var_name[0] == '!' ||
+                                    var_name[0] == '~' ||  // ビット反転を許可（R20）
+                                    var_name[0] == '-' ||  // 単項マイナスを許可（R20）
                                     var_name[0] == '*' ||  // デリファレンスを許可
                                     var_name.substr(0, 5) == "self." ||
                                     var_name.find("::") != std::string::npos)) {
@@ -245,6 +247,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                             }
                         } else if (!var_name.empty() &&
                                    (std::isalpha(var_name[0]) || var_name[0] == '!' ||
+                                    var_name[0] == '~' ||  // ビット反転を許可（R20）
+                                    var_name[0] == '-' ||  // 単項マイナスを許可（R20）
                                     var_name[0] == '*' ||  // デリファレンスを許可
                                     var_name[0] == '(' ||  // (*ptr).x 形式を許可
                                     var_name.substr(0, 5) == "self." ||

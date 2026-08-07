@@ -1,0 +1,9 @@
+//! platform: sv
+// 回帰(R16): #[input]ポートへの代入は不正SV（input wireへの手続き代入）を生成する前にCm診断で拒否
+#[input] int a = 0;
+#[output] int y = 0;
+
+void logic_step() {
+    a = 5;
+    y = a;
+}

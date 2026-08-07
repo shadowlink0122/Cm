@@ -119,6 +119,7 @@ int run_check(const cli::Options& opts) {
 
             // 型チェック
             TypeChecker checker;
+            checker.set_sv_platform(front.is_sv);  // SV入力ポート代入検査（R16）
             // check/lintではLint警告（W001等）を有効化する
             checker.set_enable_lint_warnings(true);
             // --strict指定時は宣言の命名規則チェック（L001）を有効化

@@ -1,0 +1,16 @@
+// 回帰(R20): 書式指定子（幅・整列・ゼロ埋め・基数複合・科学記法・精度）が全バックエンドで一致する
+// （従来はnative/jit/wasmが幅・:06・.Neを無視しjs/tsと分裂。指数はC/printf互換のe+00・2桁指数が正準仕様）
+import std::io::println;
+
+int main() {
+    int n = 255;
+    double pi = 3.14159265;
+    long big = 1234567;
+    println("w={n:6}| l={n:<6}| c={n:^6}| z={n:06}");
+    println("sci={pi:.2e} SCI={pi:.2E} e6={pi:e} prec={pi:.3}");
+    println("lw={big:12}| lz={big:012}");
+    println("hexw={n:8x}| star={n:*>6}|");
+    int neg = -42;
+    println("negz={neg:06} negw={neg:6}|");
+    return 0;
+}

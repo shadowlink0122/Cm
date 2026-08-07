@@ -1,0 +1,8 @@
+//! platform: sv
+// 回帰(R16): #[sv::pin]のピン名は文字列必須（数値リテラルは診断で拒否）
+#[sv::pin(12345)]
+#[output] int led = 0;
+
+void f() {
+    led = 1;
+}

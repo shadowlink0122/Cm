@@ -425,6 +425,10 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
 
         if (check(TokenKind::IntLiteral)) {
             size = static_cast<uint32_t>(current().get_int());
+            // bit[0]（幅0）は不正SV（0'd0）を生成するため診断する（R16）
+            if (base_type && base_type->kind == ast::TypeKind::Bit && *size == 0) {
+                error(i18n::msg(i18n::MsgId::PsSvBitWidthZero));
+            }
             advance();
         } else if (check(TokenKind::Ident)) {
             size_param_name = std::string(current().get_string());

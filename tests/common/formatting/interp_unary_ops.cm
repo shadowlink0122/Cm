@@ -1,0 +1,13 @@
+// 回帰(R20): 単項演算子（~ - !）を含むプレースホルダが補間され、隣接プレースホルダを巻き込まない
+// （従来は~/-始まりで文字列全体が非補間になり（jit/native）、js/tsは全プレースホルダをundefined置換するデータ破壊だった）
+import std::io::println;
+
+int main() {
+    int a = 240;
+    int n = 5;
+    int r = 9;
+    bool b = false;
+    println("tld={~a} good={n} also={r}");
+    println("neg={-a} not={!b}");
+    return 0;
+}

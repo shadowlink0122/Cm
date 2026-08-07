@@ -231,9 +231,12 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("if (spec === 'X') return __radix(val).toString(16).toUpperCase();");
         emitter.emitLine("if (spec === 'b') return __radix(val).toString(2);");
         emitter.emitLine("if (spec === 'o') return __radix(val).toString(8);");
-        emitter.emitLine("// 科学記法");
-        emitter.emitLine("if (spec === 'e') return val.toExponential();");
-        emitter.emitLine("if (spec === 'E') return val.toExponential().toUpperCase();");
+        emitter.emitLine(
+            "// "
+            "科学記法（指数はC/printf互換の2桁ゼロ埋めが正準仕様。native/jitと一致させる。R20）");
+        emitter.emitLine("const __exp2 = (s) => s.replace(/([eE][+-])(\\d)$/, '$10$2');");
+        emitter.emitLine("if (spec === 'e') return __exp2(val.toExponential(6));");
+        emitter.emitLine("if (spec === 'E') return __exp2(val.toExponential(6)).toUpperCase();");
         emitter.emitLine("// 小数点精度 .N");
         emitter.emitLine("let precMatch = spec.match(/^\\.(\\d+)$/);");
         emitter.emitLine("if (precMatch) return val.toFixed(parseInt(precMatch[1]));");
@@ -241,31 +244,35 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("precMatch = spec.match(/^\\.(\\d+)([eE])$/);");
         emitter.emitLine("if (precMatch) {");
         emitter.increaseIndent();
-        emitter.emitLine("let result = val.toExponential(parseInt(precMatch[1]));");
+        emitter.emitLine("let result = __exp2(val.toExponential(parseInt(precMatch[1])));");
         emitter.emitLine("return precMatch[2] === 'E' ? result.toUpperCase() : result;");
         emitter.decreaseIndent();
         emitter.emitLine("}");
-        emitter.emitLine("// 幅とアライメント");
-        emitter.emitLine("let alignMatch = spec.match(/^([<>^]?)(\\d+)$/);");
-        emitter.emitLine("if (alignMatch) {");
+        emitter.emitLine(
+            "// 幅・整列・ゼロ埋め・基数の複合（[fill][<>^]・0埋め・幅N・基数x/X/b/o。"
+            "native/jitのcm_apply_numeric_specと同一規則。R20）");
+        emitter.emitLine("let gm = spec.match(/^(?:(.)?([<>^]))?(0?)(\\d+)([xXbo]?)$/);");
+        emitter.emitLine("if (gm) {");
         emitter.increaseIndent();
-        emitter.emitLine("let align = alignMatch[1] || '>';");
-        emitter.emitLine("let width = parseInt(alignMatch[2]);");
-        emitter.emitLine("let s = String(val);");
+        emitter.emitLine("let fill = gm[1] || (gm[3] ? '0' : ' ');");
+        emitter.emitLine("let align = gm[2] || '>';");
+        emitter.emitLine("let width = parseInt(gm[4]);");
+        emitter.emitLine("let t = gm[5];");
+        emitter.emitLine("let s;");
+        emitter.emitLine("if (t === 'x') s = __radix(val).toString(16);");
+        emitter.emitLine("else if (t === 'X') s = __radix(val).toString(16).toUpperCase();");
+        emitter.emitLine("else if (t === 'b') s = __radix(val).toString(2);");
+        emitter.emitLine("else if (t === 'o') s = __radix(val).toString(8);");
+        emitter.emitLine("else s = String(val);");
         emitter.emitLine("if (s.length >= width) return s;");
-        emitter.emitLine("let pad = ' '.repeat(width - s.length);");
+        emitter.emitLine(
+            "if (fill === '0' && align === '>' && s[0] === '-') return '-' + "
+            "s.slice(1).padStart(width - 1, '0');");
+        emitter.emitLine("let pad = fill.repeat(width - s.length);");
         emitter.emitLine("if (align === '<') return s + pad;");
         emitter.emitLine("if (align === '>') return pad + s;");
         emitter.emitLine("let half = Math.floor(pad.length / 2);");
         emitter.emitLine("return pad.slice(0, half) + s + pad.slice(half);");
-        emitter.decreaseIndent();
-        emitter.emitLine("}");
-        emitter.emitLine("// ゼロパディング 0>N");
-        emitter.emitLine("let zeroPadMatch = spec.match(/^0>(\\d+)$/);");
-        emitter.emitLine("if (zeroPadMatch) {");
-        emitter.increaseIndent();
-        emitter.emitLine("let width = parseInt(zeroPadMatch[1]);");
-        emitter.emitLine("return String(val).padStart(width, '0');");
         emitter.decreaseIndent();
         emitter.emitLine("}");
         emitter.emitLine("return String(val);");
@@ -289,6 +296,10 @@ void emitRuntime(JSEmitter& emitter, const std::unordered_set<std::string>& used
         emitter.emitLine("let spec = '';");
         emitter.emitLine("let colonIdx = inner.indexOf(':');");
         emitter.emitLine("if (colonIdx >= 0) spec = inner.slice(colonIdx + 1);");
+        emitter.emitLine(
+            "// 値が尽きたプレースホルダはリテラル保持する（R20: パース不能な内容の位置ずれで"
+            "後続まで巻き込みundefined置換するデータ破壊をやめ、native/jitの安全側と揃える）");
+        emitter.emitLine("if (idx >= values.length) return match;");
         emitter.emitLine("return __cm_format(values[idx++], spec);");
         emitter.decreaseIndent();
         emitter.emitLine("});");

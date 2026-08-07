@@ -189,6 +189,11 @@ ast::AttributeNode Parser::parse_attribute() {
                 args.push_back(std::string(current().get_string()));
                 advance();
             } else if (check(TokenKind::IntLiteral)) {
+                // #[sv::pin(12345)]のような非文字列のピン指定は診断する（R16: 従来は無検証で
+                // 制約ファイルへ流れていた。ピン名は文字列リテラル "38" 等で指定する）
+                if ((attr_name == "sv::pin" || attr_name == "verilog::pin") && args.empty()) {
+                    error(i18n::msgf(i18n::MsgId::PsSvPinRequiresStringArgument, attr_name));
+                }
                 args.push_back(std::to_string(current().get_int()));
                 advance();
             } else {

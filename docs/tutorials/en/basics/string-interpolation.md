@@ -111,6 +111,24 @@ int main() {
 }
 ```
 
+Width, alignment, zero-padding, and scientific notation are also supported (output unified across all backends in v0.17.0; the semantics follow C/printf):
+
+```cm
+int main() {
+    int n = 255;
+    double pi = 3.14159265;
+    println("[{n:6}]");      // → [   255] (width 6; numbers right-align by default)
+    println("[{n:<6}]");     // → [255   ] (left)
+    println("[{n:^6}]");     // → [ 255  ] (center)
+    println("[{n:06}]");     // → [000255] (zero pad; negatives keep the sign first: -00042)
+    println("[{n:*>6}]");    // → [***255] (custom fill)
+    println("[{n:8x}]");     // → [      ff] (width + radix combined)
+    println("{pi:.2e}");     // → 3.14e+00 (scientific, 2-digit precision, 2-digit exponent)
+    println("{pi:e}");       // → 3.141593e+00 (default precision is 6)
+    return 0;
+}
+```
+
 ## Escaping Braces and Combining with Interpolation
 
 To output literal `{` `}`, write `{{` `}}`.

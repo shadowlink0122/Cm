@@ -856,7 +856,8 @@ static inline int cm_dtoa_buf(double value, char* buf, size_t bufsize, int preci
 }
 
 // 指数表記変換
-static inline int cm_dtoa_exp_buf(double value, char* buf, size_t bufsize, bool uppercase) {
+static inline int cm_dtoa_exp_buf(double value, char* buf, size_t bufsize, bool uppercase,
+                                  int precision) {
     if (!buf || bufsize == 0)
         return 0;
 
@@ -889,8 +890,8 @@ static inline int cm_dtoa_exp_buf(double value, char* buf, size_t bufsize, bool 
         exponent--;
     }
 
-    // 仮数部（6桁）
-    pos += cm_dtoa_buf(value, buf + pos, bufsize - pos, 6);
+    // 仮数部（精度指定。未指定は6桁）
+    pos += cm_dtoa_buf(value, buf + pos, bufsize - pos, precision < 0 ? 6 : precision);
 
     // 指数部
     if (pos < (int)bufsize - 1)
@@ -1439,15 +1440,131 @@ char* cm_format_int_octal(long long value) {
 char* cm_format_double_exp(double value) {
     char tmp[64];
     tmp[0] = 0;
-        cm_dtoa_exp_buf(value, tmp, 64, false);
+    cm_dtoa_exp_buf(value, tmp, 64, false, -1);
     return cm_str_dup(tmp);
 }
 
 char* cm_format_double_EXP(double value) {
     char tmp[64];
     tmp[0] = 0;
-        cm_dtoa_exp_buf(value, tmp, 64, true);
+    cm_dtoa_exp_buf(value, tmp, 64, true, -1);
     return cm_str_dup(tmp);
+}
+
+// 精度指定つき指数表記（{pi:.2e} → 3.14e+00。指数はC/printf互換の2桁ゼロ埋めが正準仕様。R20）
+char* cm_format_double_exp_prec(double value, int precision, int uppercase) {
+    char tmp[64];
+    tmp[0] = 0;
+    cm_dtoa_exp_buf(value, tmp, 64, uppercase != 0, precision);
+    return cm_str_dup(tmp);
+}
+
+// ============================================================
+// 数値書式指定子の一元適用（R20: 従来は幅・整列・:06ゼロ埋めがnative/jitで無視されjs/tsと分裂していた）
+// ============================================================
+
+// spec末尾の型文字（x/X/b/o/e/E/f）を返す（無ければ0）
+static char cm_spec_type_char(const char* specifier) {
+    if (!specifier || specifier[0] != ':')
+        return 0;
+    size_t len = 0;
+    while (specifier[len])
+        len++;
+    char c = specifier[len - 1];
+    if (c == 'x' || c == 'X' || c == 'b' || c == 'o' || c == 'e' || c == 'E' || c == 'f')
+        return c;
+    return 0;
+}
+
+// specの精度（".N"）を返す（無ければ-1）
+static int cm_spec_precision(const char* specifier) {
+    if (!specifier)
+        return -1;
+    const char* p = specifier;
+    while (*p && *p != '.')
+        p++;
+    if (*p != '.')
+        return -1;
+    p++;
+    int prec = 0;
+    while (*p >= '0' && *p <= '9') {
+        prec = prec * 10 + (*p - '0');
+        p++;
+    }
+    return prec;
+}
+
+void cm_string_free(char* str);  // 前方宣言（定義は後方）
+
+// 幅・整列・ゼロ埋め（":6"・":<6"・":^6"・":06"・":0>6"）を変換済み値文字列へ適用する。
+// base_valueの所有権を受け取り、パディングが必要なら差し替えて返す。数値の既定整列は右詰め。
+// ゼロ埋め右詰めの負数は符号を先頭に保つ（-3 幅4 → -003）
+static char* cm_apply_numeric_spec(const char* specifier, char* base_value) {
+    if (!base_value || !specifier || specifier[0] != ':')
+        return base_value;
+    const char* p = specifier + 1;
+    char align = 0;
+    char fill = ' ';
+    int width = 0;
+    if (*p == '<' || *p == '>' || *p == '^') {
+        align = *p;
+        p++;
+    } else if (*p && (p[1] == '<' || p[1] == '>' || p[1] == '^')) {
+        fill = *p;
+        align = p[1];
+        p += 2;
+    }
+    if (*p == '0' && p[1] >= '0' && p[1] <= '9') {
+        fill = '0';
+        if (!align)
+            align = '>';
+        p++;
+    }
+    while (*p >= '0' && *p <= '9') {
+        width = width * 10 + (*p - '0');
+        p++;
+    }
+    if (width <= 0)
+        return base_value;
+    size_t len = 0;
+    while (base_value[len])
+        len++;
+    if ((size_t)width <= len)
+        return base_value;
+    if (!align)
+        align = '>';
+    char* padded = cm_str_alloc(width);
+    if (!padded)
+        return base_value;
+    size_t pad = (size_t)width - len;
+    if (align == '<') {
+        for (size_t i = 0; i < len; i++)
+            padded[i] = base_value[i];
+        for (size_t i = len; i < (size_t)width; i++)
+            padded[i] = fill;
+    } else if (align == '^') {
+        size_t lp = pad / 2;
+        for (size_t i = 0; i < lp; i++)
+            padded[i] = fill;
+        for (size_t i = 0; i < len; i++)
+            padded[lp + i] = base_value[i];
+        for (size_t i = lp + len; i < (size_t)width; i++)
+            padded[i] = fill;
+    } else if (fill == '0' && base_value[0] == '-') {
+        padded[0] = '-';
+        for (size_t i = 1; i <= pad; i++)
+            padded[i] = '0';
+        for (size_t i = 1; i < len; i++)
+            padded[pad + i] = base_value[i];
+    } else {
+        for (size_t i = 0; i < pad; i++)
+            padded[i] = fill;
+        for (size_t i = 0; i < len; i++)
+            padded[pad + i] = base_value[i];
+    }
+    padded[width] = '\0';
+    cm_string_free(base_value);
+    return padded;
 }
 
 char* cm_format_double_scientific(double value, int uppercase) {
@@ -1758,35 +1875,21 @@ char* cm_format_replace_int(const char* format, int value) {
     }
 
     // 基数書式は32bit幅の2の補数を符号なしとして表記する（負数の64bit符号拡張防止。int以下は昇格幅=32bit、long系はreplace_long側で64bit）
+    // 型文字（末尾）でディスパッチし、幅・整列・ゼロ埋めはcm_apply_numeric_specで一元適用する（R20）
+    char type = cm_spec_type_char(specifier);
     char* formatted_value = NULL;
-    if (strcmp(specifier, ":x") == 0) {
+    if (type == 'x') {
         formatted_value = cm_format_int_hex((long long)(unsigned int)value);
-    } else if (strcmp(specifier, ":X") == 0) {
+    } else if (type == 'X') {
         formatted_value = cm_format_int_HEX((long long)(unsigned int)value);
-    } else if (strcmp(specifier, ":b") == 0) {
+    } else if (type == 'b') {
         formatted_value = cm_format_int_binary((long long)(unsigned int)value);
-    } else if (strcmp(specifier, ":o") == 0) {
+    } else if (type == 'o') {
         formatted_value = cm_format_int_octal((long long)(unsigned int)value);
-    } else if (strncmp(specifier, ":0>", 3) == 0) {
-        int width = atoi(specifier + 3);
-        char* int_str = cm_format_int(value);
-        int val_len = strlen(int_str);
-
-        if (width <= val_len) {
-            formatted_value = int_str;
-        } else {
-            formatted_value = cm_str_alloc(width);
-            if (formatted_value) {
-                int padding = width - val_len;
-                for (int i = 0; i < padding; i++)
-                    formatted_value[i] = '0';
-                strcpy(formatted_value + padding, int_str);
-            }
-            cm_string_free(int_str);
-        }
     } else {
         formatted_value = cm_format_int(value);
     }
+    formatted_value = cm_apply_numeric_spec(specifier, formatted_value);
 
     if (!formatted_value)
         return NULL;
@@ -1809,17 +1912,19 @@ char* cm_format_replace_uint(const char* format, unsigned int value) {
         (size_t)(spec_end - spec_start - 1) < sizeof(specifier)) {
         strncpy(specifier, spec_start + 1, spec_end - spec_start - 1);
     }
-    if (strcmp(specifier, ":x") == 0) {
+    char type = cm_spec_type_char(specifier);
+    if (type == 'x') {
         formatted_value = cm_format_int_hex((long long)value);
-    } else if (strcmp(specifier, ":X") == 0) {
+    } else if (type == 'X') {
         formatted_value = cm_format_int_HEX((long long)value);
-    } else if (strcmp(specifier, ":b") == 0) {
+    } else if (type == 'b') {
         formatted_value = cm_format_int_binary((long long)value);
-    } else if (strcmp(specifier, ":o") == 0) {
+    } else if (type == 'o') {
         formatted_value = cm_format_int_octal((long long)value);
     } else {
         formatted_value = cm_format_uint(value);
     }
+    formatted_value = cm_apply_numeric_spec(specifier, formatted_value);
     if (!formatted_value)
         return NULL;
 
@@ -1925,35 +2030,20 @@ char* cm_format_replace_long(const char* format, long long value) {
         strncpy(specifier, start + 1, spec_len);
     }
 
+    char type = cm_spec_type_char(specifier);
     char* formatted_value = NULL;
-    if (strcmp(specifier, ":x") == 0) {
+    if (type == 'x') {
         formatted_value = cm_format_int_hex(value);
-    } else if (strcmp(specifier, ":X") == 0) {
+    } else if (type == 'X') {
         formatted_value = cm_format_int_HEX(value);
-    } else if (strcmp(specifier, ":b") == 0) {
+    } else if (type == 'b') {
         formatted_value = cm_format_int_binary(value);
-    } else if (strcmp(specifier, ":o") == 0) {
+    } else if (type == 'o') {
         formatted_value = cm_format_int_octal(value);
-    } else if (strncmp(specifier, ":0>", 3) == 0) {
-        int width = atoi(specifier + 3);
-        char* long_str = cm_format_long(value);
-        int val_len = strlen(long_str);
-
-        if (width <= val_len) {
-            formatted_value = long_str;
-        } else {
-            formatted_value = cm_str_alloc(width);
-            if (formatted_value) {
-                int padding = width - val_len;
-                for (int i = 0; i < padding; i++)
-                    formatted_value[i] = '0';
-                strcpy(formatted_value + padding, long_str);
-            }
-            cm_string_free(long_str);
-        }
     } else {
         formatted_value = cm_format_long(value);
     }
+    formatted_value = cm_apply_numeric_spec(specifier, formatted_value);
 
     if (!formatted_value)
         return NULL;
@@ -1967,7 +2057,29 @@ char* cm_format_replace_ulong(const char* format, unsigned long long value) {
     if (!format)
         return NULL;
 
-    char* formatted_value = cm_format_ulong(value);
+    // 基数・幅指定に対応する（R20。従来は10進のみだった）
+    char specifier[32] = {0};
+    const char* spec_start = cm_find_placeholder_start(format);
+    const char* spec_end = spec_start ? cm_strchr(spec_start, '}') : NULL;
+    if (spec_start && spec_end && spec_end - spec_start - 1 > 0 &&
+        (size_t)(spec_end - spec_start - 1) < sizeof(specifier)) {
+        strncpy(specifier, spec_start + 1, spec_end - spec_start - 1);
+    }
+
+    char type = cm_spec_type_char(specifier);
+    char* formatted_value = NULL;
+    if (type == 'x') {
+        formatted_value = cm_format_int_hex((long long)value);
+    } else if (type == 'X') {
+        formatted_value = cm_format_int_HEX((long long)value);
+    } else if (type == 'b') {
+        formatted_value = cm_format_int_binary((long long)value);
+    } else if (type == 'o') {
+        formatted_value = cm_format_int_octal((long long)value);
+    } else {
+        formatted_value = cm_format_ulong(value);
+    }
+    formatted_value = cm_apply_numeric_spec(specifier, formatted_value);
     if (!formatted_value)
         return NULL;
 
@@ -2039,17 +2151,18 @@ char* cm_format_replace_double(const char* format, double value) {
         cm_strncpy_impl(specifier, start + 1, spec_len);
     }
 
+    char type = cm_spec_type_char(specifier);
+    int precision = cm_spec_precision(specifier);
     char* formatted_value = NULL;
-    if (cm_strcmp(specifier, ":e") == 0) {
-        formatted_value = cm_format_double_exp(value);
-    } else if (cm_strcmp(specifier, ":E") == 0) {
-        formatted_value = cm_format_double_EXP(value);
-    } else if (specifier[0] == ':' && specifier[1] == '.') {
-        int precision = atoi(specifier + 2);
+    if (type == 'e' || type == 'E') {
+        // {pi:.2e} 等の精度つき指数表記（指数はC/printf互換の2桁ゼロ埋め。R20）
+        formatted_value = cm_format_double_exp_prec(value, precision, type == 'E');
+    } else if (precision >= 0) {
         formatted_value = cm_format_double_precision(value, precision);
     } else {
         formatted_value = cm_format_double(value);
     }
+    formatted_value = cm_apply_numeric_spec(specifier, formatted_value);
 
     if (!formatted_value)
         return NULL;

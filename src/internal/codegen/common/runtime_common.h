@@ -41,8 +41,9 @@ char* cm_format_int_binary(long long value);
 char* cm_format_int_octal(long long value);
 
 // Double format variants
-char* cm_format_double_exp(double value);  // lowercase 'e'
-char* cm_format_double_EXP(double value);  // uppercase 'E'
+char* cm_format_double_exp(double value);                                     // lowercase 'e'
+char* cm_format_double_exp_prec(double value, int precision, int uppercase);  // 精度つき指数（R20）
+char* cm_format_double_EXP(double value);                                     // uppercase 'E'
 char* cm_format_double_scientific(double value, int uppercase);
 
 // ============================================================

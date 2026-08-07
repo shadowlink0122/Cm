@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,23 @@ namespace cm::codegen::js {
 using ast::TypeKind;
 
 namespace {
+// wide64（long/ulong/isize/usize）スロットへの素の整数リテラルをBigIntリテラル化する（H5/R19）。
+// 定数は値駆動で2^53以内をnumberのまま出すため、bigint宣言スロットへの代入でここが不変条件を回復する
+std::string wrapWide64PlainIntLiteral(std::string rvalue) {
+    bool plain_int = !rvalue.empty();
+    for (size_t ci = 0; ci < rvalue.size(); ++ci) {
+        char c = rvalue[ci];
+        if (!(std::isdigit(static_cast<unsigned char>(c)) || (ci == 0 && c == '-'))) {
+            plain_int = false;
+            break;
+        }
+    }
+    if (plain_int && rvalue != "-") {
+        rvalue = (rvalue[0] == '-') ? "(" + rvalue + "n)" : rvalue + "n";
+    }
+    return rvalue;
+}
+
 // 狭い整数型（8/16bit）への代入値をラップする。
 // JSの数値は53bit精度のため、tiny等への代入は明示的な
 // 切り詰めがないと 127+1 が 128 のまま格納されてしまう
@@ -257,18 +275,39 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                 const auto& dt = func.locals[target_local].type;
                 if (dt && (dt->kind == TypeKind::Long || dt->kind == TypeKind::ULong ||
                            dt->kind == TypeKind::ISize || dt->kind == TypeKind::USize)) {
-                    bool plain_int = !rvalue.empty();
-                    for (size_t ci = 0; ci < rvalue.size(); ++ci) {
-                        char c = rvalue[ci];
-                        if (!(std::isdigit(static_cast<unsigned char>(c)) ||
-                              (ci == 0 && c == '-'))) {
-                            plain_int = false;
-                            break;
+                    rvalue = wrapWide64PlainIntLiteral(std::move(rvalue));
+                }
+            } else if (target_local < func.locals.size()) {
+                // フィールド・要素代入（_t.v = 5等）: 射影後のスロット型がwide64なら同じBigInt
+                // リテラル化を適用する（R19: 従来はlet初期化・戻り値サイトのみで、structフィールド
+                // 代入がnumberリテラルのまま出てTS2322「number is not assignable to bigint」だった）
+                hir::TypePtr slotType = func.locals[target_local].type;
+                for (const auto& proj : data.place.projections) {
+                    if (!slotType) {
+                        break;
+                    }
+                    if (proj.result_type) {
+                        slotType = proj.result_type;
+                        continue;
+                    }
+                    if (proj.kind == mir::ProjectionKind::Field) {
+                        if (slotType->kind == TypeKind::Struct) {
+                            auto sit = struct_map_.find(slotType->name);
+                            if (sit != struct_map_.end() && sit->second &&
+                                proj.field_id < sit->second->fields.size()) {
+                                slotType = sit->second->fields[proj.field_id].type;
+                                continue;
+                            }
                         }
+                        slotType = nullptr;
+                    } else {
+                        slotType = slotType->element_type;
                     }
-                    if (plain_int && rvalue != "-") {
-                        rvalue = (rvalue[0] == '-') ? "(" + rvalue + "n)" : rvalue + "n";
-                    }
+                }
+                if (slotType &&
+                    (slotType->kind == TypeKind::Long || slotType->kind == TypeKind::ULong ||
+                     slotType->kind == TypeKind::ISize || slotType->kind == TypeKind::USize)) {
+                    rvalue = wrapWide64PlainIntLiteral(std::move(rvalue));
                 }
             }
             if (data.place.projections.empty() && declare_on_assign_.count(target_local) > 0 &&

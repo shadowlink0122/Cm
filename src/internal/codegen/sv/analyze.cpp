@@ -2,6 +2,7 @@
 // MIR解析 - モジュール情報の抽出とalwaysブロック組み立て
 // ============================================================
 #include "codegen.hpp"
+#include "internal/base/i18n.hpp"
 #include "sv_internal.hpp"
 
 #include <algorithm>
@@ -1243,6 +1244,11 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         } else if (func.always_kind == AK::Latch) {
             // always_latch 明示指定
             block_ss << indent() << "always_latch begin\n";
+        } else if (func.always_kind == AK::FF) {
+            // always_ff明示指定なのにエッジパラメータがない（R16: 従来はこの分岐が下のFF専用分岐より
+            // 先に評価されて黙ってalways_combへ変換され、順序回路の意図が失われていた）
+            throw std::runtime_error(
+                i18n::msgf(i18n::MsgId::SvSv008AlwaysFfRequiresEdge, func.name));
         } else {
             // AutoまたはNone: 後でCFG解析で判別（一旦always_combとして出力し後で置換）
             block_ss << indent() << "always_comb begin\n";

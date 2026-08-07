@@ -144,6 +144,18 @@ class TypeChecker {
     // derive付きジェネリック構造体の特殊化（例: Box<int[]>）で置換後フィールド型を検証する（R21: 無言の誤値・リンク失敗を診断化）
     void validate_derive_instantiation(const ast::StructDecl& st, const ast::TypePtr& type);
     std::set<std::string> validated_derive_instantiations_;  // 特殊化検証の重複診断抑止
+
+    // ============================================================
+    // SVプラットフォーム検査（R16）
+    // ============================================================
+   public:
+    // SVプラットフォーム（//! platform: sv）のとき有効化。入力ポートへの代入検査に使う
+    void set_sv_platform(bool enabled) { sv_platform_ = enabled; }
+
+   private:
+    bool sv_platform_ = false;
+    bool in_test_function_ = false;  // #[test]関数本体の検査中か（入力ポート駆動を許可）
+    std::unordered_set<std::string> sv_input_ports_;  // #[input]属性つきグローバル（SVポート）
     void register_auto_eq_impl(const ast::StructDecl& st);
     void register_auto_ord_impl(const ast::StructDecl& st);
     void register_auto_clone_impl(const ast::StructDecl& st);

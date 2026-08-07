@@ -249,6 +249,10 @@ int run_build(cli::Options& opts, const char* argv0) {
             std::cout << "=== Type Checker ===\n";
         auto phase_typecheck_start = std::chrono::steady_clock::now();
         TypeChecker checker;
+        // SV入力ポート代入検査（R16。ターゲット指定またはソースの //! platform: sv で有効化）
+        checker.set_sv_platform(opts.target == "sv" || opts.target == "verilog" ||
+                                opts.target == "systemverilog" ||
+                                code.find("//! platform: sv") != std::string::npos);
         // Check/Lintコマンド、または--force-check/--strict指定時にLint警告を有効化
         if (opts.force_check) {
             checker.set_enable_lint_warnings(true);

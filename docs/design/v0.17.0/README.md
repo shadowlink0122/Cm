@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15・R17・R18修正済みで残3件、ライブラリ・自動実装調査はR21・R22修正済みで残3件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15〜R20全件修正済み、ライブラリ・自動実装調査はR21・R22修正済みで残3件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -70,11 +70,11 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 健全確認済み: native↔SVの数値意味論一致・SV固有構文の正常系（`bit[N]`・幅付きリテラル・マスクmatch・ビットスライス・always系）・baremetal-x86とUEFIの正常系コンパイル・malloc/println直呼びとラッパー経由の正しい拒否・TSのプリミティブ/struct interface/配列/クロージャ/ジェネリック/async→Promise/macro/エラー診断。
 
 - R15: SVテスト検証の健全性 — **修正済み**（[archive移動](../../archive/v0.17.0/sv-test-verification-soundness.md)。`//! test:`期待値ごとに`!==`比較+`$fatal`をテストベンチへ生成し（4値比較でx/zも不一致扱い・既存`$display`行は維持し.expect突合は不変）、`#[test]`のassertを`if (!(cond))`から`if ((cond) !== 1'b1)`のx安全形へ変更。ディレクティブ検出の行中誤認識（コメント中の`//! test:`言及をテストケース化）も行頭限定で修正。negative check 4本（不一致/x出力/assert対象xがrc=1でFAIL）をcm test E2Eへ、アサート生成の固定をregressionへ追加。tests/sv 125件は無修正で全PASS＝既存期待値の正しさも確認）
-- [R16: SVコード生成が不正な構文を無診断で受理](sv-codegen-silent-invalid.md) — **Medium**: `#[sv::pinn]`タイポでピン制約が静かに欠落・`#[input]`ポートへの代入が不正SV（iverilog l-valueエラー）・エッジ無し`always_ff`が`always_comb`へ黙殺変換・`bit[0]`が不正SV（`0'd0`）。桁あふれ`4'd99`・非文字列pin引数・native流入診断の低品質（Low）
+- R16: SVコード生成が不正な構文を無診断で受理 — **修正済み**（[archive移動](../../archive/v0.17.0/sv-codegen-silent-invalid.md)。属性検証walkのGlobalVarDecl漏れ修正で#[sv::pinn]タイポを警告化、#[input]ポート代入をchecker診断化（#[test]テストベンチは駆動側として除外）、エッジ無しalways_ffの黙殺always_comb変換を分岐順バグごとerror[SV008]へ、bit[0]をパーサ診断、幅付きリテラル桁あふれをレクサErrorトークン経路で診断、sv::pinの数値引数をパーサ診断。native流入の専用診断はR14へ残置。SVエラーテスト5本追加）
 - R17: baremetal-armターゲットが起動コードのmemcpy型不一致で全滅 — **修正済み**（[archive移動](../../archive/v0.17.0/baremetal-arm-startup-broken.md)。memcpy/memsetのsize引数をDataLayoutのポインタ幅型（arm=i32）にしCreatePtrDiff結果をIntCastで整合。実装中に起動コード自体の意味バグ2件も発見・同時修正: リンカシンボルのload誤り（アドレス自体が境界なのに値をloadしていた）とptrdiff要素型ポインタによるサイズ1/4化。テストランナーのllvm-baremetalドライバへx86成功時のarm二段コンパイルゲートを追加し、x86のみ実行の盲点を封止。逆アセンブルで正しい初期化列を確認）
 - R18: フリースタンディング制約の強制漏れ — **修正済み**（[archive移動](../../archive/v0.17.0/freestanding-nostd-enforcement-gaps.md)。NoStdCheckerのブロックリストへヒープ確保を伴うランタイムヘルパ群（cm_string_/cm_str_/cm_format_/cm_slice_/cm_mem_/__builtin_array_/cm_*_to_string等）を追加し文字列連結等を診断化。禁止関数のアドレス取得（&putchar）を全Assign文rvalue・呼び出し引数のFunctionRef走査で専用診断化し間接呼び出し回避を封止。baremetal-x86のfloat使用はMIRローカル型走査の専用診断（SSE無効の明示・UEFIは使用可の非対称を仕様明文化）でLLVM内部エラー露出を解消。診断3本+UEFI float肯定1本を追加）
-- [R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない](ts-bigint-number-generation.md) — **Medium**: structフィールド代入が`_t.v = 5`（`number`を`bigint`フィールドへ）でTS2322。「生成TSがtscを通る」第一級保証に違反（実行値は正）。戻り値・let初期化サイトは修正済みでフィールド代入サイト固有
-- [R20: 文字列補間・書式指定子のバックエンド分岐](interpolation-format-backend-divergence.md) — **Medium**: 単項`~`を含む補間（`{~a}`）がjs/tsで全プレースホルダをundefined破壊・jit/nativeで文字列素通し。書式の幅/科学記法（`:6`/`.2e`）をnative/jitが無視しjs/tsが適用（3経路不一致）
+- R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない — **修正済み**（[archive移動](../../archive/v0.17.0/ts-bigint-number-generation.md)。js/ts代入文の射影付きplaceでもスロット型を解決しwide64ならBigIntリテラル化（wrapWide64PlainIntLiteralへ共通化）。フィールド・配列要素・負数の回帰を全バックエンドで追加）
+- R20: 文字列補間・書式指定子のバックエンド分岐 — **修正済み**（[archive移動](../../archive/v0.17.0/interpolation-format-backend-divergence.md)。プレースホルダ先頭文字ホワイトリストへ~と単項-を追加し単項演算子の補間が全経路動作、jsの値切れundefined置換をリテラル保持へ安全側統一。書式はC/printf互換（e+00・:e既定6桁・右詰め既定・:06符号保持）を正準仕様に確定しnative/wasm/jsの3実装を一元化（cm_apply_numeric_spec・精度つき指数・幅+基数複合）。バックエンド別expect（basic_format.expect.js）を解消し4経路同一出力に）
 
 ## ライブラリ・自動実装 深掘り調査（R21〜R25）
 
@@ -161,10 +161,10 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
 | E1 | SVバックエンドの網羅バグ調査 | 調査済み → [R15](../../archive/v0.17.0/sv-test-verification-soundness.md)（修正済み） | 専用スイートあり（tests/sv） | `//! test:`期待値の非検証・assertのx楽観性は修正済み。数値意味論はnative↔SV一致で健全 |
-| E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 調査済み → [R16](sv-codegen-silent-invalid.md) | 正常系はSVスイートにあり | 不正構文の無診断受理・属性タイポでピン制約欠落（Medium）。正常系は健全 |
+| E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 調査済み → [R16](../../archive/v0.17.0/sv-codegen-silent-invalid.md)（修正済み） | あり（tests/sv/errors 5本追加） | 不正構文・属性タイポ・桁あふれは診断化済み。native流入診断はR14残置 |
 | E3 | UEFIターゲット | 調査済み → [R18](../../archive/v0.17.0/freestanding-nostd-enforcement-gaps.md)（修正済み） | 機能テストあり（tests/uefi・float肯定含む） | ヒープ確保・間接呼び出しのすり抜けはR18で診断化済み。正常系コンパイルは健全 |
 | E4 | baremetal-arm/x86 | 調査済み → [R17](../../archive/v0.17.0/baremetal-arm-startup-broken.md)・[R18](../../archive/v0.17.0/freestanding-nostd-enforcement-gaps.md)（両方修正済み） | 機能テストあり（tests/baremetal、arm/x86二段ゲート・nostd診断3本） | armの起動コード・nostd強制漏れとも修正済み。x86正常系は健全 |
-| E5 | TSバックエンド固有経路 | 調査済み → [R19](ts-bigint-number-generation.md)・[R20](interpolation-format-backend-divergence.md) | tests/tsと`tsc --noEmit`ゲート | long/ulongフィールド代入がTS2322・補間/書式のバックエンド分岐（Medium）。型注釈の大半は健全 |
+| E5 | TSバックエンド固有経路 | 調査済み → [R19](../../archive/v0.17.0/ts-bigint-number-generation.md)・[R20](../../archive/v0.17.0/interpolation-format-backend-divergence.md)（両方修正済み） | tests/ts・wide64_field_assign・format_spec_matrix | フィールド代入のbigint化・書式の全バックエンド統一とも修正済み |
 
 ## 全体複雑度レビュー（未実装のリファクタリング提案）
 

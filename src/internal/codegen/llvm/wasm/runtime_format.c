@@ -1149,8 +1149,11 @@ char* cm_format_int_octal(long long value) {
 // ============================================================
 // Double Format Variants
 // ============================================================
-char* cm_format_double_scientific(double value, int uppercase) {
-    char* buffer = (char*)wasm_alloc(32);
+// 精度指定つき指数表記（{pi:.2e} → 3.14e+00。指数はC/printf互換の2桁ゼロ埋めが正準仕様。R20）
+char* cm_format_double_exp_prec(double value, int precision, int uppercase) {
+    char* buffer = (char*)wasm_alloc(48);
+    int frac_digits = (precision < 0) ? 6 : precision;
+    if (frac_digits > 9) frac_digits = 9;
 
     int is_negative = 0;
     if (value < 0) {
@@ -1172,24 +1175,30 @@ char* cm_format_double_scientific(double value, int uppercase) {
         }
     }
 
-    mantissa += 0.0000005;
+    // 丸め（指定桁の次で四捨五入）
+    double round_add = 0.5;
+    for (int i = 0; i < frac_digits; i++) round_add /= 10.0;
+    mantissa += round_add;
     if (mantissa >= 10.0) {
         mantissa /= 10.0;
         exponent++;
     }
 
     int mantissa_int = (int)mantissa;
-    int mantissa_frac = (int)((mantissa - mantissa_int) * 1000000);
+    long long scale = 1;
+    for (int i = 0; i < frac_digits; i++) scale *= 10;
+    long long mantissa_frac = (long long)((mantissa - mantissa_int) * (double)scale);
 
     int idx = 0;
     if (is_negative) buffer[idx++] = '-';
     buffer[idx++] = '0' + mantissa_int;
-    buffer[idx++] = '.';
-
-    int divisor = 100000;
-    for (int i = 0; i < 6; i++) {
-        buffer[idx++] = '0' + ((mantissa_frac / divisor) % 10);
-        divisor /= 10;
+    if (frac_digits > 0) {
+        buffer[idx++] = '.';
+        long long divisor = scale / 10;
+        for (int i = 0; i < frac_digits; i++) {
+            buffer[idx++] = '0' + (char)((mantissa_frac / divisor) % 10);
+            divisor /= 10;
+        }
     }
 
     buffer[idx++] = uppercase ? 'E' : 'e';
@@ -1207,12 +1216,138 @@ char* cm_format_double_scientific(double value, int uppercase) {
     return buffer;
 }
 
+char* cm_format_double_scientific(double value, int uppercase) {
+    return cm_format_double_exp_prec(value, -1, uppercase);
+}
+
 char* cm_format_double_exp(double value) {
     return cm_format_double_scientific(value, 0);
 }
 
 char* cm_format_double_EXP(double value) {
     return cm_format_double_scientific(value, 1);
+}
+
+// ============================================================
+// 数値書式指定子の一元適用（R20: nativeのcm_apply_numeric_specと同一規則）
+// ============================================================
+void cm_string_free(char* str);
+
+// spec文字列（\"{...}\"内のコロン以降・コロン含む）から末尾の型文字を返す
+static char wasm_spec_type_char(const char* specifier) {
+    if (!specifier || specifier[0] != ':')
+        return 0;
+    size_t len = 0;
+    while (specifier[len])
+        len++;
+    char c = specifier[len - 1];
+    if (c == 'x' || c == 'X' || c == 'b' || c == 'o' || c == 'e' || c == 'E' || c == 'f')
+        return c;
+    return 0;
+}
+
+// specの精度（\".N\"）を返す（無ければ-1）
+static int wasm_spec_precision(const char* specifier) {
+    if (!specifier)
+        return -1;
+    const char* p = specifier;
+    while (*p && *p != '.')
+        p++;
+    if (*p != '.')
+        return -1;
+    p++;
+    int prec = 0;
+    while (*p >= '0' && *p <= '9') {
+        prec = prec * 10 + (*p - '0');
+        p++;
+    }
+    return prec;
+}
+
+// 幅・整列・ゼロ埋めを変換済み値文字列へ適用する（数値の既定整列は右詰め・ゼロ埋め負数は符号保持）
+static char* wasm_apply_numeric_spec(const char* specifier, char* base_value) {
+    if (!base_value || !specifier || specifier[0] != ':')
+        return base_value;
+    const char* p = specifier + 1;
+    char align = 0;
+    char fill = ' ';
+    int width = 0;
+    if (*p == '<' || *p == '>' || *p == '^') {
+        align = *p;
+        p++;
+    } else if (*p && (p[1] == '<' || p[1] == '>' || p[1] == '^')) {
+        fill = *p;
+        align = p[1];
+        p += 2;
+    }
+    if (*p == '0' && p[1] >= '0' && p[1] <= '9') {
+        fill = '0';
+        if (!align)
+            align = '>';
+        p++;
+    }
+    while (*p >= '0' && *p <= '9') {
+        width = width * 10 + (*p - '0');
+        p++;
+    }
+    if (width <= 0)
+        return base_value;
+    size_t len = 0;
+    while (base_value[len])
+        len++;
+    if ((size_t)width <= len)
+        return base_value;
+    if (!align)
+        align = '>';
+    char* padded = cm_str_alloc(width);
+    if (!padded)
+        return base_value;
+    size_t pad = (size_t)width - len;
+    if (align == '<') {
+        for (size_t i = 0; i < len; i++)
+            padded[i] = base_value[i];
+        for (size_t i = len; i < (size_t)width; i++)
+            padded[i] = fill;
+    } else if (align == '^') {
+        size_t lp = pad / 2;
+        for (size_t i = 0; i < lp; i++)
+            padded[i] = fill;
+        for (size_t i = 0; i < len; i++)
+            padded[lp + i] = base_value[i];
+        for (size_t i = lp + len; i < (size_t)width; i++)
+            padded[i] = fill;
+    } else if (fill == '0' && base_value[0] == '-') {
+        padded[0] = '-';
+        for (size_t i = 1; i <= pad; i++)
+            padded[i] = '0';
+        for (size_t i = 1; i < len; i++)
+            padded[pad + i] = base_value[i];
+    } else {
+        for (size_t i = 0; i < pad; i++)
+            padded[i] = fill;
+        for (size_t i = 0; i < len; i++)
+            padded[pad + i] = base_value[i];
+    }
+    padded[width] = '\0';
+    cm_string_free(base_value);
+    return padded;
+}
+
+// \"{...}\"のコロン以降（コロン含む）をbufへ抽出する
+static void wasm_extract_specifier(const char* format, size_t start, size_t end, char* buf,
+                                   size_t bufsize) {
+    buf[0] = '\0';
+    for (size_t i = start + 1; i < end; i++) {
+        if (format[i] == ':') {
+            size_t n = end - i;
+            if (n >= bufsize)
+                n = bufsize - 1;
+            for (size_t k = 0; k < n; k++)
+                buf[k] = format[i + k];
+            buf[n] = '\0';
+            return;
+        }
+    }
 }
 
 // ============================================================
@@ -1540,38 +1675,16 @@ char* cm_format_replace_int(const char* format, int value) {
     // フォーマット指定子を抽出
     char spec = extract_format_spec(format, start, end);
     
-    // アライメントとパディングを解析
-    char align = '\0';
-    char fill_char = ' ';
-    int width = 0;
-    
-    if (end > start + 1 && format[start + 1] == ':') {
-        size_t spec_start = start + 2;
-        
-        // {:0>5} のようなパターンを検出
-        if (spec_start < end) {
-            char c = format[spec_start];
-            if (c == '<' || c == '>' || c == '^') {
-                align = c;
-                spec_start++;
-            } else if (spec_start + 1 < end && 
-                       (format[spec_start + 1] == '<' || 
-                        format[spec_start + 1] == '>' || 
-                        format[spec_start + 1] == '^')) {
-                fill_char = c;
-                align = format[spec_start + 1];
-                spec_start += 2;
-            }
-        }
-        
-        // 幅を解析
-        while (spec_start < end && format[spec_start] >= '0' && format[spec_start] <= '9') {
-            width = width * 10 + (format[spec_start] - '0');
-            spec_start++;
-        }
+    // 指定子に応じた値の文字列化（幅・整列・ゼロ埋めはwasm_apply_numeric_specで一元適用。R20）
+    char specifier[32];
+    wasm_extract_specifier(format, start, end, specifier, sizeof(specifier));
+    // 型文字は末尾から取り直す（":8x"等の幅+基数複合はextract_format_specでは拾えない）
+    {
+        char tc = wasm_spec_type_char(specifier);
+        if (tc)
+            spec = tc;
     }
-    
-    // 指定子に応じた値の文字列化
+
     char* value_str;
     switch (spec) {
         case 'x':
@@ -1590,31 +1703,8 @@ char* cm_format_replace_int(const char* format, int value) {
             value_str = cm_format_int(value);
             break;
     }
-    
-    // パディングを適用
-    size_t val_len = wasm_strlen(value_str);
-    char* formatted_value;
-    
-    if (width > 0 && (size_t)width > val_len && align != '\0') {
-        formatted_value = cm_str_alloc(width);
-        size_t padding = width - val_len;
-        
-        if (align == '<') {
-            for (size_t i = 0; i < val_len; i++) formatted_value[i] = value_str[i];
-            for (size_t i = val_len; i < (size_t)width; i++) formatted_value[i] = fill_char;
-        } else if (align == '>') {
-            for (size_t i = 0; i < padding; i++) formatted_value[i] = fill_char;
-            for (size_t i = 0; i < val_len; i++) formatted_value[padding + i] = value_str[i];
-        } else if (align == '^') {
-            size_t left_pad = padding / 2;
-            for (size_t i = 0; i < left_pad; i++) formatted_value[i] = fill_char;
-            for (size_t i = 0; i < val_len; i++) formatted_value[left_pad + i] = value_str[i];
-            for (size_t i = left_pad + val_len; i < (size_t)width; i++) formatted_value[i] = fill_char;
-        }
-        formatted_value[width] = '\0';
-    } else {
-        formatted_value = value_str;
-    }
+
+    char* formatted_value = wasm_apply_numeric_spec(specifier, value_str);
     
     // 置換を実行
     size_t placeholder_len = end - start + 1;
@@ -1818,7 +1908,16 @@ char* cm_format_replace_long(const char* format, long long value) {
     // フォーマット指定子を抽出
     char spec = extract_format_spec(format, start, end);
 
-    // 指定子に応じた値の文字列化
+    // 指定子に応じた値の文字列化（幅・整列・ゼロ埋めも適用。R20）
+    char specifier[32];
+    wasm_extract_specifier(format, start, end, specifier, sizeof(specifier));
+    // 型文字は末尾から取り直す（":8x"等の幅+基数複合対応）
+    {
+        char tc = wasm_spec_type_char(specifier);
+        if (tc)
+            spec = tc;
+    }
+
     char* value_str;
     switch (spec) {
         case 'x':
@@ -1838,6 +1937,7 @@ char* cm_format_replace_long(const char* format, long long value) {
             value_str = cm_format_long(value);
             break;
     }
+    value_str = wasm_apply_numeric_spec(specifier, value_str);
 
     return cm_format_replace(format, value_str);
 }
@@ -1913,14 +2013,17 @@ char* cm_format_replace_double(const char* format, double value) {
         }
     }
     
-    // 指定子に応じた値の文字列化
+    // 指定子に応じた値の文字列化（{pi:.2e}の精度つき指数・幅整列に対応。R20）
+    char specifier[32];
+    wasm_extract_specifier(format, start, end, specifier, sizeof(specifier));
+
     char* value_str;
     switch (spec) {
         case 'e':
-            value_str = cm_format_double_exp(value);
+            value_str = cm_format_double_exp_prec(value, precision, 0);
             break;
         case 'E':
-            value_str = cm_format_double_EXP(value);
+            value_str = cm_format_double_exp_prec(value, precision, 1);
             break;
         default:
             if (precision >= 0) {
@@ -1930,7 +2033,8 @@ char* cm_format_replace_double(const char* format, double value) {
             }
             break;
     }
-    
+    value_str = wasm_apply_numeric_spec(specifier, value_str);
+
     return cm_format_replace(format, value_str);
 }
 
