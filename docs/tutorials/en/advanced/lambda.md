@@ -101,8 +101,6 @@ process_async((int x) => {
 ### ソートのカスタム比較
 
 ```cm
-}
-
 Person[] people = [...];
 
 // 年齢でソート

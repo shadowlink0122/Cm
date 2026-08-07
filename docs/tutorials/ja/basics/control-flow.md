@@ -25,18 +25,22 @@ parent: Tutorials
 ### 基本的なif文
 
 ```cm
-const int score = 85;  // スコアは変更しないのでconst
-
-if (score >= 90) {
-    println("Grade: A");
-} else if (score >= 80) {
-    println("Grade: B");
-} else if (score >= 70) {
-    println("Grade: C");
-} else if (score >= 60) {
-    println("Grade: D");
-} else {
-    println("Grade: F");
+switch (score) {
+    case(90...100) {
+        println("Grade: A");
+    }
+    case(80...89) {
+        println("Grade: B");
+    }
+    case(70...79) {
+        println("Grade: C");
+    }
+    case(60...69) {
+        println("Grade: D");
+    }
+    else {
+        println("Grade: F");
+    }
 }
 ```
 
@@ -108,10 +112,12 @@ while (i < 5) {
 ### 無限ループ
 
 ```cm
+int count = 0;
 while (true) {
     println("{count}");
     count++;
-    
+
+    if (count >= 5) {
         break;  // ループを抜ける
     }
 }
@@ -168,17 +174,21 @@ for (n in arr) {
 ### 構造体配列のループ
 
 ```cm
+struct Point {
+    int x;
+    int y;
 }
 
+int main() {
     Point[3] points;
-    points[0] = Point(10, 20);
-    points[1] = Point(30, 40);
-    points[2] = Point(50, 60);
-    
+    points[0] = Point { x: 10, y: 20 };
+    points[1] = Point { x: 30, y: 40 };
+    points[2] = Point { x: 50, y: 60 };
+
     for (p in points) {
         println("({p.x}, {p.y})");
     }
-    
+
     return 0;
 }
 ```
@@ -236,7 +246,7 @@ string classify(string s) {
 ### 基本的なswitch
 
 ```cm
-
+switch (day) {
     case(1) {
         println("Monday");
     }
@@ -272,10 +282,13 @@ string classify(string s) {
 ```cm
 enum Status {
     Ok = 0,
+    Error = 1,
     Pending = 2
 }
 
-    
+int main() {
+    Status status = Status::Ok;
+    switch (status) {
         case(Status::Ok) {
             println("Success");
         }
@@ -286,7 +299,7 @@ enum Status {
             println("Waiting");
         }
     }
-    
+
     return 0;
 }
 ```
@@ -294,7 +307,7 @@ enum Status {
 ### ORパターン（複数値）
 
 ```cm
-
+switch (x) {
     case(1 | 2 | 3) {
         println("1, 2, or 3");
     }
@@ -310,7 +323,7 @@ enum Status {
 ### 範囲パターン
 
 ```cm
-
+switch (score) {
     case(90...100) {
         println("Grade: A");
     }
@@ -332,7 +345,7 @@ enum Status {
 ### 複合パターン
 
 ```cm
-
+switch (x) {
     case(1...5 | 10 | 20...30) {
         // (1 <= x <= 5) || x == 10 || (20 <= x <= 30)
         println("Matched!");
@@ -351,14 +364,18 @@ enum Status {
 
 ```cm
 // while文
+int i = 0;
 while (true) {
+    if (i >= 5) {
         break;
     }
     println("{i}");
+    i++;
 }
 
 // for文
 for (int j = 0; j < 10; j++) {
+    if (j == 5) {
         break;
     }
     println("{j}");
@@ -370,13 +387,17 @@ for (int j = 0; j < 10; j++) {
 ```cm
 // 偶数のみ出力
 for (int i = 0; i < 10; i++) {
+    if (i % 2 != 0) {
         continue;  // 奇数はスキップ
     }
     println("{i}");
 }
 
 // while文
+int n = 0;
 while (n < 10) {
+    n++;
+    if (n % 2 != 0) {
         continue;
     }
     println("{n}");
@@ -418,12 +439,14 @@ void process_file() {
 ### エラーハンドリング
 
 ```cm
+int divide(int a, int b) {
     defer println("divide() finished");
-    
+
+    if (b == 0) {
         println("Error: division by zero");
         return -1;
     }
-    
+
     return a / b;
 }
 ```
@@ -452,6 +475,7 @@ for (int i = 1; i <= 9; i++) {
 bool found = false;
 for (int i = 0; i < 10 && !found; i++) {
     for (int j = 0; j < 10; j++) {
+        if (i * j == 42) {
             println("Found: {i}*{j} = 42");
             found = true;
             break;  // 内側のループを抜ける
@@ -469,6 +493,7 @@ for (int i = 0; i < 10 && !found; i++) {
 **Cmではbreak不要です！**
 
 ```cm
+switch (x) {
     case(1) {
         println("One");
         // breakは不要！自動的に次のcaseに進まない
@@ -484,12 +509,14 @@ for (int i = 0; i < 10 && !found; i++) {
 
 ```cm
 // 間違い: C++風の構文
+switch (x) {
     case 1:  // エラー: case()を使う必要がある
         println("One");
         break;
 }
 
 // 正しい: Cm構文
+switch (x) {
     case(1) {
         println("One");
     }
@@ -500,12 +527,14 @@ for (int i = 0; i < 10 && !found; i++) {
 
 ```cm
 // 間違い
+switch (x) {
     case(1) { println("One"); }
     default:  // エラー: elseを使う
         println("Other");
 }
 
 // 正しい
+switch (x) {
     case(1) { println("One"); }
     else {
         println("Other");
@@ -544,7 +573,9 @@ while (i < 5);  // セミコロンがある！
 <summary>解答例</summary>
 
 ```cm
+int main() {
     for (int i = 1; i <= 100; i++) {
+        if (i % 15 == 0) {
             println("FizzBuzz");
         } else if (i % 3 == 0) {
             println("Fizz");
@@ -566,13 +597,16 @@ while (i < 5);  // セミコロンがある！
 <summary>解答例</summary>
 
 ```cm
+int factorial(int n) {
+    int result = 1;
     for (int i = 1; i <= n; i++) {
         result *= i;
     }
     return result;
 }
 
-    println("5! = {factorial(5)}");  // 120
+int main() {
+    println("5! = {factorial(5)}");   // 120
     println("10! = {factorial(10)}"); // 3628800
     return 0;
 }
@@ -587,18 +621,20 @@ while (i < 5);  // セミコロンがある！
 
 ```cm
 bool is_prime(int n) {
+    if (n < 2) {
         return false;
     }
-    
     for (int i = 2; i * i <= n; i++) {
+        if (n % i == 0) {
             return false;
         }
     }
-    
     return true;
 }
 
+int main() {
     for (int i = 2; i <= 20; i++) {
+        if (is_prime(i)) {
             println("{i} is prime");
         }
     }

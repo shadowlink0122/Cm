@@ -25,22 +25,24 @@ FFI（Foreign Function Interface）を使うと、CライブラリやOS APIをCm
 
 ```cm
 use libc {
-    malloc,
-    free,
-    memcpy,
-    memset
+    void* malloc(int size);
+    void free(void* ptr);
+    void* memcpy(void* dst, void* src, int n);
+    void* memset(void* ptr, int value, int n);
 }
 
+int main() {
     // malloc で 1024 バイト確保
     void* ptr = malloc(1024);
-    
+
+    if (ptr != null) {
         // メモリを 0 で初期化
         memset(ptr, 0, 1024);
-        
+
         // 使い終わったら解放
         free(ptr);
     }
-    
+
     return 0;
 }
 ```
@@ -52,17 +54,18 @@ use libc {
 安全なメモリ操作用のラッパー：
 
 ```cm
-
+int main() {
     // アロケータ経由でメモリ確保
-    
+    int* arr = alloc(10);
+
     // 使用
     for (int i = 0; i < 10; i++) {
         arr[i] = i * i;
     }
-    
+
     // 解放
     dealloc(arr);
-    
+
     return 0;
 }
 ```
@@ -80,8 +83,9 @@ extern "C" {
     double cos(double x);
 }
 
+int main() {
     double angle = 3.14159 / 4.0;
-    printf("sin(π/4) = %f\n", sin(angle));
+    println("sin(pi/4) = {sin(angle)}");
     return 0;
 }
 ```
@@ -104,7 +108,9 @@ extern "C" {
 
 ```cm
 // 安全なラッパー
+struct SafeBuffer {
     void* ptr;
+    int size;
 }
 
 SafeBuffer create_buffer(int size) {
@@ -113,6 +119,7 @@ SafeBuffer create_buffer(int size) {
 }
 
 void destroy_buffer(SafeBuffer* buf) {
+    if (buf->ptr != null) {
         free(buf->ptr);
         buf->ptr = null;
     }
@@ -122,6 +129,9 @@ void destroy_buffer(SafeBuffer* buf) {
 ## 構造体の受け渡し
 
 ```cm
+struct Point {
+    int x;
+    int y;
 }
 
 extern "C" {

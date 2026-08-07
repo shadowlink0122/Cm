@@ -85,10 +85,14 @@ C/C++との相互運用性を重視します。
 
 ```cm
 // C互換のメモリレイアウト
+struct Data {
+    int id;
     double value;
 }
 
 // C++風のポインタ
+int x = 0;
+int* p = &x;
 *p = 100;
 ```
 
@@ -105,6 +109,9 @@ match (status) {
 }
 
 // 自動トレイト実装
+struct Point with Debug {
+    int x;
+    int y;
 }
 ```
 
