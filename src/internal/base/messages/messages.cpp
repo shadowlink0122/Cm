@@ -699,6 +699,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // NostdCatThread
     {"threading",
      "スレッド"},
+    // NostdFloatNotAvailable
+    {"error: function '{0}' uses floating-point types; floating point is not available on baremetal-x86 (SSE is disabled; UEFI targets support it)",
+     "エラー: 関数 '{0}' 内で浮動小数点型を使用しています。baremetal-x86では浮動小数点は使用できません（SSE無効。UEFIターゲットでは使用可能です）"},
+    // NostdForbiddenAddressOf
+    {"error: function '{0}' takes the address of '{1}'; {2} is not available in bare-metal environments (indirect calls cannot bypass freestanding restrictions)",
+     "エラー: 関数 '{0}' 内で '{1}' のアドレスを取得しています。{2} はベアメタル環境では使用できません（関数ポインタ経由の間接呼び出しでも制約は回避できません）"},
     // NostdForbiddenCall
     {"error: function '{0}' uses '{1}'; {2} is not available in bare-metal environments",
      "エラー: 関数 '{0}' 内で '{1}' を使用しています。{2} はベアメタル環境では使用できません"},

@@ -253,6 +253,8 @@ enum class MsgId : int {
     NostdCatOsStdout,
     NostdCatProcess,
     NostdCatThread,
+    NostdFloatNotAvailable,
+    NostdForbiddenAddressOf,
     NostdForbiddenCall,
     // ===== parse =====
     ParseASwitchStatementRequiresCase,

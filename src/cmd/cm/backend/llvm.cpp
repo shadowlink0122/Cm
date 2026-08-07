@@ -153,7 +153,10 @@ int emit_llvm(BuildContext& ctx, mir::MirProgram& mir) {
             llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalX86 ||
             llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalUEFI) {
             cm::mir::opt::NoStdChecker checker;
-            auto check_result = checker.check(mir);
+            // baremetal-x86はSSE無効のため浮動小数点を専用診断で拒否する（R18。UEFIはSSE有効で使用可能）
+            const bool forbid_float =
+                llvm_opts.target == cm::codegen::llvm_backend::BuildTarget::BaremetalX86;
+            auto check_result = checker.check(mir, forbid_float);
             if (check_result.has_errors) {
                 for (const auto& err : check_result.errors) {
                     std::cerr << err << "\n";

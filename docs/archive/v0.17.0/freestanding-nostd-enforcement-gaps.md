@@ -1,6 +1,6 @@
 # R18: フリースタンディング制約の強制漏れ（文字列連結のヒープ確保・関数ポインタ経由バイパス・float非対称）
 
-**ステータス:** 未修正（バックエンド網羅バグ調査で検出）
+**ステータス:** 修正済み（ブロックリストのヒープ系ヘルパ拡張・アドレス取得の走査・baremetal-x86のfloat専用診断。バグ1〜3全件処置）
 **重大度:** High（ヒープ確保の黙殺・ブロックリスト回避）/ Medium（float非対称）
 
 baremetal/UEFIのno-std制約（`src/internal/mir/passes/validation/no_std_checker.cpp`、名前ベースのブロックリスト）に穴があり、フリースタンディングで使えないはずのヒープ確保が診断なしでコンパイルを通る。直接呼び出しの拒否は健全だが、名前ベースゆえ2経路で回避される。
@@ -52,3 +52,12 @@ malloc・printlnの直接呼び出しおよびラッパー関数経由（`int* w
 ## テスト計画
 
 `tests/baremetal/errors/`・`tests/uefi/`へ: 文字列連結・int→string・関数ポインタ経由の禁止関数呼び出しが診断で拒否される負のテスト。baremetal-x86でのfloat使用の専用診断。UEFIとbaremetalで同一std依存コードが同一診断になる一貫性検証。
+
+## 実装記録
+
+- **バグ1（文字列連結等のヒープ確保が無診断）**: `NoStdChecker::isForbiddenFunction`へヒープ確保を伴うランタイムヘルパ群を追加した——`cm_string_*`（連結・解放）・`cm_str_*`（cm_str_alloc等）・`cm_format_*`（補間・書式整形）・`cm_slice_*`（動的スライス）・`cm_mem_*`（std::memアロケータ経路）・`__builtin_array_*`（配列HOF）・`cm_array_to_slice`・`cm_*_to_string`（数値→文字列変換）。診断はNostdCatOsHeapカテゴリで既存の一貫した書式。理想形（runtime-builtin-registryへの確保フラグ付与によるホワイトリスト化）は複雑度レビューのレジストリ拡張と合流する将来課題として残置。
+- **バグ2（関数ポインタ経由の回避）**: 呼び出しターミネータのcallee名だけでなく、全Assign文のrvalueオペランドと呼び出し引数を走査し、禁止関数の`FunctionRef`（アドレス取得）を専用診断（NostdForbiddenAddressOf、i18n en/ja「間接呼び出しでも制約は回避できません」）で拒否するようにした。取得の時点で封じるため、間接呼び出しのcallee追跡は不要。
+- **バグ3（floatの非対称と不可解なLLVM内部エラー）**: `check()`へ`forbid_float`パラメータを追加し、baremetal-x86（SSE無効）ターゲットのとき関数のMIRローカル型（一時変数含む）にFloat/Double/UFloat/UDoubleがあれば専用診断（NostdFloatNotAvailable「baremetal-x86では浮動小数点は使用できません。SSE無効。UEFIターゲットでは使用可能」）で停止する。UEFI（SSE有効）は従来どおり使用可で、非対称は診断文とチュートリアルへ仕様として明文化した。
+- **付随**: `putchar`/`sprintf`のカテゴリ判定漏れ（OS-dependent縮退）を標準出力カテゴリへ補正。
+- **テスト**: `tests/baremetal/errors/`へ文字列連結・`&putchar`アドレス取得・floatの診断3本（R17で二段化したarm/x86ゲートの対象）、`tests/uefi/uefi_compile/`へfloat使用可の肯定1本（非対称の固定）。baremetal 14件・uefi 22件・unit/regression/interpreter/llvmの各スイートPASS。
+- **チュートリアル**: UEFIチュートリアル（ja/en）のno_std節へ「コンパイル時に拒否される機能」（直接呼び出し・アドレス取得・ヒープ確保系言語機能・floatの対称性）を明文化。

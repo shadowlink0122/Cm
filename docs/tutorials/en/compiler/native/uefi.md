@@ -24,6 +24,16 @@ Ordinary Cm programs use standard library functions such as `println` and `mallo
 
 ---
 
+### Features Rejected at Compile Time (enforcement hardened in v0.17.0)
+
+The no_std constraint is checked at compile time and violations are errors:
+
+- **Direct calls to OS-dependent functions**: `println`, `malloc`, file I/O, pthread, etc.
+- **Taking the address of a forbidden function**: indirect calls through `&putchar`-style function pointers cannot bypass the restrictions
+- **Language features that allocate on the heap**: string concatenation (`a + b`), number-to-string conversion, interpolation formatting, dynamic slice operations, and array higher-order methods
+
+Floating point is available on UEFI (the x86_64 ABI enables SSE) but rejected with a dedicated diagnostic on `--target=baremetal-x86` (SSE disabled).
+
 ## Environment setup
 
 ### Required tools

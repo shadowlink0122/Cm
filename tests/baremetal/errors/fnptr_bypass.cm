@@ -1,0 +1,10 @@
+// 回帰(R18): 禁止関数のアドレス取得（&putchar）による間接呼び出しのブロックリスト回避は診断拒否
+use libc {
+    int putchar(int c);
+}
+
+int main() {
+    int *(int) f = &putchar;
+    int r = f(65);
+    return r;
+}
