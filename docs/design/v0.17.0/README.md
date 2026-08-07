@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15修正済みで残5件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R6・R7・R8修正済み・archive移動で8件、バックエンド網羅バグ調査はR15・R17修正済みで残4件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -71,7 +71,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 
 - R15: SVテスト検証の健全性 — **修正済み**（[archive移動](../../archive/v0.17.0/sv-test-verification-soundness.md)。`//! test:`期待値ごとに`!==`比較+`$fatal`をテストベンチへ生成し（4値比較でx/zも不一致扱い・既存`$display`行は維持し.expect突合は不変）、`#[test]`のassertを`if (!(cond))`から`if ((cond) !== 1'b1)`のx安全形へ変更。ディレクティブ検出の行中誤認識（コメント中の`//! test:`言及をテストケース化）も行頭限定で修正。negative check 4本（不一致/x出力/assert対象xがrc=1でFAIL）をcm test E2Eへ、アサート生成の固定をregressionへ追加。tests/sv 125件は無修正で全PASS＝既存期待値の正しさも確認）
 - [R16: SVコード生成が不正な構文を無診断で受理](sv-codegen-silent-invalid.md) — **Medium**: `#[sv::pinn]`タイポでピン制約が静かに欠落・`#[input]`ポートへの代入が不正SV（iverilog l-valueエラー）・エッジ無し`always_ff`が`always_comb`へ黙殺変換・`bit[0]`が不正SV（`0'd0`）。桁あふれ`4'd99`・非文字列pin引数・native流入診断の低品質（Low）
-- [R17: baremetal-armターゲットが起動コードのmemcpy型不一致で全滅](baremetal-arm-startup-broken.md) — **Critical**: `_start`の`memcpy`/`memset`をi32宣言・i64実引数（arm=32bitポインタ）で呼びLLVM検証失敗。最小`int main`すら通らずターゲット全滅（x86は`generateStartupCode`早期returnで難を逃れテストスイートも露見せず）
+- R17: baremetal-armターゲットが起動コードのmemcpy型不一致で全滅 — **修正済み**（[archive移動](../../archive/v0.17.0/baremetal-arm-startup-broken.md)。memcpy/memsetのsize引数をDataLayoutのポインタ幅型（arm=i32）にしCreatePtrDiff結果をIntCastで整合。実装中に起動コード自体の意味バグ2件も発見・同時修正: リンカシンボルのload誤り（アドレス自体が境界なのに値をloadしていた）とptrdiff要素型ポインタによるサイズ1/4化。テストランナーのllvm-baremetalドライバへx86成功時のarm二段コンパイルゲートを追加し、x86のみ実行の盲点を封止。逆アセンブルで正しい初期化列を確認）
 - [R18: フリースタンディング制約の強制漏れ](freestanding-nostd-enforcement-gaps.md) — **High**: 文字列連結（`cm_string_concat`＝malloc依存）がbaremetal/UEFIで無診断コンパイル（ブロックリストに`cm_string_*`漏れ）・`&putchar`の関数ポインタ間接呼び出しでブロックリスト回避。floatがbaremetal-x86失敗/UEFI成功の非対称（Medium）
 - [R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない](ts-bigint-number-generation.md) — **Medium**: structフィールド代入が`_t.v = 5`（`number`を`bigint`フィールドへ）でTS2322。「生成TSがtscを通る」第一級保証に違反（実行値は正）。戻り値・let初期化サイトは修正済みでフィールド代入サイト固有
 - [R20: 文字列補間・書式指定子のバックエンド分岐](interpolation-format-backend-divergence.md) — **Medium**: 単項`~`を含む補間（`{~a}`）がjs/tsで全プレースホルダをundefined破壊・jit/nativeで文字列素通し。書式の幅/科学記法（`:6`/`.2e`）をnative/jitが無視しjs/tsが適用（3経路不一致）
@@ -163,7 +163,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | E1 | SVバックエンドの網羅バグ調査 | 調査済み → [R15](../../archive/v0.17.0/sv-test-verification-soundness.md)（修正済み） | 専用スイートあり（tests/sv） | `//! test:`期待値の非検証・assertのx楽観性は修正済み。数値意味論はnative↔SV一致で健全 |
 | E2 | SV固有構文の異常系（`bit<N>`・always系・assign・`+:`・幅付きリテラル・`#[sv::*]`属性群） | 調査済み → [R16](sv-codegen-silent-invalid.md) | 正常系はSVスイートにあり | 不正構文の無診断受理・属性タイポでピン制約欠落（Medium）。正常系は健全 |
 | E3 | UEFIターゲット | 調査済み → [R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/uefi） | 文字列連結のヒープ確保・間接呼び出しが制約をすり抜け（High）。正常系コンパイルは健全 |
-| E4 | baremetal-arm/x86 | 調査済み → [R17](baremetal-arm-startup-broken.md)・[R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/baremetal） | armは起動コードのmemcpy型不一致で全滅（Critical）。x86正常系は健全 |
+| E4 | baremetal-arm/x86 | 調査済み → [R17](../../archive/v0.17.0/baremetal-arm-startup-broken.md)（修正済み）・[R18](freestanding-nostd-enforcement-gaps.md) | 機能テストあり（tests/baremetal、arm/x86二段ゲート） | armの起動コード型不一致は修正済み。x86正常系は健全 |
 | E5 | TSバックエンド固有経路 | 調査済み → [R19](ts-bigint-number-generation.md)・[R20](interpolation-format-backend-divergence.md) | tests/tsと`tsc --noEmit`ゲート | long/ulongフィールド代入がTS2322・補間/書式のバックエンド分岐（Medium）。型注釈の大半は健全 |
 
 ## 全体複雑度レビュー（未実装のリファクタリング提案）

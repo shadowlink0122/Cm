@@ -410,6 +410,11 @@ PY
             # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
 
+            # x86成功時はarmでもコンパイル検証する（armのみの起動コード生成経路がx86ゲートでは露見しないため。エラーテストはx86失敗時点で判定される）
+            if [ $exit_code -eq 0 ]; then
+                (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-arm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            fi
+
             # コンパイル成功 = PASS（実行はしない）
             if [ $exit_code -eq 0 ]; then
                 if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then

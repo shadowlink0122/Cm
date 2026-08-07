@@ -308,38 +308,40 @@ void TargetManager::generateStartupCode(llvm::Module& module) {
 // データセクション初期化
 void TargetManager::generateDataInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
     auto& ctx = module.getContext();
+    auto i8Ty = llvm::Type::getInt8Ty(ctx);
+    // リンカシンボルはアドレス自体が境界を表すため、値をloadせずシンボルのアドレスを直接使う
+    auto sdata = module.getOrInsertGlobal("_sdata", i8Ty);
+    auto edata = module.getOrInsertGlobal("_edata", i8Ty);
+    auto sidata = module.getOrInsertGlobal("_sidata", i8Ty);
+
     auto ptrTy = llvm::PointerType::get(ctx, 0);
-    auto sdata = module.getOrInsertGlobal("_sdata", ptrTy);
-    auto edata = module.getOrInsertGlobal("_edata", ptrTy);
-    auto sidata = module.getOrInsertGlobal("_sidata", ptrTy);
+    // size引数の型はターゲットのポインタ幅に合わせる（arm=i32。CreatePtrDiffの結果もこの型へ揃えないとLLVM検証で型不一致になる）
+    auto sizeTy = module.getDataLayout().getIntPtrType(ctx);
+    auto memcpy = module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, sizeTy);
 
-    auto memcpy =
-        module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx));
-
-    auto sdataPtr = builder.CreateLoad(ptrTy, sdata, "sdata_ptr");
-    auto edataPtr = builder.CreateLoad(ptrTy, edata, "edata_ptr");
-    auto sidataPtr = builder.CreateLoad(ptrTy, sidata, "sidata_ptr");
-
-    auto size = builder.CreatePtrDiff(ptrTy, edataPtr, sdataPtr);
-    builder.CreateCall(memcpy, {sdataPtr, sidataPtr, size});
+    // i8要素のptrdiffでバイト数を得る（ポインタ型要素だと要素数=バイト数/ポインタ幅になってしまう）
+    auto size = builder.CreatePtrDiff(i8Ty, edata, sdata, "data_size");
+    auto sizeArg = builder.CreateIntCast(size, sizeTy, false);
+    builder.CreateCall(memcpy, {sdata, sidata, sizeArg});
 }
 
 // BSSセクション初期化
 void TargetManager::generateBssInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
     auto& ctx = module.getContext();
+    auto i8Ty = llvm::Type::getInt8Ty(ctx);
+    // リンカシンボルはアドレス自体が境界を表すため、値をloadせずシンボルのアドレスを直接使う
+    auto sbss = module.getOrInsertGlobal("_sbss", i8Ty);
+    auto ebss = module.getOrInsertGlobal("_ebss", i8Ty);
+
     auto ptrTy = llvm::PointerType::get(ctx, 0);
-    auto sbss = module.getOrInsertGlobal("_sbss", ptrTy);
-    auto ebss = module.getOrInsertGlobal("_ebss", ptrTy);
+    auto sizeTy = module.getDataLayout().getIntPtrType(ctx);
+    auto memset =
+        module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx), sizeTy);
 
-    auto memset = module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt8Ty(ctx),
-                                             llvm::Type::getInt32Ty(ctx));
-
-    auto sbssPtr = builder.CreateLoad(ptrTy, sbss);
-    auto ebssPtr = builder.CreateLoad(ptrTy, ebss);
-
-    auto size = builder.CreatePtrDiff(ptrTy, ebssPtr, sbssPtr);
-    auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(ctx), 0);
-    builder.CreateCall(memset, {sbssPtr, zero, size});
+    auto size = builder.CreatePtrDiff(i8Ty, ebss, sbss, "bss_size");
+    auto sizeArg = builder.CreateIntCast(size, sizeTy, false);
+    auto zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0);
+    builder.CreateCall(memset, {sbss, zero, sizeArg});
 }
 
 // TargetConfig::getNative() 実装
