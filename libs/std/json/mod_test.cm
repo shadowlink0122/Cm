@@ -73,3 +73,46 @@ void ignores_surrounding_whitespace() {
     int a = json_parse("  [ 1 , 2 ]  ");
     assert(json_array_len(a) == 2, "whitespace tolerant");
 }
+
+// R1バグ1回帰: 旧固定容量1024の境界で無限ループしない（アリーナはpushで自動拡張）
+#[test]
+void grows_arena_beyond_1024_nodes() {
+    string big = "[";
+    int i = 0;
+    while (i < 1500) {
+        if (i > 0) {
+            big = big + ",";
+        }
+        big = big + "1";
+        i = i + 1;
+    }
+    big = big + "]";
+    int root = json_parse(big);
+    assert(root >= 0, "1500 elements parse");
+    assert(json_array_len(root) == 1500, "1500 elements counted");
+    assert(json_int(json_array_get(root, 1499)) == 1, "last element readable");
+}
+
+// R1バグ2回帰: 甘い受理の拒否（末尾ゴミ・複数値・数字なしマイナス）
+#[test]
+void rejects_lenient_inputs() {
+    assert(json_parse("-") < 0, "lone minus rejected");
+    assert(json_parse("-x") < 0, "minus without digits rejected");
+    assert(json_parse("{\"a\":1}xyz") < 0, "trailing garbage rejected");
+    assert(json_parse("1 2") < 0, "multiple values rejected");
+    assert(json_number(json_parse("-5")) == -5.0, "valid negative still parses");
+    assert(json_number(json_parse("-0.5")) == -0.5, "negative fraction still parses");
+}
+
+// R1バグ3回帰: \uXXXXの実デコード（UTF-8格納・サロゲートペア）と不正エスケープの診断
+#[test]
+void decodes_unicode_escapes() {
+    assert(json_string(json_parse("\"\\u0041BC\"")) == "ABC", "BMP ascii decode");
+    assert(json_string(json_parse("\"\\u3042\"")) == "あ", "BMP 3-byte decode");
+    assert(json_string(json_parse("\"\\uD83D\\uDE00\"")) == "😀", "surrogate pair decode");
+    assert(json_parse("\"\\x\"") < 0, "unknown escape rejected");
+    assert(json_parse("\"\\uD800\"") < 0, "lone high surrogate rejected");
+    assert(json_parse("\"\\uDC00\"") < 0, "lone low surrogate rejected");
+    assert(json_parse("\"\\u12G4\"") < 0, "invalid hex rejected");
+    assert(json_parse("\"\\u12\"") < 0, "short hex rejected");
+}

@@ -1,0 +1,42 @@
+import std::json::*;
+import std::io::println;
+import std::strings::builder::*;
+// R1回帰: std::jsonの堅牢性（アリーナ自動拡張・甘い受理の拒否・\uエスケープの実デコード）
+// 従来は固定容量1024を2ノード超えるJSONでappend_childが自己サイクルを作り無限ループ（DoS）、
+// "-"単独が0・末尾ゴミ/複数値を受理、\uXXXXが文字uと生4桁へ化けるデータ破壊だった。
+// 非ASCIIコードポイントの出力はjsの文字列モデル分裂（R2）に依存するため、本テストはASCII範囲のみ扱う
+
+int main() {
+    // アリーナ自動拡張: 旧上限1024を跨ぐ1500要素（無限ループせず全要素読める）
+    StringBuilder sb();
+    sb.append("[");
+    int i = 0;
+    while (i < 1500) {
+        if (i > 0) {
+            sb.append(",");
+        }
+        sb.append("7");
+        i = i + 1;
+    }
+    sb.append("]");
+    int big = json_parse(sb.to_string());
+    println("grow: root={big} len={json_array_len(big)} last={json_int(json_array_get(big, 1499))}");
+
+    // 再パース時のスロット再利用（拡張後にもう一度小さいJSONを読める）
+    int small = json_parse("{\"a\":[1,2],\"b\":\"x\"}");
+    println("reuse: {json_stringify(small)}");
+
+    // 甘い受理の拒否
+    println("lone_minus: {json_parse(\"-\")}");
+    println("minus_alpha: {json_parse(\"-x\")}");
+    println("trailing: {json_parse(\"{\\\"a\\\":1}xyz\")}");
+    println("multi: {json_parse(\"1 2\")}");
+    println("ok_neg: {json_number(json_parse(\"-5\"))} {json_number(json_parse(\"-0.5\"))}");
+
+    // \uXXXXの実デコード（ASCII範囲）と不正エスケープの診断
+    println("u_ascii: {json_string(json_parse(\"\\\"\\\\u0041\\\\u0042C\\\"\"))}");
+    println("bad_esc: {json_parse(\"\\\"\\\\x\\\"\")}");
+    println("lone_hi: {json_parse(\"\\\"\\\\uD800\\\"\")}");
+    println("bad_hex: {json_parse(\"\\\"\\\\u12G4\\\"\")}");
+    return 0;
+}

@@ -260,7 +260,17 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // mainのエントリでグローバル変数の非定数初期化子を評価する。
     // 定数評価できない初期化子（関数呼び出し・構造体リテラル・スライスリテラル等）は
     // 従来コード生成で黙って捨てられ、グローバルがゼロ値のままになっていた
-    if (func.name == "main") {
+    // R1: #[test]関数はテストモードでmainを経由せず直接JITエントリになる（関数ごとに独立JITで状態隔離）ため、同じ初期化列を各テスト関数のエントリにも注入する（従来はスライス等の非定数グローバルがnullのままでテストのみSIGSEGVしていた）
+    bool inject_global_inits = (func.name == "main");
+    if (!inject_global_inits) {
+        for (const auto& fn_attr : func.attributes) {
+            if (fn_attr == "test") {
+                inject_global_inits = true;
+                break;
+            }
+        }
+    }
+    if (inject_global_inits) {
         for (const auto& gv : mir_program.global_vars) {
             if (!gv || !gv->type) {
                 continue;

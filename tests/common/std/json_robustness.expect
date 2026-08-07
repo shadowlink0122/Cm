@@ -1,0 +1,11 @@
+grow: root=0 len=1500 last=7
+reuse: {"a":[1,2],"b":"x"}
+lone_minus: -1
+minus_alpha: -1
+trailing: -1
+multi: -1
+ok_neg: -5 -0.5
+u_ascii: ABC
+bad_esc: -1
+lone_hi: -1
+bad_hex: -1

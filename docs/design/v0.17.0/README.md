@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR3修正済み・archive移動で13件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3修正済み・archive移動で12件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）、第8ラウンドは残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -48,7 +48,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 下記「構文・機能カバレッジの棚卸し」で列挙した未調査項目のうち、属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）の全項目を6並列で実機プローブ（jit O0/O2・native O0〜O3・wasm・js/ts）した。過去ラウンドと異なり、未実装構文の受理/診断/黙殺の別・仕様書との乖離まで対象にした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
 健全確認済み: async/await（js/ts動作+他経路の明示拒否）・macro正常系（6経路一致）・`${}`補間本体（`{}`と同値）・`...`範囲パターン（両端含む・先勝ち・網羅性強制、9実行一致）・TreeMap（1000件/10万件の挿入喪失なし・自動拡張）・対話入力のOption返し（M17適用）・`namespace`（実装済み動作）・extern（native/jit動作・未解決シンボル診断）・予約語誤用診断（X5の空表示バグ再発なし）・数値リテラルの拒否は安全側（誤値化なし）。
 
-- [R1: std::jsonパーサの堅牢性](json-parser-robustness.md) — **Critical**: アリーナ容量1024を2ノード超過するJSONで`json_parse`が無限ループ（`append_child`自己サイクル、jit/nativeともハング=DoS）。加えて末尾ゴミ/単独マイナス/複数値の甘い受理・`\uXXXX`の黙ったデータ破壊（Medium）
+- R1: std::jsonパーサの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/json-parser-robustness.md)。アリーナをTreeMap同方式のパラレル動的スライスへ置換し無限ループの発生源を構造的に消滅（ノード上限撤廃）、末尾ゴミ/複数値/数字なしマイナスを拒否、\uXXXXをサロゲートペア込みでUTF-8実デコード・不正エスケープを診断。併発発見のcm testモードのグローバル非定数初期化子欠落（#[test]エントリへ未注入でスライスグローバルがnull）もMIR lowering側で修正。jsの非ASCII表示はR2の文字列モデル分裂に帰属する既知制約）
 - [R2: 文字列APIのコードポイント/バイト単位不一致](string-codepoint-byte-api-split.md) — **High**: `len()`=コードポイント数（H9）と`charAt()`=生バイトの添字単位不一致で、非ASCII文字列を走査するコードが破綻。std::jsonの非ASCIIパースがnative/jit失敗・js成功のバックエンド分岐に
 - R3: ジェネリック`T*`引数の型パラメータ束縛失敗 — **修正済み**（[archive移動](../../archive/v0.17.0/generic-pointer-param-inference.md)。真因2系統: checkerのinfer_generic_callが`T*`/`T[]`/`T**`を推論できず3ケース個別実装だったのを構造再帰unifyへ置換、LLVM codegenのselfコピー最適化が特殊化名`deref__int`のT*引数をプリミティブimplメソッドのselfと誤認し要素型で確保していたのをシード条件へ「第0引数名=self」を追加。swap/deref/T[]/T**/ジェネリック構造体の回帰をjit/native O0〜O3/wasm/jsで追加）
 - [R4: クロージャの外側変数書き込み黙殺・構造体キャプチャのjs分岐](closure-mutation-semantics.md) — **High**: 同一関数内クロージャからの外側変数への代入が全経路で無診断棄却（読みは最新値・書きは無効の非対称）。構造体キャプチャ書き込みはjsだけ伝播しバックエンド分岐
@@ -146,7 +146,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
 | D1 | TreeMap | 調査済み → 健全 | 機能テストあり | 1000件/10万件の挿入喪失なし・自動拡張が効く（6経路一致）。remove/走査APIは診断ありの未実装 |
-| D2 | std::json | 調査済み → [R1](json-parser-robustness.md)・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 容量超過で無限ループ（Critical）・非ASCII失敗（High）・甘い受理・\u破壊 |
+| D2 | std::json | 調査済み → [R1](../../archive/v0.17.0/json-parser-robustness.md)（修正済み）・[R2](string-codepoint-byte-api-split.md) | libテストあり（json/mod_test.cm） | 無限ループ・甘い受理・\u破壊はR1で修正済み。非ASCII失敗（High）はR2未修正 |
 | D3 | std::env/process/path/bytes/fs | 調査済み → 健全（+[R23](cross-target-ffi-capability-gaps.md)） | selfhost素振りのCI検証（S1〜S9） | env/process/path/bytes/fsは健全（バイナリ安全・不在/空区別・エラーパス非クラッシュ）。wasmで能力ガード欠如。配列添字OOB無検査（Low〜Medium・言語共通） |
 | D4 | std::ioの対話入力（input/input_int等） | 調査済み → 健全（+[R9](stdlib-shipping-defects.md)） | なし | パイプ入力で正常・非数値でNone（M17適用）・クラッシュなし。ただし`std::io`窓口の入力再exportが解決不能 |
 | D5 | native::sync/thread | 調査済み → [R22](export-on-impl-method-parse-error.md)・[R25](concurrency-optimizer-and-join-gaps.md) | 機能テストあり（tests/llvm/sync・thread） | ランタイム挙動は健全（実並行・Mutex排他・RwLock SIGILL回避・O2/O3無破壊）。高レベルAPIがexport-implパースエラーで全損（High）・spin-waitがO1+でコンパイル不能 |

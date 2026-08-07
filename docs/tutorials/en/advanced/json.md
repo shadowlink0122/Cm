@@ -62,9 +62,10 @@ println(json_stringify(root));   // {"a":[1,2],"b":"x"}
 
 ---
 
-## Capacity
+## Capacity and Input Validation
 
-The arena holds up to 1024 nodes by default (one node per JSON value). Exceeding it makes `json_parse` return `-1`. The bound is just the fixed size of the global node array and can be raised in the source when needed.
+The arena grows automatically via slices, so there is no limit on the number of nodes (one node per JSON value; the former fixed 1024 cap was removed in v0.17.0).
+Input is validated strictly as JSON: trailing garbage (`{"a":1}xyz`), multiple values (`1 2`), and a `-` without digits return `-1`. `\uXXXX` escapes in strings are decoded to UTF-8 (including surrogate pairs), and invalid escapes (`\x` etc.), invalid hex, and unpaired surrogates return `-1`.
 
 ---
 
