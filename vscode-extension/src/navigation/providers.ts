@@ -18,6 +18,7 @@ import {
   PRIMITIVE_TYPES,
   SIZEOF_KEYWORDS,
 } from '../grammar/terms';
+import { BuiltinEntry, lookupBuiltinFunction, lookupBuiltinMethod } from './builtins';
 import { CmSymbol, extractSymbols, rankMatches } from './symbols';
 
 const WORD_PATTERN = /[A-Za-z_][A-Za-z0-9_]*/;
@@ -117,6 +118,27 @@ function wordAtPosition(
   return SKIP_WORDS.has(word) ? undefined : word;
 }
 
+// カーソル位置の識別子が直前の `.` を伴うメソッドアクセスか判定する（`obj.method` の method 側）
+function isMethodAccess(document: vscode.TextDocument, position: vscode.Position): boolean {
+  const range = document.getWordRangeAtPosition(position, WORD_PATTERN);
+  if (!range || range.start.character === 0) {
+    return false;
+  }
+  const before = document.getText(new vscode.Range(range.start.translate(0, -1), range.start));
+  return before === '.';
+}
+
+// コンパイラ組み込みメソッド・関数のホバー内容を組み立てる（ソース定義を持たないためコードジャンプは提供しない）
+function buildBuiltinHover(entries: BuiltinEntry[]): vscode.MarkdownString {
+  const md = new vscode.MarkdownString();
+  for (const entry of entries) {
+    md.appendCodeblock(entry.signature, 'cm');
+    md.appendMarkdown(`${entry.doc}\n\n`);
+    md.appendMarkdown(`*コンパイラ組み込み（${entry.receiver}）*\n\n`);
+  }
+  return md;
+}
+
 // 現在のドキュメント内容でインデックスを更新した上で識別子の定義を検索する
 async function findSymbols(
   index: CmSymbolIndex,
@@ -208,6 +230,21 @@ export function registerNavigation(context: vscode.ExtensionContext): void {
       async provideHover(document, position) {
         const entries = await findSymbols(index, document, position);
         if (entries.length === 0) {
+          // ユーザー定義シンボルが無ければコンパイラ組み込みを探す（あらかじめ共有された定義として表示）
+          const word = wordAtPosition(document, position);
+          if (word) {
+            if (isMethodAccess(document, position)) {
+              const methods = lookupBuiltinMethod(word);
+              if (methods.length > 0) {
+                return new vscode.Hover(buildBuiltinHover(methods));
+              }
+            } else {
+              const fn = lookupBuiltinFunction(word);
+              if (fn) {
+                return new vscode.Hover(buildBuiltinHover([fn]));
+              }
+            }
+          }
           return undefined;
         }
         const md = new vscode.MarkdownString();
