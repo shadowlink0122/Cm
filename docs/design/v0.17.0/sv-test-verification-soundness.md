@@ -1,6 +1,6 @@
 # R15: SVテスト検証の健全性（`//! test:`期待値が非検証・assertのx楽観性）
 
-**ステータス:** 未修正（第7ラウンド検出）
+**ステータス:** 未修正（バックエンド網羅バグ調査で検出）
 **重大度:** Critical（`//! test:`非検証）/ High（x楽観性）
 
 `cm test`でSVをシミュレーションした際の合否が信頼できない。期待値の突合が生成テストベンチに一切出力されない（Critical）か、不定値(x)でアサートが誤PASSする（High）。過去のHDMIタイトル末尾ゴミバグの回帰テストが2回連続で素通りした（[[sv-test-x-optimism]]）のと同じ構造的リスクの根。
@@ -21,7 +21,7 @@ void add() { result = a + b; }
 
 真因: `src/internal/codegen/sv/testbench.cpp:296-300`。コメントは「出力値の表示と検証」だが実装は期待値`val`をパースするだけで`$display`しか出さず、比較も`$fatal`も生成しない（`val`が未使用）。`cm test`（`src/cmd/cm/util.cpp`）はシミュレータの終了コード0＝PASSと判定するため、`$fatal`が絶対に出ないこの経路は常時PASS。
 
-影響: `//! test:`ディレクティブを使う`tests/sv/{basic,advanced,control}`の大半。`cm test`単体の「PASS」は無意味で、実際の検証は外部`unified_test_runner.sh`の`.expect`突合に依存している。アサーションが1本も無いため、x楽観性以前に確定値でも見逃す。第6ラウンドR7の「不正spec→常時PASSの空テストベンチ」はこの経路では特殊ケースでなく全件がそう。
+影響: `//! test:`ディレクティブを使う`tests/sv/{basic,advanced,control}`の大半。`cm test`単体の「PASS」は無意味で、実際の検証は外部`unified_test_runner.sh`の`.expect`突合に依存している。アサーションが1本も無いため、x楽観性以前に確定値でも見逃す。R7の「不正spec→常時PASSの空テストベンチ」はこの経路では特殊ケースでなく全件がそう。
 
 ### バグ2【High】`#[test]`+`assert`経路のx楽観性
 

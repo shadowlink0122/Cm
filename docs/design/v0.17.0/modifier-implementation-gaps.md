@@ -1,6 +1,6 @@
 # R11: 修飾子の未実装・黙殺（constexpr・inline・volatile・ufloat/udouble）
 
-**ステータス:** 未修正（第6ラウンド検出）
+**ステータス:** 未修正（構文網羅バグ調査で検出）
 **重大度:** Medium（constexpr壊れた診断・ufloat黙殺）/ Low（inline/volatile）
 
 レクサに予約語として存在するが実装が伴っていない修飾子群。CANONICAL_SPECやチュートリアルに記載があるものは仕様乖離、黙殺されるものは誤用の温床になる。

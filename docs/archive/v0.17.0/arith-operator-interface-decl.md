@@ -9,7 +9,7 @@ parent: v0.17.0 Design
 
 `impl Vec2 for Add { operator Vec2 +(Vec2 other) {...} }` の形（インターフェース指定付き演算子impl）が「internal error (typecheck): 'Add' is not a declared interface」になる。
 Eq/Ordは組み込み宣言済みで同形が通るのに対し、算術・ビット系（Add/Sub/Mul/Div/Mod/BitAnd/BitOr/BitXor/Shl/Shr）は組み込みインターフェース宣言が無く、さらに未宣言インターフェースへのimplが例外→内部エラーとして漏れる（診断品質の問題を併発）。
-inherent impl形（`impl Vec2 { operator Vec2 +(...) }`）は正常に動作し、`+`連鎖・`+=`複合代入まで正しい（第5ラウンドで検証済み）。
+inherent impl形（`impl Vec2 { operator Vec2 +(...) }`）は正常に動作し、`+`連鎖・`+=`複合代入まで正しい（未修正バグ調査（Q系）で検証済み）。
 
 ## 修正方針
 
@@ -19,7 +19,7 @@ inherent impl形（`impl Vec2 { operator Vec2 +(...) }`）は正常に動作し�
 
 ## 検出経緯
 
-第5ラウンドで検出。inherent impl形の健全性は `.tmp/bughunt5/q2/r03_operator_overload.cm`（連鎖・==・+=）で確認済み。
+未修正バグ調査（Q系）で検出。inherent impl形の健全性は `.tmp/bughunt5/q2/r03_operator_overload.cm`（連鎖・==・+=）で確認済み。
 
 ## 実装記録（修正済み）
 

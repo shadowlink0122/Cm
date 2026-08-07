@@ -1,9 +1,9 @@
 # R10: 型検査の黙殺穴（未定義型の変数宣言・型不一致マクロ・const generic半実装）
 
-**ステータス:** 未修正（第6ラウンド検出）
+**ステータス:** 未修正（構文網羅バグ調査で検出）
 **重大度:** Medium
 
-過去ラウンドで確立した「型付きHIRは全式が非null・非error型」（typed-hir-single-source）の不変条件が、宣言・マクロ・const genericの各経路で破れている3件。いずれも「checkerを素通りして下流で顕在化」する同族で、method-resolution-unification / coercion-driver-unificationの延長で封じるべき。
+これまでの調査で確立した「型付きHIRは全式が非null・非error型」（typed-hir-single-source）の不変条件が、宣言・マクロ・const genericの各経路で破れている3件。いずれも「checkerを素通りして下流で顕在化」する同族で、method-resolution-unification / coercion-driver-unificationの延長で封じるべき。
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt6/{syntax1,stdlib}/`）
 

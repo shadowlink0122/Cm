@@ -29,7 +29,7 @@ int main() {
 
 ## 真因の見立て
 
-引数の型マッチング（infer/unify）がポインタ型`T*`の内側の`T`を実引数`int*`の`int`と単一化していない。値パラメータ（`T x`）では機能する（既存テストで確認済み）ため、ポインタ被覆下の型変数のunifyが欠けている。第5ラウンドmono型駆動化（monomorphization-typed-instantiation）の範囲外だった経路の可能性が高く、`substitute_generic_type`がポインタ内型変数へ実引数を差し込めていない疑い。要ソース特定。
+引数の型マッチング（infer/unify）がポインタ型`T*`の内側の`T`を実引数`int*`の`int`と単一化していない。値パラメータ（`T x`）では機能する（既存テストで確認済み）ため、ポインタ被覆下の型変数のunifyが欠けている。mono型駆動化（monomorphization-typed-instantiation）の範囲外だった経路の可能性が高く、`substitute_generic_type`がポインタ内型変数へ実引数を差し込めていない疑い。要ソース特定。
 
 ## 修正方針
 

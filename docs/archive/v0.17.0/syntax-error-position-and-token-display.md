@@ -49,7 +49,7 @@ importなしの同内容ファイルでは`2:9`と正しい行番号になるた
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンドで検出。最小再現は `.tmp/nativejit-bughunt3/min_lineno_imports.cm` / `min_lineno_noimport.cm`。
+native/jit網羅検証（X系）で検出。最小再現は `.tmp/nativejit-bughunt3/min_lineno_imports.cm` / `min_lineno_noimport.cm`。
 
 ## 解決記録（実装済み）
 

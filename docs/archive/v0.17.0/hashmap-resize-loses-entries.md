@@ -46,4 +46,4 @@ Option<string> last = m.get(16);
 
 ## 検出経緯
 
-第5ラウンドで検出。しきい値の二分は `.tmp/bughunt5/q_hm.cm`（8/16=全件OK、17以降=末尾喪失）。
+未修正バグ調査（Q系）で検出。しきい値の二分は `.tmp/bughunt5/q_hm.cm`（8/16=全件OK、17以降=末尾喪失）。

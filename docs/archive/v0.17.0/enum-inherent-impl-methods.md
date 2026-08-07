@@ -18,7 +18,7 @@ parent: v0.17.0 Design
 
 ## 検出経緯
 
-第5ラウンドで検出。再現は `.tmp/bughunt5/q3/s01_enum_methods.cm`。
+未修正バグ調査（Q系）で検出。再現は `.tmp/bughunt5/q3/s01_enum_methods.cm`。
 
 ## 実装記録（修正済み・方針(a)サポートを採用）
 

@@ -1,9 +1,9 @@
 # R23: クロスターゲットFFIの能力ガード欠如（native専用モジュールがwasmへ黙ってコンパイル・js::timerコールバック型不能）
 
-**ステータス:** 未修正（第8ラウンド検出）
+**ステータス:** 未修正（ライブラリ・自動実装調査で検出）
 **重大度:** Medium
 
-ネイティブ専用のFFIモジュール（`std::env`/`std::process`/`std::fs`・`native::net`/`http`/`gpu`/`sync`/`thread`）を`--target=wasm`でコンパイルすると、jsが明確に拒否するのに対しwasmは無診断でコンパイルが通り、実行時（wasmインスタンス化時）に難解な`unknown import`で破綻する。第8ラウンドのD3・D5・D6/D7/D8で横断的に観測された同一根の問題。
+ネイティブ専用のFFIモジュール（`std::env`/`std::process`/`std::fs`・`native::net`/`http`/`gpu`/`sync`/`thread`）を`--target=wasm`でコンパイルすると、jsが明確に拒否するのに対しwasmは無診断でコンパイルが通り、実行時（wasmインスタンス化時）に難解な`unknown import`で破綻する。同調査のD3・D5・D6/D7/D8で横断的に観測された同一根の問題。
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt8/{os,concurrency,netgpuweb,verify}/`）
 

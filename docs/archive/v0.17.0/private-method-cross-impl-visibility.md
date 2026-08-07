@@ -67,7 +67,7 @@ privateメソッドの可視性検査がエラーメッセージ（`from outside
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンドで検出。最小再現は `.tmp/nativejit-bughunt3/private/p03_private_cross_impl.cm`。
+native/jit網羅検証（X系）で検出。最小再現は `.tmp/nativejit-bughunt3/private/p03_private_cross_impl.cm`。
 
 ## 解決記録（案B採用: 構造体単位の可視性を正とする）
 

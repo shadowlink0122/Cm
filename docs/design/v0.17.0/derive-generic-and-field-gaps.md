@@ -1,9 +1,9 @@
 # R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ（無言誤値・no-op・リンク失敗）
 
-**ステータス:** 未修正（第8ラウンド検出。既知ギャップ [auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md) の実証＋新規詳細）
+**ステータス:** 未修正（ライブラリ・自動実装調査で検出。既知ギャップ [auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md) の実証＋新規詳細）
 **重大度:** Critical（ジェネリック×スライス型引数のEq）/ High（ユニオン型引数・非Eq/Ordトレイトのno-op）/ Medium（enumフィールド）
 
-`with`/`#[derive(...)]`の自動実装は、非ジェネリック構造体では全トレイト（Eq/Ord/Clone/Hash/Debug/Display/Css）が健全に動作するが、ジェネリック型引数とフィールド型に穴が集中している。既知ギャップ文書は「モノモーフ化MIRパスにSlice/Union分岐がない」ことを記録済みで、本ラウンドで具体的な破綻を実機実証し、新規詳細（バックエンド分裂・非Eq/Ordトレイトの無言no-op・enumフィールド）を追加した。
+`with`/`#[derive(...)]`の自動実装は、非ジェネリック構造体では全トレイト（Eq/Ord/Clone/Hash/Debug/Display/Css）が健全に動作するが、ジェネリック型引数とフィールド型に穴が集中している。既知ギャップ文書は「モノモーフ化MIRパスにSlice/Union分岐がない」ことを記録済みで、本調査で具体的な破綻を実機実証し、新規詳細（バックエンド分裂・非Eq/Ordトレイトの無言no-op・enumフィールド）を追加した。
 
 ## 症状（実測: cm 0.17.0、プローブ `.tmp/bughunt8/{derive,verify}/`）
 

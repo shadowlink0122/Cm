@@ -47,7 +47,7 @@ ps.push(P { x: 3, y: 4 });
 // 型名付きリテラルは正しく 3 4 になる
 ```
 
-メンバチェーンレシーバ経由（`hs[0].cells.push({data: [9]})`）でも同様にクラッシュする（第3ラウンドc07）。
+メンバチェーンレシーバ経由（`hs[0].cells.push({data: [9]})`）でも同様にクラッシュする（X系調査のc07）。
 
 ## 原因
 
@@ -68,7 +68,7 @@ checkerが無名リテラルと要素型の不一致を検出していない点�
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンドで検出。最小再現は `.tmp/nativejit-bughunt3/min_push_anon2int.cm` / `min_push_anon_str.cm`。
+native/jit網羅検証（X系）で検出。最小再現は `.tmp/nativejit-bughunt3/min_push_anon2int.cm` / `min_push_anon_str.cm`。
 
 ## 解決記録（実装済み）
 

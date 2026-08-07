@@ -79,7 +79,7 @@ checkerはいずれも無診断で受理する。(d)はレシーバ型の解決�
 
 ## 検出経緯
 
-native/jit網羅検証第2ラウンド（深いネスト・チェーン検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_interp.cm` / `min/m_interp_arrow.cm` / `min/m_interp_len.cm`、チェーン網羅は同 `nest/` ディレクトリ。
+native/jit網羅検証（W系: 深いネスト・チェーン検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_interp.cm` / `min/m_interp_arrow.cm` / `min/m_interp_len.cm`、チェーン網羅は同 `nest/` ディレクトリ。
 
 ## 解決記録（実装済み）
 

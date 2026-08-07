@@ -58,7 +58,7 @@ rows[0].push(9);
 
 ## 検出経緯
 
-native/jit網羅検証第2ラウンドで検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d07b.cm`、回避確認は同 `min/m_d07c.cm`。
+native/jit網羅検証（W系）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d07b.cm`、回避確認は同 `min/m_d07c.cm`。
 
 ## 解決記録（実装済み）
 

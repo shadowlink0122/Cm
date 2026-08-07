@@ -56,7 +56,7 @@ int main() {
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンドで検出。最小再現は `.tmp/nativejit-bughunt3/private/p02_private_field_err.cm`。
+native/jit網羅検証（X系）で検出。最小再現は `.tmp/nativejit-bughunt3/private/p02_private_field_err.cm`。
 
 ## 解決記録（実装済み）
 

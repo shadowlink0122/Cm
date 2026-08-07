@@ -73,7 +73,7 @@ W4（licm-global-clobber-miscompile.md）で確認した`is_static`ガード欠�
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンド（static・private・複合push検証）で検出。最小再現は `.tmp/nativejit-bughunt3/min_static_block.cm` / `min_static_if.cm` / `min_static_loop2.cm`。
+native/jit網羅検証（X系: static・private・複合push検証）で検出。最小再現は `.tmp/nativejit-bughunt3/min_static_block.cm` / `min_static_if.cm` / `min_static_loop2.cm`。
 
 ## 解決記録（実装済み）
 

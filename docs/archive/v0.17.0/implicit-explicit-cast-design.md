@@ -66,4 +66,4 @@ Y4修正済みのため、`std::json`の`(digit as double)`2箇所と`std::io::c
 
 ## 検出経緯
 
-第4ラウンド追補（暗黙/明示キャスト設計調査）で作成。実測は `.tmp/bughunt4/cast_probe.cm` / `cast_rt.cm`。
+レイヤー別レビュー追補（暗黙/明示キャスト設計調査）で作成。実測は `.tmp/bughunt4/cast_probe.cm` / `cast_rt.cm`。

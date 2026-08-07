@@ -44,7 +44,7 @@ string x = rows[0][1];
 // SIGSEGV（全経路）
 ```
 
-第2ラウンドのd03（`d.bags[0].leaves.push(...)`後のゴミ値・クラッシュの一部）・c05/c06（メソッド戻りスライス経由の誤値）も、本バグでpushされた壊れ要素の二次被害と判明した（変数経由pushに置き換えるとチェーン読み書きはすべて正常）。
+W系調査のd03（`d.bags[0].leaves.push(...)`後のゴミ値・クラッシュの一部）・c05/c06（メソッド戻りスライス経由の誤値）も、本バグでpushされた壊れ要素の二次被害と判明した（変数経由pushに置き換えるとチェーン読み書きはすべて正常）。
 
 ## 原因
 
@@ -66,7 +66,7 @@ string x = rows[0][1];
 
 ## 検出経緯
 
-native/jit網羅検証第3ラウンドで検出。最小再現は `.tmp/nativejit-bughunt3/min_push_arr.cm` / `min_push_empty.cm` / `push/c09_push_string_array_literal.cm`。
+native/jit網羅検証（X系）で検出。最小再現は `.tmp/nativejit-bughunt3/min_push_arr.cm` / `min_push_empty.cm` / `push/c09_push_string_array_literal.cm`。
 
 ## 解決記録（実装済み）
 

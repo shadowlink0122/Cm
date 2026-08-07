@@ -55,7 +55,7 @@ int main() {
 
 ## 検出経緯
 
-第4ラウンド追補（ユニオン・文字列要素の配列/スライス整合性調査）で検出。最小再現は `.tmp/bughunt4/z/z02_string_array_receiver.cm` / `z/z03_short_array_receiver.cm` / `z07_short_only.cm` / `z09_long_contains.cm`。
+レイヤー別レビュー追補（ユニオン・文字列要素の配列/スライス整合性調査）で検出。最小再現は `.tmp/bughunt4/z/z02_string_array_receiver.cm` / `z/z03_short_array_receiver.cm` / `z07_short_only.cm` / `z09_long_contains.cm`。
 
 ## 実装記録（2026-08-05）
 

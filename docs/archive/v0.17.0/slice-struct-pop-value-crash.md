@@ -58,7 +58,7 @@ int x = xs.pop();
 
 ## 検出経緯
 
-native/jit網羅検証第2ラウンドで検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_pop.cm` / `min/m_pop2.cm`。
+native/jit網羅検証（W系）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_d03_pop.cm` / `min/m_pop2.cm`。
 
 ## 解決記録（実装済み）
 

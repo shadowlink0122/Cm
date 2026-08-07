@@ -60,4 +60,4 @@ js codegenの引数梱包2サイトがソース型名のインターフェース
 
 ## 検出経緯
 
-第5ラウンドで検出。最小再現は `.tmp/bughunt5/q_r02min.cm`（ローカルupcast正常との対照付き）、引数正常の確認は `q_r02arg.cm`。
+未修正バグ調査（Q系）で検出。最小再現は `.tmp/bughunt5/q_r02min.cm`（ローカルupcast正常との対照付き）、引数正常の確認は `q_r02arg.cm`。

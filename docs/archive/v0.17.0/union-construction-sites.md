@@ -74,7 +74,7 @@ MIRのlet初期化・代入loweringはユニオン型宛先を検出して `MirR
 
 ## 検出経緯
 
-v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出。最小再現は `.tmp/bughunt4/min_u_field.cm` / `min_u_ret.cm` / `min_u_sites.cm`、網羅バッテリーは同 `u/`。
+v0.17.0全修正後のレイヤー別レビューで検出。最小再現は `.tmp/bughunt4/min_u_field.cm` / `min_u_ret.cm` / `min_u_sites.cm`、網羅バッテリーは同 `u/`。
 
 ## 実装記録（2026-08-05）
 

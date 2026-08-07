@@ -46,7 +46,7 @@ int main() {
 
 ## 検出経緯
 
-v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出。最小再現は `.tmp/bughunt4/a/a02_slice_of_fixed.cm`。
+v0.17.0全修正後のレイヤー別レビューで検出。最小再現は `.tmp/bughunt4/a/a02_slice_of_fixed.cm`。
 
 ## 実装記録（2026-08-05）
 

@@ -6,12 +6,12 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**第6〜第8ラウンド（R1〜R25）で新規に検出したバグ**のうち未修正分（第6ラウンドはR1・R3・R6・R7・R8修正済み・archive移動で9件、第7ラウンドはR15〜R20の6件、第8ラウンドはR21〜R25の5件）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R6・R7・R8修正済み・archive移動で9件、バックエンド網羅バグ調査はR15〜R20の6件、ライブラリ・自動実装調査はR21〜R25の5件）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
-第6ラウンドはそれ以前のラウンドで未調査だった構文・機能（棚卸し表のA〜D）、第7ラウンドはバックエンド・ターゲット（E）、第8ラウンドは残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
+構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
 
-## レイヤー別レビュー 第4ラウンド（未修正の新規所見 Y1〜Y6）
+## レイヤー別レビュー（未修正の新規所見 Y1〜Y6）
 
 全修正完了後のフロント〜コード生成レイヤー別レビュー（ユニオン・リテラル型・const伝搬・戻り値解決・配列/スライス境界・型昇格の差分検証）で検出。バグ1項目につき1文書。
 
@@ -20,7 +20,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - Y5: 固定長配列→スライス引数の暗黙変換欠落 — **修正済み**（[archive移動](../../archive/v0.17.0/fixed-array-to-slice-argument.md)。coerce_fixed_array_to_sliceを引数/デフォルト引数へ適用・decay抑止・コピー意味論をチュートリアル明文化）
 - Y6: スライスof固定長配列の要素格納表現が未定義 — **修正済み**（[archive移動](../../archive/v0.17.0/slice-of-fixed-array-elements.md)。N×実ストライドのインラインblobに仕様確定・dispatch/layout/codegen/letの4系統統一。jsのblob意味論は将来課題）
 
-### 第4ラウンド追補: ユニオン・文字列要素の配列/スライス整合性（Z1〜Z3）
+### レイヤー別レビュー追補: ユニオン・文字列要素の配列/スライス整合性（Z1〜Z3）
 
 要素サイズが型依存（ポインタ幅・タグ付き・可変ペイロード）の配列/スライスについて、サイズ決定サイトと実行の整合性を調査した。基本レイアウト（string固定長配列の全操作・ユニオン固定長配列の読み書き・大型構造体バリアント・構造体内string配列）はnative/jit/wasmで整合を確認済み。
 
@@ -30,9 +30,9 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - Z4: 型検査のエラー検出漏れ3件 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-error-coverage-holes.md)。push要素型検査・非変種as拒否・ループ深度によるbreak/continue診断、エラーテスト4本追加）
 - Z5: 暗黙変換と明示キャストの設計整理 — **修正済み**（[archive移動](../../archive/v0.17.0/implicit-explicit-cast-design.md)。classify_numeric_conversion一元化・縮小/符号変化の警告と--strictエラー昇格・coerce_numeric_context一般化でdouble→intの全文脈修正・CANONICAL_SPEC 10.3変換表・stdlib回避策as削減。uint/usize→intはlen/sizeofイディオム維持のため現段階無診断と仕様決定）
 
-## 未修正バグ調査 第5ラウンド（Q1〜Q7）
+## 未修正バグ調査（Q1〜Q7）
 
-過去ラウンドで未検証だった領域（複雑左辺値の複合代入・for-inイテレータ・Try演算子・グローバル初期化・ポインタ演算・複数型引数ジェネリクス・インターフェース戻り値・演算子オーバーロード・match式・defer・文字列/enumメソッド・ビット演算・HashMap負荷）を6経路差分（jit O0/O2・native O0〜O3）で調査した。バグ1項目につき1文書。
+過去の調査で未検証だった領域（複雑左辺値の複合代入・for-inイテレータ・Try演算子・グローバル初期化・ポインタ演算・複数型引数ジェネリクス・インターフェース戻り値・演算子オーバーロード・match式・defer・文字列/enumメソッド・ビット演算・HashMap負荷）を6経路差分（jit O0/O2・native O0〜O3）で調査した。バグ1項目につき1文書。
 健全確認済み: 複合代入/inc-decの複雑左辺値・for-in（スライス/固定長配列）・Try連鎖・グローバル依存初期化・ポインタ演算stride・inherent演算子オーバーロード・match式全値位置・defer順序/キャプチャ・文字列メソッド群・has_next形イテレータ・ビット/char演算・sizeof。
 
 - Q2: ネストしたジェネリック型引数のstringフィールド読みが無言死 — **修正済み**（[archive移動](../../archive/v0.17.0/nested-generic-type-arg-string.md)。真因は2系統: struct_symbol_keyのsimple高速パスが生成する曖昧フラット名の誤逆算（複数引数基底×特殊化引数を$エンコードへ退避）と、内側リテラルの型注釈がフィールド宣言型のジェネリックパラメータ名で上書きされ裸のBoxのままlowerされる問題（propagate_literal_expected_typeの上書き抑止+実引数置換）。ネスト特殊化マトリクスの回帰をjit/native O0〜O3/wasm/jsで追加。フラット名逆算の全廃は[mono-flat-name-elimination.md](mono-flat-name-elimination.md)が引き続き扱う）
@@ -43,9 +43,9 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - Q5: enumへのinherent implメソッドが未サポート — **修正済み・(a)サポートを採用**（[archive移動](../../archive/v0.17.0/enum-inherent-impl-methods.md)。enum正規化の全面遅延でなく「int解決時にenum名をnameへ保持」する名前ピギーバック方式で、checker解決・HIRマングル・MIRのself渡し規約（値enum=値渡し・タグ付き=ポインタ渡し）・__tag恒等化・ペイロード射影derefの5箇所を修正。タグ付きenumのメソッドも動作。値enumメソッド内のself再代入はコピーに閉じる値意味論と仕様決定）
 - Q6（文書化なし・注記のみ）: `replace()`が最初の一致のみ置換する仕様がドキュメント未記載（全置換との区別を文字列チュートリアルへ明記すべき。Low）
 
-## 構文網羅バグ調査 第6ラウンド（R1〜R14）
+## 構文網羅バグ調査（R1〜R14）
 
-下記「構文・機能カバレッジの棚卸し」で列挙した未調査項目のうち、属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）の全項目を6並列で実機プローブ（jit O0/O2・native O0〜O3・wasm・js/ts）した。過去ラウンドと異なり、未実装構文の受理/診断/黙殺の別・仕様書との乖離まで対象にした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
+下記「構文・機能カバレッジの棚卸し」で列挙した未調査項目のうち、属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）の全項目を6並列で実機プローブ（jit O0/O2・native O0〜O3・wasm・js/ts）した。過去の調査と異なり、未実装構文の受理/診断/黙殺の別・仕様書との乖離まで対象にした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
 健全確認済み: async/await（js/ts動作+他経路の明示拒否）・macro正常系（6経路一致）・`${}`補間本体（`{}`と同値）・`...`範囲パターン（両端含む・先勝ち・網羅性強制、9実行一致）・TreeMap（1000件/10万件の挿入喪失なし・自動拡張）・対話入力のOption返し（M17適用）・`namespace`（実装済み動作）・extern（native/jit動作・未解決シンボル診断）・予約語誤用診断（X5の空表示バグ再発なし）・数値リテラルの拒否は安全側（誤値化なし）。
 
 - R1: std::jsonパーサの堅牢性 — **修正済み**（[archive移動](../../archive/v0.17.0/json-parser-robustness.md)。アリーナをTreeMap同方式のパラレル動的スライスへ置換し無限ループの発生源を構造的に消滅（ノード上限撤廃）、末尾ゴミ/複数値/数字なしマイナスを拒否、\uXXXXをサロゲートペア込みでUTF-8実デコード・不正エスケープを診断。併発発見のcm testモードのグローバル非定数初期化子欠落（#[test]エントリへ未注入でスライスグローバルがnull）もMIR lowering側で修正。jsの非ASCII表示はR2の文字列モデル分裂に帰属する既知制約）
@@ -63,7 +63,7 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R13: 文法書・仕様書に定義があるが未実装の構文](unimplemented-documented-syntax.md) — **Low**: タプル・参照型`T&`・演算子`[]`/`()`・overloadメソッド（仕様書は実装済みと例示するがパース不能+黙殺）・IFデフォルト実装・可変長引数・デフォルト型引数・エスケープ識別子・数値サフィックスが未実装（診断ありだが仕様書と乖離）。実装かドキュメント追従かの判断待ち一覧
 - [R14: 構文・プリプロセッサ診断の品質](syntax-error-diagnostic-quality.md) — **Medium（横断）**: パーサ/プリプロセッサ経由の構文エラーに行番号・桁がなく自ファイルを「imported module」と誤表記、誤誘導メッセージ（`main not found`・`assign`を型名扱い等）。X5で意味解析側は改善済みだがパーサ段が取り残されている
 
-## バックエンド網羅バグ調査 第7ラウンド（R15〜R20）
+## バックエンド網羅バグ調査（R15〜R20）
 
 棚卸し表のバックエンド・ターゲット（E）を3並列で実機プローブした（SVはiverilog+vvpシミュレーション、baremetal-arm/x86・UEFIはコンパイル成否と制約強制、TSは生成物の型注釈妥当性とts/js/jit値差分）。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは自分で最小再現を実機で裏取り済み。
 **教訓**: 調査中にユーザーがcmをリビルドした（HOF共通化コミット、cmバイナリmtime 19:15）ため、TSエージェントの旧バイナリ由来の所見3件（long戻り値のnumber混入・ulong定数の符号喪失・`as char`縮小欠落）は現行バイナリでは非再現だった。**バイナリが変わりうる環境では最終判定を現行バイナリで取り直すこと**——下記は全て現行バイナリでの再確認済みのみを記載する。
@@ -76,10 +76,10 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない](ts-bigint-number-generation.md) — **Medium**: structフィールド代入が`_t.v = 5`（`number`を`bigint`フィールドへ）でTS2322。「生成TSがtscを通る」第一級保証に違反（実行値は正）。戻り値・let初期化サイトは修正済みでフィールド代入サイト固有
 - [R20: 文字列補間・書式指定子のバックエンド分岐](interpolation-format-backend-divergence.md) — **Medium**: 単項`~`を含む補間（`{~a}`）がjs/tsで全プレースホルダをundefined破壊・jit/nativeで文字列素通し。書式の幅/科学記法（`:6`/`.2e`）をnative/jitが無視しjs/tsが適用（3経路不一致）
 
-## ライブラリ・自動実装 深掘り調査 第8ラウンド（R21〜R25）
+## ライブラリ・自動実装 深掘り調査（R21〜R25）
 
 棚卸し表で「一部調査」「未調査」のまま残っていたderive/with自動実装（A2）とライブラリモジュール（D3 OS連携・D5 sync/thread・D6 net/http・D7 gpu・D8 web）を4並列で実機プローブした。バグ1項目（同根は束ねて）につき1文書を起票。Critical/Highは現行バイナリで裏取り済み。
-**教訓（第7ラウンドに続き再発）**: 調査中にユーザーがcmを複数回リビルドした（19:18→19:39→19:44）ため、旧バイナリ由来の所見（A2スライス型引数EqのJIT-O2 SIGSEGVはクラッシュが消え誤値のみ残存等）は現行バイナリで取り直した。下記は全て現行バイナリでの再確認済み。
+**教訓（バックエンド網羅バグ調査に続き再発）**: 調査中にユーザーがcmを複数回リビルドした（19:18→19:39→19:44）ため、旧バイナリ由来の所見（A2スライス型引数EqのJIT-O2 SIGSEGVはクラッシュが消え誤値のみ残存等）は現行バイナリで取り直した。下記は全て現行バイナリでの再確認済み。
 健全確認済み: derive非ジェネリック全トレイト（6経路一致）・Ord全順序性/C3回帰・std::env/process/path/bytes/fs（バイナリ安全性・不在/空の区別・エラーパス非クラッシュ）・native::sync/threadのランタイム挙動（実並行・Mutex排他・macOS RwLock SIGILL回避・O2/O3無破壊）・net/http・gpu（実Metal実行）・web::htmlエスケープ（XSS遮断）。
 
 - [R21: derive/with自動実装のジェネリック型引数・フィールド型ギャップ](derive-generic-and-field-gaps.md) — **Critical**: ジェネリック×スライス型引数のEqが無言誤値・6経路が3種に分裂（既知ギャップ[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)の実証）。ユニオン型引数はリンク失敗（High）・非Eq/OrdトレイトのClone/Hash/Debug/Displayが無言no-op（High）・enumフィールド+Debug/Hashが型検査失敗（Medium）
@@ -88,10 +88,10 @@ v0.17.0の設計文書は第5ラウンド（Q1〜Q7）まで全件の処置が�
 - [R24: 文字列補間が実行時値の波括弧で破壊される](interpolation-brace-from-runtime-value.md) — **Medium**: `{a.debug()}`の戻り値`P { x: 1 }`が含む波括弧を補間エンジンが再スキャンし、その値と後続プレースホルダが総崩れ（`dbg=P (1, 2) disp={}`）。L2のリテラル波括弧とは別経路（評価済み値の再スキャン）
 - [R25: 並行処理の最適化・戻り値の穴](concurrency-optimizer-and-join-gaps.md) — **Medium**: プレーン共有フラグのspin-waitがO1+で「Infinite loop risk」でコンパイル中断（atomic版は全レベル動作）。join()が64bitスレッド戻り値をint32に切り詰め（Low〜Medium）
 
-## 構文・機能カバレッジの棚卸し（全ラウンド調査完了）
+## 構文・機能カバレッジの棚卸し（全項目の調査完了）
 
-CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証ラウンドと57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていなかった構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は第6ラウンド（R1〜R14）、バックエンド・ターゲット（E）は第7ラウンド（R15〜R20）、残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）は第8ラウンド（R21〜R25）で**全項目の調査を完了**し、各項目の診断状況欄に対応文書を記した。
-診断状況の凡例: **調査済み** = 第6〜第8ラウンドでプローブ完了（→対応文書 or 健全）。
+CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域を突き合わせ、B〜Qの全検証と57所見監査のいずれでもバグ調査（バックエンド差分プローブ）の対象になっていなかった構文・機能を棚卸しした。属性・ディレクティブ（A）・構文/式（B）・修飾子/宣言（C）・標準ライブラリ（D）は構文網羅バグ調査（R1〜R14）、バックエンド・ターゲット（E）はバックエンド網羅バグ調査（R15〜R20）、残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）はライブラリ・自動実装調査（R21〜R25）で**全項目の調査を完了**し、各項目の診断状況欄に対応文書を記した。
+診断状況の凡例: **調査済み** = R1〜R25の調査でプローブ完了（→対応文書 or 健全）。
 「統合テスト」はtests/配下の.cmテストの有無（機能テストの存在はバグ調査済みを意味しない——HashMapはテストが存在したままQ7の要素喪失を見逃していた）。
 
 ### A. 属性・ディレクティブ・プリプロセッサ
@@ -222,8 +222,8 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 ## 監査・網羅検証
 
 - [large-scale-bottleneck-audit.md](../../archive/v0.17.0/large-scale-bottleneck-audit.md) — 大規模開発ボトルネック監査の全57所見（C/H/M/L系、全件対応完了）
-- [syntax-audit-bugfixes.md](../../archive/v0.17.0/syntax-audit-bugfixes.md) — 構文網羅検証 第1ラウンド（B1〜B9の総括）
+- [syntax-audit-bugfixes.md](../../archive/v0.17.0/syntax-audit-bugfixes.md) — 構文網羅検証（B1〜B9の総括）
 - [move-closure-interp-audit.md](../../archive/v0.17.0/move-closure-interp-audit.md) — move・クロージャ・補間式添字の検証（V1〜V8の総括）
 - 5バックエンド差分プローブ（N1〜N8）の個別文書: [interp-nested-slice-index.md](../../archive/v0.17.0/interp-nested-slice-index.md)・[generic-slice-element-garbage.md](../../archive/v0.17.0/generic-slice-element-garbage.md)・[string-switch-miscompile.md](../../archive/v0.17.0/string-switch-miscompile.md)・[wasm-reduce-closure-trap.md](../../archive/v0.17.0/wasm-reduce-closure-trap.md)・[generic-struct-literal.md](../../archive/v0.17.0/generic-struct-literal.md)・[enum-multi-payload-match.md](../../archive/v0.17.0/enum-multi-payload-match.md)・[negative-radix-format.md](../../archive/v0.17.0/negative-radix-format.md)・[js-string-index-bigint.md](../../archive/v0.17.0/js-string-index-bigint.md)
-- native/jit網羅検証 第2・第3ラウンド（W1〜W5・X1〜X6）の個別文書: [nested-anonymous-struct-literal-loss.md](../../archive/v0.17.0/nested-anonymous-struct-literal-loss.md)・[nested-slice-element-write-crash.md](../../archive/v0.17.0/nested-slice-element-write-crash.md)・[slice-struct-pop-value-crash.md](../../archive/v0.17.0/slice-struct-pop-value-crash.md)・[licm-global-clobber-miscompile.md](../../archive/v0.17.0/licm-global-clobber-miscompile.md)・[interp-chain-lowering-failures.md](../../archive/v0.17.0/interp-chain-lowering-failures.md)・[static-block-scope-init-loss.md](../../archive/v0.17.0/static-block-scope-init-loss.md)・[private-field-access-unchecked.md](../../archive/v0.17.0/private-field-access-unchecked.md)・[slice-push-array-literal-corruption.md](../../archive/v0.17.0/slice-push-array-literal-corruption.md)・[slice-push-anonymous-struct-literal.md](../../archive/v0.17.0/slice-push-anonymous-struct-literal.md)・[syntax-error-position-and-token-display.md](../../archive/v0.17.0/syntax-error-position-and-token-display.md)・[private-method-cross-impl-visibility.md](../../archive/v0.17.0/private-method-cross-impl-visibility.md)
+- native/jit網羅検証（W1〜W5・X1〜X6）の個別文書: [nested-anonymous-struct-literal-loss.md](../../archive/v0.17.0/nested-anonymous-struct-literal-loss.md)・[nested-slice-element-write-crash.md](../../archive/v0.17.0/nested-slice-element-write-crash.md)・[slice-struct-pop-value-crash.md](../../archive/v0.17.0/slice-struct-pop-value-crash.md)・[licm-global-clobber-miscompile.md](../../archive/v0.17.0/licm-global-clobber-miscompile.md)・[interp-chain-lowering-failures.md](../../archive/v0.17.0/interp-chain-lowering-failures.md)・[static-block-scope-init-loss.md](../../archive/v0.17.0/static-block-scope-init-loss.md)・[private-field-access-unchecked.md](../../archive/v0.17.0/private-field-access-unchecked.md)・[slice-push-array-literal-corruption.md](../../archive/v0.17.0/slice-push-array-literal-corruption.md)・[slice-push-anonymous-struct-literal.md](../../archive/v0.17.0/slice-push-anonymous-struct-literal.md)・[syntax-error-position-and-token-display.md](../../archive/v0.17.0/syntax-error-position-and-token-display.md)・[private-method-cross-impl-visibility.md](../../archive/v0.17.0/private-method-cross-impl-visibility.md)
 - 個別バグ文書（B系ほか）: [must-block-field-assignment.md](../../archive/v0.17.0/must-block-field-assignment.md)・[int-literal-to-float-conversion.md](../../archive/v0.17.0/int-literal-to-float-conversion.md)・[nested-member-slice-chain.md](../../archive/v0.17.0/nested-member-slice-chain.md)・[cast-null-pointer-comparison.md](../../archive/v0.17.0/cast-null-pointer-comparison.md)・[interface-bound-method-return-type.md](../../archive/v0.17.0/interface-bound-method-return-type.md)・[interface-method-interpolation-type.md](../../archive/v0.17.0/interface-method-interpolation-type.md)・[typedef-struct-literal-resolution.md](../../archive/v0.17.0/typedef-struct-literal-resolution.md)・[defer-implicit-function-end.md](../../archive/v0.17.0/defer-implicit-function-end.md)・[const-global-aggregate-init.md](../../archive/v0.17.0/const-global-aggregate-init.md)・[uninitialized-struct-fields.md](../../archive/v0.17.0/uninitialized-struct-fields.md)

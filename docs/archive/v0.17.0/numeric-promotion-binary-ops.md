@@ -55,7 +55,7 @@ SIGBUSになる形は、検証前のcodegen段階（fcmp/fadd構築時のLLVM内
 
 ## 検出経緯
 
-v0.17.0全修正後のレイヤー別レビュー（第4ラウンド）で検出。最小再現は `.tmp/bughunt4/min_promo*.cm`、網羅は同 `c/c08_promo_mixed.cm`。
+v0.17.0全修正後のレイヤー別レビューで検出。最小再現は `.tmp/bughunt4/min_promo*.cm`、網羅は同 `c/c08_promo_mixed.cm`。
 
 ## 実装記録（2026-08-05）
 

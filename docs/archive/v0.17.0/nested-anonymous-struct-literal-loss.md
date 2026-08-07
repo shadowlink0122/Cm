@@ -69,7 +69,7 @@ nativeクラッシュは、喪失したstringフィールド（ヌル/未初期�
 
 ## 検出経緯
 
-native/jit網羅検証第2ラウンド（深いネスト・チェーン・最適化検証）で検出。再現ハーネスは `.tmp/nativejit-bughunt2/harness2.sh`、最小再現は同 `min/m_agg2.cm` / `min/m_agg_slice.cm` / `min/m_agg_write.cm`。
+native/jit網羅検証（W系: 深いネスト・チェーン・最適化検証）で検出。再現ハーネスは `.tmp/nativejit-bughunt2/harness2.sh`、最小再現は同 `min/m_agg2.cm` / `min/m_agg_slice.cm` / `min/m_agg_write.cm`。
 
 ## 解決記録（実装済み）
 

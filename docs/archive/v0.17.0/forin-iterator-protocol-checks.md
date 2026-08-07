@@ -39,7 +39,7 @@ for (v in c) { sum = sum + v; }
 
 ## 検出経緯
 
-第5ラウンドで検出。最小再現は `.tmp/bughunt5/q2x3.cm`（Option形）・`q2x4.cm`（has_next欠如の未解決シンボル）。
+未修正バグ調査（Q系）で検出。最小再現は `.tmp/bughunt5/q2x3.cm`（Option形）・`q2x4.cm`（has_next欠如の未解決シンボル）。
 
 ## 実装記録（修正済み）
 

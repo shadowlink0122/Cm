@@ -1,6 +1,6 @@
 # R25: 並行処理の最適化・戻り値の穴（spin-waitがO1+でコンパイル不能・join戻り値のint32切り詰め）
 
-**ステータス:** 未修正（第8ラウンド検出）
+**ステータス:** 未修正（ライブラリ・自動実装調査で検出）
 **重大度:** Medium（spin-wait）/ Low〜Medium（join切り詰め）
 
 `native::sync`/`native::thread`の低レベルAPI（mutex/rwlock/channel/atomic + thread spawn/join）はランタイム挙動が健全（実並行実行・Mutex排他・macOS RwLock SIGILL回避・O2/O3での共有変数無破壊をD5で確認）。残る穴は2点で、いずれもコンパイル時または戻り値経路の欠陥。

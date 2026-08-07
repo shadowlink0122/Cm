@@ -52,7 +52,7 @@ SCCP（`scalar/sccp.cpp:549`）は `is_global || is_static` を格子から除�
 
 ## 検出経緯
 
-native/jit網羅検証第2ラウンド（最適化正しさ検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_o06.cm`（6経路比較は `harness2.sh`）。
+native/jit網羅検証（W系: 最適化正しさ検証）で検出。最小再現は `.tmp/nativejit-bughunt2/min/m_o06.cm`（6経路比較は `harness2.sh`）。
 
 ## 解決記録（実装済み）
 
