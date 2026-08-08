@@ -180,7 +180,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 - [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — **第1段実施済み**（coerce_to_expected新設と11サイト置換・ユニオンのインラインCast3サイト吸収・メンバ代入の全変換種対応・ユニオン変種の保守的再帰ディスパッチ。発見した既存バグ3件は**修正済み**——真因はLLVMでなくGVNのCSEキー欠陥（is/as混同）とパーサのis/asスライス型右辺未対応+補間パース失敗の黙殺だった）。残: 第2段の本丸（upcastのMIR化）・第3段（checker注釈駆動化）（Critical）
 - [モノモーフ化のフラット名逆算の完全廃止](mono-flat-name-elimination.md) — **逆算読者のtypekey統一・C8実害修正済み**（parse_flat_type_argsの全6呼び出しサイトへ$優先分岐・scanの無言破棄へ痕跡・衝突テストで発見したメンバアクセスのC8検査漏れ（ユーザー定義Box__Box__int風名前のフィールドがジェネリック基底型で誤再型付け）を修正）。残: 逆算器本体とmono_internalフラット分岐の削除・ベース名抽出約30箇所の共通化・同定/表示分離（シンボル名一斉変更を伴うため専用ターン）（Critical）
-- [メソッド解決の一元化](method-resolution-unification.md) — メソッド表キー計算が12箇所別実装・解決機構4系統・types/の全throw4件が内部エラー漏れ。正準キー関数＋resolve_method APIでQ1/Q4/Q5族を封止する（High）
+- [メソッド解決の一元化](method-resolution-unification.md) — **第1段（throw診断化・for-inプロトコル検証）とキー正準化実施済み**（generic_def_method_key/strip_spec_suffixの正準関数2種へ、method.cpp/function.cpp/auto_impl.cppのバイト一致必須な組み立て4実装を統一。Q4/Q1/Q5は個別修正済み）。残: resolve_method統一API・ビルトインラダー表駆動化・namespace方式1本化・第3段（High）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
 - [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — 構造化import後も包含判定は正規表現識別子スキャン・出力はスパン消し込み+改名テキスト複製のまま。判定のAST化→出力のAST化の2段で座標ズレ（X5同根）と誤包含を解消する（Medium）
 - 型サイズ照会の一本化 — **実施済み**（[archive移動](../../archive/v0.17.0/optimizer-codegen/layout-size-single-source.md)。実測でsizeof(Pair<char,int>)=16（正8）等の誤値がユーザーへ到達していた。HIRのStruct/Generic分岐へ型引数置換の実レイアウト計算を実装しフィールド数×8と暫定256を削除、MIR見積もりは`__`分割逆算ごとlayout_size委譲サンク化。見積もり実装0件に。sizeof_generic回帰マトリクス追加）

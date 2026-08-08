@@ -273,24 +273,12 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 // まず直接検索を試みる
                 auto it = type_methods_.find(type_name);
                 if (it == type_methods_.end()) {
-                    // ジェネリック型の場合: Vec<int> -> Vec<T> に変換して検索
+                    // ジェネリック型の場合: Vec<int> -> Vec<T> の定義キーへ正準関数で変換して検索（method.cppと同一実装の複製を排除）
                     size_t lt_pos = type_name.find('<');
                     if (lt_pos != std::string::npos) {
                         std::string base_name = type_name.substr(0, lt_pos);
-
-                        // generic_structs_から型パラメータを取得
-                        auto gen_it = generic_structs_.find(base_name);
-                        if (gen_it != generic_structs_.end()) {
-                            // 登録時の型名を構築: Vec<T>
-                            std::string generic_type_name = base_name + "<";
-                            for (size_t i = 0; i < gen_it->second.size(); ++i) {
-                                if (i > 0)
-                                    generic_type_name += ", ";
-                                generic_type_name += gen_it->second[i];
-                            }
-                            generic_type_name += ">";
-
-                            it = type_methods_.find(generic_type_name);
+                        if (generic_structs_.count(base_name) > 0) {
+                            it = type_methods_.find(generic_def_method_key(base_name));
                         }
                     }
                 }

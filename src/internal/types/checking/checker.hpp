@@ -206,6 +206,11 @@ class TypeChecker {
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
     bool is_valid_type(ast::TypePtr type);
+    // メソッド表キーの正準計算（method-resolution-unification）。登録側はtype_to_string(impl.target_type)を正とし、
+    // 参照側のジェネリック定義キー再構築（G<T, U>形）はこの1関数を共有する（バイト一致必須の複製を排除）
+    std::string generic_def_method_key(const std::string& base_name) const;
+    // 特殊化サフィックスの除去（Name<...>・Name__k → Name。enum/ジェネリックのベース名でメソッド表を引く参照側で共有）
+    static std::string strip_spec_suffix(const std::string& name);
     // R10: constジェネリックパラメータ（<N: const int>）は実体化未実装のため宣言時に明示診断で拒否する
     void reject_const_generic_params(const std::vector<ast::GenericParam>& params, Span span);
 

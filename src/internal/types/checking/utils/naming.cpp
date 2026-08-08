@@ -286,4 +286,36 @@ void TypeChecker::check_naming_conventions(ast::Program& program) {
     }
 }
 
+// メソッド表キーの正準計算: ジェネリック定義キー（G<T, U>形。implブロック登録のtype_to_string形と同形）。
+// 従来はmethod.cpp・function.cpp・auto_impl.cppがバイト一致必須の文字列組み立てを別々に持っていた
+std::string TypeChecker::generic_def_method_key(const std::string& base_name) const {
+    auto it = generic_structs_.find(base_name);
+    if (it == generic_structs_.end()) {
+        return base_name;
+    }
+    std::string key = base_name + "<";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) {
+            key += ", ";
+        }
+        key += it->second[i];
+    }
+    key += ">";
+    return key;
+}
+
+// 特殊化サフィックスの除去（Result<int, string>・Result__int__string → Result）
+std::string TypeChecker::strip_spec_suffix(const std::string& name) {
+    std::string base = name;
+    auto lt = base.find('<');
+    if (lt != std::string::npos) {
+        base = base.substr(0, lt);
+    }
+    auto us = base.find("__");
+    if (us != std::string::npos && us > 0) {
+        base = base.substr(0, us);
+    }
+    return base;
+}
+
 }  // namespace cm

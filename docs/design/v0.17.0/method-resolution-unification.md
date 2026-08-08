@@ -42,3 +42,12 @@ parent: v0.17.0 Design
 ## 検出経緯
 
 全体複雑度レビュー（2026-08-05）のメソッド解決調査で、Q1/Q4/Q5の真因を含む分裂構造として実測した。
+## 実装記録（キー正準化・2026-08-08）
+
+第2段のうちメソッド表キーの正準化を実施した。
+
+- `TypeChecker::generic_def_method_key(base_name)`（ジェネリック定義キーG<T, U>形の正準計算）と`strip_spec_suffix(name)`（Name<...>・Name__k→Nameのベース名抽出）を新設し、バイト一致必須の文字列組み立てを別々に持っていた4実装——method.cppの特殊化レシーバ検索・function.cppの静的ジェネリック呼び出し・auto_impl.cppのローカルgeneric_method_table_key（削除し4呼び出しサイトを正準関数へ）・method.cppのenum基底剥ぎ——を1系統へ畳んだ。
+- 登録側キーはtype_to_string(impl.target_type)を正のまま維持し（impl G<T, U>の登録形とgeneric_def_method_keyの出力形が一致することが不変条件）、for-in検索は元からtype_to_string直参照のため変更不要だった。
+- 挙動変更なしの純リファクタリングとして全13スイートPASS（ジェネリックレシーバ・静的ジェネリック呼び出し・enum inherentメソッド・deriveメソッド解決の既存回帰を含む）。
+
+残り: resolve_method統一API（infer_memberの9分岐・静的分岐・for-in検索の同一入口化）・ビルトインラダー約500行の表駆動化・namespace方式3種の1本化・第3段（enum正規化遅延と演算子解決の統合）。

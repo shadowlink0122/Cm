@@ -13,23 +13,7 @@
 
 namespace cm {
 
-namespace {
-
-// ジェネリック構造体のメソッド表キー（例: G<T, U>）。implブロックの登録キー（type_to_string形）と同形にし、
-// 特殊化レシーバのメソッド解決（method.cppのジェネリック検索）から自動実装メソッドを引けるようにする（R21）
-std::string generic_method_table_key(const ast::StructDecl& st) {
-    std::string key = st.name + "<";
-    for (size_t i = 0; i < st.generic_params.size(); ++i) {
-        if (i > 0) {
-            key += ", ";
-        }
-        key += st.generic_params[i];
-    }
-    key += ">";
-    return key;
-}
-
-}  // namespace
+namespace {}  // namespace
 
 void TypeChecker::register_auto_impl(const ast::StructDecl& st, const std::string& iface_name) {
     // 導出可能セット（コンパイラ組み込み）。with / #[derive] 共通の検証
@@ -274,7 +258,7 @@ void TypeChecker::register_auto_clone_impl(const ast::StructDecl& st) {
         }
         MethodInfo generic_clone = clone_method;
         generic_clone.return_type = generic_ret;
-        type_methods_[generic_method_table_key(st)]["clone"] = generic_clone;
+        type_methods_[generic_def_method_key(st.name)]["clone"] = generic_clone;
     }
 
     // グローバル関数としても登録
@@ -298,7 +282,7 @@ void TypeChecker::register_auto_hash_impl(const ast::StructDecl& st) {
     hash_method.return_type = ast::make_int();
     type_methods_[struct_name]["hash"] = hash_method;
     if (!st.generic_params.empty()) {
-        type_methods_[generic_method_table_key(st)]["hash"] = hash_method;
+        type_methods_[generic_def_method_key(st.name)]["hash"] = hash_method;
     }
 
     // グローバル関数としても登録
@@ -445,7 +429,7 @@ void TypeChecker::register_auto_debug_impl(const ast::StructDecl& st) {
     debug_method.return_type = ast::make_string();
     type_methods_[struct_name]["debug"] = debug_method;
     if (!st.generic_params.empty()) {
-        type_methods_[generic_method_table_key(st)]["debug"] = debug_method;
+        type_methods_[generic_def_method_key(st.name)]["debug"] = debug_method;
     }
 
     // グローバル関数としても登録
@@ -469,7 +453,7 @@ void TypeChecker::register_auto_display_impl(const ast::StructDecl& st) {
     tostring_method.return_type = ast::make_string();
     type_methods_[struct_name]["toString"] = tostring_method;
     if (!st.generic_params.empty()) {
-        type_methods_[generic_method_table_key(st)]["toString"] = tostring_method;
+        type_methods_[generic_def_method_key(st.name)]["toString"] = tostring_method;
     }
 
     // グローバル関数としても登録

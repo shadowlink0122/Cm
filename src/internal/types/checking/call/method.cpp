@@ -136,15 +136,10 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
 
         // ジェネリック構造体の場合
         if (obj_type->kind == ast::TypeKind::Struct && !obj_type->type_args.empty()) {
-            std::string generic_type_name = obj_type->name + "<";
             auto gen_it = generic_structs_.find(obj_type->name);
             if (gen_it != generic_structs_.end()) {
-                for (size_t i = 0; i < gen_it->second.size(); ++i) {
-                    if (i > 0)
-                        generic_type_name += ", ";
-                    generic_type_name += gen_it->second[i];
-                }
-                generic_type_name += ">";
+                // 定義キー（G<T, U>形）は正準関数で計算する（登録側type_to_string形とバイト一致）
+                std::string generic_type_name = generic_def_method_key(obj_type->name);
 
                 auto git = type_methods_.find(generic_type_name);
                 if (git != type_methods_.end()) {
@@ -264,17 +259,7 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
         // 組み込みenum型（Result<T,E>/Option<T>）のメソッド
         // type_methods_はベース名（"Result"）で登録されているため、インスタンス化名（"Result<int, string>" / "Result__int__string"）から
         // ベース名で引き、戻り値・引数のジェネリックパラメータを型引数で置換する
-        std::string enum_base = obj_type->name;
-        {
-            auto lt = enum_base.find('<');
-            if (lt != std::string::npos) {
-                enum_base = enum_base.substr(0, lt);
-            }
-            auto us = enum_base.find("__");
-            if (us != std::string::npos && us > 0) {
-                enum_base = enum_base.substr(0, us);
-            }
-        }
+        const std::string enum_base = strip_spec_suffix(obj_type->name);
         if (obj_type->kind == ast::TypeKind::Struct && enum_names_.count(enum_base) > 0) {
             auto em_it = type_methods_.find(enum_base);
             auto ge_it = generic_enums_.find(enum_base);
