@@ -78,3 +78,12 @@ checker側の受理判定（utils/compat.cpp・utils/conversion.cpp）とMIR側�
 第1段記録の「LLVMユニオンStructType生成3系統（8バイト固定fallback含む）・サイトごとのタグ再導出」は静的には依然存在するが、今回の3バグの真因ではなかった。実害の証拠が出た時点で対処する（現時点で全スイート・全マトリクスは正値）。
 
 残り: 第2段の本丸（インターフェースupcastのMIR構築物化・returnのheap-boxingフラグ統一・4バックエンドのassign認識撤去）・第3段（checker注釈駆動化。受理乖離2件=ユニオン引数リテラル直渡し・typedef経由の変種asもここで解消）。
+## 実装記録（受理乖離2件の解消・2026-08-08）
+
+第3段（受理と挿入の同表化）の先行断片として、第1段で記録したchecker受理乖離2件（MIR側は対応済みなのにcheckerが誤拒否する偽陽性）を解消した。
+
+- **ユニオン型引数への変種リテラル直接渡し**（take_union(9)がArgument type mismatch）: 真因はtypes_compatibleがtypedefエイリアスを解決せず、letサイトは呼び出し側で個別にresolve_typedefしてから比較する一方、引数検査は未解決のまま渡すため`typedef IntOrStr = int | string`型パラメータのユニオン受理分岐に到達しなかったこと。types_compatible先頭でのtypedef実体解決へ一元化し、呼び出し側の個別resolveへの依存を廃した。
+- **typedef別名経由の変種as/is**（s as IntSliceがnot a variant）: is/asの変種照合が未解決のtypedef名の文字列比較だった。対象型・変種の両側を実体解決してから照合するようにした（IntSlice = int[]がint[]変種と一致する。負例のas_nonvariant等のエラーテストは全て維持）。
+- 回帰: union/coerce_sites.cmを変種リテラル直接渡し・typedef別名経由のas抽出込みへ更新（native/js一致・全13スイートPASS）。
+
+残り: 第2段の本丸（インターフェースupcastのMIR化・4バックエンドassign認識撤去・return heap-boxing統一）・第3段本体（checkerが受理した変換種のHIR注釈化とconversion_kind表の単一真実化）。

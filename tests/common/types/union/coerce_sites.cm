@@ -5,6 +5,7 @@ import std::io::println;
 
 typedef IntOrStr = int | string;
 typedef DblOrStr = double | string;
+typedef IntSlice = int[];
 typedef SliceOrStr = int[] | string;
 
 struct Holder {
@@ -23,8 +24,8 @@ int main() {
     // return（isとasの併用がGVNで混同されない）
     const IntOrStr r = ret_union(5);
     println("ret={r is int} v={r as int}");
-    // 引数・デフォルト引数
-    take_union(9 as IntOrStr);
+    // 引数・デフォルト引数（変種リテラルの直接渡し。従来はArgument type mismatchで誤拒否されas付きが必要だった）
+    take_union(9);
     // let初期化
     IntOrStr a = 42;
     println("let={a is int} v={a as int}");
@@ -46,10 +47,12 @@ int main() {
     // 唯一の数値変種への正規化（int→double変種。coerce_to_expectedの再帰ディスパッチ）
     DblOrStr d = 1;
     println("dbl={d is double} v={d as double}");
-    // スライス変種のis検査（is/asの型右辺のスライスサフィックス対応）
+    // スライス変種のis検査（is/asの型右辺のスライスサフィックス対応）とtypedef別名経由のas（従来はnot a variantで誤拒否）
     int[] dyn = [];
     dyn.push(5);
     SliceOrStr s = dyn;
     println("slice_is={s is int[]} str_is={s is string}");
+    const IntSlice sl = s as IntSlice;
+    println("via_alias={sl[0]}");
     return 0;
 }

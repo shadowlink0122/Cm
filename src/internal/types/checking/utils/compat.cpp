@@ -104,6 +104,19 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
         return true;
 
+    // typedefエイリアスは実体で比較する（従来はlet等の呼び出し側が個別にresolve_typedefしており、
+    // 引数検査など未解決のまま渡すサイトで typedef IntOrStr = int | string 型パラメータへの変種渡しが誤拒否されていた）
+    {
+        auto ra = resolve_typedef(a);
+        if (ra) {
+            a = ra;
+        }
+        auto rb = resolve_typedef(b);
+        if (rb) {
+            b = rb;
+        }
+    }
+
     // ユニオン型への代入互換性チェック
     // 例: int | null x = null; → a=Union{int,null}, b=Void
     // 例: int | null x = 42;   → a=Union{int,null}, b=Int

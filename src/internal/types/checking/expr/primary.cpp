@@ -125,10 +125,18 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                                  (operand_type ? ast::type_to_string(*operand_type)
                                                : i18n::msg(i18n::MsgId::TypeLabelUnknown))));
             } else if (cast_expr->target_type) {
+                // typedef別名（IntSlice = int[] 等）の対象型・変種は実体解決してから照合する（従来は未解決名の文字列比較で誤拒否）
+                auto tgt_resolved = resolve_typedef(cast_expr->target_type);
+                const std::string target_key =
+                    ast::type_to_string(*(tgt_resolved ? tgt_resolved : cast_expr->target_type));
                 std::string target_name = ast::type_to_string(*cast_expr->target_type);
                 bool found = false;
                 for (const auto& v : variants) {
-                    if (v && ast::type_to_string(*v) == target_name) {
+                    if (!v) {
+                        continue;
+                    }
+                    auto vr = resolve_typedef(v);
+                    if (ast::type_to_string(*(vr ? vr : v)) == target_key) {
                         found = true;
                         break;
                     }
@@ -154,9 +162,16 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                         ast::type_to_string(*tgt_resolved) == ast::type_to_string(*op_resolved);
                     if (!same_union) {
                         std::string target_name = ast::type_to_string(*cast_expr->target_type);
+                        // typedef別名の対象型・変種は実体解決してから照合する（従来は未解決名の文字列比較で誤拒否）
+                        const std::string target_key = ast::type_to_string(
+                            *(tgt_resolved ? tgt_resolved : cast_expr->target_type));
                         bool found = false;
                         for (const auto& v : ast::union_variant_types(op_resolved)) {
-                            if (v && ast::type_to_string(*v) == target_name) {
+                            if (!v) {
+                                continue;
+                            }
+                            auto vr = resolve_typedef(v);
+                            if (ast::type_to_string(*(vr ? vr : v)) == target_key) {
                                 found = true;
                                 break;
                             }
