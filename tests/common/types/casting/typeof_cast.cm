@@ -1,0 +1,13 @@
+//! platform: !js|sv
+import std::io::println;
+// 型文法の汎用合成: typeof(式) を as の対象型として使える（括弧なし as typeof(x) と括弧あり as (typeof(x)) の両方）。typeof が汎用の型文脈で解決されることの検査
+int main() {
+    int imarker = 0;
+    double d = 3.9;
+    long big = 5000000000;
+    auto a = d as typeof(imarker);      // 括弧なし
+    auto b = d as (typeof(imarker));    // 括弧あり
+    auto c = big as (typeof(imarker));  // int幅へ切り詰め（typeofがintに解決される）
+    println("{a} {b} {c}");
+    return 0;
+}

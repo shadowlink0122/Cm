@@ -1,0 +1,9 @@
+import std::io::println;
+// 型文法の汎用合成: as の対象型を括弧で囲める（(int)・ネストした ((int))）。局所的なas専用型パースではなく汎用parse_typeを通ることの検査
+int main() {
+    double d = 3.9;
+    auto a = d as (int);
+    auto b = d as ((int));
+    println("{a} {b}");
+    return 0;
+}
