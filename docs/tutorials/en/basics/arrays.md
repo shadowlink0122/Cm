@@ -209,6 +209,19 @@ int main() {
 }
 ```
 
+Function pointers can also be stored in a `void*` array; retrieve one and `as`-cast it back to the function pointer type to call it.
+
+```cm
+int add(int a, int b) { return a + b; }
+
+int main() {
+    void*[1] fns = [&add];
+    int*(int, int) op = fns[0] as int*(int, int);
+    const int r = op(3, 2);  // 5
+    return 0;
+}
+```
+
 ## Pointer Decay
 
 Arrays convert to pointers automatically.

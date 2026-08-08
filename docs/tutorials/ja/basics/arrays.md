@@ -209,6 +209,19 @@ int main() {
 }
 ```
 
+関数ポインタも `void*` 配列に格納できます。取り出して関数ポインタ型へ `as` キャストすれば呼び出せます。
+
+```cm
+int add(int a, int b) { return a + b; }
+
+int main() {
+    void*[1] fns = [&add];
+    int*(int, int) op = fns[0] as int*(int, int);
+    const int r = op(3, 2);  // 5
+    return 0;
+}
+```
+
 ## ポインタへの変換
 
 配列は自動的にポインタに変換されます（Array Decay）。
