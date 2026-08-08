@@ -19,6 +19,7 @@ For the growable slice type `T[]`, see [Slices](../advanced/slices.html).
 - [Higher-Order Methods](#higher-order-methods)
 - [Sorting and First/Last](#sorting-and-firstlast)
 - [Arrays of Structs](#arrays-of-structs)
+- [Element Type Checking](#element-type-checking)
 - [Pointer Decay](#pointer-decay)
 - [for-in Loops](#for-in-loops)
 - [Multidimensional Arrays](#multidimensional-arrays)
@@ -165,6 +166,49 @@ int main() {
 }
 ```
 
+## Element Type Checking
+
+Every element of an array literal must be compatible with the declared element type. The same rules as variable declarations apply.
+
+```cm
+int main() {
+    // OK: widening from smaller integer types (tiny/short) to int is allowed
+    tiny t = 1;
+    short s = 2;
+    int[3] a = [t, s, 3];
+
+    // OK: an unnamed struct literal is allowed when it matches the element type
+    Point[2] pts = [{ x: 1, y: 2 }, { x: 3, y: 4 }];
+
+    // Error: mixing an incompatible type is a compile error
+    // int[3] bad = [1, "hello", 3];   // cannot assign 'string' to 'int'
+    return 0;
+}
+```
+
+Numeric narrowing (such as `int[] = [3.14]`) is warned about just like in variable declarations, and an explicit `as` cast is recommended.
+
+### void* Arrays for Anything
+
+An array of the generic pointer type `void*` is an escape hatch that is exempt from element type checking. It can hold any pointer; retrieve elements with `auto` and determine the stored type with `typeof`.
+
+```cm
+int main() {
+    int n = 42;
+    string s = "hi";
+    Point p = Point { x: 1, y: 2 };
+
+    // heterogeneous pointers can be stored together
+    void*[3] arr = [&n, &s, &p];
+
+    // retrieve with auto, inspect with typeof, then cast to the proper type
+    auto e0 = arr[0];
+    const string ty = typeof(e0);        // "*void"
+    const int back = *(arr[0] as int*);  // 42
+    return 0;
+}
+```
+
 ## Pointer Decay
 
 Arrays convert to pointers automatically.
@@ -293,7 +337,7 @@ Multidimensional arrays are automatically flattened internally for cache localit
 
 ---
 
-**Last Updated:** 2026-07-12
+**Last Updated:** 2026-08-08
 
 ---
 
