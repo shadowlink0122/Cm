@@ -454,8 +454,9 @@ void Monomorphization::generate_generic_specializations(
         // 関数名が__dtorで終わり、type_argsが存在し、要素型にデストラクタがある場合
         if (specialized_name.find("__dtor") != std::string::npos && !type_args.empty()) {
             // 要素型のデストラクタ名を型引数ツリーのシンボルキーから構築する
+            // 要素の構造体正準キー（$）を関数名ドメイン（base__argkey）へ変換してdtor名を組む
             std::string element_type = arg_symbol_key(type_args[0]);
-            std::string element_dtor_name = element_type + "__dtor";
+            std::string element_dtor_name = typekey::spec_fn_prefix(element_type) + "__dtor";
 
             // 要素型にデストラクタが存在するかチェック
             bool has_element_dtor = false;
@@ -470,8 +471,9 @@ void Monomorphization::generate_generic_specializations(
             // この時点では未生成のことがある。基底のジェネリックデストラクタ（Vector<T>__dtor）が
             // 存在すれば呼び出しを挿入してよい（不動点ループが本関数の呼び出しをスキャンして
             // 特殊化を連鎖生成するため、多段ネストの各段で要素データが解放される）
-            if (!has_element_dtor && element_type.find("__") != std::string::npos) {
-                std::string elem_base = element_type.substr(0, element_type.find("__"));
+            if (!has_element_dtor && (element_type.find("__") != std::string::npos ||
+                                      typekey::is_encoded_key(element_type))) {
+                std::string elem_base = typekey::spec_base_name(element_type);
                 for (const auto& func : program.functions) {
                     if (func && func->name.rfind(elem_base + "<", 0) == 0 &&
                         func->name.size() > 6 &&

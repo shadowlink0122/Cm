@@ -3,6 +3,7 @@
 // lowering.cpp（2,912行）から分割（013 §4.3-4 巨大TU分割）
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "lowering.hpp"
 
 #include <algorithm>
@@ -76,12 +77,8 @@ void MirLowering::generate_monomorphized_auto_impls() {
 
         const std::string& struct_name = mir_struct->name;
 
-        // 元のジェネリック構造体名を抽出（例: Pair__int__int -> Pair）
-        std::string base_name = struct_name;
-        auto underscore_pos = struct_name.find("__");
-        if (underscore_pos != std::string::npos) {
-            base_name = struct_name.substr(0, underscore_pos);
-        }
+        // 元のジェネリック構造体名を正準関数で抽出（例: Pair__int__int / Pair$2$... -> Pair）
+        std::string base_name = mir::typekey::spec_base_name(struct_name);
 
         // このジェネリック構造体にauto_implsがあるか確認
         auto it = generic_struct_auto_impls_.find(base_name);
@@ -115,7 +112,7 @@ void MirLowering::generate_monomorphized_auto_impls() {
 
 // モノモーフィゼーションされた構造体用のCloneメソッドを生成
 void MirLowering::generate_builtin_clone_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__clone";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__clone";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)
@@ -145,7 +142,7 @@ void MirLowering::generate_builtin_clone_method_for_monomorphized(const MirStruc
 
 // モノモーフィゼーションされた構造体用のHashメソッドを生成
 void MirLowering::generate_builtin_hash_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__hash";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__hash";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)
@@ -319,7 +316,7 @@ void MirLowering::generate_builtin_hash_method_for_monomorphized(const MirStruct
 
 // モノモーフィゼーション版Debug自動実装
 void MirLowering::generate_builtin_debug_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__debug";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__debug";
 
     // 既に生成されている場合はスキップ
     for (const auto& func : mir_program.functions) {
@@ -340,10 +337,7 @@ void MirLowering::generate_builtin_debug_method_for_monomorphized(const MirStruc
     auto* block = mir_func->get_block(entry_block);
 
     // 表示名はマングル名（G__int）でなく基底の構造体名（G）にする（非ジェネリックのdebug書式と整合）
-    std::string display_name = st.name;
-    if (auto sep = display_name.find("__"); sep != std::string::npos) {
-        display_name = display_name.substr(0, sep);
-    }
+    std::string display_name = mir::typekey::spec_base_name(st.name);
     std::string initial_str = display_name + " { ";
     LocalId result = mir_func->add_local("_result", hir::make_string(), true, false);
 
@@ -492,7 +486,7 @@ void MirLowering::generate_builtin_debug_method_for_monomorphized(const MirStruc
 
 // モノモーフィゼーション版Display自動実装
 void MirLowering::generate_builtin_display_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__toString";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__toString";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)

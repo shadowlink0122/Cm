@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "lowering.hpp"
 
 #include <algorithm>
@@ -26,7 +27,7 @@ std::string MirLowering::to_kebab_case(const std::string& name) {
 }
 
 void MirLowering::generate_builtin_css_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__css";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__css";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)
@@ -189,8 +190,8 @@ void MirLowering::generate_builtin_css_method_for_monomorphized(const MirStruct&
 
 // to_css() は css() のエイリアス（モノモーフィゼーション版）
 void MirLowering::generate_builtin_to_css_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__to_css";
-    std::string css_func_name = st.name + "__css";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__to_css";
+    std::string css_func_name = mir::typekey::spec_fn_prefix(st.name) + "__css";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)
@@ -232,7 +233,7 @@ void MirLowering::generate_builtin_to_css_method_for_monomorphized(const MirStru
 }
 
 void MirLowering::generate_builtin_is_css_method_for_monomorphized(const MirStruct& st) {
-    std::string func_name = st.name + "__isCss";
+    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__isCss";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)

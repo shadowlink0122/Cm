@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 
 #include <functional>
 #include <memory>
@@ -541,7 +542,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 for (const auto& [iface_name, func_name] : type_it->second) {
                     // Eq インターフェースの実装を探す
                     if (iface_name == "Eq" || func_name.find("__op_eq") != std::string::npos) {
-                        op_func_name = type_name + "__op_eq";
+                        op_func_name = typekey::spec_fn_prefix(type_name) + "__op_eq";
                         break;
                     }
                 }
@@ -607,7 +608,7 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
                 std::string op_func_name;
                 for (const auto& [iface_name, func_name] : type_it->second) {
                     if (iface_name == "Ord" || func_name.find("__op_lt") != std::string::npos) {
-                        op_func_name = type_name + "__op_lt";
+                        op_func_name = typekey::spec_fn_prefix(type_name) + "__op_lt";
                         break;
                     }
                 }

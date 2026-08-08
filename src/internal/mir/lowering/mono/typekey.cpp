@@ -232,6 +232,72 @@ bool is_encoded_key(const std::string& key) {
     return key.find('$') != std::string::npos;
 }
 
+std::string arg_key_from_tree(const hir::TypePtr& arg) {
+    if (!arg) {
+        return "void";
+    }
+    switch (arg->kind) {
+        case hir::TypeKind::Pointer:
+            return "ptr_" + arg_key_from_tree(arg->element_type);
+        case hir::TypeKind::Reference:
+            return "$R" + arg_key_from_tree(arg->element_type);
+        case hir::TypeKind::Array: {
+            std::string size_str = arg->array_size ? std::to_string(*arg->array_size) : "";
+            return "$A" + size_str + "$" + arg_key_from_tree(arg->element_type);
+        }
+        default:
+            break;
+    }
+    if (arg->is_primitive()) {
+        return encode_type_key(arg);
+    }
+    std::string base = arg->name;
+    auto lt = base.find('<');
+    if (lt != std::string::npos) {
+        base = base.substr(0, lt);
+    }
+    if (arg->type_args.empty()) {
+        return base.empty() ? encode_type_key(arg) : base;
+    }
+    if (base.find("__") != std::string::npos || base.find('$') != std::string::npos) {
+        return base;
+    }
+    return struct_key_from_tree(base, arg->type_args);
+}
+
+std::string struct_key_from_tree(const std::string& base_name,
+                                 const std::vector<hir::TypePtr>& type_args) {
+    if (type_args.empty()) {
+        return base_name;
+    }
+    std::vector<std::string> keys;
+    keys.reserve(type_args.size());
+    for (const auto& arg : type_args) {
+        keys.push_back(arg_key_from_tree(arg));
+    }
+    std::string out = base_name + "$" + std::to_string(keys.size()) + "$";
+    for (const auto& k : keys) {
+        out += std::to_string(k.size()) + "$" + k;
+    }
+    return out;
+}
+
+std::string spec_fn_prefix(const std::string& struct_key) {
+    if (!is_encoded_key(struct_key)) {
+        return struct_key;
+    }
+    const std::string base = base_name_of(struct_key);
+    auto args = decode_type_args(struct_key);
+    if (args.empty()) {
+        return struct_key;
+    }
+    std::string out = base;
+    for (const auto& a : args) {
+        out += "__" + arg_key_from_tree(a);
+    }
+    return out;
+}
+
 std::string spec_base_name(const std::string& name) {
     if (is_encoded_key(name)) {
         return base_name_of(name);

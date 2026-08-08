@@ -5,6 +5,8 @@
 
 #include "mono_internal.hpp"
 
+#include "mono/typekey.hpp"
+
 #include <optional>
 
 namespace cm::mir {
@@ -112,31 +114,21 @@ hir::TypePtr substitute_type_in_type(
     if (type_args_changed &&
         (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::Generic)) {
         // 既にマングリング済みの名前の場合でも、substituted_type_argsを使用して正しい名前を生成
-        if (type->name.find("__") != std::string::npos) {
-            // 基本名を抽出してsubstituted_type_argsから新しい名前を生成
-            auto pos = type->name.find("__");
-            std::string base_name = type->name.substr(0, pos);
-            std::string new_name = base_name;
-            for (const auto& arg : substituted_type_args) {
-                if (arg) {
-                    new_name += "__" + get_type_name(arg);
-                }
-            }
+        if (type->name.find("__") != std::string::npos || typekey::is_encoded_key(type->name)) {
+            // 基本名を正準関数で抽出し、substituted_type_argsから正準キーを生成（フラット名産生の全廃）
+            std::string base_name = typekey::spec_base_name(type->name);
             auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-            new_type->name = new_name;
+            new_type->name =
+                mono ? mono->struct_symbol_key(base_name, substituted_type_args) : type->name;
             // マングリング済みの名前なのでtype_argsはクリア
             new_type->type_args.clear();
             return new_type;
         }
 
         auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-        // 新しい名前を生成（Node -> Node__Item）
-        std::string new_name = type->name;
-        for (const auto& arg : substituted_type_args) {
-            if (arg) {
-                new_name += "__" + get_type_name(arg);
-            }
-        }
+        // 新しい名前（正準キー）を生成（Node -> Node$1$...）
+        std::string new_name =
+            mono ? mono->struct_symbol_key(type->name, substituted_type_args) : type->name;
         new_type->name = new_name;
         // 重要: マングリング済みの名前（__を含む）の場合、type_argsはクリア
         // これにより二重マングリング（例: QueueNode__int<int>）を防止
@@ -207,6 +199,35 @@ hir::TypePtr substitute_type_in_type(
         }
     }
 
+    // 3a. $エンコード名に型パラメータが埋め込まれている場合（Container$1$1$T → 復号・置換・再エンコード）
+    if ((type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) &&
+        typekey::is_encoded_key(type->name)) {
+        auto base = typekey::base_name_of(type->name);
+        auto args = typekey::decode_type_args(type->name);
+        bool any = false;
+        for (auto& a : args) {
+            if (a) {
+                auto sit = type_subst.find(a->name);
+                if (sit != type_subst.end()) {
+                    a = sit->second;
+                    any = true;
+                } else {
+                    auto rec = substitute_type_in_type(a, type_subst, mono);
+                    if (rec && rec->name != a->name) {
+                        a = rec;
+                        any = true;
+                    }
+                }
+            }
+        }
+        if (any && mono && !args.empty()) {
+            auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            new_type->name = mono->struct_symbol_key(base, args);
+            new_type->type_args = args;
+            return new_type;
+        }
+    }
+
     // 3. 構造体名に型パラメータが埋め込まれている場合（Container__T → Container__int）
     if (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) {
         std::string type_name = type->name;
@@ -245,12 +266,9 @@ hir::TypePtr substitute_type_in_type(
             }
 
             if (any_substituted) {
-                // 新しい構造体名を生成
-                std::string new_name = base_name;
+                // 新しい構造体名（正準キー）を生成
                 std::vector<hir::TypePtr> resolved_type_args;
                 for (const auto& p : new_params) {
-                    new_name += "__" + p;
-                    // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
                     auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                     arg_type->name = p;
                     // プリミティブ型の場合はTypeKindを復元（M11）
@@ -260,7 +278,8 @@ hir::TypePtr substitute_type_in_type(
                 }
 
                 auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                new_type->name = new_name;
+                new_type->name =
+                    mono ? mono->struct_symbol_key(base_name, resolved_type_args) : type_name;
                 new_type->type_args = resolved_type_args;
                 return new_type;
             }
@@ -316,12 +335,9 @@ hir::TypePtr substitute_type_in_type(
                 }
 
                 if (any_substituted) {
-                    // 新しい構造体名を生成（Container__int 形式）
-                    std::string new_name = base_name;
+                    // 新しい構造体名（正準キー）を生成
                     std::vector<hir::TypePtr> resolved_type_args;
                     for (const auto& p : new_params) {
-                        new_name += "__" + p;
-                        // type_argsを設定（LLVMコード生成でマングリング名生成に必要）
                         auto arg_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                         arg_type->name = p;
                         // プリミティブ型の場合はTypeKindを復元（M11）
@@ -332,10 +348,11 @@ hir::TypePtr substitute_type_in_type(
 
                     // 重要: モノモーフィック化後の型はStructになる
                     auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                    new_type->name = new_name;
+                    new_type->name =
+                        mono ? mono->struct_symbol_key(base_name, resolved_type_args) : type_name;
                     new_type->type_args = resolved_type_args;
                     debug_msg("MONO", "Substituted angle-bracket type: " + type_name + " -> " +
-                                          new_name + " (kind: Generic->Struct)");
+                                          new_type->name + " (kind: Generic->Struct)");
                     return new_type;
                 }
             }
@@ -346,24 +363,19 @@ hir::TypePtr substitute_type_in_type(
             type->name.find("<") == std::string::npos) {
             // ジェネリック構造体名（Container）で、型引数がある場合
             // type_substからすべての型引数を適用
-            std::string new_name = type->name;
-            bool applied = false;
+            std::vector<hir::TypePtr> resolved_type_args;
             for (const auto& [param_name, param_type] : type_subst) {
-                (void)param_name;  // 使用しない
-                new_name += "__" + get_type_name(param_type);
-                applied = true;
+                (void)param_name;
+                resolved_type_args.push_back(param_type);
             }
-            if (applied) {
-                // type_argsを設定
-                std::vector<hir::TypePtr> resolved_type_args;
-                for (const auto& [param_name, param_type] : type_subst) {
-                    (void)param_name;
-                    resolved_type_args.push_back(param_type);
-                }
+            if (!resolved_type_args.empty()) {
                 auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                new_type->name = new_name;
+                // 新しい構造体名（正準キー）を生成
+                new_type->name =
+                    mono ? mono->struct_symbol_key(type->name, resolved_type_args) : type->name;
                 new_type->type_args = resolved_type_args;
-                debug_msg("MONO", "Substituted generic type: " + type->name + " -> " + new_name);
+                debug_msg("MONO",
+                          "Substituted generic type: " + type->name + " -> " + new_type->name);
                 return new_type;
             }
         }

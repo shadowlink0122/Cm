@@ -45,6 +45,18 @@ std::string base_name_of(const std::string& key);
 // __前提のベース名抽出サイトを$対応で共通化するための正準関数（mono-flat-name-elimination）
 std::string spec_base_name(const std::string& name);
 
+// 型引数ツリーからシンボルキー1個分を生成する（Monomorphization::arg_symbol_keyと同一規約:
+// ポインタptr_・参照$R・配列$A・プリミティブ正準名・特殊化は$エンコード。既にマングリング済みの名前は素通し）
+std::string arg_key_from_tree(const hir::TypePtr& arg);
+
+// 基底名+型引数ツリーから特殊化構造体の正準キー（$エンコード）を生成する
+std::string struct_key_from_tree(const std::string& base_name,
+                                 const std::vector<hir::TypePtr>& type_args);
+
+// 構造体正準キーから関数名ドメインの接頭辞（base__argkey…）を生成する
+// （特殊化関数名はbase__argkey__methodのフラット結合規約のため、dtor等の関数参照はこの形で組む）
+std::string spec_fn_prefix(const std::string& struct_key);
+
 // エンコード済みキーの型引数を復元する（非エンコード名は空）
 std::vector<hir::TypePtr> decode_type_args(const std::string& key);
 

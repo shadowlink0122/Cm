@@ -367,9 +367,10 @@ std::vector<hir::TypePtr> Monomorphization::infer_type_args(
         auto arg_type = arg_type_of(call_data.args[i]);
         if (!arg_type)
             continue;
-        // 実引数がフラット名縮退の構造体の場合は復元してから照合する
+        // 実引数がフラット/エンコード名縮退の構造体の場合は復元してから照合する
         if (arg_type->kind == hir::TypeKind::Struct && arg_type->type_args.empty() &&
-            arg_type->name.find("__") != std::string::npos) {
+            (arg_type->name.find("__") != std::string::npos ||
+             typekey::is_encoded_key(arg_type->name))) {
             if (auto decoded = decode_type_name(arg_type->name)) {
                 arg_type = decoded;
             }

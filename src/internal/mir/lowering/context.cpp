@@ -183,8 +183,18 @@ bool LoweringContext::has_destructor(const std::string& type_name) const {
         return true;
     }
 
-    // ジェネリック型の場合（Vector__TrackedObject・Vector$1$...等）、元テンプレート名を正準関数で抽出してチェック
-    const std::string base_template_name = typekey::spec_base_name(type_name);
+    // ジェネリック型の場合、元テンプレート名を抽出してチェック。
+    // dtor登録名は関数名ドメイン（base__argkey…。argkeyに$を含みうる）のため最初の__を基底区切りとして優先し、
+    // __を含まない$構造体キーはtypekeyの正準抽出で基底を取る
+    std::string base_template_name;
+    {
+        auto us = type_name.find("__");
+        if (us != std::string::npos && us > 0) {
+            base_template_name = type_name.substr(0, us);
+        } else {
+            base_template_name = typekey::spec_base_name(type_name);
+        }
+    }
     if (base_template_name != type_name) {
         const std::string& base_template = base_template_name;
         // Vector<T> の形式で登録されているかチェック

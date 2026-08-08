@@ -3,6 +3,7 @@
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
 #include "internal/mir/lowering/layout.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"

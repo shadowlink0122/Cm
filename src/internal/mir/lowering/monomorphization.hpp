@@ -36,6 +36,14 @@ class Monomorphization : public MirLoweringBase {
         const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
         const std::unordered_map<std::string, const hir::HirStruct*>& hir_structs = {});
 
+    // 型引数1個分のシンボルキーを生成する（正準キーAPI）
+    std::string arg_symbol_key(const hir::TypePtr& arg) const;
+
+    // 特殊化構造体のシンボルキーを生成する（正準キーAPI）。
+    // フラット名（base__k1__k2）は本質的に曖昧なため産生を全廃し、常に'$'長さ接頭辞の可逆エンコード名を返す
+    std::string struct_symbol_key(const std::string& base_name,
+                                  const std::vector<hir::TypePtr>& type_args) const;
+
    private:
     const std::unordered_map<std::string, const hir::HirFunction*>* hir_funcs = nullptr;
     const std::unordered_map<std::string, const hir::HirStruct*>* hir_struct_defs = nullptr;
@@ -61,15 +69,6 @@ class Monomorphization : public MirLoweringBase {
     // 特殊化構造体を生成（型引数はhir::Typeツリー。ネストした特殊化も再帰的に生成する）
     void generate_specialized_struct(MirProgram& program, const std::string& base_name,
                                      const std::vector<hir::TypePtr>& type_args);
-
-    // 型引数1個分のシンボルキーを生成（既存の__フラット規約を維持する）
-    std::string arg_symbol_key(const hir::TypePtr& arg) const;
-
-    // 特殊化構造体のシンボルキーを生成する。
-    // 通常は関数特殊化経路と整合する従来のbase__arg連結を用い、フラット名がユーザー定義
-    // 構造体と同名になる場合のみ'$'区切りの可逆エンコード名へ退避して縮退を排除する（C8）
-    std::string struct_symbol_key(const std::string& base_name,
-                                  const std::vector<hir::TypePtr>& type_args) const;
 
     // フラット特殊化名の残り部分（base__以降）を型引数ツリーへ復元する。
     // 基底の型パラメータが1個の場合は全セグメントを1引数として結合する（ネスト対応）

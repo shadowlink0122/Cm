@@ -92,7 +92,7 @@ void Monomorphization::collect_struct_specializations(
             continue;
         }
 
-        for (const auto& local : func->locals) {
+        for (auto& local : func->locals) {
             if (!local.type)
                 continue;
 
@@ -136,9 +136,15 @@ void Monomorphization::collect_struct_specializations(
                 }
                 {
                     if (!type_args.empty()) {
-                        std::string spec_name = local.type->name;
-                        if (needed.find(spec_name) == needed.end()) {
-                            needed[spec_name] = {base_name, type_args};
+                        // フラット名産生の全廃に伴い、既存のフラット名ローカルも正準キーへ改名して収束させる
+                        // （生成されるMirStructは正準キーで登録されるため、ローカル名との不一致はレイアウト解決欠落になる）
+                        const std::string canonical = struct_symbol_key(base_name, type_args);
+                        if (canonical != local.type->name) {
+                            local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                            local.type->name = canonical;
+                        }
+                        if (needed.find(canonical) == needed.end()) {
+                            needed[canonical] = {base_name, type_args};
                         }
                     }
                 }

@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "lowering.hpp"
 
 #include <algorithm>

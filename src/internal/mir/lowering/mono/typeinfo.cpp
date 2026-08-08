@@ -62,17 +62,20 @@ std::string Monomorphization::struct_symbol_key(const std::string& base_name,
     if (type_args.empty())
         return base_name;
 
+    // 産生の$全面化（フラット名全廃）は、フラットfn接頭辞=フラット構造体キーの歴史的一致へ依存する
+    // 結合（HIR期の呼び出し名・derive関数名・演算子経路・dtor登録名）を広く露出させるため、
+    // ドメイン分離の移行計画（設計文書の実装記録参照）に沿った専用の検証枠で行う。
+    // 現段は従来どおりフラット既定+曖昧時$退避（Q2/C8）とし、キー産生のチョークポイント化のみ完了している
     std::vector<std::string> keys;
     bool simple = true;
     for (const auto& arg : type_args) {
         keys.push_back(arg_symbol_key(arg));
-        // Q2: 複数引数基底で引数キー自体が特殊化（__入り）だとフラット名が曖昧になる（Pair__Box__int__Box__stringがBox|int|Box|stringへ誤分割される）ため$エンコードへ退避する。1引数基底は全セグメント結合で可逆のためフラット名を維持する
+        // Q2: 複数引数基底で引数キー自体が特殊化（__入り）だとフラット名が曖昧になるため$エンコードへ退避する。1引数基底は全セグメント結合で可逆のためフラット名を維持する
         if (keys.back().find('$') != std::string::npos ||
             (type_args.size() > 1 && keys.back().find("__") != std::string::npos)) {
             simple = false;
         }
     }
-
     if (simple) {
         std::string flat = base_name;
         for (const auto& k : keys)
@@ -81,7 +84,6 @@ std::string Monomorphization::struct_symbol_key(const std::string& base_name,
         if (!hir_struct_defs || hir_struct_defs->find(flat) == hir_struct_defs->end())
             return flat;
     }
-
     std::string out = base_name + "$" + std::to_string(keys.size()) + "$";
     for (const auto& k : keys)
         out += std::to_string(k.size()) + "$" + k;
