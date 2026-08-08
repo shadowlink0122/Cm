@@ -74,8 +74,11 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypeP
                 if (end_pos != std::string::npos) {
                     // {と}の間に内容があるかチェック
                     std::string content = str_val.substr(pos + 1, end_pos - pos - 1);
+                    // 受理先頭文字はextract_named_placeholders側のホワイトリストと揃える（'_'は__cm_priv_*等のimportプライベート改名・R20の!~-(も追従）
                     if (!content.empty() &&
-                        (std::isalpha(content[0]) || content[0] == '*' || content[0] == '&')) {
+                        (std::isalpha(content[0]) || content[0] == '_' || content[0] == '*' ||
+                         content[0] == '&' || content[0] == '!' || content[0] == '~' ||
+                         content[0] == '-' || content[0] == '(')) {
                         has_placeholders = true;
                         break;
                     }

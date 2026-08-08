@@ -180,7 +180,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         if (!var_name.empty() && var_name[0] == '&') {
                             // &variable形式 - アドレス取得 (後でサポート)
                             std::string actual_var = var_name.substr(1);
-                            if (!actual_var.empty() && std::isalpha(actual_var[0])) {
+                            if (!actual_var.empty() &&
+                                (std::isalpha(actual_var[0]) || actual_var[0] == '_')) {
                                 var_names.push_back("&" + actual_var);  // &付きで格納
                                 // フォーマット指定子をそのまま維持
                                 converted_format += "{" + format_spec;
@@ -191,8 +192,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         } else if (!var_name.empty() && var_name[0] == '*') {
                             // *variable形式 - ポインタのデリファレンス（**pp等も許可）
                             std::string ptr_var = var_name.substr(1);
-                            if (!ptr_var.empty() && (std::isalpha(ptr_var[0]) ||
-                                                     ptr_var[0] == '(' || ptr_var[0] == '*')) {
+                            if (!ptr_var.empty() &&
+                                (std::isalpha(ptr_var[0]) || ptr_var[0] == '_' ||
+                                 ptr_var[0] == '(' || ptr_var[0] == '*')) {
                                 var_names.push_back("*" + ptr_var);  // *付きで格納
                                 // フォーマット指定子をそのまま維持
                                 converted_format += "{" + format_spec;
@@ -200,13 +202,17 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な*フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() &&
-                                   (std::isalpha(var_name[0]) || var_name[0] == '!' ||
-                                    var_name[0] == '~' ||  // ビット反転を許可（R20）
-                                    var_name[0] == '-' ||  // 単項マイナスを許可（R20）
-                                    var_name[0] == '*' ||  // デリファレンスを許可
-                                    var_name.substr(0, 5) == "self." ||
-                                    var_name.find("::") != std::string::npos)) {
+                        } else if (
+                            !var_name.empty() &&
+                            (std::isalpha(var_name[0]) ||
+                             var_name[0] ==
+                                 '_' ||  // 先頭アンダースコアの識別子（__cm_priv_*等のimportプライベート改名が該当）
+                             var_name[0] == '!' ||
+                             var_name[0] == '~' ||  // ビット反転を許可（R20）
+                             var_name[0] == '-' ||  // 単項マイナスを許可（R20）
+                             var_name[0] == '*' ||  // デリファレンスを許可
+                             var_name.substr(0, 5) == "self." ||
+                             var_name.find("::") != std::string::npos)) {
                             // 変数名、メンバーアクセス、メソッド呼び出し、enum値、または否定演算子として有効
                             // self.x, p.field, r.area(), Color::Red, !true のような形式も許可
                             var_names.push_back(var_name);
@@ -225,7 +231,8 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                         if (!var_name.empty() && var_name[0] == '&') {
                             // &variable形式 - アドレス取得 (後でサポート)
                             std::string actual_var = var_name.substr(1);
-                            if (!actual_var.empty() && std::isalpha(actual_var[0])) {
+                            if (!actual_var.empty() &&
+                                (std::isalpha(actual_var[0]) || actual_var[0] == '_')) {
                                 var_names.push_back("&" + actual_var);  // &付きで格納
                                 // アドレス表示用: プレースホルダーのみ（プレフィックスなし）
                                 converted_format += "{}";
@@ -237,24 +244,28 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                             // *variable形式 - ポインタのデリファレンス
                             std::string ptr_var = var_name.substr(1);
                             // (*ptr).x 形式と **pp（多重デリファレンス）もサポート
-                            if (!ptr_var.empty() && (std::isalpha(ptr_var[0]) ||
-                                                     ptr_var[0] == '(' || ptr_var[0] == '*')) {
+                            if (!ptr_var.empty() &&
+                                (std::isalpha(ptr_var[0]) || ptr_var[0] == '_' ||
+                                 ptr_var[0] == '(' || ptr_var[0] == '*')) {
                                 var_names.push_back("*" + ptr_var);  // *付きで格納
                                 converted_format += "{}";
                             } else {
                                 // 無効な*フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (!var_name.empty() &&
-                                   (std::isalpha(var_name[0]) || var_name[0] == '!' ||
-                                    var_name[0] == '~' ||  // ビット反転を許可（R20）
-                                    var_name[0] == '-' ||  // 単項マイナスを許可（R20）
-                                    var_name[0] == '*' ||  // デリファレンスを許可
-                                    var_name[0] == '(' ||  // (*ptr).x 形式を許可
-                                    var_name.substr(0, 5) == "self." ||
-                                    var_name.find("::") != std::string::npos ||
-                                    var_name.find("->") !=
-                                        std::string::npos)) {  // ptr->x 形式を許可
+                        } else if (
+                            !var_name.empty() &&
+                            (std::isalpha(var_name[0]) ||
+                             var_name[0] ==
+                                 '_' ||  // 先頭アンダースコアの識別子（__cm_priv_*等のimportプライベート改名が該当）
+                             var_name[0] == '!' ||
+                             var_name[0] == '~' ||  // ビット反転を許可（R20）
+                             var_name[0] == '-' ||  // 単項マイナスを許可（R20）
+                             var_name[0] == '*' ||  // デリファレンスを許可
+                             var_name[0] == '(' ||  // (*ptr).x 形式を許可
+                             var_name.substr(0, 5) == "self." ||
+                             var_name.find("::") != std::string::npos ||
+                             var_name.find("->") != std::string::npos)) {  // ptr->x 形式を許可
                             // 変数名、メンバーアクセス、メソッド呼び出し、enum値、または否定演算子として有効
                             // self.x, p.field, r.area(), Color::Red, !true のような形式も許可
                             debug_msg("MIR", "Extracted placeholder: " + var_name);

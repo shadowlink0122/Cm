@@ -143,6 +143,21 @@ ast::TypePtr Parser::parse_type() {
         return arr_type;
     }
 
+    // 括弧で囲んだ型: 型文法を汎用的に合成できるようにする（(T)・(typeof(x))・(int*) 等を型が要求される任意の位置で許可する）
+    if (check(TokenKind::LParen)) {
+        advance();  // '(' を消費
+        auto inner = parse_type();
+        expect(TokenKind::RParen);
+        if (has_const && inner) {
+            inner->qualifiers.is_const = true;
+        }
+        // 閉じ括弧後のポインタサフィックス (T)* を許可する（スライス [] 等の後置は呼び出し側で処理する）
+        while (!in_operator_return_type_ && consume_if(TokenKind::Star)) {
+            inner = ast::make_pointer(std::move(inner));
+        }
+        return inner;
+    }
+
     // プリミティブ型
     ast::TypePtr base_type;
     switch (current().kind) {

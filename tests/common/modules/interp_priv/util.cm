@@ -1,0 +1,8 @@
+// 非exportヘルパーを補間プレースホルダ内でのみ参照する（プライベート改名__cm_priv_*が補間受理リストを通る回帰）
+int hidden_helper() {
+    return 99;
+}
+
+export string render() {
+    return "value={hidden_helper()}";
+}

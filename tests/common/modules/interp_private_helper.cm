@@ -1,0 +1,9 @@
+// 補間プレースホルダ内でのみ参照される非exportヘルパーが、importのプライベート改名（__cm_priv_*）後も解決される
+// （従来はプレースホルダ受理リストに先頭'_'が無く、文字列全体が未変換で素通りしていた）
+import std::io::println;
+import ./interp_priv/util::{render};
+
+int main() {
+    println(render());
+    return 0;
+}
