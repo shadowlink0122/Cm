@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、追加調査（R1〜R25）は**全25件の処置が完了**した（構文網羅バグ調査R1〜R14・バックエンド網羅バグ調査R15〜R20・ライブラリ・自動実装調査R21〜R25、全てarchive移動済み）。未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）のみである（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、追加調査（R1〜R25）は**全25件の処置が完了**した（構文網羅バグ調査R1〜R14・バックエンド網羅バグ調査R15〜R20・ライブラリ・自動実装調査R21〜R25、全てarchive移動済み）。未処置は「全体複雑度レビュー」のリファクタリング提案6件（8件中、配列HOFランタイム共通ソース化・型サイズ照会の一本化は実施済み）のみである（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -183,7 +183,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 - [メソッド解決の一元化](method-resolution-unification.md) — メソッド表キー計算が12箇所別実装・解決機構4系統・types/の全throw4件が内部エラー漏れ。正準キー関数＋resolve_method APIでQ1/Q4/Q5族を封止する（High）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
 - [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — 構造化import後も包含判定は正規表現識別子スキャン・出力はスパン消し込み+改名テキスト複製のまま。判定のAST化→出力のAST化の2段で座標ズレ（X5同根）と誤包含を解消する（Medium）
-- [型サイズ照会の一本化](layout-size-single-source.md) — サイズ実装が4系統（HIRの暫定256バイト・MIRのフィールド数×8見積もり・monoのフラット名依存・真実のlayout系）でsizeofが見積もりを答えうる。全照会をlayout API 1系統へ（Medium）
+- 型サイズ照会の一本化 — **実施済み**（[archive移動](../../archive/v0.17.0/layout-size-single-source.md)。実測でsizeof(Pair<char,int>)=16（正8）等の誤値がユーザーへ到達していた。HIRのStruct/Generic分岐へ型引数置換の実レイアウト計算を実装しフィールド数×8と暫定256を削除、MIR見積もりは`__`分割逆算ごとlayout_size委譲サンク化。見積もり実装0件に。sizeof_generic回帰マトリクス追加）
 - [derive自動実装の残存MIR生成の整理](auto-impl-generic-gaps-and-cleanup.md) — 源展開移行後も約2,970行のMIR直生成が残存（非ジェネリック分は死に体）。ジェネリックパスはSlice/Unionフィールド未対応で無言誤動作。削除→ギャップ封鎖→単一ソース化完遂の3段（Medium）
 - 配列HOFランタイムの共通ソース化 — **実施済み**（[archive移動](../../archive/v0.17.0/runtime-hof-common-source.md)。__builtin_array_*全54関数+ヘルパーをcommon/runtime_hof_core.inc（826行）へ抽出しCM_RT_*フックで両target包含（native 3,058→2,255行・wasm 2,888→2,129行）。wasm sort系のalloc失敗リーク解消・ソートのcm_qsort統一を含む。check_builtin_signatures.pyへ共通コア重複定義検査（111件）を追加し再発を機械防止。文字列フォーマット系はwasm SDS化まで非対象の既存判断を維持）
 

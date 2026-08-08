@@ -228,60 +228,8 @@ hir::TypePtr LoweringContext::resolve_type_param(const std::string& param_name) 
 
 // 型サイズを計算（sizeof_for_Tマーカー処理用）
 int64_t LoweringContext::calculate_type_size(const hir::TypePtr& type) const {
-    if (!type)
-        return 8;  // デフォルトはポインタサイズ
-
-    switch (type->kind) {
-        case hir::TypeKind::Bool:
-        case hir::TypeKind::Tiny:
-        case hir::TypeKind::UTiny:
-        case hir::TypeKind::Char:
-            return 1;
-        case hir::TypeKind::Short:
-        case hir::TypeKind::UShort:
-            return 2;
-        case hir::TypeKind::Int:
-        case hir::TypeKind::UInt:
-        case hir::TypeKind::Float:
-        case hir::TypeKind::UFloat:
-            return 4;
-        case hir::TypeKind::Long:
-        case hir::TypeKind::ULong:
-        case hir::TypeKind::Double:
-        case hir::TypeKind::UDouble:
-            return 8;
-        case hir::TypeKind::Pointer:
-        case hir::TypeKind::Reference:
-        case hir::TypeKind::String:
-            // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
-            return cm::target_pointer_size();
-        case hir::TypeKind::Struct: {
-            // 構造体定義を探してサイズを計算
-            if (struct_defs && struct_defs->count(type->name)) {
-                const auto* st = struct_defs->at(type->name);
-                // 各フィールドをポインタサイズで見積もり
-                int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
-                return size > 0 ? size : 8;
-            }
-            // マングリング名の場合、ベース名で検索
-            if (type->name.find("__") != std::string::npos) {
-                std::string base = type->name.substr(0, type->name.find("__"));
-                if (struct_defs && struct_defs->count(base)) {
-                    const auto* st = struct_defs->at(base);
-                    int64_t size = static_cast<int64_t>(st->fields.size()) * 8;
-                    return size > 0 ? size : 8;
-                }
-            }
-            return 8;
-        }
-        case hir::TypeKind::Array:
-            if (type->element_type && type->array_size.has_value()) {
-                return calculate_type_size(type->element_type) * type->array_size.value();
-            }
-            return 8;
-        default:
-            return 8;
-    }
+    // 型サイズ一本化: 見積もり実装（フィールド数×8・__ベース名逆算）を廃止し、真実のlayout_size 1系統へ委譲する
+    return layout_size(type);
 }
 
 // 変数を現在のスコープに登録
@@ -671,6 +619,7 @@ int64_t LoweringContext::layout_size(const hir::TypePtr& type) const {
             return align_to(4 + payload, 4);
         }
         case hir::TypeKind::Pointer:
+        case hir::TypeKind::Reference:
         case hir::TypeKind::String:
             // ポインタ幅はターゲット依存（wasm32/baremetal-armは4）
             return cm::target_pointer_size();
