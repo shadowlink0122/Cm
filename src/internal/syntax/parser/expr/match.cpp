@@ -107,8 +107,19 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
         // => (arrow)
         expect(TokenKind::Arrow);
 
-        // アームの本体: { で始まればブロック形式、それ以外は式形式
-        if (check(TokenKind::LBrace)) {
+        // アームの本体: { で始まればブロック形式、それ以外は式形式。
+        // ただし { ident : は無名構造体リテラル式として式形式へ回す（局所処理調査C4。従来は無条件でブロック化され、値アームの構造体リテラルがvoidブロックへ化けていた）。判定はprimaryの暗黙構造体リテラルと同じ先読み
+        bool brace_is_struct_literal = false;
+        if (!is_sv_platform_ && check(TokenKind::LBrace)) {
+            auto saved_pos = pos_;
+            advance();
+            if (check(TokenKind::Ident)) {
+                advance();
+                brace_is_struct_literal = check(TokenKind::Colon);
+            }
+            pos_ = saved_pos;
+        }
+        if (check(TokenKind::LBrace) && !brace_is_struct_literal) {
             // ブロック形式
             auto body = parse_block();
             arms.emplace_back(std::move(pattern), std::move(guard), std::move(body));

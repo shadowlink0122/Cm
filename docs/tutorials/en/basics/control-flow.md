@@ -90,6 +90,14 @@ string status = (age >= 20) ? "Adult" : "Minor";
 int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 ```
 
+Anonymous struct literals can be written in both branches (the type name is filled in from the expected type of the declaration, assignment, or argument).
+
+```cm
+struct Point { int x; int y; }
+
+Point p = cond ? {x: 1, y: 2} : {x: 3, y: 4};
+```
+
 ---
 
 ## while Loop

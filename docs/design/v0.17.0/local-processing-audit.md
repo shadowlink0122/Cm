@@ -40,7 +40,7 @@
 - **B4 [silent] `auto k = i as typeof(j); typeof(k)` が `<inferred>`**。値としてのキャストはネイティブ系では効くがJSでは解決されない（G2）。
 - 恒久対応には `ast::Type` に typeof の被演算式（または解決済み型）を保持させ、型チェッカで具体型へ解決する必要がある（[parenthesized-type-and-typeof-cast](parenthesized-type-and-typeof-cast.md) に既述）。
 
-## C. 期待型伝播の複製（透過ノードを降りない）
+## C. 期待型伝播の複製（透過ノードを降りない）【処置済み】
 
 `propagate_literal_expected_type` は `StructLiteralExpr`/`ArrayLiteralExpr` にしか降りず、期待型に対して**透過であるべき合成ノード**を扱わない。消費サイト個別パッチをAPI化した経緯があるが、以下が取り残されている。
 
@@ -48,6 +48,8 @@
 - **C2 [silent] ジェネリック関数の明示型引数が実引数の期待型に置換されない**。`Point p = id<Point>({x:1,y:2});` がネイティブ `2,0`・JS `undefined`（正 `1,2`）。自由関数の引数経路（`src/internal/types/checking/call/function.cpp:646` 付近）が未置換の仮引数型 `T` のまま `infer_type_expecting` を呼ぶ（静的メソッド経路は `substituted_param` で置換しているのと非対称）。
 - **C3 [reject] match のアーム値に期待型が伝播しない**。括弧付き無名構造体アームが `expected 'Point', got 'void'`。
 - **C4 [reject] 素の `{...}`/`[...]` リテラルが三項枝・matchアームでパースできない**（ブロック/添字と曖昧）。他位置では通るのに位置限定で失敗する。
+
+**処置記録（C1〜C4）**: `propagate_literal_expected_type` へ透過ノード分岐を追加し、三項の両枝とmatchの式形式アームへ構造体期待型を再帰伝播するようにした（`primary.cpp`）。C2は `infer_generic_call` の実引数推論を「明示型引数で仮引数型を置換→`infer_type_expecting`」の順へ変更（静的メソッド経路の `substituted_param` と同型、`generic.cpp`）。C4はパーサ2箇所——`?` エラー伝播演算子の三項判別ホワイトリストへ `[` と `{ ident :` 先読みを追加（`expr/postfix.cpp`）、matchアームの `=>` 直後 `{` を `{ ident :` 先読みで式形式へ分岐（`expr/match.cpp`）——で解消。配列期待型の三項/match伝播は、枝の配列リテラルへ動的スライス型を強制すると三項loweringの固定長前提と食い違い無診断で壊れるため対象外とし、従来どおり枝ごとの固定長型で検査する（サイズ不一致は明示診断のまま）。回帰テスト: `tests/common/structs/literal/anon-transparent-nodes.cm`。
 
 ## D. 文字列補間の制限された部分文法
 
@@ -108,7 +110,7 @@
 ## 推奨する統一の方向（優先度順）
 
 1. **[Critical] E系: 高階関数を `slice_dispatch.hpp` へ移行し、checkerに要素型ゲートを追加**（無診断の誤コンパイル/クラッシュを解消）。`sort`/`indexOf` が既にやっている汎用形へ揃える。
-2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。
+2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。→ **処置済み**（C節の処置記録参照）
 3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。
 4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。
 5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。

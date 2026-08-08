@@ -242,6 +242,16 @@ ast::ExprPtr Parser::parse_postfix() {
                     case TokenKind::KwMatch:
                         next_starts_expr = true;
                         break;
+                    // 配列リテラルの三項枝（cond ? [..] : [..]）。try演算子直後に添字[が続く形は括弧で書く（局所処理調査C4）
+                    case TokenKind::LBracket:
+                        next_starts_expr = true;
+                        break;
+                    // { ident : は無名構造体リテラルの三項枝（cond ? {x:..} : {x:..}）。ブロックと区別するためprimaryと同じ先読みで判定する（局所処理調査C4）
+                    case TokenKind::LBrace:
+                        next_starts_expr = pos_ + 3 < tokens_.size() &&
+                                           tokens_[pos_ + 2].kind == TokenKind::Ident &&
+                                           tokens_[pos_ + 3].kind == TokenKind::Colon;
+                        break;
                     default:
                         break;
                 }

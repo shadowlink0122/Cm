@@ -1,0 +1,29 @@
+// 期待型に透過な合成ノード（三項・match・ジェネリック実引数）越しの無名リテラル型付け確認
+import std::io::println;
+struct P { int x; int y; }
+<T> T id(T v) {
+    return v;
+}
+int main() {
+    bool c = true;
+    // 三項の両枝（素の無名リテラル）
+    P a = c ? {x: 1, y: 2} : {x: 3, y: 4};
+    println("{a.x} {a.y}");
+    // 三項のelse枝が選ばれる場合と括弧付きの枝
+    P b = !c ? ({x: 1, y: 2}) : ({x: 5, y: 6});
+    println("{b.x} {b.y}");
+    // matchの式形式アーム（素の無名リテラル）
+    int k = 2;
+    P m = match (k) {
+        1 => {x: 7, y: 8},
+        _ => {x: 9, y: 10},
+    };
+    println("{m.x} {m.y}");
+    // ジェネリック関数の明示型引数への無名リテラル
+    P g = id<P>({x: 11, y: 12});
+    println("{g.x} {g.y}");
+    // 三項をreturn/代入以外の消費サイト（関数引数）で使う
+    P h = id<P>(c ? {x: 13, y: 14} : {x: 15, y: 16});
+    println("{h.x} {h.y}");
+    return 0;
+}

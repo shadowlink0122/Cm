@@ -96,6 +96,14 @@ const int x = 5;
 const int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 ```
 
+両枝には無名構造体リテラルも書ける（宣言・代入・引数などの期待型から型名が補われる）。
+
+```cm
+struct Point { int x; int y; }
+
+Point p = cond ? {x: 1, y: 2} : {x: 3, y: 4};
+```
+
 ---
 
 ## while文

@@ -17,17 +17,36 @@ namespace cm {
 
 ast::TypePtr TypeChecker::infer_generic_call(ast::CallExpr& call, const std::string& func_name,
                                              const std::vector<std::string>& type_params) {
-    // 引数の型を推論
-    std::vector<ast::TypePtr> arg_types;
-    for (auto& arg : call.args) {
-        arg_types.push_back(infer_type(*arg));
-    }
-
     // シンボルテーブルから関数情報を取得
     auto sym = scopes_.current().lookup(func_name);
     if (!sym || !sym->is_function) {
         error(current_span_, i18n::msgf(i18n::MsgId::TcNotFunction, func_name));
         return ast::make_error();
+    }
+
+    // 明示型引数（id<Point>({...})等）が確定している場合は、仮引数型の型変数を実型引数へ置換した期待型で実引数を推論する（局所処理調査C2。静的メソッド経路のsubstituted_paramと同型）。
+    // 従来は未置換の仮引数型Tのまま期待型なしで推論され、無名構造体リテラルが型名不明のゼロblobへ落ちていた
+    std::vector<ast::TypePtr> explicit_args;
+    if (!call.inferred_type_args.empty()) {
+        for (const auto& param_name : type_params) {
+            auto it = call.inferred_type_args.find(param_name);
+            if (it == call.inferred_type_args.end() || !it->second) {
+                explicit_args.clear();
+                break;
+            }
+            explicit_args.push_back(it->second);
+        }
+    }
+
+    // 引数の型を推論
+    std::vector<ast::TypePtr> arg_types;
+    for (size_t i = 0; i < call.args.size(); ++i) {
+        ast::TypePtr expected;
+        if (!explicit_args.empty() && i < sym->param_types.size()) {
+            expected = substitute_generic_type(sym->param_types[i], type_params, explicit_args);
+        }
+        arg_types.push_back(expected ? infer_type_expecting(*call.args[i], expected)
+                                     : infer_type(*call.args[i]));
     }
 
     // 引数の数チェック（デフォルト引数を考慮）

@@ -83,6 +83,17 @@ int x = match (getv(21)) {
 
 Note: an expression-form match nested inside an arm's expression body cannot use a function call as its scrutinee (use a block-form arm and bind the call result to a variable first).
 
+Anonymous struct literals can be used as arm values (the type name is filled in from the expected type of the whole match). A `{` right after `=>` is parsed as a struct literal expression when it has the `{fieldName:` shape, and as a block body otherwise.
+
+```cm
+struct Point { int x; int y; }
+
+Point p = match (k) {
+    1 => {x: 1, y: 2},
+    _ => {x: 3, y: 4},
+};
+```
+
 ---
 
 ## Enum Patterns

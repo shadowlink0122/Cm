@@ -485,6 +485,28 @@ void TypeChecker::propagate_literal_expected_type(ast::Expr& expr, const ast::Ty
         }
         return;
     }
+    // 期待型に対して透過な合成ノードへ降りる（局所処理調査C系）。
+    // 三項の両枝とmatchの式形式アームは、その結果値がそのまま期待型の位置へ流れるため、無名リテラルの型名解決に期待型を引き継ぐ（従来はここで伝播が途切れ、無名リテラルが型不明のままゼロblob化していた）。
+    // 配列期待型は伝播しない: 枝の配列リテラルへ動的スライス型を強制すると三項loweringの固定長前提と食い違い無診断で壊れるため、従来どおり枝ごとの固定長型で検査する
+    if (resolved->kind == ast::TypeKind::Struct) {
+        if (auto* tern = expr.as<ast::TernaryExpr>()) {
+            if (tern->then_expr) {
+                propagate_literal_expected_type(*tern->then_expr, expected);
+            }
+            if (tern->else_expr) {
+                propagate_literal_expected_type(*tern->else_expr, expected);
+            }
+            return;
+        }
+        if (auto* match = expr.as<ast::MatchExpr>()) {
+            for (auto& arm : match->arms) {
+                if (!arm.is_block_form && arm.expr_body) {
+                    propagate_literal_expected_type(*arm.expr_body, expected);
+                }
+            }
+            return;
+        }
+    }
 }
 
 ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
