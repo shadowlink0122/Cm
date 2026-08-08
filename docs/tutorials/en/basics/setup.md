@@ -402,7 +402,7 @@ For cross-compilation or explicit architecture targeting. Usually auto-detection
 
 ### VS Code (Recommended)
 
-Installing the Cm VSCode extension provides syntax highlighting, hover information, go-to-definition, and file icons.
+Installing the Cm VSCode extension provides syntax highlighting, hover information, go-to-definition (powered by the bundled LSP server), and file icons.
 
 ```bash
 # 1. Install dependencies
@@ -422,7 +422,7 @@ code --install-extension cm-language-*.vsix
 |---------|-------------|
 | **Syntax highlighting** | Keywords, types, functions, string interpolation, preprocessor directives |
 | **Hover information** | Shows signatures and doc comments for functions, structs, enums, and methods |
-| **Go to Definition** | Jump to declarations with F12/Cmd+click (outline view and workspace symbol search are also supported) |
+| **Go to Definition** | Jump to declarations with F12/Cmd+click or the context menu (outline view and workspace symbol search are also supported) |
 | **File icons** | Displays the Cm icon for `.cm` files |
 | **Language configuration** | Bracket matching, folding, and indentation support |
 
