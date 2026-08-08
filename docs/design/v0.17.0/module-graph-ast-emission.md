@@ -46,3 +46,13 @@ module-system-structural-imports（archive済み）でimportのテキストイ�
 - 回帰: modules/interp_private_helper.cm（改名ヘルパーの補間経由解決）・strings/interpolation/underscore_placeholder.cm（先頭_識別子と戻り値文字列内R20演算子）。全13スイートPASS。
 
 **残り（本提案の本体）**: 第1段（包含判定のAST化＝regexスキャン置換。識別子ウォーカの網羅実装が必要で、走査漏れは未包含のコンパイルエラーとして顕在化する）・第2段（出力のAST化）。教訓: 受理/検出のホワイトリストが2系統3複製あり文字追加のたびに追従漏れする——第1段実施時に単一の述語へ統一すべき。
+## 実装記録（第1段・判定のAST化・2026-08-08）
+
+第1段（包含判定のAST化）を実施した。
+
+- 参照識別子の収集を、正規表現テキストスキャン（collect_identifiers+strip_for_scan）からパース済みASTのwalk（AstRefCollector）へ置き換えた。収集方針は従来と同じ「出現した識別子は全て包含候補」（過剰包含は無害・過少包含はリンク欠落で即顕在化）で、修飾名A::Bはセグメント分割、文字列リテラルは補間プレースホルダ内部のみを識別子走査する（strip_for_scanの文字列規則と同一）。関数はFunctionDecl（export宣言付き含む）を自関数のrefsへ、それ以外の宣言（struct/global/typedef/enum/interface/impl/macro・rootのmodule内部）はrest_refsへ収集し、Import/Export(List系)/非rootモジュール/FFI宣言名の除外規則も従来と一致させた（FFI宣言はシグネチャ型のみ収集）。
+- 包含クロージャの計算（include_function）は不変。CM_GRAPH_TEXT_SCAN=1で従来のテキストスキャンへフォールバックできる切り分け経路を残した。
+- 検証: 全13スイート一発PASS（600超のプログラム・libs全30モジュールのimportゲート・選択import/エイリアス/階層再export/namespace含む）で判定の同値性を実証した。ウォーカの走査漏れは未包含のコンパイルエラーとして即顕在化する性質を検証設計に用いた。
+- これによりstrip_for_scanの手書き字句処理（補間断片・エスケープの追従）への依存が包含判定から消え、字句仕様変更時の追従漏れバグ族を封じた。
+
+残り: 第2段（出力のAST化＝blank_lines・スパンerase・改名テキスト複製・namespaceテキスト包みの廃止とプリティプリント出力・元ソース座標の恒久保持）。テキストスキャン実装はフォールバックとして残置しており、第2段完了時に削除する。

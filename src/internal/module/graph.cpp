@@ -143,6 +143,435 @@ void collect_identifiers(const std::string& text, std::unordered_set<std::string
     }
 }
 
+// ==== 包含判定のAST化（module-graph-ast-emission 第1段） ====
+// 参照識別子をパース済みASTのwalkで収集する（従来の正規表現テキストスキャンcollect_identifiersを置換）。
+// 収集方針は従来スキャンと同じ「出現した識別子は全て包含候補」（過剰包含は無害・過少包含はリンク欠落で即顕在化）。
+// 修飾名A::Bはセグメント分割して両方を候補にし、文字列リテラルは補間プレースホルダ内部のみを識別子走査する
+struct AstRefCollector {
+    std::unordered_set<std::string>& out;
+
+    explicit AstRefCollector(std::unordered_set<std::string>& o) : out(o) {}
+
+    void add(const std::string& name) {
+        size_t pos = 0;
+        while (pos <= name.size()) {
+            size_t sep = name.find("::", pos);
+            std::string seg =
+                (sep == std::string::npos) ? name.substr(pos) : name.substr(pos, sep - pos);
+            if (!seg.empty()) {
+                out.insert(seg);
+            }
+            if (sep == std::string::npos) {
+                break;
+            }
+            pos = sep + 2;
+        }
+    }
+
+    // 文字列リテラル: 補間プレースホルダ{...}の内部のみを識別子走査する（strip_for_scanの文字列規則と同一）
+    void placeholders(const std::string& s) {
+        size_t i = 0;
+        while (i < s.size()) {
+            if (s[i] == '{' && i + 1 < s.size() && s[i + 1] == '{') {
+                i += 2;
+                continue;
+            }
+            if (s[i] == '{') {
+                size_t close = s.find('}', i + 1);
+                if (close == std::string::npos) {
+                    break;
+                }
+                collect_identifiers(s.substr(i + 1, close - i - 1), out);
+                i = close + 1;
+                continue;
+            }
+            ++i;
+        }
+    }
+
+    void type(const ast::TypePtr& t) {
+        if (!t) {
+            return;
+        }
+        add(t->name);
+        for (const auto& a : t->type_args) {
+            type(a);
+        }
+        type(t->element_type);
+        type(t->return_type);
+        for (const auto& pt : t->param_types) {
+            type(pt);
+        }
+        if (t->kind == ast::TypeKind::Union) {
+            for (const auto& v : ast::union_variant_types(t)) {
+                type(v);
+            }
+        }
+    }
+
+    void attrs(const std::vector<ast::AttributeNode>& list) {
+        for (const auto& a : list) {
+            add(a.name);
+            for (const auto& arg : a.args) {
+                add(arg);
+            }
+        }
+    }
+
+    void pattern(const ast::Pattern* p) {
+        if (!p) {
+            return;
+        }
+        expr(p->value.get());
+        expr(p->range_start.get());
+        expr(p->range_end.get());
+        for (const auto& op : p->or_patterns) {
+            pattern(op.get());
+        }
+    }
+
+    void match_pattern(const ast::MatchPattern* p) {
+        if (!p) {
+            return;
+        }
+        expr(p->value.get());
+        expr(p->range_start.get());
+        expr(p->range_end.get());
+        add(p->enum_variant);
+        type(p->type_pattern);
+        for (const auto& op : p->or_patterns) {
+            match_pattern(op.get());
+        }
+    }
+
+    void expr(const ast::Expr* e) {
+        if (!e) {
+            return;
+        }
+        if (const auto* lit = e->as<ast::LiteralExpr>()) {
+            if (lit->is_string()) {
+                placeholders(std::get<std::string>(lit->value));
+            }
+            return;
+        }
+        if (const auto* id = e->as<ast::IdentExpr>()) {
+            add(id->name);
+            return;
+        }
+        if (const auto* bin = e->as<ast::BinaryExpr>()) {
+            expr(bin->left.get());
+            expr(bin->right.get());
+            return;
+        }
+        if (const auto* un = e->as<ast::UnaryExpr>()) {
+            expr(un->operand.get());
+            return;
+        }
+        if (const auto* call = e->as<ast::CallExpr>()) {
+            expr(call->callee.get());
+            for (const auto& a : call->args) {
+                expr(a.get());
+            }
+            return;
+        }
+        if (const auto* idx = e->as<ast::IndexExpr>()) {
+            expr(idx->object.get());
+            expr(idx->index.get());
+            return;
+        }
+        if (const auto* sl = e->as<ast::SliceExpr>()) {
+            expr(sl->object.get());
+            expr(sl->start.get());
+            expr(sl->end.get());
+            expr(sl->step.get());
+            return;
+        }
+        if (const auto* mem = e->as<ast::MemberExpr>()) {
+            expr(mem->object.get());
+            add(mem->member);
+            for (const auto& a : mem->args) {
+                expr(a.get());
+            }
+            return;
+        }
+        if (const auto* tern = e->as<ast::TernaryExpr>()) {
+            expr(tern->condition.get());
+            expr(tern->then_expr.get());
+            expr(tern->else_expr.get());
+            return;
+        }
+        if (const auto* nw = e->as<ast::NewExpr>()) {
+            type(nw->type);
+            for (const auto& a : nw->args) {
+                expr(a.get());
+            }
+            return;
+        }
+        if (const auto* sz = e->as<ast::SizeofExpr>()) {
+            type(sz->target_type);
+            expr(sz->target_expr.get());
+            return;
+        }
+        if (const auto* to = e->as<ast::TypeofExpr>()) {
+            expr(to->target_expr.get());
+            return;
+        }
+        if (const auto* al = e->as<ast::AlignofExpr>()) {
+            type(al->target_type);
+            return;
+        }
+        if (const auto* tn = e->as<ast::TypenameOfExpr>()) {
+            type(tn->target_type);
+            expr(tn->target_expr.get());
+            return;
+        }
+        if (const auto* slit = e->as<ast::StructLiteralExpr>()) {
+            add(slit->type_name);
+            for (const auto& f : slit->fields) {
+                expr(f.value.get());
+            }
+            return;
+        }
+        if (const auto* alit = e->as<ast::ArrayLiteralExpr>()) {
+            for (const auto& el : alit->elements) {
+                expr(el.get());
+            }
+            return;
+        }
+        if (const auto* lam = e->as<ast::LambdaExpr>()) {
+            for (const auto& pr : lam->params) {
+                type(pr.type);
+                expr(pr.default_value.get());
+            }
+            type(lam->return_type);
+            if (lam->is_expr_body()) {
+                expr(std::get<ast::ExprPtr>(lam->body).get());
+            } else {
+                for (const auto& s : std::get<std::vector<ast::StmtPtr>>(lam->body)) {
+                    stmt(s.get());
+                }
+            }
+            return;
+        }
+        if (const auto* m = e->as<ast::MatchExpr>()) {
+            expr(m->scrutinee.get());
+            for (const auto& arm : m->arms) {
+                match_pattern(arm.pattern.get());
+                expr(arm.guard.get());
+                expr(arm.expr_body.get());
+                for (const auto& s : arm.block_body) {
+                    stmt(s.get());
+                }
+            }
+            return;
+        }
+        if (const auto* c = e->as<ast::CastExpr>()) {
+            expr(c->operand.get());
+            type(c->target_type);
+            return;
+        }
+        if (const auto* mv = e->as<ast::MoveExpr>()) {
+            expr(mv->operand.get());
+            return;
+        }
+        if (const auto* aw = e->as<ast::AwaitExpr>()) {
+            expr(aw->operand.get());
+            return;
+        }
+    }
+
+    void stmt(const ast::Stmt* s) {
+        if (!s) {
+            return;
+        }
+        if (const auto* let = const_cast<ast::Stmt*>(s)->as<ast::LetStmt>()) {
+            type(let->type);
+            expr(let->init.get());
+            for (const auto& a : let->ctor_args) {
+                expr(a.get());
+            }
+            return;
+        }
+        if (const auto* es = const_cast<ast::Stmt*>(s)->as<ast::ExprStmt>()) {
+            expr(es->expr.get());
+            return;
+        }
+        if (const auto* ret = const_cast<ast::Stmt*>(s)->as<ast::ReturnStmt>()) {
+            expr(ret->value.get());
+            return;
+        }
+        if (const auto* ifs = const_cast<ast::Stmt*>(s)->as<ast::IfStmt>()) {
+            expr(ifs->condition.get());
+            for (const auto& st : ifs->then_block) {
+                stmt(st.get());
+            }
+            for (const auto& st : ifs->else_block) {
+                stmt(st.get());
+            }
+            return;
+        }
+        if (const auto* fs = const_cast<ast::Stmt*>(s)->as<ast::ForStmt>()) {
+            stmt(fs->init.get());
+            expr(fs->condition.get());
+            expr(fs->update.get());
+            for (const auto& st : fs->body) {
+                stmt(st.get());
+            }
+            return;
+        }
+        if (const auto* fin = const_cast<ast::Stmt*>(s)->as<ast::ForInStmt>()) {
+            expr(fin->iterable.get());
+            for (const auto& st : fin->body) {
+                stmt(st.get());
+            }
+            return;
+        }
+        if (const auto* ws = const_cast<ast::Stmt*>(s)->as<ast::WhileStmt>()) {
+            expr(ws->condition.get());
+            for (const auto& st : ws->body) {
+                stmt(st.get());
+            }
+            return;
+        }
+        if (const auto* blk = const_cast<ast::Stmt*>(s)->as<ast::BlockStmt>()) {
+            for (const auto& st : blk->stmts) {
+                stmt(st.get());
+            }
+            return;
+        }
+        if (const auto* sw = const_cast<ast::Stmt*>(s)->as<ast::SwitchStmt>()) {
+            expr(sw->expr.get());
+            for (const auto& c : sw->cases) {
+                pattern(c.pattern.get());
+                for (const auto& st : c.stmts) {
+                    stmt(st.get());
+                }
+            }
+            return;
+        }
+        if (const auto* df = const_cast<ast::Stmt*>(s)->as<ast::DeferStmt>()) {
+            stmt(df->body.get());
+            return;
+        }
+        if (const auto* mb = const_cast<ast::Stmt*>(s)->as<ast::MustBlockStmt>()) {
+            for (const auto& st : mb->body) {
+                stmt(st.get());
+            }
+            return;
+        }
+    }
+
+    void func(const ast::FunctionDecl& f) {
+        for (const auto& pr : f.params) {
+            type(pr.type);
+            expr(pr.default_value.get());
+        }
+        type(f.return_type);
+        for (const auto& gp : f.generic_params_v2) {
+            for (const auto& c : gp.constraints) {
+                add(c);
+            }
+            type(gp.const_type);
+        }
+        attrs(f.attributes);
+        for (const auto& st : f.body) {
+            stmt(st.get());
+        }
+    }
+
+    // 関数以外の宣言（rest_refs用）。ImportDecl/ExportDecl(List系)/FFI use等の除外は呼び出し側で行う
+    void decl(ast::Decl& d) {
+        if (const auto* st = d.as<ast::StructDecl>()) {
+            for (const auto& f : st->fields) {
+                type(f.type);
+                expr(f.default_value.get());
+            }
+            for (const auto& gp : st->generic_params_v2) {
+                for (const auto& c : gp.constraints) {
+                    add(c);
+                }
+                type(gp.const_type);
+            }
+            for (const auto& ai : st->auto_impls) {
+                add(ai);
+            }
+            attrs(st->attributes);
+            return;
+        }
+        if (const auto* gv = d.as<ast::GlobalVarDecl>()) {
+            type(gv->type);
+            expr(gv->init_expr.get());
+            return;
+        }
+        if (const auto* td = d.as<ast::TypedefDecl>()) {
+            type(td->type);
+            return;
+        }
+        if (const auto* en = d.as<ast::EnumDecl>()) {
+            for (const auto& m : en->members) {
+                for (const auto& f : m.fields) {
+                    type(f.second);
+                }
+            }
+            return;
+        }
+        if (const auto* ifc = d.as<ast::InterfaceDecl>()) {
+            for (const auto& m : ifc->methods) {
+                for (const auto& pr : m.params) {
+                    type(pr.type);
+                }
+                type(m.return_type);
+            }
+            for (const auto& op : ifc->operators) {
+                for (const auto& pr : op.params) {
+                    type(pr.type);
+                }
+                type(op.return_type);
+            }
+            return;
+        }
+        if (const auto* im = d.as<ast::ImplDecl>()) {
+            add(im->interface_name);
+            type(im->target_type);
+            for (const auto& ta : im->interface_type_args) {
+                type(ta);
+            }
+            for (const auto& m : im->methods) {
+                func(*m);
+            }
+            for (const auto& c : im->constructors) {
+                func(*c);
+            }
+            if (im->destructor) {
+                func(*im->destructor);
+            }
+            for (const auto& op : im->operators) {
+                for (const auto& pr : op->params) {
+                    type(pr.type);
+                    expr(pr.default_value.get());
+                }
+                type(op->return_type);
+                for (const auto& st2 : op->body) {
+                    stmt(st2.get());
+                }
+            }
+            return;
+        }
+        if (const auto* mc = d.as<ast::MacroDecl>()) {
+            type(mc->type);
+            expr(mc->value.get());
+            for (const auto& st2 : mc->body) {
+                stmt(st2.get());
+            }
+            return;
+        }
+        if (const auto* fn = d.as<ast::FunctionDecl>()) {
+            func(*fn);
+            return;
+        }
+    }
+};
+
 // import行のディレクトリワイルドカード「/*」は字句解析でブロックコメント開始と衝突するため、
 // パース前にセンチネルセグメントへ置換する（行数は保存され、graph側で"*"相当として解釈する）
 constexpr const char* kDirWildcardSentinel = "__cm_dir_wildcard__";
@@ -608,13 +1037,14 @@ struct Builder {
             }
         }
 
-        // 参照集合: 各関数本文と、関数以外の残余テキスト（impl・グローバル等）
-        for (auto& [name, fi] : info.functions) {
-            const size_t s = std::min(fi.span_start, info.source.size());
-            const size_t e = std::min(fi.span_end, info.source.size());
-            collect_identifiers(info.source.substr(s, e - s), fi.refs);
-        }
-        {
+        // 参照集合: 各関数と、関数以外の宣言（impl・グローバル等）。既定はAST walk（module-graph-ast-emission 第1段）。
+        // CM_GRAPH_TEXT_SCAN=1 で従来の正規表現テキストスキャンへフォールバックできる（挙動比較・切り分け用）
+        if (std::getenv("CM_GRAPH_TEXT_SCAN")) {
+            for (auto& [name, fi] : info.functions) {
+                const size_t s = std::min(fi.span_start, info.source.size());
+                const size_t e = std::min(fi.span_end, info.source.size());
+                collect_identifiers(info.source.substr(s, e - s), fi.refs);
+            }
             std::string rest = info.source;
             // FFI宣言ブロックは残余参照から除外する（宣言名そのものを使用参照と誤認しないため）
             for (const auto& [span, names] : info.ffi_blocks) {
@@ -628,6 +1058,77 @@ struct Builder {
                 }
             }
             collect_identifiers(rest, info.rest_refs);
+        } else {
+            for (const auto& decl : program.declarations) {
+                if (!decl) {
+                    continue;
+                }
+                // 関数（export宣言付き含む）は自関数のrefsへ、それ以外はrest_refsへ収集する
+                if (const auto* fn = decl->as<ast::FunctionDecl>()) {
+                    auto fit = info.functions.find(fn->name);
+                    if (fit != info.functions.end()) {
+                        AstRefCollector rc(fit->second.refs);
+                        rc.func(*fn);
+                    } else {
+                        AstRefCollector rc(info.rest_refs);
+                        rc.func(*fn);
+                    }
+                    continue;
+                }
+                if (const auto* exp = decl->as<ast::ExportDecl>()) {
+                    // List/ReExportは空行化済み（辺として処理）。宣言付きexportのみ中身を収集する
+                    if (exp->declaration) {
+                        if (const auto* fn2 = exp->declaration->as<ast::FunctionDecl>()) {
+                            auto fit = info.functions.find(fn2->name);
+                            AstRefCollector rc(fit != info.functions.end() ? fit->second.refs
+                                                                           : info.rest_refs);
+                            rc.func(*fn2);
+                        } else {
+                            AstRefCollector rc(info.rest_refs);
+                            rc.decl(*exp->declaration);
+                        }
+                    }
+                    continue;
+                }
+                if (decl->as<ast::ImportDecl>()) {
+                    continue;  // 辺として処理済み（テキストも空行化済み）
+                }
+                if (const auto* use = decl->as<ast::UseDecl>()) {
+                    // FFI宣言ブロックの宣言名は使用参照と誤認しない（従来のffi_blocks除外と同じ）。
+                    // 宣言のシグネチャ型のみ参照として収集する
+                    for (const auto& f : use->ffi_funcs) {
+                        AstRefCollector rc(info.rest_refs);
+                        rc.type(f.return_type);
+                        for (const auto& pr : f.params) {
+                            rc.type(pr.second);
+                        }
+                    }
+                    continue;
+                }
+                if (const auto* mod = decl->as<ast::ModuleDecl>()) {
+                    // 非rootのmodule宣言は空行化済み（namespace包み経路が別処理）。rootのみ中身を収集する
+                    if (is_root) {
+                        std::function<void(const ast::ModuleDecl&)> walk_mod =
+                            [&](const ast::ModuleDecl& md) {
+                                for (const auto& inner : md.declarations) {
+                                    if (!inner) {
+                                        continue;
+                                    }
+                                    if (const auto* nested = inner->as<ast::ModuleDecl>()) {
+                                        walk_mod(*nested);
+                                        continue;
+                                    }
+                                    AstRefCollector rc(info.rest_refs);
+                                    rc.decl(*inner);
+                                }
+                            };
+                        walk_mod(*mod);
+                    }
+                    continue;
+                }
+                AstRefCollector rc(info.rest_refs);
+                rc.decl(*decl);
+            }
         }
 
         // 依存を先に処理
