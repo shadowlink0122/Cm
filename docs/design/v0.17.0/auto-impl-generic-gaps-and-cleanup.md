@@ -18,7 +18,7 @@ derive-as-source-expansion（archive済み）で非ジェネリック構造体�
 ## リファクタリング方針
 
 1. **第1段（削除）**: 非ジェネリック用MIR生成器の本体を削除し、expand_derivesが処理しなかったderiveは（無言でMIR生成に落とすのではなく）診断で停止する。到達しないコード約1,500行の削減と、「どちらの生成系が動いたのか」の曖昧さの解消。
-2. **第2段（ギャップ封鎖・実施済み）**: R21修正（[derive-generic-and-field-gaps.md](../../archive/v0.17.0/derive-generic-and-field-gaps.md)）で、特殊化時の置換後フィールド型検証（validate_derive_instantiation）によりSlice/Union/タグ付きenum型引数を型検査診断で停止するようにした。あわせてジェネリックのClone/Hash/Debug/Displayメソッド解決の配線と値enumフィールドのint意味論対応も実施済み。MIRパス自体へのSlice/Union対応（診断でなく動作）は第3段の単一ソース化に委ねる。
+2. **第2段（ギャップ封鎖・実施済み）**: R21修正（[derive-generic-and-field-gaps.md](../../archive/v0.17.0/interfaces-derive/derive-generic-and-field-gaps.md)）で、特殊化時の置換後フィールド型検証（validate_derive_instantiation）によりSlice/Union/タグ付きenum型引数を型検査診断で停止するようにした。あわせてジェネリックのClone/Hash/Debug/Displayメソッド解決の配線と値enumフィールドのint意味論対応も実施済み。MIRパス自体へのSlice/Union対応（診断でなく動作）は第3段の単一ソース化に委ねる。
 3. **第3段（単一ソース化の完遂）**: monomorphization-typed-instantiationの残課題であるジェネリック演算子implのモノモーフ化登録を実装し、ジェネリック構造体も単一のジェネリックimplソース合成→特殊化の経路へ載せて、*_for_monomorphized系と特例群（auto_impl_info_等）を全廃する。
 
 ## テスト計画

@@ -154,6 +154,6 @@
 
 ## 関連ドキュメント
 
-- [001_jit_compiler_overview.md](./001_jit_compiler_overview.md) - 概要設計
-- [002_jit_compiler_detailed_design.md](./002_jit_compiler_detailed_design.md) - 詳細設計
-- [003_jit_runtime_functions.md](./003_jit_runtime_functions.md) - ランタイム関数一覧
+- [001_jit_compiler_overview.md](001_jit_compiler_overview.md) - 概要設計
+- [002_jit_compiler_detailed_design.md](002_jit_compiler_detailed_design.md) - 詳細設計
+- [003_jit_runtime_functions.md](003_jit_runtime_functions.md) - ランタイム関数一覧

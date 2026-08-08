@@ -86,8 +86,8 @@ addr = builder->CreateGEP(arrayType, addr, {zero, indexVal});
 
 ## 関連ドキュメント
 
-- [006_stack_array_flattening_architecture.md](./006_stack_array_flattening_architecture.md)
-- [007_array_flattening_optimization.md](./007_array_flattening_optimization.md)
-- [008_array_flattening_implementation_plan.md](./008_array_flattening_implementation_plan.md)
-- [009_slice_optimization_design.md](./009_slice_optimization_design.md)
-- [010_stack_array_summary.md](./010_stack_array_summary.md)
+- [006_stack_array_flattening_architecture.md](006_stack_array_flattening_architecture.md)
+- [007_array_flattening_optimization.md](007_array_flattening_optimization.md)
+- [008_array_flattening_implementation_plan.md](008_array_flattening_implementation_plan.md)
+- [009_slice_optimization_design.md](009_slice_optimization_design.md)
+- [010_stack_array_summary.md](010_stack_array_summary.md)
