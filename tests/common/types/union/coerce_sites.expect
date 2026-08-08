@@ -1,4 +1,4 @@
-ret=true
+ret=true v=5
 arg=true def=true defv=77
 let=true v=42
 assign=true v=hello
@@ -6,3 +6,5 @@ field=true
 member=true v=world
 member2=true v=7
 push0=true push1=true
+dbl=true v=1
+slice_is=true str_is=false

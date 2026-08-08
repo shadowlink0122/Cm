@@ -1,9 +1,11 @@
 // 変換統一ドライバ第1段の回帰: 全値消費サイト（let/単純代入/メンバ代入/return/構造体フィールド/push/引数/デフォルト引数）の
 // ユニオン構築がcoerce_to_expected 1系統で挿入され、タグ+ペイロードが全経路で一致する
-// 注意: 複数のユニオン関数を含むファイルでのユニオンreturnペイロードはnative/jitの既存ミスコンパイル（誤読・jsは正値）があるためタグのみ検証する（既知バグはcoercion-driver-unification.mdの実装記録を参照）
+// is（check_only）とasのGVN混同ミスコンパイル修正後は、is/as併用のreturnペイロード・数値変種正規化・isスライス変種も全経路一致を検証する
 import std::io::println;
 
 typedef IntOrStr = int | string;
+typedef DblOrStr = double | string;
+typedef SliceOrStr = int[] | string;
 
 struct Holder {
     IntOrStr v;
@@ -18,9 +20,9 @@ void take_union(IntOrStr u, IntOrStr d = 77) {
 }
 
 int main() {
-    // return（上記の既知バグのためタグのみ検証）
+    // return（isとasの併用がGVNで混同されない）
     const IntOrStr r = ret_union(5);
-    println("ret={r is int}");
+    println("ret={r is int} v={r as int}");
     // 引数・デフォルト引数
     take_union(9 as IntOrStr);
     // let初期化
@@ -41,5 +43,13 @@ int main() {
     xs.push(10);
     xs.push("s");
     println("push0={xs[0] is int} push1={xs[1] is string}");
+    // 唯一の数値変種への正規化（int→double変種。coerce_to_expectedの再帰ディスパッチ）
+    DblOrStr d = 1;
+    println("dbl={d is double} v={d as double}");
+    // スライス変種のis検査（is/asの型右辺のスライスサフィックス対応）
+    int[] dyn = [];
+    dyn.push(5);
+    SliceOrStr s = dyn;
+    println("slice_is={s is int[]} str_is={s is string}");
     return 0;
 }

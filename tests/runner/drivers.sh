@@ -2,6 +2,14 @@
 # unified_test_runner.sh から source される実行ドライバモジュール。
 # 順次実行（run_tests_sequential）・並列実行（run_tests_parallel）・並列ワーカー（run_parallel_test）を提供する。
 
+# テスト本体か判定する。期待値/エラー/スキップ等の伴走ファイル（.cmと同basename）を持つ.cmのみをテスト対象とし、
+# import用ヘルパーモジュール（サブフォルダ内で伴走ファイルを持たない.cm）はテストとして実行しない。
+is_test_entry() {
+    local base="${1%.cm}"
+    [ -f "$base.expect" ] || [ -f "$base.error" ] || [ -f "$base.skip" ] || \
+    [ -f "$base.timeout" ] || ls "$base".expect.* >/dev/null 2>&1 || ls "$base".error.* >/dev/null 2>&1
+}
+
 # 順次実行モード
 run_tests_sequential() {
     for entry in $CATEGORIES; do
@@ -23,9 +31,9 @@ run_tests_sequential() {
         log "Testing category: $platform_dir/$category"
         log "----------------------------------------"
 
-        # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）
+        # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）。ヘルパーモジュールは除外
         while IFS= read -r test_file; do
-            if [ -f "$test_file" ]; then
+            if [ -f "$test_file" ] && is_test_entry "$test_file"; then
                 ((TOTAL++))
                 run_single_test "$test_file"
             fi
@@ -52,9 +60,9 @@ run_tests_parallel() {
             category_dir="$PROGRAMS_DIR/$platform_dir/$category"
         fi
         if [ -d "$category_dir" ]; then
-            # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）
+            # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）。ヘルパーモジュールは除外
             while IFS= read -r test_file; do
-                if [ -f "$test_file" ]; then
+                if [ -f "$test_file" ] && is_test_entry "$test_file"; then
                     test_files+=("$test_file")
                 fi
             done < <(find "$category_dir" -type f -name '*.cm' | sort)
