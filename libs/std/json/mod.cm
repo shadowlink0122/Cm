@@ -15,6 +15,8 @@
 
 module std.json;
 
+import std::strings::from_bytes;
+
 // JSON値の種別。
 export enum JsonKind {
     Null,
@@ -50,7 +52,11 @@ int[] nd_next_sibling = [];
 int node_count = 0;
 
 // パーサ状態（モジュールグローバル）。
+// R2: 走査はコードポイント単位に統一する。posはコードポイント添字で、len()/substring()と同単位。
+// cpsはjson_parseで一度だけ実体化するコードポイント列（peekのO(1)化。len()の毎回呼び出しはO(n)走査になるため長さもキャッシュする）
 string src = "";
+uint[] cps = [];
+int src_cp_len = 0;
 int pos = 0;
 bool had_error = false;
 
@@ -96,11 +102,16 @@ void append_child(int parent, int child) {
 // ---- 字句操作 ----
 
 // 現在位置の文字を返す（終端では '\0'）。
+// R2: 非ASCIIコードポイントはJSONの構造文字と衝突しない番兵0x80を返す（内容の取り出しはrun切り出しのsubstringが担うため、peekは構造判定にのみ使う）
 char peek() {
-    if (pos >= src.len() as int) {
+    if (pos >= src_cp_len) {
         return '\0';
     }
-    return src.charAt(pos as uint);
+    const int cp = cps[pos] as int;
+    if (cp <= 0x7F) {
+        return cp as char;
+    }
+    return 0x80 as char;
 }
 
 // 1文字進める。
@@ -110,7 +121,7 @@ void advance() {
 
 // 空白（スペース・タブ・改行・復帰）を読み飛ばす。
 void skip_ws() {
-    while (pos < src.len() as int) {
+    while (pos < src_cp_len) {
         char c = peek();
         if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
             advance();
@@ -152,20 +163,26 @@ int read_hex4() {
     return value;
 }
 
-// コードポイントをUTF-8バイト列としてoutへ追記して返す。
-string utf8_append(string out, int cp) {
+// コードポイント1つを文字列へ変換する。
+// R2: UTF-8バイト列を組み立ててfrom_bytesで復号する（バイトをcharとして連結する方式はjs/tsバックエンドでUTF-16文字扱いになり文字化けするため、全バックエンドで同じ復号経路を通す）
+string cp_to_string(int cp) {
+    utiny[] b = [];
     if (cp < 0x80) {
-        return out + (cp as char);
+        b.push(cp as utiny);
+    } else if (cp < 0x800) {
+        b.push((0xC0 | (cp / 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
+    } else if (cp < 0x10000) {
+        b.push((0xE0 | (cp / 4096)) as utiny);
+        b.push((0x80 | ((cp / 64) % 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
+    } else {
+        b.push((0xF0 | (cp / 262144)) as utiny);
+        b.push((0x80 | ((cp / 4096) % 64)) as utiny);
+        b.push((0x80 | ((cp / 64) % 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
     }
-    if (cp < 0x800) {
-        return out + ((0xC0 | (cp / 64)) as char) + ((0x80 | (cp % 64)) as char);
-    }
-    if (cp < 0x10000) {
-        return out + ((0xE0 | (cp / 4096)) as char) + ((0x80 | ((cp / 64) % 64)) as char) +
-            ((0x80 | (cp % 64)) as char);
-    }
-    return out + ((0xF0 | (cp / 262144)) as char) + ((0x80 | ((cp / 4096) % 64)) as char) +
-        ((0x80 | ((cp / 64) % 64)) as char) + ((0x80 | (cp % 64)) as char);
+    return from_bytes(b);
 }
 
 // バックスラッシュ直後の1文字エスケープを対応する文字列へ変換する（\u以外）。未知のエスケープはエラー。
@@ -200,16 +217,20 @@ string decode_escape(char e) {
 }
 
 // 文字列リテラルを読み、内容（エスケープ解決済み）を返す。開始の " 位置にいる前提。
+// R2: 通常文字はrun切り出し（コードポイント添字のsubstring）でまとめて取り出す（非ASCIIをchar経由で1文字ずつ運ぶとバックエンド間で表現が割れるため）
 string parse_string_raw() {
     string out = "";
     advance();  // 開始の " を消費
-    while (pos < src.len() as int) {
+    int run_start = pos;
+    while (pos < src_cp_len) {
         char c = peek();
         if (c == '"') {
+            out = out + src.substring(run_start, pos);
             advance();
             return out;
         }
         if (c == '\\') {
+            out = out + src.substring(run_start, pos);
             advance();
             char e = peek();
             if (e == 'u') {
@@ -243,7 +264,7 @@ string parse_string_raw() {
                     had_error = true;
                     return out;
                 }
-                out = utf8_append(out, cp);
+                out = out + cp_to_string(cp);
             } else {
                 out = out + decode_escape(e);
                 if (had_error) {
@@ -251,8 +272,8 @@ string parse_string_raw() {
                 }
                 advance();
             }
+            run_start = pos;
         } else {
-            out = out + c;
             advance();
         }
     }
@@ -270,7 +291,7 @@ double parse_number_raw() {
 
     double int_part = 0.0;
     bool has_digit = false;
-    while (pos < src.len() as int) {
+    while (pos < src_cp_len) {
         char c = peek();
         if (c >= '0' && c <= '9') {
             int digit = (c as int) - ('0' as int);
@@ -291,7 +312,7 @@ double parse_number_raw() {
     if (peek() == '.') {
         advance();
         double scale = 0.1;
-        while (pos < src.len() as int) {
+        while (pos < src_cp_len) {
             char c = peek();
             if (c >= '0' && c <= '9') {
                 int digit = (c as int) - ('0' as int);
@@ -317,7 +338,7 @@ double parse_number_raw() {
             advance();
         }
         int exp = 0;
-        while (pos < src.len() as int) {
+        while (pos < src_cp_len) {
             char c = peek();
             if (c >= '0' && c <= '9') {
                 exp = exp * 10 + ((c as int) - ('0' as int));
@@ -346,7 +367,7 @@ double parse_number_raw() {
 // 指定文字列にマッチすれば消費して true。
 bool match_literal(string lit) {
     int n = lit.len() as int;
-    if (pos + n > src.len() as int) {
+    if (pos + n > src_cp_len) {
         return false;
     }
     string sub = src.substring(pos, pos + n);
@@ -366,7 +387,7 @@ int parse_array() {
         advance();
         return node;
     }
-    while (pos < src.len() as int) {
+    while (pos < src_cp_len) {
         skip_ws();
         int child = parse_value();
         append_child(node, child);
@@ -395,7 +416,7 @@ int parse_object() {
         advance();
         return node;
     }
-    while (pos < src.len() as int) {
+    while (pos < src_cp_len) {
         skip_ws();
         if (peek() != '"') {
             had_error = true;
@@ -471,12 +492,14 @@ int parse_value() {
 export int json_parse(string text) {
     node_count = 0;
     src = text;
+    cps = text.chars();
+    src_cp_len = cps.len() as int;
     pos = 0;
     had_error = false;
     int root = parse_value();
     skip_ws();
     // R1: 末尾ゴミ（{"a":1}xyz）・複数値（1 2）は受理しない
-    if (pos < src.len() as int) {
+    if (pos < src_cp_len) {
         had_error = true;
     }
     if (had_error) {
@@ -557,28 +580,34 @@ export bool json_object_has(int node, string key) {
 }
 
 // 文字列をJSONエスケープする。
+// R2: コードポイント添字で走査し、エスケープ対象（全てASCII）以外はrun切り出しのsubstringでまとめて通す（非ASCII安全）
 string escape_json(string s) {
+    uint[] k = s.chars();
+    int n = k.len() as int;
     string out = "";
     int i = 0;
-    int n = s.len() as int;
+    int run_start = 0;
     while (i < n) {
-        char c = s.charAt(i as uint);
-        if (c == '"') {
-            out = out + "\\\"";
-        } else if (c == '\\') {
-            out = out + "\\\\";
-        } else if (c == '\n') {
-            out = out + "\\n";
-        } else if (c == '\t') {
-            out = out + "\\t";
-        } else if (c == '\r') {
-            out = out + "\\r";
-        } else {
-            out = out + c;
+        const int c = k[i] as int;
+        string esc = "";
+        if (c == '"' as int) {
+            esc = "\\\"";
+        } else if (c == '\\' as int) {
+            esc = "\\\\";
+        } else if (c == '\n' as int) {
+            esc = "\\n";
+        } else if (c == '\t' as int) {
+            esc = "\\t";
+        } else if (c == '\r' as int) {
+            esc = "\\r";
+        }
+        if (esc != "") {
+            out = out + s.substring(run_start, i) + esc;
+            run_start = i + 1;
         }
         i = i + 1;
     }
-    return out;
+    return out + s.substring(run_start, n);
 }
 
 // ノードをJSON文字列へ直列化する（コンパクト表現）。

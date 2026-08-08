@@ -116,3 +116,23 @@ void decodes_unicode_escapes() {
     assert(json_parse("\"\\u12G4\"") < 0, "invalid hex rejected");
     assert(json_parse("\"\\u12\"") < 0, "short hex rejected");
 }
+
+// R2回帰: 非ASCII生文字列のパース・キー参照・ラウンドトリップ（len()/charAt()の単位分裂で従来native/jit/wasmは-1で全滅していた）
+#[test]
+void parses_non_ascii_strings() {
+    assert(json_string(json_parse("\"日本語\"")) == "日本語", "raw non-ascii string");
+    assert(
+        json_string(json_parse("\"改行\\nと\\\"引用\\\"と日本語\"")) == "改行\nと\"引用\"と日本語",
+        "escapes mixed with non-ascii"
+    );
+    const int root = json_parse("{\"名前\":\"Cm言語\",\"tags\":[\"日本語\",\"emoji😀\"]}");
+    assert(root >= 0, "non-ascii object parses");
+    assert(json_string(json_object_get(root, "名前")) == "Cm言語", "non-ascii key lookup");
+    assert(
+        json_string(json_array_get(json_object_get(root, "tags"), 1)) == "emoji😀",
+        "astral element"
+    );
+    const string text = json_stringify(root);
+    const int again = json_parse(text);
+    assert(json_string(json_object_get(again, "名前")) == "Cm言語", "non-ascii roundtrip");
+}

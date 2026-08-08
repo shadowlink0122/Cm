@@ -38,6 +38,7 @@ int main() {
 - Indices of `substring()` / `slice()` are code-point based (negative indices count from the end). `codepoint_at(i)` returns the Unicode scalar value at code-point index `i` as `uint` (0 when out of range)
 - `chars()` returns the code points as a `uint[]` slice; iterate with `for (cp in s.chars())`
 - `indexOf()` returns a code-point index (`"あいうえお".indexOf("うえ")` is 2; -1 when not found)
-- `charAt()` / `at()` remain byte-based access (the byte-level API paired with `byte_len()`)
+- `charAt(i)` / `at(i)` are **codepoint-indexed** element access (same unit as `len()`; changed from byte units in v0.17.0). The `char` return type is one byte, so only ASCII values are returned faithfully; non-ASCII codepoints and out-of-range return `'\0'`. Use `codepoint_at(i)` when you need non-ASCII values
+- Raw byte access is `byte_at(i)` (the byte-series API paired with `byte_len()`; returns the byte value 0..255 as `int` at a byte index, 0 when out of range; added in v0.17.0)
 - The JS backend counts surrogate pairs (such as emoji) as one code point
 - To build a string from raw bytes, use `std::strings::from_bytes(utiny[])` (byte sequences containing embedded NUL (0x00) are preserved; v0.17.0)

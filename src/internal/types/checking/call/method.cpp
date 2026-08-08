@@ -811,6 +811,19 @@ ast::TypePtr TypeChecker::infer_string_method(ast::MemberExpr& member, ast::Type
         }
         return ast::make_uint();
     }
+    if (member.member == "byte_at") {
+        // R2: バイト系アクセス（byte_lenと対）。バイト添字の生バイト値（0..255・int）を返す
+        if (member.args.size() != 1) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakes1Argument, member.member));
+        } else {
+            auto arg_type = infer_type(*member.args[0]);
+            if (!arg_type->is_integer()) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcStringIndexMustInteger, member.member));
+            }
+        }
+        return ast::make_int();
+    }
     if (member.member == "charAt" || member.member == "at") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msgf(i18n::MsgId::TcStringTakes1Argument, member.member));

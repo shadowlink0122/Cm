@@ -1,13 +1,13 @@
 # UTF-8コードポイント処理（native/jit）
 
-Cmの文字列はUTF-8バイト列であり、ユーザー向けの長さ・添字APIはコードポイント単位、バイト単位のアクセスは`byte_len()`/`charAt()`という別名のAPIに分離されている。`len()`は継続バイト（0b10xxxxxx）を数えないO(n)スキャンでコードポイント数を返し、`substring`/`slice`/`indexOf`/`codepoint_at`/`chars()`は全てコードポイント添字で統一されているため、マルチバイト文字の途中で切れた壊れたUTF-8が生成されることはない。
+Cmの文字列はUTF-8バイト列であり、ユーザー向けの長さ・添字APIはコードポイント単位、バイト単位のアクセスは`byte_len()`/`byte_at()`という別名のAPIに分離されている（R2: `charAt`/`at`もコードポイント添字。ASCIIのみ`char`で値を返し非ASCIIは`'\0'`）。`len()`は継続バイト（0b10xxxxxx）を数えないO(n)スキャンでコードポイント数を返し、`substring`/`slice`/`indexOf`/`codepoint_at`/`chars()`は全てコードポイント添字で統一されているため、マルチバイト文字の途中で切れた壊れたUTF-8が生成されることはない。
 
 ## 概要
 
 - `s.len()`（別名`size`/`length`）はHIR loweringで`__builtin_string_codepoint_len`へ写像され、コードポイント数を返す（src/internal/hir/lowering/expr_member.cpp:777-783）。
 - `s.byte_len()`は`__builtin_string_len`へ写像され、バイト数を返す（expr_member.cpp:785-792）。ヘッダ付き文字列ならO(1)である（[representation.md](representation.md)参照）。
 - コードポイント添字API: `substring(start, end)`/`slice`、`indexOf(sub)`の戻り値、`codepoint_at(i)`、`chars()`。
-- バイト添字API: `charAt(i)`/`at(i)`（1バイトを`char`で返す。expr_member.cpp:812-822）。`byte_len()`と対になるバイトアクセスとして意図的に温存されている。
+- バイト添字API: `byte_at(i)`（生バイト0..255を`int`で返す。R2で追加）。`byte_len()`と対になるバイトアクセス。`charAt(i)`/`at(i)`はコードポイント添字でASCIIのみ`char`値を返す（R2でバイト添字から変更。従来はlen()との単位分裂で非ASCII走査が全滅していた）。
 - UTF-8デコードは先頭バイトのビットパターン判定（1〜4バイト列）のみで行い、不正なバイト列でも停止しない防御的な実装になっている。
 
 ## データ構造とアルゴリズム
@@ -75,7 +75,7 @@ static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
 
 ### バイトAPIとの分離
 
-`charAt`/`at`/`first`/`last`はバイト単位のアクセスAPIとして残る（runtime_format.c:1019-1039）。UTF-8マルチバイト文字に対しては構成バイトの1つを返すだけなので、テキスト処理には`codepoint_at`/`chars()`を使い、`charAt`はバイナリ的なアクセス（`byte_len`と対）に限定するのが使い分けである。
+`charAt`/`at`はコードポイント添字でASCIIのみ`char`値を返す（R2。非ASCIIコードポイントは`'\0'`）。バイナリ的なアクセスは`byte_at`（`byte_len`と対）を使う。`first`/`last`は先頭/末尾バイトを返すバイト系のままであり、非ASCII先頭文字にはコードポイント系（`codepoint_at(0)`等）を使う。
 
 ## 実装箇所
 
@@ -90,7 +90,7 @@ static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
 ## 落とし穴とケア
 
 - 防ぐバグのクラス: バイト添字での切り出しによる壊れたUTF-8の生成（マルチバイト文字の途中で切れる）、バックエンド間の添字単位不一致（バイト単位とUTF-16単位で同じプログラムの観測が食い違う）、`indexOf`の戻り値を`substring`へ渡すと位置がずれる単位混在バグ。
-- 維持すべき不変条件: 「添字・長さを返す/受けるユーザーAPIはコードポイント単位、バイト単位は`byte_len`/`charAt`系の明示名のみ」という二層構造を崩さない。新しい文字列APIを追加するときは、どちらの層に属するかを決めてから`cm_cp_index_to_byte`または`cm_string_byte_len`を使い分けること（1つのAPI内で両単位を混ぜない）。
+- 維持すべき不変条件: 「添字・長さを返す/受けるユーザーAPIはコードポイント単位、バイト単位は`byte_len`/`byte_at`のbyte_接頭辞名のみ」という二層構造を崩さない。新しい文字列APIを追加するときは、どちらの層に属するかを決めてから`cm_cp_index_to_byte`または`cm_string_byte_len`を使い分けること（1つのAPI内で両単位を混ぜない）。
 - 走査境界は必ず`cm_string_byte_len`（ヘッダ由来）を使う。NUL終端で走査を打ち切ると埋め込みNULを含む文字列で添字解決が壊れる（codepoint_len・cm_cp_index_to_byteは既にこの規約に従っている）。
 - UTF-8デコードは不正列で停止せず0や近傍境界へ丸める防御的動作とする。ランタイムはユーザー入力由来の任意バイト列を受けるため、assertやクラッシュで落ちてはならない。
 - `split(s, "")`のような全文字分割は`substring(i, i+1)`のO(n)呼び出しを繰り返すためO(n²)になり得る。コードポイント列が必要なだけなら`chars()`の方が線形である。

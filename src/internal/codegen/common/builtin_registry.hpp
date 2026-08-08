@@ -404,6 +404,7 @@ inline constexpr BuiltinSig kBuiltinSigs[] = {
     {"__builtin_slice_get_i64", nullptr, TypeTag::I64, {TypeTag::Ptr, TypeTag::I64}, 2, false},
     {"__builtin_slice_get_i8", nullptr, TypeTag::I8, {TypeTag::Ptr, TypeTag::I64}, 2, false},
     {"__builtin_slice_get_ptr", nullptr, TypeTag::Ptr, {TypeTag::Ptr, TypeTag::I64}, 2, false},
+    {"__builtin_string_byte_at", nullptr, TypeTag::I32, {TypeTag::Ptr, TypeTag::I64}, 2, false},
     {"__builtin_string_charAt", nullptr, TypeTag::I8, {TypeTag::Ptr, TypeTag::I64}, 2, false},
     {"__builtin_string_chars", nullptr, TypeTag::Ptr, {TypeTag::Ptr}, 1, false},
     {"__builtin_string_codepoint_at",

@@ -1,0 +1,36 @@
+//! platform: !sv
+// R2回帰: charAt/atのコードポイント添字化（len()と同単位。ASCIIのみ値を返し非ASCIIコードポイントは'\0'）とバイト系byte_at（byte_lenと対・生バイト0..255）の全経路一致
+import std::io::println;
+
+int main() {
+    const string s = "a日b😀c";
+    println("len={s.len()} blen={s.byte_len()}");
+    // コードポイント系: charAt/atはASCIIを忠実に返し、非ASCIIは0（値が要る場合はcodepoint_at）
+    println("c0={s.charAt(0)} c2={s.at(2)} c4={s.charAt(4)}");
+    println("c1_is_nul={s.charAt(1) as int == 0} c3_is_nul={s.at(3) as int == 0}");
+    println("cp1={s.codepoint_at(1)} cp3={s.codepoint_at(3)}");
+    // バイト系: byte_at(i)はUTF-8バイト添字の生バイト値（範囲外は0）
+    println("b0={s.byte_at(0)} b1={s.byte_at(1)} b4={s.byte_at(4)} oob={s.byte_at(999)}");
+    // len()+charAtの同単位走査: ASCII文字の個数を数える
+    int ascii_count = 0;
+    int i = 0;
+    while (i < s.len() as int) {
+        if (s.charAt(i) as int != 0) {
+            ascii_count = ascii_count + 1;
+        }
+        i = i + 1;
+    }
+    println("ascii_count={ascii_count}");
+    // byte_len()+byte_atの同単位走査: UTF-8継続バイト（0b10xxxxxx）の個数
+    int cont = 0;
+    int j = 0;
+    while (j < s.byte_len() as int) {
+        const int b = s.byte_at(j);
+        if (b >= 128 && b < 192) {
+            cont = cont + 1;
+        }
+        j = j + 1;
+    }
+    println("cont_bytes={cont}");
+    return 0;
+}

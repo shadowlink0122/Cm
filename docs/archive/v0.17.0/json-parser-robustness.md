@@ -42,5 +42,5 @@
 3. **バグ3（\uXXXXの実デコード）**: `\uXXXX`を16進4桁として読みUTF-8バイト列へ実エンコードする（1〜3バイト+サロゲートペアの4バイト対応）。不正16進・桁不足・対を成さないサロゲート・未知のエスケープ（`\x`等）は`had_error`で`-1`を返す。
 4. **併発修正（cm testモードのグローバル初期化欠落）**: 修正検証中に、`cm test`（#[test]関数を直接JITエントリで実行）ではグローバル変数の非定数初期化子（`int[] xs = [];`等）がmainエントリにしか注入されず実行されない汎用的な穴を発見した（スライスグローバルがnullのままでlibテストのみSIGSEGV）。MIR loweringの初期化列注入条件を「main または #[test]属性付き関数」へ拡張して修正した（src/internal/mir/lowering/impl.cpp。テストは関数ごとに独立JITのため各エントリで初期化が必要）。
 5. **回帰**: libs/std/json/mod_test.cmへ3バグの回帰テスト（旧1024境界跨ぎ・拒否系・\uデコード/サロゲートペア/不正系）を追加し`cm test`10件通過。バックエンド横断はtests/common/std/json_robustness.cm（ASCII範囲）でjit/llvm/llvm-wasm/jsの出力一致を確認した。
-6. **既知の制約（R2連動）**: 非ASCIIコードポイントのデコード結果はバイトレベルでは全バックエンド正しいが、jsバックエンドは文字列モデルがUTF-16でバイト単位連結が表示上化ける（[string-codepoint-byte-api-split.md](../../design/v0.17.0/string-codepoint-byte-api-split.md)の単位分裂と同根）。R2の解決時にjsの非ASCII表示も一致する。
+6. **既知の制約（R2連動）**: 非ASCIIコードポイントのデコードは[string-codepoint-byte-api-split.md](string-codepoint-byte-api-split.md)（R2）で解決済み——\u復号はfrom_bytes経由の全バックエンド共通経路になり、jsの非ASCII表示も一致する。
 

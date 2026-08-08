@@ -1,0 +1,37 @@
+//! platform: !sv
+// R2回帰: std::jsonの非ASCII対応（len()/charAt()の単位分裂で従来native/jit/wasmはjson_parseが-1で全滅、jsのみ成功のバックエンド分岐だった）
+// 走査をコードポイント単位へ統一（peekはchars()実体化のO(1)参照・内容はrun切り出しsubstring・\uはfrom_bytes復号）した後の全経路一致を固定する
+import std::io::println;
+import std::json::{
+    json_parse,
+    json_string,
+    json_stringify,
+    json_object_get,
+    json_array_get,
+    json_array_len
+};
+
+int main() {
+    // 非ASCII文字列のパース（従来native/jit/wasmは-1で全滅していた）
+    const int r1 = json_parse("\"日本語\"");
+    println("r1={r1 >= 0} val={json_string(r1)}");
+    // \uエスケープ（BMP・サロゲートペア）
+    const int r3 = json_parse("\"\\u65e5\\u672c\\ud83d\\ude00\"");
+    println("r3={json_string(r3)}");
+    // エスケープと非ASCIIの混在
+    const int r5 = json_parse("\"改行\\nと\\\"引用\\\"と日本語\"");
+    println("r5={json_string(r5)}");
+    // キー・値・配列の混在（アリーナは1度に1パースのため、このノード群の検証をまとめて行う）
+    const int r2 = json_parse("{\"名前\":\"Cm言語\",\"tags\":[\"日本語\",\"emoji😀\"],\"ok\":true}");
+    const int name = json_object_get(r2, "名前");
+    println("name={json_string(name)}");
+    const int tags = json_object_get(r2, "tags");
+    println("tags={json_array_len(tags)} t0={json_string(json_array_get(tags, 0))} t1={json_string(json_array_get(tags, 1))}");
+    // 直列化（非ASCIIはそのまま・エスケープは復元）
+    const string text = json_stringify(r2);
+    println("rt={text}");
+    // ラウンドトリップ
+    const int r6 = json_parse(text);
+    println("rt2={json_string(json_object_get(r6, \"名前\"))}");
+    return 0;
+}

@@ -17,7 +17,7 @@ int main() {
     string str = "Hello, World!";
 
     int len = str.len();
-    char first = str.charAt(0);
+    char first = str.charAt(0)  // コードポイント添字（ASCIIのみ値を返す。生バイトはbyte_at）;
     string sub1 = str.substring(0, 5);
     int pos = str.indexOf("World");
     string upper = str.toUpperCase();

@@ -294,8 +294,14 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "(([..." + argStrs[0] + "][Number(" + argStrs[1] + ")] ?? \"\\0\").codePointAt(0))";
     }
     if (name == "__builtin_string_charAt" && argStrs.size() >= 2) {
-        // 添字がlong系変数だとBigIntが渡り charCodeAt(BigInt) がTypeErrorになるためNumber化する（H5）
-        return argStrs[0] + ".charCodeAt(Number(" + argStrs[1] + "))";
+        // R2: charAt/atはコードポイント添字（len()と同単位）。ASCII（<=0x7F）のみ値を返しそれ以外は0（従来のcharCodeAtはUTF-16単位でnative/wasmのバイト単位とも分裂していた）。long添字のBigIntはNumber化（H5）
+        return "((cp) => (cp === undefined || cp > 0x7F ? 0 : cp))(([..." + argStrs[0] +
+               "][Number(" + argStrs[1] + ")] ?? \"\\0\").codePointAt(0))";
+    }
+    if (name == "__builtin_string_byte_at" && argStrs.size() >= 2) {
+        // R2: バイト系アクセス（byte_lenと対）。UTF-8バイト添字の生バイト値（0..255）、範囲外は0
+        return "(((new TextEncoder().encode(" + argStrs[0] + "))[Number(" + argStrs[1] +
+               ")]) ?? 0)";
     }
     if (name == "__builtin_string_substring" && argStrs.size() >= 3) {
         return "__cm_str_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";

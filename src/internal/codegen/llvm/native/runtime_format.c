@@ -1017,13 +1017,21 @@ size_t __builtin_string_codepoint_len(const char* str) {
     return count;
 }
 
+uint32_t __builtin_string_codepoint_at(const char* str, int64_t index);
+
+// R2: charAt/atはlen()と同じコードポイント添字の要素アクセス。charで忠実に表現できるASCII（<=0x7F）のみ値を返し、それ以外のコードポイント・範囲外は'\0'（値が必要な場合はcodepoint_at、生バイトはbyte_at）
 char __builtin_string_charAt(const char* str, int64_t index) {
+    uint32_t cp = __builtin_string_codepoint_at(str, index);
+    return (cp <= 0x7F) ? (char)cp : '\0';
+}
+
+// R2: バイト系アクセス（byte_lenと対）。バイト添字の生バイト値（0..255）を返し、範囲外は0
+int32_t __builtin_string_byte_at(const char* str, int64_t index) {
     if (!str || index < 0)
-        return '\0';
-    size_t len = cm_strlen_impl(str);
-    if ((size_t)index >= len)
-        return '\0';
-    return str[index];
+        return 0;
+    if ((size_t)index >= cm_string_byte_len(str))
+        return 0;
+    return (int32_t)(unsigned char)str[index];
 }
 
 char __builtin_string_first(const char* str) {

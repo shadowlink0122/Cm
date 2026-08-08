@@ -502,7 +502,9 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 }
                 // 成功ブロックに続行
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
-            } else if (func_name == "__builtin_string_charAt") {
+            } else if (func_name == "__builtin_string_charAt" ||
+                       func_name == "__builtin_string_byte_at") {
+                // R2: SVの文字列はASCIIバイト配列でバイト==コードポイントのため、byte_atはcharAtと同一の添字アクセスとして生成する
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
