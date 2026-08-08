@@ -48,6 +48,8 @@ ufloat uf = 2.5;      // 32bit non-negative
 udouble ud = 10.0;    // 64bit non-negative
 ```
 
+Assigning a negative literal to `ufloat`/`udouble` produces a warning (an error with `--strict`). Operations that become negative at runtime are not checked, so validate values where a non-negative guarantee is required.
+
 ### Other Types
 
 ```cm

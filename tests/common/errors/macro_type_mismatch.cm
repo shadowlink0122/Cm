@@ -1,0 +1,6 @@
+// R10: マクロの宣言型と初期化子型の不一致は診断される（従来はcheckを素通りしLLVM検証エラー/js黙殺実行に分裂していた）
+macro int X = "str";
+int main() {
+    println(X);
+    return 0;
+}

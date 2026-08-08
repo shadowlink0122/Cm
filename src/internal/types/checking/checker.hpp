@@ -206,6 +206,8 @@ class TypeChecker {
     bool check_type_constraints(const std::string& type_name,
                                 const std::vector<std::string>& constraints);
     bool is_valid_type(ast::TypePtr type);
+    // R10: constジェネリックパラメータ（<N: const int>）は実体化未実装のため宣言時に明示診断で拒否する
+    void reject_const_generic_params(const std::vector<ast::GenericParam>& params, Span span);
 
     // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
     // 代入先がLiteralUnion型の場合、代入する値が許容リテラルに含まれるかチェック

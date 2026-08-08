@@ -1,6 +1,6 @@
 # R11: 修飾子の未実装・黙殺（constexpr・inline・volatile・ufloat/udouble）
 
-**ステータス:** 未修正（構文網羅バグ調査で検出）
+**ステータス:** 修正済み（構文網羅バグ調査で検出）
 **重大度:** Medium（constexpr壊れた診断・ufloat黙殺）/ Low（inline/volatile）
 
 レクサに予約語として存在するが実装が伴っていない修飾子群。CANONICAL_SPECやチュートリアルに記載があるものは仕様乖離、黙殺されるものは誤用の温床になる。
@@ -33,3 +33,15 @@
 ## テスト計画
 
 各修飾子について「実装するなら動作テスト、未実装なら専用診断のエラーテスト」を用意し、`Expected type`のような無関係な汎用エラーやnullptr由来の壊れた診断を撲滅する。ufloatの負値代入・負演算の診断テスト。
+## 実装記録（2026-08-08）
+
+4件とも処置した。方針は「実装できるものは実装（inline）、当面実装しないものは専用診断で黙殺・壊れた診断をやめる（constexpr変数・volatile）、警告で明示（constexpr関数・ufloat負値）」。
+
+- C1 constexpr: 変数は`parse_constexpr`のnullptr返しをやめ、`PsConstexprVarUnsupported`の専用診断を出しつつconst宣言として回復するようにした（後続の無関係な構文エラー連鎖が消滅）。ローカル位置（`parse_stmt`）でも同診断。関数は`FunctionDecl::is_constexpr`フラグを新設して受理し、checkerが`TcConstexprFunctionTreatedAsRegular`警告で「通常関数扱い・コンパイル時評価未実装」を明示する。
+- C2 inline: `is_inline`フラグをAST→HIR（`HirFunction`）→MIR（`MirFunction`）→LLVM（`convertFunctionSignature`の`InlineHint`属性）へ伝搬するようにした。IRで`attributes #0 = { inlinehint }`を確認済み。CANONICAL_SPEC 8章の`#inline`ディレクティブ記載はキーワード形式`inline`へ一本化した（ディレクティブは未実装のまま記載だけが残っていた）。
+- C3 volatile: パーサへ消費箇所を追加し（トップレベル2箇所+ローカル）、`PsVolatileUnsupported`で拒否するようにした。メッセージにnative::sync atomicsへの誘導を含める（R25のspin-waitヒントと整合）。
+- C5 ufloat/udouble: `check_numeric_conversion_policy`の先頭で負リテラル（単項マイナス1段剥がし）の代入/初期化/returnを`TcNegativeValueUnsignedFloat`で診断するようにした（Z5と同じ運用: 通常は警告・--strictでエラー昇格）。実行時に負へ転じる演算は検査対象外で、チュートリアルに制限を明記した。
+
+テスト: `tests/common/errors/{constexpr_var_reject,volatile_reject}.cm`。inlineはCM_DUMP_IR=1でinlinehint属性を目視確認。
+
+残課題: constexprのコンパイル時評価実装、volatileの意味論実装（R25のatomic誘導で当面代替）、ufloatの演算結果検査（静的には不可能、実行時検査の要否は設計判断）。

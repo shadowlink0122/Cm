@@ -84,6 +84,7 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->return_type = func.return_type;
     hir_func->is_export = func.visibility == ast::Visibility::Export;
     hir_func->is_extern = func.is_extern;  // externフラグを伝播
+    hir_func->is_inline = func.is_inline;  // R11: inlineフラグを伝播（従来はASTで消えていた）
     hir_func->is_async = func.is_async;    // asyncフラグを伝播
     hir_func->is_always = func.is_always;  // alwaysフラグを伝播
     // always_kind を伝搬（AST→HIR: enum値をintでキャスト）

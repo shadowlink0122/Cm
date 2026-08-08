@@ -1,16 +1,12 @@
+// R10: constジェネリックパラメータは値引数での実体化が未実装のため、宣言時に専用診断で拒否される（従来は宣言のみ無警告で受理され、使用箇所で無関係な構文エラーに化けていた）
 import std::io::println;
 
-// const generics パーステスト
-// 新しい構文: <N: const int> 形式
-
-// 定数パラメータを持つ構造体
 struct Buffer<T, SIZE: const int> {
     T* data;
     int len;
 }
 
 int main() {
-    println("const generics parse test - new syntax");
-
+    println("should not compile");
     return 0;
 }

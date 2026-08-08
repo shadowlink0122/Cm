@@ -1579,6 +1579,26 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcImplicitSignConversion
     {"Implicit conversion from '{0}' to '{1}' changes the sign interpretation; use an explicit cast 'as {1}'",
      "'{0}' から '{1}' への暗黙変換は符号の解釈を変えます。明示キャスト 'as {1}' を使用してください"},
+    // TcUndefinedTypeVariable
+    {"Undefined type: '{0}' for variable '{1}'", "未定義の型: 変数 '{1}' の '{0}'"},
+    // TcMacroInitTypeMismatch
+    {"Type mismatch in macro '{0}': declared type is '{1}' but initializer has type '{2}'",
+     "マクロ '{0}' の型不一致: 宣言型 '{1}' に対し初期化子の型は '{2}' です"},
+    // TcConstGenericUnsupported
+    {"const generic parameter '{0}' is not supported yet; use a macro or const value instead",
+     "constジェネリックパラメータ '{0}' は未対応です。macroまたはconst値を使用してください"},
+    // TcConstexprFunctionTreatedAsRegular
+    {"constexpr function '{0}' is treated as a regular function (compile-time evaluation is not implemented)",
+     "constexpr関数 '{0}' は通常関数として扱われます（コンパイル時評価は未実装）"},
+    // TcNegativeValueUnsignedFloat
+    {"Negative value assigned to unsigned floating-point type '{0}'",
+     "符号なし浮動小数型 '{0}' へ負値を代入しています"},
+    // PsConstexprVarUnsupported
+    {"constexpr variables are not supported yet; use 'const'",
+     "constexpr変数は未対応です。'const' を使用してください"},
+    // PsVolatileUnsupported
+    {"'volatile' is not supported yet; for cross-thread shared variables use native::sync atomics",
+     "'volatile' は未対応です。スレッド間共有変数にはnative::syncのatomicを使用してください"},
 };
 // clang-format on
 

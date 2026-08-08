@@ -440,6 +440,7 @@ struct MirFunction {
     bool is_export = false;    // エクスポートされているか
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
+    bool is_inline = false;    // inline修飾子（LLVMのinlinehint属性へ伝搬する）
     bool is_async = false;     // async関数（JSバックエンド用）
     bool is_always = false;  // always修飾子（SVバックエンド用: always_ff/always_comb）
     // SVバックエンド: always ブロックの種別

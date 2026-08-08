@@ -187,6 +187,24 @@ void check_score(int score) {
 }
 ```
 
+### 数値リテラル・範囲パターン
+
+数値リテラルは負数も直接パターンに書けます（v0.17.0で対応）。範囲パターンは`...`（三点）で両端を含みます。
+
+```cm
+string classify(int x) {
+    match (x) {
+        -1 => { return "minus one"; }
+        -10...-5 => { return "low range"; }
+        0 => { return "zero"; }
+        1...5 => { return "small"; }
+        _ => { return "other"; }
+    }
+}
+```
+
+全armが`return`する網羅的なmatch（`_`あり、またはenum全variant被覆）は関数のreturn網羅解析で終端と認識されるため、match後にダミーのreturnを書く必要はありません。
+
 ---
 
 ## 変数束縛パターン

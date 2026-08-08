@@ -343,8 +343,8 @@ void bench_sort() {
     // ベンチマークコード
 }
 
-#inline
-int square(int x) {
+// inline修飾子はキーワード形式（LLVMのinlinehint属性としてコード生成へ伝搬する）
+inline int square(int x) {
     return x * x;
 }
 

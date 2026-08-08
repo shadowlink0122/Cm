@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3・R4・R5・R6・R7・R8・R9修正済み・archive移動で6件、バックエンド網羅バグ調査はR15〜R20全件修正済み、ライブラリ・自動実装調査はR21〜R25全件修正済み）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1・R3〜R12修正済み・archive移動で残3件（R2・R13・R14）、バックエンド網羅バグ調査はR15〜R20全件修正済み、ライブラリ・自動実装調査はR21〜R25全件修正済み）である（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -57,9 +57,9 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 - R7: 属性の検証レジストリ — **修正済み**（[archive移動](../../archive/v0.17.0/attribute-validation-registry.md)。checkerの検証パスで3値分類を実装: 未知・タイポ属性=警告/--strictエラー、既知未実装（bench/optimize/inline/cfg）=専用診断、#[deprecated]=呼び出しサイト警告として実装昇格。#[target]未知名の意味反転を許可リスト検証で診断化、#[inline]の予約語パース特例、AttributeNode.spanで診断位置を属性自身に。cfg条件評価の実装はR13の領分として残置）
 - R8: デフォルト引数での前引数参照が無診断でゼロ値 — **修正済み・方針1（診断拒否）を採用**（[archive移動](../../archive/v0.17.0/default-arg-prev-param-zero.md)。デフォルト引数はパラメータ束縛前に呼び出し側で評価される仕様のためC++同様にパラメータ参照を拒否。check_default_param_refsで宣言時に式を再帰走査し関数・implメソッド両経路で診断（自己参照・後方参照も検出）。エラーテスト3本+i18n E2E+正常系回帰を追加、チュートリアルへ制約を明記）
 - R9: stdlibの出荷不良 — **修正済み**（[archive移動](../../archive/v0.17.0/stdlib-shipping-defects.md)。std::iterはrangeオーバーロードのデフォルト引数化+range_to・デリファレンス修正・Range::iter()のfor-in対応で復旧。Vector/HashMap/Queueはstd::mem経由へ置換しカスタムアロケータを通す。std::io入力再exportはmodule graphの選択的再export辿り（組み込みI/O名のみ素通し）で解決。掃引で発見した同類4件——std::coreのusize typedef衝突とabs多重定義・std.core.asyncの予約語パス（std.core.timeへ改名+runtime_time.c新設）・native::mathのfloat接尾辞と11組オーバーロード・std::memのヘッダ不一致——も同時修正し、libs全mod.cmのimportゲートをtest-libsへ常設）
-- [R10: 型検査の黙殺穴](checker-silent-holes.md) — **Medium**: 未定義型の変数宣言が無診断で実行まで通る・型不一致マクロ（`macro int X = "str";`）がcheck素通りでLLVM内部エラー/js黙殺の三分裂・const generic宣言が無警告受理されるが実体化手段が存在しない（半黙殺）
-- [R11: 修飾子の未実装・黙殺](modifier-implementation-gaps.md) — **Medium/Low**: `constexpr`変数がパーサTODOのnullptr返しで壊れた診断・`inline`は無警告黙殺（IR不変）・`volatile`はパーサ未対応・`ufloat`/`udouble`のunsigned語義が未実装で負値も無診断
-- [R12: matchの負数パターン不可・網羅matchのreturn漏れ誤検知](match-pattern-and-flow-gaps.md) — **Medium**: matchパターンに負数リテラル（`-1 =>`・`-5...-1`）が書けない。全arm returnの網羅matchに「falls off the end」を誤検知し--strictでビルド阻害
+- R10: 型検査の黙殺穴 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-silent-holes.md)。変数宣言の型名をis_valid_typeで検証（未定義型を宣言時に診断）、マクロの宣言型と初期化子型をtypes_compatibleで照合（LLVM内部エラー/js黙殺の三分裂を消滅）、constジェネリックパラメータを全宣言種の登録時に専用診断で拒否（半黙殺をやめ既存テストはエラーテスト化）。const genericの実体化実装は将来課題）
+- R11: 修飾子の未実装・黙殺 — **修正済み**（[archive移動](../../archive/v0.17.0/modifier-implementation-gaps.md)。inlineはAST→HIR→MIR→LLVMのinlinehint属性へ実伝搬（実装）、constexpr変数はnullptr返しをやめ専用診断+const回復、constexpr関数は通常関数扱いを警告で明示、volatileはパーサ消費+atomic誘導つき専用診断、ufloat/udouble負リテラルはZ5運用（警告・--strictエラー）で診断。CANONICAL_SPECの#inlineはキーワード形式へ一本化）
+- R12: matchの負数パターン不可・網羅matchのreturn漏れ誤検知 — **修正済み**（[archive移動](../../archive/v0.17.0/match-pattern-and-flow-gaps.md)。負数リテラル/負数範囲を符号反転LiteralExprへ畳み込んで受理（下流変更ゼロ）、return網羅解析へmatch文を追加しワイルドカード/変数束縛のASTフォールバック+網羅性検査確定フラグの2系統で網羅を認識（enum全variant被覆で`_`無しも対応、--strict阻害を解消））
 - [R13: 文法書・仕様書に定義があるが未実装の構文](unimplemented-documented-syntax.md) — **Low**: タプル・参照型`T&`・演算子`[]`/`()`・overloadメソッド（仕様書は実装済みと例示するがパース不能+黙殺）・IFデフォルト実装・可変長引数・デフォルト型引数・エスケープ識別子・数値サフィックスが未実装（診断ありだが仕様書と乖離）。実装かドキュメント追従かの判断待ち一覧
 - [R14: 構文・プリプロセッサ診断の品質](syntax-error-diagnostic-quality.md) — **Medium（横断）**: パーサ/プリプロセッサ経由の構文エラーに行番号・桁がなく自ファイルを「imported module」と誤表記、誤誘導メッセージ（`main not found`・`assign`を型名扱い等）。X5で意味解析側は改善済みだがパーサ段が取り残されている
 
@@ -112,7 +112,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
 | B1 | async/await | 調査済み → 健全 | jsの基本テストのみ | js/ts動作・他経路は明示拒否。await式の型も正しい（軽微: check非対称・全角括弧混入は[R14](syntax-error-diagnostic-quality.md)） |
-| B2 | macro宣言（定数マクロ・関数マクロ） | 調査済み → [R10](checker-silent-holes.md) | 基本テストあり | 正常系は6経路一致で健全。型不一致マクロがcheck素通り（Medium） |
+| B2 | macro宣言（定数マクロ・関数マクロ） | 調査済み → [R10](../../archive/v0.17.0/checker-silent-holes.md)修正済み | macro_type_mismatchエラーテスト | 正常系は6経路一致で健全。型不一致マクロはchecker診断化 |
 | B3 | ラムダの参照キャプチャ`[&x]` | 調査済み → [R4](../../archive/v0.17.0/closure-mutation-semantics.md)（修正済み）・[R13](unimplemented-documented-syntax.md) | なし | `[&x]`構文は未実装。クロージャ書き込みは診断拒否へ修正済み |
 | B4 | raw string（`r"..."`/`r#"..."#`） | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | `r"..."`構文は不採用（仕様書から削除）。バッククォートraw文字列は非エスケープ化済み（`` \` ``のみ例外） |
 | B5 | エスケープ識別子（バッククォート`` `名前` ``） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（バッククォートはraw文字列に割当・診断あり） |
@@ -125,19 +125,19 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | B12 | `overload`メソッド（コンストラクタ以外） | 調査済み → [R13](unimplemented-documented-syntax.md) | コンストラクタのみ | 仕様書§4が実装済みと例示するがパース不能+inherentで黙殺（Medium） |
 | B13 | インターフェースのデフォルト実装（本体付き宣言） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
 | B14 | ユーザー定義関数の可変長引数`...` | 調査済み → [R13](unimplemented-documented-syntax.md) | FFIのprintf経由のみ | 未実装（文法書と乖離・FFI専用・診断あり） |
-| B15 | matchの範囲パターン`a...b` | 調査済み → [R12](match-pattern-and-flow-gaps.md) | なし（masked_patternはあり） | `...`範囲は健全（両端含む・9実行一致）。負数パターン不可（Medium） |
+| B15 | matchの範囲パターン`a...b` | 調査済み → [R12](../../archive/v0.17.0/match-pattern-and-flow-gaps.md)修正済み | negative_pattern値テスト | `...`範囲は健全（両端含む・9実行一致）。負数パターン/負数範囲も受理 |
 | B16 | ジェネリクスのデフォルト型引数`<T = int>` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
-| B17 | const genericパラメータの境界・演算 | 調査済み → [R10](checker-silent-holes.md) | 基本テストあり | 宣言のみ無警告受理・実体化手段なしの半黙殺（Medium） |
+| B17 | const genericパラメータの境界・演算 | 調査済み → [R10](../../archive/v0.17.0/checker-silent-holes.md)修正済み | const_genericsエラーテスト | 宣言時に専用診断で拒否（実体化実装は将来課題） |
 
 ### C. 修飾子・宣言
 
 | # | 調査項目 | 診断状況 | 統合テスト | 備考 |
 |---|---------|---------|-----------|------|
-| C1 | `constexpr` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | 変数はパーサTODOのnullptr返しで壊れた診断・関数は無警告で通常関数化（Medium） |
-| C2 | `inline`修飾子/`#inline` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | キーワードは無警告黙殺（IR不変）、`#inline`は仕様記載ありなのに拒否 |
-| C3 | `volatile` | 調査済み → [R11](modifier-implementation-gaps.md) | asm最適化テストの付随のみ | パーサ未対応で全位置構文エラー（最適化検証不能） |
+| C1 | `constexpr` | 調査済み → [R11](../../archive/v0.17.0/modifier-implementation-gaps.md)修正済み | constexpr_var_rejectエラーテスト | 変数は専用診断+const回復・関数は通常関数扱いを警告で明示 |
+| C2 | `inline`修飾子/`#inline` | 調査済み → [R11](../../archive/v0.17.0/modifier-implementation-gaps.md)修正済み | IRのinlinehint属性を確認 | キーワードをinlinehint属性へ実伝搬、仕様は`inline`キーワードへ一本化 |
+| C3 | `volatile` | 調査済み → [R11](../../archive/v0.17.0/modifier-implementation-gaps.md)修正済み | volatile_rejectエラーテスト | パーサ消費+atomic誘導つき専用診断（意味論実装は将来課題） |
 | C4 | 語彙のみのキーワード（`mutable`/`namespace`/`template`/`typename`/`pub`/`from`） | 調査済み → 概ね健全 | なし | 識別子誤用は6語とも正しく診断（X5空表示バグ再発なし）。`namespace`は実装済み動作。他は診断で拒否 |
-| C5 | `ufloat`/`udouble` | 調査済み → [R11](modifier-implementation-gaps.md) | なし | 受理・6経路値一致だがunsigned語義未実装（負値も無診断、Medium） |
+| C5 | `ufloat`/`udouble` | 調査済み → [R11](../../archive/v0.17.0/modifier-implementation-gaps.md)修正済み | 負リテラル診断を手動確認 | 負リテラルを警告・--strictエラーで診断（実行時に負へ転じる演算は対象外と明文化） |
 | C6 | `extern`宣言（native一般） | 調査済み → 健全 | SVのextern_instance等のみ | native/jitで動作・未解決シンボル診断も明確。js経路のみ実行時エラー（Low） |
 | C7 | デフォルト引数 | 調査済み → [R8](../../archive/v0.17.0/default-arg-prev-param-zero.md)（修正済み） | あり（functions/default_args等+R8回帰） | 部分省略・関数呼び出し既定式・メソッド既定は健全。前引数参照は診断拒否へ修正済み |
 

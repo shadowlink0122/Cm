@@ -182,6 +182,24 @@ void check_score(int score) {
 
 ---
 
+### Numeric Literal and Range Patterns
+
+Negative numeric literals can be written directly in patterns (supported in v0.17.0). Range patterns use `...` (three dots) and include both ends.
+
+```cm
+string classify(int x) {
+    match (x) {
+        -1 => { return "minus one"; }
+        -10...-5 => { return "low range"; }
+        0 => { return "zero"; }
+        1...5 => { return "small"; }
+        _ => { return "other"; }
+    }
+}
+```
+
+An exhaustive match whose arms all `return` (with `_` or full enum variant coverage) is recognized as terminating by the return-coverage analysis, so no dummy return is needed after the match.
+
 ## Variable Binding Patterns
 
 ### Reusing Variables

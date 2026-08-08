@@ -111,7 +111,8 @@ ast::DeclPtr Parser::parse_constexpr() {
 
         auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
                                                         std::move(type), std::move(body));
-        // TODO: constexprフラグを設定
+        // R11: コンパイル時評価は未実装のため、フラグを立てて通常関数として受理しcheckerが警告を出す
+        func->is_constexpr = true;
 
         return std::make_unique<ast::Decl>(std::move(func));
     } else {
@@ -120,8 +121,11 @@ ast::DeclPtr Parser::parse_constexpr() {
         auto init = parse_expr();
         expect(TokenKind::Semicolon);
 
-        // TODO: ConstExprDeclノードを作成
-        return nullptr;
+        // R11: constexpr変数は未実装。従来はnullptrを返して後続が無関係な構文エラーに化けていたため、専用診断を出しつつconst宣言として回復する
+        error(i18n::msg(i18n::MsgId::PsConstexprVarUnsupported));
+        auto global_var = std::make_unique<ast::GlobalVarDecl>(std::move(name), std::move(type),
+                                                               std::move(init), true);
+        return std::make_unique<ast::Decl>(std::move(global_var));
     }
 }
 

@@ -1,0 +1,5 @@
+// R11: constexpr変数は未実装のため専用診断で拒否される（従来はnullptr返しで無関係な構文エラーに化けていた）
+constexpr int N = 10;
+int main() {
+    return 0;
+}

@@ -71,6 +71,33 @@ bool literal_fits_target(const ast::Expr* expr, const ast::Type& target) {
     return false;
 }
 
+// R11: 符号なし浮動小数型（ufloat/udouble）への負リテラル初期化/代入か（単項マイナスを1段剥がして判定する）
+bool is_negative_literal(const ast::Expr* expr) {
+    if (!expr) {
+        return false;
+    }
+    bool negated = false;
+    if (const auto* unary = expr->as<ast::UnaryExpr>()) {
+        if (unary->op == ast::UnaryOp::Neg && unary->operand) {
+            negated = true;
+            expr = unary->operand.get();
+        }
+    }
+    const auto* lit = expr->as<ast::LiteralExpr>();
+    if (!lit) {
+        return false;
+    }
+    if (lit->is_int()) {
+        int64_t v = std::get<int64_t>(lit->value);
+        return negated ? v > 0 : v < 0;
+    }
+    if (lit->is_float()) {
+        double v = std::get<double>(lit->value);
+        return negated ? v > 0 : v < 0;
+    }
+    return false;
+}
+
 }  // namespace
 
 TypeChecker::NumericConversion TypeChecker::classify_numeric_conversion(
@@ -127,6 +154,20 @@ TypeChecker::NumericConversion TypeChecker::classify_numeric_conversion(
 void TypeChecker::check_numeric_conversion_policy(const ast::TypePtr& target,
                                                   const ast::TypePtr& source,
                                                   const ast::Expr* value_expr, Span span) {
+    // R11: ufloat/udoubleへの負リテラルを診断する（非負制約がどこにも強制されず事実上float/doubleの別名になっていた。実行時に負になる演算までは検査しない）
+    {
+        auto ut = resolve_typedef(target);
+        if (ut && ut->is_unsigned_float() && is_negative_literal(value_expr)) {
+            const std::string msg =
+                i18n::msgf(i18n::MsgId::TcNegativeValueUnsignedFloat, ast::type_to_string(*ut));
+            if (enable_naming_check_) {
+                error(span, msg);
+            } else {
+                warning(span, msg);
+            }
+            return;
+        }
+    }
     const auto kind = classify_numeric_conversion(target, source);
     if (kind != NumericConversion::Narrowing && kind != NumericConversion::SignChange) {
         return;

@@ -173,6 +173,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     mir_func->is_export = func.is_export;         // エクスポートフラグを設定
     mir_func->is_extern = func.is_extern;         // externフラグを設定
     mir_func->is_variadic = func.is_variadic;     // 可変長引数フラグを設定
+    mir_func->is_inline = func.is_inline;         // R11: inlineフラグを設定
     mir_func->is_async = func.is_async;           // asyncフラグを設定
     mir_func->is_always = func.is_always;         // alwaysフラグを設定
     // always_kind を伝搬（HIR→MIR: enum値をintでキャスト）

@@ -348,6 +348,11 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
         llvmFunc->addParamAttr(0, llvm::Attribute::get(ctx.getContext(), llvm::Attribute::NoAlias));
     }
 
+    // R11: inline修飾子をinlinehint属性へ伝搬する（従来はパースのみで黙殺されIRに現れなかった）
+    if (func.is_inline) {
+        llvmFunc->addFnAttr(llvm::Attribute::InlineHint);
+    }
+
     // アロケータ関数にはnoinline属性を追加
     // LLVMが積極的にインライン化してから削除するのを防ぐ
     if (func.name.find("alloc") != std::string::npos ||

@@ -30,6 +30,14 @@ ast::StmtPtr Parser::parse_stmt() {
     debug::par::log(debug::par::Id::Stmt, "", debug::Level::Trace);
     uint32_t start_pos = current().start;
 
+    // R11: volatile/constexprはローカル宣言でも未対応。専用診断を出しつつ後続を通常宣言として解析続行する（従来はExpected expression等の無関係なエラーに化けていた）
+    if (consume_if(TokenKind::KwVolatile)) {
+        error(i18n::msg(i18n::MsgId::PsVolatileUnsupported));
+    }
+    if (consume_if(TokenKind::KwConstexpr)) {
+        error(i18n::msg(i18n::MsgId::PsConstexprVarUnsupported));
+    }
+
     // ブロック
     if (check(TokenKind::LBrace)) {
         auto stmts = parse_block();

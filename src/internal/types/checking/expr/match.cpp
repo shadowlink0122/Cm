@@ -242,12 +242,16 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
         }
     }
     if (has_wildcard || has_variable_binding) {
+        // R12: return網羅解析（stmt_terminates）が網羅済みmatchを終端と認識できるよう記録する
+        match.known_exhaustive = true;
         return;
     }
 
     if (scrutinee_type->kind == ast::TypeKind::Bool) {
         if (!covered_values.count("true") || !covered_values.count("false")) {
             error(current_span_, i18n::msg(i18n::MsgId::TcNonExhaustiveMatchMissingTrue));
+        } else {
+            match.known_exhaustive = true;
         }
         return;
     }
@@ -267,6 +271,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 return;
             }
         }
+        match.known_exhaustive = true;
         return;
     }
 
@@ -286,6 +291,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 return;
             }
         }
+        match.known_exhaustive = true;
         return;
     }
 

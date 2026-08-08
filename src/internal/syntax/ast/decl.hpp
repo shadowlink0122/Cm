@@ -123,6 +123,7 @@ struct FunctionDecl {
     Visibility visibility = Visibility::Private;
     bool is_static = false;
     bool is_inline = false;
+    bool is_constexpr = false;  // R11: 受理はするがコンパイル時評価は未実装（checkerが警告を出す）
 
     // コンストラクタ/デストラクタ
     bool is_constructor = false;  // self() コンストラクタ

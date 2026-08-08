@@ -71,6 +71,33 @@ bool stmt_terminates(const ast::StmtPtr& s, bool for_function) {
                     }
                 }
             }
+            // R12: 網羅的で全armが終端するmatch文は終端とみなす（従来は認識されず、--strictで正当なコードのビルドを阻害していた）
+            if (auto* me = es->expr->as<ast::MatchExpr>()) {
+                bool exhaustive = me->known_exhaustive;
+                if (!exhaustive) {
+                    // 網羅性検査前でも判定できるASTフォールバック: ガード無しのワイルドカード/変数束縛armがあれば網羅
+                    for (const auto& arm : me->arms) {
+                        if (arm.pattern && !arm.guard &&
+                            (arm.pattern->kind == ast::MatchPatternKind::Wildcard ||
+                             arm.pattern->kind == ast::MatchPatternKind::Variable)) {
+                            exhaustive = true;
+                            break;
+                        }
+                    }
+                }
+                if (exhaustive && !me->arms.empty()) {
+                    bool all_terminate = true;
+                    for (const auto& arm : me->arms) {
+                        if (!arm.is_block_form ||
+                            !cm_stmts_terminate(arm.block_body, for_function)) {
+                            all_terminate = false;
+                            break;
+                        }
+                    }
+                    if (all_terminate)
+                        return true;
+                }
+            }
         }
         return false;
     }
@@ -271,6 +298,11 @@ void TypeChecker::check_let(ast::LetStmt& let) {
 
     // ジェネリック型引数の個数を検証する（H15。ローカル変数宣言はis_valid_typeを通らないためここで検査）
     if (let.type) {
+        // R10: 宣言型そのものの存在を検証する（従来は型引数のみ検証され、未定義型の変数宣言が無診断で素通りしメソッド呼び出し時のUnknown methodまで顕在化しなかった）
+        if (!is_valid_type(let.type)) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedTypeVariable,
+                                            ast::type_to_string(*let.type), let.name));
+        }
         auto rt = resolve_typedef(let.type);
         const auto& ct = rt ? rt : let.type;
         auto sd_it = struct_defs_.find(ct->name);

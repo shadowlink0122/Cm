@@ -257,6 +257,16 @@ void TypeChecker::register_mangled_symbol(const std::string& name, const std::st
           i18n::msgf(i18n::MsgId::TypeMangledSymbolCollision, name, it->second.origin, origin));
 }
 
+// R10: constジェネリックパラメータは宣言のみ受理され値引数での実体化が未実装のため、宣言時に専用診断で拒否する（従来は無警告で通り、使用箇所でExpected type等の誤誘導エラーになっていた）
+void TypeChecker::reject_const_generic_params(const std::vector<ast::GenericParam>& params,
+                                              Span span) {
+    for (const auto& p : params) {
+        if (p.is_const()) {
+            error(span, i18n::msgf(i18n::MsgId::TcConstGenericUnsupported, p.name));
+        }
+    }
+}
+
 void TypeChecker::register_declaration(ast::Decl& decl) {
     if (auto* mod = decl.as<ast::ModuleDecl>()) {
         register_namespace(*mod, "");
@@ -264,6 +274,12 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
     }
 
     if (auto* func = decl.as<ast::FunctionDecl>()) {
+        reject_const_generic_params(func->generic_params_v2, decl.span);
+        // R11: constexpr関数はコンパイル時評価が未実装で通常関数として扱われることを明示する（従来は無警告で黙殺され、配列サイズ等の定数文脈で使えず混乱を招いていた）
+        if (func->is_constexpr) {
+            warning(decl.span,
+                    i18n::msgf(i18n::MsgId::TcConstexprFunctionTreatedAsRegular, func->name));
+        }
         if (!func->generic_params.empty()) {
             generic_functions_[func->name] = func->generic_params;
             generic_function_constraints_[func->name] = func->generic_params_v2;
@@ -320,6 +336,7 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
         // L100: 関数名はsnake_caseであるべき
         // 関数名の命名規則チェックは check_naming_conventions（L001 --strict）へ一本化
     } else if (auto* st = decl.as<ast::StructDecl>()) {
+        reject_const_generic_params(st->generic_params_v2, decl.span);
         if (!st->generic_params.empty()) {
             generic_structs_[st->name] = st->generic_params;
             debug::tc::log(debug::tc::Id::Resolved,
@@ -483,6 +500,12 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
                                             ast::type_to_string(*macro->type), macro->name));
             }
             ast::TypePtr var_type = macro->type ? resolve_typedef(macro->type) : init_type;
+            // R10: 宣言型と初期化子型を照合する（従来は未照合で、型不一致マクロがLLVM検証エラー/js黙殺実行へ落ちていた）
+            if (macro->type && var_type && init_type && !types_compatible(var_type, init_type)) {
+                error(decl.span,
+                      i18n::msgf(i18n::MsgId::TcMacroInitTypeMismatch, macro->name,
+                                 ast::type_to_string(*var_type), ast::type_to_string(*init_type)));
+            }
             if (var_type) {
                 scopes_.global().define(macro->name, var_type, true /* is_const */, false,
                                         decl.span, const_int_value);
@@ -611,6 +634,7 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         }
     } else if (auto* iface = decl.as<ast::InterfaceDecl>()) {
         current_span_ = decl.span;
+        reject_const_generic_params(iface->generic_params_v2, decl.span);
         generic_context_.clear();
         if (!iface->generic_params.empty()) {
             for (const auto& param : iface->generic_params) {
@@ -830,6 +854,7 @@ void TypeChecker::check_attributes(const ast::Program& program) {
 }
 
 void TypeChecker::register_impl(ast::ImplDecl& impl) {
+    reject_const_generic_params(impl.generic_params_v2, current_span_);
     if (!impl.target_type)
         return;
 
@@ -1139,6 +1164,7 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
 
 void TypeChecker::register_enum(ast::EnumDecl& en) {
     debug::tc::log(debug::tc::Id::Resolved, "Registering enum: " + en.name, debug::Level::Debug);
+    reject_const_generic_params(en.generic_params_v2, current_span_);
 
     enum_names_.insert(en.name);
 

@@ -401,6 +401,7 @@ struct HirFunction {
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_static = false;  // staticメソッド（selfパラメータなし）
+    bool is_inline = false;  // inline修飾子（LLVMのinlinehint属性へ伝搬する）
     bool is_async = false;   // async関数（JSバックエンド用）
     bool is_always = false;  // always修飾子（SVバックエンド用）
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;

@@ -559,6 +559,8 @@ struct MatchArm {
 struct MatchExpr {
     ExprPtr scrutinee;           // マッチ対象の式
     std::vector<MatchArm> arms;  // マッチアームのリスト
+    // R12: 網羅性検査が「全ケース被覆」と確定した場合にセットする（return網羅解析がワイルドカード無しの全variant被覆matchも終端と認識できるようにする）
+    bool known_exhaustive = false;
 
     MatchExpr(ExprPtr s, std::vector<MatchArm> a) : scrutinee(std::move(s)), arms(std::move(a)) {}
 };

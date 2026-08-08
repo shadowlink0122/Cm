@@ -549,6 +549,13 @@ enum class MsgId : int {
     CliEntryPointMainNotFound,
     TcImplicitNarrowingConversion,
     TcImplicitSignConversion,
+    TcUndefinedTypeVariable,
+    TcMacroInitTypeMismatch,
+    TcConstGenericUnsupported,
+    TcConstexprFunctionTreatedAsRegular,
+    TcNegativeValueUnsignedFloat,
+    PsConstexprVarUnsupported,
+    PsVolatileUnsupported,
     Count,
 };
 

@@ -176,14 +176,39 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
     }
 
     // リテラルパターン (数値、文字列、真偽値)
+    // R12: 単項マイナス付き数値リテラル（-1 や -5...-1）もリテラルパターンとして受理する。
+    // 下流（網羅性検査のLiteralExpr直読み・HIR lowering）が負値をそのまま扱えるよう、UnaryExprでなく値を符号反転したLiteralExprに畳み込む
+    auto is_negative_literal_start = [&]() {
+        return check(TokenKind::Minus) &&
+               (peek_kind() == TokenKind::IntLiteral || peek_kind() == TokenKind::FloatLiteral);
+    };
+    auto parse_literal_pattern_operand = [&]() -> ast::ExprPtr {
+        bool negated = false;
+        if (is_negative_literal_start()) {
+            advance();
+            negated = true;
+        }
+        auto lit_expr = parse_primary();
+        if (negated && lit_expr) {
+            if (auto* lit = lit_expr->as<ast::LiteralExpr>()) {
+                if (lit->is_int()) {
+                    lit->value = -std::get<int64_t>(lit->value);
+                } else if (lit->is_float()) {
+                    lit->value = -std::get<double>(lit->value);
+                }
+            }
+        }
+        return lit_expr;
+    };
     if (check(TokenKind::IntLiteral) || check(TokenKind::FloatLiteral) ||
         check(TokenKind::StringLiteral) || check(TokenKind::CharLiteral) ||
-        check(TokenKind::KwTrue) || check(TokenKind::KwFalse) || check(TokenKind::KwNull)) {
-        auto lit_expr = parse_primary();
+        check(TokenKind::KwTrue) || check(TokenKind::KwFalse) || check(TokenKind::KwNull) ||
+        is_negative_literal_start()) {
+        auto lit_expr = parse_literal_pattern_operand();
 
         // 範囲パターンチェック: val...val
         if (consume_if(TokenKind::Ellipsis)) {
-            auto end_expr = parse_primary();
+            auto end_expr = parse_literal_pattern_operand();
             debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: range",
                             debug::Level::Debug);
             return ast::MatchPattern::make_range(std::move(lit_expr), std::move(end_expr));

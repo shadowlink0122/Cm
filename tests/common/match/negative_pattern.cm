@@ -1,0 +1,20 @@
+string classify(int x) {
+    match (x) {
+        -1 => { return "minus one"; }
+        -10...-5 => { return "low range"; }
+        0 => { return "zero"; }
+        1...5 => { return "small"; }
+        _ => { return "other"; }
+    }
+}
+int main() {
+    println(classify(-1));
+    println(classify(-7));
+    println(classify(-10));
+    println(classify(-5));
+    println(classify(0));
+    println(classify(3));
+    println(classify(99));
+    println(classify(-4));
+    return 0;
+}

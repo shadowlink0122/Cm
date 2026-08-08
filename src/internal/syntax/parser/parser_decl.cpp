@@ -147,7 +147,11 @@ ast::DeclPtr Parser::parse_top_level() {
         if (is_type_start() || check(TokenKind::Lt) || check(TokenKind::KwStatic) ||
             check(TokenKind::KwInline) || check(TokenKind::KwAsync) || check(TokenKind::KwAlways) ||
             check(TokenKind::KwAlwaysFF) || check(TokenKind::KwAlwaysComb) ||
-            check(TokenKind::KwAlwaysLatch)) {
+            check(TokenKind::KwAlwaysLatch) || check(TokenKind::KwVolatile)) {
+            // R11: volatileは字句予約のみで意味論が未実装。専用診断を出しつつ後続を通常宣言として解析続行する
+            if (consume_if(TokenKind::KwVolatile)) {
+                error(i18n::msg(i18n::MsgId::PsVolatileUnsupported));
+            }
             // 修飾子を収集
             bool is_static = consume_if(TokenKind::KwStatic);
             bool is_inline = consume_if(TokenKind::KwInline);
@@ -194,6 +198,11 @@ ast::DeclPtr Parser::parse_top_level() {
     // extern
     if (check(TokenKind::KwExtern)) {
         return parse_extern(std::move(attrs));
+    }
+
+    // R11: volatileは字句予約のみで意味論が未実装。専用診断を出しつつ後続を通常宣言として解析続行する
+    if (consume_if(TokenKind::KwVolatile)) {
+        error(i18n::msg(i18n::MsgId::PsVolatileUnsupported));
     }
 
     // 修飾子を収集

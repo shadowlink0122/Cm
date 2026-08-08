@@ -1,6 +1,6 @@
 # R10: 型検査の黙殺穴（未定義型の変数宣言・型不一致マクロ・const generic半実装）
 
-**ステータス:** 未修正（構文網羅バグ調査で検出）
+**ステータス:** 修正済み（構文網羅バグ調査で検出）
 **重大度:** Medium
 
 これまでの調査で確立した「型付きHIRは全式が非null・非error型」（typed-hir-single-source）の不変条件が、宣言・マクロ・const genericの各経路で破れている3件。いずれも「checkerを素通りして下流で顕在化」する同族で、method-resolution-unification / coercion-driver-unificationの延長で封じるべき。
@@ -39,3 +39,14 @@ int main() { println(X); return 0; }
 ## テスト計画
 
 エラーテスト（tests/common/errors/）: 未定義型変数宣言の拒否・型不一致マクロの拒否・const generic使用時の明示診断または実体化の値一致。
+## 実装記録（2026-08-08）
+
+3件とも修正した。方針は「typed-hir不変条件の宣言サイトへの拡張」で、既存のis_valid_type/types_compatible機構を未検査経路へ接続した。
+
+- バグ1: `TypeChecker::check_let`で宣言型そのものを`is_valid_type`検証するようにした（`TcUndefinedTypeVariable`）。従来はH15のジェネリック型引数検証のみで基底型名は未検証だった。ジェネリック関数内の型パラメータ（`T tmp;`）は`generic_context_`経由で有効と判定されるため誤検出しない。
+- バグ2: マクロ宣言の`var_type`と`init_type`を`types_compatible`で照合するようにした（`TcMacroInitTypeMismatch`）。checker段で停止するため、LLVM検証エラー（native）とjs黙殺実行の三分裂は消滅し全バックエンドが同一診断になる。
+- バグ3: constジェネリックパラメータ（`GenericParam::is_const()`）を関数・構造体・enum・インターフェース・implの登録時に`reject_const_generic_params`で拒否するようにした（`TcConstGenericUnsupported`、実体化実装までの明示診断）。既存の`tests/common/generics/const_generics.cm`は宣言のみの半黙殺テストだったためエラーテストへ転換した。
+
+テスト: `tests/common/errors/{undef_type_var_decl,macro_type_mismatch}.cm`と`tests/common/generics/const_generics.cm`（エラーテスト化）。
+
+残課題: const genericの値引数実体化（`Arr<4>`）の本実装。未定義型メソッド呼び出しの`Unknown method`誤誘導はR14（診断品質）の領分。
