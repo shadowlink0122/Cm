@@ -114,6 +114,6 @@ warning: type parameter 'T' uses operator '<' but no interface bound is declared
 
 ## 関連資料
 
-- [ジェネリックインスタンス化の診断](../../archive/v0.17.0/generic-instantiation-diagnostics.md) — 導入時の設計文書
+- [ジェネリックインスタンス化の診断](../../archive/v0.17.0/diagnostics/generic-instantiation-diagnostics.md) — 導入時の設計文書
 - [monomorphization.md](monomorphization.md) — 診断の下流にある単相化経路
 - [../interface/static-dispatch.md](../interface/static-dispatch.md) — インスタンス化時の制約充足検査（`check_type_constraints`）

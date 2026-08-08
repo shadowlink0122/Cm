@@ -93,4 +93,4 @@ wasmランタイムにも同名関数があり（`src/internal/codegen/llvm/wasm
 ## 関連資料
 
 - [スライスのランタイム表現](runtime-representation.md) — 検査対象となるランタイム関数群の定義
-- [境界チェック統一ポリシー設計文書（archive）](../../archive/v0.17.0/bounds-checking-policy.md) — バックエンド分裂の調査記録と設計判断
+- [境界チェック統一ポリシー設計文書（archive）](../../archive/v0.17.0/arrays-slices/bounds-checking-policy.md) — バックエンド分裂の調査記録と設計判断

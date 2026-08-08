@@ -104,6 +104,6 @@ for (const auto* fn : test_fns) {
 
 - [JITコンパイラ概要（初期設計）](../../archive/v0.11.0/001_jit_compiler_overview.md)
 - [JITランタイム関数一覧（初期設計）](../../archive/v0.11.0/003_jit_runtime_functions.md)
-- [境界チェック方針（bounds sanitizeの設計）](../../archive/v0.17.0/bounds-checking-policy.md)
+- [境界チェック方針（bounds sanitizeの設計）](../../archive/v0.17.0/arrays-slices/bounds-checking-policy.md)
 - [サニタイザ設計](../../archive/v0.16.2/06_sanitizer.md)
 - [インクリメンタルビルド・並列コード生成（AOT側のビルド基盤）](../build/incremental-and-parallel-codegen.md)

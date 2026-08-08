@@ -1,7 +1,7 @@
 # 前方検討: JS/TSエコシステム連携ロードマップ（React・Node活用）
 
 最終ゴール: React・Node等の一般的なWebフレームワーク・ライブラリをCmから活用し、フロントエンド・サーバ開発をCmで行えるようにする。
-Phase 1（npmパッケージFFI・構造体互換・コールバック・メソッドthis束縛）は実装済み（`docs/archive/v0.17.0/01_js_npm_interop.md`）。
+Phase 1（npmパッケージFFI・構造体互換・コールバック・メソッドthis束縛）は実装済み（`docs/archive/v0.17.0/backends/01_js_npm_interop.md`）。
 
 ## Phase 2: TypeScript型定義との統合
 

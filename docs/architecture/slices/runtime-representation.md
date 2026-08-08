@@ -122,4 +122,4 @@ if (auto info = slice_scalar_info(elem_kind)) {
 
 - [境界検査ポリシー](bounds-checking.md) — get/element_ptr経由アクセスへの検査挿入
 - [チェーンレシーバの解決](chain-receiver.md) — `cm_slice_get_subslice_ref`によるレシーバ場所化
-- [境界チェック統一ポリシー設計文書（archive）](../../archive/v0.17.0/bounds-checking-policy.md)
+- [境界チェック統一ポリシー設計文書（archive）](../../archive/v0.17.0/arrays-slices/bounds-checking-policy.md)

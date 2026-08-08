@@ -117,6 +117,6 @@ MIR定数のstd::string値は全てこの経路を通る（types.cpp:743-746）�
 
 ## 関連資料
 
-- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md)
+- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings/strings-utf8-and-stringbuilder.md)
 - UTF-8コードポイントAPI: [utf8.md](utf8.md)
 - StringBuilder: [stringbuilder.md](stringbuilder.md)

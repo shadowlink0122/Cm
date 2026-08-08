@@ -15,7 +15,7 @@
 | 戻り値 | 16バイト以下は第一級値でreturn | 16バイト超の構造体はsret（先頭の隠し出力ポインタ）へ変換 |
 
 第一級集約のままO2に渡すと、SROA/instcombineが集約を要素単位のSSA値へ分解するためIRが要素数に対して超線形に膨張する。
-`int[16384]`フィールドを持つ構造体のコピーや戻り値がこの経路に落ちると、コンパイルが実用不能な時間・メモリに達することが実測されており、本設計はその爆発源を経路ごとに塞いでいる（背景と実測は[archive設計文書](../../archive/v0.17.0/aggregate-copy-lowering.md)）。
+`int[16384]`フィールドを持つ構造体のコピーや戻り値がこの経路に落ちると、コンパイルが実用不能な時間・メモリに達することが実測されており、本設計はその爆発源を経路ごとに塞いでいる（背景と実測は[archive設計文書](../../archive/v0.17.0/memory/aggregate-copy-lowering.md)）。
 
 ## データ構造とアルゴリズム
 
@@ -96,6 +96,6 @@ LLVMの`byval`属性は「呼び出し側がコピーする」意味論であり
 
 ## 関連資料
 
-- [集約コピーのmemcpy化とレイアウト計算の一本化（archive設計文書）](../../archive/v0.17.0/aggregate-copy-lowering.md)
+- [集約コピーのmemcpy化とレイアウト計算の一本化（archive設計文書）](../../archive/v0.17.0/memory/aggregate-copy-lowering.md)
 - [RAII・dropパスと所有権](drop-and-ownership.md) — 集約ローカルのゼロ初期化と解放挿入
 - [アロケータ設計](allocator.md)

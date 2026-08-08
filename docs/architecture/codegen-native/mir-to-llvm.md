@@ -122,5 +122,5 @@ if (func.is_extern) {
 - [オブジェクトファイル出力](object-emission.md)
 - [リンクとランタイム解決](linking-and-runtime.md)
 - [数値出力とキャストの一貫性](numeric-and-casts.md)
-- 大構造体のsret化・ポインタ渡し統一の経緯: [../../archive/v0.17.0/aggregate-copy-lowering.md](../../archive/v0.17.0/aggregate-copy-lowering.md)
-- 大規模監査での背景所見: [../../archive/v0.17.0/large-scale-bottleneck-audit.md](../../archive/v0.17.0/large-scale-bottleneck-audit.md)
+- 大構造体のsret化・ポインタ渡し統一の経緯: [../../archive/v0.17.0/memory/aggregate-copy-lowering.md](../../archive/v0.17.0/memory/aggregate-copy-lowering.md)
+- 大規模監査での背景所見: [../../archive/v0.17.0/audit/large-scale-bottleneck-audit.md](../../archive/v0.17.0/audit/large-scale-bottleneck-audit.md)

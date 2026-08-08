@@ -113,5 +113,5 @@ preprocessor修正後に残る真の重複は型検査が捕捉する。
 ## 関連資料
 
 - [import-resolution.md](import-resolution.md) — モジュール解決とテキスト展開の全体像
-- [../../archive/v0.17.0/module-visibility-and-import-dedup.md](../../archive/v0.17.0/module-visibility-and-import-dedup.md) — 本設計の背景・根本原因・段階分割を記録した設計文書
-- [../../archive/v0.17.0/mangling-collision-detection.md](../../archive/v0.17.0/mangling-collision-detection.md) — マングル名の単一シンボルテーブルによる衝突検出
+- [../../archive/v0.17.0/modules/module-visibility-and-import-dedup.md](../../archive/v0.17.0/modules/module-visibility-and-import-dedup.md) — 本設計の背景・根本原因・段階分割を記録した設計文書
+- [../../archive/v0.17.0/modules/mangling-collision-detection.md](../../archive/v0.17.0/modules/mangling-collision-detection.md) — マングル名の単一シンボルテーブルによる衝突検出

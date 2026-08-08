@@ -113,7 +113,7 @@ C13の期待挙動はメモリ挙動であり構文出力の変化は無い。
 ## 関連
 
 - `docs/design/v0.17.0/large-scale-bottleneck-audit.md`（監査本体、テーマ4「メモリを解放しない」）
-- `docs/archive/v0.17.0/allocator-and-temp-pool.md`（H11/M14、wasmでの実解放とアロケータ差し替え。実装済み）
+- `docs/archive/v0.17.0/memory/allocator-and-temp-pool.md`（H11/M14、wasmでの実解放とアロケータ差し替え。実装済み）
 - `src/internal/mir/lowering/stmt/scope.cpp` / `src/internal/mir/lowering/stmt/control.cpp`（スコープ・制御フローlowering）
 - `src/internal/mir/lowering/mono/specialize.cpp`（ジェネリックデストラクタ特殊化）
 - `src/internal/types/checking/expr/primary.cpp` / `src/internal/types/scope.cpp`（move状態管理）

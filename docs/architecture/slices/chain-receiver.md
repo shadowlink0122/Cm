@@ -113,5 +113,5 @@ void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
 ## 関連資料
 
 - [スライスのランタイム表現](runtime-representation.md) — 内側スライスヘッダのインライン格納と`elem_size = sizeof(CmSlice)`
-- [チェーンレシーバ解決設計文書（archive）](../../archive/v0.17.0/chain-receiver-resolution.md) — 解決対象の一般化と黙殺禁止の設計判断
-- [コレクションのOption返しAPI設計文書（archive）](../../archive/v0.17.0/collections-option-api-and-errors.md) — 呼び出しレシーバの多重評価問題と`match_hoist`退避の経緯
+- [チェーンレシーバ解決設計文書（archive）](../../archive/v0.17.0/type-system/chain-receiver-resolution.md) — 解決対象の一般化と黙殺禁止の設計判断
+- [コレクションのOption返しAPI設計文書（archive）](../../archive/v0.17.0/stdlib-runtime/collections-option-api-and-errors.md) — 呼び出しレシーバの多重評価問題と`match_hoist`退避の経緯

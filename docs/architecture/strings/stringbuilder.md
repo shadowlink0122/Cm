@@ -118,6 +118,6 @@ export impl StringBuilder {
 
 ## 関連資料
 
-- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md)
+- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings/strings-utf8-and-stringbuilder.md)
 - ランタイム表現（cm_str_alloc・所有と解放）: [representation.md](representation.md)
 - UTF-8コードポイントAPI: [utf8.md](utf8.md)

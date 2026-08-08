@@ -99,5 +99,5 @@ inline std::string msgf(MsgId id, Args&&... args) {
 ## 関連資料
 
 - [correctness-lints.md](correctness-lints.md) — E/W/L診断コード体系と`MsgId`の接続
-- [../../archive/v0.17.0/misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — 診断まわりの監査所見と対応記録
+- [../../archive/v0.17.0/diagnostics/misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/diagnostics/misc-diagnostics-and-low-priority.md) — 診断まわりの監査所見と対応記録
 - [../../archive/v0.16.2/04_message_i18n.md](../../archive/v0.16.2/04_message_i18n.md) — i18n基盤の当初設計（実装済みアーカイブ）

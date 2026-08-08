@@ -37,7 +37,7 @@ Cmの型検査は、型整合に加えて「黙って壊れる」クラスのバ
 
 この設計が防ぐのは「片方の分岐だけで初期化された変数が合流後も初期化済みと誤認され、未初期化読み取りが無警告で通る」クラスのバグである（フラット集合だけでは検出できない）。
 集約型（構造体・固定長配列・スライス）はランタイムのゼロ初期化/暗黙構築が保証されるため対象外とし、偽陽性を避ける。
-ループ本体の初期化は意図的にフラット扱い（ループ内初期化を合流後も初期化済みとみなす）で、偽陰性側に倒している。厳密化するとループ経由初期化の既存コードが大量に警告されるためで、MIR CFG上のデータフロー化は将来課題である（設計は[アーカイブ文書](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md)参照）。
+ループ本体の初期化は意図的にフラット扱い（ループ内初期化を合流後も初期化済みとみなす）で、偽陰性側に倒している。厳密化するとループ経由初期化の既存コードが大量に警告されるためで、MIR CFG上のデータフロー化は将来課題である（設計は[アーカイブ文書](../../archive/v0.17.0/diagnostics/definite-assignment-and-correctness-lints.md)参照）。
 
 ### return網羅検査（return coverage）
 
@@ -125,5 +125,5 @@ check/lintの出力側は、メッセージ末尾の`[W001]`形式からルー�
 ## 関連資料
 
 - [i18n-messages.md](i18n-messages.md) — 診断本文のi18nカタログと`MsgId`接続
-- [../../archive/v0.17.0/definite-assignment-and-correctness-lints.md](../../archive/v0.17.0/definite-assignment-and-correctness-lints.md) — 確定代入・return網羅の設計とMIR CFG化の将来課題
-- [../../archive/v0.17.0/misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/misc-diagnostics-and-low-priority.md) — 黙殺禁止インバリアントに関する監査所見の記録
+- [../../archive/v0.17.0/diagnostics/definite-assignment-and-correctness-lints.md](../../archive/v0.17.0/diagnostics/definite-assignment-and-correctness-lints.md) — 確定代入・return網羅の設計とMIR CFG化の将来課題
+- [../../archive/v0.17.0/diagnostics/misc-diagnostics-and-low-priority.md](../../archive/v0.17.0/diagnostics/misc-diagnostics-and-low-priority.md) — 黙殺禁止インバリアントに関する監査所見の記録

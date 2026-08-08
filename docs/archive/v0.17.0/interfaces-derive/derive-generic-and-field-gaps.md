@@ -51,7 +51,7 @@ deriveした構造体がenum（ペイロード付き）フィールドを持つ�
 
 ## 実装記録
 
-構造的解消（derive-as-source-expansionのジェネリック拡張）は[auto-impl-generic-gaps-and-cleanup.md](auto-impl-generic-gaps-and-cleanup.md)第3段の領分として残し、本修正は「無言の誤動作・no-opを全て診断または動作に置き換える」方針で4バグ＋付随を処置した。
+構造的解消（derive-as-source-expansionのジェネリック拡張）は[auto-impl-generic-gaps-and-cleanup.md](../../../design/v0.17.0/auto-impl-generic-gaps-and-cleanup.md)第3段の領分として残し、本修正は「無言の誤動作・no-opを全て診断または動作に置き換える」方針で4バグ＋付随を処置した。
 
 - **バグ1・2（スライス/ユニオン型引数の無言誤値・リンク失敗）→特殊化時検証で診断化**: checkerへ`validate_derive_instantiation`を新設し、derive付きジェネリック構造体の特殊化（`Box<int[]>`等）で型引数を代入した後のフィールド型を宣言時と同じ規則（`derive_field_unsupported_reason`として宣言時検証`validate_derive_field_types`と共通化）で検証する。検証フックはlet宣言のH15検査（stmt.cpp）とis_valid_type（compat.cpp: グローバル/フィールド/パラメータ/戻り値等）の2箇所で、typedef経由の型引数はresolve_typedefで実体化してから判定、重複診断は特殊化名のメモで抑止。`Box<int[]>`のEq（6経路で結論3分裂の生バイナリ比較）と`Box<IU>`のEq（`_IntOrStr__op_eq`未定義の難読リンク失敗）が使用箇所を指す「Cannot derive」診断になる。
 - **バグ3（ジェネリック×Clone/Hash/Debug/Displayの無言no-op）→メソッド解決を配線して動作化**: MIR側の`generate_*_for_monomorphized`は全トレイト生成済みだったが、checker側の`register_auto_{clone,hash,debug,display}_impl`がメソッドを基底名（`G`）でしか登録せず、特殊化レシーバの検索キー（`G<T>`）から到達不能だった。ジェネリック構造体は`G<T>`キー（implブロック登録と同形）でも登録し、cloneの戻り値型は型引数付き（`G<T>`）にして呼び出し時に`G<int>`へ置換されるようにした。jit/native/wasm/js/tsの全経路で`clone()`/`hash()`/`debug()`/`toString()`が動作。あわせてモノモーフ化Debug/Displayの表示名をマングル名（`G__int`）から基底名（`G`）へ修正。

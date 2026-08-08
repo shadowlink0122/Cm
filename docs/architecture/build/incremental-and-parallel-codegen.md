@@ -84,7 +84,7 @@ if (const char* jobs_env = std::getenv("CM_CODEGEN_JOBS")) {
 ## 落とし穴とケア
 
 - **キャッシュ無効化漏れが最大のリスク**: 古い `.o` を使う誤ビルドを防ぐため、「生成コードに影響する入力はすべてキーに含める」が不変条件である。コンパイラ自身の更新（compilerIdentity、codegen.cpp:131-133）、型レイアウト（GEPオフセット波及のため共通キー、codegen.cpp:210-211）、extern関数の全文（codegen.cpp:249-250）をキーに混ぜているのはいずれも実際に必要だった無効化条件であり、疑わしい入力は過剰無効化側に倒す。
-- **死蔵経路の接続で発覚したバグのクラス**: グローバル変数の全モジュール複製定義による状態分裂（所有/externの分離で防止、mir_splitter.hpp:34-38）、空contextでのランタイムライブラリ要否誤判定（MIRベース判定で防止、codegen.cpp:474-480）、body付きextern関数の重複定義などは、分割経路を変更する際に再発しやすい。経路変更時は [archive設計文書](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md) の8クラスの不具合一覧を確認すること。
+- **死蔵経路の接続で発覚したバグのクラス**: グローバル変数の全モジュール複製定義による状態分裂（所有/externの分離で防止、mir_splitter.hpp:34-38）、空contextでのランタイムライブラリ要否誤判定（MIRベース判定で防止、codegen.cpp:474-480）、body付きextern関数の重複定義などは、分割経路を変更する際に再発しやすい。経路変更時は [archive設計文書](../../archive/v0.17.0/optimizer-codegen/incremental-build-and-parallel-codegen.md) の8クラスの不具合一覧を確認すること。
 - **並列化の不変条件**: LLVMターゲットレジストリの初期化は非スレッドセーフのため、ワーカ起動前にメインスレッドで1回行う（codegen.cpp:321-326）。ワーカスレッドからのforkはmallocロック競合でデッドロックしうるため、モジュール `.o` の出力はfork分離なしの `emitObjectFileDirect` を使う（codegen.cpp:419-425）。モジュール間で `LLVMContext` を共有しないことが並列安全性の前提である。
 - **同一キャッシュへの並行書き込み**: `.o` は内容アドレス名のため並列コンパイル間で共有しても衝突しないが、書き込み自体は一時名+`rename` の原子的置換を維持する必要がある（codegen.cpp:420-426）。直接書き込みに変えると並走プロセスが壊れた `.o` を読むレースになる。
 - **UEFIターゲットの最適化無効化**: LLVM最適化・CodeGen最適化が `efi_main` のcall/ret命令を削除しフォールスルークラッシュを起こすため、分割経路でも `optLevel = 0` とパススキップを維持する（codegen.cpp:197-203, 377-379）。
@@ -93,6 +93,6 @@ if (const char* jobs_env = std::getenv("CM_CODEGEN_JOBS")) {
 
 ## 関連資料
 
-- [インクリメンタルビルド・並列コード生成・ICF・タイムアウトのプロセス分離（設計文書）](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md)
-- [大規模ボトルネック監査](../../archive/v0.17.0/large-scale-bottleneck-audit.md)
+- [インクリメンタルビルド・並列コード生成・ICF・タイムアウトのプロセス分離（設計文書）](../../archive/v0.17.0/optimizer-codegen/incremental-build-and-parallel-codegen.md)
+- [大規模ボトルネック監査](../../archive/v0.17.0/audit/large-scale-bottleneck-audit.md)
 - [JITエンジン（cm runの実行系）](../codegen-jit/lljit-engine.md)

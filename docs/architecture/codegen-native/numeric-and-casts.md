@@ -32,7 +32,7 @@ if ((double)(float)value == value) {
 
 このfloat精度優先の分岐は、printlnがfloatをdoubleへ拡張して渡すために `3.14f` が `3.140000104904175` と冗長表示になるのを防ぐ。整数値のdouble（±1e15未満）は整数として出力する（`cm_format_double` `runtime_format.c:2022-2032`）。明示精度指定（`{x:.2}` 等）は `cm_format_double_precision`（`runtime_format.c:2034`）→ `cm_dtoa_buf`（`runtime_format.c:704-856`）で、precision>0のときは0.5×10^-Nの丸めを加えて小数点以下N桁固定・末尾0保持で出力する。NaN/±infは `nan`/`inf`/`-inf` の固定トークンである（`runtime_format.c:586-599`）。
 
-この最短round-trip方式が防ぐバグは「バックエンドごとの桁数分裂」である。有効桁固定の実装は `123456789.5` を `123457000` のように桁化けさせ、js/ts（ECMAScriptのround-trip出力）と食い違う（経緯は[../../archive/v0.17.0/numeric-output-and-cast-consistency.md](../../archive/v0.17.0/numeric-output-and-cast-consistency.md)のM8）。
+この最短round-trip方式が防ぐバグは「バックエンドごとの桁数分裂」である。有効桁固定の実装は `123456789.5` を `123457000` のように桁化けさせ、js/ts（ECMAScriptのround-trip出力）と食い違う（経緯は[../../archive/v0.17.0/numeric/numeric-output-and-cast-consistency.md](../../archive/v0.17.0/numeric/numeric-output-and-cast-consistency.md)のM8）。
 
 ### `as` キャストの意味論（rvalue.cpp）
 
@@ -95,7 +95,7 @@ Cast右辺値の変換（`src/internal/codegen/llvm/core/rvalue.cpp:68`）は、
 
 ## 関連資料
 
-- 数値出力・キャスト統一の設計と経緯: [../../archive/v0.17.0/numeric-output-and-cast-consistency.md](../../archive/v0.17.0/numeric-output-and-cast-consistency.md)
+- 数値出力・キャスト統一の設計と経緯: [../../archive/v0.17.0/numeric/numeric-output-and-cast-consistency.md](../../archive/v0.17.0/numeric/numeric-output-and-cast-consistency.md)
 - [リンクとランタイム解決](linking-and-runtime.md)（runtime_format.cがリンクされる経路）
 - [MIR→LLVM IR変換の構造](mir-to-llvm.md)（Cast右辺値を含む変換全体の位置づけ）
-- 文字列・UTF-8まわりのランタイム設計: [../../archive/v0.17.0/strings-utf8-and-stringbuilder.md](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md)
+- 文字列・UTF-8まわりのランタイム設計: [../../archive/v0.17.0/strings/strings-utf8-and-stringbuilder.md](../../archive/v0.17.0/strings/strings-utf8-and-stringbuilder.md)

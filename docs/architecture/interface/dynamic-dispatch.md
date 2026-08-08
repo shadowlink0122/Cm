@@ -93,6 +93,6 @@ int main() {
 
 ## 関連資料
 
-- [集約へのインターフェイス値格納（fat pointer構築の伝播）](../../archive/v0.17.0/interface-values-in-aggregates.md) — 集約経路のcoercion設計と壊れ方の詳細な分析
+- [集約へのインターフェイス値格納（fat pointer構築の伝播）](../../archive/v0.17.0/interfaces-derive/interface-values-in-aggregates.md) — 集約経路のcoercion設計と壊れ方の詳細な分析
 - [static-dispatch.md](static-dispatch.md) — 具象型が確定する経路の直接呼び出しへの解決
 - [../generics/mangling.md](../generics/mangling.md) — vtableエントリ名と`is_virtual`判定が依存するマングル規約

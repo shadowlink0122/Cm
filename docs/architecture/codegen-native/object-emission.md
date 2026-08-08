@@ -103,4 +103,4 @@ Baremetalターゲットではオブジェクト出力に加えて、FLASH/RAM�
 
 - [MIR→LLVM IR変換の構造](mir-to-llvm.md)
 - [リンクとランタイム解決](linking-and-runtime.md)
-- 差分ビルド・モジュール並列コード生成の設計: [../../archive/v0.17.0/incremental-build-and-parallel-codegen.md](../../archive/v0.17.0/incremental-build-and-parallel-codegen.md)
+- 差分ビルド・モジュール並列コード生成の設計: [../../archive/v0.17.0/optimizer-codegen/incremental-build-and-parallel-codegen.md](../../archive/v0.17.0/optimizer-codegen/incremental-build-and-parallel-codegen.md)

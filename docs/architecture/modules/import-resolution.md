@@ -103,5 +103,5 @@ importの解決には2つの層がある。
 ## 関連資料
 
 - [visibility-and-dedup.md](visibility-and-dedup.md) — export可視性の強制と多重importの重複排除
-- [../../archive/v0.17.0/module-visibility-and-import-dedup.md](../../archive/v0.17.0/module-visibility-and-import-dedup.md) — 可視性・重複排除の設計文書（実装済みアーカイブ）
+- [../../archive/v0.17.0/modules/module-visibility-and-import-dedup.md](../../archive/v0.17.0/modules/module-visibility-and-import-dedup.md) — 可視性・重複排除の設計文書（実装済みアーカイブ）
 - src/internal/preprocessor/conditional.cpp — import展開後に走る条件付きコンパイル（`#ifdef`等）

@@ -31,4 +31,4 @@ enum正規化の全面遅延（method-resolution-unificationの最高リスク�
 5. **MIRアクセス/レイアウト**: 値enumの`__tag`アクセスを恒等化（expr/access.cpp。従来はenum名を一律タグ付き扱いしfield(0)射影でint値を壊していた）、MIR letの`__TaggedUnion_`変換をタグ付きenum限定に修正（stmt/let.cpp。他2サイトと同条件へ整合）、タグ付きenumメソッド内matchのペイロード射影へselfポインタのderefを追加（expr/construct.cpp）。
 
 この実装でタグ付きenum（ペイロード付き）のメソッドも動作する（修正方針2の拡張検討を包含。selfポインタ渡し+match/ペイロード束縛が全経路一致）。回帰は`tests/common/enum/inherent_impl_methods.cm`（変数/関数戻り値/ループ変数レシーバ・引数付き・self比較・self as int・int互換性の不変・タグ付きmatch束縛）で、jit/native O0/O2/js/wasm出力一致を確認した。
-既知の制約: 値enumメソッド内の`self`再代入はコピーに閉じる（値意味論。チュートリアルに明記）。enum正規化の構造的遅延・メソッド表キーの正準化は[method-resolution-unification.md](../../design/v0.17.0/method-resolution-unification.md)が引き続き扱う。
+既知の制約: 値enumメソッド内の`self`再代入はコピーに閉じる（値意味論。チュートリアルに明記）。enum正規化の構造的遅延・メソッド表キーの正準化は[method-resolution-unification.md](../../../design/v0.17.0/method-resolution-unification.md)が引き続き扱う。

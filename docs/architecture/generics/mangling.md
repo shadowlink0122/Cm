@@ -107,7 +107,7 @@ error: symbol 'Holder__method' is defined more than once: method 'Holder.method'
 
 ## 関連資料
 
-- [マングリング名の衝突検出](../../archive/v0.17.0/mangling-collision-detection.md) — 単一シンボルテーブル導入の設計文書
-- [型同一性の構造化（再帰的型キー）](../../archive/v0.17.0/type-identity-recursive-keys.md) — `$`退避方式の設計文書
+- [マングリング名の衝突検出](../../archive/v0.17.0/modules/mangling-collision-detection.md) — 単一シンボルテーブル導入の設計文書
+- [型同一性の構造化（再帰的型キー）](../../archive/v0.17.0/type-system/type-identity-recursive-keys.md) — `$`退避方式の設計文書
 - [monomorphization.md](monomorphization.md) — 特殊化名を消費する単相化側の設計
 - [../interface/dynamic-dispatch.md](../interface/dynamic-dispatch.md) — マングル名に依存するインターフェイス呼び出し判定

@@ -119,4 +119,4 @@ Wasmターゲットは同様に `CM_RUNTIME_WASM_PATH`→`build/lib/cm_runtime_w
 - [オブジェクトファイル出力](object-emission.md)
 - [MIR→LLVM IR変換の構造](mir-to-llvm.md)
 - [数値出力とキャストの一貫性](numeric-and-casts.md)（runtime_format.cの書式化実装）
-- アロケータと一時プールの設計: [../../archive/v0.17.0/allocator-and-temp-pool.md](../../archive/v0.17.0/allocator-and-temp-pool.md)
+- アロケータと一時プールの設計: [../../archive/v0.17.0/memory/allocator-and-temp-pool.md](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)

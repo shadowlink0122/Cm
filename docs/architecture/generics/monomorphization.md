@@ -110,7 +110,7 @@ int main() {
 
 ## 関連資料
 
-- [型同一性の構造化（再帰的型キー）](../../archive/v0.17.0/type-identity-recursive-keys.md) — 本設計の導入経緯と縮退の実例
-- [マングリング名の衝突検出](../../archive/v0.17.0/mangling-collision-detection.md) — フラット名縮退の最終防波堤
+- [型同一性の構造化（再帰的型キー）](../../archive/v0.17.0/type-system/type-identity-recursive-keys.md) — 本設計の導入経緯と縮退の実例
+- [マングリング名の衝突検出](../../archive/v0.17.0/modules/mangling-collision-detection.md) — フラット名縮退の最終防波堤
 - [mangling.md](mangling.md) — シンボルキー空間の全体設計
 - [instantiation-diagnostics.md](instantiation-diagnostics.md) — 単相化の上流で不正なインスタンス化を弾く診断

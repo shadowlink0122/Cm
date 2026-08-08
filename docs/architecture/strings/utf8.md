@@ -98,6 +98,6 @@ static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
 
 ## 関連資料
 
-- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings-utf8-and-stringbuilder.md)
+- 設計経緯: [文字列の(ポインタ,長さ)表現・UTF-8対応・StringBuilder導入](../../archive/v0.17.0/strings/strings-utf8-and-stringbuilder.md)
 - ランタイム表現とO(1)バイト長: [representation.md](representation.md)
 - StringBuilder: [stringbuilder.md](stringbuilder.md)

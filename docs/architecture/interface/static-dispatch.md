@@ -99,4 +99,4 @@ int main() {
 - [dynamic-dispatch.md](dynamic-dispatch.md) — レシーバがインターフェイス値である場合のvtable経由呼び出し
 - [../generics/monomorphization.md](../generics/monomorphization.md) — 特殊化生成と呼び出し書き換えの本体
 - [../generics/instantiation-diagnostics.md](../generics/instantiation-diagnostics.md) — 境界未宣言の演算子使用の前倒し検査
-- [ジェネリックインスタンス化の診断](../../archive/v0.17.0/generic-instantiation-diagnostics.md) — 境界検査の設計文書
+- [ジェネリックインスタンス化の診断](../../archive/v0.17.0/diagnostics/generic-instantiation-diagnostics.md) — 境界検査の設計文書

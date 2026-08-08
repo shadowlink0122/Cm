@@ -17,7 +17,7 @@ Cmのメモリ解放は、MIR lowering時に静的へ挿入されるデストラ
 | return文（全スコープ分を一括） | `src/internal/mir/lowering/stmt/control.cpp:125`（`get_all_destructor_vars`） |
 | return文なしの関数終端 | `src/internal/mir/lowering/impl.cpp:360`（`emit_destructors`、定義は`:410`） |
 
-ループ本体の毎周期実行は重要な設計点であり、これが無いとループ内で束縛した`Vector`等が関数終了まで解放されず反復回数に比例してリークする（詳細は[archive設計文書](../../archive/v0.17.0/memory-drop-and-lifetime.md)）。
+ループ本体の毎周期実行は重要な設計点であり、これが無いとループ内で束縛した`Vector`等が関数終了まで解放されず反復回数に比例してリークする（詳細は[archive設計文書](../../archive/v0.17.0/memory/memory-drop-and-lifetime.md)）。
 
 ## データ構造とアルゴリズム
 
@@ -75,7 +75,7 @@ moved-out変数の読み出しをloweringする際、`is_moved_from`が立って
 ### 未初期化フィールドの扱い
 
 構造体・ユニオン・固定長配列のローカルは、LLVMコード生成の`alloca`直後に`CreateMemSet`でゼロ初期化される（`src/internal/codegen/llvm/core/translate/function.cpp:501`の`zeroInitAggregate`判定と`:514`のmemset発行）。
-これによりnative/jitの未初期化フィールド読み取りがスタックゴミではなくゼロに確定し、もともとゼロ初期化されるwasm/js/tsと挙動が揃う（背景は[archive設計文書](../../archive/v0.17.0/uninitialized-struct-fields.md)）。
+これによりnative/jitの未初期化フィールド読み取りがスタックゴミではなくゼロに確定し、もともとゼロ初期化されるwasm/js/tsと挙動が揃う（背景は[archive設計文書](../../archive/v0.17.0/memory/uninitialized-struct-fields.md)）。
 特にstring型フィールドではゴミポインタのデリファレンスによるクラッシュを防ぎ、dropパスがNULL（未設定）を安全に無視できる前提を作る。
 余分なゼロストアはO1以上のmem2reg/DSEが除去する。
 
@@ -108,7 +108,7 @@ moved-out変数の読み出しをloweringする際、`is_moved_from`が立って
 
 ## 関連資料
 
-- [一時オブジェクトのdropパスとループ本体の寿命管理（archive設計文書）](../../archive/v0.17.0/memory-drop-and-lifetime.md)
-- [未初期化構造体フィールドのゼロ初期化（archive設計文書）](../../archive/v0.17.0/uninitialized-struct-fields.md)
+- [一時オブジェクトのdropパスとループ本体の寿命管理（archive設計文書）](../../archive/v0.17.0/memory/memory-drop-and-lifetime.md)
+- [未初期化構造体フィールドのゼロ初期化（archive設計文書）](../../archive/v0.17.0/memory/uninitialized-struct-fields.md)
 - [アロケータ設計](allocator.md) — 挿入された解放呼び出しが接続される先の確保・解放経路
 - [集約コピーのlowering](aggregate-copy.md) — 集約を値として動かす経路の設計

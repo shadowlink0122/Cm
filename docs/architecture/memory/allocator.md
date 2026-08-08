@@ -70,7 +70,7 @@ reset_allocator();  // 既定（libc委譲）へ戻す
 
 wasmはフリーリスト方式の独自アロケータ固定であり、`cm_set_allocator_fns`はno-opとして定義される（`src/internal/codegen/llvm/wasm/runtime_wasm.c:259`）。
 js/tsはGC管理のため差し替え対象外である。
-本文書の対象はnative/jitであり、wasmアロケータの詳細は[archive設計文書](../../archive/v0.17.0/allocator-and-temp-pool.md)を参照。
+本文書の対象はnative/jitであり、wasmアロケータの詳細は[archive設計文書](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)を参照。
 
 ## 実装箇所
 
@@ -88,7 +88,7 @@ js/tsはGC管理のため差し替え対象外である。
 
 ## 落とし穴とケア
 
-- **確保・解放経路の一本化が防ぐバグ**: 確保がlibc直呼び・解放がカスタムアロケータ（またはその逆）というペア不一致はヒープ破壊に直結する。ランタイムに新しい確保サイトを書くときは必ず`cm_alloc`/`cm_dealloc`/`cm_realloc`（Cm側なら`cm_mem_*`）を使い、`malloc`/`free`を直接呼ばないこと。かつて`std::mem`がlibcを直呼びしていた時代には、`cm_set_allocator`で差し替えても`std::mem`と`Vector`に反映されないという分裂があった（背景は[archive設計文書](../../archive/v0.17.0/allocator-and-temp-pool.md)）
+- **確保・解放経路の一本化が防ぐバグ**: 確保がlibc直呼び・解放がカスタムアロケータ（またはその逆）というペア不一致はヒープ破壊に直結する。ランタイムに新しい確保サイトを書くときは必ず`cm_alloc`/`cm_dealloc`/`cm_realloc`（Cm側なら`cm_mem_*`）を使い、`malloc`/`free`を直接呼ばないこと。かつて`std::mem`がlibcを直呼びしていた時代には、`cm_set_allocator`で差し替えても`std::mem`と`Vector`に反映されないという分裂があった（背景は[archive設計文書](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)）
 - **inline APIとFFI実体の二重定義**: `cm_alloc`系はヘッダのstatic inlineで、外部シンボルは`cm_mem_*`のみである。Cmから新しいアロケータ機能を公開する場合はinline版でなく非inlineのエクスポート実体を追加し、JITのプロセス内シンボル解決とnativeリンクの両方で解決可能にする
 - **差し替え中の解放の整合**: `set_allocator_fns`は既に確保済みのブロックの出自を追跡しない。カスタムアロケータの登録・解除をまたいで生存するオブジェクトは、確保時と同じ実装で解放される保証がユーザー側の責務になる。計測用のカウンタアロケータのように内部でlibc mallocへ委譲する実装であれば境界をまたいでも安全である
 - **NoInline不変条件**: アロケータ関数のNoInline付与を外すと、O2でインライン展開後に元関数が削除され、`set_allocator_fns`へ渡した関数ポインタがダングリングする
@@ -97,6 +97,6 @@ js/tsはGC管理のため差し替え対象外である。
 
 ## 関連資料
 
-- [解放可能なwasmアロケータとアロケータ差し替えの到達可能化（archive設計文書）](../../archive/v0.17.0/allocator-and-temp-pool.md)
+- [解放可能なwasmアロケータとアロケータ差し替えの到達可能化（archive設計文書）](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)
 - [RAII・dropパスと所有権](drop-and-ownership.md) — この確保・解放経路を呼び出す解放挿入の設計
 - [集約コピーのlowering](aggregate-copy.md)
