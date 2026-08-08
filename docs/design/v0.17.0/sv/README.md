@@ -1,0 +1,94 @@
+# SystemVerilogバックエンド 機能ギャップ調査と新規実装項目（索引）
+
+Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、SystemVerilogの構文・機能をどこまで生成できるかを全面調査し、未対応の新規実装項目をまとめた。調査は3系統（コード生成`src/internal/codegen/sv/`の精読・`tests/sv/`とチュートリアルの実証範囲・`validation.cpp`とドキュメントの明示制限）を突き合わせ、主要ギャップは`cm compile --target=sv`で実機裏取りした。
+
+対象はFPGA向け合成可能サブセットとテストベンチ生成。**非目標**（下記）は本調査の対象外とする。
+
+## 凡例
+
+- ✅ 対応（native SVを生成、テストまたはチュートリアルで実証）
+- 🟡 機能は動くが native SV構文でない（shift+mask等へ降下＝合成結果は等価だが非idiomatic）
+- 🔴 表現手段なし（新規実装項目）
+- ⛔ 設計上の非目標（対象外）
+
+## カバレッジ・マトリクス
+
+### データ型
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| logic/signed/unsigned・整数幅写像・`bit[N]`・unpacked配列・多次元配列・typedef enum | ✅ | |
+| packed struct | ✅ | ただし全structを一律packed出力（`#[sv::packed]`制御は未実装、TODO analyze.cpp:863） |
+| packed union | 🔴 | → [SV-N6](packed-union.md) |
+| 2-state `bit`型・native `reg`宣言 | 🟡/🔴 | `bit`は`logic`(4-state)へ写像・`reg`は非出力 → [SV-N8](misc-synth-gaps.md) |
+
+### 式・ビット操作
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| 連接`{}`・複製`{n{}}`・三項・算術右シフト`>>>`・`$signed`/`$unsigned`・サイズ付きリテラル | ✅ | |
+| ビットスライス`x[hi:lo]`（読み） | 🟡 | shift+maskへ降下（native `[hi:lo]`非出力） → [SV-N1](native-bit-part-select.md) |
+| インデックス付き部分選択`x[i +: w]`（読み）・部分代入`x[hi:lo] = v` | 🟡 | 同上（shift+mask・read-modify-write） → [SV-N1](native-bit-part-select.md) |
+| `x[i -: w]` | 🔴 | → [SV-N1](native-bit-part-select.md) |
+| リダクション演算子`&x`/`\|x`/`^x`/`~&`/`~\|`/`~^` | 🔴 | Cmに構文なし → [SV-N2](reduction-operators.md) |
+| 型キャスト`type'(expr)`（enum/struct）・ストリーミング演算子 | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+
+### 制御構文
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| if/else if/else・`unique case`・while再構成・break(disable方式)・don't-careパターン | ✅ | |
+| `casez`/`casex`（native） | 🟡 | don't-careは`(x & mask)==v`三項へ降下（native casez非出力） → [SV-N3](casez-casex-priority.md) |
+| `priority` case修飾 | 🔴 | `unique`のみ出力 → [SV-N3](casez-casex-priority.md) |
+
+### モジュール構造
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| module/ポート(in/out/inout)・`#(parameter)`・localparam・名前付きポート接続・階層(export IO struct) | ✅ | |
+| SV `function automatic`（戻り値あり関数） | ✅ | |
+| generate/genvar/for-generate/if-generate | 🔴 | 定数ループ展開が部分代替 → [SV-N4](generate-genvar.md) |
+| パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`（ロードマップA6）・パラメータ依存ループ展開(A5) | 🔴 | → [SV-N4](generate-genvar.md) |
+| モジュールインスタンス配列・位置ベースポート接続 | 🔴 | → [SV-N5](module-instance-arrays.md) |
+| SV `task`（自動生成） | 🔴 | void関数はalways化（設計選択）→ [SV-N8](misc-synth-gaps.md) |
+
+### メモリ・属性・実機I/O
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| 内部配列/RAM・配列初期化・`$readmemh`・`#[sv::bram/lutram/memfile]`・`--emit-memfile` | ✅ | |
+| ピン制約`#[sv::pin]`(.cst/.xdc/.tcl)・トライステート`#[sv::tri]`・CDC同期`#[sv::sync]` | ✅ | 正常系の統合テストは薄い（チュートリアルのみの項目あり） |
+| `$readmemb` | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+
+### テストベンチ・検証
+| 機能 | 状態 | 備考 |
+|------|------|------|
+| TB自動生成(`//! test:`)・`#[test]`刺激関数+`step()`・即時アサーション`assert(...) else $error`・`$display`/`$finish`/`$dumpvars`・クロック生成 | ✅ | （`//! test:`期待値の非検証は別途R15で対応中） |
+| 並行アサーション`assert property`/`sequence`/`property` | 🔴 | → [SV-N7](concurrent-assertions-sva.md) |
+| `$time`・`final`ブロック | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+
+## 新規実装項目（優先度順）
+
+| ID | 項目 | 優先度 | 分類 |
+|----|------|--------|------|
+| [SV-N1](native-bit-part-select.md) | native ビット選択・部分選択の出力（`[hi:lo]`/`[+:]`/`[-:]`・部分代入） | High | idiom（合成結果は等価だが可読性・ツール互換） |
+| [SV-N2](reduction-operators.md) | リダクション演算子（Cm構文＋SV出力） | High | 新機能 |
+| [SV-N3](casez-casex-priority.md) | `casez`/`casex`とpriority/unique0 case修飾 | High | idiom＋新機能 |
+| [SV-N4](generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ展開 | Medium | 新機能（A5/A6） |
+| [SV-N5](module-instance-arrays.md) | モジュールインスタンス配列・位置ベースポート接続 | Medium | 新機能 |
+| [SV-N6](packed-union.md) | packed union（ビット再解釈） | Low | 新機能 |
+| [SV-N7](concurrent-assertions-sva.md) | 並行アサーション（SVA property/sequence） | Medium | 検証機能 |
+| [SV-N8](misc-synth-gaps.md) | 小粒ギャップ集（$readmemb・type'(expr)・SV task・$time/final・native reg/2-state bit・#[sv::packed]） | Low | 混在 |
+
+## 設計上の非目標（⛔ 対象外・実装しない）
+
+出典: `docs/tutorials/ja/compiler/sv/semantics.md`・`docs/design/backend_support_matrix.md`。Cmに構文が無く表現しない、または合成不能:
+
+`force`/`release`・`specify`ブロック・UDP・信号強度(strength)・`fork`/`join`・イベント(event)・DPI-C・SV `interface`/`modport`（Cmのinterfaceとは別概念。階層＋構造体で代替）・遅延`#10`（TB生成内部でのみ使用）・`clocking block`・`package`（importはフラット化）・class（合成不能）・タグ付きunion（ペイロード付きenum）・クロージャ/ラムダ・動的配列/スライス・浮動小数・ポインタ。
+
+型検査を通過した非対応構文がコード生成に到達した場合はSV007で明示エラーになる。
+
+## 調査の裏取りメモ
+
+主要ギャップは実機（cm 2026-08-08ビルド）で確認済み:
+- `din[7:4]` → `hi = din >> 32'sd4 & 32'sd15;`（shift+mask、native `[7:4]`非出力）
+- `word[i +: 4]`（int基点）→ `nib = word >> i & 32'sd15;`（同上。bit基点は「base of a part-select must be an integer type」で拒否）
+- `word[7:4] = v` → `word = word & -8'sd241 | (v & 32'sd15) << 32'sd4;`（read-modify-write）
+- `switch`（default/else付き）→ `unique case (...) ... default: ... endcase`（priorityは非出力）
+- don't-care `0b1?00` → `(op & 32'd11) == 32'd8 ? ...`（native casez非出力）
+- リダクション・generate・インスタンス配列・packed union・並行アサーションは生成箇所ゼロ（3系統調査で一致）

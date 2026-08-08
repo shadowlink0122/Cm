@@ -166,6 +166,14 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 | E4 | baremetal-arm/x86 | 調査済み → [R17](../../archive/v0.17.0/baremetal-arm-startup-broken.md)・[R18](../../archive/v0.17.0/freestanding-nostd-enforcement-gaps.md)（両方修正済み） | 機能テストあり（tests/baremetal、arm/x86二段ゲート・nostd診断3本） | armの起動コード・nostd強制漏れとも修正済み。x86正常系は健全 |
 | E5 | TSバックエンド固有経路 | 調査済み → [R19](../../archive/v0.17.0/ts-bigint-number-generation.md)・[R20](../../archive/v0.17.0/interpolation-format-backend-divergence.md)（両方修正済み） | tests/ts・wide64_field_assign・format_spec_matrix | フィールド代入のbigint化・書式の全バックエンド統一とも修正済み |
 
+## SystemVerilogバックエンド機能ギャップ（新規実装項目）
+
+SVバックエンドが生成できるSV構文・機能を全面調査し（コード生成の精読・tests/svとチュートリアルの実証範囲・validation.cppの明示制限の3系統、主要ギャップは実機裏取り）、未対応の新規実装項目8件をまとめた。索引・カバレッジマトリクス・非目標一覧は [sv/README.md](sv/README.md)。合成可能サブセットの多くは対応済みで、非目標（force/release・specify・UDP・fork/join・DPI-C・interface/modport・遅延ほか）は対象外。
+
+- [SV-N1](sv/native-bit-part-select.md) native ビット選択・部分選択の出力（現状shift+mask降下）・[SV-N2](sv/reduction-operators.md) リダクション演算子・[SV-N3](sv/casez-casex-priority.md) casez/casex・priority case（High）
+- [SV-N4](sv/generate-genvar.md) generate/genvar・パラメータ幅配列（A5/A6）・[SV-N5](sv/module-instance-arrays.md) インスタンス配列・[SV-N7](sv/concurrent-assertions-sva.md) 並行アサーション（Medium）
+- [SV-N6](sv/packed-union.md) packed union・[SV-N8](sv/misc-synth-gaps.md) 小粒ギャップ集（$readmemb・type'(expr)・SV task・native reg/2-state bit・#[sv::packed]ほか）（Low）
+
 ## 全体複雑度レビュー（未実装のリファクタリング提案）
 
 修正履歴の同族バグ分析（変換サイト欠落族・メソッド解決分裂族・名前逆算族）と全ソースの実測（サイト×変換種マトリクス・キー計算箇所の棚卸し・ランタイムdiff・関数長スキャン）に基づき、複雑すぎる実装をシンプルかつバグが再発しない構造へ変えるための提案。優先度順。
