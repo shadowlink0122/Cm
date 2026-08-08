@@ -4,6 +4,7 @@
 
 #include "internal/base/target.hpp"
 #include "layout.hpp"
+#include "mono/typekey.hpp"
 
 #include <memory>
 #include <optional>
@@ -182,10 +183,10 @@ bool LoweringContext::has_destructor(const std::string& type_name) const {
         return true;
     }
 
-    // ジェネリック型の場合（Vector__TrackedObject等）、元テンプレート名を抽出してチェック
-    auto underscore_pos = type_name.find("__");
-    if (underscore_pos != std::string::npos) {
-        std::string base_template = type_name.substr(0, underscore_pos);
+    // ジェネリック型の場合（Vector__TrackedObject・Vector$1$...等）、元テンプレート名を正準関数で抽出してチェック
+    const std::string base_template_name = typekey::spec_base_name(type_name);
+    if (base_template_name != type_name) {
+        const std::string& base_template = base_template_name;
         // Vector<T> の形式で登録されているかチェック
         std::string generic_name = base_template + "<T>";
         if (types_with_destructor.count(generic_name) > 0) {
@@ -202,8 +203,9 @@ bool LoweringContext::has_destructor(const std::string& type_name) const {
         }
     }
 
-    // ベース名で渡された場合（例：Vector）、ジェネリックテンプレートをチェック
-    if (type_name.find('<') == std::string::npos && type_name.find("__") == std::string::npos) {
+    // ベース名で渡された場合（例：Vector）、ジェネリックテンプレートをチェック（$エンコード名は上の基底抽出経路が処理済み）
+    if (type_name.find('<') == std::string::npos && type_name.find("__") == std::string::npos &&
+        !typekey::is_encoded_key(type_name)) {
         std::string generic_name = type_name + "<T>";
         if (types_with_destructor.count(generic_name) > 0) {
             return true;
@@ -311,11 +313,10 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
         if (enum_defs) {
             auto it = enum_defs->find(type->name);
 
-            // モノモーフ化された型名（例: Result__ulong__long）の場合、ベース名（Result）でenum_defsをフォールバック検索
+            // モノモーフ化された型名（例: Result__ulong__long・Result$2$...）の場合、正準関数で基底名（Result）を取りenum_defsをフォールバック検索
             if (it == enum_defs->end()) {
-                size_t dunder_pos = type->name.find("__");
-                if (dunder_pos != std::string::npos && dunder_pos > 0) {
-                    std::string base_name = type->name.substr(0, dunder_pos);
+                const std::string base_name = typekey::spec_base_name(type->name);
+                if (base_name != type->name) {
                     it = enum_defs->find(base_name);
                 }
             }

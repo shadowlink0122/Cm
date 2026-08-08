@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/slice_dispatch.hpp"
 
 #include <functional>
@@ -181,6 +182,18 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
                         // field_typeの名前がgeneric_paramsに一致する場合、置換
                         if (struct_def->generic_params[j].name == field_type->name) {
                             field_type = current_type->type_args[j];
+                            break;
+                        }
+                    }
+                }
+                // type_argsが空でも$エンコード名（Pair$2$...）はtypekeyの可逆復号で型引数を復元する（フラット逆算より優先）
+                else if (field_type && current_type->type_args.empty() &&
+                         typekey::is_encoded_key(current_type->name)) {
+                    auto decoded = typekey::decode_type_args(current_type->name);
+                    for (size_t j = 0; j < struct_def->generic_params.size() && j < decoded.size();
+                         ++j) {
+                        if (struct_def->generic_params[j].name == field_type->name) {
+                            field_type = decoded[j];
                             break;
                         }
                     }

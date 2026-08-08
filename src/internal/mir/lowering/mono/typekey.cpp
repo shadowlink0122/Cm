@@ -232,6 +232,17 @@ bool is_encoded_key(const std::string& key) {
     return key.find('$') != std::string::npos;
 }
 
+std::string spec_base_name(const std::string& name) {
+    if (is_encoded_key(name)) {
+        return base_name_of(name);
+    }
+    auto us = name.find("__");
+    if (us != std::string::npos && us > 0) {
+        return name.substr(0, us);
+    }
+    return name;
+}
+
 std::string base_name_of(const std::string& key) {
     if (!key.empty() && key[0] == '$')
         return key;  // 派生型マーカーには基底名が無い

@@ -2,6 +2,8 @@
 
 #include "base.hpp"
 
+#include "mono/typekey.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,11 +70,10 @@ hir::TypePtr MirLoweringBase::resolve_typedef(hir::TypePtr type) {
         // enum定義を確認
         auto enum_it = enum_defs.find(type->name);
 
-        // モノモーフ化された型名（例: Result__ulong__long）の場合、ベース名（Result）でenum_defsをフォールバック検索
+        // モノモーフ化された型名（例: Result__ulong__long・Result$2$...）の場合、正準関数で基底名（Result）を取りenum_defsをフォールバック検索
         if (enum_it == enum_defs.end()) {
-            size_t dunder_pos = type->name.find("__");
-            if (dunder_pos != std::string::npos && dunder_pos > 0) {
-                std::string base_name = type->name.substr(0, dunder_pos);
+            const std::string base_name = typekey::spec_base_name(type->name);
+            if (base_name != type->name) {
                 enum_it = enum_defs.find(base_name);
             }
         }

@@ -41,6 +41,10 @@ bool is_encoded_key(const std::string& key);
 // キーの基底名を取り出す（"Box$1$3$int" -> "Box"、非エンコード名はそのまま）
 std::string base_name_of(const std::string& key);
 
+// 特殊化シンボル名から基底名を取る（$エンコード名は$前・フラット名は最初の__前・素名はそのまま）。
+// __前提のベース名抽出サイトを$対応で共通化するための正準関数（mono-flat-name-elimination）
+std::string spec_base_name(const std::string& name);
+
 // エンコード済みキーの型引数を復元する（非エンコード名は空）
 std::vector<hir::TypePtr> decode_type_args(const std::string& key);
 
