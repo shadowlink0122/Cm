@@ -2,6 +2,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
@@ -133,14 +134,22 @@ void Monomorphization::generate_generic_specializations(
                         // 構造体型でマングリング済みの名前（__を含む）を持つ場合
                         // （ユーザー定義に同名の構造体がある場合は特殊化と混同しない。C8）
                         else if (target && target->kind == hir::TypeKind::Struct &&
-                                 target->name.find("__") != std::string::npos &&
+                                 (target->name.find("__") != std::string::npos ||
+                                  typekey::is_encoded_key(target->name)) &&
                                  (!hir_struct_defs ||
                                   hir_struct_defs->find(target->name) == hir_struct_defs->end())) {
-                            // 基本名と型引数を抽出（1パラメータ基底はセグメントを結合）
-                            auto pos = target->name.find("__");
-                            std::string base_name = target->name.substr(0, pos);
-                            std::vector<hir::TypePtr> struct_type_args =
-                                parse_flat_type_args(base_name, target->name.substr(pos + 2));
+                            // 基本名と型引数を抽出（$エンコード名はtypekeyの可逆復号を優先。フラット1パラメータ基底はセグメントを結合）
+                            std::string base_name;
+                            std::vector<hir::TypePtr> struct_type_args;
+                            if (typekey::is_encoded_key(target->name)) {
+                                base_name = typekey::base_name_of(target->name);
+                                struct_type_args = typekey::decode_type_args(target->name);
+                            } else {
+                                auto pos = target->name.find("__");
+                                base_name = target->name.substr(0, pos);
+                                struct_type_args =
+                                    parse_flat_type_args(base_name, target->name.substr(pos + 2));
+                            }
                             // 構造体特殊化を生成
                             if (!struct_type_args.empty()) {
                                 generate_specialized_struct(program, base_name, struct_type_args);

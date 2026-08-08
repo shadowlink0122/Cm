@@ -179,7 +179,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 修正履歴の同族バグ分析（変換サイト欠落族・メソッド解決分裂族・名前逆算族）と全ソースの実測（サイト×変換種マトリクス・キー計算箇所の棚卸し・ランタイムdiff・関数長スキャン）に基づき、複雑すぎる実装をシンプルかつバグが再発しない構造へ変えるための提案。優先度順。
 
 - [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — **第1段実施済み**（coerce_to_expected新設と11サイト置換・ユニオンのインラインCast3サイト吸収・メンバ代入の全変換種対応・ユニオン変種の保守的再帰ディスパッチ。発見した既存バグ3件は**修正済み**——真因はLLVMでなくGVNのCSEキー欠陥（is/as混同）とパーサのis/asスライス型右辺未対応+補間パース失敗の黙殺だった）。残: 第2段の本丸（upcastのMIR化）・第3段（checker注釈駆動化）（Critical）
-- [モノモーフ化のフラット名逆算の完全廃止](mono-flat-name-elimination.md) — 可逆$エンコーダ（typekey）があるのにstruct_symbol_keyのsimple高速パスがネスト特殊化で曖昧フラット名を生成し、parse_flat_type_argsの誤逆算がQ2の真因。逆算器の削除とtypekey全面化でQ2族を表現不能にする（Critical）
+- [モノモーフ化のフラット名逆算の完全廃止](mono-flat-name-elimination.md) — **逆算読者のtypekey統一・C8実害修正済み**（parse_flat_type_argsの全6呼び出しサイトへ$優先分岐・scanの無言破棄へ痕跡・衝突テストで発見したメンバアクセスのC8検査漏れ（ユーザー定義Box__Box__int風名前のフィールドがジェネリック基底型で誤再型付け）を修正）。残: 逆算器本体とmono_internalフラット分岐の削除・ベース名抽出約30箇所の共通化・同定/表示分離（シンボル名一斉変更を伴うため専用ターン）（Critical）
 - [メソッド解決の一元化](method-resolution-unification.md) — メソッド表キー計算が12箇所別実装・解決機構4系統・types/の全throw4件が内部エラー漏れ。正準キー関数＋resolve_method APIでQ1/Q4/Q5族を封止する（High）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
 - [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — 構造化import後も包含判定は正規表現識別子スキャン・出力はスパン消し込み+改名テキスト複製のまま。判定のAST化→出力のAST化の2段で座標ズレ（X5同根）と誤包含を解消する（Medium）

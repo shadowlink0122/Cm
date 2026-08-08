@@ -121,9 +121,12 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
         std::string base_name = current_type->name;
 
         // マングリング済み名前（__を含む）の場合、ベース名を抽出
+        // C8: 完全名がユーザー定義構造体（Box__Box__int等のフラット風名前）ならベース分割しない
+        // （従来は無条件分割でユーザー構造体のフィールドがジェネリック基底の型で誤再型付けされていた）
         size_t mangled_pos = base_name.find("__");
         std::string original_base = base_name;
-        if (mangled_pos != std::string::npos) {
+        if (mangled_pos != std::string::npos &&
+            !(ctx.struct_defs && ctx.struct_defs->count(base_name))) {
             base_name = base_name.substr(0, mangled_pos);
         }
 

@@ -4,6 +4,7 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
@@ -128,6 +129,17 @@ hir::TypePtr Monomorphization::decode_type_name(const std::string& name) const {
         t->element_type = elem;
         t->name = name;
         return t;
+    }
+    // $エンコード名（typekey）は可逆復号を最優先する（フラット文法は本質的に曖昧なため、逆算ヒューリスティックへは渡さない）
+    if (typekey::is_encoded_key(name)) {
+        const std::string base = typekey::base_name_of(name);
+        auto args = typekey::decode_type_args(name);
+        if (!args.empty()) {
+            auto t = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            t->name = base;
+            t->type_args = std::move(args);
+            return t;
+        }
     }
     // フラット特殊化名（Vector__int / HashMap__int__string）:
     // 基底がジェネリック構造体として登録済みの場合のみ型引数を復元する
@@ -304,6 +316,10 @@ void Monomorphization::scan_generic_calls(
                 }
             }
 
+            // 件数不一致（曖昧なフラット名等）は要求を記録しない。無置換特殊化の常時検査が下流の検出網になる（無言破棄の痕跡はデバッグログへ残す）
+            if (type_args.size() != num_params) {
+                debug_msg("MONO", "scan: type-arg count mismatch, call site dropped: " + func_name);
+            }
             if (type_args.size() == num_params && !type_args.empty()) {
                 debug_msg("MONO", "Found mangled call to " + func_name + " matching generic " +
                                       generic_name);
