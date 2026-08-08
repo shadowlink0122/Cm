@@ -223,7 +223,8 @@ void desugar_string_interpolation(ast::LiteralExpr& lit, const Span& span) {
     for (const auto& content : extract_placeholder_exprs(std::get<std::string>(lit.value))) {
         auto expr = parse_interp_content(content);
         if (!expr) {
-            // パース不能な内容は従来どおりリテラル文字として扱う（診断はMIR側のフォールバックが行う）
+            // パース不能な内容はリテラル文字として出力される（MIR側フォールバック）。リテラルへ記録しcheckerのdesugar_interpolation_partsが警告する（従来は無診断でエラー型ローカルの未初期化値が出力されていた）
+            lit.interp_parse_failures.push_back(content);
             continue;
         }
         stamp_spans(*expr, span);
@@ -233,6 +234,20 @@ void desugar_string_interpolation(ast::LiteralExpr& lit, const Span& span) {
 
 void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
     desugar_string_interpolation(lit, current_span_);
+    // 脱糖はプリパス（match_hoist）が先行することがあるため、記録済みの失敗をここで一度だけ報告する
+    if (!lit.interp_failures_reported && !lit.interp_parse_failures.empty()) {
+        lit.interp_failures_reported = true;
+        for (const auto& content : lit.interp_parse_failures) {
+            const std::string msg =
+                i18n::msgf(i18n::MsgId::TcInterpPlaceholderNotExpression, content);
+            // Z5と同じ運用: 通常は警告、--strictではエラーへ昇格する
+            if (enable_naming_check_) {
+                error(current_span_, msg);
+            } else {
+                warning(current_span_, msg);
+            }
+        }
+    }
 }
 
 }  // namespace cm

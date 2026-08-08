@@ -174,6 +174,11 @@ std::string GVN::stringify_rvalue(const MirRvalue& rvalue) {
         ss << ",";
         if (cast->target_type)
             ss << cm::hir::type_to_string(*cast->target_type);
+        // check_only（is検査。bool結果）と通常のas（抽出）は同一オペランド・同一宛先型でも別の値である。
+        // 従来はキーに含まれておらず、`r is int`のbool結果が後続の`r as int`へCSE再利用され、
+        // ペイロードが1（true）や5e-324（bit 1のdouble解釈）に化けるミスコンパイルの真因だった
+        if (cast->check_only)
+            ss << ",is";
         ss << ")";
         return ss.str();
     }

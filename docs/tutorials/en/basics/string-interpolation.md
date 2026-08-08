@@ -132,6 +132,7 @@ int main() {
 ## Escaping Braces and Combining with Interpolation
 
 To output literal `{` `}`, write `{{` `}}`.
+A placeholder that is not a valid expression (a typo like `{x +}`) is printed literally and produces a compile-time warning (an error with `--strict`); added in v0.17.0 — previously an uninitialized value was printed with no diagnostic.
 **As of v0.17.0, escaping and interpolation can be combined in every form**: you can embed placeholders inside escaped braces, as in `{{ ... {value} ... }}`.
 
 ```cm

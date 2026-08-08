@@ -69,6 +69,7 @@ int main() {
 ```
 
 > **Note:** Use `as Value` to store a value into the union, and `as string` to extract it back to its original type. Extraction is tag-checked: extracting with a type that does not match the active variant panics at runtime.
+> Slice-variant checks and extraction (`v is int[]` / `v as int[]`) are also supported since v0.17.0 (previously `int[]` was a syntax error in this position).
 
 ### Runtime Type Discrimination: the `is` Operator and Match Type Patterns (v0.16.0)
 

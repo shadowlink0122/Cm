@@ -2,6 +2,8 @@
 
 #include "internal/syntax/ast/nodes.hpp"
 
+#include <functional>
+
 namespace cm {
 
 // 式形式matchのscrutineeに関数呼び出しを含む式が書かれた場合、文の直前に一時変数（auto推論のLetStmt）へ退避してscrutineeを識別子参照に書き換える。

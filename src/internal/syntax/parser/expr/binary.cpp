@@ -329,16 +329,25 @@ ast::ExprPtr Parser::parse_cast_expr() {
     auto expr = parse_unary();
 
     while (true) {
+        // as/isの型右辺のスライスサフィックス: 空ブラケット[]のみ型として消費する（int[]等。[i]は従来通り(expr as T)[i]の添字式として残す）
+        auto consume_slice_suffix = [&](ast::TypePtr ty) {
+            while (check(TokenKind::LBracket) && peek_kind() == TokenKind::RBracket) {
+                advance();
+                advance();
+                ty = ast::make_array(std::move(ty));
+            }
+            return ty;
+        };
         if (consume_if(TokenKind::KwAs)) {
             debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
                             debug::Level::Debug);
-            auto target_type = parse_type();
+            auto target_type = consume_slice_suffix(parse_type());
             expr = ast::make_cast(std::move(expr), std::move(target_type));
         } else if (consume_if(TokenKind::KwIs)) {
             // ユニオン型の実行時型判別: expr is Type → bool
             debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'is' type check expression",
                             debug::Level::Debug);
-            auto target_type = parse_type();
+            auto target_type = consume_slice_suffix(parse_type());
             auto span = Span{expr->span.start, previous().end};
             auto cast = std::make_unique<ast::CastExpr>(std::move(expr), std::move(target_type));
             cast->type_check = true;

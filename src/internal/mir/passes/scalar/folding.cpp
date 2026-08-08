@@ -207,6 +207,11 @@ std::optional<MirConstant> ConstantFolding::evaluate_rvalue(
                 break;
             }
 
+            // check_only（is検査）は値変換でなくタグ検査であり、定数畳み込みの対象にしない（GVNのキー同様、asの値変換と混同しない）
+            if (cast_data.check_only) {
+                break;
+            }
+
             // ポインタ型への変換は定数畳み込みしない
             // ポインタ型変換は実行時のアドレスに依存するため
             if (cast_data.target_type && cast_data.target_type->kind == hir::TypeKind::Pointer) {

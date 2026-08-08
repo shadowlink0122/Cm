@@ -1625,6 +1625,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsMethodOverloadUnsupported
     {"method overloading with 'overload' is not supported ('overload' is for constructors only)",
      "メソッドのオーバーロード（overload修飾子）は未対応です（overloadはコンストラクタ専用）"},
+    // TcInterpPlaceholderNotExpression
+    {"interpolation placeholder '{0}' is not a valid expression; it is printed literally (escape literal braces by doubling them)",
+     "補間プレースホルダ '{0}' は式として解釈できないためリテラル文字として出力されます（リテラル波括弧は二重化でエスケープ）"},
 };
 // clang-format on
 

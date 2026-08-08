@@ -285,12 +285,19 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
 }
 
 // 補間プレースホルダの内容を値ローカルへ解決する（脱糖済み部分式が無い場合の最終手段）。
-// 識別子は変数として直接参照し、解決不能な内容はエラー型のダミー値を返す
+// 識別子は変数として直接参照し、解決不能な内容は「{内容}」のリテラル文字列を返す
+// （従来はエラー型ダミーで未初期化値がそのまま出力されていた。checkerが脱糖時に警告済み）
 LocalId ExprLowering::resolve_interp_placeholder(const std::string& content, LoweringContext& ctx) {
     if (auto var_id = ctx.resolve_variable(content)) {
         return *var_id;
     }
-    return ctx.new_temp(hir::make_error());
+    LocalId tmp = ctx.new_temp(hir::make_string());
+    MirConstant c;
+    c.type = hir::make_string();
+    c.value = "{" + content + "}";
+    ctx.push_statement(
+        MirStatement::assign(MirPlace{tmp}, MirRvalue::use(MirOperand::constant(std::move(c)))));
+    return tmp;
 }
 
 // 脱糖済みの補間部分式から各プレースホルダを値ローカルへ解決する（type-resolution-simplification 領域1第4段b）。
