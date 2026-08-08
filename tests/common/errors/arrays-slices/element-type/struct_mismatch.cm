@@ -1,0 +1,6 @@
+// 匿名構造体リテラルは許可されるが、要素型に合わない非構造体(int)が混在するとエラーになる（Req1/Req3境界）
+struct Point { int x; int y; }
+int main() {
+    Point[2] pts = [{x: 1, y: 2}, 42];
+    return 0;
+}

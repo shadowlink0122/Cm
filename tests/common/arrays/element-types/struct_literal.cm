@@ -1,0 +1,8 @@
+import std::io::println;
+// 型名を明示しない構造体リテラルでも要素型に一致すれば配列要素として許可される（Req3）
+struct Point { int x; int y; }
+int main() {
+    Point[2] pts = [{x: 1, y: 2}, {x: 3, y: 4}];
+    println("{pts[0].x},{pts[0].y} {pts[1].x},{pts[1].y}");
+    return 0;
+}

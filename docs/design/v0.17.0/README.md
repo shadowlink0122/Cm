@@ -184,7 +184,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
 - [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — 構造化import後も包含判定は正規表現識別子スキャン・出力はスパン消し込み+改名テキスト複製のまま。判定のAST化→出力のAST化の2段で座標ズレ（X5同根）と誤包含を解消する（Medium）
 - 型サイズ照会の一本化 — **実施済み**（[archive移動](../../archive/v0.17.0/optimizer-codegen/layout-size-single-source.md)。実測でsizeof(Pair<char,int>)=16（正8）等の誤値がユーザーへ到達していた。HIRのStruct/Generic分岐へ型引数置換の実レイアウト計算を実装しフィールド数×8と暫定256を削除、MIR見積もりは`__`分割逆算ごとlayout_size委譲サンク化。見積もり実装0件に。sizeof_generic回帰マトリクス追加）
-- [derive自動実装の残存MIR生成の整理](auto-impl-generic-gaps-and-cleanup.md) — 源展開移行後も約2,970行のMIR直生成が残存（非ジェネリック分は死に体）。ジェネリックパスはSlice/Unionフィールド未対応で無言誤動作。削除→ギャップ封鎖→単一ソース化完遂の3段（Medium）
+- [derive自動実装の残存MIR生成の整理](auto-impl-generic-gaps-and-cleanup.md) — **第1段・第2段実施済み**（第1段: 非ジェネリック用の死に体生成器7本約900行を削除しディスパッチを展開漏れの内部エラー化（eq/ltはユーザーifaceの演算子auto-implが現役利用のため維持）。第2段: R21のSlice/Union診断封鎖済み）。残: 第3段（ジェネリックの単一ソース化完遂と*_for_monomorphized全廃）（Medium）
 - 配列HOFランタイムの共通ソース化 — **実施済み**（[archive移動](../../archive/v0.17.0/stdlib-runtime/runtime-hof-common-source.md)。__builtin_array_*全54関数+ヘルパーをcommon/runtime_hof_core.inc（826行）へ抽出しCM_RT_*フックで両target包含（native 3,058→2,255行・wasm 2,888→2,129行）。wasm sort系のalloc失敗リーク解消・ソートのcm_qsort統一を含む。check_builtin_signatures.pyへ共通コア重複定義検査（111件）を追加し再発を機械防止。文字列フォーマット系はwasm SDS化まで非対象の既存判断を維持）
 
 ## コンパイラ基盤の構造的リファクタリング

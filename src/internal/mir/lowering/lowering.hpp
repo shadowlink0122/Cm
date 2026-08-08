@@ -79,13 +79,6 @@ class MirLowering : public MirLoweringBase {
     // 組み込み演算子/メソッドの自動生成（非ジェネリック構造体用）
     void generate_builtin_eq_operator(const hir::HirStruct& st);
     void generate_builtin_lt_operator(const hir::HirStruct& st);
-    void generate_builtin_clone_method(const hir::HirStruct& st);
-    void generate_builtin_hash_method(const hir::HirStruct& st);
-    void generate_builtin_debug_method(const hir::HirStruct& st);
-    void generate_builtin_display_method(const hir::HirStruct& st);
-    void generate_builtin_css_method(const hir::HirStruct& st);
-    void generate_builtin_to_css_method(const hir::HirStruct& st);
-    void generate_builtin_is_css_method(const hir::HirStruct& st);
 
     // 組み込み演算子/メソッドの自動生成（モノモーフィゼーション版）
     void generate_builtin_eq_operator_for_monomorphized(const MirStruct& st);

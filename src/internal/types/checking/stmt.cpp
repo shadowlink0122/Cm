@@ -362,8 +362,24 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                 // 宣言型を採用しつつ、要素（ネストした無名リテラル含む）へ要素型を期待型として伝播する
                 init_type = let.type;
                 let.init->type = let.type;
+                // union typedef（typedef Val = int | string 等）の要素型はメンバ互換判定のため先に typedef を解決する（scalar 変数宣言と同じ経路）
+                const auto elem_expected = resolve_typedef(let.type->element_type);
+                // 汎用格納の void* 要素配列は「何でも入る」エスケープハッチとして要素型検査を免除する（取得は auto、型判定は typeof を想定）
+                const bool elem_is_void_ptr =
+                    elem_expected && elem_expected->kind == ast::TypeKind::Pointer &&
+                    elem_expected->element_type &&
+                    elem_expected->element_type->kind == ast::TypeKind::Void;
                 for (auto& elem : array_lit->elements) {
-                    infer_type_expecting(*elem, let.type->element_type);
+                    auto elem_type = infer_type_expecting(*elem, elem_expected);
+                    // 配列リテラル要素の型検査: scalar 変数宣言と同じ規則で宣言要素型と非互換な要素を拒否する
+                    // 拡大変換(tiny/short→int)・無名 struct リテラルのコアース・void* への任意ポインタ代入は types_compatible が許容する
+                    if (!elem_is_void_ptr && elem_expected && elem && elem_type &&
+                        !types_compatible(elem_expected, elem_type)) {
+                        error(elem->span,
+                              i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected,
+                                         let.name, ast::type_to_string(*elem_expected),
+                                         ast::type_to_string(*elem_type)));
+                    }
                 }
             } else {
                 init_type = infer_type(*let.init);
