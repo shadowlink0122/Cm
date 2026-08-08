@@ -93,8 +93,13 @@ int run_check(const cli::Options& opts) {
                 continue;
             }
             if (!front.preprocess_ok) {
-                std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
-                                        front.preprocess_error);
+                // R14: 位置情報付きの構文エラーはsyntax errorとして表示する（ファイル名は位置情報に含まれる）
+                if (front.preprocess_error_has_location) {
+                    std::cerr << i18n::msgf(i18n::MsgId::CliSyntaxError, front.preprocess_error);
+                } else {
+                    std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
+                                            front.preprocess_error);
+                }
                 total_errors++;
                 continue;
             }

@@ -143,6 +143,17 @@ run_case non-export-import-ja "$CM" check --lang=ja "$DIR/non_export_import/main
 run_case nostd-exit-en "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null
 run_case nostd-exit-ja "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null --lang=ja
 
+# ---------- 構文エラーの位置情報とラベル（R14） ----------
+run_case r14-syntax-en "$CM" check "$DIR/r14_syntax_error.cm"
+run_case r14-syntax-ja "$CM" check --lang=ja "$DIR/r14_syntax_error.cm"
+
+# ---------- //! platform: タイポの専用診断（R14） ----------
+run_case r14-platform-typo "$CM" run "$DIR/r14_platform_typo.cm"
+
+# ---------- SV構文のnative流入への専用診断（R14） ----------
+run_case r14-sv-construct-en "$CM" check "$DIR/r14_sv_construct.cm"
+run_case r14-sv-construct-ja "$CM" check --lang=ja "$DIR/r14_sv_construct.cm"
+
 # ---------- 言語の決定順序 ----------
 run_case lang-env-ja       env CM_LANG=ja "$CM" nosuchcmd
 run_case lang-cli-over-env env CM_LANG=ja "$CM" nosuchcmd --lang=en

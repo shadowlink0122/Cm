@@ -26,6 +26,8 @@ struct GraphParams {
 struct GraphResult {
     bool ok = false;
     std::string error;  // 循環・未解決import・依存ファイルの構文エラー等
+    // R14: errorが位置情報（file:line:col+該当行+キャレット）を含む整形済み構文エラーならtrue（呼び出し側はpreprocessor errorでなくsyntax errorラベルで表示する）
+    bool error_has_location = false;
 
     std::string combined_source;  // 依存順連結ソース（指示行は空行化）
     cm::SourceMap source_map;     // 連結行→元ファイル・行の写像

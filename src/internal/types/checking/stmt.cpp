@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace cm {
@@ -300,8 +301,16 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.type) {
         // R10: 宣言型そのものの存在を検証する（従来は型引数のみ検証され、未定義型の変数宣言が無診断で素通りしメソッド呼び出し時のUnknown methodまで顕在化しなかった）
         if (!is_valid_type(let.type)) {
-            error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedTypeVariable,
-                                            ast::type_to_string(*let.type), let.name));
+            // R14: SystemVerilog構文のnative流入（assign x = 2;等はassignが型名扱いになる）は専用メッセージで誘導する
+            static const std::set<std::string> kSvConstructs = {"assign",    "initial", "genvar",
+                                                                "endmodule", "posedge", "negedge"};
+            if (kSvConstructs.count(let.type->name) > 0) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSvConstructRequiresSvTarget, let.type->name));
+            } else {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedTypeVariable,
+                                                ast::type_to_string(*let.type), let.name));
+            }
         }
         auto rt = resolve_typedef(let.type);
         const auto& ct = rt ? rt : let.type;

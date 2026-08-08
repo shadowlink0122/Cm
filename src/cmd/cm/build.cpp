@@ -119,6 +119,24 @@ int run_build(cli::Options& opts, const char* argv0) {
                     current = "native";
             }
 
+            // R14: ディレクティブ中の不明なプラットフォーム名（タイポ等）は専用エラーにする（従来はwarning表記でrc=1、かつヒントがタイポをそのまま--target=svv等と提案していた）
+            {
+                static const std::set<std::string> kValidPlatforms = {
+                    "native", "jit", "js", "ts", "web", "wasm", "sv", "uefi", "baremetal", "bm"};
+                std::string tokens = directive;
+                if (!tokens.empty() && tokens[0] == '!') {
+                    tokens = tokens.substr(1);
+                }
+                std::istringstream ss(tokens);
+                std::string token;
+                while (std::getline(ss, token, '|')) {
+                    if (!token.empty() && kValidPlatforms.count(token) == 0) {
+                        std::cerr << i18n::msgf(i18n::MsgId::CliUnknownPlatformDirective, token);
+                        std::cerr << i18n::msgf(i18n::MsgId::CliFile, opts.input_file);
+                        return 1;
+                    }
+                }
+            }
             if (!match_platform_directive(directive, current)) {
                 std::cerr << i18n::msgf(i18n::MsgId::CliThisFileTargetsPlatformCurrent, directive,
                                         current);
@@ -183,7 +201,12 @@ int run_build(cli::Options& opts, const char* argv0) {
             return kExitFailure;
         }
         if (!front.preprocess_ok) {
-            std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError2, front.preprocess_error);
+            // R14: 位置情報付きの構文エラーはpreprocessor errorでなくsyntax errorとして表示する
+            if (front.preprocess_error_has_location) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliSyntaxError, front.preprocess_error);
+            } else {
+                std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError2, front.preprocess_error);
+            }
             return 1;
         }
 

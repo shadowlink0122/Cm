@@ -29,6 +29,8 @@ struct FrontendResult {
     bool preprocess_ok = false;
     bool parse_ok = false;
     std::string preprocess_error;
+    // R14: preprocess_errorが位置情報付きの整形済み構文エラーならtrue（syntax errorラベルで表示する）
+    bool preprocess_error_has_location = false;
     std::string internal_error_stage;  // "preprocess" / "parse"（例外発生時のみ）
     std::string internal_error;
 

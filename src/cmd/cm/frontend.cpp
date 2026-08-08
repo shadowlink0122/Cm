@@ -37,6 +37,7 @@ FrontendResult run_frontend(const FrontendParams& params, std::string code) {
                                      .count();
     if (!graph.ok) {
         result.preprocess_error = graph.error;
+        result.preprocess_error_has_location = graph.error_has_location;
         return result;
     }
     result.preprocess.success = true;

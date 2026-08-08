@@ -33,5 +33,5 @@ conditional.cppのparse_directiveへ`endif`分岐を追加し、process()へ行�
 3. **エラー伝播**: module graphの`apply_conditional`がIssueをファイルパス・行番号付きのi18nメッセージ（en/ja）へ整形しgraph.errorへ格納、既存のCliPreprocessorError経路で表示される。importされたモジュール内の違反もそのモジュールのパスで特定できる。
 4. **文法書の追従**: cm_grammar.mdのプリプロセッサ節から実装されていない`define`を削除して`end`を追記し、`#end`/`#endif`同義・`#define`未実装（-D/組み込みシンボル案内）・構造違反のエラー化を明記した。
 5. **回帰**: tests/common/preprocessor/endif_alias.cm（真/偽/else/ネスト混在の後続コード保存）・エラーテスト3本（閉じ忘れ・過剰#end・#define）・i18n E2E 2ケース（en/ja）を追加し、既存ifdef系テストの非回帰を確認した。
-6. **スコープ外（R14へ委譲）**: パーサ段の構文エラー全般の行番号・桁欠落と「imported module」誤表記（症状5）は[syntax-error-diagnostic-quality.md](../../design/v0.17.0/syntax-error-diagnostic-quality.md)の横断課題として残る。本修正で追加したプリプロセッサ診断自体はファイル・行番号付きで表示される。
+6. **スコープ外（R14へ委譲）**: パーサ段の構文エラー全般の行番号・桁欠落と「imported module」誤表記（症状5）は[syntax-error-diagnostic-quality.md](syntax-error-diagnostic-quality.md)で修正済み。本修正で追加したプリプロセッサ診断自体はファイル・行番号付きで表示される。
 

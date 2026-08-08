@@ -1,6 +1,7 @@
 #include "graph.hpp"
 
 #include "internal/base/i18n.hpp"
+#include "internal/base/source_location.hpp"
 #include "internal/preprocessor/conditional.hpp"
 #include "internal/preprocessor/import.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
@@ -184,6 +185,8 @@ struct Builder {
     std::unordered_map<std::string, FileInfo> files;
     std::vector<std::string> order;  // 依存順（依存先が先）
     std::string error;
+    // R14: errorが位置情報付きの整形済み構文エラーならtrue
+    bool error_has_location = false;
 
     explicit Builder(const GraphParams& p) : params(p), resolver(p.debug) {}
 
@@ -477,9 +480,16 @@ struct Builder {
         Parser parser(std::move(tokens), lexer.is_sv());
         ast::Program program = parser.parse();
         if (parser.has_errors()) {
-            error = "syntax error in imported module '" + canonical + "'";
+            // R14: 構文エラーへ行番号・該当行・キャレットを付与する。直接コンパイルしたルートファイルを「imported module」と誤表記しない
             if (!parser.diagnostics().empty()) {
-                error += ": " + parser.diagnostics().front().message;
+                const auto& d = parser.diagnostics().front();
+                SourceLocationManager slm(info.source, canonical);
+                error = is_root ? "" : ("in imported module '" + canonical + "':\n");
+                error += slm.format_error_location(d.span, d.message);
+                error_has_location = true;
+            } else {
+                error = is_root ? ("syntax error in '" + canonical + "'")
+                                : ("syntax error in imported module '" + canonical + "'");
             }
             return false;
         }
@@ -905,6 +915,7 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
     Builder builder(params);
     if (!builder.visit(root_file, root_source, true)) {
         result.error = builder.error;
+        result.error_has_location = builder.error_has_location;
         return result;
     }
     builder.resolve_inclusion();

@@ -18,7 +18,7 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"  async function detected: {0}\n",
      "  async関数が検出されました: {0}\n"},
     // CliAwaitExpressionDetectedFunction
-    {"  await expression detected (function: {0}）\n",
+    {"  await expression detected (function: {0})\n",
      "  await式が検出されました（関数: {0}）\n"},
     // CliCannotOpenFile
     {"error: cannot open file: {0}",
@@ -285,7 +285,7 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"hint: specify the JS target with --target=js\n",
      "ヒント: --target=js オプションでJSターゲットを指定してください\n"},
     // CliStepIsOnlyAvailableIn
-    {"error: step() is only available in //! platform: sv tests (test function: {0}）\n",
+    {"error: step() is only available in //! platform: sv tests (test function: {0})\n",
      "エラー: step() は //! platform: sv のテストでのみ使用できます（テスト関数: {0}）\n"},
     // CliSvHierarchyError
     {"SV hierarchy error: {0}\n",
@@ -324,8 +324,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"the -o option requires an output file name",
      "-o オプションには出力ファイル名が必要です"},
     // CliThisFileTargetsPlatformCurrent
-    {"warning: this file targets platform '{0}' (current: {1}）\n",
-     "警告: このファイルはプラットフォーム '{0}' 向けです（現在: {1}）\n"},
+    {"error: this file targets platform '{0}' (current: {1})\n",
+     "エラー: このファイルはプラットフォーム '{0}' 向けです（現在: {1}）\n"},
     // CliToRunAFileUse
     {"to run a file, use: cm run {0}\n\n",
      "ファイルを実行するには次を使用してください: cm run {0}\n\n"},
@@ -1599,6 +1599,14 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsVolatileUnsupported
     {"'volatile' is not supported yet; for cross-thread shared variables use native::sync atomics",
      "'volatile' は未対応です。スレッド間共有変数にはnative::syncのatomicを使用してください"},
+    // CliSyntaxError
+    {"syntax error: {0}", "構文エラー: {0}"},
+    // CliUnknownPlatformDirective
+    {"error: unknown platform '{0}' in //! platform: directive (valid: native, jit, js, ts, web, wasm, sv, uefi, baremetal/bm)\n",
+     "エラー: //! platform: ディレクティブのプラットフォーム '{0}' は不明です（有効: native, jit, js, ts, web, wasm, sv, uefi, baremetal/bm）\n"},
+    // TcSvConstructRequiresSvTarget
+    {"'{0}' is a SystemVerilog construct; it is only available with --target=sv",
+     "'{0}' はSystemVerilog構文です。--target=sv でのみ使用できます"},
 };
 // clang-format on
 

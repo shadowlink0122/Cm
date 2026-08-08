@@ -556,6 +556,9 @@ enum class MsgId : int {
     TcNegativeValueUnsignedFloat,
     PsConstexprVarUnsupported,
     PsVolatileUnsupported,
+    CliSyntaxError,
+    CliUnknownPlatformDirective,
+    TcSvConstructRequiresSvTarget,
     Count,
 };
 
