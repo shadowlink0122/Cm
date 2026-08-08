@@ -235,6 +235,11 @@ class LoweringContext {
     // 値消費サイト（return・構造体リテラルフィールド・push引数・スライスリテラル要素等）はこのヘルパを通し、タグ未構築のペイロード直書きを防ぐ
     LocalId coerce_to_union(LocalId value, const hir::TypePtr& dest_type);
 
+    // 暗黙変換の統一ドライバ（変換統一ドライバ第1段）: 値消費サイトを「値を作る→coerce_to_expected→格納」の1形へ集約する。
+    // 宛先がユニオンの場合は変種を解決し、必要なら値を変種型へ再帰的にcoerce（固定長配列→スライス変種・唯一の数値変種への正規化）してからwrapする。
+    // 非ユニオンはnumeric→固定長配列→スライスの順で既存ヘルパを連鎖する。変換不要ならvalueをそのまま返す
+    LocalId coerce_to_expected(LocalId value, const hir::TypePtr& expected);
+
     // LLVMのDataLayout（自然アライメント）と一致する型サイズ/アライメントを計算する
     // スライスのblob要素サイズ算出用（calculate_type_sizeは見積もりでありレイアウト非互換）
     int64_t layout_size(const hir::TypePtr& type) const;

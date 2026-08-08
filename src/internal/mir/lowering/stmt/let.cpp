@@ -467,7 +467,7 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                             elem_value = expr_lowering->lower_expression(*elem, ctx);
 
                             // ユニオン要素スライスの変種値要素はユニオン構築Cast経由でタグ+ペイロードを揃える（Y3）
-                            elem_value = ctx.coerce_to_union(elem_value, elem_type);
+                            elem_value = ctx.coerce_to_expected(elem_value, elem_type);
 
                             // インターフェイス要素スライスへの具象構造体要素:
                             // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
@@ -651,24 +651,11 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                           std::to_string(block->statements.size()) + " statements");
                         }
                     }
-                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、O0での `as` タグ検査パニックや `is` の誤判定になる）
+                    // 変換統一ドライバ第1段: numeric/ユニオン構築（タグ+ペイロード。直接storeするとタグ未設定でasパニック・is誤判定）/固定長配列→スライスをcoerce_to_expected 1系統で挿入する
                     hir::TypePtr resolved_let_type = ctx.resolve_typedef(let.type);
-                    hir::TypePtr init_type =
-                        (init_value < ctx.func->locals.size())
-                            ? ctx.resolve_typedef(ctx.func->locals[init_value].type)
-                            : nullptr;
-                    if (resolved_let_type && resolved_let_type->kind == hir::TypeKind::Union &&
-                        (!init_type || init_type->kind != hir::TypeKind::Union)) {
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{local}, MirRvalue::cast(MirOperand::copy(MirPlace{init_value}),
-                                                             resolved_let_type)));
-                    } else {
-                        // 整数初期値を浮動小数変数へ入れる場合はsitofp/uitofp相当のCastを挿入する（B2）
-                        init_value = ctx.coerce_numeric_context(init_value, resolved_let_type);
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{local},
-                            MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
-                    }
+                    init_value = ctx.coerce_to_expected(init_value, resolved_let_type);
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
                     if (let.name == "result") {
                         auto* block = ctx.get_current_block();
                         if (block) {

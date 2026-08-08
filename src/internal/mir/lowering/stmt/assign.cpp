@@ -118,17 +118,11 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                           " rhs kind=" +
                           (rhs_type ? std::to_string(static_cast<int>(rhs_type->kind))
                                     : std::string("null")));
-            if (lhs_type && lhs_type->kind == hir::TypeKind::Union &&
-                (!rhs_type || rhs_type->kind != hir::TypeKind::Union)) {
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{*lhs_opt},
-                    MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_type)));
-            } else {
-                // 整数右辺を浮動小数変数へ代入する場合はsitofp/uitofp相当のCastを挿入する（B2）
-                rhs_value = ctx.coerce_numeric_context(rhs_value, lhs_type);
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
-            }
+            // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する
+            (void)rhs_type;
+            rhs_value = ctx.coerce_to_expected(rhs_value, lhs_type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }
     } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
                std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind) ||
@@ -139,8 +133,8 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         hir::TypePtr current_type;
 
         if (build_lvalue_place(assign.target.get(), place, current_type)) {
-            // 整数右辺を浮動小数フィールド・配列要素へ代入する場合もCastを挿入する（B2）
-            rhs_value = ctx.coerce_numeric_context(rhs_value, current_type);
+            // 変換統一ドライバ第1段: メンバ/添字/deref代入もcoerce_to_expected 1系統へ（従来はnumericのみでユニオンフィールドへの変種代入がタグ未構築だった）
+            rhs_value = ctx.coerce_to_expected(rhs_value, current_type);
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }

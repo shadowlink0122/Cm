@@ -214,10 +214,8 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
             field_value = lower_expression(*field.value, ctx);
         }
 
-        // 整数値を浮動小数フィールドへ入れる場合はsitofp/uitofp相当のCastを、
-        // ユニオンフィールドへ変種値を入れる場合はユニオン構築Cast（タグ+ペイロード書き込み）を挿入する（B2/Y1）
-        field_value = ctx.coerce_numeric_context(field_value, field_type);
-        field_value = ctx.coerce_to_union(field_value, field_type);
+        // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する（B2/Y1）
+        field_value = ctx.coerce_to_expected(field_value, field_type);
 
         // フィールドへの代入を生成
         MirPlace place{result};

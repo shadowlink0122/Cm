@@ -178,7 +178,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 修正履歴の同族バグ分析（変換サイト欠落族・メソッド解決分裂族・名前逆算族）と全ソースの実測（サイト×変換種マトリクス・キー計算箇所の棚卸し・ランタイムdiff・関数長スキャン）に基づき、複雑すぎる実装をシンプルかつバグが再発しない構造へ変えるための提案。優先度順。
 
-- [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — 変換挿入が11サイトに手組み散在（全種連鎖は2サイトのみ・ユニオンは2方式併存・インターフェースupcastは変換系外で各バックエンド個別）。coerce_to_expected一本化＋upcastのMIR化＋checker受理との同表化で、B2→Y1〜Y3→Y5→Z5→Q3と続いた「受理したのに未挿入」バグ族を構造的に封止する（Critical）
+- [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — **第1段実施済み**（coerce_to_expected新設と11サイト置換・ユニオンのインラインCast3サイト吸収・メンバ代入の全変換種対応・ユニオン変種の保守的再帰ディスパッチ。過程でLLVMユニオンの既存バグ3件——複数ユニオン関数同居時のreturnペイロード誤読・数値変種正規化の無効化・isスライス変種の非bool出力——を発見し実装記録へ）。残: 第2段（upcastのMIR化+LLVMユニオンバグ修正）・第3段（checker注釈駆動化）（Critical）
 - [モノモーフ化のフラット名逆算の完全廃止](mono-flat-name-elimination.md) — 可逆$エンコーダ（typekey）があるのにstruct_symbol_keyのsimple高速パスがネスト特殊化で曖昧フラット名を生成し、parse_flat_type_argsの誤逆算がQ2の真因。逆算器の削除とtypekey全面化でQ2族を表現不能にする（Critical）
 - [メソッド解決の一元化](method-resolution-unification.md) — メソッド表キー計算が12箇所別実装・解決機構4系統・types/の全throw4件が内部エラー漏れ。正準キー関数＋resolve_method APIでQ1/Q4/Q5族を封止する（High）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）

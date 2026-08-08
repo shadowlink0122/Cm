@@ -416,15 +416,9 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             hir::TypePtr rhs_resolved = (rhs_value < ctx.func->locals.size())
                                             ? ctx.resolve_typedef(ctx.func->locals[rhs_value].type)
                                             : nullptr;
-            if (lhs_resolved && lhs_resolved->kind == hir::TypeKind::Union &&
-                (!rhs_resolved || rhs_resolved->kind != hir::TypeKind::Union)) {
-                ctx.push_statement(MirStatement::assign(
-                    place, MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_resolved)));
-                return rhs_value;
-            }
-
-            // 整数右辺を浮動小数左辺へ代入する場合はsitofp/uitofp相当のCastを挿入する（B2）
-            rhs_value = ctx.coerce_numeric_context(rhs_value, lhs_resolved);
+            // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する（B2）
+            (void)rhs_resolved;
+            rhs_value = ctx.coerce_to_expected(rhs_value, lhs_resolved);
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
             return rhs_value;

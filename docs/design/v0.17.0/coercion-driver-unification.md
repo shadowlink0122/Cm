@@ -51,3 +51,19 @@ checker側の受理判定（utils/compat.cpp・utils/conversion.cpp）とMIR側�
 ## 検出経緯
 
 全体複雑度レビュー（2026-08-05）で実測。バグ族の系譜はB2→Y1〜Y3→Y5→Z5→Q3で、いずれも「新しい変換種や新しいサイトが手動連鎖から漏れる」同型である。
+## 実装記録（第1段・2026-08-08）
+
+第1段（coerce_to_expected導入と11サイト置換）を実施した。挙動変更なしの純リファクタリングとして全13スイートPASSを確認済み。
+
+- `LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& expected)`をcontext.cppへ新設し、11サイト全てを「値を作る→coerce_to_expected→格納」の1形へ置き換えた。インラインCast方式のユニオン3サイト（let/単純代入/複合代入。宛先place直接Castだったが意味論同一のためヘルパ経由の一時+copyへ統一）を吸収し、メンバ/添字/deref代入サイトはnumericのみ→全変換種対応になった。
+- 再帰的ディスパッチ（方針2）を保守的に実装した: 宛先がユニオンで値の型に一致する変種がある場合は従来通り事前変換なしでwrap（既存挙動維持）。一致変種が無い場合のみ、固定長配列→唯一のスライス変種の実体化・唯一の数値変種への正規化を事前に行ってからwrapする。
+- returnの配列→スライスインライン実装（control.cpp:48-97、return_local直接ターゲット）とpushの多次元リテラル専用経路（expr_slice.cpp）は専用の後段/前段として残置した（ドライバの汎用経路と役割が重ならないことを確認済み）。let要素・構造体フィールドの配列リテラル専用経路も同様に残置（棚卸しの11サイト外）。
+
+**第1段で発見した既存バグ（第2段の入力。いずれも本リファクタリング前のバイナリで同一再現・jsは正値でLLVMバックエンドのユニオン実装に帰属）:**
+1. 複数のユニオン関数を含むファイルでのユニオンreturnペイロード誤読: `IntOrStr ret_union(int x) { return x; }`を他のユニオン引数関数と同居させて呼ぶと`r as int`が1を返す（単独ファイルでは正値5。MIRは`as <union>`の正しい構築列を出力しており、LLVM側のユニオンローカル/型の取り回しが真因）。tests/common/types/union_coerce_sites.cmはこのためreturnはタグのみ検証している。
+2. 数値変種の事前正規化がバックエンドで無効化される: `(double|string) d = 1;`はドライバ後のMIRで`copy as double`→`as <union>`の正しい列になるが、native/jitの実行結果はペイロードが生intビット（5e-324）のまま（jsは1.0で正値）。LLVMのユニオン構築Castが変換済み一時でなく元の値を読んでいる可能性が高い。
+3. `is`のスライス変種検査がbool以外を出力する: `s is int[]`が-1342177280等の生値を返す（タグ比較のlowering欠落）。
+
+**checker側の受理乖離（第3段の入力）:** ユニオン引数への変種リテラル直接渡し（`take_union(9)`）は`Argument type mismatch`で拒否（`as`付きは通る）、typedef経由の変種as（`s as IntSlice`）は「not a variant」拒否。MIR側は対応済みのため、受理表の同表化（方針4）で解消する領分。
+
+残り: 第2段（インターフェースupcastのMIR化+上記LLVMユニオンバグ群の修正）・第3段（checker注釈駆動化）。

@@ -447,6 +447,72 @@ LocalId LoweringContext::coerce_to_union(LocalId value, const hir::TypePtr& dest
     return casted;
 }
 
+// 暗黙変換の統一ドライバ（変換統一ドライバ第1段）。従来は消費サイトごとにヘルパ3種を手組みで連鎖しており、
+// 「受理されるのに変換が挿入されないサイトがある」バグ族（B2・Y1〜Y3・Y5・Z5・Q3）の温床だった。
+// 宛先がユニオンの場合の変種解決は保守的で、値の型に一致する変種があれば事前coerceせずwrapする（既存挙動の維持）。
+// 一致変種が無い場合のみ、固定長配列→唯一のスライス変種、数値→唯一の数値変種の事前coerceを行ってからwrapする
+LocalId LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& expected) {
+    if (!expected || value >= func->locals.size()) {
+        return value;
+    }
+    hir::TypePtr dest = resolve_typedef(expected);
+    if (!dest) {
+        return value;
+    }
+    if (dest->kind == hir::TypeKind::Union) {
+        hir::TypePtr src = resolve_typedef(func->locals[value].type);
+        if (src && src->kind != hir::TypeKind::Union) {
+            const auto variants = ast::union_variant_types(dest);
+            auto is_numeric = [](hir::TypeKind k) {
+                return k == hir::TypeKind::Tiny || k == hir::TypeKind::UTiny ||
+                       k == hir::TypeKind::Short || k == hir::TypeKind::UShort ||
+                       k == hir::TypeKind::Int || k == hir::TypeKind::UInt ||
+                       k == hir::TypeKind::Long || k == hir::TypeKind::ULong ||
+                       k == hir::TypeKind::Float || k == hir::TypeKind::UFloat ||
+                       k == hir::TypeKind::Double || k == hir::TypeKind::UDouble;
+            };
+            bool exact = false;
+            hir::TypePtr slice_variant = nullptr;
+            hir::TypePtr numeric_variant = nullptr;
+            int slice_count = 0;
+            int numeric_count = 0;
+            for (const auto& v : variants) {
+                auto rv = resolve_typedef(v);
+                if (!rv) {
+                    continue;
+                }
+                if (rv->kind == src->kind &&
+                    (rv->kind != hir::TypeKind::Struct || rv->name == src->name)) {
+                    exact = true;
+                    break;
+                }
+                if (rv->kind == hir::TypeKind::Array && !rv->array_size.has_value()) {
+                    slice_variant = rv;
+                    slice_count++;
+                }
+                if (is_numeric(rv->kind)) {
+                    numeric_variant = rv;
+                    numeric_count++;
+                }
+            }
+            if (!exact) {
+                if (src->kind == hir::TypeKind::Array && src->array_size.has_value() &&
+                    slice_count == 1) {
+                    // ユニオンofスライス変種への固定長配列: まずスライスへ実体化してからwrapする
+                    value = coerce_fixed_array_to_slice(value, slice_variant);
+                } else if (is_numeric(src->kind) && numeric_count == 1) {
+                    // 唯一の数値変種への正規化（int→double変種等。一致変種が無い場合のみ）
+                    value = coerce_numeric_context(value, numeric_variant);
+                }
+            }
+        }
+        return coerce_to_union(value, dest);
+    }
+    value = coerce_numeric_context(value, dest);
+    value = coerce_fixed_array_to_slice(value, dest);
+    return value;
+}
+
 // 宛先型がスライスで値が固定長配列の場合、cm_array_to_sliceでヒープスライスへ実体化した一時を返す（Y5）。
 // 要素ストライドはlayout API（array_elem_stride相当）で計算する。メソッドレシーバ（HIRのneeds_array_to_slice）と同じ意味論
 LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::TypePtr& dest_type) {
