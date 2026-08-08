@@ -5,7 +5,7 @@
 # cmバイナリの実際の出力メッセージを英語（デフォルト）と日本語の両方で検証する。
 # 言語の決定順序（--lang > CM_LANG > .cmconfig.yml language:)も確認する。
 #
-# 期待値は expects/<ケース名>.expect に1行1条件で記述する:
+# 期待値は <ケース名>.expect（入力と同じ tests/i18n/ 直下・別置きフォルダは廃止） に1行1条件で記述する:
 #   通常行   = 出力に含まれるべき部分文字列
 #   ! 接頭辞 = 出力に含まれてはならない部分文字列
 # ============================================================
@@ -22,7 +22,7 @@ FAIL=0
 run_case() {
     local name="$1"
     shift
-    local expect_file="$DIR/expects/$name.expect"
+    local expect_file="$DIR/$name.expect"
     if [ ! -f "$expect_file" ]; then
         echo "[FAIL] $name (expect file not found: $expect_file)"
         FAIL=$((FAIL + 1))
