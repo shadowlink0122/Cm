@@ -122,7 +122,8 @@ void decodes_unicode_escapes() {
 void parses_non_ascii_strings() {
     assert(json_string(json_parse("\"日本語\"")) == "日本語", "raw non-ascii string");
     assert(
-        json_string(json_parse("\"改行\\nと\\\"引用\\\"と日本語\"")) == "改行\nと\"引用\"と日本語",
+        json_string(json_parse("\"改行\\nと\\\"引用\\\"と日本語\""))
+        == "改行\nと\"引用\"と日本語",
         "escapes mixed with non-ascii"
     );
     const int root = json_parse("{\"名前\":\"Cm言語\",\"tags\":[\"日本語\",\"emoji😀\"]}");
