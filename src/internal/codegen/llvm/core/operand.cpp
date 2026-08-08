@@ -3,6 +3,7 @@
 
 #include "internal/base/debug/codegen.hpp"
 #include "internal/codegen/llvm/monitoring/compilation_guard.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -179,6 +180,15 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                                         baseLocal->type_args[0]) {
                                                         // type_argsがある場合は直接使用
                                                         currentType = baseLocal->type_args[0];
+                                                    } else if (cm::mir::typekey::is_encoded_key(
+                                                                   baseLocal->name)) {
+                                                        // $エンコード名はtypekeyの可逆復号で第1型引数を得る（$移行用・フラット規約下では不活性）
+                                                        auto decoded =
+                                                            cm::mir::typekey::decode_type_args(
+                                                                baseLocal->name);
+                                                        if (!decoded.empty() && decoded[0]) {
+                                                            currentType = decoded[0];
+                                                        }
                                                     } else if (baseLocal->name.find("__") !=
                                                                std::string::npos) {
                                                         // マングリング名から型引数を抽出

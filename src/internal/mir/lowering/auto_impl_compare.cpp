@@ -29,7 +29,8 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
     // ネストしたstruct型フィールドの比較関数を先に生成（再帰的自動実装）
     for (const auto& field : st.fields) {
         if (field.type && field.type->kind == hir::TypeKind::Struct) {
-            std::string nested_func_name = field.type->name + "__op_eq";
+            std::string nested_func_name =
+                mir::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
             bool exists = false;
             for (const auto& func : mir_program.functions) {
                 if (func && func->name == nested_func_name) {
@@ -99,7 +100,8 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
 
             // フィールド型がstructの場合は__op_eq関数を呼び出す（再帰的比較）
             if (field.type && field.type->kind == hir::TypeKind::Struct) {
-                std::string field_op_eq = field.type->name + "__op_eq";
+                std::string field_op_eq =
+                    mir::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
 
                 BlockId eq_call_success = mir_func->add_block();
 
@@ -478,13 +480,13 @@ void MirLowering::rewrite_struct_comparison_operators() {
 
                 if (bin_data.op == MirBinaryOp::Eq || bin_data.op == MirBinaryOp::Ne) {
                     if (impl_info.count(type_name) && impl_info[type_name].count("Eq")) {
-                        op_func_name = type_name + "__op_eq";
+                        op_func_name = mir::typekey::spec_fn_prefix(type_name) + "__op_eq";
                         need_negate = (bin_data.op == MirBinaryOp::Ne);
                     }
                 } else if (bin_data.op == MirBinaryOp::Lt || bin_data.op == MirBinaryOp::Le ||
                            bin_data.op == MirBinaryOp::Gt || bin_data.op == MirBinaryOp::Ge) {
                     if (impl_info.count(type_name) && impl_info[type_name].count("Ord")) {
-                        op_func_name = type_name + "__op_lt";
+                        op_func_name = mir::typekey::spec_fn_prefix(type_name) + "__op_lt";
                         // > は < の引数を入れ替え、>= と <= は結果を反転
                     }
                 } else if (bin_data.op == MirBinaryOp::Add) {

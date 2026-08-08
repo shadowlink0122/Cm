@@ -637,12 +637,12 @@ void MirLowering::generate_auto_operator_impl(const hir::HirStruct& st,
     // Eq演算子（==）の自動実装
     if (op.op == hir::HirOperatorKind::Eq) {
         generate_builtin_eq_operator(st);
-        impl_info[st.name][iface.name] = st.name + "__op_eq";
+        impl_info[st.name][iface.name] = mir::typekey::spec_fn_prefix(st.name) + "__op_eq";
     }
     // Ord演算子（<）の自動実装
     else if (op.op == hir::HirOperatorKind::Lt) {
         generate_builtin_lt_operator(st);
-        impl_info[st.name][iface.name] = st.name + "__op_lt";
+        impl_info[st.name][iface.name] = mir::typekey::spec_fn_prefix(st.name) + "__op_lt";
     }
 }
 
