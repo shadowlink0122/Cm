@@ -23,12 +23,13 @@ run_tests_sequential() {
         log "Testing category: $platform_dir/$category"
         log "----------------------------------------"
 
-        for test_file in "$category_dir"/*.cm; do
+        # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）
+        while IFS= read -r test_file; do
             if [ -f "$test_file" ]; then
                 ((TOTAL++))
                 run_single_test "$test_file"
             fi
-        done
+        done < <(find "$category_dir" -type f -name '*.cm' | sort)
 
         log ""
     done
@@ -51,11 +52,12 @@ run_tests_parallel() {
             category_dir="$PROGRAMS_DIR/$platform_dir/$category"
         fi
         if [ -d "$category_dir" ]; then
-            for test_file in "$category_dir"/*.cm; do
+            # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）
+            while IFS= read -r test_file; do
                 if [ -f "$test_file" ]; then
                     test_files+=("$test_file")
                 fi
-            done
+            done < <(find "$category_dir" -type f -name '*.cm' | sort)
         fi
     done
     

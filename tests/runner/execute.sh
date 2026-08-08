@@ -34,7 +34,14 @@ run_single_test() {
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
-    local category_skip_file="$(dirname "$test_file")/.skip"
+    # カテゴリ.skipはテストファイルのディレクトリから祖先方向へ最初に見つかったものを採用（サブフォルダの階層は問わない）
+    local category_skip_file=""
+    local _skip_dir="$(dirname "$test_file")"
+    while [ -n "$_skip_dir" ] && [ "$_skip_dir" != "/" ] && [ "$_skip_dir" != "." ]; do
+        if [ -f "$_skip_dir/.skip" ]; then category_skip_file="$_skip_dir/.skip"; break; fi
+        case "$_skip_dir" in */tests) break;; esac
+        _skip_dir="$(dirname "$_skip_dir")"
+    done
     local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
     local current_arch=$(uname -m)
     local current_opt="o${OPT_LEVEL:-3}"

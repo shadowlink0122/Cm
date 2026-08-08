@@ -50,7 +50,7 @@ typecheck() {
 
 echo "=== TypeScript backend E2E tests ==="
 
-for cm_file in "$CASES"/*.cm; do
+while IFS= read -r cm_file; do
     name=$(basename "$cm_file" .cm)
     ts_file="$WORK/$name.ts"
 
@@ -77,13 +77,13 @@ for cm_file in "$CASES"/*.cm; do
     fi
 
     run_out=$($TIMEOUT_CMD env NODE_PATH="$FIXTURE_MODULES" "$CM" run --target=ts -O0 "$cm_file" 2>&1)
-    expected=$(cat "$CASES/$name.expect")
+    expected=$(cat "${cm_file%.cm}.expect")
     if [ "$run_out" = "$expected" ]; then
         pass "ts/$name: run output matches"
     else
         fail "ts/$name: run output" "expected=[$expected] got=[$run_out]"
     fi
-done
+done < <(find "$CASES" -type f -name '*.cm' | sort)
 
 # ---------- 広域ゲート: common + js コーパス ----------
 echo ""
