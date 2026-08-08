@@ -104,8 +104,10 @@ operator_symbol ::= '+' | '-' | '*' | '/' | '%'
                   | '==' | '!=' | '<' | '>' | '<=' | '>='
                   | '&' | '|' | '^' | '~' | '!'
                   | '<<' | '>>'
-                  | '[]' | '()'
 ```
+
+添字演算子`[]`・呼び出し演算子`()`のオーバーロードは未対応（専用診断で拒否される）。
+
 
 ---
 
@@ -119,9 +121,9 @@ generic_param_list ::= generic_param (',' generic_param)*
 generic_param ::= type_param
                 | const_param
 
-type_param ::= identifier (':' type_constraint)? ('=' type)?
+type_param ::= identifier (':' type_constraint)?
 
-const_param ::= identifier ':' 'const' type ('=' const_expr)?
+const_param ::= identifier ':' 'const' type  # 未対応（宣言時に専用診断で拒否される）
 
 type_constraint ::= union_type       # int | double | float
                   | type_name         # Number (typedef or trait)
@@ -149,8 +151,6 @@ type ::= primitive_type
        | type_name '<' type_list '>'        # ジェネリクスインスタンス化
        | type '[' const_expr ']'            # 配列
        | type '*'                           # ポインタ
-       | type '&'                           # 参照
-       | '(' type_list ')'                  # タプル
        | union_type                         # int | double
        | 'typeof' '(' expression ')'        # 式の型
 
@@ -167,6 +167,11 @@ union_type ::= type ('|' type)+
 type_list ::= type (',' type)*
 
 type_name ::= identifier ('::' identifier)*
+```
+
+参照型`T&`とタプル型`(T1, T2)`は未対応（参照はポインタ`T*`で代替する。`T&`は専用診断で拒否される）。
+
+```bnf
 
 trait_name ::= identifier ('::' identifier)*
 ```
@@ -327,7 +332,8 @@ format_expr ::= '{' expression '}'
 param_list ::= parameter (',' parameter)*
 
 parameter ::= type identifier ('=' const_expr)?
-            | type '...' identifier              # 可変長引数
+
+# 可変長引数 `type '...'` はFFIのextern宣言専用（ユーザー定義関数では専用診断で拒否される）
 
 argument_list ::= expression (',' expression)*
 ```
@@ -352,7 +358,6 @@ integer_literal ::= decimal_literal
                   | octal_literal
 
 decimal_literal ::= [0-9] [0-9_]*
-                  | [1-9] [0-9_]* integer_suffix?
 
 hex_literal ::= '0x' [0-9a-fA-F] [0-9a-fA-F_]*
 
@@ -360,12 +365,10 @@ binary_literal ::= '0b' [01] [01_]*
 
 octal_literal ::= '0o' [0-7] [0-7_]*
 
-integer_suffix ::= 'u' | 'U' | 'l' | 'L' | 'ul' | 'UL'
+float_literal ::= [0-9]+ '.' [0-9]+ ([eE] [+-]? [0-9]+)?
+                | [0-9]+ [eE] [+-]? [0-9]+
 
-float_literal ::= [0-9]+ '.' [0-9]+ ([eE] [+-]? [0-9]+)? float_suffix?
-                | [0-9]+ [eE] [+-]? [0-9]+ float_suffix?
-
-float_suffix ::= 'f' | 'F' | 'd' | 'D'
+# 数値サフィックス（42u・3.14f等）は未対応。桁区切りアンダースコア（1_000・0xFF_FF等）は全基数・小数部で使用できる
 
 char_literal ::= "'" (escape_sequence | [^'\\\n]) "'"
 
@@ -392,7 +395,6 @@ null_literal ::= 'null' | 'nullptr'
 
 ```bnf
 identifier ::= [a-zA-Z_] [a-zA-Z0-9_]*
-             | '`' [^`]+ '`'  # エスケープ識別子
 
 keyword ::= 'if' | 'else' | 'while' | 'for' | 'switch' | 'case' | 'default'
           | 'break' | 'continue' | 'return' | 'defer'

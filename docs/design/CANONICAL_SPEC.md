@@ -176,11 +176,10 @@ impl<T> Vec<T> for Container<T> {
     private void grow() {
         // 内部ヘルパー関数
     }
-
-    // メソッドのオーバーロード
-    overload void push(T item, size_t count) { }
 }
 ```
+
+メソッドのオーバーロード（`overload`修飾子つきメソッド）は未対応であり、専用診断で拒否される（`overload`が使えるのは第3.1節のコンストラクタのみ）。
 
 ### 4.1 privateメソッド
 

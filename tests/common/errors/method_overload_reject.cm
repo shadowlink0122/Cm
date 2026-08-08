@@ -1,0 +1,16 @@
+// R13: inherent implのoverload修飾子つきメソッドは未対応（従来は無警告で黙殺されていた）
+struct P {
+    int x;
+}
+impl P {
+    self() {
+        self.x = 1;
+    }
+    overload int get(int a) {
+        return a;
+    }
+}
+int main() {
+    P p;
+    return 0;
+}

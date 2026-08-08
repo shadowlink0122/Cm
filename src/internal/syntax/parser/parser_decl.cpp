@@ -470,6 +470,16 @@ std::vector<ast::Param> Parser::parse_params() {
             param.qualifiers.is_const = consume_if(TokenKind::KwConst);
             param.type = parse_type_with_union();
 
+            // R13: 参照型T&・ユーザー可変長引数は未実装。汎用のExpected identifierでなく専用診断で拒否し、トークンを読み捨てて解析を続行する
+            if (check(TokenKind::Amp)) {
+                error(i18n::msg(i18n::MsgId::PsReferenceTypeUnsupported));
+                advance();
+            }
+            if (check(TokenKind::Ellipsis)) {
+                error(i18n::msg(i18n::MsgId::PsVariadicParamsUnsupported));
+                advance();
+            }
+
             param.name = expect_ident();
 
             // デフォルト引数をパース
@@ -628,6 +638,19 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
 
 // 演算子の種類をパース
 std::optional<ast::OperatorKind> Parser::parse_operator_kind() {
+    // R13: 添字[]・呼び出し()演算子のオーバーロードは未実装。専用診断を出しトークンを消費して呼び出し元の汎用エラーを避ける
+    if (check(TokenKind::LBracket) && peek_kind() == TokenKind::RBracket) {
+        error(i18n::msg(i18n::MsgId::PsOperatorIndexCallUnsupported));
+        advance();
+        advance();
+        return std::nullopt;
+    }
+    if (check(TokenKind::LParen) && peek_kind() == TokenKind::RParen) {
+        error(i18n::msg(i18n::MsgId::PsOperatorIndexCallUnsupported));
+        advance();
+        advance();
+        return std::nullopt;
+    }
     if (check(TokenKind::EqEq)) {
         advance();
         return ast::OperatorKind::Eq;
@@ -724,6 +747,16 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
             in_operator_return_type_ = true;
             op_sig.return_type = parse_type();
             in_operator_return_type_ = false;
+            // R13: `operator int [](...)`の`[]`はスライス型サフィックスとして消費されてしまうため、配列サフィックス解釈より前に添字演算子の試みを検出して専用診断を出す
+            if (check(TokenKind::LBracket) && peek_kind() == TokenKind::RBracket &&
+                peek_kind(2) == TokenKind::LParen) {
+                error(i18n::msg(i18n::MsgId::PsOperatorIndexCallUnsupported));
+                while (!is_at_end() && !consume_if(TokenKind::Semicolon) &&
+                       !check(TokenKind::RBrace)) {
+                    advance();
+                }
+                continue;
+            }
             op_sig.return_type = check_array_suffix(std::move(op_sig.return_type));
 
             auto op_kind = parse_operator_kind();
@@ -736,7 +769,13 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
             expect(TokenKind::LParen);
             op_sig.params = parse_params();
             expect(TokenKind::RParen);
-            expect(TokenKind::Semicolon);
+            // R13: インターフェースのデフォルト実装（本体付き宣言）は未実装。本体を読み飛ばして専用診断を出す
+            if (check(TokenKind::LBrace)) {
+                error(i18n::msg(i18n::MsgId::PsInterfaceDefaultBodyUnsupported));
+                parse_block();
+            } else {
+                expect(TokenKind::Semicolon);
+            }
             operators.push_back(std::move(op_sig));
         } else {
             ast::MethodSig sig;
@@ -746,7 +785,13 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
             expect(TokenKind::LParen);
             sig.params = parse_params();
             expect(TokenKind::RParen);
-            expect(TokenKind::Semicolon);
+            // R13: インターフェースのデフォルト実装（本体付き宣言）は未実装。本体を読み飛ばして専用診断を出す
+            if (check(TokenKind::LBrace)) {
+                error(i18n::msg(i18n::MsgId::PsInterfaceDefaultBodyUnsupported));
+                parse_block();
+            } else {
+                expect(TokenKind::Semicolon);
+            }
             methods.push_back(std::move(sig));
         }
     }
@@ -839,6 +884,11 @@ ast::DeclPtr Parser::parse_impl(std::vector<ast::AttributeNode> attributes) {
                 std::vector<ast::AttributeNode> method_attrs;
                 while (is_attribute_start()) {
                     method_attrs.push_back(parse_attribute());
+                }
+
+                // R13: メソッドオーバーロードは未実装（overloadはコンストラクタ専用）。従来impl-for形はExpected typeの誤誘導エラーだった
+                if (consume_if(TokenKind::KwOverload)) {
+                    error(i18n::msg(i18n::MsgId::PsMethodOverloadUnsupported));
                 }
 
                 if (check(TokenKind::KwOperator)) {
@@ -953,6 +1003,10 @@ ast::DeclPtr Parser::parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
 
                 decl->constructors.push_back(std::move(ctor));
             } else if (check(TokenKind::KwOperator)) {
+                // R13: 演算子実装へのoverload修飾子は未実装（黙殺せず診断する）
+                if (is_overload) {
+                    error(i18n::msg(i18n::MsgId::PsMethodOverloadUnsupported));
+                }
                 advance();
                 auto op_impl = std::make_unique<ast::OperatorImpl>();
                 in_operator_return_type_ = true;
@@ -972,6 +1026,10 @@ ast::DeclPtr Parser::parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
                 op_impl->body = parse_block();
                 decl->operators.push_back(std::move(op_impl));
             } else {
+                // R13: メソッドオーバーロードは未実装（overloadはコンストラクタ専用）。従来は無警告で黙殺され、同名2定義まで進んで初めてDuplicate methodになっていた
+                if (is_overload) {
+                    error(i18n::msg(i18n::MsgId::PsMethodOverloadUnsupported));
+                }
                 std::vector<ast::AttributeNode> method_attrs;
                 while (is_attribute_start()) {
                     method_attrs.push_back(parse_attribute());

@@ -74,23 +74,23 @@ export const numbers: TmRepositoryEntry = {
     },
     {
       name: 'constant.numeric.hex.cm',
-      match: '\\b0[xX][0-9a-fA-F]+\\b',
+      match: '\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\\b',
     },
     {
       name: 'constant.numeric.binary.cm',
-      match: '\\b0[bB][01?]+\\b',
+      match: '\\b0[bB][01?][01?_]*\\b',
     },
     {
       name: 'constant.numeric.octal.cm',
-      match: '\\b0[oO][0-7]+\\b',
+      match: '\\b0[oO][0-7][0-7_]*\\b',
     },
     {
       name: 'constant.numeric.float.cm',
-      match: '\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b',
+      match: '\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b',
     },
     {
       name: 'constant.numeric.integer.cm',
-      match: '\\b[0-9]+\\b',
+      match: '\\b[0-9][0-9_]*\\b',
     },
   ],
 };

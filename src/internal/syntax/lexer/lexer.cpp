@@ -4,6 +4,7 @@
 #include "internal/base/debug/lex.hpp"
 #include "internal/base/i18n.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -281,13 +282,24 @@ Token Lexer::scan_number(uint32_t start) {
         debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
     bool is_float = false;
 
+    // 桁区切りアンダースコア（1_000等）を数値テキストから除去するヘルパ（B7: 文法書の[0-9_]*を実装）
+    auto strip_separators = [](std::string s) {
+        s.erase(std::remove(s.begin(), s.end(), '_'), s.end());
+        return s;
+    };
+    // 直後に基数の有効数字が続く場合のみ '_' を桁区切りとして消費する（末尾 '_' は識別子等として残す）
+    auto is_sep = [&](auto&& digit_pred) {
+        return peek() == '_' && !is_at_end() && digit_pred(peek_next());
+    };
+
     // 16進数チェック
     if (source_[start] == '0' && (peek() == 'x' || peek() == 'X')) {
         advance();
-        while (!is_at_end() && is_hex_digit(peek())) {
+        while (!is_at_end() &&
+               (is_hex_digit(peek()) || is_sep([](char c) { return is_hex_digit(c); }))) {
             advance();
         }
-        std::string text(source_.substr(start, pos_ - start));
+        std::string text = strip_separators(std::string(source_.substr(start, pos_ - start)));
         // stoullで符号なし64bit全域をパース後、ビットキャスト（Bug3: 0x8000000000000000以上対応）
         uint64_t uval = std::stoull(text, nullptr, 16);
         int64_t val = static_cast<int64_t>(uval);
@@ -302,10 +314,12 @@ Token Lexer::scan_number(uint32_t start) {
     // 8進数チェック (0o/0Oプレフィックス)
     if (source_[start] == '0' && (peek() == 'o' || peek() == 'O')) {
         advance();
-        while (!is_at_end() && is_octal_digit(peek())) {
+        while (!is_at_end() &&
+               (is_octal_digit(peek()) || is_sep([](char c) { return is_octal_digit(c); }))) {
             advance();
         }
-        std::string text(source_.substr(start + 2, pos_ - start - 2));
+        std::string text =
+            strip_separators(std::string(source_.substr(start + 2, pos_ - start - 2)));
         uint64_t uval = std::stoull(text, nullptr, 8);
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
@@ -319,13 +333,15 @@ Token Lexer::scan_number(uint32_t start) {
     if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
         advance();
         bool has_dontcare = false;
-        while (!is_at_end() && (peek() == '0' || peek() == '1' || peek() == '?')) {
+        while (!is_at_end() && (peek() == '0' || peek() == '1' || peek() == '?' ||
+                                is_sep([](char c) { return c == '0' || c == '1' || c == '?'; }))) {
             if (peek() == '?') {
                 has_dontcare = true;
             }
             advance();
         }
-        std::string text(source_.substr(start + 2, pos_ - start - 2));
+        std::string text =
+            strip_separators(std::string(source_.substr(start + 2, pos_ - start - 2)));
         if (has_dontcare) {
             // ビット列テキストをそのまま保持し、パーサ側で値/マスクに変換する
             return Token(TokenKind::MaskedBinLiteral, start, pos_, text);
@@ -339,8 +355,8 @@ Token Lexer::scan_number(uint32_t start) {
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
-    // 10進数の整数部分
-    while (!is_at_end() && is_digit(peek())) {
+    // 10進数の整数部分（'_' 桁区切り可）
+    while (!is_at_end() && (is_digit(peek()) || is_sep([](char c) { return is_digit(c); }))) {
         advance();
     }
 
@@ -427,11 +443,11 @@ Token Lexer::scan_number(uint32_t start) {
                      value_str);
     } while (false);
 
-    // 小数点チェック
+    // 小数点チェック（小数部も '_' 桁区切り可）
     if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
         is_float = true;
         advance();
-        while (!is_at_end() && is_digit(peek())) {
+        while (!is_at_end() && (is_digit(peek()) || is_sep([](char c) { return is_digit(c); }))) {
             advance();
         }
     }
@@ -448,7 +464,7 @@ Token Lexer::scan_number(uint32_t start) {
         }
     }
 
-    std::string text(source_.substr(start, pos_ - start));
+    std::string text = strip_separators(std::string(source_.substr(start, pos_ - start)));
 
     if (is_float) {
         double val = std::stod(text);

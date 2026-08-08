@@ -88,6 +88,13 @@ Parser::parse_generic_params_v2() {
                             debug::Level::Debug);
         }
 
+        // R13: デフォルト型引数<T = int>は未実装。専用診断を出し型を読み捨てて解析を続行する（従来はExpected '>'の誤誘導エラー）
+        if (check(TokenKind::Eq)) {
+            error(i18n::msg(i18n::MsgId::PsDefaultTypeArgUnsupported));
+            advance();
+            parse_type();
+        }
+
     } while (consume_if(TokenKind::Comma));
 
     expect(TokenKind::Gt);

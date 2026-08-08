@@ -1,0 +1,7 @@
+// R13: ユーザー定義関数の可変長引数は未対応（FFI extern宣言専用の専用診断）
+int sum(int ... xs) {
+    return 0;
+}
+int main() {
+    return 0;
+}

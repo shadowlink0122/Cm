@@ -35,6 +35,12 @@ utiny ut = 255;       // 8bit: 0 to 255
 ushort us = 65535;    // 16bit: 0 to 65535
 uint ui = 100;        // 32bit: 0 to 2^32-1
 ulong ul = 2000000;   // 64bit: 0 to 2^64-1
+
+// Digit separator underscores (v0.17.0): usable in every base and fraction part
+int million = 1_000_000;
+int mask = 0b1010_1010;
+long color = 0xFF_FF_FF as long;
+double pi_ish = 3.141_592;
 ```
 
 ### Floating Point Types

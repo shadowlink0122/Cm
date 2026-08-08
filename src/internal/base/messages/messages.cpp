@@ -1607,6 +1607,24 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcSvConstructRequiresSvTarget
     {"'{0}' is a SystemVerilog construct; it is only available with --target=sv",
      "'{0}' はSystemVerilog構文です。--target=sv でのみ使用できます"},
+    // PsReferenceTypeUnsupported
+    {"reference types 'T&' are not supported; use a pointer type 'T*'",
+     "参照型 'T&' は未対応です。ポインタ型 'T*' を使用してください"},
+    // PsOperatorIndexCallUnsupported
+    {"overloading the index operator '[]' or call operator '()' is not supported",
+     "添字演算子 '[]'・呼び出し演算子 '()' のオーバーロードは未対応です"},
+    // PsInterfaceDefaultBodyUnsupported
+    {"interface methods cannot have a default body; declare the signature with ';' and implement it in each impl",
+     "インターフェースメソッドのデフォルト実装（本体付き宣言）は未対応です。';'でシグネチャのみ宣言し、各implで実装してください"},
+    // PsVariadicParamsUnsupported
+    {"user-defined variadic parameters are not supported ('...' is only available in FFI extern declarations)",
+     "ユーザー定義関数の可変長引数は未対応です（'...' はFFIのextern宣言専用）"},
+    // PsDefaultTypeArgUnsupported
+    {"default type arguments '<T = int>' are not supported",
+     "デフォルト型引数 '<T = int>' は未対応です"},
+    // PsMethodOverloadUnsupported
+    {"method overloading with 'overload' is not supported ('overload' is for constructors only)",
+     "メソッドのオーバーロード（overload修飾子）は未対応です（overloadはコンストラクタ専用）"},
 };
 // clang-format on
 

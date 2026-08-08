@@ -559,6 +559,12 @@ enum class MsgId : int {
     CliSyntaxError,
     CliUnknownPlatformDirective,
     TcSvConstructRequiresSvTarget,
+    PsReferenceTypeUnsupported,
+    PsOperatorIndexCallUnsupported,
+    PsInterfaceDefaultBodyUnsupported,
+    PsVariadicParamsUnsupported,
+    PsDefaultTypeArgUnsupported,
+    PsMethodOverloadUnsupported,
     Count,
 };
 

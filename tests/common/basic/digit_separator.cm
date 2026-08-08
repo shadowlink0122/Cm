@@ -1,0 +1,12 @@
+// R13(B7): 数値リテラルの桁区切りアンダースコア（文法書の[0-9_]*を実装。全基数・小数部・指数部前の整数部で使用可）
+import std::io::println;
+
+int main() {
+    const int d = 1_000_000;
+    const long h = 0xFF_FF as long;
+    const int b = 0b1010_1010;
+    const int o = 0o7_55;
+    const double f = 1_234.567_8;
+    println("{d} {h} {b} {o} {f}");
+    return 0;
+}

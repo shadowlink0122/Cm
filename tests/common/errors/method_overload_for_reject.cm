@@ -1,0 +1,18 @@
+// R13: impl-for形のoverload修飾子つきメソッドは未対応（従来はExpected typeの誤誘導エラーだった）
+struct P {
+    int x;
+}
+interface I {
+    int get();
+}
+impl P for I {
+    int get() {
+        return self.x;
+    }
+    overload int get(int a) {
+        return a;
+    }
+}
+int main() {
+    return 0;
+}

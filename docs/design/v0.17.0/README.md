@@ -6,7 +6,7 @@ has_children: true
 
 # v0.17.0 設計文書（索引）
 
-v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）と、下記**追加調査（R1〜R25）で新規に検出したバグ**のうち未修正分（構文網羅バグ調査はR1〜R12・R14修正済み・archive移動で残1件（R13）、バックエンド網羅バグ調査はR15〜R20全件修正済み、ライブラリ・自動実装調査はR21〜R25全件修正済み）である（本READMEは索引として残る）。
+v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置が完了し（実装済み文書は [archive/v0.17.0/](../../archive/v0.17.0/) へ移動）、追加調査（R1〜R25）は**全25件の処置が完了**した（構文網羅バグ調査R1〜R14・バックエンド網羅バグ調査R15〜R20・ライブラリ・自動実装調査R21〜R25、全てarchive移動済み）。未処置は「全体複雑度レビュー」のリファクタリング提案7件（8件中、配列HOFランタイム共通ソース化は実施済み）のみである（本READMEは索引として残る）。
 各文書には設計方針・段階分割・実装記録・不採用判断・将来課題を記録している。
 変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）を参照。
 構文網羅バグ調査はそれ以前に未調査だった構文・機能（棚卸し表のA〜D）、バックエンド網羅バグ調査はバックエンド・ターゲット（E）、ライブラリ・自動実装調査は残った一部調査項目（A2 derive・D3/D5/D6/D7/D8ライブラリ）を実機プローブしたもの。これで棚卸し表の全項目の調査を完了した。
@@ -60,7 +60,7 @@ v0.17.0の設計文書は未修正バグ調査（Q1〜Q7）まで全件の処置
 - R10: 型検査の黙殺穴 — **修正済み**（[archive移動](../../archive/v0.17.0/checker-silent-holes.md)。変数宣言の型名をis_valid_typeで検証（未定義型を宣言時に診断）、マクロの宣言型と初期化子型をtypes_compatibleで照合（LLVM内部エラー/js黙殺の三分裂を消滅）、constジェネリックパラメータを全宣言種の登録時に専用診断で拒否（半黙殺をやめ既存テストはエラーテスト化）。const genericの実体化実装は将来課題）
 - R11: 修飾子の未実装・黙殺 — **修正済み**（[archive移動](../../archive/v0.17.0/modifier-implementation-gaps.md)。inlineはAST→HIR→MIR→LLVMのinlinehint属性へ実伝搬（実装）、constexpr変数はnullptr返しをやめ専用診断+const回復、constexpr関数は通常関数扱いを警告で明示、volatileはパーサ消費+atomic誘導つき専用診断、ufloat/udouble負リテラルはZ5運用（警告・--strictエラー）で診断。CANONICAL_SPECの#inlineはキーワード形式へ一本化）
 - R12: matchの負数パターン不可・網羅matchのreturn漏れ誤検知 — **修正済み**（[archive移動](../../archive/v0.17.0/match-pattern-and-flow-gaps.md)。負数リテラル/負数範囲を符号反転LiteralExprへ畳み込んで受理（下流変更ゼロ）、return網羅解析へmatch文を追加しワイルドカード/変数束縛のASTフォールバック+網羅性検査確定フラグの2系統で網羅を認識（enum全variant被覆で`_`無しも対応、--strict阻害を解消））
-- [R13: 文法書・仕様書に定義があるが未実装の構文](unimplemented-documented-syntax.md) — **Low**: タプル・参照型`T&`・演算子`[]`/`()`・overloadメソッド（仕様書は実装済みと例示するがパース不能+黙殺）・IFデフォルト実装・可変長引数・デフォルト型引数・エスケープ識別子・数値サフィックスが未実装（診断ありだが仕様書と乖離）。実装かドキュメント追従かの判断待ち一覧
+- R13: 文法書・仕様書に定義があるが未実装の構文 — **修正済み**（[archive移動](../../archive/v0.17.0/unimplemented-documented-syntax.md)。桁区切りアンダースコア`1_000`は実装（全基数・小数部・VSCodeハイライト追従）、参照型/演算子[]()/overloadメソッド/IFデフォルト実装/可変長引数/デフォルト型引数は専用診断へ置き換え（overloadのinherent黙殺とCANONICAL_SPEC §4の仕様詐称も解消）、タプル/エスケープ識別子/数値サフィックスは文法書を実態へ追従。エラーテスト7本+値テスト追加）
 - R14: 構文・プリプロセッサ診断の品質 — **修正済み**（[archive移動](../../archive/v0.17.0/syntax-error-diagnostic-quality.md)。構文エラーへfile:line:col+該当行+キャレットを付与しsyntax errorラベルへ変更、imported module表記はimport経由のみに限定、SV構文native流入は専用診断、英語診断の全角括弧・platform不一致のwarningラベル/rc不整合・タイポの実行不能ヒントを是正。Unknown method/const generic誤誘導はR10、main not found誤誘導はR6で先行解消。複数エラーの一括表示は将来課題）
 
 ## バックエンド網羅バグ調査（R15〜R20）
@@ -113,20 +113,20 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 |---|---------|---------|-----------|------|
 | B1 | async/await | 調査済み → 健全 | jsの基本テストのみ | js/ts動作・他経路は明示拒否。await式の型も正しい（軽微: check非対称・全角括弧混入は[R14](syntax-error-diagnostic-quality.md)） |
 | B2 | macro宣言（定数マクロ・関数マクロ） | 調査済み → [R10](../../archive/v0.17.0/checker-silent-holes.md)修正済み | macro_type_mismatchエラーテスト | 正常系は6経路一致で健全。型不一致マクロはchecker診断化 |
-| B3 | ラムダの参照キャプチャ`[&x]` | 調査済み → [R4](../../archive/v0.17.0/closure-mutation-semantics.md)（修正済み）・[R13](unimplemented-documented-syntax.md) | なし | `[&x]`構文は未実装。クロージャ書き込みは診断拒否へ修正済み |
+| B3 | ラムダの参照キャプチャ`[&x]` | 調査済み → [R4](../../archive/v0.17.0/closure-mutation-semantics.md)（修正済み）・[R13](../../archive/v0.17.0/unimplemented-documented-syntax.md) | なし | `[&x]`構文は未実装。クロージャ書き込みは診断拒否へ修正済み |
 | B4 | raw string（`r"..."`/`r#"..."#`） | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | `r"..."`構文は不採用（仕様書から削除）。バッククォートraw文字列は非エスケープ化済み（`` \` ``のみ例外） |
-| B5 | エスケープ識別子（バッククォート`` `名前` ``） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（バッククォートはraw文字列に割当・診断あり） |
+| B5 | エスケープ識別子（バッククォート`` `名前` ``） | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | なし | 機能自体が存在しないため文法書から削除（バッククォートはraw文字列に割当） |
 | B6 | エスケープシーケンス`\xHH`/`\uHHHH`/`\UHHHHHHHH` | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | デコード実装済み・未知エスケープは診断拒否 |
-| B7 | 数値リテラルの桁区切り`_`・型サフィックス（u/l/f/d等） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（拒否は安全側・誤値化なし）。基数リテラル値は健全 |
+| B7 | 数値リテラルの桁区切り`_`・型サフィックス（u/l/f/d等） | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | digit_separator値テスト | 桁区切り`1_000`を実装（全基数・小数部）。サフィックスは未実装のまま文法書から削除 |
 | B8 | `${...}`形式の文字列補間 | 調査済み → [R5](../../archive/v0.17.0/string-escape-and-raw-semantics.md)（修正済み） | あり（escape_sequences） | 補間本体は`{}`と同値で健全。`\${x}`のリテラル出力対応済み |
-| B9 | タプル型・タプル式 | 調査済み → [R13](unimplemented-documented-syntax.md) | 専用テストなし | 未実装（文法書と乖離・診断あり・黙殺なし） |
-| B10 | 参照型`T&` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（CANONICAL_SPEC §3.2で明記済み・診断あり） |
-| B11 | 演算子オーバーロードの`[]`/`()` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（operator_symbolに`[]`/`()`なし・診断あり） |
-| B12 | `overload`メソッド（コンストラクタ以外） | 調査済み → [R13](unimplemented-documented-syntax.md) | コンストラクタのみ | 仕様書§4が実装済みと例示するがパース不能+inherentで黙殺（Medium） |
-| B13 | インターフェースのデフォルト実装（本体付き宣言） | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
-| B14 | ユーザー定義関数の可変長引数`...` | 調査済み → [R13](unimplemented-documented-syntax.md) | FFIのprintf経由のみ | 未実装（文法書と乖離・FFI専用・診断あり） |
+| B9 | タプル型・タプル式 | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | なし | 文法書から削除し未対応を注記（診断あり・黙殺なし） |
+| B10 | 参照型`T&` | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | ref_type_rejectエラーテスト | 「ポインタT*を使用」の専用診断へ（文法書も追従） |
+| B11 | 演算子オーバーロードの`[]`/`()` | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | operator_index_rejectエラーテスト | 専用診断へ（interfaceのスライスサフィックス誤消費も先読みで回避） |
+| B12 | `overload`メソッド（コンストラクタ以外） | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | method_overload_reject×2エラーテスト | 両impl形で専用診断（inherent黙殺解消）。仕様書§4の例を削除し未対応を明記 |
+| B13 | インターフェースのデフォルト実装（本体付き宣言） | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | interface_default_body_rejectエラーテスト | 専用診断へ（本体を読み飛ばし「各implで実装」を案内） |
+| B14 | ユーザー定義関数の可変長引数`...` | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | vararg_user_rejectエラーテスト | 「FFI extern宣言専用」の専用診断へ（文法書も追従） |
 | B15 | matchの範囲パターン`a...b` | 調査済み → [R12](../../archive/v0.17.0/match-pattern-and-flow-gaps.md)修正済み | negative_pattern値テスト | `...`範囲は健全（両端含む・9実行一致）。負数パターン/負数範囲も受理 |
-| B16 | ジェネリクスのデフォルト型引数`<T = int>` | 調査済み → [R13](unimplemented-documented-syntax.md) | なし | 未実装（診断あり） |
+| B16 | ジェネリクスのデフォルト型引数`<T = int>` | 調査済み → [R13](../../archive/v0.17.0/unimplemented-documented-syntax.md)修正済み | default_type_arg_rejectエラーテスト | 専用診断へ（文法書も追従） |
 | B17 | const genericパラメータの境界・演算 | 調査済み → [R10](../../archive/v0.17.0/checker-silent-holes.md)修正済み | const_genericsエラーテスト | 宣言時に専用診断で拒否（実体化実装は将来課題） |
 
 ### C. 修飾子・宣言
