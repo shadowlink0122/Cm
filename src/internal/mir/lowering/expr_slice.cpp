@@ -9,8 +9,8 @@
 #include "internal/base/i18n.hpp"
 #include "internal/base/target.hpp"
 #include "internal/hir/lowering/fwd.hpp"
-#include "layout.hpp"
 #include "internal/hir/slice_dispatch.hpp"
+#include "layout.hpp"
 
 #include <memory>
 #include <optional>

@@ -1,9 +1,9 @@
 // MIR lowering - アクセス式（メンバアクセス・Place取得・インデックス）
 
 #include "internal/base/debug.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 #include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/mono/typekey.hpp"
-#include "internal/hir/slice_dispatch.hpp"
 
 #include <functional>
 #include <memory>

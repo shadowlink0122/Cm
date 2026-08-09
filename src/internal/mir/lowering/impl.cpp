@@ -2,8 +2,8 @@
 #include "internal/base/debug.hpp"
 #include "internal/base/mangle.hpp"
 #include "internal/base/target.hpp"
-#include "internal/mir/lowering/layout.hpp"
 #include "internal/hir/slice_dispatch.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "lowering.hpp"
 
 #include <memory>
