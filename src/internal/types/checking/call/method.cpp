@@ -307,6 +307,14 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
                         continue;
                     }
                     auto field_type = resolve_typedef(field.type);
+                    // ジェネリック構造体のフィールド型を型引数で置換する（Box<int*(int,int)> の v: T → int*(int,int)）。
+                    // 従来はフィールドアクセスのみ置換し、関数フィールド呼び出しは未置換の T のままで「Unknown method」になっていた（局所処理調査「その他」）
+                    if (field_type && !obj_type->type_args.empty() &&
+                        !struct_decl->generic_params.empty()) {
+                        field_type = substitute_generic_type(
+                            field_type, struct_decl->generic_params, obj_type->type_args);
+                        field_type = resolve_typedef(field_type);
+                    }
                     if (!field_type || field_type->kind != ast::TypeKind::Function) {
                         break;
                     }

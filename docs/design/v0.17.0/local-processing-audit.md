@@ -105,7 +105,7 @@
 ## その他の位置限定の非汎用
 
 - ~~`for-in` が配列/スライス限定で `string` を拒否（`for (char ch in s)` がエラー）。範囲は `range(a,b)`。~~ → **処置済み**: 型チェッカ（`check_for_in`）で `string` を反復対象として受理し要素型を `char` にした。HIR loweringは配列と同じインデックスループへ脱糖し、境界は `__builtin_string_len`（バイト長。添字 `s[i]` がバイト単位のため）、要素取得は `s[i]` の正準lowering `__builtin_string_charAt` を用いる（`for (char ch in s)` が `s[i]` と同じバイト意味論で反復する。全バックエンド一致）。回帰テスト: `tests/common/control-flow/loops/forin_string.cm`。
-- ジェネリック型引数に関数ポインタ型を渡すと（`Box<int*(int,int)>`）型は通るがフィールド解決で `Unknown method 'v'`（モノモーフ化/フィールド解決層）。
+- ~~ジェネリック型引数に関数ポインタ型を渡すと（`Box<int*(int,int)>`）型は通るがフィールド解決で `Unknown method 'v'`（モノモーフ化/フィールド解決層）。~~ → **処置済み**: `b.v(2,3)`（関数フィールドのメソッド構文呼び出し）が、フィールド型を型引数で置換しない経路のため未置換の `T` のまま関数型と認識されず「Unknown method」になっていた（フィールドアクセス `b.v` は置換していて動作していた）。型チェッカ（`method.cpp` の関数フィールド呼び出し）とHIRlowering（`expr_member.cpp` の関数フィールド呼び出し。基底名でstruct_defsを引き `sd.generic_params`↔`obj_type->type_args` でフィールド型を置換）の双方に、フィールドアクセスと同じ型引数置換を追加した。回帰テスト: `tests/common/generics/pointers-memory/fnptr_field_call.cm`（全バックエンド一致）。
 - 関数ポインタを直接呼ぶ式（G4）と、`Type<Args>{...}` 構築式（`<`/`>`が比較演算子に解釈される）は一般に未対応。
 
 ---

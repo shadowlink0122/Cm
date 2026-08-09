@@ -1105,12 +1105,32 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
         // 関数型フィールドの呼び出し（obj.field(args)）: implメソッドではなく関数値を保持するフィールドを起動する
         // （JSオブジェクトのメソッド等。呼び出し先はメンバ式のまま保持し、JSバックエンドでのthis束縛を保てるようにする）
         if (obj_type && obj_type->kind == ast::TypeKind::Struct) {
-            // 構造体フィールドの解決（struct_defs_）
+            // 構造体フィールドの解決（struct_defs_）。ジェネリック特殊化名（Box<int*(int,int)>）は
+            // 基底名（Box）でstruct_defsを引き、フィールド型を型引数で置換する（局所処理調査「その他」: 関数フィールド呼び出しの取りこぼし解消）
             std::vector<std::pair<std::string, TypePtr>> field_types;
-            auto struct_it = struct_defs_.find(obj_type->name);
+            std::string field_struct_name = obj_type->name;
+            {
+                auto angle = field_struct_name.find('<');
+                if (angle != std::string::npos) {
+                    field_struct_name = field_struct_name.substr(0, angle);
+                }
+            }
+            auto struct_it = struct_defs_.find(field_struct_name);
             if (struct_it != struct_defs_.end() && struct_it->second) {
-                for (const auto& field : struct_it->second->fields) {
-                    field_types.emplace_back(field.name, field.type);
+                const auto& sd = *struct_it->second;
+                for (const auto& field : sd.fields) {
+                    TypePtr ft = field.type;
+                    // フィールド型が基底のジェネリックパラメータ（v: T）なら実型引数へ置換する
+                    if (ft && !obj_type->type_args.empty()) {
+                        for (size_t i = 0;
+                             i < sd.generic_params.size() && i < obj_type->type_args.size(); ++i) {
+                            if (sd.generic_params[i] == ft->name && obj_type->type_args[i]) {
+                                ft = obj_type->type_args[i];
+                                break;
+                            }
+                        }
+                    }
+                    field_types.emplace_back(field.name, ft);
                 }
             }
             {
