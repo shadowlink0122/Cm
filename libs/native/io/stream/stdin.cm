@@ -74,7 +74,7 @@ impl Stdin {
         }
 
         // ヒープにバッファを確保してコピー
-        void* heap_buf = malloc(total + 1);
+        void* heap_buf = malloc((total + 1) as int);
         char* result = heap_buf as char*;
 
         // データをコピー

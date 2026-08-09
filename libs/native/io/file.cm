@@ -51,7 +51,7 @@ export string read_file(string path) {
     // SEEK_SET = 0
     lseek(fd, 0 as long, 0);
 
-    void* buf = malloc(size + 1 as long);
+    void* buf = malloc((size + 1) as int);
     if (buf == 0 as void*) {
         close(fd);
         return "";
