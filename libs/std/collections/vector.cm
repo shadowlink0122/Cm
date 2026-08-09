@@ -42,7 +42,7 @@ export impl<T> Vector<T> {
                 void* src = self.data as void*;
                 void* dst = new_data as void*;
                 const long copy_size = (self.size as long) * elem_size;
-                memcpy(dst, src, copy_size);
+                memcpy(dst, src, copy_size as int);
             }
             void* old_ptr = self.data as void*;
             void* null_ptr = 0 as void*;

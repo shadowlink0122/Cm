@@ -380,6 +380,11 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                          let.name, ast::type_to_string(*elem_expected),
                                          ast::type_to_string(*elem_type)));
                     }
+                    // 配列要素リテラルの縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+                    if (!elem_is_void_ptr && elem_expected && elem && elem_type) {
+                        check_numeric_conversion_policy(elem_expected, elem_type, elem.get(),
+                                                        elem->span);
+                    }
                 }
             } else {
                 init_type = infer_type(*let.init);

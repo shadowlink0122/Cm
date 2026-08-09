@@ -73,7 +73,7 @@
 
 **処置記録（E1〜E6）**: HIR loweringの各HOFサイト（map/filter/reduce/forEach/some/every/findIndex/first/last/find/sortBy、スライスのfirst/last）の手書きi32/i64二択を、`slice_dispatch.hpp` の `slice_scalar_info` から導出する正準ヘルパ `array_hof_suffix` へ一本化し、ランタイム（`runtime_hof_core.inc`/`runtime_slice_core.inc`）へi8/i16/f32/f64変種（クロージャ版含む80関数）と `builtin_registry.hpp` の宣言行を追加した。固定長配列のsort/reverseは `cm_array_to_slice` でスライスへ変換し、符号・浮動小数・文字列をヘッダのelem_sizeで正しく扱うスライス汎用ランタイム（`cm_slice_sort_*`/`cm_slice_reverse`）へ相乗りさせ、i32形状の `__builtin_array_sort/reverse` 依存を廃止した（スライスsortの手書きswitchも `slice_scalar_sort_suffix` へ置換）。checkerに要素型ゲートを追加し、非スカラ要素（構造体・文字列等）のHOFは構造的loweringを行うjs/ts系ターゲット（`set_structural_array_lowering`）でのみ許可、native/jit/wasmでは `TcArraySearchUnsupportedElem` 診断で停止する（E6の能力非対称も同判定へ統一）。E1のreduce戻り型はコールバックのアキュムレータ型（無ければ初期値型→要素型）に修正し、要素×アキュムレータの未提供な幅組み合わせは専用診断 `TcArrayReduceUnsupportedAcc` で停止する。クロージャ正規化（`normalizeHofClosureArgs`）の要素型二択も幅サフィックス導出へ拡張し、`_i32_acc64` のサンクacc幅誤り（i32サンクと(i64,i32)コールバックの食い違い）も同時修正。あわせて調査で発覚した2件——ラムダキャプチャ解析が `as` キャスト・構造体/配列リテラル内の識別子を走査せず、キャスト内でだけ参照される外側変数が無診断ゼロ値になる漏れ（`lambda.cpp`）と、jsの `cm_slice_get_f32` 未対応（float要素の添字読みがundefined）——も修正した。回帰テスト: `tests/common/arrays/higher-order/{elem_widths,sort_widths,closure_widths,unsupported_elem}`。ラムダ仮引数の配列型（補足）は構文未対応のため未処置。
 
-## F. 数値縮小診断の文脈差
+## F. 数値縮小診断の文脈差【処置済み】
 
 同一の縮小変換（例 `int`→`tiny`。変換の**挿入**は全文脈で行われ値は切り詰まる）に対し、縮小**警告**が文脈で出たり出なかったりする。checker側の問題で全backend共通。
 
@@ -81,11 +81,13 @@
 - 警告が出ない（silent）: **関数引数・配列要素リテラル・構造体フィールド初期化**。
 - 「ある文脈では黙って受理し別文脈では警告」という典型的な非汎用。[coercion-driver-unification](coercion-driver-unification.md) の方針4（受理と挿入の同表化）に一部関連するが、この文脈別の警告欠落は現状の欠陥として未記載。
 
+**処置記録（F系）**: 正準の `check_numeric_conversion_policy`（Z5）を関数引数（`call/function.cpp`）・配列要素リテラル（`stmt.cpp` のlet初期化要素ループ）・構造体フィールド初期化（`expr/primary.cpp`）の3文脈へ適用し、let/代入/return/三項と同一規則（適合リテラル免除・`uint/usize→int` 免除・`--strict` でエラー昇格）で診断するようにした。掃引で発覚した既存の暗黙縮小4箇所——stdlibの `vector.cm` の `memcpy(…, long)`・`io/console/input.cm` の `malloc(long)`・テスト2件の同型 `malloc(long)`——は従来挙動と同じ切り詰めを `as int` で明示化した。回帰テスト: `tests/regression/narrowing_diag_test.cpp`（cases/narrowing_diag/、3文脈の警告発火と適合リテラル無診断）。
+
 ## G. バックエンド分岐（同一入力・異結果）
 
 フロントで一本化されず各backendが独自実装するため、同じプログラムが結果分岐する。
 
-- **G1 [silent] JSで `ulong`>2^63 の補間が符号付きになる**（`src/internal/codegen/js/runtime.cpp:221` の `String(val)`）。`ulong a=1e19; println(a)` は正しいが `println("{a}")` がJSで `-8446744073709551616`、`{a/b}` も `14223372036854775808` と誤る。radix指定時のみ `BigInt.asUintN(64,...)` を適用しており、無指定の補間分岐が符号正規化を欠く。補間の値リストが符号情報を持たないため（native/interpは型付きフォーマッタを選ぶ）。
+- **G1 [silent] JSで `ulong`>2^63 の補間が符号付きになる**（`src/internal/codegen/js/runtime.cpp:221` の `String(val)`）。`ulong a=1e19; println(a)` は正しいが `println("{a}")` がJSで `-8446744073709551616`、`{a/b}` も `14223372036854775808` と誤る。radix指定時のみ `BigInt.asUintN(64,...)` を適用しており、無指定の補間分岐が符号正規化を欠く。補間の値リストが符号情報を持たないため（native/interpは型付きフォーマッタを選ぶ）。→ **解消済みを確認**: 補間・書式指定子の全バックエンド統一（R20）以降、`{a}`・`{a/b}`・`ulong`最大値・`0-1` ラップ・`{a:x}` のいずれもJSとnativeが一致することを実測で再確認した（追加修正は不要だった）。
 - **G2 [silent] JSが `x as typeof(intVar)` を解決しない**（native/wasmは切り詰める）。B4の裏返し。
 - **G3 [diag/silent] 集約の補間フォーマッタが未統一**。`int[3]` の `"{a}"` が interp/native `{}`・JS `1,2,3`、構造体は interp/native 空・JS `[object Object]`。共有規則が無く各backendが即興。
 - **G4 [reject] 間接呼び出しのコード生成欠落**。`getf()(2,3)`（即時に返した関数ポインタの呼び出し）や `fs[0](2,3)`（関数ポインタ配列の呼び出し）がネイティブで `Symbols not found: [ _<indirect> ]`。型は通る。一旦変数に束ねれば動く。既知の関数ポインタ配列非対応（[array-literal-element-type-checking](array-literal-element-type-checking.md) のReq5）と同族。
@@ -114,9 +116,9 @@
 1. **[Critical] E系: 高階関数を `slice_dispatch.hpp` へ移行し、checkerに要素型ゲートを追加**（無診断の誤コンパイル/クラッシュを解消）。`sort`/`indexOf` が既にやっている汎用形へ揃える。→ **処置済み**（E節の処置記録参照）
 2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。→ **処置済み**（C節の処置記録参照）
 3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。
-4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。
+4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。→ **G1は解消済みを確認**（R20の補間統一で修正済み。G節参照。sizeof/typeof/alignofの無診断誤値はA/B系の残課題）
 5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。
-6. **[Medium] F系: 縮小診断を全変換文脈で一律化**（引数・配列要素・フィールド初期化）。
+6. **[Medium] F系: 縮小診断を全変換文脈で一律化**（引数・配列要素・フィールド初期化）。→ **処置済み**（F節の処置記録参照）
 7. **[Medium] B系: `typeof` 型に被演算式を持たせて解決**（宣言型・仮引数型・キャスト結果型・JSでの解決を一括で正す）。
 
 ## 検査に使った再現プローブ

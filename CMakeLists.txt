@@ -780,6 +780,23 @@ if(BUILD_TESTING)
         target_link_libraries(hir_type_audit_test gtest_main cm_frontend)
         gtest_discover_tests(hir_type_audit_test PROPERTIES LABELS "regression")
 
+        # Integration tests - 数値縮小診断の文脈網羅（局所処理調査F系）
+        # （Cmプログラムを tests/regression/cases/narrowing_diag/ から読み込む）
+        add_executable(narrowing_diag_test
+            tests/regression/narrowing_diag_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(narrowing_diag_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(narrowing_diag_test PRIVATE
+            CM_NARROWING_DIAG_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/narrowing_diag")
+        target_include_directories(narrowing_diag_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(narrowing_diag_test gtest_main cm_frontend)
+        gtest_discover_tests(narrowing_diag_test PROPERTIES LABELS "regression")
+
         # Integration tests - MIR Lowering
         # （Cmプログラムを tests/regression/cases/mir_lowering/ から読み込む）
         add_executable(mir_lowering_test

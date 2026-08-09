@@ -22,7 +22,7 @@ impl PtrContainer<T> {
     void init(int cap) {
         const long elem_size = __sizeof__(T) as long;
         const long alloc_size = (cap as long) * elem_size;
-        void* raw = malloc(alloc_size);
+        void* raw = malloc(alloc_size as int);
         self.data = raw as T*;
         self.size = 0;
         self.capacity = cap;

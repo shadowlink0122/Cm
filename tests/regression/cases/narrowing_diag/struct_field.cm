@@ -1,0 +1,9 @@
+// 構造体フィールド初期化への縮小変換（int→tiny）は警告される（局所処理調査F系）
+struct S {
+    tiny t;
+}
+int main() {
+    int big = 300;
+    S s = {t: big};
+    return 0;
+}

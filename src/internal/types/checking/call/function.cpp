@@ -650,6 +650,11 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                     error(current_span_, i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
                                                     ident->name, expected, actual));
                 }
+                // 関数引数の縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+                if (sym->param_types[i] && arg_type) {
+                    check_numeric_conversion_policy(sym->param_types[i], arg_type,
+                                                    call.args[i].get(), call.args[i]->span);
+                }
                 // キャプチャ付きクロージャの関数引数渡しは環境喪失でゴミ値になるため拒否（V5）
                 if (sym->param_types[i] && sym->param_types[i]->kind == ast::TypeKind::Function &&
                     is_capturing_closure_expr(*call.args[i])) {

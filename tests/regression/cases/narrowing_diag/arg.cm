@@ -1,0 +1,7 @@
+// 関数引数への縮小変換（int→tiny）は警告される（局所処理調査F系）
+void f(tiny t) {}
+int main() {
+    int big = 300;
+    f(big);
+    return 0;
+}

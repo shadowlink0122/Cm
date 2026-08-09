@@ -570,7 +570,12 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
                     break;
                 }
             }
-            infer_type_expecting(*field.value, field_expected);
+            auto field_value_type = infer_type_expecting(*field.value, field_expected);
+            // フィールド初期化の縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+            if (field_expected && field_value_type) {
+                check_numeric_conversion_policy(field_expected, field_value_type, field.value.get(),
+                                                field.value->span);
+            }
         }
         // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）
         if (field.value && is_capturing_closure_expr(*field.value)) {
