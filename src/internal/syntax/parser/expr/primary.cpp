@@ -771,6 +771,8 @@ ast::ExprPtr Parser::parse_sizeof_operand(uint32_t start_pos) {
         case TokenKind::KwChar:
         case TokenKind::KwString:
         case TokenKind::KwCstring:
+        case TokenKind::
+            KwTypeof:  // sizeof(typeof(x)) は typeof を型として解析する（被演算式を保持し型チェッカで解決。局所処理調査B系）
         case TokenKind::Star:
         case TokenKind::Amp:
         case TokenKind::LBracket:

@@ -299,6 +299,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
 
     // ジェネリック型引数の個数を検証する（H15。ローカル変数宣言はis_valid_typeを通らないためここで検査）
     if (let.type) {
+        // typeof(式) 宣言型を被演算式の具体型へ解決する（局所処理調査B系。__typeof__ のままだと is_valid_type/型不一致で失敗する）
+        let.type = resolve_typeof(let.type);
         // R10: 宣言型そのものの存在を検証する（従来は型引数のみ検証され、未定義型の変数宣言が無診断で素通りしメソッド呼び出し時のUnknown methodまで顕在化しなかった）
         if (!is_valid_type(let.type)) {
             // R14: SystemVerilog構文のnative流入（assign x = 2;等はassignが型名扱いになる）は専用メッセージで誘導する

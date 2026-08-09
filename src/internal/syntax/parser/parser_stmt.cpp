@@ -463,6 +463,35 @@ bool Parser::is_type_start() {
         case TokenKind::Amp:
         case TokenKind::LBracket:
             return true;
+        case TokenKind::KwTypeof: {
+            // typeof(...) の直後（ポインタ/配列サフィックスを挟んで）に識別子が来れば宣言（typeof(x) name）。
+            // 式文 typeof(x); とは区別する（局所処理調査A1のtypeof分。paren宣言(int) kはB系のtypeof解決に依存しないため別課題）
+            if (peek_kind() != TokenKind::LParen) {
+                return false;
+            }
+            size_t i = pos_ + 2;  // 'typeof' '(' の次
+            int depth = 1;
+            while (i < tokens_.size() && depth > 0) {
+                if (tokens_[i].kind == TokenKind::LParen) {
+                    depth++;
+                } else if (tokens_[i].kind == TokenKind::RParen) {
+                    depth--;
+                } else if (tokens_[i].kind == TokenKind::Eof) {
+                    break;
+                }
+                i++;
+            }
+            if (depth != 0) {
+                return false;
+            }
+            // 閉じ括弧後のポインタ/配列サフィックスをスキップ
+            while (i < tokens_.size() &&
+                   (tokens_[i].kind == TokenKind::Star || tokens_[i].kind == TokenKind::LBracket ||
+                    tokens_[i].kind == TokenKind::RBracket)) {
+                i++;
+            }
+            return i < tokens_.size() && tokens_[i].kind == TokenKind::Ident;
+        }
         case TokenKind::Ident:
             // 識別子の後に識別子が来たら変数宣言 (Type name)
             // 識別子の後に::が来たら名前空間修飾型の可能性 (ns::Type name)

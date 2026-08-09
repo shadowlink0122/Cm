@@ -55,6 +55,8 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         // sizeof(型)の場合、型が有効かチェック
         // 無効な場合は変数として解釈を試みる
         if (sizeof_expr->target_type) {
+            // sizeof(typeof(x)): typeof 型を被演算式の具体型へ解決してからサイズを求める（局所処理調査B系）
+            sizeof_expr->target_type = resolve_typeof(sizeof_expr->target_type);
             auto& target_type = sizeof_expr->target_type;
             // 構造体型として解析されたが、実際には変数かもしれない
             if (target_type->kind == ast::TypeKind::Struct) {
@@ -199,6 +201,10 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             }
             inferred_type = ast::make_bool();
         } else {
+            // as typeof(x): 対象型が typeof スタブなら被演算式の具体型へ解決する（局所処理調査B系。原型ノードを差し替えて後段のloweringも具体型を見る）
+            if (cast_expr->target_type) {
+                cast_expr->target_type = resolve_typeof(cast_expr->target_type);
+            }
             // ターゲット型を返す
             inferred_type = cast_expr->target_type;
             // 配列型へのasキャストは未対応として診断する（局所処理調査A3の追補）。

@@ -9,6 +9,9 @@
 
 namespace cm::ast {
 
+// typeof(式) 型が被演算式を保持するための前方宣言（型チェッカで具体型へ解決する）
+struct Expr;
+
 // ============================================================
 // 型の種類
 // ============================================================
@@ -116,6 +119,9 @@ struct Type {
     // 関数型用: 引数型と戻り値型
     std::vector<TypePtr> param_types;
     TypePtr return_type;
+
+    // typeof(式) 型（kind==Inferred・name=="__typeof__"）の被演算式。型チェッカで具体型へ解決する（従来は破棄していた）
+    std::shared_ptr<Expr> typeof_operand;
 
     // コンストラクタ
     explicit Type(TypeKind k) : kind(k) {}

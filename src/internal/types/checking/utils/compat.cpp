@@ -86,6 +86,37 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
     return type;
 }
 
+ast::TypePtr TypeChecker::resolve_typeof(const ast::TypePtr& type) {
+    if (!type) {
+        return type;
+    }
+    // typeof(式)型（__typeof__ スタブ）: 被演算式を型検査し具体型を返す（従来は未解決の Inferred のままだった）
+    if (type->kind == ast::TypeKind::Inferred && type->name == "__typeof__" &&
+        type->typeof_operand) {
+        // メタ情報取得のため未初期化チェックの対象外（sizeof/typeofと同様に使用マークのみ）
+        if (auto* id = type->typeof_operand->as<ast::IdentExpr>()) {
+            mark_variable_initialized(id->name);
+        }
+        auto inferred = infer_type(*type->typeof_operand);
+        if (inferred && inferred->kind != ast::TypeKind::Error) {
+            return inferred;
+        }
+        return type;  // 解決不能なら従来どおりスタブのまま（後段で expected 型不一致として顕在化する）
+    }
+    // ポインタ/参照/配列の要素側 typeof（(typeof(x))* 等）も再帰解決する。原型は破壊せずコピーへ差し替える
+    if ((type->kind == ast::TypeKind::Pointer || type->kind == ast::TypeKind::Reference ||
+         type->kind == ast::TypeKind::Array) &&
+        type->element_type) {
+        auto resolved_elem = resolve_typeof(type->element_type);
+        if (resolved_elem != type->element_type) {
+            auto copy = std::make_shared<ast::Type>(*type);
+            copy->element_type = resolved_elem;
+            return copy;
+        }
+    }
+    return type;
+}
+
 bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     // ビットベクタと整数の互換（v0.16.0 ビットスライス）:
     // bit[N] への整数代入・整数文脈での bit[N] 使用を許可する

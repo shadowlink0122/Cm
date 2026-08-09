@@ -180,6 +180,8 @@ class TypeChecker {
     // ユーティリティ (utils.cpp)
     // ============================================================
     ast::TypePtr resolve_typedef(ast::TypePtr type);
+    // typeof(式)型（__typeof__）を被演算式の推論型へ解決する。ポインタ/参照/配列の要素側も再帰解決する。typeofでなければそのまま返す
+    ast::TypePtr resolve_typeof(const ast::TypePtr& type);
     bool types_compatible(ast::TypePtr expected, ast::TypePtr actual);
     ast::TypePtr common_type(ast::TypePtr a, ast::TypePtr b);
 

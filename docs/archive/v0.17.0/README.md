@@ -10,6 +10,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 - [monomorphization-typed-instantiation.md](type-system/monomorphization-typed-instantiation.md) — モノモーフ化の型駆動化（名前マングリング逆算の廃止）
 - [nested-anonymous-struct-literal-loss.md](type-system/nested-anonymous-struct-literal-loss.md) — 構造体リテラル内配列の無名構造体リテラル喪失（W1）
 - [nested-generic-type-arg-string.md](type-system/nested-generic-type-arg-string.md) — ネストしたジェネリック型引数のstringフィールド読みが無言死（Q2）
+- [parenthesized-type-and-typeof-cast.md](type-system/parenthesized-type-and-typeof-cast.md) — 括弧付き型とtypeof型の静的解決（as/宣言/sizeofで具体型へ・JSキャスト解決）
 - [type-identity-recursive-keys.md](type-system/type-identity-recursive-keys.md) — 型同一性の構造化（再帰的型キー）（実装済み）
 - [typed-hir-single-source.md](type-system/typed-hir-single-source.md) — 型付きHIRの単一情報源化（下流での型再推論の禁止）
 - [typedef-struct-literal-resolution.md](type-system/typedef-struct-literal-resolution.md) — B8: 構造体typedef別名のリテラル使用不可

@@ -173,6 +173,8 @@ ast::TypePtr Parser::parse_type() {
             expect(TokenKind::RParen);
             auto type = std::make_shared<ast::Type>(ast::TypeKind::Inferred);
             type->name = "__typeof__";
+            // 被演算式を保持して型チェッカで具体型へ解決する（従来は破棄していたため __typeof__ が未解決のままだった）
+            type->typeof_operand = std::shared_ptr<ast::Expr>(std::move(expr));
             base_type = type;
             break;
         }

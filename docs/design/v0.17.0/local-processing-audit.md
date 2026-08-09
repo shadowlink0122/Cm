@@ -34,7 +34,7 @@
 
 **処置記録（A3〜A6）**: A3は `as`/`is` の対象型の後置サフィックス消費を独自の空`[]`限定ラムダから正準の `check_array_suffix` へ置換し（`binary.cpp`）、`x as int[N]` が `(x as int)[N]` の添字式へ黙って化ける問題を解消した。配列型への `as` は実体loweringが無く無診断のゴミ値になるため、型チェッカで配列型キャストを専用診断 `TcCastToArrayUnsupported` で停止し、暗黙変換（代入・呼び出しの固定長→スライス）へ誘導する（ユニオン変種取り出し `union as int[]` は除外し既存のZ4検査へ委ねる）。あわせて `as` の `CastExpr` にスパンが設定されておらず新診断がstdlib先頭を指していた不具合を修正した（`is` 経路と同様に `Span{operand.start, end}` を付与）。A4は括弧型の中身を `parse_type` から union対応の `parse_type_with_union` へ再帰させ `(int | string)` をあらゆる型位置で受理（`parser_type.cpp`）、A5はジェネリック型引数ループを同じく `parse_type_with_union` へ変更し `Foo<int | string>` を受理（フィールド等でunionが通るのと対称化）した。A6は `__alignof__` の被演算子が型でなく変数を指す場合に静的型へ置換する変数救済を型チェッカへ追加し、未解決名の既定アライン8を返す無診断誤値を解消した（sizeofの変数救済と同型）。回帰テスト: `tests/common/types/general/type_grammar_union.cm`（A4/A5/A6）・`tests/common/types/casting/cast_to_array.cm`（A3の診断、`.error`）。残課題は上記A1・配列サイズ定数式に加え、`Type<Args>{...}` 構築式（`<`/`>` が比較演算子に解釈される）が一般に未対応な点（「その他の位置限定の非汎用」節）。
 
-## B. `typeof` 型のスタブ化（被演算式を捨てる）
+## B. `typeof` 型のスタブ化（被演算式を捨てる）【一部処置済み】
 
 `typeof(式)` を型として解析する際、被演算式をパース後に**破棄**し、名前 `__typeof__` の未解決 `Inferred` 型を返すだけ（`src/internal/syntax/parser/parser_type.cpp` の KwTypeof 分岐）。型チェッカ/HIRで `__typeof__` は解決されない。結果:
 
@@ -42,7 +42,9 @@
 - **B2 [silent] `typeof(&x)` が文字列 `"&x"`（ソース片）を返す**（正 `"*int"`）。`is_type_start()` の `case TokenKind::Amp`（`parser_stmt.cpp:463`）が先頭 `&` を無条件に参照型扱いにするため（`*` には `*Type Ident` の先読みガードがあるのに `&` には無い）。
 - **B3 [reject/silent] `typeof` を宣言型/仮引数型に使うと未解決**。`typeof(j) k = i;` はA1で失敗、`int g(typeof(1) x)` は本体・呼び出し側とも `expected 'int', got '<inferred>'` になる。
 - **B4 [silent] `auto k = i as typeof(j); typeof(k)` が `<inferred>`**。値としてのキャストはネイティブ系では効くがJSでは解決されない（G2）。
-- 恒久対応には `ast::Type` に typeof の被演算式（または解決済み型）を保持させ、型チェッカで具体型へ解決する必要がある（[parenthesized-type-and-typeof-cast](parenthesized-type-and-typeof-cast.md) に既述）。
+- 恒久対応には `ast::Type` に typeof の被演算式（または解決済み型）を保持させ、型チェッカで具体型へ解決する必要がある（[parenthesized-type-and-typeof-cast](../../archive/v0.17.0/type-system/parenthesized-type-and-typeof-cast.md) に既述）。
+
+**処置記録（B1・B3宣言・B4・G2）**: 恒久対応どおり `ast::Type` に typeof の被演算式 `typeof_operand` を保持させ（パーサは従来破棄していた式を保存）、型チェッカのヘルパ `resolve_typeof` が被演算式を型検査して具体型へ解決するようにした（ポインタ/参照/配列の要素側 typeof も再帰解決）。解決サイトは as キャストの対象型（`x as typeof(y)`。対象型ノードを具体型へ差し替えるため後段loweringも具体型を見る→**JSでも typeof キャストが解決されG2解消**・全バックエンドで幅一致）・宣言型（`typeof(j) k = i`。`is_type_start` へ typeof宣言の先読みを追加してA1のtypeof分を解消し `check_let` で解決）・`sizeof(typeof(x))`（sizeof被演算子判定へ typeof を型として追加し checker で解決→B1解消。`sizeof(typeof(int))`=4が正しく出る）。`auto` 経由の結果型・結果への `typeof()` も解決済み具体型を返す（B4解消）。回帰テスト: `tests/common/types/casting/typeof_cast.cm`（JS含む全非SVへ拡大）・`typeof_decl.cm`（宣言型・幅解決・sizeof(typeof)）。設計文書 [parenthesized-type-and-typeof-cast](../../archive/v0.17.0/type-system/parenthesized-type-and-typeof-cast.md) を完了しarchiveへ移動した。残: **B2**（`typeof(&x)` が `is_type_start` の先頭 `&` 無条件参照扱いでソース片文字列を返す。typeof解決でなく is_type_start の Amp 先読みガードの課題）・**B3の仮引数型**（`int g(typeof(1) x)` はシグネチャ登録が本体検査に先行するため未解決。宣言型と解決タイミングが異なる）。
 
 ## C. 期待型伝播の複製（透過ノードを降りない）【処置済み】
 
@@ -94,7 +96,7 @@
 フロントで一本化されず各backendが独自実装するため、同じプログラムが結果分岐する。
 
 - **G1 [silent] JSで `ulong`>2^63 の補間が符号付きになる**（`src/internal/codegen/js/runtime.cpp:221` の `String(val)`）。`ulong a=1e19; println(a)` は正しいが `println("{a}")` がJSで `-8446744073709551616`、`{a/b}` も `14223372036854775808` と誤る。radix指定時のみ `BigInt.asUintN(64,...)` を適用しており、無指定の補間分岐が符号正規化を欠く。補間の値リストが符号情報を持たないため（native/interpは型付きフォーマッタを選ぶ）。→ **解消済みを確認**: 補間・書式指定子の全バックエンド統一（R20）以降、`{a}`・`{a/b}`・`ulong`最大値・`0-1` ラップ・`{a:x}` のいずれもJSとnativeが一致することを実測で再確認した（追加修正は不要だった）。
-- **G2 [silent] JSが `x as typeof(intVar)` を解決しない**（native/wasmは切り詰める）。B4の裏返し。
+- **G2 [silent] JSが `x as typeof(intVar)` を解決しない**（native/wasmは切り詰める）。B4の裏返し。→ **処置済み**（B節の処置記録参照。`resolve_typeof` がキャスト対象型を具体型へ差し替えるためJSも全バックエンドと一致）。
 - **G3 [diag/silent] 集約の補間フォーマッタが未統一**。`int[3]` の `"{a}"` が interp/native `{}`・JS `1,2,3`、構造体は interp/native 空・JS `[object Object]`。共有規則が無く各backendが即興。
 - **G4 [reject] 間接呼び出しのコード生成欠落**。`getf()(2,3)`（即時に返した関数ポインタの呼び出し）や `fs[0](2,3)`（関数ポインタ配列の呼び出し）がネイティブで `Symbols not found: [ _<indirect> ]`。型は通る。一旦変数に束ねれば動く。既知の関数ポインタ配列非対応（[array-literal-element-type-checking](../../archive/v0.17.0/arrays-slices/array-literal-element-type-checking.md) の対象外節）と同族。
 
@@ -111,7 +113,7 @@
 本調査の多くは、既に進行中の「複製排除」系設計文書と同じ精神の**未カバー箇所**である。重複を避けるため対応関係を記す。
 
 - A系（型文法の複製）: [type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) が場所解決・スライス表引き・期待型API化・補間の脱糖を扱ったが、**型文法そのものの呼び出し側複製（is_type_start / sizeof判定 / as-is配列サフィックス / paren・generic-arg の非union再帰）は未統一**。
-- B系（typeof型）: [parenthesized-type-and-typeof-cast](parenthesized-type-and-typeof-cast.md) に既述の残課題（`ast::Type` に被演算式を持たせる）。
+- B系（typeof型）: [parenthesized-type-and-typeof-cast](../../archive/v0.17.0/type-system/parenthesized-type-and-typeof-cast.md)（処置済み。`ast::Type` に被演算式を持たせ `resolve_typeof` で解決。残はB2・仮引数型）。
 - C系（期待型伝播）: `infer_type_expecting`/`propagate_literal_expected_type` の**透過ノード（三項・match・ジェネリック置換）への拡張が未完**。
 - E系（HOFディスパッチ）: [method-resolution-unification](method-resolution-unification.md) のビルトインラダー表駆動化と方向性は同じだが、**高階関数の `slice_dispatch.hpp` 移行と要素型ゲートは別作業**。
 - F/G1（変換・整形）: [coercion-driver-unification](coercion-driver-unification.md) の受理/挿入同表化に隣接するが、**文脈別警告欠落**と**JS無指定補間の符号処理**は個別対応が必要。
@@ -125,7 +127,7 @@
 4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。→ **G1は解消済みを確認**（R20の補間統一で修正済み。G節参照。sizeof/typeof/alignofの無診断誤値はA/B系の残課題）
 5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。→ **処置済み**（D節の処置記録参照。MIRの先頭文字ホワイトリスト撤廃でcheckerの式パーサ受理へ統一・三項コロンの誤認をカウンタで解消・MIRの二重走査を統合）。
 6. **[Medium] F系: 縮小診断を全変換文脈で一律化**（引数・配列要素・フィールド初期化）。→ **処置済み**（F節の処置記録参照）
-7. **[Medium] B系: `typeof` 型に被演算式を持たせて解決**（宣言型・仮引数型・キャスト結果型・JSでの解決を一括で正す）。
+7. **[Medium] B系: `typeof` 型に被演算式を持たせて解決**（宣言型・仮引数型・キャスト結果型・JSでの解決を一括で正す）。→ **一部処置済み**（B節の処置記録参照。`ast::Type` へ被演算式を保持し `resolve_typeof` でキャスト対象型・宣言型・`sizeof(typeof)`・auto結果型を解決、JSキャストも解決してG2解消。残: B2の `typeof(&x)` と仮引数型）。
 
 ## 検査に使った再現プローブ
 

@@ -1,6 +1,6 @@
-//! platform: !js|sv
+//! platform: !sv
 import std::io::println;
-// 型文法の汎用合成: typeof(式) を as の対象型として使える（括弧なし as typeof(x) と括弧あり as (typeof(x)) の両方）。typeof が汎用の型文脈で解決されることの検査
+// 型文法の汎用合成: typeof(式) を as の対象型として使える（括弧なし as typeof(x) と括弧あり as (typeof(x)) の両方）。typeof が汎用の型文脈で解決されることの検査（JSでもtypeofキャストが解決される）
 int main() {
     int imarker = 0;
     double d = 3.9;
