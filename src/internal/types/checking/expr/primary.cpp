@@ -626,6 +626,20 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
                 debug::Level::Debug);
         }
     }
+    // 明示型引数付きジェネリック構造体リテラル（Box<int>{...}）: 基底名で構造体を引く（局所処理調査「その他」）。
+    // 実際の型引数はフィールド値からの推論で決まる（Box{...} と同じ経路。従来は Box<int> が構造体表に無く「Unknown struct type」だった）
+    if (struct_it == struct_defs_.end()) {
+        auto angle = lit.type_name.find('<');
+        if (angle != std::string::npos) {
+            std::string base = lit.type_name.substr(0, angle);
+            auto base_it = struct_defs_.find(base);
+            if (base_it != struct_defs_.end()) {
+                lit.type_name =
+                    base;  // 基底名へ書き換えてHIR/コード生成へ伝播する（推論経路と一致させる）
+                struct_it = base_it;
+            }
+        }
+    }
     if (struct_it == struct_defs_.end()) {
         error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownStructType2, lit.type_name));
         return ast::make_error();

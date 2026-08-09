@@ -163,9 +163,11 @@ struct Pair<A, B> { A first; B second; }
 
 Box<int> b = Box{v: 7};                            // bare-name literal (inferred)
 Pair<int, string> p = {first: 7, second: "seven"}; // anonymous literal (inferred)
+
+Box<int> b2 = Box<int>{v: 7};                       // explicit type arguments
 ```
 
-Explicit type arguments in literals (`Box<int>{v: 7}`) are not supported due to parsing ambiguity with comparison operators. Field-by-field assignment (`Box<int> b; b.v = 7;`) also keeps working.
+Explicit type arguments in literals (`Box<int>{v: 7}`) are also allowed (v0.17.0); the actual type arguments are still determined by inference from the field values. Field-by-field assignment (`Box<int> b; b.v = 7;`) also keeps working.
 
 ## Structs with Nested Specializations as Type Arguments
 
