@@ -293,7 +293,14 @@ void TypeChecker::register_declaration(ast::Decl& decl) {
 
         std::vector<ast::TypePtr> param_types;
         size_t required_params = 0;
-        for (const auto& p : func->params) {
+        for (auto& p : func->params) {
+            // typeof(リテラル) 仮引数型を具体型へ解決する（局所処理調査B3）。
+            // リテラル被演算式はスコープ非依存で登録時に安全に解決できる（変数被演算式はスコープが要るため据え置き）。
+            // シグネチャ登録が本体検査に先行するため、ここで解決すれば呼び出し側の型照合も本体も具体型を見る
+            if (p.type && p.type->kind == ast::TypeKind::Inferred && p.type->name == "__typeof__" &&
+                p.type->typeof_operand && p.type->typeof_operand->as<ast::LiteralExpr>()) {
+                p.type = resolve_typeof(p.type);
+            }
             param_types.push_back(p.type);
             if (!p.default_value) {
                 required_params++;

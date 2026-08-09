@@ -1,0 +1,27 @@
+//! platform: !sv
+// typeof のアドレス取得被演算式と仮引数型（局所処理調査B2/B3）:
+// __typeof__(&x) はポインタ型名を返す（従来は is_type_start が先頭 & を無条件に参照型扱いしソース片 "&x" を返していた）。
+// typeof(リテラル) 仮引数型は具体型・幅へ解決される（従来は本体・呼び出し側とも <inferred>）。
+import std::io::println;
+
+// B3: typeof(リテラル) を仮引数型に使う（1 は int、大きな定数は long に解決）
+int inc(typeof(1) x) {
+    return x + 1;
+}
+
+long dbl(typeof(1000000000000) y) {
+    return y * 2;
+}
+
+int main() {
+    // B2: アドレス取得のtypeofはポインタ型名
+    int x = 5;
+    double d = 3.5;
+    println("{__typeof__(&x)} {__typeof__(&d)}");
+
+    // B3: 仮引数typeofの解決（幅も正しい）
+    println(inc(5));
+    println(dbl(3000000000));
+
+    return 0;
+}

@@ -461,6 +461,24 @@ bool Parser::is_type_start() {
             }
             return false;  // *p = ... のような式
         case TokenKind::Amp:
+            // &type name の形式かチェック（&x のようなアドレス取得式と区別する。局所処理調査B2）。
+            // 従来は先頭 & を無条件に参照型扱いにしていたため typeof(&x) が参照型 "&x" になっていた（*には同じ先読みガードがある）
+            if (pos_ + 1 < tokens_.size()) {
+                auto next_kind = tokens_[pos_ + 1].kind;
+                if (next_kind == TokenKind::KwInt || next_kind == TokenKind::KwFloat ||
+                    next_kind == TokenKind::KwDouble || next_kind == TokenKind::KwUfloat ||
+                    next_kind == TokenKind::KwUdouble || next_kind == TokenKind::KwChar ||
+                    next_kind == TokenKind::KwBool || next_kind == TokenKind::KwString ||
+                    next_kind == TokenKind::KwCstring || next_kind == TokenKind::KwIsize ||
+                    next_kind == TokenKind::KwUsize || next_kind == TokenKind::KwVoid ||
+                    next_kind == TokenKind::Ident) {
+                    // &int name or &Type name の形式（その後に識別子が続けば宣言）
+                    if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].kind == TokenKind::Ident) {
+                        return true;
+                    }
+                }
+            }
+            return false;  // &x のようなアドレス取得式
         case TokenKind::LBracket:
             return true;
         case TokenKind::KwTypeof: {
