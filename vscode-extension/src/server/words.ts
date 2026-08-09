@@ -70,7 +70,28 @@ export function isSkippedWord(word: string): boolean {
   return SKIP_WORDS.has(word);
 }
 
+// 識別子の呼び出し文脈
+// - member:    メンバアクセス `obj.write`（直前が `.`）
+// - qualified: 修飾アクセス `Type::write` / `Enum::Variant`（直前が `::`）
+// - bare:      単独出現 `write(...)`（上記以外）
+export type AccessKind = 'member' | 'qualified' | 'bare';
+
+// カーソル位置の識別子の直前の記号から呼び出し文脈を判定する
+export function classifyAccess(text: string, wordStart: number): AccessKind {
+  if (wordStart <= 0) {
+    return 'bare';
+  }
+  const prev = text[wordStart - 1];
+  if (prev === '.') {
+    return 'member';
+  }
+  if (prev === ':' && text[wordStart - 2] === ':') {
+    return 'qualified';
+  }
+  return 'bare';
+}
+
 // 識別子が直前の `.` を伴うメソッドアクセスか判定する（`obj.method` の method 側）
 export function isMethodAccess(text: string, wordStart: number): boolean {
-  return wordStart > 0 && text[wordStart - 1] === '.';
+  return classifyAccess(text, wordStart) === 'member';
 }

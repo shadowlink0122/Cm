@@ -337,6 +337,14 @@ export function extractSymbols(text: string): CmSymbol[] {
 
 // ---- 検索補助 ----
 
+// 型に属するメンバ（メソッド・フィールド・列挙子）の種別
+const MEMBER_KINDS: ReadonlySet<CmSymbolKind> = new Set(['method', 'field', 'variant']);
+
+/// メンバアクセス（`obj.x`）でのみ解決対象となる種別か判定する
+export function isMemberKind(kind: CmSymbolKind): boolean {
+  return MEMBER_KINDS.has(kind);
+}
+
 /// 主要シンボル（型・関数など）を優先し、なければフィールド・バリアントを返す
 export function rankMatches(matches: CmSymbol[]): CmSymbol[] {
   const primary = matches.filter((s) => s.kind !== 'field' && s.kind !== 'variant');

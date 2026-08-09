@@ -24,7 +24,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { BuiltinEntry, lookupBuiltinFunction, lookupBuiltinMethod } from '../navigation/builtins';
 import { CmSymbol, extractSymbols, rankMatches } from '../navigation/symbols';
 import { IndexedSymbol, WorkspaceIndex } from './indexer';
-import { isMethodAccess, isSkippedWord, wordAtOffset } from './words';
+import { scopeByAccess, scopeByReachability } from './scope';
+import { classifyAccess, isMethodAccess, isSkippedWord, wordAtOffset } from './words';
 
 const HOVER_MAX_ENTRIES = 3;
 const DEFINITION_MAX_ENTRIES = 20;
@@ -114,12 +115,14 @@ async function findSymbols(document: TextDocument, offset: number): Promise<Word
   }
   await index.ensureBuilt();
   index.setFile(document.uri, text);
-  const entries = index.lookup(found.word);
-  const ranked = new Set(rankMatches(entries.map((m) => m.symbol)));
+  // 候補を「呼び出し文脈の種別」→「ファイル到達性」の順に絞り、同名シンボルの曖昧さを減らす
+  const byAccess = scopeByAccess(index.lookup(found.word), classifyAccess(text, found.start));
+  const scoped = scopeByReachability(byAccess, document.uri, text);
+  const ranked = new Set(rankMatches(scoped.map((m) => m.symbol)));
   return {
     word: found.word,
     start: found.start,
-    entries: entries.filter((m) => ranked.has(m.symbol)),
+    entries: scoped.filter((m) => ranked.has(m.symbol)),
   };
 }
 

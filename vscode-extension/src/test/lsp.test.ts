@@ -173,6 +173,78 @@ test('編集の即時反映: didChange直後の新シンボルへジャンプで
   );
 });
 
+test('定義ジャンプ: 単独呼び出し write() は同名メソッドを除外しトップレベル関数のみ返す', async () => {
+  const lines = [
+    'struct Writer {',
+    '}',
+    'impl Writer {',
+    '    void write(int b) {',
+    '    }',
+    '}',
+    'void write(int b) {',
+    '}',
+    'int main() {',
+    '    Writer w;',
+    '    w.write(1);',
+    '    write(2);',
+    '    return 0;',
+    '}',
+  ];
+  const edited = lines.join('\n');
+  await connection.sendNotification('textDocument/didChange', {
+    textDocument: { uri: mainUri, version: 3 },
+    contentChanges: [{ text: edited }],
+  });
+  const methodLine = lines.findIndex((l) => l.includes('void write') && l.startsWith('    '));
+  const funcLine = lines.findIndex((l) => l.startsWith('void write'));
+
+  // 単独呼び出し `write(2)` はトップレベル関数のみ
+  const bareCallLine = lines.findIndex((l) => l.includes('write(2)'));
+  const bare = (await connection.sendRequest('textDocument/definition', {
+    textDocument: { uri: mainUri },
+    position: { line: bareCallLine, character: lines[bareCallLine].indexOf('write') + 1 },
+  })) as LocationResult[];
+  assert.equal(bare.length, 1, 'トップレベル関数1件のみ');
+  assert.equal(bare[0].range.start.line, funcLine);
+
+  // メンバアクセス `w.write(1)` はメソッドのみ
+  const memberCallLine = lines.findIndex((l) => l.includes('w.write(1)'));
+  const member = (await connection.sendRequest('textDocument/definition', {
+    textDocument: { uri: mainUri },
+    position: { line: memberCallLine, character: lines[memberCallLine].indexOf('write') + 1 },
+  })) as LocationResult[];
+  assert.equal(member.length, 1, 'メソッド1件のみ');
+  assert.equal(member[0].range.start.line, methodLine);
+});
+
+test('定義ジャンプ: 同名関数がある場合は同一ファイルの定義を優先し一意化する', async () => {
+  // defs.cm にも make_point があるが、ローカル定義を持つファイルではローカルを優先する
+  const lines = [
+    'Point make_point(int x, int y) {',
+    '    Point p;',
+    '    return p;',
+    '}',
+    'int main() {',
+    '    Point q = make_point(3, 4);',
+    '    return 0;',
+    '}',
+  ];
+  const edited = lines.join('\n');
+  await connection.sendNotification('textDocument/didChange', {
+    textDocument: { uri: mainUri, version: 4 },
+    contentChanges: [{ text: edited }],
+  });
+  const callLine = lines.findIndex((l) => l.includes('make_point(3, 4)'));
+  const localDefLine = lines.findIndex((l) => l.startsWith('Point make_point'));
+  const locations = (await connection.sendRequest('textDocument/definition', {
+    textDocument: { uri: mainUri },
+    position: { line: callLine, character: lines[callLine].indexOf('make_point') + 1 },
+  })) as LocationResult[];
+  assert.equal(locations.length, 1, '同一ファイルの1件のみ（defs.cmの同名は除外）');
+  assert.ok(locations[0].uri.endsWith('main.cm'));
+  assert.equal(locations[0].range.start.line, localDefLine);
+});
+
 test('ドキュメントシンボル: アウトライン用の一覧を返す', async () => {
   const symbols = (await connection.sendRequest('textDocument/documentSymbol', {
     textDocument: { uri: mainUri },
