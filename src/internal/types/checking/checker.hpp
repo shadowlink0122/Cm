@@ -84,6 +84,11 @@ class TypeChecker {
     void check_for(ast::ForStmt& for_stmt);
     void check_for_in(ast::ForInStmt& for_in);
 
+    // 配列リテラル初期化子の各要素を宣言要素型に対して検査する（ネストした配列リテラルは多次元要素型へ再帰）。var_nameは診断メッセージ用
+    void check_array_literal_elements(ast::ArrayLiteralExpr& lit,
+                                      const ast::TypePtr& expected_array,
+                                      const std::string& var_name);
+
     // デフォルト引数式が同じ宣言のパラメータを参照していないか検査する（R8。関数・implメソッド・演算子で共用）
     void check_default_param_refs(const std::vector<ast::Param>& params, const Span& span);
 

@@ -191,6 +191,19 @@ int main() {
 
 Numeric narrowing (such as `int[] = [3.14]`) is warned about just like in variable declarations, and an explicit `as` cast is recommended.
 
+Multi-dimensional arrays (`int[2][2] = [[...], [...]]`) are checked recursively down to the inner elements.
+
+```cm
+int main() {
+    // OK: matches the element type at every level
+    int[2][2] m = [[1, 2], [3, 4]];
+
+    // Error: an inner element type mismatch is caught too
+    // int[2][2] bad = [[1, 2], ["a", 4]];   // cannot assign 'string' to 'int'
+    return 0;
+}
+```
+
 ### void* Arrays for Anything
 
 An array of the generic pointer type `void*` is an escape hatch that is exempt from element type checking. It can hold any pointer; retrieve elements with `auto` and determine the stored type with `typeof`.

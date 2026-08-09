@@ -46,6 +46,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 ## arrays-slices/ — 配列・スライス・ビット操作
 
 - [array-builtin-elem-dispatch.md](arrays-slices/array-builtin-elem-dispatch.md) — 配列検索ビルトインの要素型ディスパッチ欠落（Z1）
+- [array-literal-element-type-checking.md](arrays-slices/array-literal-element-type-checking.md) — 配列リテラル要素の型検査（多次元の内側要素まで再帰・void\*免除）
 - [array-to-slice-elem-size.md](arrays-slices/array-to-slice-elem-size.md) — 固定長配列→スライス変換の手書き要素サイズ残存（Z2）
 - [bounds-checking-policy.md](arrays-slices/bounds-checking-policy.md) — 配列・スライスの境界チェック統一ポリシー（実装済み）
 - [fixed-array-to-slice-argument.md](arrays-slices/fixed-array-to-slice-argument.md) — 固定長配列→スライス引数の暗黙変換欠落でゴミ値（Y5）

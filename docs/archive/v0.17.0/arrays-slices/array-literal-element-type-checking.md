@@ -12,6 +12,7 @@
 - 型名を明示しない構造体リテラル（`{x:1, y:2}`）は、期待型伝播でその要素型にコアースされるため、要素型に一致すれば許可される。逆に非互換な要素（`int` を構造体配列に入れる等）はエラーになる。
 - union typedef（`typedef Val = int | string`）の要素型は、メンバ互換判定のため検査前に `resolve_typedef` で解決する（scalarと同じ経路。未解決のままだと `types_compatible` のunion分岐が typedef 解決前に評価されメンバ互換を取りこぼす）。
 - 数値どうしの縮小変換（`int[] = [3.14]`）は、scalar同様に許可し警告で扱う（型不一致エラーにはしない）。
+- 多次元配列（`int[2][2] = [[...], [...]]`）は、要素が配列リテラルで宣言要素型も配列のとき内側の要素型へ**再帰的に検査する**。期待型伝播だけに任せると内側リテラルが宣言要素型を無条件に採用して不一致（`[[1,2],["a",4]]` の `"a"`）を無診断で通すため、要素ごとの検査を再帰化して各次元で `types_compatible` を効かせる。
 
 ## void* によるエスケープハッチ
 
@@ -19,12 +20,12 @@
 
 ## 実装
 
-`src/internal/types/checking/stmt.cpp` の変数宣言処理で、初期化子が配列リテラルかつ宣言型が配列型の分岐に要素検査を追加する。要素型が `void*` の場合は検査をスキップする。エラーメッセージは変数宣言の型不一致（`TcTypeMismatchVariableDeclarationExpected`）を要素位置で流用する。
+`src/internal/types/checking/stmt.cpp` の変数宣言処理で、初期化子が配列リテラルかつ宣言型が配列型の分岐に要素検査を追加する。要素検査は再帰ヘルパ `check_array_literal_elements(lit, expected_array, var_name)` に分離し、要素が配列リテラルで宣言要素型も配列のときは内側へ再帰する（多次元の内側要素も取りこぼさない）。要素型が `void*` の場合は検査をスキップする。エラーメッセージは変数宣言の型不一致（`TcTypeMismatchVariableDeclarationExpected`）を要素位置で流用する。
 
 ## テスト
 
-- 正常系（`tests/common/arrays/element-types/`）: 拡大変換（widening）・無名構造体リテラル（struct_literal）・void\*配列とauto/typeof（void_ptr、`//! platform: !js|sv`）。
-- エラー系（`tests/common/errors/arrays-slices/element-type/`）: リテラル混在（literal）・変数混在（variable）・非構造体の混在（struct_mismatch）。
+- 正常系（`tests/common/arrays/element-types/`）: 拡大変換（widening）・無名構造体リテラル（struct_literal）・void\*配列とauto/typeof（void_ptr、`//! platform: !js|sv`）・多次元の正しい入れ子と内側拡大変換（multidim）。
+- エラー系（`tests/common/errors/arrays-slices/element-type/`）: リテラル混在（literal）・変数混在（variable）・非構造体の混在（struct_mismatch）・多次元の内側不一致（multidim）。
 
 ## 対象外
 

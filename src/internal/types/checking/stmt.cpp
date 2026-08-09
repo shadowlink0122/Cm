@@ -362,30 +362,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                 // 宣言型を採用しつつ、要素（ネストした無名リテラル含む）へ要素型を期待型として伝播する
                 init_type = let.type;
                 let.init->type = let.type;
-                // union typedef（typedef Val = int | string 等）の要素型はメンバ互換判定のため先に typedef を解決する（scalar 変数宣言と同じ経路）
-                const auto elem_expected = resolve_typedef(let.type->element_type);
-                // 汎用格納の void* 要素配列は「何でも入る」エスケープハッチとして要素型検査を免除する（取得は auto、型判定は typeof を想定）
-                const bool elem_is_void_ptr =
-                    elem_expected && elem_expected->kind == ast::TypeKind::Pointer &&
-                    elem_expected->element_type &&
-                    elem_expected->element_type->kind == ast::TypeKind::Void;
-                for (auto& elem : array_lit->elements) {
-                    auto elem_type = infer_type_expecting(*elem, elem_expected);
-                    // 配列リテラル要素の型検査: scalar 変数宣言と同じ規則で宣言要素型と非互換な要素を拒否する
-                    // 拡大変換(tiny/short→int)・無名 struct リテラルのコアース・void* への任意ポインタ代入は types_compatible が許容する
-                    if (!elem_is_void_ptr && elem_expected && elem && elem_type &&
-                        !types_compatible(elem_expected, elem_type)) {
-                        error(elem->span,
-                              i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected,
-                                         let.name, ast::type_to_string(*elem_expected),
-                                         ast::type_to_string(*elem_type)));
-                    }
-                    // 配列要素リテラルの縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
-                    if (!elem_is_void_ptr && elem_expected && elem && elem_type) {
-                        check_numeric_conversion_policy(elem_expected, elem_type, elem.get(),
-                                                        elem->span);
-                    }
-                }
+                check_array_literal_elements(*array_lit, let.type, let.name);
             } else {
                 init_type = infer_type(*let.init);
             }
@@ -875,6 +852,39 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     loop_depth_--;
 
     scopes_.pop();
+}
+
+void TypeChecker::check_array_literal_elements(ast::ArrayLiteralExpr& lit,
+                                               const ast::TypePtr& expected_array,
+                                               const std::string& var_name) {
+    // union typedef（typedef Val = int | string 等）の要素型はメンバ互換判定のため先に typedef を解決する（scalar 変数宣言と同じ経路）
+    const auto elem_expected = resolve_typedef(expected_array->element_type);
+    // 汎用格納の void* 要素配列は「何でも入る」エスケープハッチとして要素型検査を免除する（取得は auto、型判定は typeof を想定）
+    const bool elem_is_void_ptr = elem_expected && elem_expected->kind == ast::TypeKind::Pointer &&
+                                  elem_expected->element_type &&
+                                  elem_expected->element_type->kind == ast::TypeKind::Void;
+    for (auto& elem : lit.elements) {
+        auto elem_type = infer_type_expecting(*elem, elem_expected);
+        // 多次元配列: 要素が配列リテラルで宣言要素型も配列なら内側要素へ再帰検査する（従来は期待型伝播で内側の不一致が無診断になっていた）
+        if (elem_expected && elem_expected->kind == ast::TypeKind::Array) {
+            if (auto* inner = elem->as<ast::ArrayLiteralExpr>()) {
+                check_array_literal_elements(*inner, elem_expected, var_name);
+                continue;
+            }
+        }
+        // 配列リテラル要素の型検査: scalar 変数宣言と同じ規則で宣言要素型と非互換な要素を拒否する
+        // 拡大変換(tiny/short→int)・無名 struct リテラルのコアース・void* への任意ポインタ代入は types_compatible が許容する
+        if (!elem_is_void_ptr && elem_expected && elem && elem_type &&
+            !types_compatible(elem_expected, elem_type)) {
+            error(elem->span,
+                  i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected, var_name,
+                             ast::type_to_string(*elem_expected), ast::type_to_string(*elem_type)));
+        }
+        // 配列要素リテラルの縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+        if (!elem_is_void_ptr && elem_expected && elem && elem_type) {
+            check_numeric_conversion_policy(elem_expected, elem_type, elem.get(), elem->span);
+        }
+    }
 }
 
 }  // namespace cm

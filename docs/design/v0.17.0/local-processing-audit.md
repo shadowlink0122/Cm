@@ -96,7 +96,7 @@
 - **G1 [silent] JSで `ulong`>2^63 の補間が符号付きになる**（`src/internal/codegen/js/runtime.cpp:221` の `String(val)`）。`ulong a=1e19; println(a)` は正しいが `println("{a}")` がJSで `-8446744073709551616`、`{a/b}` も `14223372036854775808` と誤る。radix指定時のみ `BigInt.asUintN(64,...)` を適用しており、無指定の補間分岐が符号正規化を欠く。補間の値リストが符号情報を持たないため（native/interpは型付きフォーマッタを選ぶ）。→ **解消済みを確認**: 補間・書式指定子の全バックエンド統一（R20）以降、`{a}`・`{a/b}`・`ulong`最大値・`0-1` ラップ・`{a:x}` のいずれもJSとnativeが一致することを実測で再確認した（追加修正は不要だった）。
 - **G2 [silent] JSが `x as typeof(intVar)` を解決しない**（native/wasmは切り詰める）。B4の裏返し。
 - **G3 [diag/silent] 集約の補間フォーマッタが未統一**。`int[3]` の `"{a}"` が interp/native `{}`・JS `1,2,3`、構造体は interp/native 空・JS `[object Object]`。共有規則が無く各backendが即興。
-- **G4 [reject] 間接呼び出しのコード生成欠落**。`getf()(2,3)`（即時に返した関数ポインタの呼び出し）や `fs[0](2,3)`（関数ポインタ配列の呼び出し）がネイティブで `Symbols not found: [ _<indirect> ]`。型は通る。一旦変数に束ねれば動く。既知の関数ポインタ配列非対応（[array-literal-element-type-checking](array-literal-element-type-checking.md) のReq5）と同族。
+- **G4 [reject] 間接呼び出しのコード生成欠落**。`getf()(2,3)`（即時に返した関数ポインタの呼び出し）や `fs[0](2,3)`（関数ポインタ配列の呼び出し）がネイティブで `Symbols not found: [ _<indirect> ]`。型は通る。一旦変数に束ねれば動く。既知の関数ポインタ配列非対応（[array-literal-element-type-checking](../../archive/v0.17.0/arrays-slices/array-literal-element-type-checking.md) の対象外節）と同族。
 
 ## その他の位置限定の非汎用
 
