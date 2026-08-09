@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cm {
@@ -442,6 +443,71 @@ ast::TypePtr Parser::parse_type_with_union() {
     return union_type;
 }
 
+namespace {
+
+// 配列サイズの定数式をパース時に整数へ畳む（整数リテラルの算術のみ。
+// 定数名や sizeof 等は値がパース時に未知のため nullopt を返し呼び出し側で診断する）
+std::optional<int64_t> fold_array_size_const(const ast::Expr& expr) {
+    if (auto* lit = expr.as<ast::LiteralExpr>()) {
+        if (std::holds_alternative<int64_t>(lit->value)) {
+            return std::get<int64_t>(lit->value);
+        }
+        return std::nullopt;
+    }
+    if (auto* unary = expr.as<ast::UnaryExpr>()) {
+        auto v = fold_array_size_const(*unary->operand);
+        if (!v) {
+            return std::nullopt;
+        }
+        switch (unary->op) {
+            case ast::UnaryOp::Neg:
+                return -(*v);
+            case ast::UnaryOp::BitNot:
+                return ~(*v);
+            default:
+                return std::nullopt;
+        }
+    }
+    if (auto* binary = expr.as<ast::BinaryExpr>()) {
+        auto l = fold_array_size_const(*binary->left);
+        auto r = fold_array_size_const(*binary->right);
+        if (!l || !r) {
+            return std::nullopt;
+        }
+        switch (binary->op) {
+            case ast::BinaryOp::Add:
+                return *l + *r;
+            case ast::BinaryOp::Sub:
+                return *l - *r;
+            case ast::BinaryOp::Mul:
+                return *l * *r;
+            case ast::BinaryOp::Div:
+                if (*r == 0 || *l < 0 || *r < 0) {
+                    return std::nullopt;
+                }
+                return *l / *r;
+            case ast::BinaryOp::Mod:
+                if (*r == 0 || *l < 0 || *r < 0) {
+                    return std::nullopt;
+                }
+                return *l % *r;
+            case ast::BinaryOp::BitAnd:
+                return *l & *r;
+            case ast::BinaryOp::BitOr:
+                return *l | *r;
+            case ast::BinaryOp::BitXor:
+                return *l ^ *r;
+            case ast::BinaryOp::Shl:
+                return *l << *r;
+            default:
+                return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 // C++スタイルの配列サイズ指定とポインタをチェック
 ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
     // T[N] 形式をチェック
@@ -449,16 +515,30 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
         std::optional<uint32_t> size;
         std::string size_param_name;
 
-        if (check(TokenKind::IntLiteral)) {
+        if (check(TokenKind::IntLiteral) && peek_kind() == TokenKind::RBracket) {
+            // 単純な整数リテラル: T[3]
             size = static_cast<uint32_t>(current().get_int());
             // bit[0]（幅0）は不正SV（0'd0）を生成するため診断する（R16）
             if (base_type && base_type->kind == ast::TypeKind::Bit && *size == 0) {
                 error(i18n::msg(i18n::MsgId::PsSvBitWidthZero));
             }
             advance();
-        } else if (check(TokenKind::Ident)) {
+        } else if (check(TokenKind::Ident) && peek_kind() == TokenKind::RBracket) {
+            // constパラメータ名: T[N]
             size_param_name = std::string(current().get_string());
             advance();
+        } else if (!check(TokenKind::RBracket) && !check(TokenKind::Colon)) {
+            // 定数式: T[2+1]・T[(1+2)*3] 等。整数リテラルの算術をコンパイル時に畳む（局所処理調査Aの補足。従来は Expected ']' の構文エラー）
+            auto size_expr = parse_expr();
+            auto folded = size_expr ? fold_array_size_const(*size_expr) : std::nullopt;
+            if (folded && *folded >= 0) {
+                size = static_cast<uint32_t>(*folded);
+                if (base_type && base_type->kind == ast::TypeKind::Bit && *size == 0) {
+                    error(i18n::msg(i18n::MsgId::PsSvBitWidthZero));
+                }
+            } else {
+                error(i18n::msg(i18n::MsgId::PsArraySizeNotConstant));
+            }
         }
 
         // SVの範囲表記 [msb:lsb] は型宣言では非対応（スライス式と紛らわしいため）。

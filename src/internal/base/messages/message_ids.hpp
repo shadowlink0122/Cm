@@ -355,6 +355,7 @@ enum class MsgId : int {
     PsExpectedFromExport,
     PsExportAndPrivateConflict,
     PsSvBitWidthZero,
+    PsArraySizeNotConstant,
     PsSvLiteralOverflowsWidth,
     PsSvPinRequiresStringArgument,
     PsExpectedGlobalVariableInitializer,

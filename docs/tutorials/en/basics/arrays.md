@@ -37,6 +37,13 @@ int[3] values = [1, 2, 3];
 int[5] partial = [1, 2];  // [1, 2, 0, 0, 0]
 ```
 
+Array sizes may also be integer-literal constant expressions (folded at compile time).
+
+```cm
+int[2 + 1] a = [1, 2, 3];        // same as int[3]
+int[(1 + 2) * 2] b;              // int[6]
+```
+
 ## Element Access
 
 ```cm

@@ -1,0 +1,36 @@
+// 配列サイズに整数リテラルの定数式を書ける（局所処理調査Aの補足）:
+// int[2 + 1] 等の算術式がパース時にコンパイル時定数へ畳まれ、局所・フィールド・仮引数の全位置で int[3] と同じに動く。
+// 旧: int[2 + 1] は Expected ']' の構文エラーだった
+import std::io::println;
+
+struct Buf {
+    int[2 + 1] data;
+}
+
+int first(int[1 + 1] xs) {
+    return xs[0];
+}
+
+int main() {
+    // 加算
+    int[2 + 1] a = [1, 2, 3];
+    println(a[2]);
+
+    // 括弧と乗算
+    int[(1 + 2) * 2] b = [10, 20, 30, 40, 50, 60];
+    println(b[5]);
+
+    // 除算
+    int[10 / 2] c = [1, 2, 3, 4, 5];
+    println(c[4]);
+
+    // フィールド位置
+    Buf buf;
+    buf.data[2] = 99;
+    println(buf.data[2]);
+
+    // 仮引数位置
+    println(first([7, 8]));
+
+    return 0;
+}

@@ -998,6 +998,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsSvBitWidthZero
     {"bit width must be at least 1 (bit[0] would generate invalid SystemVerilog)",
      "bitの幅は1以上が必要です（bit[0]は不正なSystemVerilogを生成します）"},
+    // PsArraySizeNotConstant
+    {"array size must be a compile-time constant integer expression",
+     "配列サイズはコンパイル時定数の整数式である必要があります"},
     // PsSvLiteralOverflowsWidth
     {"sized literal '{0}' overflows its bit width (the value would be silently truncated by simulators)",
      "幅付きリテラル '{0}' が指定ビット幅に収まりません（シミュレータで黙って切り詰められます）"},

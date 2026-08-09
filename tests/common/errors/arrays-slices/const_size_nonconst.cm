@@ -1,0 +1,5 @@
+// 非定数の配列サイズ式は診断エラー（sizeof/const名の算術はパース時に畳めない）
+int main() {
+    int[sizeof(int)] a = [1, 2, 3, 4];
+    return 0;
+}
