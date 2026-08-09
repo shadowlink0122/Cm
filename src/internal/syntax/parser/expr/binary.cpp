@@ -329,25 +329,19 @@ ast::ExprPtr Parser::parse_cast_expr() {
     auto expr = parse_unary();
 
     while (true) {
-        // as/isの型右辺のスライスサフィックス: 空ブラケット[]のみ型として消費する（int[]等。[i]は従来通り(expr as T)[i]の添字式として残す）
-        auto consume_slice_suffix = [&](ast::TypePtr ty) {
-            while (check(TokenKind::LBracket) && peek_kind() == TokenKind::RBracket) {
-                advance();
-                advance();
-                ty = ast::make_array(std::move(ty));
-            }
-            return ty;
-        };
+        // as/isの対象型の後置配列・ポインタは正準のcheck_array_suffixで消費する（局所処理調査A3。従来は空の[]だけを消費する独自ラムダで、x as int[N]が(x as int)[N]の添字式へ黙って化けていた。キャスト結果の添字は(x as T)[i]と括弧で書く）
         if (consume_if(TokenKind::KwAs)) {
             debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'as' cast expression",
                             debug::Level::Debug);
-            auto target_type = consume_slice_suffix(parse_type());
-            expr = ast::make_cast(std::move(expr), std::move(target_type));
+            const uint32_t cast_start = expr->span.start;
+            auto target_type = check_array_suffix(parse_type());
+            auto span = Span{cast_start, previous().end};
+            expr = ast::make_cast(std::move(expr), std::move(target_type), span);
         } else if (consume_if(TokenKind::KwIs)) {
             // ユニオン型の実行時型判別: expr is Type → bool
             debug::par::log(debug::par::Id::PrimaryExpr, "Detected 'is' type check expression",
                             debug::Level::Debug);
-            auto target_type = consume_slice_suffix(parse_type());
+            auto target_type = check_array_suffix(parse_type());
             auto span = Span{expr->span.start, previous().end};
             auto cast = std::make_unique<ast::CastExpr>(std::move(expr), std::move(target_type));
             cast->type_check = true;

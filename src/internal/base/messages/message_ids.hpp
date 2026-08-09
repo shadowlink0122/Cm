@@ -567,6 +567,7 @@ enum class MsgId : int {
     PsMethodOverloadUnsupported,
     TcInterpPlaceholderNotExpression,
     TcArrayReduceUnsupportedAcc,
+    TcCastToArrayUnsupported,
     Count,
 };
 

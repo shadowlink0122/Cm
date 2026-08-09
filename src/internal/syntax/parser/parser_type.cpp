@@ -143,10 +143,11 @@ ast::TypePtr Parser::parse_type() {
         return arr_type;
     }
 
-    // 括弧で囲んだ型: 型文法を汎用的に合成できるようにする（(T)・(typeof(x))・(int*) 等を型が要求される任意の位置で許可する）
+    // 括弧で囲んだ型: 型文法を汎用的に合成できるようにする（(T)・(typeof(x))・(int*)・(int | string) 等を型が要求される任意の位置で許可する）。
+    // 中身はunion対応のparse_type_with_unionへ再帰する（局所処理調査A4。従来はparse_type再帰のため(int | string)があらゆる位置で失敗していた）
     if (check(TokenKind::LParen)) {
         advance();  // '(' を消費
-        auto inner = parse_type();
+        auto inner = parse_type_with_union();
         expect(TokenKind::RParen);
         if (has_const && inner) {
             inner->qualifiers.is_const = true;
@@ -334,7 +335,8 @@ ast::TypePtr Parser::parse_type() {
 
             do {
                 // スライス/配列型の型引数（Result<utiny[], string>等）も受理する
-                type_args.push_back(check_array_suffix(parse_type()));
+                // 型引数はunion対応のparse_type_with_unionで受ける（局所処理調査A5。従来はparse_typeのためFoo<int | string>が失敗し、フィールド等でunionが通るのと非対称だった。配列サフィックスはparse_type_with_unionが内部で消費する）
+                type_args.push_back(parse_type_with_union());
             } while (consume_if(TokenKind::Comma));
 
             consume_gt_in_type_context();

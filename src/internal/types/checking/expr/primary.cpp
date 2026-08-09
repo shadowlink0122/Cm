@@ -123,6 +123,23 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         }
         // sizeof は常に uint (符号なし整数) を返す
         inferred_type = ast::make_uint();
+    } else if (auto* alignof_expr = expr.as<ast::AlignofExpr>()) {
+        // __alignof__(x) の変数救済（局所処理調査A6）: sizeofと同様、型として解析された名前が型でなければ変数として解決し、その静的型へ置き換える（アラインは型のみで決まるため式の保持は不要）。従来は未解決名の既定アライン8を無診断で返していた
+        if (alignof_expr->target_type && alignof_expr->target_type->kind == ast::TypeKind::Struct) {
+            const std::string name = alignof_expr->target_type->name;
+            const bool is_valid_type =
+                typedef_defs_.count(name) > 0 || struct_defs_.count(name) > 0;
+            if (!is_valid_type) {
+                // enum名・ジェネリックパラメータ名等の非変数はsizeofと同様そのまま残す（HIRが型として評価する）
+                auto sym = scopes_.current().lookup(name);
+                if (sym && sym->type && sym->type->kind != ast::TypeKind::Error) {
+                    mark_variable_initialized(name);
+                    alignof_expr->target_type = sym->type;
+                }
+            }
+        }
+        // alignof は常に uint を返す
+        inferred_type = ast::make_uint();
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
         // typeof(式) - 式の型を推論（メタ情報取得のため未初期化チェックの対象外）
         if (typeof_expr->target_expr) {
@@ -184,6 +201,20 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         } else {
             // ターゲット型を返す
             inferred_type = cast_expr->target_type;
+            // 配列型へのasキャストは未対応として診断する（局所処理調査A3の追補）。
+            // as int[N]が型として正しくパースされるようになった一方、キャスト実体（スカラ→配列・固定長→スライスのas形）はloweringに存在せず無診断のゴミ値になるため、暗黙変換（代入・呼び出しの固定長→スライス）へ誘導する。ユニオンからの変種取り出し（IS v; v as int[]等）は下のZ4検査が扱う
+            {
+                auto tgt_resolved0 = resolve_typedef(cast_expr->target_type);
+                auto op_resolved0 = resolve_typedef(operand_type);
+                if (tgt_resolved0 && tgt_resolved0->kind == ast::TypeKind::Array && op_resolved0 &&
+                    op_resolved0->kind != ast::TypeKind::Union &&
+                    op_resolved0->kind != ast::TypeKind::Error &&
+                    ast::type_to_string(*tgt_resolved0) != ast::type_to_string(*op_resolved0)) {
+                    error(expr.span, i18n::msgf(i18n::MsgId::TcCastToArrayUnsupported,
+                                                ast::type_to_string(*tgt_resolved0),
+                                                ast::type_to_string(*op_resolved0)));
+                }
+            }
             // ユニオン値のasダウンキャストは変種のいずれかであること（Z4穴2）。
             // isには同検査があるがasに無く、非変種型への`v as double`がペイロードのビット再解釈ゴミ値になっていた
             {

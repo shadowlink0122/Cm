@@ -1631,6 +1631,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcArrayReduceUnsupportedAcc
     {"Array reduce() does not support accumulator type '{0}' for element type '{1}'",
      "配列の reduce() は要素型 '{1}' に対しアキュムレータ型 '{0}' に対応していません"},
+    // TcCastToArrayUnsupported
+    {"Cannot cast '{1}' to array type '{0}' with 'as' (fixed-length arrays convert to slices implicitly at assignment and call sites)",
+     "'as' で '{1}' から配列型 '{0}' へはキャストできません（固定長配列は代入・呼び出しで暗黙にスライスへ変換されます）"},
 };
 // clang-format on
 
