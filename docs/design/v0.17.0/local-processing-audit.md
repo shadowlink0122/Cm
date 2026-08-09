@@ -100,7 +100,7 @@
 
 ## その他の位置限定の非汎用
 
-- `for-in` が配列/スライス限定で `string` を拒否（`for (char ch in s)` がエラー）。範囲は `range(a,b)`。
+- ~~`for-in` が配列/スライス限定で `string` を拒否（`for (char ch in s)` がエラー）。範囲は `range(a,b)`。~~ → **処置済み**: 型チェッカ（`check_for_in`）で `string` を反復対象として受理し要素型を `char` にした。HIR loweringは配列と同じインデックスループへ脱糖し、境界は `__builtin_string_len`（バイト長。添字 `s[i]` がバイト単位のため）、要素取得は `s[i]` の正準lowering `__builtin_string_charAt` を用いる（`for (char ch in s)` が `s[i]` と同じバイト意味論で反復する。全バックエンド一致）。回帰テスト: `tests/common/control-flow/loops/forin_string.cm`。
 - ジェネリック型引数に関数ポインタ型を渡すと（`Box<int*(int,int)>`）型は通るがフィールド解決で `Unknown method 'v'`（モノモーフ化/フィールド解決層）。
 - 関数ポインタを直接呼ぶ式（G4）と、`Type<Args>{...}` 構築式（`<`/`>`が比較演算子に解釈される）は一般に未対応。
 

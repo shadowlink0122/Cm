@@ -838,6 +838,9 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     } else if (iterable_type->kind == ast::TypeKind::Array) {
         // 配列型: 従来のインデックスベース展開
         element_type = iterable_type->element_type;
+    } else if (iterable_type->kind == ast::TypeKind::String) {
+        // 文字列: char をバイト単位で反復する（添字 s[i] と同じバイト意味論。局所処理調査「その他」の for-in string 非対応の解消）
+        element_type = ast::make_char();
     } else {
         error(stmt_span, i18n::msgf(i18n::MsgId::TcRequiresIterableTypeArray,
                                     ast::type_to_string(*iterable_type)));

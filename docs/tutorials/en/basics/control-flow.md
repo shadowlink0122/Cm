@@ -181,6 +181,15 @@ for (n in arr) {
 }
 ```
 
+Strings can also be iterated with for-in (v0.17.0). Each `char` is taken one at a time by byte, the same unit as indexing `s[i]` (for ASCII strings, one character per iteration).
+
+```cm
+string s = "abc";
+for (char ch in s) {
+    println(ch);   // → a / b / c
+}
+```
+
 ### Looping over Struct Arrays
 
 ```cm

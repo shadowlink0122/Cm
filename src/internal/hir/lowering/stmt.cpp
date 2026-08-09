@@ -385,6 +385,7 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
                           iterable_type->array_size.has_value();
     bool is_slice = iterable_type && iterable_type->kind == ast::TypeKind::Array &&
                     !iterable_type->array_size.has_value();
+    bool is_string = iterable_type && iterable_type->kind == ast::TypeKind::String;
 
     std::string idx_name = "__for_in_idx_" + for_in.var_name;
 
@@ -413,6 +414,12 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         // スライスの場合: iterable.len() を呼び出す
         auto len_call = std::make_unique<HirCall>();
         len_call->func_name = "__builtin_slice_len";
+        len_call->args.push_back(lower_expr(*for_in.iterable));
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
+    } else if (is_string) {
+        // 文字列の場合: バイト長で反復する（添字 s[i] がバイト単位のため、コードポイント数ではなくバイト長を境界にする）
+        auto len_call = std::make_unique<HirCall>();
+        len_call->func_name = "__builtin_string_len";
         len_call->args.push_back(lower_expr(*for_in.iterable));
         cond_binary->rhs = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
     } else {
@@ -446,13 +453,22 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     elem_let->name = for_in.var_name;
     elem_let->type = for_in.var_type;
 
-    auto arr_expr = lower_expr(*for_in.iterable);
     auto idx_ref3 = std::make_unique<HirVarRef>();
     idx_ref3->name = idx_name;
-    auto index_expr = std::make_unique<HirIndex>();
-    index_expr->object = std::move(arr_expr);
-    index_expr->index = std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int());
-    elem_let->init = std::make_unique<HirExpr>(std::move(index_expr), for_in.var_type);
+    if (is_string) {
+        // 文字列は __builtin_string_charAt(s, __i) でバイトを読む（s[i] の正準lowering。HirIndexは配列専用のため）
+        auto char_at = std::make_unique<HirCall>();
+        char_at->func_name = "__builtin_string_charAt";
+        char_at->args.push_back(lower_expr(*for_in.iterable));
+        char_at->args.push_back(std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int()));
+        elem_let->init = std::make_unique<HirExpr>(std::move(char_at), ast::make_char());
+    } else {
+        auto arr_expr = lower_expr(*for_in.iterable);
+        auto index_expr = std::make_unique<HirIndex>();
+        index_expr->object = std::move(arr_expr);
+        index_expr->index = std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int());
+        elem_let->init = std::make_unique<HirExpr>(std::move(index_expr), for_in.var_type);
+    }
 
     hir_for->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
 

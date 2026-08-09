@@ -179,6 +179,15 @@ for (n in arr) {
 }
 ```
 
+文字列も for-in で反復できます（v0.17.0）。`char` を添字 `s[i]` と同じバイト単位で1つずつ取り出します（ASCII文字列では1文字=1反復）。
+
+```cm
+string s = "abc";
+for (char ch in s) {
+    println(ch);   // → a / b / c
+}
+```
+
 ### 構造体配列のループ
 
 ```cm
