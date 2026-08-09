@@ -233,8 +233,10 @@ class TypeChecker {
     // コンパイル時定数評価（const強化）
     std::optional<int64_t> evaluate_const_expr(ast::Expr& expr);
 
-    // 配列サイズのsize_param_name解決（const強化）
-    void resolve_array_size(ast::TypePtr& type);
+    // 配列サイズのsize_param_name解決（const強化）。
+    // best_effort=trueのときは、名前がconstとして解決できない場合でも診断を出さず記号名のまま残す
+    // （構造体フィールドはbit[WIDTH]のように同struct内の#[sv::param]フィールドを幅に使い、SVバックエンドが[WIDTH-1:0]で出力するため）
+    void resolve_array_size(ast::TypePtr& type, bool best_effort = false);
 
     // 変数変更追跡（const推奨警告用）
     void mark_variable_modified(const std::string& name);

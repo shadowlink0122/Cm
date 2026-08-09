@@ -135,7 +135,7 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
 // ============================================================
 // 配列サイズのsize_param_name解決（const強化）
 // ============================================================
-void TypeChecker::resolve_array_size(ast::TypePtr& type) {
+void TypeChecker::resolve_array_size(ast::TypePtr& type, bool best_effort) {
     if (!type)
         return;
 
@@ -153,10 +153,13 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
                 debug::tc::log(debug::tc::Id::TypeInfer,
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),
                                debug::Level::Debug);
-            } else {
+            } else if (!best_effort) {
                 error(current_span_, i18n::msgf(i18n::MsgId::TcArraySizeMustPositiveInteger,
                                                 std::to_string(size), type->size_param_name));
             }
+        } else if (best_effort) {
+            // ベストエフォート解決（構造体フィールド）: constとして解決できない名前は診断せず記号名のまま残す。
+            // bit[WIDTH]のように同struct内の#[sv::param]フィールドやimport越しの未束縛パラメータを幅に使うため
         } else if (sym && !sym->is_const) {
             error(current_span_,
                   i18n::msgf(i18n::MsgId::TcArraySizeMustConstVariable, type->size_param_name));
@@ -171,7 +174,7 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
 
     // 要素型も再帰的に解決
     if (type->element_type) {
-        resolve_array_size(type->element_type);
+        resolve_array_size(type->element_type, best_effort);
     }
 }
 

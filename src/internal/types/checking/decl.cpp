@@ -579,9 +579,11 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
                                  ast::type_to_string(*field.type), field.name, st->name));
             }
             // フィールドのconstパラメータ配列サイズ（int[N]）を具体サイズへ解決する。
-            // 従来はローカル宣言（check_let）でのみ解決され、フィールドは未解決のままでnative/jitのレイアウトが壊れ無出力になっていた
+            // 従来はローカル宣言（check_let）でのみ解決され、フィールドは未解決のままでnative/jitのレイアウトが壊れ無出力になっていた。
+            // ベストエフォート解決: bit[WIDTH]のように同struct内の#[sv::param]フィールドを幅に使うSV構造体は
+            // 記号名のまま残し（SVバックエンドが[WIDTH-1:0]で出力）、未解決名で診断を出さない
             if (field.type) {
-                resolve_array_size(field.type);
+                resolve_array_size(field.type, /*best_effort=*/true);
             }
         }
 
