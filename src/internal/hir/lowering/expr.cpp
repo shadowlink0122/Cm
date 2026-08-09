@@ -925,9 +925,14 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
                             debug::Level::Debug);
         }
     } else {
+        // 複雑な式を呼び出し先にする間接呼び出し（fs[0](args)・getf()(args) 等。局所処理調査G4）。
+        // callee式を評価して indirect_callee に載せることで、MIRが式の値（関数ポインタ）経由で呼び出す。
+        // 従来は func_name="<indirect>" のまま indirect_callee を設定せず、MIRが変数名 <indirect> の解決に失敗して _<indirect> 未解決シンボルになっていた（一旦変数へ束ねれば動いていた）
         hir->func_name = "<indirect>";
         hir->is_indirect = true;
-        debug::hir::log(debug::hir::Id::CallTarget, "indirect call", debug::Level::Trace);
+        hir->indirect_callee = lower_expr(*call.callee);
+        debug::hir::log(debug::hir::Id::CallTarget, "indirect call via expression",
+                        debug::Level::Trace);
     }
 
     debug::hir::log(debug::hir::Id::CallArgs, "count=" + std::to_string(call.args.size()),

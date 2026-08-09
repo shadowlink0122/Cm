@@ -668,6 +668,42 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
         return sym->return_type;
     }
 
+    // 識別子以外の式を呼び出し先にする間接呼び出し（fs[0](args)・getf()(args) 等。局所処理調査G4）。
+    // メンバフィールドの関数ポインタ呼び出し（h.f(args)）は別経路で扱われ全ターゲットで動くため、ここでは添字式・呼び出し結果の被呼び出しのみを対象にする
+    if (call.callee && (call.callee->as<ast::IndexExpr>() || call.callee->as<ast::CallExpr>())) {
+        auto callee_type = infer_type(*call.callee);
+        auto fn_type = resolve_typedef(callee_type);
+        // 関数ポインタ型（Function、または Pointer→Function）を取り出す
+        if (fn_type && fn_type->kind == ast::TypeKind::Pointer && fn_type->element_type &&
+            fn_type->element_type->kind == ast::TypeKind::Function) {
+            fn_type = fn_type->element_type;
+        }
+        if (fn_type && fn_type->kind == ast::TypeKind::Function) {
+            // 引数を型検査する（パラメータ型を期待型として渡す）
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                ast::TypePtr pt =
+                    (i < fn_type->param_types.size()) ? fn_type->param_types[i] : nullptr;
+                auto at = pt ? infer_type_expecting(*call.args[i], pt) : infer_type(*call.args[i]);
+                if (pt && at && !types_compatible(pt, at)) {
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected, "<indirect>",
+                                     ast::type_to_string(*pt), ast::type_to_string(*at)));
+                }
+            }
+            // 式値経由の間接呼び出しのコード生成は現状js/ts（構造的lowering）のみ対応。
+            // native/jit/wasmは変数へ束ねれば動くため、クラッシュではなく明確な診断で誘導する
+            if (!structural_array_lowering_) {
+                error(current_span_, i18n::msg(i18n::MsgId::TcIndirectCallExprUnsupported));
+            }
+            return fn_type->return_type ? fn_type->return_type : ast::make_void();
+        }
+        // 関数ポインタでない式の呼び出しは診断する（従来は無診断でerror型に落ちていた）
+        if (callee_type && callee_type->kind != ast::TypeKind::Error) {
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcNotFunction, ast::type_to_string(*callee_type)));
+        }
+    }
+
     return ast::make_error();
 }
 

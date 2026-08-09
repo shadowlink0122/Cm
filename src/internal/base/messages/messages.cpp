@@ -1637,6 +1637,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcCastToArrayUnsupported
     {"Cannot cast '{1}' to array type '{0}' with 'as' (fixed-length arrays convert to slices implicitly at assignment and call sites)",
      "'as' で '{1}' から配列型 '{0}' へはキャストできません（固定長配列は代入・呼び出しで暗黙にスライスへ変換されます）"},
+    // TcIndirectCallExprUnsupported
+    {"calling a function pointer produced by an expression (such as fs[0](...) or getf()(...)) is not yet supported on this target; assign it to a variable first (e.g. auto f = fs[0]; f(...))",
+     "式が生む関数ポインタの直接呼び出し（fs[0](...) や getf()(...) 等）はこのターゲットでは未対応です。一旦変数へ束ねてから呼び出してください（例: auto f = fs[0]; f(...)）"},
 };
 // clang-format on
 

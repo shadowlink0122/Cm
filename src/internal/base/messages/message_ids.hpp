@@ -569,6 +569,7 @@ enum class MsgId : int {
     TcInterpPlaceholderNotExpression,
     TcArrayReduceUnsupportedAcc,
     TcCastToArrayUnsupported,
+    TcIndirectCallExprUnsupported,
     Count,
 };
 

@@ -1,0 +1,11 @@
+// 式が生む関数ポインタの直接呼び出しは native/jit/wasm では未対応の診断（局所処理調査G4）。
+// 一旦変数へ束ねれば動く。
+import std::io::println;
+
+int add(int a, int b) { return a + b; }
+
+int main() {
+    int*(int, int)[] fs = [add];
+    println(fs[0](10, 3));
+    return 0;
+}
