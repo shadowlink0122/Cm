@@ -61,6 +61,7 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
         size_t colon_pos = std::string::npos;
         int depth = 0;
         int brace_depth = 0;
+        int ternary_pending = 0;
         bool in_quotes = false;
         while (end < format_str.length()) {
             char c = format_str[end];
@@ -99,11 +100,22 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
             if (c == ']' || c == ')') {
                 depth--;
             }
+            // 三項演算子の '?'。対応する ':' はフォーマット指定子ではない（局所処理調査D2。MIRのexpr_interpと同一規則）
+            if (c == '?' && depth == 0 && brace_depth == 0) {
+                ternary_pending++;
+                end++;
+                continue;
+            }
             if (c == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
                 end += 2;  // ::はパス区切りとしてスキップ
                 continue;
             }
             if (c == ':' && depth == 0 && brace_depth == 0 && colon_pos == std::string::npos) {
+                if (ternary_pending > 0) {
+                    ternary_pending--;  // 三項のコロン
+                    end++;
+                    continue;
+                }
                 colon_pos = end;
             }
             end++;

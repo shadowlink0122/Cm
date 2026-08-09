@@ -43,6 +43,18 @@ int main() {
 }
 ```
 
+Any expression works in a placeholder (v0.17.0). Expressions starting with a numeric, array, or string literal, as well as ternary operators, are parsed with the same grammar as ordinary expressions.
+
+```cm
+int main() {
+    bool ok = true;
+    println("{2 + 3}");            // → 5 (expression starting with a number)
+    println("{[1, 2, 3].len()}");  // → 3 (starting with an array literal)
+    println("{ok ? 1 : 0}");       // → 1 (ternary; the : is not mistaken for a format specifier)
+    return 0;
+}
+```
+
 ## Embedding Function Calls (fixed and extended in v0.15.1)
 
 Functions can be called inside interpolations. **Variable arguments, multiple arguments, and negative literals** are supported.

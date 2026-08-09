@@ -55,13 +55,15 @@
 
 **処置記録（C1〜C4）**: `propagate_literal_expected_type` へ透過ノード分岐を追加し、三項の両枝とmatchの式形式アームへ構造体期待型を再帰伝播するようにした（`primary.cpp`）。C2は `infer_generic_call` の実引数推論を「明示型引数で仮引数型を置換→`infer_type_expecting`」の順へ変更（静的メソッド経路の `substituted_param` と同型、`generic.cpp`）。C4はパーサ2箇所——`?` エラー伝播演算子の三項判別ホワイトリストへ `[` と `{ ident :` 先読みを追加（`expr/postfix.cpp`）、matchアームの `=>` 直後 `{` を `{ ident :` 先読みで式形式へ分岐（`expr/match.cpp`）——で解消。配列期待型の三項/match伝播は、枝の配列リテラルへ動的スライス型を強制すると三項loweringの固定長前提と食い違い無診断で壊れるため対象外とし、従来どおり枝ごとの固定長型で検査する（サイズ不一致は明示診断のまま）。回帰テスト: `tests/common/structs/literal/anon-transparent-nodes.cm`。
 
-## D. 文字列補間の制限された部分文法
+## D. 文字列補間の制限された部分文法【処置済み】
 
 補間プレースホルダが本物の式文法ではなく専用の文字列処理を通るため、外では通る式が中で壊れる。
 
 - **D1 [silent] 先頭が数字のプレースホルダを黙って捨てる**（`src/internal/hir/string_interpolation.cpp:63` の `!std::isdigit(var.name[0])`）。`"{2 + 3}"` が `{2 + 3}` とリテラル出力される。`{(2+3)}` は通る。
 - **D2 [silent/reject] 最初の `:` で書式指定に分割する**（`string_interpolation.cpp:53-59` の `content.find(':')`）。三項 `"{c ? a : b}"`（警告＋切り詰め）や `"{Color::Red}"`（**0を誤出力**）が壊れる。
 - **D3 [silent] `{` 直後が配列リテラル `[` の呼び出しが解析されない**。`"{[1,2,3].len()}"` がリテラル出力。`{xs.map(f).len()}` 等は通る。
+
+**処置記録（D1〜D3）**: 真因はMIRの補間展開 `extract_named_placeholders`（`mir/lowering/expr_interp.cpp`）がプレースホルダ内容の**先頭文字ホワイトリスト**（識別子・`_`・`!`・`~`・`-`・`*`・`(`・`self.`・`::`のみ許可）で受理を判定し、数値始まり `{2 + 3}`・配列リテラル始まり `{[1,2,3].len()}`・文字列リテラル始まり `{"s".len()}` を弾いて（1件でも弾くと文字列全体を未変換で返す）リテラル出力していたこと（D1/D3）。checkerは既に本物の式パーサでプレースホルダを検証・脱糖済み（`types/checking/utils/interp.cpp` の `parse_interp_content`）で無診断に受理していたため、両者のドリフトがそのまま表面化していた。ホワイトリストを撤廃し任意の非空内容を受理する（無効な内容はcheckerが警告済みで、値解決は識別子直接参照→`{内容}`リテラルへフォールバックする）ようにしてMIRをcheckerへ揃えた。D2はcheckerとMIR双方のコロン走査が三項の `:` をフォーマット指定子と誤認していた（`content.find(':')`相当）ため、両走査に三項 `?` の保留カウンタを追加し、対応するコロンはフォーマット区切りとみなさないようにした（`{c ? a : b}` が値へ、`{c ? a : b:x}` は末尾の `:x` のみ指定子）。あわせてMIR側で終端走査とコロン走査が二重化していたのを、コロン位置を終端走査の結果から導出する形へ統合し、両者の乖離余地を排した（`::`はパス区切りとして両側で維持。`{Color::Red}` 等のenum値は従来どおり。D1参照の `string_interpolation.cpp` は既に未使用のデッドコードで実経路ではない）。回帰テスト: `tests/common/strings/formatting/interpolation/expr-placeholder.cm`（全バックエンド一致）。
 
 ## E. 配列高階関数の要素型ディスパッチ複製（`slice_dispatch.hpp` 未移行）【処置済み】
 
@@ -121,7 +123,7 @@
 2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。→ **処置済み**（C節の処置記録参照）
 3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。→ **A2〜A6は処置済み**（A節の処置記録参照。A2=sizeof被演算子判定の共通化・変数被添字の要素型サイズ救済、A3=as/is配列サフィックスの正準化と配列as診断、A4=括弧型のunion受理、A5=ジェネリック引数のunion受理、A6=alignof変数救済）。残るA1（`is_type_start`の`typeof`/`(`拡張）はB系のtypeof解決が前提のため据え置き。
 4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。→ **G1は解消済みを確認**（R20の補間統一で修正済み。G節参照。sizeof/typeof/alignofの無診断誤値はA/B系の残課題）
-5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。
+5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。→ **処置済み**（D節の処置記録参照。MIRの先頭文字ホワイトリスト撤廃でcheckerの式パーサ受理へ統一・三項コロンの誤認をカウンタで解消・MIRの二重走査を統合）。
 6. **[Medium] F系: 縮小診断を全変換文脈で一律化**（引数・配列要素・フィールド初期化）。→ **処置済み**（F節の処置記録参照）
 7. **[Medium] B系: `typeof` 型に被演算式を持たせて解決**（宣言型・仮引数型・キャスト結果型・JSでの解決を一括で正す）。
 

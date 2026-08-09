@@ -58,6 +58,7 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
             // } { : は式の一部として扱い、深度0・引用符外の } のみを終端とする
             int fspec_depth = 0;
             int brace_depth = 0;
+            int ternary_pending = 0;
             bool in_quotes = false;
             while (end < format_str.length()) {
                 char fc = format_str[end];
@@ -92,72 +93,40 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                 }
                 if (fc == '[' || fc == '(') {
                     fspec_depth++;
+                    end++;
+                    continue;
                 }
                 if (fc == ']' || fc == ')') {
                     fspec_depth--;
+                    end++;
+                    continue;
                 }
-                // フォーマット指定子のコロンをチェック（:: ではなく、括弧・ネスト波括弧の外）
-                if (fc == ':' && fspec_depth == 0 && brace_depth == 0 &&
-                    (end + 1 >= format_str.length() || format_str[end + 1] != ':')) {
-                    break;  // フォーマット指定子の開始
+                // 三項演算子の '?'（括弧・ネスト波括弧の外）。対応する ':' はフォーマット指定子ではない（局所処理調査D2）
+                if (fc == '?' && fspec_depth == 0 && brace_depth == 0) {
+                    ternary_pending++;
+                    end++;
+                    continue;
                 }
                 if (fc == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
-                    end += 2;  // :: をスキップ
-                } else {
-                    end++;
+                    end += 2;  // :: はパス区切りとしてスキップ
+                    continue;
                 }
+                if (fc == ':' && fspec_depth == 0 && brace_depth == 0) {
+                    if (ternary_pending > 0) {
+                        ternary_pending--;  // 三項のコロン。フォーマット指定子ではない
+                        end++;
+                        continue;
+                    }
+                    break;  // フォーマット指定子の開始
+                }
+                end++;
             }
 
             if (end < format_str.length() || end == format_str.length()) {
-                std::string content = format_str.substr(pos + 1, end - pos - 1);
-
-                // フォーマット指定子を探す（:: と括弧・ネスト波括弧・引用符内はスキップ。L2）
-                size_t colon_pos = std::string::npos;
-                int cdepth = 0;
-                int cbrace = 0;
-                bool cquotes = false;
-                for (size_t i = pos + 1; i < format_str.length(); ++i) {
-                    char cc = format_str[i];
-                    if (cquotes) {
-                        if (cc == '\\' && i + 1 < format_str.length()) {
-                            i++;
-                            continue;
-                        }
-                        if (cc == '"') {
-                            cquotes = false;
-                        }
-                        continue;
-                    }
-                    if (cc == '"') {
-                        cquotes = true;
-                        continue;
-                    }
-                    if (cc == '{') {
-                        cbrace++;
-                        continue;
-                    }
-                    if (cc == '}') {
-                        if (cbrace == 0) {
-                            break;
-                        }
-                        cbrace--;
-                        continue;
-                    }
-                    if (cc == '[' || cc == '(') {
-                        cdepth++;
-                    }
-                    if (cc == ']' || cc == ')') {
-                        cdepth--;
-                    }
-                    if (cc == ':' && cdepth == 0 &&
-                        (i + 1 >= format_str.length() || format_str[i + 1] != ':')) {
-                        colon_pos = i;
-                        break;
-                    }
-                    if (cc == ':' && i + 1 < format_str.length() && format_str[i + 1] == ':') {
-                        i++;  // :: をスキップ
-                    }
-                }
+                // フォーマット指定子のコロン位置は上の走査結果（end）から導出する。
+                // endはフォーマット指定子コロン（あれば）か終端 } を指すため、二重走査（regression温床）を排して両者の一致を保証する
+                size_t colon_pos =
+                    (end < format_str.length() && format_str[end] == ':') ? end : std::string::npos;
                 // プレースホルダの終端は深度考慮の走査結果を使う（find('}')はネストで壊れる）。
                 // フォーマット指定子がある場合、指定子部分に波括弧は現れないためコロン以降のfindで良い
                 size_t close_pos;
@@ -202,25 +171,15 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な*フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (
-                            !var_name.empty() &&
-                            (std::isalpha(var_name[0]) ||
-                             var_name[0] ==
-                                 '_' ||  // 先頭アンダースコアの識別子（__cm_priv_*等のimportプライベート改名が該当）
-                             var_name[0] == '!' ||
-                             var_name[0] == '~' ||  // ビット反転を許可（R20）
-                             var_name[0] == '-' ||  // 単項マイナスを許可（R20）
-                             var_name[0] == '*' ||  // デリファレンスを許可
-                             var_name.substr(0, 5) == "self." ||
-                             var_name.find("::") != std::string::npos)) {
-                            // 変数名、メンバーアクセス、メソッド呼び出し、enum値、または否定演算子として有効
-                            // self.x, p.field, r.area(), Color::Red, !true のような形式も許可
+                        } else if (!var_name.empty()) {
+                            // 先頭文字ホワイトリストを撤廃し任意の式を受理する（局所処理調査D1/D3）。
+                            // checkerが本物の式パーサでプレースホルダを検証・脱糖済みで、無効な内容は警告済み＋リテラルへフォールバックするため、
+                            // 数値始まり{2 + 3}・配列リテラル始まり{[1,2,3].len()}・文字列リテラル始まり{"s".len()}も式として評価される
                             var_names.push_back(var_name);
                             converted_format += "{" + format_spec;  // {:x} のような形式に変換
                         } else {
-                            // 位置プレースホルダは無視（変数名ではないので処理しない）
-                            // 空のままにしてエラーにする
-                            return {var_names, format_str};  // エラー：変換せずに元の文字列を返す
+                            // 空プレースホルダ {} はそのまま出力（変数名が無い）
+                            converted_format += format_str.substr(pos, close_pos - pos + 1);
                         }
                         pos = close_pos + 1;
                     } else {
@@ -253,21 +212,9 @@ std::pair<std::vector<std::string>, std::string> ExprLowering::extract_named_pla
                                 // 無効な*フォーマット - そのまま処理
                                 converted_format += format_str.substr(pos, close_pos - pos + 1);
                             }
-                        } else if (
-                            !var_name.empty() &&
-                            (std::isalpha(var_name[0]) ||
-                             var_name[0] ==
-                                 '_' ||  // 先頭アンダースコアの識別子（__cm_priv_*等のimportプライベート改名が該当）
-                             var_name[0] == '!' ||
-                             var_name[0] == '~' ||  // ビット反転を許可（R20）
-                             var_name[0] == '-' ||  // 単項マイナスを許可（R20）
-                             var_name[0] == '*' ||  // デリファレンスを許可
-                             var_name[0] == '(' ||  // (*ptr).x 形式を許可
-                             var_name.substr(0, 5) == "self." ||
-                             var_name.find("::") != std::string::npos ||
-                             var_name.find("->") != std::string::npos)) {  // ptr->x 形式を許可
-                            // 変数名、メンバーアクセス、メソッド呼び出し、enum値、または否定演算子として有効
-                            // self.x, p.field, r.area(), Color::Red, !true のような形式も許可
+                        } else if (!var_name.empty()) {
+                            // 先頭文字ホワイトリストを撤廃し任意の式を受理する（局所処理調査D1/D3）。
+                            // checkerが本物の式パーサでプレースホルダを検証・脱糖済みで、無効な内容は警告済み＋リテラルへフォールバックする
                             debug_msg("MIR", "Extracted placeholder: " + var_name);
                             var_names.push_back(var_name);
                             converted_format += "{}";  // 位置プレースホルダに変換
