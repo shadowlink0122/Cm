@@ -109,6 +109,21 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
             collect_identifiers(*ternary->condition);
             collect_identifiers(*ternary->then_expr);
             collect_identifiers(*ternary->else_expr);
+        } else if (auto* cast = expr.as<ast::CastExpr>()) {
+            // as/isキャストの被演算子（従来は走査されず、キャスト内でだけ参照される外側変数がキャプチャ漏れでゼロ値になっていた）
+            collect_identifiers(*cast->operand);
+        } else if (auto* slit = expr.as<ast::StructLiteralExpr>()) {
+            for (auto& field : slit->fields) {
+                if (field.value) {
+                    collect_identifiers(*field.value);
+                }
+            }
+        } else if (auto* alit = expr.as<ast::ArrayLiteralExpr>()) {
+            for (auto& el : alit->elements) {
+                if (el) {
+                    collect_identifiers(*el);
+                }
+            }
         }
         // その他の式タイプも必要に応じて追加
     };

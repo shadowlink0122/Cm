@@ -4,6 +4,7 @@
 
 #include "fwd.hpp"
 #include "internal/base/mangle.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -53,9 +54,66 @@ std::optional<std::string> array_search_suffix(const ast::TypePtr& elem) {
     }
 }
 
+// 配列HOF（map/filter/reduce/forEach/some/every/findIndex/first/last/find/sortBy）の要素幅サフィックス（局所処理調査E系）。
+// 正準のslice_scalar_info（slice_dispatch.hpp）から導出し、各サイトの手書きi32/i64二択を廃止する。
+// 集約・文字列など非スカラ要素はnullopt（js/ts以外は型検査が診断済みで、呼び出し側のi32フォールバックには到達しない。js/tsは構造的loweringのため幅は無関係）
+std::optional<std::string> array_hof_suffix(const ast::TypePtr& elem) {
+    if (!elem) {
+        return std::nullopt;
+    }
+    if (auto info = slice_scalar_info(elem->kind)) {
+        return std::string(info->width);
+    }
+    return std::nullopt;
+}
+
+// サフィックスを「_i32はレガシー基底名・それ以外は_<幅>付き」の実名へ整形する（map/filter/sortBy/sort/reverseの既存i32変種は無サフィックス名のため）
+std::string hof_func_name(const std::string& base, const std::optional<std::string>& suffix,
+                          bool i32_is_bare) {
+    if (!suffix || (*suffix == "i32" && i32_is_bare)) {
+        return i32_is_bare ? base : base + "_i32";
+    }
+    return base + "_" + *suffix;
+}
+
 }  // namespace
 
 namespace {
+
+// 固定長配列をcm_array_to_sliceでスライスへ変換するHIR呼び出しを構築する（局所処理調査E系）。
+// 固定長配列のsort/reverseを、要素幅・符号・文字列・集約をヘッダのelem_sizeで正しく扱うスライス汎用ランタイムへ相乗りさせるために使う（従来のi32形状の__builtin_array_sort/reverseはdouble等で黙って壊れていた）。
+// 要素サイズはHIRでは決めず0を置き、MIRのcm_array_to_slice引数loweringがlayout API（array_elem_stride）で再計算する
+HirExprPtr make_array_to_slice(HirExprPtr obj_hir, const TypePtr& obj_type) {
+    auto convert_call = std::make_unique<HirCall>();
+    convert_call->func_name = "cm_array_to_slice";
+    auto addr_op = std::make_unique<HirUnary>();
+    addr_op->op = HirUnaryOp::AddrOf;
+    addr_op->operand = std::move(obj_hir);
+    auto ptr_type = ast::make_pointer(obj_type->element_type);
+    convert_call->args.push_back(std::make_unique<HirExpr>(std::move(addr_op), ptr_type));
+    auto size_lit = std::make_unique<HirLiteral>();
+    size_lit->value = static_cast<int64_t>(obj_type->array_size.value_or(0));
+    convert_call->args.push_back(std::make_unique<HirExpr>(std::move(size_lit), ast::make_long()));
+    auto elem_size_lit = std::make_unique<HirLiteral>();
+    elem_size_lit->value = int64_t{0};
+    convert_call->args.push_back(
+        std::make_unique<HirExpr>(std::move(elem_size_lit), ast::make_long()));
+    auto slice_type = ast::make_array(obj_type->element_type, std::nullopt);
+    return std::make_unique<HirExpr>(std::move(convert_call), slice_type);
+}
+
+// sortの比較関数名（符号・浮動小数・文字列を区別）。正準のslice_scalar_sort_suffix（slice_dispatch.hpp）から導出し、手書きswitchの複製を廃止する
+std::string slice_sort_func_name(const TypePtr& elem) {
+    if (elem) {
+        if (elem->kind == ast::TypeKind::String) {
+            return "cm_slice_sort_str";
+        }
+        if (const char* s = slice_scalar_sort_suffix(elem->kind)) {
+            return std::string("cm_slice_sort_") + s;
+        }
+    }
+    return "cm_slice_sort_i32";
+}
 
 // 配列HOF（map/filter/reduce等）共通のデータ引数・サイズ引数を構築する。
 // 固定長配列: 配列アドレス(&arr) + 静的サイズ。
@@ -345,14 +403,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "forEach") {
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてサフィックスを決定（ランタイムはi32/i64のみ提供）
-                std::string foreach_suffix = "_i32";
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    foreach_suffix = "_i64";
-                }
-                hir->func_name = "__builtin_array_forEach" + foreach_suffix;
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でtiny/short/float/doubleがstride誤りだった）
+                hir->func_name = hof_func_name("__builtin_array_forEach",
+                                               array_hof_suffix(obj_type->element_type), false);
                 hir->args.push_back(std::move(obj_hir));
                 auto size_lit = std::make_unique<HirLiteral>();
                 // スライスはサイズ-1（ランタイムが負サイズをCmSlice*として展開する）
@@ -382,20 +435,15 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                     !lowered_args[0]->type->param_types.empty()) {
                     acc_type = lowered_args[0]->type->param_types[0];
                 }
-                const bool elem64 = obj_type->element_type &&
-                                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                                     obj_type->element_type->kind == ast::TypeKind::ULong);
                 const bool acc64 = acc_type && (acc_type->kind == ast::TypeKind::Long ||
                                                 acc_type->kind == ast::TypeKind::ULong ||
                                                 acc_type->kind == ast::TypeKind::ISize ||
                                                 acc_type->kind == ast::TypeKind::USize);
-                // 要素型に応じてサフィックスを決定する。アキュムレータが64bitで要素が32bit以下の場合は
-                // 混合幅版を選ぶ（従来は要素型のみで選んでいたため、long acc×int要素のコールバックが
-                // (i32,i32)シグネチャで呼ばれ、wasmはcall_indirectの型検査でトラップしていた）
-                std::string suffix = "_i32";
-                if (elem64) {
-                    suffix = "_i64";
-                } else if (acc64) {
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でtiny/short/float/doubleが壊れていた）。
+                // アキュムレータが64bit整数で要素が32bit以下の整数の場合は混合幅版を選ぶ（要素型のみで選ぶとlong acc×int要素のコールバックが(i32,i32)シグネチャで呼ばれ、wasmはcall_indirectの型検査でトラップする）
+                auto elem_suffix = array_hof_suffix(obj_type->element_type);
+                std::string suffix = "_" + elem_suffix.value_or("i32");
+                if (acc64 && suffix == "_i32") {
                     suffix = "_i32_acc64";
                 }
                 hir->func_name = "__builtin_array_reduce" + suffix;
@@ -414,7 +462,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "some") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_some_i32";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32固定）
+                hir->func_name = hof_func_name("__builtin_array_some",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
@@ -427,7 +477,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "every") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_every_i32";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32固定）
+                hir->func_name = hof_func_name("__builtin_array_every",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
@@ -440,7 +492,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "findIndex") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_findIndex_i32";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32固定）
+                hir->func_name = hof_func_name("__builtin_array_findIndex",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 for (auto& arg : mem.args) {
@@ -483,17 +537,11 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
             }
 
-            // 64bit整数要素はランタイムのi64変種を使う（従来は常にi32版が選ばれ、
-            // long配列のmap/filterがstride不一致で黙って壊れていた）
-            const bool elem_is_i64 =
-                obj_type->element_type && (obj_type->element_type->kind == ast::TypeKind::Long ||
-                                           obj_type->element_type->kind == ast::TypeKind::ULong ||
-                                           obj_type->element_type->kind == ast::TypeKind::ISize ||
-                                           obj_type->element_type->kind == ast::TypeKind::USize);
-
             if (mem.member == "map") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = elem_is_i64 ? "__builtin_array_map_i64" : "__builtin_array_map";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でtiny/short/float/doubleがstride不一致で黙って壊れていた。i32はレガシーの無サフィックス基底名）
+                hir->func_name = hof_func_name("__builtin_array_map",
+                                               array_hof_suffix(obj_type->element_type), true);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
@@ -509,8 +557,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "filter") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name =
-                    elem_is_i64 ? "__builtin_array_filter_i64" : "__builtin_array_filter";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（mapと同様。i32はレガシーの無サフィックス基底名）
+                hir->func_name = hof_func_name("__builtin_array_filter",
+                                               array_hof_suffix(obj_type->element_type), true);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
@@ -525,10 +574,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             }
 
             if (mem.member == "reverse" && obj_type->array_size.has_value()) {
+                // 固定長配列はスライスへ変換し、ヘッダのelem_sizeで全要素型を正しく扱うスライス汎用reverseへ相乗りする（従来のi32形状__builtin_array_reverseはdouble/構造体で黙って壊れていた）
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_reverse";
-                // データ引数とサイズ引数（固定長配列/スライス共通）
-                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
+                hir->func_name = "cm_slice_reverse";
+                hir->args.push_back(make_array_to_slice(std::move(obj_hir), obj_type));
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin reverse()",
                                 debug::Level::Debug);
                 // 動的配列（スライス）を返す
@@ -537,10 +586,10 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             }
 
             if (mem.member == "sort" && obj_type->array_size.has_value()) {
+                // 固定長配列はスライスへ変換し、符号・浮動小数・文字列を正しく比較するスライス汎用sortへ相乗りする（従来のi32形状__builtin_array_sortはdouble等で黙って壊れていた）
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_sort";
-                // データ引数とサイズ引数（固定長配列/スライス共通）
-                push_array_hof_args(*hir, std::move(obj_hir), obj_type);
+                hir->func_name = slice_sort_func_name(obj_type->element_type);
+                hir->args.push_back(make_array_to_slice(std::move(obj_hir), obj_type));
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin sort()",
                                 debug::Level::Debug);
                 // 動的配列（スライス）を返す
@@ -551,7 +600,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             // sortByは固定長配列・スライス共通（スライスはサイズ-1番兵でランタイム展開）
             if (mem.member == "sortBy") {
                 auto hir = std::make_unique<HirCall>();
-                hir->func_name = "__builtin_array_sortBy";
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32形状固定でlong/double要素の比較関数が効かなかった。i32はレガシーの無サフィックス基底名）
+                hir->func_name = hof_func_name("__builtin_array_sortBy",
+                                               array_hof_suffix(obj_type->element_type), true);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コンパレータ関数
@@ -583,14 +634,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 }
 
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてサフィックスを決定
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    suffix = "_i64";
-                }
-                hir->func_name = "__builtin_array_first" + suffix;
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でdouble等が壊れていた）
+                hir->func_name = hof_func_name("__builtin_array_first",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin first()",
@@ -616,14 +662,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 }
 
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてサフィックスを決定
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    suffix = "_i64";
-                }
-                hir->func_name = "__builtin_array_last" + suffix;
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でdouble等が壊れていた）
+                hir->func_name = hof_func_name("__builtin_array_last",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Array builtin last()",
@@ -633,14 +674,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "find") {
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてサフィックスを決定
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    suffix = "_i64";
-                }
-                hir->func_name = "__builtin_array_find" + suffix;
+                // 要素幅サフィックスは正準ヘルパで全幅選択（従来はi32/i64二択でdouble等が壊れていた）
+                hir->func_name = hof_func_name("__builtin_array_find",
+                                               array_hof_suffix(obj_type->element_type), false);
                 // データ引数とサイズ引数（固定長配列/スライス共通）
                 push_array_hof_args(*hir, std::move(obj_hir), obj_type);
                 // コールバック関数
@@ -734,12 +770,14 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 }
 
                 auto hir = std::make_unique<HirCall>();
-                // スライスの場合はcm_slice_first_*を使用
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    suffix = "_i64";
+                // スライスの場合はcm_slice_first_*を使用。要素幅サフィックスは正準ヘルパで全幅選択し、ポインタ・文字列要素は_ptr変種を使う（従来はi32/i64二択でdouble/stringが壊れていた）
+                std::string suffix = "_i32";
+                if (auto w = array_hof_suffix(obj_type->element_type)) {
+                    suffix = "_" + *w;
+                } else if (obj_type->element_type &&
+                           (obj_type->element_type->kind == ast::TypeKind::String ||
+                            obj_type->element_type->kind == ast::TypeKind::Pointer)) {
+                    suffix = "_ptr";
                 }
                 hir->func_name = "cm_slice_first" + suffix;
                 hir->args.push_back(std::move(obj_hir));
@@ -761,12 +799,14 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
                 }
 
                 auto hir = std::make_unique<HirCall>();
-                // スライスの場合はcm_slice_last_*を使用
-                std::string suffix = "_i32";  // デフォルト
-                if (obj_type->element_type &&
-                    (obj_type->element_type->kind == ast::TypeKind::Long ||
-                     obj_type->element_type->kind == ast::TypeKind::ULong)) {
-                    suffix = "_i64";
+                // スライスの場合はcm_slice_last_*を使用。要素幅サフィックスは正準ヘルパで全幅選択し、ポインタ・文字列要素は_ptr変種を使う（firstと同様）
+                std::string suffix = "_i32";
+                if (auto w = array_hof_suffix(obj_type->element_type)) {
+                    suffix = "_" + *w;
+                } else if (obj_type->element_type &&
+                           (obj_type->element_type->kind == ast::TypeKind::String ||
+                            obj_type->element_type->kind == ast::TypeKind::Pointer)) {
+                    suffix = "_ptr";
                 }
                 hir->func_name = "cm_slice_last" + suffix;
                 hir->args.push_back(std::move(obj_hir));
@@ -786,52 +826,8 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
 
             if (mem.member == "sort") {
                 auto hir = std::make_unique<HirCall>();
-                // 要素型に応じてソート関数を選択する（符号・浮動小数・文字列を正しく比較。C5）
-                std::string sort_suffix = "_i32";
-                if (obj_type->element_type) {
-                    switch (obj_type->element_type->kind) {
-                        case ast::TypeKind::Bool:
-                        case ast::TypeKind::Char:
-                        case ast::TypeKind::UTiny:
-                            sort_suffix = "_u8";
-                            break;
-                        case ast::TypeKind::Tiny:
-                            sort_suffix = "_i8";
-                            break;
-                        case ast::TypeKind::Short:
-                            sort_suffix = "_i16";
-                            break;
-                        case ast::TypeKind::UShort:
-                            sort_suffix = "_u16";
-                            break;
-                        case ast::TypeKind::UInt:
-                            sort_suffix = "_u32";
-                            break;
-                        case ast::TypeKind::Long:
-                        case ast::TypeKind::ISize:
-                            sort_suffix = "_i64";
-                            break;
-                        case ast::TypeKind::ULong:
-                        case ast::TypeKind::USize:
-                            sort_suffix = "_u64";
-                            break;
-                        case ast::TypeKind::Float:
-                        case ast::TypeKind::UFloat:
-                            sort_suffix = "_f32";
-                            break;
-                        case ast::TypeKind::Double:
-                        case ast::TypeKind::UDouble:
-                            sort_suffix = "_f64";
-                            break;
-                        case ast::TypeKind::String:
-                            sort_suffix = "_str";
-                            break;
-                        default:
-                            sort_suffix = "_i32";
-                            break;
-                    }
-                }
-                hir->func_name = "cm_slice_sort" + sort_suffix;
+                // 要素型に応じたソート関数の選択は正準ヘルパへ集約（符号・浮動小数・文字列を正しく比較。C5の手書きswitchをslice_dispatchの正準表から導出する形へ置換）
+                hir->func_name = slice_sort_func_name(obj_type->element_type);
                 hir->args.push_back(std::move(obj_hir));
                 debug::hir::log(debug::hir::Id::MethodCallLower, "Slice builtin sort()",
                                 debug::Level::Debug);

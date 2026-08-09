@@ -4,7 +4,7 @@
 #include "internal/base/target.hpp"
 #include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/layout.hpp"
-#include "internal/mir/lowering/slice_dispatch.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 
 #include <functional>
 #include <memory>
@@ -118,7 +118,7 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
 
             // push関数名を決定
             std::string push_func = "cm_slice_push_i32";
-            if (auto info = slice_scalar_info(elem_kind)) {
+            if (auto info = hir::slice_scalar_info(elem_kind)) {
                 // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
                 push_func = std::string("cm_slice_push_") + info->width;
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {

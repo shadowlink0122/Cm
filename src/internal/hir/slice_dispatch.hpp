@@ -10,6 +10,7 @@
 // アクセス幅の不一致を構造的に防ぎ、新しいスカラ型の追加を1箇所の変更で済ませる。
 // ポインタ・文字列・構造体・ユニオン・配列などの集約型はスカラではないためnulloptを返し、
 // 各呼び出し側が従来通り個別に扱う（集約の格納表現はサイトごとに異なるため一元化しない）。
+// 配置はhir層: HIR loweringの配列HOF幅選択（局所処理調査E系）とMIR loweringの両方が消費するため、層規約（hir→base,syntax / mir→hir）に従いここへ置く。
 
 #pragma once
 
@@ -18,7 +19,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace cm::mir {
+namespace cm::hir {
 
 struct SliceScalarInfo {
     int64_t elem_size;  // 要素のバイト幅
@@ -130,4 +131,4 @@ inline const char* slice_scalar_sort_suffix(hir::TypeKind kind) {
     }
 }
 
-}  // namespace cm::mir
+}  // namespace cm::hir

@@ -1,0 +1,15 @@
+//! platform: llvm
+// 非スカラ要素のHOFはネイティブ系ターゲットでは診断エラー（局所処理調査E系: 従来は型検査を通過してから無診断で誤コンパイル/クラッシュしていた。js/tsは構造的loweringのため引き続き許可される）
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point[] ps = [{x: 1, y: 2}, {x: 3, y: 4}];
+    int[] ys = ps.map((Point p) => p.y);
+    println(ys[0]);
+    return 0;
+}

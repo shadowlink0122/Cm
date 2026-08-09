@@ -9,8 +9,65 @@
 
 namespace cm::codegen::js {
 
-// 組み込み関数かどうかをチェック
-bool isBuiltinFunction(const std::string& name) {
+namespace {
+
+// スカラ全幅化で増える幅サフィックス付きの配列HOF・スライス端アクセス名を、既存分岐が扱える正準名の候補列へ正規化する。
+// JSバックエンドは要素型に依存しない構造的lowering（__cm_unwrap(arr).map(cb)形式）のため、幅違いの名前は同じJS出力へ落とせばよい。
+// 対象は __builtin_array_* と cm_slice_first_* / cm_slice_last_* に限定し、呼び出し側でexact一致に外れた名前だけへ適用する（_i64のindexOf/includes等の既存特別扱いを壊さないため）。
+// 候補は「幅を_i32へ置換（_acc64位置は保持）」→「_acc64を落として_i32へ置換」→「幅を除去した基底名」の順で返し、末尾の_closureは常に保持する。
+std::vector<std::string> widthNormalizedCandidates(const std::string& name) {
+    std::vector<std::string> candidates;
+    const bool isArrayHof = name.rfind("__builtin_array_", 0) == 0;
+    const bool isSliceEdge =
+        name.rfind("cm_slice_first_", 0) == 0 || name.rfind("cm_slice_last_", 0) == 0;
+    if (!isArrayHof && !isSliceEdge) {
+        return candidates;
+    }
+    std::string base = name;
+    // 末尾サフィックスが一致したらbaseから取り除く小ヘルパ
+    auto stripSuffix = [&base](const std::string& suffix) {
+        if (base.size() > suffix.size() &&
+            base.compare(base.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            base.resize(base.size() - suffix.size());
+            return true;
+        }
+        return false;
+    };
+    const bool hasClosure = stripSuffix("_closure");
+    const bool hasAcc64 = stripSuffix("_acc64");
+    // 幅サフィックス表（符号なし幅はJSでは同じ格納表現のため同列に正規化する）
+    static const char* const kWidthSuffixes[] = {"_i8", "_i16", "_i32", "_i64", "_f32", "_f64",
+                                                 "_u8", "_u16", "_u32", "_u64", "_ptr"};
+    bool hadWidth = false;
+    for (const char* const width : kWidthSuffixes) {
+        if (stripSuffix(width)) {
+            hadWidth = true;
+            break;
+        }
+    }
+    if (!hadWidth && !hasAcc64) {
+        // 幅情報を持たない名前（_str等や基底名そのもの）は正規化対象外
+        return candidates;
+    }
+    const std::string closure = hasClosure ? "_closure" : "";
+    // 元名と同一の候補を積まないための小ヘルパ
+    auto pushUnlessSame = [&candidates, &name](std::string candidate) {
+        if (candidate != name) {
+            candidates.push_back(std::move(candidate));
+        }
+    };
+    pushUnlessSame(base + "_i32" + (hasAcc64 ? "_acc64" : "") + closure);
+    if (hasAcc64) {
+        pushUnlessSame(base + "_i32" + closure);
+    }
+    pushUnlessSame(base + closure);
+    return candidates;
+}
+
+}  // namespace
+
+// 組み込み関数かどうかをチェック（exact一致のみ。幅サフィックス正規化は公開関数側で行う）
+static bool isBuiltinFunctionExact(const std::string& name) {
     // 基本集合はビルトインレジストリ（codegen/common/builtin_registry.hpp）から導出する（runtime-builtin-registry 第2段）。
     // レジストリ未収容のjs固有・別経路宣言の関数のみここで列挙する（新規ビルトインはレジストリへ追加すること）
     if (cm::codegen::find_builtin_sig(name) != nullptr) {
@@ -63,8 +120,23 @@ bool isBuiltinFunction(const std::string& name) {
     return extra_builtins.count(name) > 0;
 }
 
-// 組み込み関数呼び出しをJSコードに変換
-std::string emitBuiltinCall(const std::string& name, const std::vector<std::string>& argStrs) {
+// 組み込み関数かどうかをチェック
+bool isBuiltinFunction(const std::string& name) {
+    if (isBuiltinFunctionExact(name)) {
+        return true;
+    }
+    // 幅サフィックス付きの新名（例: __builtin_array_map_f64 / cm_slice_first_i8）は正準名候補で再判定する
+    for (const std::string& candidate : widthNormalizedCandidates(name)) {
+        if (isBuiltinFunctionExact(candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 組み込み関数呼び出しをJSコードに変換（exact一致のみ。未対応名は空文字列を返し、公開関数側で幅サフィックス正規化のフォールバックを行う）
+static std::string emitBuiltinCallExact(const std::string& name,
+                                        const std::vector<std::string>& argStrs) {
     // __cm_slice: (arr, start, end)
     if (name == "__cm_slice" && argStrs.size() >= 3) {
         return "__cm_slice(" + argStrs[0] + ", " + argStrs[1] + ", " + argStrs[2] + ")";
@@ -480,7 +552,8 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
 
     // スライス操作
     if ((name == "cm_slice_get_i8" || name == "cm_slice_get_i16" || name == "cm_slice_get_i32" ||
-         name == "cm_slice_get_i64" || name == "cm_slice_get_f64" || name == "cm_slice_get_ptr") &&
+         name == "cm_slice_get_i64" || name == "cm_slice_get_f32" || name == "cm_slice_get_f64" ||
+         name == "cm_slice_get_ptr") &&
         argStrs.size() >= 2) {
         return "__cm_unwrap(" + argStrs[0] + ")[" + argStrs[1] + "]";
     }
@@ -636,6 +709,23 @@ std::string emitBuiltinCall(const std::string& name, const std::vector<std::stri
         return "process.stdout.write(String(" + argStrs[0] + "))";
     }
 
+    // 未対応名（空文字列は「どの分岐にも一致しなかった」の印。全一致分岐は必ず非空文字列を返す）
+    return "";
+}
+
+// 組み込み関数呼び出しをJSコードに変換
+std::string emitBuiltinCall(const std::string& name, const std::vector<std::string>& argStrs) {
+    std::string js = emitBuiltinCallExact(name, argStrs);
+    if (!js.empty()) {
+        return js;
+    }
+    // exact一致に外れた幅サフィックス付き新名は、正準名候補（_i32置換→基底名）で既存分岐へ落とす
+    for (const std::string& candidate : widthNormalizedCandidates(name)) {
+        js = emitBuiltinCallExact(candidate, argStrs);
+        if (!js.empty()) {
+            return js;
+        }
+    }
     // 不明な組み込み関数
     return "/* unknown builtin: " + name + " */ undefined";
 }

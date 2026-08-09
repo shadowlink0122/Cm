@@ -276,6 +276,12 @@ int run_build(cli::Options& opts, const char* argv0) {
         checker.set_sv_platform(opts.target == "sv" || opts.target == "verilog" ||
                                 opts.target == "systemverilog" ||
                                 code.find("//! platform: sv") != std::string::npos);
+        // js/ts系は配列HOFを構造的にlowerするため、非スカラ要素のHOFゲートを解除する（局所処理調査E系。ターゲット指定またはソースの //! platform: 指定で有効化）
+        checker.set_structural_array_lowering(opts.target == "js" || opts.target == "ts" ||
+                                              opts.target == "web" ||
+                                              code.find("//! platform: js") != std::string::npos ||
+                                              code.find("//! platform: ts") != std::string::npos ||
+                                              code.find("//! platform: web") != std::string::npos);
         // Check/Lintコマンド、または--force-check/--strict指定時にLint警告を有効化
         if (opts.force_check) {
             checker.set_enable_lint_warnings(true);

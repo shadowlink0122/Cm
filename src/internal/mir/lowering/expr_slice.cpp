@@ -10,7 +10,7 @@
 #include "internal/base/target.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 #include "layout.hpp"
-#include "slice_dispatch.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 
 #include <memory>
 #include <optional>
@@ -143,7 +143,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         auto r = ctx.resolve_typedef(slice_type->element_type);
         elem_type = r ? r : slice_type->element_type;
     }
-    const SliceElemDispatch disp = slice_elem_dispatch(elem_type);
+    const hir::SliceElemDispatch disp = hir::slice_elem_dispatch(elem_type);
 
     if (is_push) {
         LocalId value_local = lower_expression(*call.args[1], ctx);
@@ -152,7 +152,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         value_local = ctx.coerce_to_expected(value_local, elem_type);
 
         // 多次元スライスへの配列リテラル直接push（X3）: リテラルは固定長配列blobとしてlowerされるためcm_slice_push_sliceが期待するCmSliceヘッダにならない。cm_array_to_sliceでヒープスライスへ実体化してからpushする（空リテラルはlen=0の正規ヘッダ）
-        if (disp.cls == SliceElemClass::InnerSlice && value_local < ctx.func->locals.size()) {
+        if (disp.cls == hir::SliceElemClass::InnerSlice && value_local < ctx.func->locals.size()) {
             hir::TypePtr vt = ctx.func->locals[value_local].type;
             if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
                 // 空リテラル[]は要素型をレシーバの内側スライスから取る
@@ -175,7 +175,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         }
 
         // インターフェイス要素スライスへの具象構造体push: インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
-        if (disp.cls == SliceElemClass::Blob && elem_type &&
+        if (disp.cls == hir::SliceElemClass::Blob && elem_type &&
             elem_type->kind == hir::TypeKind::Struct && ctx.interface_names &&
             ctx.interface_names->count(elem_type->name) > 0) {
             hir::TypePtr actual = (value_local < ctx.func->locals.size())
@@ -194,7 +194,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         args.push_back(MirOperand::copy(slice_place));
         // Blob規約は値のアドレスを渡す（集約のインラインコピーのため）、それ以外は値渡し
         LocalId value_arg =
-            (disp.cls == SliceElemClass::Blob) ? make_addr(ctx, value_local) : value_local;
+            (disp.cls == hir::SliceElemClass::Blob) ? make_addr(ctx, value_local) : value_local;
         args.push_back(MirOperand::copy(MirPlace{value_arg}));
         emit_call(ctx, std::string("cm_slice_push_") + disp.suffix, std::move(args), std::nullopt);
         return ctx.new_temp(hir::make_void());
@@ -202,7 +202,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
 
     if (is_pop) {
         hir::TypePtr result_elem = elem_type ? elem_type : hir::make_int();
-        if (disp.cls == SliceElemClass::Blob) {
+        if (disp.cls == hir::SliceElemClass::Blob) {
             // Blob規約: ポインタ幅戻り値のcm_slice_pop_ptrでは構造体宛先への格納が型不整合になるため（W3）、末尾要素ポインタからderefコピーで受けてからlenを減算する
             LocalId len_local = ctx.new_temp(hir::make_long());
             std::vector<MirOperandPtr> len_args;
@@ -237,7 +237,7 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
 
         // 内側スライス要素のpopはランタイム未実装のため従来既定のi32に落ちる（既知の未対応。導入時はcm_slice_pop_sliceを追加して表のsuffixを使う）
         const std::string pop_suffix =
-            (disp.cls == SliceElemClass::InnerSlice) ? "i32" : disp.suffix;
+            (disp.cls == hir::SliceElemClass::InnerSlice) ? "i32" : disp.suffix;
         LocalId result = ctx.new_temp(result_elem);
         std::vector<MirOperandPtr> args;
         args.push_back(MirOperand::copy(slice_place));

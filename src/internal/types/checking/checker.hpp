@@ -152,8 +152,13 @@ class TypeChecker {
     // SVプラットフォーム（//! platform: sv）のとき有効化。入力ポートへの代入検査に使う
     void set_sv_platform(bool enabled) { sv_platform_ = enabled; }
 
+    // js/ts系ターゲット（構造的配列lowering）のとき有効化（局所処理調査E系）。
+    // 配列高階関数はネイティブ系では要素幅別ランタイムを使うため非スカラ要素を診断で止めるが、js/tsは要素型に依存しないJS配列メソッドへlowerされるため集約・文字列要素も許可する
+    void set_structural_array_lowering(bool enabled) { structural_array_lowering_ = enabled; }
+
    private:
     bool sv_platform_ = false;
+    bool structural_array_lowering_ = false;
     bool in_test_function_ = false;  // #[test]関数本体の検査中か（入力ポート駆動を許可）
     std::unordered_set<std::string> sv_input_ports_;  // #[input]属性つきグローバル（SVポート）
     void register_auto_eq_impl(const ast::StructDecl& st);

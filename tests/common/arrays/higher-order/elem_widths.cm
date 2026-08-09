@@ -1,0 +1,57 @@
+// 配列HOFのスカラ全幅ディスパッチ確認（局所処理調査E系: 従来はi32/i64二択でdouble/float/tiny/shortが無診断で壊れていた）
+import std::io::println;
+
+int main() {
+    // double: map/filter/reduce/first/last/find/some/every/findIndex
+    double[] ds = [1.5, 2.5, 3.5];
+    double[] dm = ds.map((double d) => d * 2.0);
+    println("{dm[0]} {dm[1]} {dm[2]}");
+    double[] df = ds.filter((double d) => d > 2.0);
+    println("{df.len()} {df[0]}");
+    double dsum = ds.reduce((double a, double b) => a + b, 0.0);
+    println("{dsum}");
+    println("{ds.first()} {ds.last()}");
+    double dfound = ds.find((double d) => d > 2.0);
+    println("{dfound}");
+    println("{ds.some((double d) => d > 3.0)} {ds.every((double d) => d > 1.0)}");
+    println("{ds.findIndex((double d) => d > 2.0)}");
+
+    // float
+    float[] fs = [1.5 as float, 4.5 as float];
+    float[] fm = fs.map((float f) => f + 1.0 as float);
+    println("{fm[0]} {fm[1]}");
+    float fsum = fs.reduce((float a, float b) => a + b, 0.0 as float);
+    println("{fsum}");
+    println("{fs.first()} {fs.last()}");
+
+    // tiny（8bit）
+    tiny[] ts = [1 as tiny, 2 as tiny, 3 as tiny];
+    tiny[] tm = ts.map((tiny t) => t * 2 as tiny);
+    println("{tm[0]} {tm[1]} {tm[2]}");
+    int tsum = ts.reduce((int a, tiny t) => a + t, 0);
+    println("{tsum}");
+    println("{ts.first()} {ts.last()}");
+    println("{ts.findIndex((tiny t) => t == 2 as tiny)}");
+
+    // short（16bit）
+    short[] ss = [100 as short, 200 as short, 300 as short];
+    short[] sm = ss.map((short s) => s + 1 as short);
+    println("{sm[0]} {sm[2]}");
+    int ssum = ss.reduce((int a, short s) => a + s, 0);
+    println("{ssum}");
+    println("{ss.some((short s) => s > 250 as short)} {ss.every((short s) => s > 150 as short)}");
+
+    // long（64bit・既存動作の維持確認）
+    long[] ls = [10, 20, 30];
+    long[] lm = ls.map((long v) => v * 3);
+    println("{lm[2]}");
+    long lsum = ls.reduce((long a, long v) => a + v, 0 as long);
+    println("{lsum}");
+
+    // 固定長配列レシーバでも同じ幅ディスパッチが効く
+    double[3] fixed = [9.5, 7.5, 8.5];
+    println("{fixed.first()} {fixed.last()}");
+    double ffound = fixed.find((double d) => d < 8.0);
+    println("{ffound}");
+    return 0;
+}

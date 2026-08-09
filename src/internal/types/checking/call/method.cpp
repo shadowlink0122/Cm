@@ -477,7 +477,8 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     }
 
     // 検索ビルトインの要素型サポート判定（Z1）。
-    // 値比較系（indexOf/includes/contains）はスカラ+stringの変種、述語系（some/every/findIndex）はi32/i64変種のみ存在する。
+    // 値比較系（indexOf/includes/contains）はスカラ+stringの変種を持つ。
+    // 述語・高階系（some/every/findIndex/map等）は後述のhof_elem_supportedで判定する（局所処理調査E系でスカラ全幅化）。
     // 未対応の要素型は黙ってi32変種へ落とさず診断で停止する
     auto search_elem_supported = [&](bool value_compare) -> bool {
         auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
@@ -513,6 +514,39 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         error(current_span_, i18n::msgf(i18n::MsgId::TcArraySearchUnsupportedElem, method,
                                         elem ? ast::type_to_string(*elem) : "unknown"));
     };
+    // 要素型がスカラ（ランタイムにi8/i16/i32/i64/f32/f64の幅別変種がある）かの判定（局所処理調査E系）
+    auto hof_elem_scalar = [&]() -> bool {
+        auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
+        if (!elem) {
+            return true;
+        }
+        switch (elem->kind) {
+            case ast::TypeKind::Bool:
+            case ast::TypeKind::Char:
+            case ast::TypeKind::Tiny:
+            case ast::TypeKind::UTiny:
+            case ast::TypeKind::Short:
+            case ast::TypeKind::UShort:
+            case ast::TypeKind::Int:
+            case ast::TypeKind::UInt:
+            case ast::TypeKind::Long:
+            case ast::TypeKind::ULong:
+            case ast::TypeKind::ISize:
+            case ast::TypeKind::USize:
+            case ast::TypeKind::Float:
+            case ast::TypeKind::UFloat:
+            case ast::TypeKind::Double:
+            case ast::TypeKind::UDouble:
+                return true;
+            default:
+                return false;
+        }
+    };
+    // 高階関数（map/filter/reduce/forEach/some/every/findIndex/first/last/find/sortBy）の要素型ゲート（局所処理調査E系）。
+    // 非スカラ要素は、要素型に依存しない構造的loweringを行うjs/ts系ターゲットでのみ許可し、それ以外は黙ってi32形状のランタイムへ落とさず診断で停止する（従来はPoint[]/string[]のmap等が型検査を通過してから無診断で誤コンパイル/クラッシュしていた）
+    auto hof_elem_supported = [&]() -> bool {
+        return hof_elem_scalar() || structural_array_lowering_;
+    };
     if (member.member == "indexOf") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayIndexofTakes1Argument));
@@ -543,7 +577,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArraySomeTakes1Predicate));
         }
-        if (!search_elem_supported(false)) {
+        if (!hof_elem_supported()) {
             diag_unsupported_elem("some");
             return ast::make_error();
         }
@@ -556,7 +590,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayEveryTakes1Predicate));
         }
-        if (!search_elem_supported(false)) {
+        if (!hof_elem_supported()) {
             diag_unsupported_elem("every");
             return ast::make_error();
         }
@@ -569,7 +603,7 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayFindindexTakes1Predicate));
         }
-        if (!search_elem_supported(false)) {
+        if (!hof_elem_supported()) {
             diag_unsupported_elem("findIndex");
             return ast::make_error();
         }
@@ -582,14 +616,92 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() < 1 || member.args.size() > 2) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayReduceTakes12));
         }
-        for (auto& arg : member.args) {
-            infer_type(*arg);
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("reduce");
+            return ast::make_error();
         }
-        return ast::make_int();
+        ast::TypePtr callback_type;
+        ast::TypePtr init_type;
+        for (size_t i = 0; i < member.args.size(); ++i) {
+            auto arg_type = infer_type(*member.args[i]);
+            if (i == 0) {
+                callback_type = arg_type;
+            } else {
+                init_type = arg_type;
+            }
+        }
+        // アキュムレータ型はコールバック第1引数から決める（無ければ初期値、さらに無ければ要素型）。従来は戻り型が常にintへ固定され、double等のアキュムレータが宣言型と食い違い拒否されていた（E1）
+        ast::TypePtr acc_type;
+        if (callback_type && callback_type->kind == ast::TypeKind::Function &&
+            !callback_type->param_types.empty()) {
+            acc_type = callback_type->param_types[0];
+        }
+        // 要素×アキュムレータの幅組み合わせがランタイム変種に存在するかの検査（js/ts系は構造的loweringのため任意の組み合わせを許可）。
+        // 対応表: 32bit以下の整数要素×整数acc（int要素のみ64bit accの混合幅版あり）・64bit整数要素×64bit整数acc・float×float・double×double
+        if (!structural_array_lowering_ && acc_type && obj_type->element_type) {
+            auto elem = resolve_typedef(obj_type->element_type);
+            auto acc = resolve_typedef(acc_type);
+            auto is_i64_kind = [](ast::TypeKind k) {
+                return k == ast::TypeKind::Long || k == ast::TypeKind::ULong ||
+                       k == ast::TypeKind::ISize || k == ast::TypeKind::USize;
+            };
+            auto is_i32_or_less_kind = [](ast::TypeKind k) {
+                return k == ast::TypeKind::Bool || k == ast::TypeKind::Char ||
+                       k == ast::TypeKind::Tiny || k == ast::TypeKind::UTiny ||
+                       k == ast::TypeKind::Short || k == ast::TypeKind::UShort ||
+                       k == ast::TypeKind::Int || k == ast::TypeKind::UInt;
+            };
+            bool ok = true;
+            if (elem && acc) {
+                switch (elem->kind) {
+                    case ast::TypeKind::Float:
+                    case ast::TypeKind::UFloat:
+                        ok =
+                            acc->kind == ast::TypeKind::Float || acc->kind == ast::TypeKind::UFloat;
+                        break;
+                    case ast::TypeKind::Double:
+                    case ast::TypeKind::UDouble:
+                        ok = acc->kind == ast::TypeKind::Double ||
+                             acc->kind == ast::TypeKind::UDouble;
+                        break;
+                    case ast::TypeKind::Long:
+                    case ast::TypeKind::ULong:
+                    case ast::TypeKind::ISize:
+                    case ast::TypeKind::USize:
+                        ok = is_i64_kind(acc->kind);
+                        break;
+                    case ast::TypeKind::Int:
+                    case ast::TypeKind::UInt:
+                        ok = is_i32_or_less_kind(acc->kind) || is_i64_kind(acc->kind);
+                        break;
+                    default:
+                        // 8/16bit整数要素は32bit整数アキュムレータのみ（64bit accの混合幅版は未提供）
+                        ok = is_i32_or_less_kind(acc->kind);
+                        break;
+                }
+            }
+            if (!ok) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcArrayReduceUnsupportedAcc,
+                                 ast::type_to_string(*acc), ast::type_to_string(*elem)));
+                return ast::make_error();
+            }
+        }
+        if (acc_type) {
+            return acc_type;
+        }
+        if (init_type) {
+            return init_type;
+        }
+        return obj_type->element_type ? obj_type->element_type : ast::make_int();
     }
     if (member.member == "forEach") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayForeachTakes1Callback));
+        }
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("forEach");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -599,6 +711,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
     if (member.member == "map") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayMapTakes1Callback));
+        }
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("map");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             auto callback_type = infer_type(*member.args[0]);
@@ -618,6 +734,10 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayFilterTakes1Predicate));
         }
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("filter");
+            return ast::make_error();
+        }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
         }
@@ -635,12 +755,26 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (!member.args.empty()) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArraySortTakesNoArguments));
         }
+        // sortはスカラ全幅+文字列の比較変種を持つ（cm_slice_sort_*）。それ以外の要素は構造的loweringのjs/ts系のみ許可
+        {
+            auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
+            const bool sortable =
+                hof_elem_scalar() || (elem && elem->kind == ast::TypeKind::String);
+            if (!sortable && !structural_array_lowering_) {
+                diag_unsupported_elem("sort");
+                return ast::make_error();
+            }
+        }
         // ソート済み動的配列を返す（サイズは動的）
         return ast::make_array(obj_type->element_type, std::nullopt);
     }
     if (member.member == "sortBy") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArraySortbyTakes1Comparator));
+        }
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("sortBy");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);
@@ -663,9 +797,25 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         opt->type_args.push_back(obj_type->element_type ? obj_type->element_type : ast::make_int());
         return opt;
     }
+    // first/lastは多次元（配列要素）が添字アクセスへ脱糖され、スライスのポインタ・文字列要素は_ptr変種があるため、それらは全ターゲットで許可する
+    auto first_last_elem_supported = [&]() -> bool {
+        auto elem = obj_type->element_type ? resolve_typedef(obj_type->element_type) : nullptr;
+        if (elem && elem->kind == ast::TypeKind::Array) {
+            return true;
+        }
+        if (is_dynamic && elem &&
+            (elem->kind == ast::TypeKind::String || elem->kind == ast::TypeKind::Pointer)) {
+            return true;
+        }
+        return hof_elem_supported();
+    };
     if (member.member == "first") {
         if (!member.args.empty()) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayFirstTakesNoArguments));
+        }
+        if (!first_last_elem_supported()) {
+            diag_unsupported_elem("first");
+            return ast::make_error();
         }
         // 最初の要素を返す
         return obj_type->element_type ? obj_type->element_type : ast::make_error();
@@ -674,12 +824,20 @@ ast::TypePtr TypeChecker::infer_array_method(ast::MemberExpr& member, ast::TypeP
         if (!member.args.empty()) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayLastTakesNoArguments));
         }
+        if (!first_last_elem_supported()) {
+            diag_unsupported_elem("last");
+            return ast::make_error();
+        }
         // 最後の要素を返す
         return obj_type->element_type ? obj_type->element_type : ast::make_error();
     }
     if (member.member == "find") {
         if (member.args.size() != 1) {
             error(current_span_, i18n::msg(i18n::MsgId::TcArrayFindTakes1Predicate));
+        }
+        if (!hof_elem_supported()) {
+            diag_unsupported_elem("find");
+            return ast::make_error();
         }
         if (!member.args.empty()) {
             infer_type(*member.args[0]);

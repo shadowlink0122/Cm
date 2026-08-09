@@ -33,6 +33,23 @@ typedef int32_t (*MapFnI32Closure)(void*, int32_t);
 typedef int64_t (*MapFnI64Closure)(void*, int64_t);
 typedef int8_t (*FilterFnI32Closure)(void*, int32_t);
 typedef int8_t (*FilterFnI64Closure)(void*, int64_t);
+// スカラ全幅対応（局所処理調査E系）: i8/i16/f32/f64のmap/filterコールバック型
+typedef int8_t (*MapFnI8)(int8_t);
+typedef int16_t (*MapFnI16)(int16_t);
+typedef float (*MapFnF32)(float);
+typedef double (*MapFnF64)(double);
+typedef int8_t (*MapFnI8Closure)(void*, int8_t);
+typedef int16_t (*MapFnI16Closure)(void*, int16_t);
+typedef float (*MapFnF32Closure)(void*, float);
+typedef double (*MapFnF64Closure)(void*, double);
+typedef int8_t (*FilterFnI8)(int8_t);
+typedef int8_t (*FilterFnI16)(int16_t);
+typedef int8_t (*FilterFnF32)(float);
+typedef int8_t (*FilterFnF64)(double);
+typedef int8_t (*FilterFnI8Closure)(void*, int8_t);
+typedef int8_t (*FilterFnI16Closure)(void*, int16_t);
+typedef int8_t (*FilterFnF32Closure)(void*, float);
+typedef int8_t (*FilterFnF64Closure)(void*, double);
 
 
 // スライスを作成
@@ -610,6 +627,56 @@ void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr,
     return result;
 }
 
+// スカラ全幅対応（局所処理調査E系）: mapのi8/i16/f32/f64変種（要素サイズはsizeof(T)、cm_slice_newで確保）
+#define CM_DEFINE_ARRAY_MAP(suffix, ctype, fn_type, closure_fn_type)                          \
+    void* __builtin_array_map_##suffix(void* arr_ptr, int64_t size, void* fn_ptr) {           \
+        if (size < 0) {                                                                       \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                              \
+            arr_ptr = __cm_s->data;                                                           \
+            size = __cm_s->len;                                                               \
+        }                                                                                     \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                 \
+            return NULL;                                                                      \
+        fn_type fn = (fn_type)fn_ptr;                                                         \
+        ctype* arr = (ctype*)arr_ptr;                                                         \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                        \
+        if (!result)                                                                          \
+            return NULL;                                                                      \
+        ctype* result_data = (ctype*)result->data;                                            \
+        for (int64_t i = 0; i < size; i++) {                                                  \
+            result_data[i] = fn(arr[i]);                                                      \
+        }                                                                                     \
+        result->len = size;                                                                   \
+        return result;                                                                        \
+    }                                                                                         \
+    void* __builtin_array_map_##suffix##_closure(void* arr_ptr, int64_t size, void* fn_ptr,   \
+                                                 void* env) {                                 \
+        if (size < 0) {                                                                       \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                              \
+            arr_ptr = __cm_s->data;                                                           \
+            size = __cm_s->len;                                                               \
+        }                                                                                     \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                 \
+            return NULL;                                                                      \
+        closure_fn_type fn = (closure_fn_type)fn_ptr;                                         \
+        ctype* arr = (ctype*)arr_ptr;                                                         \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                        \
+        if (!result)                                                                          \
+            return NULL;                                                                      \
+        ctype* result_data = (ctype*)result->data;                                            \
+        for (int64_t i = 0; i < size; i++) {                                                  \
+            result_data[i] = fn(env, arr[i]);                                                 \
+        }                                                                                     \
+        result->len = size;                                                                   \
+        return result;                                                                        \
+    }
+
+CM_DEFINE_ARRAY_MAP(i8, int8_t, MapFnI8, MapFnI8Closure)
+CM_DEFINE_ARRAY_MAP(i16, int16_t, MapFnI16, MapFnI16Closure)
+CM_DEFINE_ARRAY_MAP(f32, float, MapFnF32, MapFnF32Closure)
+CM_DEFINE_ARRAY_MAP(f64, double, MapFnF64, MapFnF64Closure)
+#undef CM_DEFINE_ARRAY_MAP
+
 // filter: i32配列から条件を満たす要素を抽出
 void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
     if (size < 0) {
@@ -728,6 +795,62 @@ void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_p
     return result;
 }
 
+// スカラ全幅対応（局所処理調査E系）: filterのi8/i16/f32/f64変種（要素サイズはsizeof(T)、cm_slice_newで確保）
+#define CM_DEFINE_ARRAY_FILTER(suffix, ctype, fn_type, closure_fn_type)                        \
+    void* __builtin_array_filter_##suffix(void* arr_ptr, int64_t size, void* fn_ptr) {         \
+        if (size < 0) {                                                                        \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                               \
+            arr_ptr = __cm_s->data;                                                            \
+            size = __cm_s->len;                                                                \
+        }                                                                                      \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                  \
+            return NULL;                                                                       \
+        fn_type fn = (fn_type)fn_ptr;                                                          \
+        ctype* arr = (ctype*)arr_ptr;                                                          \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                         \
+        if (!result)                                                                           \
+            return NULL;                                                                       \
+        ctype* result_data = (ctype*)result->data;                                             \
+        int64_t count = 0;                                                                     \
+        for (int64_t i = 0; i < size; i++) {                                                   \
+            if (fn(arr[i])) {                                                                  \
+                result_data[count++] = arr[i];                                                 \
+            }                                                                                  \
+        }                                                                                      \
+        result->len = count;                                                                   \
+        return result;                                                                         \
+    }                                                                                          \
+    void* __builtin_array_filter_##suffix##_closure(void* arr_ptr, int64_t size, void* fn_ptr, \
+                                                    void* env) {                               \
+        if (size < 0) {                                                                        \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                               \
+            arr_ptr = __cm_s->data;                                                            \
+            size = __cm_s->len;                                                                \
+        }                                                                                      \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                  \
+            return NULL;                                                                       \
+        closure_fn_type fn = (closure_fn_type)fn_ptr;                                          \
+        ctype* arr = (ctype*)arr_ptr;                                                          \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                         \
+        if (!result)                                                                           \
+            return NULL;                                                                       \
+        ctype* result_data = (ctype*)result->data;                                             \
+        int64_t count = 0;                                                                     \
+        for (int64_t i = 0; i < size; i++) {                                                   \
+            if (fn(env, arr[i])) {                                                             \
+                result_data[count++] = arr[i];                                                 \
+            }                                                                                  \
+        }                                                                                      \
+        result->len = count;                                                                   \
+        return result;                                                                         \
+    }
+
+CM_DEFINE_ARRAY_FILTER(i8, int8_t, FilterFnI8, FilterFnI8Closure)
+CM_DEFINE_ARRAY_FILTER(i16, int16_t, FilterFnI16, FilterFnI16Closure)
+CM_DEFINE_ARRAY_FILTER(f32, float, FilterFnF32, FilterFnF32Closure)
+CM_DEFINE_ARRAY_FILTER(f64, double, FilterFnF64, FilterFnF64Closure)
+#undef CM_DEFINE_ARRAY_FILTER
+
 // スライスの最初の要素を取得
 int32_t cm_slice_first_i32(void* slice_ptr) {
     if (!slice_ptr)
@@ -767,6 +890,87 @@ int64_t cm_slice_last_i64(void* slice_ptr) {
     if (slice->len <= 0 || !slice->data)
         return 0;
     int64_t* data = (int64_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+// スカラ全幅対応（局所処理調査E系）: first/lastのi8/i16/f32/f64変種
+int8_t cm_slice_first_i8(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int8_t* data = (int8_t*)slice->data;
+    return data[0];
+}
+
+int16_t cm_slice_first_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int16_t* data = (int16_t*)slice->data;
+    return data[0];
+}
+
+float cm_slice_first_f32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0f;
+    float* data = (float*)slice->data;
+    return data[0];
+}
+
+double cm_slice_first_f64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0;
+    double* data = (double*)slice->data;
+    return data[0];
+}
+
+int8_t cm_slice_last_i8(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int8_t* data = (int8_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+int16_t cm_slice_last_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int16_t* data = (int16_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+float cm_slice_last_f32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0f;
+    float* data = (float*)slice->data;
+    return data[slice->len - 1];
+}
+
+double cm_slice_last_f64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0;
+    double* data = (double*)slice->data;
     return data[slice->len - 1];
 }
 

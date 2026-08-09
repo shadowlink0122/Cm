@@ -59,7 +59,7 @@
 - **D2 [silent/reject] 最初の `:` で書式指定に分割する**（`string_interpolation.cpp:53-59` の `content.find(':')`）。三項 `"{c ? a : b}"`（警告＋切り詰め）や `"{Color::Red}"`（**0を誤出力**）が壊れる。
 - **D3 [silent] `{` 直後が配列リテラル `[` の呼び出しが解析されない**。`"{[1,2,3].len()}"` がリテラル出力。`{xs.map(f).len()}` 等は通る。
 
-## E. 配列高階関数の要素型ディスパッチ複製（`slice_dispatch.hpp` 未移行）
+## E. 配列高階関数の要素型ディスパッチ複製（`slice_dispatch.hpp` 未移行）【処置済み】
 
 要素型クラス分け（幅別スカラ/Ptr/Blob/内側スライス）の正準は `slice_dispatch.hpp` で、`push/pop/get/set` と `indexOf/includes`（`array_search_suffix`）は正しく消費している。しかし**高階関数群が未移行**で、`src/internal/hir/lowering/expr_member.cpp` の各サイトが `elem_is_i64 ? "_i64" : "_i32"` の手書き選択を行い、ランタイム（`runtime_hof_core.inc`）も `_i32`/`_i64` しか実装していない。型チェッカ（`method.cpp`）も `map/filter/reduce/first/last/sort/sortBy` に要素型ゲートを設けないため、`double[]`/`string[]`/`Point[]` レシーバは**型検査を通過してからネイティブで無診断に誤コンパイル/クラッシュ**する（JSは構造的lowerで正しい）。
 
@@ -70,6 +70,8 @@
 - **E5 [silent] `sortBy`**: 構造体要素で比較関数が効かない（`__builtin_array_sortBy` がi32形状）。`sort()`/`reverse()` はスライスヘッダの `elem_size` を読むため構造体/doubleでも正しく、これが本来あるべき汎用形。
 - **E6 [reject/非対称] `some`/`every`/`findIndex`** はchecker（`method.cpp:542-580`）で整数要素限定。`filter`/`map` は同じ `string[]` レシーバを受理して誤コンパイルするのに、`some` は拒否する、という能力面の不整合。
 - （補足）`.map((int[] row)=>{...})` のように**ラムダ仮引数に配列型**が書けない（`Expected expression`）ため `int[][]` の行コールバックが書けない。
+
+**処置記録（E1〜E6）**: HIR loweringの各HOFサイト（map/filter/reduce/forEach/some/every/findIndex/first/last/find/sortBy、スライスのfirst/last）の手書きi32/i64二択を、`slice_dispatch.hpp` の `slice_scalar_info` から導出する正準ヘルパ `array_hof_suffix` へ一本化し、ランタイム（`runtime_hof_core.inc`/`runtime_slice_core.inc`）へi8/i16/f32/f64変種（クロージャ版含む80関数）と `builtin_registry.hpp` の宣言行を追加した。固定長配列のsort/reverseは `cm_array_to_slice` でスライスへ変換し、符号・浮動小数・文字列をヘッダのelem_sizeで正しく扱うスライス汎用ランタイム（`cm_slice_sort_*`/`cm_slice_reverse`）へ相乗りさせ、i32形状の `__builtin_array_sort/reverse` 依存を廃止した（スライスsortの手書きswitchも `slice_scalar_sort_suffix` へ置換）。checkerに要素型ゲートを追加し、非スカラ要素（構造体・文字列等）のHOFは構造的loweringを行うjs/ts系ターゲット（`set_structural_array_lowering`）でのみ許可、native/jit/wasmでは `TcArraySearchUnsupportedElem` 診断で停止する（E6の能力非対称も同判定へ統一）。E1のreduce戻り型はコールバックのアキュムレータ型（無ければ初期値型→要素型）に修正し、要素×アキュムレータの未提供な幅組み合わせは専用診断 `TcArrayReduceUnsupportedAcc` で停止する。クロージャ正規化（`normalizeHofClosureArgs`）の要素型二択も幅サフィックス導出へ拡張し、`_i32_acc64` のサンクacc幅誤り（i32サンクと(i64,i32)コールバックの食い違い）も同時修正。あわせて調査で発覚した2件——ラムダキャプチャ解析が `as` キャスト・構造体/配列リテラル内の識別子を走査せず、キャスト内でだけ参照される外側変数が無診断ゼロ値になる漏れ（`lambda.cpp`）と、jsの `cm_slice_get_f32` 未対応（float要素の添字読みがundefined）——も修正した。回帰テスト: `tests/common/arrays/higher-order/{elem_widths,sort_widths,closure_widths,unsupported_elem}`。ラムダ仮引数の配列型（補足）は構文未対応のため未処置。
 
 ## F. 数値縮小診断の文脈差
 
@@ -109,7 +111,7 @@
 
 ## 推奨する統一の方向（優先度順）
 
-1. **[Critical] E系: 高階関数を `slice_dispatch.hpp` へ移行し、checkerに要素型ゲートを追加**（無診断の誤コンパイル/クラッシュを解消）。`sort`/`indexOf` が既にやっている汎用形へ揃える。
+1. **[Critical] E系: 高階関数を `slice_dispatch.hpp` へ移行し、checkerに要素型ゲートを追加**（無診断の誤コンパイル/クラッシュを解消）。`sort`/`indexOf` が既にやっている汎用形へ揃える。→ **処置済み**（E節の処置記録参照）
 2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。→ **処置済み**（C節の処置記録参照）
 3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。
 4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。

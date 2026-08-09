@@ -159,7 +159,7 @@ string[] names = people
 // ["Alice", "Carol"]
 ```
 
-> Backend note: higher-order methods on struct slices (filter/map/indexOf/includes/pop) and mutation of global or struct-member slices work on the js/ts backends (they map to JS arrays). On native/jit only the basic operations are supported (push/len/indexing/for-in/passing as argument or return value/updating an element field). Use `--target=ts` for growable data such as web development.
+> Backend note: higher-order methods on scalar elements (tiny/short/int/long/float/double and their unsigned variants) work on all backends. Higher-order methods on struct slices (filter/map/...) and mutation of global or struct-member slices are js/ts-only (they map to JS arrays); on native/jit/wasm they are a compile error (they used to misbehave without any diagnostic). On native/jit struct slices support the basic operations (push/len/indexing/for-in/passing as argument or return value/updating an element field/first/last). Use `--target=ts` for growable struct data such as web development.
 
 ---
 

@@ -1628,6 +1628,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcInterpPlaceholderNotExpression
     {"interpolation placeholder '{0}' is not a valid expression; it is printed literally (escape literal braces by doubling them)",
      "補間プレースホルダ '{0}' は式として解釈できないためリテラル文字として出力されます（リテラル波括弧は二重化でエスケープ）"},
+    // TcArrayReduceUnsupportedAcc
+    {"Array reduce() does not support accumulator type '{0}' for element type '{1}'",
+     "配列の reduce() は要素型 '{1}' に対しアキュムレータ型 '{0}' に対応していません"},
 };
 // clang-format on
 

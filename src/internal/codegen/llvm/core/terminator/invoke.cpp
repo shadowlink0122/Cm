@@ -72,14 +72,28 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
 
     // ランタイム側の要素型・戻り値型
     // map: elem→elem / filter・some・every・findIndex: 述語系はi8 / reduce: acc / forEach: void
-    const bool isI64 = funcName.find("_i64") != std::string::npos;
+    // 要素型は関数名の幅サフィックスから導出する（局所処理調査E系。従来は_i64有無の二択でtiny/short/float/double要素のクロージャHOFが扱えなかった）
     const bool isFilter = funcName.find("filter") != std::string::npos;
     const bool isPredicate = funcName.find("_some_") != std::string::npos ||
                              funcName.find("_every_") != std::string::npos;
     const bool isFindIndex = funcName.find("_findIndex_") != std::string::npos;
     const bool isForEach = funcName.find("_forEach_") != std::string::npos;
-    llvm::Type* elemTy = isI64 ? i64Ty : i32Ty;
-    llvm::Type* retTy = elemTy;
+    auto has_suffix = [&](const char* sfx) { return funcName.find(sfx) != std::string::npos; };
+    llvm::Type* elemTy = i32Ty;
+    if (has_suffix("_i8")) {
+        elemTy = ctx.getI8Type();
+    } else if (has_suffix("_i16")) {
+        elemTy = ctx.getI16Type();
+    } else if (has_suffix("_i64")) {
+        elemTy = i64Ty;
+    } else if (has_suffix("_f32")) {
+        elemTy = ctx.getF32Type();
+    } else if (has_suffix("_f64")) {
+        elemTy = ctx.getF64Type();
+    }
+    // アキュムレータ型は要素型と同じ。混合幅版（_i32_acc64）のみ64bit整数（従来はi32のサンクを合成しランタイムの(i64,i32)コールバックと食い違っていた）
+    llvm::Type* accTy = has_suffix("_acc64") ? i64Ty : elemTy;
+    llvm::Type* retTy = isReduce ? accTy : elemTy;
     if (isFilter || isPredicate || isFindIndex) {
         retTy = ctx.getI8Type();
     } else if (isForEach) {
@@ -120,7 +134,7 @@ void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& call
         // サンクの引数: env + （reduceはacc, elem / それ以外はelem）
         std::vector<llvm::Type*> thunkParams = {ptrTy};
         if (isReduce) {
-            thunkParams.push_back(elemTy);  // acc
+            thunkParams.push_back(accTy);  // acc（混合幅版は要素型と異なる）
         }
         thunkParams.push_back(elemTy);  // elem
         auto* thunkTy = llvm::FunctionType::get(retTy, thunkParams, false);

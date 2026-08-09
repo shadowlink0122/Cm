@@ -1,0 +1,35 @@
+// 固定長配列sort/reverse・sortByの要素幅ディスパッチ確認（局所処理調査E系: 従来はi32形状固定でdouble/longが無診断で壊れていた）
+import std::io::println;
+
+int main() {
+    // 固定長double配列のsort（スライス汎用ソートへ相乗り）
+    double[3] da = [3.5, 1.5, 2.5];
+    double[] ds = da.sort();
+    println("{ds[0]} {ds[1]} {ds[2]}");
+
+    // 固定長double配列のreverse
+    double[3] dr = [1.5, 2.5, 3.5];
+    double[] drev = dr.reverse();
+    println("{drev[0]} {drev[2]}");
+
+    // 固定長long配列のsort（符号つき64bit比較）
+    long[3] la = [30, -10, 20];
+    long[] lsorted = la.sort();
+    println("{lsorted[0]} {lsorted[2]}");
+
+    // スライスのsortBy（long要素・比較関数が効くこと）
+    long[] ls = [30, 10, 20];
+    long[] lt = ls.sortBy((long a, long b) => (a - b) as int);
+    println("{lt[0]} {lt[1]} {lt[2]}");
+
+    // スライスのsortBy（double要素）
+    double[] dd = [9.5, 7.5, 8.5];
+    double[] dt = dd.sortBy((double a, double b) => (a * 10.0 - b * 10.0) as int);
+    println("{dt[0]} {dt[2]}");
+
+    // スライスのsortBy（tiny要素）
+    tiny[] ta = [3 as tiny, 1 as tiny, 2 as tiny];
+    tiny[] ts = ta.sortBy((tiny a, tiny b) => (a - b) as int);
+    println("{ts[0]} {ts[2]}");
+    return 0;
+}

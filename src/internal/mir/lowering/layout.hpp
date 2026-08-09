@@ -9,7 +9,7 @@
 
 #include "context.hpp"
 #include "internal/base/target.hpp"
-#include "slice_dispatch.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 
 #include <cstdint>
 
@@ -33,7 +33,7 @@ int64_t slice_elem_stride_of(const hir::TypePtr& resolved_elem, AggregateSizeFn&
     if (!resolved_elem) {
         return 4;
     }
-    if (auto info = slice_scalar_info(resolved_elem->kind)) {
+    if (auto info = hir::slice_scalar_info(resolved_elem->kind)) {
         return info->elem_size;
     }
     switch (resolved_elem->kind) {
@@ -64,7 +64,7 @@ int64_t array_elem_stride_of(const hir::TypePtr& resolved_elem, AggregateSizeFn&
     if (!resolved_elem) {
         return 4;
     }
-    if (auto info = slice_scalar_info(resolved_elem->kind)) {
+    if (auto info = hir::slice_scalar_info(resolved_elem->kind)) {
         return info->elem_size;
     }
     switch (resolved_elem->kind) {

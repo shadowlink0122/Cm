@@ -3,7 +3,7 @@
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/mono/typekey.hpp"
-#include "internal/mir/lowering/slice_dispatch.hpp"
+#include "internal/hir/slice_dispatch.hpp"
 
 #include <functional>
 #include <memory>
@@ -671,7 +671,7 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             get_func = "cm_slice_get_subslice";
         } else if (elem_type) {
             auto elem_kind = elem_type->kind;
-            if (auto info = slice_scalar_info(elem_kind)) {
+            if (auto info = hir::slice_scalar_info(elem_kind)) {
                 // スカラ型: 幅サフィックスをslice_dispatchから取得（elem_sizeと整合。C4）
                 get_func = std::string("cm_slice_get_") + info->width;
             } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {

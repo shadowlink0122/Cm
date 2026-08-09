@@ -159,7 +159,7 @@ string[] names = people
 // ["Alice", "Carol"]
 ```
 
-> バックエンド注記: 構造体スライスの高階メソッド（filter/map/indexOf/includes/pop）や、グローバル・構造体メンバのスライスへのミューテーションは js/ts バックエンドで動作します（JS配列に対応）。native/jit では基本操作（push/len/添字/for-in/引数・戻り値/要素フィールド更新）に限られます。可変長データを扱うWeb開発等では `--target=ts` を使ってください。
+> バックエンド注記: スカラー要素（tiny/short/int/long/float/double とその符号なし版）の高階メソッドは全バックエンドで動作します。構造体スライスの高階メソッド（filter/map等）やグローバル・構造体メンバのスライスへのミューテーションは js/ts バックエンド専用で（JS配列に対応）、native/jit/wasm ではコンパイルエラーになります（従来は無診断で誤動作していました）。native/jit の構造体スライスは基本操作（push/len/添字/for-in/引数・戻り値/要素フィールド更新/first/last）に限られます。可変長の構造体データを扱うWeb開発等では `--target=ts` を使ってください。
 
 ---
 

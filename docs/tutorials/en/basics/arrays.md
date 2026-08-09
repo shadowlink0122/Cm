@@ -125,6 +125,9 @@ int main() {
 
 Method calls with function arguments can also be used directly inside string interpolation (e.g. `println("{numbers.some(is_even)}")`).
 
+Higher-order methods work for all scalar element widths (tiny/short/int/long/float/double and their unsigned variants), and the result type of `reduce` follows the callback's accumulator type (a `double` sum can be received as `double`).
+Higher-order methods on struct or string elements are js/ts-only (their lowering does not depend on the element type); on native/jit/wasm they are a compile error (they used to return wrong values without any diagnostic).
+
 ## Sorting and First/Last
 
 ```cm
