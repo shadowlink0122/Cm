@@ -1,0 +1,37 @@
+// sizeof/__sizeof__ の被演算子が型か式かの判定（局所処理調査A2）:
+// 識別子始まりでも . ( 二項演算子 が続けば式として解析し、添字 a[0] は変数被添字なら要素型サイズを返す。
+// 旧: sizeof(f())/sizeof(p.x)/sizeof(x+y) はパースエラー、sizeof(a[0]) は要素数0の配列サイズ計算で無診断の0
+import std::io::println;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int f() {
+    return 3;
+}
+
+int main() {
+    int[3] a = [10, 20, 30];
+    int[] s = a;
+    Point p = Point{x: 1, y: 2};
+
+    // 式として解析されるべき被演算子
+    println("member {sizeof(p.x)}");
+    println("call {sizeof(f())}");
+    println("arith {sizeof(1 + 2)}");
+    println("index {sizeof(a[0])}");
+    println("slice {sizeof(s[0])}");
+    println("intrinsic_member {__sizeof__(p.x)}");
+    println("intrinsic_index {__sizeof__(a[0])}");
+
+    // 型として解析されるべき被演算子（回帰確認）
+    println("kw {sizeof(int)}");
+    println("named {sizeof(Point)}");
+    println("named_array {sizeof(Point[2])}");
+    println("kw_array {sizeof(int[3])}");
+    println("intrinsic_named {__sizeof__(Point)}");
+
+    return 0;
+}

@@ -77,6 +77,41 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                         sizeof_expr->target_type = nullptr;
                     }
                 }
+            } else if (target_type->kind == ast::TypeKind::Array) {
+                // A2: Ident[N] が「型の配列」ではなく「変数の添字」の場合の救済。
+                // sizeof(a[0]) は配列型 Array(Struct("a"),0) と解析されるが a が変数（配列/スライス）なら
+                // a[0] は要素であり要素型のサイズを返すべき（従来は要素数0の配列サイズ計算で無診断の0を返していた）。
+                // 最内の被要素名を辿り、その名が型でなく変数を指すなら添字段数だけ要素型を剥がす
+                int idx_depth = 0;
+                ast::Type* inner = target_type.get();
+                while (inner && inner->kind == ast::TypeKind::Array) {
+                    ++idx_depth;
+                    inner = inner->element_type.get();
+                }
+                if (inner && inner->kind == ast::TypeKind::Struct) {
+                    const std::string base = inner->name;
+                    const bool is_valid_type =
+                        typedef_defs_.count(base) > 0 || struct_defs_.count(base) > 0;
+                    if (!is_valid_type) {
+                        auto sym = scopes_.current().lookup(base);
+                        if (sym && sym->type) {
+                            ast::TypePtr elem = sym->type;
+                            bool ok = true;
+                            for (int d = 0; d < idx_depth && ok; ++d) {
+                                auto r = resolve_typedef(elem);
+                                if (r && r->kind == ast::TypeKind::Array && r->element_type) {
+                                    elem = r->element_type;
+                                } else {
+                                    ok = false;
+                                }
+                            }
+                            if (ok && elem && elem->kind != ast::TypeKind::Error) {
+                                mark_variable_initialized(base);
+                                sizeof_expr->target_type = elem;
+                            }
+                        }
+                    }
+                }
             }
         }
         // sizeof(式) の場合は式の型チェックを行う（コンパイル時のメタ情報取得であり値は読まないため、未初期化チェックの対象外）

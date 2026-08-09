@@ -91,52 +91,7 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found 'sizeof' expression",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-
-        // sizeof内では、型として解析できるものは全て型として解析
-        // キーワード型、識別子（ユーザー定義型）、ポインタ(*)、参照(&)、配列([)
-        bool could_be_type = false;
-        switch (current().kind) {
-            case TokenKind::KwAuto:
-            case TokenKind::KwVoid:
-            case TokenKind::KwBool:
-            case TokenKind::KwTiny:
-            case TokenKind::KwShort:
-            case TokenKind::KwInt:
-            case TokenKind::KwLong:
-            case TokenKind::KwUtiny:
-            case TokenKind::KwUshort:
-            case TokenKind::KwUint:
-            case TokenKind::KwUlong:
-            case TokenKind::KwIsize:
-            case TokenKind::KwUsize:
-            case TokenKind::KwFloat:
-            case TokenKind::KwDouble:
-            case TokenKind::KwUfloat:
-            case TokenKind::KwUdouble:
-            case TokenKind::KwChar:
-            case TokenKind::KwString:
-            case TokenKind::KwCstring:
-            case TokenKind::Star:
-            case TokenKind::Amp:
-            case TokenKind::LBracket:
-            case TokenKind::Ident:
-                could_be_type = true;
-                break;
-            default:
-                break;
-        }
-
-        if (could_be_type) {
-            auto type = parse_type();
-            type = check_array_suffix(std::move(type));  // T*, T[N] などをサポート
-            expect(TokenKind::RParen);
-            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
-        } else {
-            // 式として解析
-            auto expr = parse_expr();
-            expect(TokenKind::RParen);
-            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
-        }
+        return parse_sizeof_operand(start_pos);
     }
 
     // typeof式 - typeof(式) で型名を文字列として取得
@@ -161,50 +116,7 @@ ast::ExprPtr Parser::parse_primary() {
         debug::par::log(debug::par::Id::PrimaryExpr, "Found '__sizeof__' intrinsic",
                         debug::Level::Debug);
         expect(TokenKind::LParen);
-
-        // sizeof と同じロジックで型または式を解析
-        bool could_be_type = false;
-        switch (current().kind) {
-            case TokenKind::KwAuto:
-            case TokenKind::KwVoid:
-            case TokenKind::KwBool:
-            case TokenKind::KwTiny:
-            case TokenKind::KwShort:
-            case TokenKind::KwInt:
-            case TokenKind::KwLong:
-            case TokenKind::KwUtiny:
-            case TokenKind::KwUshort:
-            case TokenKind::KwUint:
-            case TokenKind::KwUlong:
-            case TokenKind::KwIsize:
-            case TokenKind::KwUsize:
-            case TokenKind::KwFloat:
-            case TokenKind::KwDouble:
-            case TokenKind::KwUfloat:
-            case TokenKind::KwUdouble:
-            case TokenKind::KwChar:
-            case TokenKind::KwString:
-            case TokenKind::KwCstring:
-            case TokenKind::Star:
-            case TokenKind::Amp:
-            case TokenKind::LBracket:
-            case TokenKind::Ident:
-                could_be_type = true;
-                break;
-            default:
-                break;
-        }
-
-        if (could_be_type) {
-            auto type = parse_type();
-            type = check_array_suffix(std::move(type));
-            expect(TokenKind::RParen);
-            return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
-        } else {
-            auto expr = parse_expr();
-            expect(TokenKind::RParen);
-            return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
-        }
+        return parse_sizeof_operand(start_pos);
     }
 
     // コンパイラ組み込み関数 __typeof__(expr)
@@ -769,6 +681,118 @@ ast::ExprPtr Parser::parse_lambda_body(std::vector<ast::Param> params, uint32_t 
 
     debug::par::log(debug::par::Id::PrimaryExpr, "Lambda expression parsed", debug::Level::Debug);
     return std::make_unique<ast::Expr>(std::move(lambda), Span{start_pos, previous().end});
+}
+
+// sizeof被演算子が識別子始まりのとき、型パスが閉じ括弧に達すれば型・途中に式演算子が現れれば式と非破壊で判定する（局所処理調査A2）。
+// sizeof(Point)/sizeof(Point*)/sizeof(Point[2])/sizeof(Vec<int>) は型、sizeof(p.x)/sizeof(f())/sizeof(x+y) は式に分かれる。
+// 識別子始まりの添字 sizeof(a[0]) は型パスとして受理し、変数被添字かどうかは型チェッカで救済する（要素型サイズを返す）
+bool Parser::sizeof_operand_ident_is_type() const {
+    size_t i = pos_;
+    if (i >= tokens_.size() || tokens_[i].kind != TokenKind::Ident) {
+        return false;
+    }
+    ++i;  // 先頭識別子
+    // 名前空間修飾 ns::Type
+    while (i + 1 < tokens_.size() && tokens_[i].kind == TokenKind::ColonColon &&
+           tokens_[i + 1].kind == TokenKind::Ident) {
+        i += 2;
+    }
+    // ジェネリック型引数 <...>（バランスが取れる場合のみ型パスに含める。閉じなければ < は比較演算子とみなす）
+    if (i < tokens_.size() && tokens_[i].kind == TokenKind::Lt) {
+        size_t j = i + 1;
+        int depth = 1;
+        while (j < tokens_.size() && depth > 0) {
+            const TokenKind k = tokens_[j].kind;
+            if (k == TokenKind::Lt) {
+                ++depth;
+            } else if (k == TokenKind::Gt) {
+                --depth;
+            } else if (k == TokenKind::GtGt) {
+                depth -= 2;
+            } else if (k == TokenKind::Semicolon || k == TokenKind::LBrace ||
+                       k == TokenKind::RBrace || k == TokenKind::Eof) {
+                break;  // 型引数内に出現しないトークン → 比較演算子
+            }
+            ++j;
+        }
+        if (depth <= 0) {
+            i = j;  // <...> を消費
+        }
+    }
+    // ポインタ/参照サフィックス連鎖 * &
+    while (i < tokens_.size() &&
+           (tokens_[i].kind == TokenKind::Star || tokens_[i].kind == TokenKind::Amp)) {
+        ++i;
+    }
+    // 配列サフィックス連鎖 [...]（バランス）
+    while (i < tokens_.size() && tokens_[i].kind == TokenKind::LBracket) {
+        size_t j = i + 1;
+        int depth = 1;
+        while (j < tokens_.size() && depth > 0) {
+            const TokenKind k = tokens_[j].kind;
+            if (k == TokenKind::LBracket) {
+                ++depth;
+            } else if (k == TokenKind::RBracket) {
+                --depth;
+            } else if (k == TokenKind::Eof) {
+                break;
+            }
+            ++j;
+        }
+        if (depth != 0) {
+            break;
+        }
+        i = j;
+    }
+    return i < tokens_.size() && tokens_[i].kind == TokenKind::RParen;
+}
+
+// sizeof/__sizeof__ の被演算子（'(' 消費済み）を型/式のいずれかで解析しノードを返す（局所処理調査A2: 両組込の重複switchを一本化）
+ast::ExprPtr Parser::parse_sizeof_operand(uint32_t start_pos) {
+    bool could_be_type = false;
+    switch (current().kind) {
+        case TokenKind::KwAuto:
+        case TokenKind::KwVoid:
+        case TokenKind::KwBool:
+        case TokenKind::KwTiny:
+        case TokenKind::KwShort:
+        case TokenKind::KwInt:
+        case TokenKind::KwLong:
+        case TokenKind::KwUtiny:
+        case TokenKind::KwUshort:
+        case TokenKind::KwUint:
+        case TokenKind::KwUlong:
+        case TokenKind::KwIsize:
+        case TokenKind::KwUsize:
+        case TokenKind::KwFloat:
+        case TokenKind::KwDouble:
+        case TokenKind::KwUfloat:
+        case TokenKind::KwUdouble:
+        case TokenKind::KwChar:
+        case TokenKind::KwString:
+        case TokenKind::KwCstring:
+        case TokenKind::Star:
+        case TokenKind::Amp:
+        case TokenKind::LBracket:
+            could_be_type = true;
+            break;
+        case TokenKind::Ident:
+            // 識別子始まりは型パスが閉じ括弧に達する場合のみ型として解析する（. ( 二項演算子 等が続けば式）
+            could_be_type = sizeof_operand_ident_is_type();
+            break;
+        default:
+            break;
+    }
+
+    if (could_be_type) {
+        auto type = parse_type();
+        type = check_array_suffix(std::move(type));  // T*, T[N] などをサポート
+        expect(TokenKind::RParen);
+        return ast::make_sizeof(std::move(type), Span{start_pos, previous().end});
+    }
+    auto expr = parse_expr();
+    expect(TokenKind::RParen);
+    return ast::make_sizeof_expr(std::move(expr), Span{start_pos, previous().end});
 }
 
 }  // namespace cm

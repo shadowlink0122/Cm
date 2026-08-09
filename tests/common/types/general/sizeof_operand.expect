@@ -1,0 +1,12 @@
+member 4
+call 4
+arith 4
+index 4
+slice 4
+intrinsic_member 4
+intrinsic_index 4
+kw 4
+named 8
+named_array 16
+kw_array 12
+intrinsic_named 8

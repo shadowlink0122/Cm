@@ -115,6 +115,10 @@ class Parser {
     std::string expect_ident();
     std::string current_text() const;
     bool is_type_start();
+    // sizeof/__sizeof__ の被演算子を型/式のいずれとして解析するか判定し対応ノードを返す（両組込で共通化。局所処理調査A2）
+    ast::ExprPtr parse_sizeof_operand(uint32_t start_pos);
+    // sizeof被演算子が識別子始まりのとき、型パス（名前・ジェネリック引数・ポインタ/配列サフィックス）が閉じ括弧に達すれば型、途中に式演算子（. ( 二項演算子 等）が現れれば式と非破壊で判定する
+    bool sizeof_operand_ident_is_type() const;
 
     // ============================================================
     // モジュール関連パーサ（module/ 配下で実装）

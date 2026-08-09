@@ -18,7 +18,7 @@
 
 ---
 
-## A. 型文法の複製（正準 `parse_type`/`parse_type_with_union` からのドリフト）
+## A. 型文法の複製（正準 `parse_type`/`parse_type_with_union` からのドリフト）【一部処置済み】
 
 同じ完全な型が「あらゆる型位置」で受理されるべきなのに、呼び出し側の型判定ホワイトリストや部分文法が正準からずれて一部を落とす。
 
@@ -29,6 +29,8 @@
 - **A5 [reject] ジェネリック型引数が union を受理しない**（`src/internal/syntax/parser/parser_type.cpp:337`）。`Foo<int | string>` が失敗する。引数ループが `parse_type` を使うため。`V[]` やフィールド等では union が通るのと非対称。
 - **A6 [silent] `__alignof__` に式経路が無い**（`src/internal/syntax/parser/expr/primary.cpp:244-251`）。`__alignof__(x)`（x:int）が未解決名の既定アラインで **8を無診断で返す**（正4）。sizeof の変数救済が alignof には無い。
 - （補足）配列サイズ文法が `IntLiteral` か素の `Ident` のみを受け付け（`parser_type.cpp` `check_array_suffix`）、`int[2+1]`・`int[sizeof(int)]` 等の定数式が型位置に合成できない。
+
+**処置記録（A2）**: sizeof/`__sizeof__` の被演算子判定を共通ヘルパ `parse_sizeof_operand` へ一本化し（両組込に重複していた `could_be_type` スイッチを解消）、識別子始まりの被演算子は型パス（名前・`::`修飾・ジェネリック引数・ポインタ/配列サフィックス）が閉じ括弧まで到達する場合のみ型として解析する非破壊判定 `sizeof_operand_ident_is_type` を追加した。これにより `sizeof(p.x)`・`sizeof(f())`・`sizeof(x+y)` は式として解析され（従来はパースエラー）、型形の `sizeof(Point)`・`sizeof(Point*)`・`sizeof(Point[2])`・`sizeof(int[3])`・`__sizeof__(T)` は従来どおり型として解析される。識別子始まりの添字 `sizeof(a[0])` は型パスとして受理したうえで、型チェッカのsizeof救済を配列型へ拡張し、最内の被要素名が型でなく変数（配列/スライス）を指す場合は添字段数だけ要素型を剥がして要素型サイズを返すようにした（従来は要素数0の配列サイズ計算で無診断の0を返していた）。回帰テスト: `tests/common/types/general/sizeof_operand.cm`。残課題: A1（`typeof`/`(` を宣言開始と認識する `is_type_start` 拡張。`typeof` 宣言型は被演算式を保持するB系の解決が前提）と補足の配列サイズ定数式（`int[2+1]`）は本処置の対象外。
 
 ## B. `typeof` 型のスタブ化（被演算式を捨てる）
 
@@ -115,7 +117,7 @@
 
 1. **[Critical] E系: 高階関数を `slice_dispatch.hpp` へ移行し、checkerに要素型ゲートを追加**（無診断の誤コンパイル/クラッシュを解消）。`sort`/`indexOf` が既にやっている汎用形へ揃える。→ **処置済み**（E節の処置記録参照）
 2. **[Critical] C系: 期待型伝播を透過ノードへ拡張**（三項・matchアーム・ジェネリック実引数置換）。無名リテラルの無診断ゼロ化を解消。→ **処置済み**（C節の処置記録参照）
-3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。
+3. **[High] A系: 型文法の呼び出し側複製を正準へ集約**。`is_type_start` を `parse_type` と整合させる（または投機パース化）、sizeof/alignof/as-is が同じ型パーサ経路を使う、paren・generic-arg を `parse_type_with_union` に。合わせてsizeof/alignofに変数救済を通す。→ **A2は処置済み**（A節の処置記録参照。sizeof被演算子判定の共通化・変数被添字の要素型サイズ救済）。残るA1（`is_type_start`の`typeof`/`(`拡張）はB系のtypeof解決が前提のため据え置き。
 4. **[High] G1: JSの無指定補間に符号情報を渡し `asUintN` を適用**（silentな値破壊）。A2/A6/B1/B2のsizeof/typeof/alignof無診断誤値もここで一掃。→ **G1は解消済みを確認**（R20の補間統一で修正済み。G節参照。sizeof/typeof/alignofの無診断誤値はA/B系の残課題）
 5. **[Medium] D系: 補間を本物の式パーサへ**（digit/`:`/配列リテラル始まりの制限撤廃）。[type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) の「補間のパース時脱糖」を式全域へ。
 6. **[Medium] F系: 縮小診断を全変換文脈で一律化**（引数・配列要素・フィールド初期化）。→ **処置済み**（F節の処置記録参照）
