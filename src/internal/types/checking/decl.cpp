@@ -572,11 +572,16 @@ void TypeChecker::check_declaration(ast::Decl& decl) {
         }
 
         // 構造体の全フィールドの型が有効かチェック
-        for (const auto& field : st->fields) {
+        for (auto& field : st->fields) {
             if (field.type && !is_valid_type(field.type)) {
                 error(decl.span,
                       i18n::msgf(i18n::MsgId::TcUndefinedTypeFieldStruct,
                                  ast::type_to_string(*field.type), field.name, st->name));
+            }
+            // フィールドのconstパラメータ配列サイズ（int[N]）を具体サイズへ解決する。
+            // 従来はローカル宣言（check_let）でのみ解決され、フィールドは未解決のままでnative/jitのレイアウトが壊れ無出力になっていた
+            if (field.type) {
+                resolve_array_size(field.type);
             }
         }
 
