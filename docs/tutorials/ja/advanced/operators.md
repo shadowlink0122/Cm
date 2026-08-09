@@ -137,6 +137,40 @@ impl Vec2 for Sub {
 
 どちらの形でも演算子の使い方・複合代入の自動対応は同じです。存在しないインターフェース名を指定した場合（`impl T for Nope`）はコンパイルエラーになります。ジェネリック関数本体での境界付き算術（`<T: Add> T sum(T a, T b) { return a + b; }`）は現時点では未対応です（比較演算子の`<T: Ord>`は使用可能）。
 
+## ジェネリック構造体の比較演算子impl
+
+ジェネリック構造体にも比較演算子（`Eq`/`Ord`）を`impl S<T> for Eq`・`impl S<T> for Ord`の形で実装できます。特殊化ごとに演算子が単相化され、`>`・`<=`・`>=`は`<`の実装から自動導出されます。
+
+```cm
+struct Vec2<T> {
+    T x;
+    T y;
+}
+
+impl Vec2<T> for Ord {
+    operator bool <(Vec2<T> other) {
+        if (self.x < other.x) { return true; }
+        if (self.x > other.x) { return false; }
+        return self.y < other.y;
+    }
+}
+
+impl Vec2<T> for Eq {
+    operator bool ==(Vec2<T> other) {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+int main() {
+    Vec2<int> a = Vec2<int>{x: 1, y: 2};
+    Vec2<int> b = Vec2<int>{x: 1, y: 3};
+    println("{a < b} {a == b}");  // true false
+    return 0;
+}
+```
+
+算術演算子（`Add`等）のジェネリック構造体implは、本体の`self.x + other.x`（`x`が型パラメータ`T`）が現時点の型検査で数値境界を持たないため未対応です（比較演算子のみ対応）。
+
 ## ビット演算子
 
 ```cm

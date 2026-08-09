@@ -1,0 +1,5 @@
+lt_ab=true lt_ba=false
+gt_ba=true le_ac=true ge_ba=true
+eq_ac=true eq_ab=false
+box_eq_pq=true box_eq_pr=false
+box_str=false

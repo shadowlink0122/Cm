@@ -356,8 +356,10 @@ std::string synthesize_derive_impls(const ast::Program& program) {
         if (!st || st->auto_impls.empty()) {
             continue;
         }
-        // ジェネリック構造体は対象外（総称演算子implのモノモーフ化が未対応のため、
-        // モノモーフ化後の手組み生成経路を維持する。単一総称implへの移行はmono拡張後）
+        // ジェネリック構造体は対象外（総称演算子implのモノモーフ化は実装済みだが、
+        // Hash/Debug/Display/Cssの合成本体はフィールドT上で self.v.hash()/self.v.debug() を呼ぶ形になり、
+        // 型引数がint等のプリミティブのときプリミティブに該当メソッドが無く合成が成立しない。
+        // 単一総称implへの移行にはプリミティブへの一様メソッド付与が前提となるためモノモーフ化後の手組み生成を維持する）
         if (!st->generic_params.empty()) {
             continue;
         }

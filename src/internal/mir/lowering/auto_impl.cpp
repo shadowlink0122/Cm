@@ -734,6 +734,14 @@ void MirLowering::lower_impl_methods(const hir::HirProgram& hir_program) {
 // モノモーフィゼーションを実行
 void MirLowering::perform_monomorphization() {
     monomorphizer.monomorphize(mir_program, hir_functions, struct_defs);
+
+    // 特殊化した総称演算子impl（impl<T> Foo<T> for Eq { operator ... }）をimpl_infoへ登録する。
+    // これによりPass 6のrewrite_struct_comparison_operatorsが特殊化構造体の==/<等を特殊化演算子関数の
+    // 呼び出しへ書き換えられる（従来は特殊化キーが無く生の構造体比較へフォールバックし、
+    // interp/LLVMでネスト構造体・stringフィールドを含む比較が誤値になっていた）
+    for (const auto& so : monomorphizer.specialized_operators()) {
+        impl_info[so.struct_name][so.op_kind] = so.func_name;
+    }
 }
 
 }  // namespace cm::mir

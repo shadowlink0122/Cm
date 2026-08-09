@@ -1,0 +1,73 @@
+// ユーザー定義の総称演算子impl（impl S<T> for Eq/Ord）のモノモーフ化。
+// 演算子呼び出しは生のBinaryOpでスキャンに現れないため、構造体特殊化集合を起点に特殊化を種蒔きする。
+// このファイルは総称関数を一切持たない（演算子implと総称構造体のみ）ため、
+// 種蒔き経路が「総称関数ゼロでも回る」ことも同時に固定する
+import std::io::println;
+
+struct Inner {
+    string tag;
+    int id;
+}
+
+impl Inner for Eq {
+    operator bool ==(Inner other) {
+        return self.tag == other.tag && self.id == other.id;
+    }
+}
+
+struct Vec2<T> {
+    T x;
+    T y;
+}
+
+// Ordは非対称。特殊化演算子のself/other取り違え（生ポインタ比較へのフォールバック）を検出する
+impl Vec2<T> for Ord {
+    operator bool <(Vec2<T> other) {
+        if (self.x < other.x) {
+            return true;
+        }
+        if (self.x > other.x) {
+            return false;
+        }
+        return self.y < other.y;
+    }
+}
+
+impl Vec2<T> for Eq {
+    operator bool ==(Vec2<T> other) {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+struct Box<T> {
+    T v;
+}
+
+impl Box<T> for Eq {
+    operator bool ==(Box<T> other) {
+        return self.v == other.v;
+    }
+}
+
+int main() {
+    Vec2<int> a = { x: 1, y: 2 };
+    Vec2<int> b = { x: 1, y: 3 };
+    Vec2<int> c = { x: 1, y: 2 };
+    // 辞書式順序: a < b（y 2<3）、b < a は偽
+    println("lt_ab={a < b} lt_ba={b < a}");
+    // 導出比較演算子 >, <=, >= も < の特殊化から導出される
+    println("gt_ba={b > a} le_ac={a <= c} ge_ba={b >= a}");
+    println("eq_ac={a == c} eq_ab={a == b}");
+
+    // ネスト構造体を型引数に持つ総称Eq（フィールドのop_eqへ委譲）
+    Box<Inner> p = { v: { tag: "x", id: 1 } };
+    Box<Inner> q = { v: { tag: "x", id: 1 } };
+    Box<Inner> r = { v: { tag: "y", id: 1 } };
+    println("box_eq_pq={p == q} box_eq_pr={p == r}");
+
+    // string型引数の総称Eq（内容比較）
+    Box<string> s1 = { v: "hello" };
+    Box<string> s2 = { v: "world" };
+    println("box_str={s1 == s2}");
+    return 0;
+}

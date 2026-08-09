@@ -137,6 +137,40 @@ impl Vec2 for Sub {
 
 Operator usage and automatic compound-assignment support are identical in both forms. Specifying an undeclared interface name (`impl T for Nope`) is a compile error. Bounded arithmetic inside generic function bodies (`<T: Add> T sum(T a, T b) { return a + b; }`) is not supported yet (comparison with `<T: Ord>` is available).
 
+## Comparison operator impls on generic structs
+
+Generic structs can implement the comparison operators (`Eq`/`Ord`) with `impl S<T> for Eq` / `impl S<T> for Ord`. The operator is monomorphized per specialization, and `>`, `<=`, `>=` are derived automatically from the `<` implementation.
+
+```cm
+struct Vec2<T> {
+    T x;
+    T y;
+}
+
+impl Vec2<T> for Ord {
+    operator bool <(Vec2<T> other) {
+        if (self.x < other.x) { return true; }
+        if (self.x > other.x) { return false; }
+        return self.y < other.y;
+    }
+}
+
+impl Vec2<T> for Eq {
+    operator bool ==(Vec2<T> other) {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+int main() {
+    Vec2<int> a = Vec2<int>{x: 1, y: 2};
+    Vec2<int> b = Vec2<int>{x: 1, y: 3};
+    println("{a < b} {a == b}");  // true false
+    return 0;
+}
+```
+
+Arithmetic operator impls on generic structs (e.g. `Add`) are not supported yet because the body's `self.x + other.x` (where `x` is the type parameter `T`) has no numeric bound under the current type checker (only the comparison operators are supported).
+
 ## Bitwise Operators
 
 ```cm

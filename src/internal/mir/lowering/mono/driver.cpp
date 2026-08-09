@@ -43,7 +43,18 @@ void Monomorphization::monomorphize(
         }
     }
 
-    if (generic_funcs.empty()) {
+    // 総称演算子impl（impl<T> Foo<T> for Eq { operator ... }）はHIR関数を持たずgeneric_funcsに含まれない。
+    // 演算子implだけを持つプログラム（総称関数が無い）でも種蒔き経路を回すため、その有無を別途判定する
+    bool has_generic_operator_impl = false;
+    for (const auto& func : program.functions) {
+        if (func && func->name.find('<') != std::string::npos &&
+            func->name.find(">__op_") != std::string::npos) {
+            has_generic_operator_impl = true;
+            break;
+        }
+    }
+
+    if (generic_funcs.empty() && !has_generic_operator_impl) {
         debug_msg("MONO", "No generic functions found");
         fix_struct_method_self_args(program);
         return;
@@ -71,6 +82,11 @@ void Monomorphization::monomorphize(
                 continue;
             scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
         }
+
+        // 総称演算子impl（impl<T> Foo<T> for Eq { operator ... }）の特殊化を種蒔きする。
+        // 演算子呼び出しは生のBinaryOpのままでスキャンに現れないため、構造体特殊化集合を起点に要求を作る。
+        // 固定点内で呼ぶことで、後続パスで新たに現れる構造体特殊化にも追随する
+        seed_operator_specializations(program, needed);
 
         // 既に生成済みの特殊化を除外（キー=特殊化シンボル名）
         SpecRequests new_needed;

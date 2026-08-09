@@ -30,6 +30,18 @@ class Monomorphization : public MirLoweringBase {
     // キー=特殊化シンボル名（型引数はarg_symbol_keyで一意にエンコード済みのため重複判定を兼ねる）
     using SpecRequests = std::map<std::string, SpecRequest>;
 
+    // 特殊化した総称演算子impl（impl<T> Foo<T> for Eq { operator ... }）の記録。
+    // 演算子呼び出しは生のBinaryOpのため呼び出しサイト走査で拾えず、構造体特殊化集合を起点に特殊化する。
+    // モノモーフ化後にMirLoweringがimpl_infoへ登録し、Pass 6の演算子→関数呼び出し書き換えが引き当てる
+    struct SpecializedOperator {
+        std::string struct_name;  // 特殊化構造体キー（Pass 6のローカル型名と一致）
+        std::string op_kind;      // impl_infoキー（Eq/Ord/Add...）
+        std::string func_name;  // 特殊化演算子関数名
+    };
+    const std::vector<SpecializedOperator>& specialized_operators() const {
+        return specialized_operators_;
+    }
+
     // プログラム全体のモノモーフィゼーション
     void monomorphize(
         MirProgram& program,
@@ -50,6 +62,11 @@ class Monomorphization : public MirLoweringBase {
 
     // 生成済みの特殊化構造体名を追跡
     std::unordered_set<std::string> generated_struct_specializations;
+
+    // 特殊化した総称演算子implの記録（MirLoweringがimpl_info登録に使用）
+    std::vector<SpecializedOperator> specialized_operators_;
+    // 種蒔き済みの演算子特殊化名（固定点反復での重複種蒔きを防ぐ）
+    std::unordered_set<std::string> seeded_operator_specs_;
 
     // ジェネリック構造体のモノモーフィゼーション
     void monomorphize_structs(MirProgram& program);
@@ -116,6 +133,10 @@ class Monomorphization : public MirLoweringBase {
     // ジェネリック関数を削除
     void cleanup_generic_functions(MirProgram& program,
                                    const std::unordered_set<std::string>& generic_funcs);
+
+    // 生成済み構造体特殊化を起点に総称演算子implの特殊化要求を種蒔きする。
+    // 演算子の呼び出しサイトは生のBinaryOpでスキャンに現れないため、構造体特殊化集合から要求を作る
+    void seed_operator_specializations(MirProgram& program, SpecRequests& needed);
 
     // 呼び出しサイトの実引数型・戻り値格納先型（MIRローカルの型ツリー）から型パラメータを構造的単一化で推論する
     std::vector<hir::TypePtr> infer_type_args(const MirFunction* caller,

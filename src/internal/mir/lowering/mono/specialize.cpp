@@ -43,11 +43,11 @@ void Monomorphization::generate_generic_specializations(
         if (!original_mir)
             continue;
 
-        // HIR関数から型パラメータ名を取得
+        // HIR関数から型パラメータ名を取得（総称演算子implはHIR関数(HirFunction)を持たないためnull許容。
+        // その場合は総称シンボル名の<...>部から型パラメータ名を復元する）
         auto hir_it = hir_functions.find(func_name);
-        if (hir_it == hir_functions.end())
-            continue;
-        const auto* hir_func = hir_it->second;
+        const hir::HirFunction* hir_func =
+            (hir_it != hir_functions.end()) ? hir_it->second : nullptr;
 
         // 型置換マップを作成（パラメータ名→型引数ツリー。名前からの型復元は行わない）
         std::unordered_map<std::string, hir::TypePtr> type_subst;
@@ -57,7 +57,7 @@ void Monomorphization::generate_generic_specializations(
 
         // 型パラメータ名の取得: 総称関数はgeneric_params、implメソッドは総称シンボル名の<...>部
         std::vector<std::string> param_names;
-        if (!hir_func->generic_params.empty()) {
+        if (hir_func && !hir_func->generic_params.empty()) {
             for (const auto& gp : hir_func->generic_params) {
                 param_names.push_back(gp.name);
             }
@@ -93,6 +93,11 @@ void Monomorphization::generate_generic_specializations(
         if (angle_pos != std::string::npos && dunder_pos != std::string::npos) {
             inferred_self_type = struct_symbol_key(func_name.substr(0, angle_pos), type_args);
         }
+        // 総称演算子impl（Foo<T>__op_eq等）は、self/other等の値パラメータが基底構造体名（型引数なし）で
+        // 型付けされている。substitute_type_in_typeでは基底名は変化しないため、特殊化構造体キーへ明示的に再型付けする
+        const bool is_operator_fn = func_name.find(">__op_") != std::string::npos;
+        const std::string op_base =
+            (angle_pos != std::string::npos) ? func_name.substr(0, angle_pos) : std::string();
 
         for (const auto& local : original_mir->locals) {
             LocalDecl new_local = local;
@@ -157,6 +162,15 @@ void Monomorphization::generate_generic_specializations(
                         }
                     };
                     ensure_struct_specialization(new_local.type);
+
+                    // 総称演算子implの値パラメータ等（型引数なしの基底構造体名）を特殊化構造体キーへ再型付け
+                    if (is_operator_fn && !inferred_self_type.empty() && new_local.type &&
+                        new_local.type->kind == hir::TypeKind::Struct &&
+                        new_local.type->name == op_base && new_local.type->type_args.empty()) {
+                        auto spec_struct_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                        spec_struct_type->name = inferred_self_type;
+                        new_local.type = spec_struct_type;
+                    }
                 }
             }
             specialized->locals.push_back(new_local);
@@ -797,12 +811,83 @@ void Monomorphization::cleanup_generic_functions(
                 should_remove = true;
                 debug_msg("MONO", "Removing unspecialized generic function: " + func_name);
             }
+            // 3. 総称演算子impl原本（Foo<T>__op_eq等。特殊化済みで到達不能）。
+            // ジェネリック関数集合(generic_funcs)はhir_functions由来で演算子を含まないため個別に除去する
+            else if (func_name.find('<') != std::string::npos &&
+                     func_name.find(">__op_") != std::string::npos) {
+                should_remove = true;
+                debug_msg("MONO", "Removing unspecialized generic operator: " + func_name);
+            }
         }
         if (should_remove) {
             debug_msg("MONO", "Removing generic function: " + (*it)->name);
             it = program.functions.erase(it);
         } else {
             ++it;
+        }
+    }
+}
+
+// 生成済み構造体特殊化を起点に、総称演算子implの特殊化要求を種蒔きする。
+// 演算子（==/<等）の呼び出しは生のBinaryOpのままPass 6まで残り、scan_generic_callsに現れない。
+// そのため呼び出しサイト駆動では特殊化できず、構造体特殊化集合（Foo__int等）から要求を組み立てる
+void Monomorphization::seed_operator_specializations(MirProgram& program, SpecRequests& needed) {
+    // 総称演算子impl関数（名前に'<'と">__op_"を含む）を基底名・接尾辞で収集する
+    struct GenOp {
+        std::string func_name;  // 例: Foo<T>__op_eq
+        std::string base;       // 例: Foo
+        std::string suffix;     // 例: op_eq
+    };
+    std::vector<GenOp> gen_ops;
+    for (const auto& func : program.functions) {
+        if (!func)
+            continue;
+        const std::string& n = func->name;
+        auto lt = n.find('<');
+        auto op_pos = n.find(">__op_");
+        if (lt == std::string::npos || op_pos == std::string::npos)
+            continue;
+        // ">__op_" の ">__" 3文字を飛ばした残り("op_...")が接尾辞
+        gen_ops.push_back({n, n.substr(0, lt), n.substr(op_pos + 3)});
+    }
+    if (gen_ops.empty())
+        return;
+
+    // 演算子接尾辞→impl_infoキー（Pass 6のrewrite_struct_comparison_operatorsが引き当てる名称）
+    auto op_kind_of = [](const std::string& suffix) -> std::string {
+        static const std::unordered_map<std::string, std::string> kMap = {
+            {"op_eq", "Eq"},         {"op_lt", "Ord"},        {"op_add", "Add"},
+            {"op_sub", "Sub"},       {"op_mul", "Mul"},       {"op_div", "Div"},
+            {"op_mod", "Mod"},       {"op_bitand", "BitAnd"}, {"op_bitor", "BitOr"},
+            {"op_bitxor", "BitXor"}, {"op_shl", "Shl"},       {"op_shr", "Shr"}};
+        auto it = kMap.find(suffix);
+        return it != kMap.end() ? it->second : std::string();
+    };
+
+    for (const auto& struct_name : generated_struct_specializations) {
+        // 特殊化構造体名（Foo__int / Foo$1$...）を基底名+型引数ツリーへ復元する
+        auto decoded = decode_type_name(struct_name);
+        if (!decoded || decoded->type_args.empty())
+            continue;
+        for (const auto& go : gen_ops) {
+            if (go.base != decoded->name)
+                continue;
+            std::string kind = op_kind_of(go.suffix);
+            if (kind.empty())
+                continue;
+            std::string spec_name = make_specialized_name(go.func_name, decoded->type_args);
+            // 固定点反復での重複種蒔きを防ぐ（生成済み判定は駆動側のall_generatedが担う）
+            if (!seeded_operator_specs_.insert(spec_name).second)
+                continue;
+            SpecRequest& req = needed[spec_name];
+            if (req.generic_name.empty()) {
+                req.generic_name = go.func_name;
+                req.type_args = decoded->type_args;
+            }
+            // MirLoweringがモノモーフ化後にimpl_info[struct_name][kind]=spec_nameとして登録する
+            specialized_operators_.push_back({struct_name, kind, spec_name});
+            debug_msg("MONO", "Seeded operator specialization: " + spec_name + " for struct " +
+                                  struct_name + " (" + kind + ")");
         }
     }
 }
