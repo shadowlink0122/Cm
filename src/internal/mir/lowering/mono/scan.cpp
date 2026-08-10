@@ -4,10 +4,10 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <map>
 #include <memory>
@@ -131,9 +131,9 @@ hir::TypePtr Monomorphization::decode_type_name(const std::string& name) const {
         return t;
     }
     // $エンコード名（typekey）は可逆復号を最優先する（フラット文法は本質的に曖昧なため、逆算ヒューリスティックへは渡さない）
-    if (typekey::is_encoded_key(name)) {
-        const std::string base = typekey::base_name_of(name);
-        auto args = typekey::decode_type_args(name);
+    if (ast::typekey::is_encoded_key(name)) {
+        const std::string base = ast::typekey::base_name_of(name);
+        auto args = ast::typekey::decode_type_args(name);
         if (!args.empty()) {
             auto t = std::make_shared<hir::Type>(hir::TypeKind::Struct);
             t->name = base;
@@ -141,26 +141,8 @@ hir::TypePtr Monomorphization::decode_type_name(const std::string& name) const {
             return t;
         }
     }
-    // フラット特殊化名（Vector__int / HashMap__int__string）:
-    // 基底がジェネリック構造体として登録済みの場合のみ型引数を復元する
-    auto dunder = name.find("__");
-    if (dunder != std::string::npos && name.find('<') == std::string::npos) {
-        const std::string base = name.substr(0, dunder);
-        if (hir_struct_defs) {
-            auto sit = hir_struct_defs->find(base);
-            if (sit != hir_struct_defs->end() && sit->second &&
-                !sit->second->generic_params.empty()) {
-                auto args = parse_flat_type_args(base, name.substr(dunder + 2));
-                if (!args.empty()) {
-                    auto t = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                    t->name = base;
-                    t->type_args = std::move(args);
-                    return t;
-                }
-            }
-        }
-    }
     // 表示形（Vector<int>）・プリミティブ・ptr_xxx・非ジェネリック名は既存デコーダで復元
+    // （曖昧なフラット特殊化名Vector__int等の逆算は廃止済み。産生側が$エンコード/表示形へ正準化されている）
     return make_type_from_name(name);
 }
 
@@ -373,7 +355,7 @@ std::vector<hir::TypePtr> Monomorphization::infer_type_args(
         // 実引数がフラット/エンコード名縮退の構造体の場合は復元してから照合する
         if (arg_type->kind == hir::TypeKind::Struct && arg_type->type_args.empty() &&
             (arg_type->name.find("__") != std::string::npos ||
-             typekey::is_encoded_key(arg_type->name))) {
+             ast::typekey::is_encoded_key(arg_type->name))) {
             if (auto decoded = decode_type_name(arg_type->name)) {
                 arg_type = decoded;
             }

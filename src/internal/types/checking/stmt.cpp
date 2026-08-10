@@ -4,6 +4,7 @@
 
 #include "internal/base/i18n.hpp"
 #include "internal/base/mangle.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>
@@ -392,7 +393,10 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     }
 
     if (let.has_ctor_call && let.type) {
-        std::string type_name = ast::type_to_string(*let.type);
+        // ジェネリック型は関数名ドメインの正準接頭辞で組む（HIR側lower_letと同一規則＝移行計画①）
+        std::string type_name = let.type->type_args.empty()
+                                    ? ast::type_to_string(*let.type)
+                                    : ast::typekey::fn_prefix_from_tree(*let.type);
         // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。手組み複製はHIR側と規則が乖離する温床）
         std::string ctor_name =
             mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());

@@ -1,6 +1,6 @@
 #include "builtins.hpp"
 #include "codegen.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "runtime.hpp"
 #include "types.hpp"
 
@@ -124,8 +124,8 @@ const mir::MirStruct* JSCodeGen::findStructDef(const hir::Type& type) const {
         if (lt != std::string::npos) {
             base = base.substr(0, lt);
         }
-        base = cm::mir::typekey::spec_base_name(base);
-        auto key = cm::mir::typekey::struct_key_from_tree(base, type.type_args);
+        base = cm::ast::typekey::spec_base_name(base);
+        auto key = cm::ast::typekey::struct_key_from_tree(base, type.type_args);
         it = struct_map_.find(key);
         if (it != struct_map_.end() && it->second) {
             return it->second;

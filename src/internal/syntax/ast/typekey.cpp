@@ -8,50 +8,50 @@
 #include <string_view>
 #include <vector>
 
-namespace cm::mir::typekey {
+namespace cm::ast::typekey {
 
 namespace {
 
 // プリミティブ型の正規名（エンコードにそのまま使う）
-std::optional<std::string> canonical_primitive_name(hir::TypeKind kind) {
+std::optional<std::string> canonical_primitive_name(ast::TypeKind kind) {
     switch (kind) {
-        case hir::TypeKind::Void:
+        case ast::TypeKind::Void:
             return "void";
-        case hir::TypeKind::Bool:
+        case ast::TypeKind::Bool:
             return "bool";
-        case hir::TypeKind::Tiny:
+        case ast::TypeKind::Tiny:
             return "tiny";
-        case hir::TypeKind::UTiny:
+        case ast::TypeKind::UTiny:
             return "utiny";
-        case hir::TypeKind::Short:
+        case ast::TypeKind::Short:
             return "short";
-        case hir::TypeKind::UShort:
+        case ast::TypeKind::UShort:
             return "ushort";
-        case hir::TypeKind::Int:
+        case ast::TypeKind::Int:
             return "int";
-        case hir::TypeKind::UInt:
+        case ast::TypeKind::UInt:
             return "uint";
-        case hir::TypeKind::Long:
+        case ast::TypeKind::Long:
             return "long";
-        case hir::TypeKind::ULong:
+        case ast::TypeKind::ULong:
             return "ulong";
-        case hir::TypeKind::ISize:
+        case ast::TypeKind::ISize:
             return "isize";
-        case hir::TypeKind::USize:
+        case ast::TypeKind::USize:
             return "usize";
-        case hir::TypeKind::Float:
+        case ast::TypeKind::Float:
             return "float";
-        case hir::TypeKind::UFloat:
+        case ast::TypeKind::UFloat:
             return "ufloat";
-        case hir::TypeKind::Double:
+        case ast::TypeKind::Double:
             return "double";
-        case hir::TypeKind::UDouble:
+        case ast::TypeKind::UDouble:
             return "udouble";
-        case hir::TypeKind::Char:
+        case ast::TypeKind::Char:
             return "char";
-        case hir::TypeKind::String:
+        case ast::TypeKind::String:
             return "string";
-        case hir::TypeKind::CString:
+        case ast::TypeKind::CString:
             return "cstring";
         default:
             return std::nullopt;
@@ -59,26 +59,26 @@ std::optional<std::string> canonical_primitive_name(hir::TypeKind kind) {
 }
 
 // 正規名からプリミティブ型を復元する（該当しなければ nullptr）
-hir::TypePtr make_primitive_from_name(const std::string& name) {
+ast::TypePtr make_primitive_from_name(const std::string& name) {
     struct Entry {
         const char* name;
-        hir::TypeKind kind;
+        ast::TypeKind kind;
     };
     static const Entry kTable[] = {
-        {"void", hir::TypeKind::Void},       {"bool", hir::TypeKind::Bool},
-        {"tiny", hir::TypeKind::Tiny},       {"utiny", hir::TypeKind::UTiny},
-        {"short", hir::TypeKind::Short},     {"ushort", hir::TypeKind::UShort},
-        {"int", hir::TypeKind::Int},         {"uint", hir::TypeKind::UInt},
-        {"long", hir::TypeKind::Long},       {"ulong", hir::TypeKind::ULong},
-        {"isize", hir::TypeKind::ISize},     {"usize", hir::TypeKind::USize},
-        {"float", hir::TypeKind::Float},     {"ufloat", hir::TypeKind::UFloat},
-        {"double", hir::TypeKind::Double},   {"udouble", hir::TypeKind::UDouble},
-        {"char", hir::TypeKind::Char},       {"string", hir::TypeKind::String},
-        {"cstring", hir::TypeKind::CString},
+        {"void", ast::TypeKind::Void},       {"bool", ast::TypeKind::Bool},
+        {"tiny", ast::TypeKind::Tiny},       {"utiny", ast::TypeKind::UTiny},
+        {"short", ast::TypeKind::Short},     {"ushort", ast::TypeKind::UShort},
+        {"int", ast::TypeKind::Int},         {"uint", ast::TypeKind::UInt},
+        {"long", ast::TypeKind::Long},       {"ulong", ast::TypeKind::ULong},
+        {"isize", ast::TypeKind::ISize},     {"usize", ast::TypeKind::USize},
+        {"float", ast::TypeKind::Float},     {"ufloat", ast::TypeKind::UFloat},
+        {"double", ast::TypeKind::Double},   {"udouble", ast::TypeKind::UDouble},
+        {"char", ast::TypeKind::Char},       {"string", ast::TypeKind::String},
+        {"cstring", ast::TypeKind::CString},
     };
     for (const auto& e : kTable) {
         if (name == e.name) {
-            auto t = std::make_shared<hir::Type>(e.kind);
+            auto t = std::make_shared<ast::Type>(e.kind);
             t->name = e.name;
             return t;
         }
@@ -87,7 +87,7 @@ hir::TypePtr make_primitive_from_name(const std::string& name) {
 }
 
 // キー全体を1つの型としてデコードする（不正な形式は nullptr）
-hir::TypePtr decode_whole(std::string_view s);
+ast::TypePtr decode_whole(std::string_view s);
 
 // 数字列を読み取る（数字が無ければ nullopt）
 std::optional<size_t> read_number(std::string_view s, size_t& pos) {
@@ -102,7 +102,7 @@ std::optional<size_t> read_number(std::string_view s, size_t& pos) {
     return value;
 }
 
-hir::TypePtr decode_whole(std::string_view s) {
+ast::TypePtr decode_whole(std::string_view s) {
     if (s.empty())
         return nullptr;
 
@@ -115,7 +115,7 @@ hir::TypePtr decode_whole(std::string_view s) {
             auto elem = decode_whole(s.substr(2));
             if (!elem)
                 return nullptr;
-            return marker == 'P' ? hir::make_pointer(elem) : hir::make_reference(elem);
+            return marker == 'P' ? ast::make_pointer(elem) : ast::make_reference(elem);
         }
         if (marker == 'A') {
             size_t pos = 2;
@@ -127,8 +127,8 @@ hir::TypePtr decode_whole(std::string_view s) {
             if (!elem)
                 return nullptr;
             if (size)
-                return hir::make_array(elem, static_cast<uint32_t>(*size));
-            return hir::make_array(elem);
+                return ast::make_array(elem, static_cast<uint32_t>(*size));
+            return ast::make_array(elem);
         }
         return nullptr;
     }
@@ -139,7 +139,7 @@ hir::TypePtr decode_whole(std::string_view s) {
         std::string name(s);
         if (auto prim = make_primitive_from_name(name))
             return prim;
-        return hir::make_named(name);
+        return ast::make_named(name);
     }
 
     std::string base(s.substr(0, dollar));
@@ -153,7 +153,7 @@ hir::TypePtr decode_whole(std::string_view s) {
         return nullptr;
     ++pos;
 
-    std::vector<hir::TypePtr> args;
+    std::vector<ast::TypePtr> args;
     for (size_t i = 0; i < *argc; ++i) {
         auto len = read_number(s, pos);
         if (!len || pos >= s.size() || s[pos] != '$')
@@ -172,23 +172,23 @@ hir::TypePtr decode_whole(std::string_view s) {
     if (pos != s.size())
         return nullptr;
 
-    auto t = hir::make_named(base);
+    auto t = ast::make_named(base);
     t->type_args = std::move(args);
     return t;
 }
 
 }  // namespace
 
-std::string encode_type_key(const hir::TypePtr& type) {
+std::string encode_type_key(const ast::TypePtr& type) {
     if (!type)
         return "";
 
     switch (type->kind) {
-        case hir::TypeKind::Pointer:
+        case ast::TypeKind::Pointer:
             return "$P" + (type->element_type ? encode_type_key(type->element_type) : "void");
-        case hir::TypeKind::Reference:
+        case ast::TypeKind::Reference:
             return "$R" + (type->element_type ? encode_type_key(type->element_type) : "void");
-        case hir::TypeKind::Array: {
+        case ast::TypeKind::Array: {
             std::string size_str =
                 type->array_size ? std::to_string(*type->array_size) : std::string();
             return "$A" + size_str + "$" +
@@ -213,7 +213,7 @@ std::string encode_type_key(const hir::TypePtr& type) {
     return make_struct_key(base, type->type_args);
 }
 
-std::string make_struct_key(const std::string& base_name, const std::vector<hir::TypePtr>& args) {
+std::string make_struct_key(const std::string& base_name, const std::vector<ast::TypePtr>& args) {
     if (args.empty())
         return base_name;
     std::string out = base_name + "$" + std::to_string(args.size()) + "$";
@@ -224,7 +224,7 @@ std::string make_struct_key(const std::string& base_name, const std::vector<hir:
     return out;
 }
 
-hir::TypePtr decode_type_key(const std::string& key) {
+ast::TypePtr decode_type_key(const std::string& key) {
     return decode_whole(key);
 }
 
@@ -232,16 +232,16 @@ bool is_encoded_key(const std::string& key) {
     return key.find('$') != std::string::npos;
 }
 
-std::string arg_key_from_tree(const hir::TypePtr& arg) {
+std::string arg_key_from_tree(const ast::TypePtr& arg) {
     if (!arg) {
         return "void";
     }
     switch (arg->kind) {
-        case hir::TypeKind::Pointer:
+        case ast::TypeKind::Pointer:
             return "ptr_" + arg_key_from_tree(arg->element_type);
-        case hir::TypeKind::Reference:
+        case ast::TypeKind::Reference:
             return "$R" + arg_key_from_tree(arg->element_type);
-        case hir::TypeKind::Array: {
+        case ast::TypeKind::Array: {
             std::string size_str = arg->array_size ? std::to_string(*arg->array_size) : "";
             return "$A" + size_str + "$" + arg_key_from_tree(arg->element_type);
         }
@@ -266,7 +266,7 @@ std::string arg_key_from_tree(const hir::TypePtr& arg) {
 }
 
 std::string struct_key_from_tree(const std::string& base_name,
-                                 const std::vector<hir::TypePtr>& type_args) {
+                                 const std::vector<ast::TypePtr>& type_args) {
     if (type_args.empty()) {
         return base_name;
     }
@@ -298,6 +298,21 @@ std::string spec_fn_prefix(const std::string& struct_key) {
     return out;
 }
 
+std::string fn_prefix_from_tree(const ast::Type& type) {
+    // 型引数の無い型は名前をそのまま関数名接頭辞とする（表示形<...>だけの名前は基底へ切る）
+    if (type.type_args.empty()) {
+        auto lt = type.name.find('<');
+        return lt == std::string::npos ? type.name : type.name.substr(0, lt);
+    }
+    std::string base = type.name;
+    auto lt = base.find('<');
+    if (lt != std::string::npos) {
+        base = base.substr(0, lt);
+    }
+    base = spec_base_name(base);
+    return spec_fn_prefix(struct_key_from_tree(base, type.type_args));
+}
+
 std::string spec_base_name(const std::string& name) {
     if (is_encoded_key(name)) {
         return base_name_of(name);
@@ -318,7 +333,7 @@ std::string base_name_of(const std::string& key) {
     return key.substr(0, dollar);
 }
 
-std::vector<hir::TypePtr> decode_type_args(const std::string& key) {
+std::vector<ast::TypePtr> decode_type_args(const std::string& key) {
     if (!is_encoded_key(key) || (!key.empty() && key[0] == '$'))
         return {};
     auto decoded = decode_type_key(key);
@@ -327,15 +342,15 @@ std::vector<hir::TypePtr> decode_type_args(const std::string& key) {
     return decoded->type_args;
 }
 
-std::string display_name(const hir::TypePtr& type) {
+std::string display_name(const ast::TypePtr& type) {
     if (!type)
         return "";
     switch (type->kind) {
-        case hir::TypeKind::Pointer:
+        case ast::TypeKind::Pointer:
             return "*" + display_name(type->element_type);
-        case hir::TypeKind::Reference:
+        case ast::TypeKind::Reference:
             return "&" + display_name(type->element_type);
-        case hir::TypeKind::Array: {
+        case ast::TypeKind::Array: {
             std::string size_str = type->array_size ? std::to_string(*type->array_size) : "";
             return display_name(type->element_type) + "[" + size_str + "]";
         }
@@ -369,4 +384,4 @@ std::string display_name(const std::string& key) {
     return display_name(decoded);
 }
 
-}  // namespace cm::mir::typekey
+}  // namespace cm::ast::typekey

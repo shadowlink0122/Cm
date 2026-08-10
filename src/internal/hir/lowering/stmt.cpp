@@ -3,6 +3,7 @@
 #include "fwd.hpp"
 #include "internal/base/mangle.hpp"
 #include "internal/base/text_utils.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <memory>
 #include <string>
@@ -201,7 +202,11 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
     }
 
     if (should_call_ctor && let.type) {
-        std::string type_name = type_to_string(*let.type);
+        // ジェネリック型は関数名ドメインの正準接頭辞で組む（Vector<Vector<int>> ->
+        // Vector__Vector$1$3$int。移行計画①: 表示形Base<args>__ctorの産生を廃止）
+        std::string type_name = let.type->type_args.empty()
+                                    ? type_to_string(*let.type)
+                                    : ast::typekey::fn_prefix_from_tree(*let.type);
         // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。checker側と同一規則を共有する）
         std::string ctor_name =
             mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());

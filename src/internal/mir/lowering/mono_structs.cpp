@@ -3,7 +3,7 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "mono_internal.hpp"
 #include "monomorphization.hpp"
 #include "monomorphization_utils.hpp"
@@ -120,40 +120,30 @@ void Monomorphization::collect_struct_specializations(
             if ((local.type->kind == hir::TypeKind::Struct ||
                  local.type->kind == hir::TypeKind::TypeAlias) &&
                 (local.type->name.find("__") != std::string::npos ||
-                 typekey::is_encoded_key(local.type->name)) &&
+                 ast::typekey::is_encoded_key(local.type->name)) &&
                 hir_struct_defs->find(local.type->name) == hir_struct_defs->end()) {
                 // ユーザー定義に同名の構造体がある場合は特殊化と混同しない（C8）
                 // 基本名を抽出（Node__int -> Node。$エンコード名はtypekeyの可逆復号を優先する）
                 std::string base_name;
                 std::vector<hir::TypePtr> type_args;
-                if (typekey::is_encoded_key(local.type->name)) {
-                    base_name = typekey::base_name_of(local.type->name);
+                if (ast::typekey::is_encoded_key(local.type->name)) {
+                    base_name = ast::typekey::base_name_of(local.type->name);
                     if (generic_structs.count(base_name) > 0) {
-                        type_args = typekey::decode_type_args(local.type->name);
-                    }
-                } else {
-                    auto pos = local.type->name.find("__");
-                    base_name = local.type->name.substr(0, pos);
-                    if (generic_structs.count(base_name) > 0) {
-                        type_args =
-                            parse_flat_type_args(base_name, local.type->name.substr(pos + 2));
+                        type_args = ast::typekey::decode_type_args(local.type->name);
                     }
                 }
-                {
-                    if (!type_args.empty()) {
-                        // 置換に使うツリーを正準化（フラット名リーフの復号）
-                        for (auto& a : type_args)
-                            a = normalize_spec_arg_tree(a);
-                        // フラット名産生の全廃に伴い、既存のフラット名ローカルも正準キーへ改名して収束させる
-                        // （生成されるMirStructは正準キーで登録されるため、ローカル名との不一致はレイアウト解決欠落になる）
-                        const std::string canonical = struct_symbol_key(base_name, type_args);
-                        if (canonical != local.type->name) {
-                            local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
-                            local.type->name = canonical;
-                        }
-                        if (needed.find(canonical) == needed.end()) {
-                            needed[canonical] = {base_name, type_args};
-                        }
+                // 曖昧なフラット特殊化名（Vector__int等）の逆算は廃止済み（産生側が$エンコードへ正準化されている）
+                if (!type_args.empty()) {
+                    // 置換に使うツリーを正準化（エンコード名リーフの復号）
+                    for (auto& a : type_args)
+                        a = normalize_spec_arg_tree(a);
+                    const std::string canonical = struct_symbol_key(base_name, type_args);
+                    if (canonical != local.type->name) {
+                        local.type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+                        local.type->name = canonical;
+                    }
+                    if (needed.find(canonical) == needed.end()) {
+                        needed[canonical] = {base_name, type_args};
                     }
                 }
             }
@@ -193,7 +183,7 @@ void Monomorphization::generate_specialized_struct(MirProgram& program,
         const auto& param_name = base_struct->generic_params[i].name;
         type_subst[param_name] = type_args[i];
         debug_msg("MONO", "Struct type substitution: " + param_name + " -> " +
-                              typekey::display_name(type_args[i]));
+                              ast::typekey::display_name(type_args[i]));
     }
 
     // 特殊化構造体を生成
@@ -261,15 +251,12 @@ hir::TypePtr Monomorphization::to_symbol_type(MirProgram& program, const hir::Ty
         // 既にマングリング済みの名前はそのままシンボルとし、特殊化の存在のみ保証する
         if (base.find("__") != std::string::npos || base.find('$') != std::string::npos) {
             if (hir_struct_defs && hir_struct_defs->find(base) == hir_struct_defs->end()) {
-                // $エンコード名はtypekeyの可逆復号を優先し、フラット名のみ逆算ヒューリスティックへ渡す
+                // $エンコード名のみtypekeyで可逆復号する（曖昧なフラット名の逆算は廃止済み）
                 std::string flat_base;
                 std::vector<hir::TypePtr> parsed;
-                if (typekey::is_encoded_key(base)) {
-                    flat_base = typekey::base_name_of(base);
-                    parsed = typekey::decode_type_args(base);
-                } else {
-                    flat_base = base.substr(0, base.find("__"));
-                    parsed = parse_flat_type_args(flat_base, base.substr(flat_base.size() + 2));
+                if (ast::typekey::is_encoded_key(base)) {
+                    flat_base = ast::typekey::base_name_of(base);
+                    parsed = ast::typekey::decode_type_args(base);
                 }
                 auto def_it = hir_struct_defs->find(flat_base);
                 if (def_it != hir_struct_defs->end() && def_it->second &&
@@ -524,24 +511,13 @@ void Monomorphization::update_type_references(MirProgram& program) {
                             if (local_type && local_type->kind == hir::TypeKind::Struct &&
                                 hir_struct_defs->find(local_type->name) == hir_struct_defs->end()) {
                                 std::string type_name = local_type->name;
-                                if (typekey::is_encoded_key(type_name)) {
-                                    // '$'エンコード名から基底名と型引数を復元
-                                    base_name = typekey::base_name_of(type_name);
-                                    type_args = typekey::decode_type_args(type_name);
+                                if (ast::typekey::is_encoded_key(type_name)) {
+                                    // '$'エンコード名から基底名と型引数を復元（曖昧なフラット名の逆算は廃止済み）
+                                    base_name = ast::typekey::base_name_of(type_name);
+                                    type_args = ast::typekey::decode_type_args(type_name);
                                     if (!type_args.empty() &&
                                         generic_structs.count(base_name) > 0) {
                                         has_struct_info = true;
-                                    }
-                                } else {
-                                    size_t pos = type_name.find("__");
-                                    if (pos != std::string::npos) {
-                                        base_name = type_name.substr(0, pos);
-                                        // 型引数を抽出（1パラメータ基底はセグメントを結合）
-                                        type_args = parse_flat_type_args(base_name,
-                                                                         type_name.substr(pos + 2));
-                                        if (generic_structs.count(base_name) > 0) {
-                                            has_struct_info = true;
-                                        }
                                     }
                                 }
                             }

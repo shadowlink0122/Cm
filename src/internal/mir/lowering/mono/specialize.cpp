@@ -2,10 +2,10 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <cstdio>
 #include <map>
@@ -140,20 +140,15 @@ void Monomorphization::generate_generic_specializations(
                         // （ユーザー定義に同名の構造体がある場合は特殊化と混同しない。C8）
                         else if (target && target->kind == hir::TypeKind::Struct &&
                                  (target->name.find("__") != std::string::npos ||
-                                  typekey::is_encoded_key(target->name)) &&
+                                  ast::typekey::is_encoded_key(target->name)) &&
                                  (!hir_struct_defs ||
                                   hir_struct_defs->find(target->name) == hir_struct_defs->end())) {
-                            // 基本名と型引数を抽出（$エンコード名はtypekeyの可逆復号を優先。フラット1パラメータ基底はセグメントを結合）
+                            // 基本名と型引数を抽出（$エンコード名のみtypekeyで可逆復号。曖昧なフラット名の逆算は廃止済み）
                             std::string base_name;
                             std::vector<hir::TypePtr> struct_type_args;
-                            if (typekey::is_encoded_key(target->name)) {
-                                base_name = typekey::base_name_of(target->name);
-                                struct_type_args = typekey::decode_type_args(target->name);
-                            } else {
-                                auto pos = target->name.find("__");
-                                base_name = target->name.substr(0, pos);
-                                struct_type_args =
-                                    parse_flat_type_args(base_name, target->name.substr(pos + 2));
+                            if (ast::typekey::is_encoded_key(target->name)) {
+                                base_name = ast::typekey::base_name_of(target->name);
+                                struct_type_args = ast::typekey::decode_type_args(target->name);
                             }
                             // 構造体特殊化を生成
                             if (!struct_type_args.empty()) {
@@ -470,7 +465,7 @@ void Monomorphization::generate_generic_specializations(
             // 要素型のデストラクタ名を型引数ツリーのシンボルキーから構築する
             // 要素の構造体正準キー（$）を関数名ドメイン（base__argkey）へ変換してdtor名を組む
             std::string element_type = arg_symbol_key(type_args[0]);
-            std::string element_dtor_name = typekey::spec_fn_prefix(element_type) + "__dtor";
+            std::string element_dtor_name = ast::typekey::spec_fn_prefix(element_type) + "__dtor";
 
             // 要素型にデストラクタが存在するかチェック
             bool has_element_dtor = false;
@@ -486,8 +481,8 @@ void Monomorphization::generate_generic_specializations(
             // 存在すれば呼び出しを挿入してよい（不動点ループが本関数の呼び出しをスキャンして
             // 特殊化を連鎖生成するため、多段ネストの各段で要素データが解放される）
             if (!has_element_dtor && (element_type.find("__") != std::string::npos ||
-                                      typekey::is_encoded_key(element_type))) {
-                std::string elem_base = typekey::spec_base_name(element_type);
+                                      ast::typekey::is_encoded_key(element_type))) {
+                std::string elem_base = ast::typekey::spec_base_name(element_type);
                 for (const auto& func : program.functions) {
                     if (func && func->name.rfind(elem_base + "<", 0) == 0 &&
                         func->name.size() > 6 &&

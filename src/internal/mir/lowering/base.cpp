@@ -2,7 +2,7 @@
 
 #include "base.hpp"
 
-#include "mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <memory>
 #include <optional>
@@ -72,7 +72,7 @@ hir::TypePtr MirLoweringBase::resolve_typedef(hir::TypePtr type) {
 
         // モノモーフ化された型名（例: Result__ulong__long・Result$2$...）の場合、正準関数で基底名（Result）を取りenum_defsをフォールバック検索
         if (enum_it == enum_defs.end()) {
-            const std::string base_name = typekey::spec_base_name(type->name);
+            const std::string base_name = ast::typekey::spec_base_name(type->name);
             if (base_name != type->name) {
                 enum_it = enum_defs.find(base_name);
             }

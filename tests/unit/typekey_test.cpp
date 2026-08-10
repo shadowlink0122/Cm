@@ -1,8 +1,8 @@
 // 型キー可逆エンコーディング（typekey.cpp）の単体テスト
-// 手組みの hir::Type ツリーを入力に、往復不変（decode(encode(t)) の構造一致）と
+// 手組みの ast::Type ツリーを入力に、往復不変（decode(encode(t)) の構造一致）と
 // フラット__連結で縮退していた組が異なるキーへ分離されること（C7/C8）を検証する。
 
-#include "internal/mir/lowering/mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <gtest/gtest.h>
 #include <memory>
@@ -10,24 +10,24 @@
 #include <vector>
 
 using namespace cm;
-using namespace cm::mir::typekey;
+using namespace cm::ast::typekey;
 
 namespace {
 
 // 名前付き型（type_args付き）を構築するヘルパー
-hir::TypePtr named(const std::string& name, std::vector<hir::TypePtr> args = {}) {
-    auto t = hir::make_named(name);
+ast::TypePtr named(const std::string& name, std::vector<ast::TypePtr> args = {}) {
+    auto t = ast::make_named(name);
     t->type_args = std::move(args);
     return t;
 }
 
 // 2つの型ツリーの構造一致を再帰判定する
-bool structurally_equal(const hir::TypePtr& a, const hir::TypePtr& b) {
+bool structurally_equal(const ast::TypePtr& a, const ast::TypePtr& b) {
     if (!a || !b)
         return a == b;
     if (a->kind != b->kind)
         return false;
-    if (a->kind == hir::TypeKind::Struct && a->name != b->name)
+    if (a->kind == ast::TypeKind::Struct && a->name != b->name)
         return false;
     if (a->array_size != b->array_size)
         return false;
@@ -45,7 +45,7 @@ bool structurally_equal(const hir::TypePtr& a, const hir::TypePtr& b) {
 }
 
 // 往復不変を検証する（文字列往復と構造往復の両方）
-void expect_roundtrip(const hir::TypePtr& t) {
+void expect_roundtrip(const ast::TypePtr& t) {
     std::string key = encode_type_key(t);
     auto decoded = decode_type_key(key);
     ASSERT_TRUE(decoded) << "decode failed for key: " << key;
@@ -54,15 +54,15 @@ void expect_roundtrip(const hir::TypePtr& t) {
 }
 
 TEST(TypeKeyTest, PrimitiveRoundtrip) {
-    auto int_t = hir::make_int();
+    auto int_t = ast::make_int();
     EXPECT_EQ(encode_type_key(int_t), "int");
     expect_roundtrip(int_t);
 
-    auto str_t = hir::make_string();
+    auto str_t = ast::make_string();
     EXPECT_EQ(encode_type_key(str_t), "string");
     expect_roundtrip(str_t);
 
-    auto short_t = hir::make_short();
+    auto short_t = ast::make_short();
     expect_roundtrip(short_t);
 }
 
@@ -73,59 +73,59 @@ TEST(TypeKeyTest, PlainNamedRoundtrip) {
 }
 
 TEST(TypeKeyTest, SingleArgGeneric) {
-    auto t = named("Box", {hir::make_int()});
+    auto t = named("Box", {ast::make_int()});
     EXPECT_EQ(encode_type_key(t), "Box$1$3$int");
     expect_roundtrip(t);
 }
 
 TEST(TypeKeyTest, MultiArgGeneric) {
-    auto t = named("Pair", {hir::make_int(), hir::make_string()});
+    auto t = named("Pair", {ast::make_int(), ast::make_string()});
     EXPECT_EQ(encode_type_key(t), "Pair$2$3$int6$string");
     expect_roundtrip(t);
 }
 
 TEST(TypeKeyTest, NestedGenericRoundtrip) {
     // Box<Pair<int,string>>（C7の代表例）
-    auto inner = named("Pair", {hir::make_int(), hir::make_string()});
+    auto inner = named("Pair", {ast::make_int(), ast::make_string()});
     auto t = named("Box", {inner});
     expect_roundtrip(t);
 
     // Box<Box<int>>
-    auto bb = named("Box", {named("Box", {hir::make_int()})});
+    auto bb = named("Box", {named("Box", {ast::make_int()})});
     expect_roundtrip(bb);
 
     // Pair<Box<int>, Box<string>>
     auto pboxes =
-        named("Pair", {named("Box", {hir::make_int()}), named("Box", {hir::make_string()})});
+        named("Pair", {named("Box", {ast::make_int()}), named("Box", {ast::make_string()})});
     expect_roundtrip(pboxes);
 }
 
 TEST(TypeKeyTest, PointerAndArrayRoundtrip) {
     // *int
-    auto p = hir::make_pointer(hir::make_int());
+    auto p = ast::make_pointer(ast::make_int());
     EXPECT_EQ(encode_type_key(p), "$Pint");
     expect_roundtrip(p);
 
     // int[4]
-    auto arr = hir::make_array(hir::make_int(), 4);
+    auto arr = ast::make_array(ast::make_int(), 4);
     EXPECT_EQ(encode_type_key(arr), "$A4$int");
     expect_roundtrip(arr);
 
     // 可変長 int[]
-    auto slice = hir::make_array(hir::make_int());
+    auto slice = ast::make_array(ast::make_int());
     EXPECT_EQ(encode_type_key(slice), "$A$int");
     expect_roundtrip(slice);
 
     // Box<*int> / Box<int[8]> / Box<Box<short>[3]>
     expect_roundtrip(named("Box", {p}));
-    expect_roundtrip(named("Box", {hir::make_array(hir::make_int(), 8)}));
-    expect_roundtrip(named("Box", {hir::make_array(named("Box", {hir::make_short()}), 3)}));
+    expect_roundtrip(named("Box", {ast::make_array(ast::make_int(), 8)}));
+    expect_roundtrip(named("Box", {ast::make_array(named("Box", {ast::make_short()}), 3)}));
 }
 
 TEST(TypeKeyTest, FlatNameCollisionsAreSeparated) {
     // フラット__連結ではこの3組が全て "Box__Box__int" に縮退していた（C7/C8）
-    auto nested = named("Box", {named("Box", {hir::make_int()})});  // Box<Box<int>>
-    auto two_args = named("Box", {named("Box"), hir::make_int()});  // Box<Box, int>
+    auto nested = named("Box", {named("Box", {ast::make_int()})});  // Box<Box<int>>
+    auto two_args = named("Box", {named("Box"), ast::make_int()});  // Box<Box, int>
     auto user_type = named("Box__Box__int");                        // ユーザー定義
 
     std::string k1 = encode_type_key(nested);
@@ -144,7 +144,7 @@ TEST(TypeKeyTest, FlatNameCollisionsAreSeparated) {
 TEST(TypeKeyTest, UserIdentifierNamespaceSeparation) {
     // ユーザー定義 Box__int とジェネリック Box<int> のキーは一致しない（C8）
     auto user_type = named("Box__int");
-    auto generic = named("Box", {hir::make_int()});
+    auto generic = named("Box", {ast::make_int()});
     EXPECT_NE(encode_type_key(user_type), encode_type_key(generic));
     // エンコード済みキーには必ず '$' が含まれ、ユーザー識別子には含まれない
     EXPECT_TRUE(is_encoded_key(encode_type_key(generic)));
@@ -153,26 +153,26 @@ TEST(TypeKeyTest, UserIdentifierNamespaceSeparation) {
 
 TEST(TypeKeyTest, AngleBracketNameIsNormalized) {
     // name に "Box<int>" 表記が残っていても type_args を真実として基底名を用いる
-    auto t = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+    auto t = std::make_shared<ast::Type>(ast::TypeKind::Struct);
     t->name = "Box<int>";
-    t->type_args = {hir::make_int()};
+    t->type_args = {ast::make_int()};
     EXPECT_EQ(encode_type_key(t), "Box$1$3$int");
 }
 
 TEST(TypeKeyTest, MakeStructKeyMatchesEncode) {
-    auto args = std::vector<hir::TypePtr>{hir::make_int(), hir::make_string()};
+    auto args = std::vector<ast::TypePtr>{ast::make_int(), ast::make_string()};
     EXPECT_EQ(make_struct_key("Pair", args), encode_type_key(named("Pair", args)));
     EXPECT_EQ(make_struct_key("Plain", {}), "Plain");
 }
 
 TEST(TypeKeyTest, BaseNameAndArgsExtraction) {
-    auto t = named("Pair", {hir::make_int(), hir::make_string()});
+    auto t = named("Pair", {ast::make_int(), ast::make_string()});
     std::string key = encode_type_key(t);
     EXPECT_EQ(base_name_of(key), "Pair");
     auto args = decode_type_args(key);
     ASSERT_EQ(args.size(), 2u);
-    EXPECT_EQ(args[0]->kind, hir::TypeKind::Int);
-    EXPECT_EQ(args[1]->kind, hir::TypeKind::String);
+    EXPECT_EQ(args[0]->kind, ast::TypeKind::Int);
+    EXPECT_EQ(args[1]->kind, ast::TypeKind::String);
 
     // 非エンコード名はそのまま
     EXPECT_EQ(base_name_of("Point"), "Point");
@@ -180,7 +180,7 @@ TEST(TypeKeyTest, BaseNameAndArgsExtraction) {
 }
 
 TEST(TypeKeyTest, DisplayNameIsHumanReadable) {
-    auto inner = named("Pair", {hir::make_int(), hir::make_string()});
+    auto inner = named("Pair", {ast::make_int(), ast::make_string()});
     auto t = named("Box", {inner});
     EXPECT_EQ(display_name(t), "Box<Pair<int, string>>");
     EXPECT_EQ(display_name(encode_type_key(t)), "Box<Pair<int, string>>");

@@ -5,6 +5,7 @@
 #include "fwd.hpp"
 #include "internal/base/mangle.hpp"
 #include "internal/hir/slice_dispatch.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -1028,64 +1029,22 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             method_type_name = obj_type->name;
         }
 
-        // ジェネリック型名（例：Vector<int>）をマングリング形式（例：Vector__int）に変換
-        // Struct<T1, T2, ...> -> Struct__T1__T2__...
-        size_t angle_pos = method_type_name.find('<');
-        if (angle_pos != std::string::npos) {
-            size_t close_pos = method_type_name.rfind('>');
-            if (close_pos != std::string::npos && close_pos > angle_pos) {
-                std::string base_name = method_type_name.substr(0, angle_pos);
-                std::string type_args_str =
-                    method_type_name.substr(angle_pos + 1, close_pos - angle_pos - 1);
-
-                // 型引数を抽出（カンマ区切り、ネストを考慮）
-                std::vector<std::string> type_args;
-                int depth = 0;
-                std::string current_arg;
-                for (char c : type_args_str) {
-                    if (c == '<') {
-                        depth++;
-                        current_arg += c;
-                    } else if (c == '>') {
-                        depth--;
-                        current_arg += c;
-                    } else if (c == ',' && depth == 0) {
-                        // 空白を削除
-                        while (!current_arg.empty() && current_arg.front() == ' ') {
-                            current_arg = current_arg.substr(1);
-                        }
-                        while (!current_arg.empty() && current_arg.back() == ' ') {
-                            current_arg.pop_back();
-                        }
-                        type_args.push_back(current_arg);
-                        current_arg.clear();
-                    } else {
-                        current_arg += c;
-                    }
-                }
-                // 最後の引数を追加
-                while (!current_arg.empty() && current_arg.front() == ' ') {
-                    current_arg = current_arg.substr(1);
-                }
-                while (!current_arg.empty() && current_arg.back() == ' ') {
-                    current_arg.pop_back();
-                }
-                if (!current_arg.empty()) {
-                    type_args.push_back(current_arg);
-                }
-
-                // マングリング名を生成：BaseType__Arg1__Arg2__...
-                method_type_name = base_name;
-                for (const auto& arg : type_args) {
-                    method_type_name += "__" + arg;
-                }
-
-                debug::hir::log(
-                    debug::hir::Id::MethodCallLower,
-                    "Generic type name mangled: " + type_name + " -> " + method_type_name,
-                    debug::Level::Debug);
-            }
+        // ジェネリック型名（例：Vector<int>）を関数名ドメインの正準接頭辞（例：Vector__int、
+        // ネスト特殊化はVector__Vector$1$3$int）へ変換する（移行計画①: 型ツリーからargkeyを組み、
+        // type_to_string文字列の再パース＝表示形argの半マングル混入を廃止する）
+        if (obj_type && obj_type->kind == ast::TypeKind::Struct && !obj_type->type_args.empty() &&
+            struct_defs_.count(method_type_name) == 0) {
+            std::string base_name = method_type_name.substr(0, method_type_name.find('<'));
+            // stale名（旧フラット/エンコード名のままargs併存）は基底名へ再建する（C8: ユーザー定義完全名は上のcountで除外済み）
+            base_name = ast::typekey::spec_base_name(base_name);
+            method_type_name = ast::typekey::spec_fn_prefix(
+                ast::typekey::struct_key_from_tree(base_name, obj_type->type_args));
+            debug::hir::log(debug::hir::Id::MethodCallLower,
+                            "Generic type name mangled: " + type_name + " -> " + method_type_name,
+                            debug::Level::Debug);
         }
+        // 型ツリーに引数の無い表示形名（Vector<int>等が名前へ埋め込まれた型）はそのまま残す
+        // （monoのスキャンが表示形Base<args>__suffixを復号して照合する）
 
         // 固定長配列（T[N]）の場合、スライス型名（T[]）にマッピング
         // impl int[] for Interface のメソッドを int[5], int[10] 等からも呼び出し可能にする

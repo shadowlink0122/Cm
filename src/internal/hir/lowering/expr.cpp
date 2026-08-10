@@ -1010,43 +1010,14 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
                 std::string type_part = func_name.substr(0, first_colon);
                 std::string method_part = func_name.substr(first_colon + 2);
                 if (!type_part.empty() && std::isupper(static_cast<unsigned char>(type_part[0]))) {
-                    // ジェネリック特殊化の静的呼び出し（Box<int>::new）はインスタンスメソッドと同じ
-                    // BaseType__Arg1__Arg2形式へマングルする（R22。従来は未変換のままcallが黙って消えゼロ値になっていた）
+                    // ジェネリック特殊化の静的呼び出し（Box<int>::new）は表示形Base<args>__methodへ変換する
+                    // （R22: 未変換のままだとcallが黙って消えゼロ値になっていた。型引数の文字列分割による
+                    //  半マングルBase__Arg1__Arg2は廃止し、復号はmonoスキャンの表示形照合へ一元化する＝移行計画①）
                     size_t lt_pos = type_part.find('<');
                     if (lt_pos != std::string::npos && type_part.back() == '>') {
                         std::string base_name = type_part.substr(0, lt_pos);
                         if (struct_defs_.count(base_name) > 0 || enum_defs_.count(base_name) > 0) {
-                            std::string args_str =
-                                type_part.substr(lt_pos + 1, type_part.size() - lt_pos - 2);
-                            std::string mangled_type = base_name;
-                            std::string current_arg;
-                            int depth = 0;
-                            auto flush_arg = [&]() {
-                                while (!current_arg.empty() && current_arg.front() == ' ') {
-                                    current_arg = current_arg.substr(1);
-                                }
-                                while (!current_arg.empty() && current_arg.back() == ' ') {
-                                    current_arg.pop_back();
-                                }
-                                if (!current_arg.empty()) {
-                                    mangled_type += "__" + current_arg;
-                                }
-                                current_arg.clear();
-                            };
-                            for (char c : args_str) {
-                                if (c == '<') {
-                                    depth++;
-                                } else if (c == '>') {
-                                    depth--;
-                                }
-                                if (c == ',' && depth == 0) {
-                                    flush_arg();
-                                } else {
-                                    current_arg += c;
-                                }
-                            }
-                            flush_arg();
-                            func_name = mangle::method_name(mangled_type, method_part);
+                            func_name = mangle::method_name(type_part, method_part);
                         }
                     } else if (struct_defs_.count(type_part) > 0 ||
                                enum_defs_.count(type_part) > 0) {

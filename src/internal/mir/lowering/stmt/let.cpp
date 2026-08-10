@@ -4,9 +4,9 @@
 #include "internal/base/target.hpp"
 #include "internal/hir/slice_dispatch.hpp"
 #include "internal/mir/lowering/layout.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <cinttypes>
 #include <functional>
@@ -721,42 +721,10 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     if (let.type && let.type->kind == hir::TypeKind::Struct) {
         std::string type_name = let.type->name;
 
-        // ジェネリック型の場合、マングル済み名を構築（Vector<TrackedObject> ->
-        // Vector__TrackedObject）
+        // ジェネリック型は関数名ドメインの正準接頭辞で登録する（Vector<Vector<int>> ->
+        // Vector__Vector$1$3$int。移行計画①: 手組み再帰マングルの曖昧フラット名を廃止）
         if (!let.type->type_args.empty()) {
-            std::string mangled_name = type_name;
-
-            // 再帰的にネストしたジェネリック型引数をマングリングするラムダ
-            std::function<std::string(const hir::TypePtr&)> mangle_type_arg =
-                [&](const hir::TypePtr& arg) -> std::string {
-                if (!arg)
-                    return "";
-
-                std::string result;
-
-                // 基本型名を取得
-                if (!arg->name.empty()) {
-                    result = arg->name;
-                } else {
-                    // プリミティブ型などは型を文字列化
-                    result = hir::type_to_string(*arg);
-                }
-
-                // ネストしたtype_argsがある場合は再帰的に処理
-                if (!arg->type_args.empty()) {
-                    for (const auto& nested_arg : arg->type_args) {
-                        result += "__" + mangle_type_arg(nested_arg);
-                    }
-                }
-
-                return result;
-            };
-
-            for (const auto& arg : let.type->type_args) {
-                mangled_name += "__" + mangle_type_arg(arg);
-            }
-
-            type_name = mangled_name;
+            type_name = ast::typekey::fn_prefix_from_tree(*let.type);
         }
 
         if (ctx.has_destructor(type_name)) {

@@ -322,7 +322,4 @@ inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param
 // ============================================================
 std::string type_to_string(const Type& t);
 
-// 型名のマングル化版（Container<int> → Container__int。実装は types.cpp）
-std::string type_to_mangled_name(const Type& t);
-
 }  // namespace cm::ast

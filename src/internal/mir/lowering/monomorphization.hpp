@@ -87,11 +87,6 @@ class Monomorphization : public MirLoweringBase {
     void generate_specialized_struct(MirProgram& program, const std::string& base_name,
                                      const std::vector<hir::TypePtr>& type_args);
 
-    // フラット特殊化名の残り部分（base__以降）を型引数ツリーへ復元する。
-    // 基底の型パラメータが1個の場合は全セグメントを1引数として結合する（ネスト対応）
-    std::vector<hir::TypePtr> parse_flat_type_args(const std::string& base_name,
-                                                   const std::string& remainder) const;
-
     // 型パラメータを実引数ツリーで置換する（名前の平坦化を行わず構造を保つ）
     hir::TypePtr substitute_type_tree(
         const hir::TypePtr& type, const std::unordered_map<std::string, hir::TypePtr>& subst) const;

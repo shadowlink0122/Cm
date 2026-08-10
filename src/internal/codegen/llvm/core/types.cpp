@@ -1,8 +1,8 @@
 /// @file llvm_types.cpp
 /// @brief 型変換・定数変換処理
 
-#include "internal/mir/lowering/mono/typekey.hpp"
 #include "internal/syntax/ast/typedef.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -183,7 +183,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 if (lt != std::string::npos) {
                     base = base.substr(0, lt);
                 }
-                lookupName = cm::mir::typekey::struct_key_from_tree(base, type->type_args);
+                lookupName = cm::ast::typekey::struct_key_from_tree(base, type->type_args);
             }
 
             auto it = structTypes.find(lookupName);
@@ -229,7 +229,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                     base = base.substr(0, lt);
                 }
                 // $エンコード名・フラット名の基底抽出は正準関数へ（mono-flat-name-elimination）
-                base = cm::mir::typekey::spec_base_name(base);
+                base = cm::ast::typekey::spec_base_name(base);
                 if (!base.empty() && base != lookupName && enumDefs.count(base) > 0) {
                     auto tagged = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                     tagged->name = "__TaggedUnion_" + base;

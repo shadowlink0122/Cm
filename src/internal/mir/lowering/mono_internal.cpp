@@ -5,7 +5,7 @@
 
 #include "mono_internal.hpp"
 
-#include "mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <optional>
 
@@ -114,9 +114,10 @@ hir::TypePtr substitute_type_in_type(
     if (type_args_changed &&
         (type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::Generic)) {
         // 既にマングリング済みの名前の場合でも、substituted_type_argsを使用して正しい名前を生成
-        if (type->name.find("__") != std::string::npos || typekey::is_encoded_key(type->name)) {
+        if (type->name.find("__") != std::string::npos ||
+            ast::typekey::is_encoded_key(type->name)) {
             // 基本名を正準関数で抽出し、substituted_type_argsから正準キーを生成（フラット名産生の全廃）
-            std::string base_name = typekey::spec_base_name(type->name);
+            std::string base_name = ast::typekey::spec_base_name(type->name);
             auto new_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
             new_type->name =
                 mono ? mono->struct_symbol_key(base_name, substituted_type_args) : type->name;
@@ -201,9 +202,9 @@ hir::TypePtr substitute_type_in_type(
 
     // 3a. $エンコード名に型パラメータが埋め込まれている場合（Container$1$1$T → 復号・置換・再エンコード）
     if ((type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) &&
-        typekey::is_encoded_key(type->name)) {
-        auto base = typekey::base_name_of(type->name);
-        auto args = typekey::decode_type_args(type->name);
+        ast::typekey::is_encoded_key(type->name)) {
+        auto base = ast::typekey::base_name_of(type->name);
+        auto args = ast::typekey::decode_type_args(type->name);
         bool any = false;
         for (auto& a : args) {
             if (a) {

@@ -42,7 +42,7 @@ int main() {
 ## 修正方針
 
 1. 即修: `struct_symbol_key`のsimple高速パス判定に「引数キーが`__`を含む（=引数自体が特殊化）場合は`$`エンコード分岐へ」を追加する。`$`エンコード名の消費側（resolve_struct_field_types:193-201・mono_structs.cpp:499-506等）は対応済みのため、この1箇所でQ2は修正できる。
-2. 恒久: フラット名逆算そのものの全廃は[mono-flat-name-elimination.md](../../../design/v0.17.0/mono-flat-name-elimination.md)で扱う（parse_flat_type_args削除・typekey全面化）。
+2. 恒久: フラット名逆算そのものの全廃は[mono-flat-name-elimination.md](mono-flat-name-elimination.md)で扱う（parse_flat_type_args削除・typekey全面化）。
 3. 回帰: ネスト特殊化のマトリクス（`Pair<Box<int>, Box<string>>`・逆順・3型引数・`Box<Pair<int,string>>`）を6経路+wasm/jsで追加し、いかなる場合もrc=0で無言死しないことを検証する。
 
 ## 検出経緯
@@ -57,4 +57,4 @@ int main() {
 2. **型注釈系（書き込み経路・新発見）**: 内側リテラル`Box { v: "deep" }`の一時変数が裸の`Box`型のままlowerされ、LLVMの裸`%Box`（フィールドi32）へstringポインタの指す先頭4バイトをload/storeして値を破壊していた。真因は`propagate_literal_expected_type`（src/internal/types/checking/expr/primary.cpp）の上書き: 外側リテラルからの伝播で`Box<string>`を注釈した後、`infer_struct_literal`のフィールド走査が生のフィールド宣言型（ジェネリックパラメータ名`A`。パーサ上はStruct kind）で再伝播し、`expr.type = A`で上書きしていた。構造体表にない名前は既存のより具体的な注釈を上書きしないよう修正し、あわせて期待型が特殊化型のときはフィールド型中のジェネリックパラメータを実引数へ置換してから伝播するようにした（`substitute_generic_type`を再利用）。
 3. **回帰テスト**: `tests/common/generics/nested_specialization_args.cm`（基本形・逆順・特殊化×プリミティブ混在・3型引数・逆ネスト`Box<Pair<int,string>>`・関数戻り値経由・チェーン読み）をjit・native O0/O2/O3・wasm・jsで出力一致確認し、TS広域ゲート（578件）も通過した。
 
-恒久対応（`parse_flat_type_args`の全廃・typekey全面化）は[mono-flat-name-elimination.md](../../../design/v0.17.0/mono-flat-name-elimination.md)が引き続き扱う。
+恒久対応（`parse_flat_type_args`の全廃・typekey全面化）は[mono-flat-name-elimination.md](mono-flat-name-elimination.md)が引き続き扱う。

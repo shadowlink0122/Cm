@@ -308,7 +308,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp
-    src/internal/mir/lowering/mono/typekey.cpp
+    src/internal/syntax/ast/typekey.cpp
     src/internal/mir/lowering/mono_internal.cpp
     src/internal/mir/lowering/mono_structs.cpp
     src/internal/mir/lowering/monomorphization_utils.cpp
@@ -908,7 +908,7 @@ if(BUILD_TESTING)
         # Unit tests - 型キー可逆エンコーディング（単相化の型同一性。C7/C8/C9）
         add_executable(typekey_test
             tests/unit/typekey_test.cpp
-            src/internal/mir/lowering/mono/typekey.cpp
+            src/internal/syntax/ast/typekey.cpp
         )
         set_target_properties(typekey_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(typekey_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)

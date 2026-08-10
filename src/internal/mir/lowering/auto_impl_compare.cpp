@@ -3,7 +3,7 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
-#include "internal/mir/lowering/mono/typekey.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "lowering.hpp"
 
 #include <algorithm>
@@ -18,7 +18,7 @@ namespace cm::mir {
 
 // モノモーフィゼーションされた構造体用のEq演算子を生成
 void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct& st) {
-    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__op_eq";
+    std::string func_name = ast::typekey::spec_fn_prefix(st.name) + "__op_eq";
 
     // 既に生成されている場合はスキップ
     for (const auto& func : mir_program.functions) {
@@ -30,7 +30,7 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
     for (const auto& field : st.fields) {
         if (field.type && field.type->kind == hir::TypeKind::Struct) {
             std::string nested_func_name =
-                mir::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
+                ast::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
             bool exists = false;
             for (const auto& func : mir_program.functions) {
                 if (func && func->name == nested_func_name) {
@@ -101,7 +101,7 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
             // フィールド型がstructの場合は__op_eq関数を呼び出す（再帰的比較）
             if (field.type && field.type->kind == hir::TypeKind::Struct) {
                 std::string field_op_eq =
-                    mir::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
+                    ast::typekey::spec_fn_prefix(field.type->name) + "__op_eq";
 
                 BlockId eq_call_success = mir_func->add_block();
 
@@ -222,7 +222,7 @@ void MirLowering::generate_builtin_eq_operator_for_monomorphized(const MirStruct
 
 // モノモーフィゼーションされた構造体用のOrd演算子を生成
 void MirLowering::generate_builtin_lt_operator_for_monomorphized(const MirStruct& st) {
-    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__op_lt";
+    std::string func_name = ast::typekey::spec_fn_prefix(st.name) + "__op_lt";
 
     for (const auto& func : mir_program.functions) {
         if (func && func->name == func_name)
@@ -480,13 +480,13 @@ void MirLowering::rewrite_struct_comparison_operators() {
 
                 if (bin_data.op == MirBinaryOp::Eq || bin_data.op == MirBinaryOp::Ne) {
                     if (impl_info.count(type_name) && impl_info[type_name].count("Eq")) {
-                        op_func_name = mir::typekey::spec_fn_prefix(type_name) + "__op_eq";
+                        op_func_name = ast::typekey::spec_fn_prefix(type_name) + "__op_eq";
                         need_negate = (bin_data.op == MirBinaryOp::Ne);
                     }
                 } else if (bin_data.op == MirBinaryOp::Lt || bin_data.op == MirBinaryOp::Le ||
                            bin_data.op == MirBinaryOp::Gt || bin_data.op == MirBinaryOp::Ge) {
                     if (impl_info.count(type_name) && impl_info[type_name].count("Ord")) {
-                        op_func_name = mir::typekey::spec_fn_prefix(type_name) + "__op_lt";
+                        op_func_name = ast::typekey::spec_fn_prefix(type_name) + "__op_lt";
                         // > は < の引数を入れ替え、>= と <= は結果を反転
                     }
                 } else if (bin_data.op == MirBinaryOp::Add) {
@@ -661,7 +661,7 @@ void MirLowering::rewrite_struct_comparison_operators() {
 // 組み込みEq演算子（==）の自動実装を生成
 void MirLowering::generate_builtin_eq_operator(const hir::HirStruct& st) {
     // 関数名: TypeName__op_eq
-    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__op_eq";
+    std::string func_name = ast::typekey::spec_fn_prefix(st.name) + "__op_eq";
 
     auto mir_func = std::make_unique<MirFunction>();
     mir_func->name = func_name;
@@ -823,7 +823,7 @@ void MirLowering::generate_builtin_eq_operator(const hir::HirStruct& st) {
 // 組み込みOrd演算子（<）の自動実装を生成
 void MirLowering::generate_builtin_lt_operator(const hir::HirStruct& st) {
     // 関数名: TypeName__op_lt
-    std::string func_name = mir::typekey::spec_fn_prefix(st.name) + "__op_lt";
+    std::string func_name = ast::typekey::spec_fn_prefix(st.name) + "__op_lt";
 
     auto mir_func = std::make_unique<MirFunction>();
     mir_func->name = func_name;

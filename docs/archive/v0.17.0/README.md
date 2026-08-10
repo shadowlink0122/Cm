@@ -7,6 +7,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 - [chain-receiver-resolution.md](type-system/chain-receiver-resolution.md) — チェーンレシーバ解決の任意式対応
 - [generic-pointer-param-inference.md](type-system/generic-pointer-param-inference.md) — R3: ジェネリック`T*`引数の型パラメータ束縛失敗（swap等が全経路SIGSEGV）
 - [generic-struct-literal.md](type-system/generic-struct-literal.md) — ジェネリック構造体リテラルの構築不能
+- [mono-flat-name-elimination.md](type-system/mono-flat-name-elimination.md) — モノモーフ化のフラット名の産生と逆算の全廃（特殊化同定の$エンコード全面化・呼び出し名の正準化・parse_flat_type_args削除）
 - [monomorphization-typed-instantiation.md](type-system/monomorphization-typed-instantiation.md) — モノモーフ化の型駆動化（名前マングリング逆算の廃止）
 - [nested-anonymous-struct-literal-loss.md](type-system/nested-anonymous-struct-literal-loss.md) — 構造体リテラル内配列の無名構造体リテラル喪失（W1）
 - [nested-generic-type-arg-string.md](type-system/nested-generic-type-arg-string.md) — ネストしたジェネリック型引数のstringフィールド読みが無言死（Q2）

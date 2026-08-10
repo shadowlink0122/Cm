@@ -3,8 +3,8 @@
 #include "context.hpp"
 
 #include "internal/base/target.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "layout.hpp"
-#include "mono/typekey.hpp"
 
 #include <memory>
 #include <optional>
@@ -192,7 +192,7 @@ bool LoweringContext::has_destructor(const std::string& type_name) const {
         if (us != std::string::npos && us > 0) {
             base_template_name = type_name.substr(0, us);
         } else {
-            base_template_name = typekey::spec_base_name(type_name);
+            base_template_name = ast::typekey::spec_base_name(type_name);
         }
     }
     if (base_template_name != type_name) {
@@ -215,7 +215,7 @@ bool LoweringContext::has_destructor(const std::string& type_name) const {
 
     // ベース名で渡された場合（例：Vector）、ジェネリックテンプレートをチェック（$エンコード名は上の基底抽出経路が処理済み）
     if (type_name.find('<') == std::string::npos && type_name.find("__") == std::string::npos &&
-        !typekey::is_encoded_key(type_name)) {
+        !ast::typekey::is_encoded_key(type_name)) {
         std::string generic_name = type_name + "<T>";
         if (types_with_destructor.count(generic_name) > 0) {
             return true;
@@ -325,7 +325,7 @@ hir::TypePtr LoweringContext::resolve_typedef(const hir::TypePtr& type) {
 
             // モノモーフ化された型名（例: Result__ulong__long・Result$2$...）の場合、正準関数で基底名（Result）を取りenum_defsをフォールバック検索
             if (it == enum_defs->end()) {
-                const std::string base_name = typekey::spec_base_name(type->name);
+                const std::string base_name = ast::typekey::spec_base_name(type->name);
                 if (base_name != type->name) {
                     it = enum_defs->find(base_name);
                 }
