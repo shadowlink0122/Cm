@@ -150,6 +150,8 @@ class Monomorphization : public MirLoweringBase {
 
     // フラット名/表示名を型ツリーへ復元する単一の境界（Vector__int / Vector<int> / ptr_int / int）
     hir::TypePtr decode_type_name(const std::string& name) const;
+    // 特殊化引数ツリーの正準化（フラット名リーフの復号。mono-flat-name-elimination③）
+    hir::TypePtr normalize_spec_arg_tree(const hir::TypePtr& t) const;
 
     // 特殊化関数名を生成（型引数ツリーからarg_symbol_keyでエンコード。名前生成の終端）
     std::string make_specialized_name(const std::string& base_name,

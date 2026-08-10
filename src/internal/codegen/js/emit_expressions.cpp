@@ -310,11 +310,10 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                                 currentType = func.locals[data.place.local].type;
                             }
                             if (currentType && currentType->kind == TypeKind::Struct) {
-                                auto it = struct_map_.find(currentType->name);
-                                if (it != struct_map_.end() && it->second &&
-                                    proj.field_id < it->second->fields.size()) {
-                                    base += "." + sanitizeIdentifier(
-                                                      it->second->fields[proj.field_id].name);
+                                const auto* st = findStructDef(*currentType);
+                                if (st && proj.field_id < st->fields.size()) {
+                                    base +=
+                                        "." + sanitizeIdentifier(st->fields[proj.field_id].name);
                                 }
                             }
                         } else if (proj.kind == mir::ProjectionKind::Deref) {
@@ -357,24 +356,20 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
                     }
                     if (proj.kind == mir::ProjectionKind::Field && currentType &&
                         currentType->kind == TypeKind::Struct) {
-                        auto it = struct_map_.find(currentType->name);
-                        if (it != struct_map_.end() && it->second &&
-                            proj.field_id < it->second->fields.size()) {
-                            base +=
-                                "." + sanitizeIdentifier(it->second->fields[proj.field_id].name);
-                            currentType = it->second->fields[proj.field_id].type;
+                        const auto* st = findStructDef(*currentType);
+                        if (st && proj.field_id < st->fields.size()) {
+                            base += "." + sanitizeIdentifier(st->fields[proj.field_id].name);
+                            currentType = st->fields[proj.field_id].type;
                         }
                     }
                 }
                 // 最後のFieldはキーとして返す
                 const auto& lastProj = data.place.projections.back();
                 if (currentType && currentType->kind == TypeKind::Struct) {
-                    auto it = struct_map_.find(currentType->name);
-                    if (it != struct_map_.end() && it->second &&
-                        lastProj.field_id < it->second->fields.size()) {
+                    const auto* st = findStructDef(*currentType);
+                    if (st && lastProj.field_id < st->fields.size()) {
                         return "{__arr: " + base + ", __idx: \"" +
-                               sanitizeIdentifier(it->second->fields[lastProj.field_id].name) +
-                               "\"}";
+                               sanitizeIdentifier(st->fields[lastProj.field_id].name) + "\"}";
                     }
                 }
             }
@@ -777,14 +772,9 @@ std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
             case mir::ProjectionKind::Field: {
                 // 構造体のフィールド名を取得
                 if (currentType && currentType->kind == TypeKind::Struct) {
-                    auto it = struct_map_.find(currentType->name);
-                    // ジェネリック構造体: base nameで見つからない場合、mangled nameで再検索
-                    if (it == struct_map_.end() && !currentType->type_args.empty()) {
-                        std::string mangled = ast::type_to_mangled_name(*currentType);
-                        it = struct_map_.find(mangled);
-                    }
-                    if (it != struct_map_.end() && it->second) {
-                        const auto* mirStruct = it->second;
+                    // ジェネリック構造体はfindStructDef内で$正準キーによる再検索を行う
+                    const auto* mirStruct = findStructDef(*currentType);
+                    if (mirStruct) {
                         if (proj.field_id < mirStruct->fields.size()) {
                             const auto& field_name = mirStruct->fields[proj.field_id].name;
                             if (mirStruct->is_css) {
@@ -989,12 +979,10 @@ cm::hir::TypePtr JSCodeGen::getPlaceType(const mir::MirPlace& place, const mir::
         switch (proj.kind) {
             case mir::ProjectionKind::Field: {
                 if (currentType->kind == TypeKind::Struct) {
-                    auto it = struct_map_.find(currentType->name);
-                    if (it != struct_map_.end() && it->second) {
-                        if (proj.field_id < it->second->fields.size()) {
-                            currentType = it->second->fields[proj.field_id].type;
-                            continue;
-                        }
+                    const auto* st = findStructDef(*currentType);
+                    if (st && proj.field_id < st->fields.size()) {
+                        currentType = st->fields[proj.field_id].type;
+                        continue;
                     }
                 }
                 currentType = nullptr;

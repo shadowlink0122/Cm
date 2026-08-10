@@ -104,9 +104,14 @@ void Monomorphization::collect_struct_specializations(
                 if (tree_has_generic_param(local.type))
                     continue;
 
-                std::string spec_name = struct_symbol_key(local.type->name, local.type->type_args);
+                // 置換に使うツリーを正準化（フラット名リーフの復号）
+                std::vector<hir::TypePtr> norm_args;
+                norm_args.reserve(local.type->type_args.size());
+                for (const auto& a : local.type->type_args)
+                    norm_args.push_back(normalize_spec_arg_tree(a));
+                std::string spec_name = struct_symbol_key(local.type->name, norm_args);
                 if (needed.find(spec_name) == needed.end()) {
-                    needed[spec_name] = {local.type->name, local.type->type_args};
+                    needed[spec_name] = {local.type->name, norm_args};
                     debug_msg("MONO", "Need struct specialization: " + spec_name);
                 }
             }
@@ -136,6 +141,9 @@ void Monomorphization::collect_struct_specializations(
                 }
                 {
                     if (!type_args.empty()) {
+                        // 置換に使うツリーを正準化（フラット名リーフの復号）
+                        for (auto& a : type_args)
+                            a = normalize_spec_arg_tree(a);
                         // フラット名産生の全廃に伴い、既存のフラット名ローカルも正準キーへ改名して収束させる
                         // （生成されるMirStructは正準キーで登録されるため、ローカル名との不一致はレイアウト解決欠落になる）
                         const std::string canonical = struct_symbol_key(base_name, type_args);

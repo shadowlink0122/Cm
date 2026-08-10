@@ -201,6 +201,9 @@ class JSCodeGen {
     // 構造体のデフォルト値生成（ネストフィールド対応）
     std::string getStructDefaultValue(const hir::Type& type) const;
 
+    // 構造体型からMirStruct定義を解決する（名前直引き→ジェネリックは$正準キーで再検索）
+    const mir::MirStruct* findStructDef(const hir::Type& type) const;
+
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;
 

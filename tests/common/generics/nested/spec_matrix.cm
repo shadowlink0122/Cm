@@ -1,0 +1,55 @@
+// ネスト特殊化のマトリクス（mono-flat-name-elimination③のテスト計画）:
+// 複数引数基底×ネスト引数・順序違い・逆ネスト・3引数混載が、$エンコードキーの下で
+// 正しいレイアウト・正しい値で動作することを固定する（旧フラット名では本質的に曖昧だった組）
+import std::io::println;
+
+struct Box<T> {
+    T v;
+}
+
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+
+struct Tri<X, Y, Z> {
+    X a;
+    Y b;
+    Z c;
+}
+
+int main() {
+    // Pair<Box<int>, Box<string>>
+    Pair<Box<int>, Box<string>> p1;
+    p1.first = Box<int>{v: 42};
+    p1.second = Box<string>{v: "hello"};
+    println(p1.first.v);
+    println(p1.second.v);
+
+    // 順序違い: Pair<Box<string>, Box<int>>
+    Pair<Box<string>, Box<int>> p2;
+    p2.first = Box<string>{v: "world"};
+    p2.second = Box<int>{v: 7};
+    println(p2.first.v);
+    println(p2.second.v);
+
+    // 逆ネスト: Box<Pair<int, string>>
+    Box<Pair<int, string>> b1;
+    Pair<int, string> inner;
+    inner.first = 9;
+    inner.second = "nine";
+    b1.v = inner;
+    println(b1.v.first);
+    println(b1.v.second);
+
+    // 3引数混載: Tri<int, Box<int>, string>
+    Tri<int, Box<int>, string> t;
+    t.a = 1;
+    t.b = Box<int>{v: 2};
+    t.c = "three";
+    println(t.a);
+    println(t.b.v);
+    println(t.c);
+
+    return 0;
+}

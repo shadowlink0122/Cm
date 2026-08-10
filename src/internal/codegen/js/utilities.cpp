@@ -1,5 +1,6 @@
 #include "builtins.hpp"
 #include "codegen.hpp"
+#include "internal/mir/lowering/mono/typekey.hpp"
 #include "runtime.hpp"
 #include "types.hpp"
 
@@ -111,6 +112,28 @@ void JSCodeGen::emitStructInterface(const mir::MirStruct& st) {
     emitter_.emitLine();
 }
 
+const mir::MirStruct* JSCodeGen::findStructDef(const hir::Type& type) const {
+    auto it = struct_map_.find(type.name);
+    if (it != struct_map_.end() && it->second) {
+        return it->second;
+    }
+    // ジェネリック構造体: base nameで見つからない場合、$正準キーで再検索（旧フラット名Krate__int等の残置キーにも直引きで対応済み）
+    if (!type.type_args.empty()) {
+        std::string base = type.name;
+        auto lt = base.find('<');
+        if (lt != std::string::npos) {
+            base = base.substr(0, lt);
+        }
+        base = cm::mir::typekey::spec_base_name(base);
+        auto key = cm::mir::typekey::struct_key_from_tree(base, type.type_args);
+        it = struct_map_.find(key);
+        if (it != struct_map_.end() && it->second) {
+            return it->second;
+        }
+    }
+    return nullptr;
+}
+
 bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
     auto it = struct_map_.find(struct_name);
     return it != struct_map_.end() && it->second && it->second->is_css;
@@ -202,11 +225,10 @@ std::string JSCodeGen::getStructDefaultValue(const hir::Type& type) const {
     if (type.kind != ast::TypeKind::Struct) {
         return jsDefaultValue(type);
     }
-    auto it = struct_map_.find(type.name);
-    if (it == struct_map_.end() || !it->second || it->second->fields.empty()) {
+    const auto* mirStruct = findStructDef(type);
+    if (!mirStruct || mirStruct->fields.empty()) {
         return "{}";
     }
-    const auto* mirStruct = it->second;
     std::string result = "{ ";
     for (size_t i = 0; i < mirStruct->fields.size(); ++i) {
         if (i > 0)

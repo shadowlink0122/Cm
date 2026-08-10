@@ -50,40 +50,100 @@ std::string Monomorphization::arg_symbol_key(const hir::TypePtr& arg) const {
         base = base.substr(0, lt);
     if (arg->type_args.empty())
         return base.empty() ? typekey::encode_type_key(arg) : base;
-    // 既にマングリング済みの名前（__や$を含む）はそのままシンボルキーとして扱う
-    if (base.find("__") != std::string::npos || base.find('$') != std::string::npos)
+    // $エンコード名は既に正準キー
+    if (base.find('$') != std::string::npos)
         return base;
+    // フラット特殊化名のリーフ（先行特殊化でローカル型名が具体名化されたもの。例: Vector__int）は
+    // 可逆な型ツリーへ復号してから正準キーへ再エンコードする。
+    // ユーザー定義の__入り名（C8: Box__Box__int等の実在struct）は復号せずそのまま扱う
+    if (base.find("__") != std::string::npos) {
+        if (hir_struct_defs && hir_struct_defs->find(base) != hir_struct_defs->end())
+            return base;
+        auto decoded = decode_type_name(base);
+        if (decoded && !decoded->type_args.empty())
+            return struct_symbol_key(decoded->name, decoded->type_args);
+        return base;
+    }
     return struct_symbol_key(base, arg->type_args);
 }
 
 // 特殊化構造体のシンボルキーを生成する（仕様はヘッダのコメントを参照）
+// 特殊化引数ツリーの正準化（mono-flat-name-elimination③）。
+// 先行特殊化で具体名化されたフラット/エンコード名のリーフ（name="Vector__int"・type_args空）を可逆復号して
+// 構造化ツリー（name="Vector"・type_args=[int]）へ戻す。キー計算だけでなく置換に使うツリー自体を正準化しないと、
+// 特殊化本体のパラメータ/ローカル型がフラット名リーフのままcodegenへ渡り、lookup欠落でフォールバック形状に落ちる。
+// ユーザー定義の__入り同名struct（C8）は復号しない
+hir::TypePtr Monomorphization::normalize_spec_arg_tree(const hir::TypePtr& t) const {
+    if (!t)
+        return t;
+    if ((t->kind == hir::TypeKind::Struct || t->kind == hir::TypeKind::TypeAlias) &&
+        t->type_args.empty() &&
+        (t->name.find("__") != std::string::npos || typekey::is_encoded_key(t->name)) &&
+        (!hir_struct_defs || hir_struct_defs->find(t->name) == hir_struct_defs->end())) {
+        auto decoded = decode_type_name(t->name);
+        if (decoded && !decoded->type_args.empty()) {
+            // 復号結果の引数にもリーフが残り得るため再帰的に正準化する
+            for (auto& a : decoded->type_args)
+                a = normalize_spec_arg_tree(a);
+            return decoded;
+        }
+        return t;
+    }
+    bool changed = false;
+    auto result = t;
+    // type_args / element_type の再帰（clone-on-write）
+    std::vector<hir::TypePtr> new_args;
+    new_args.reserve(t->type_args.size());
+    for (const auto& a : t->type_args) {
+        auto na = normalize_spec_arg_tree(a);
+        if (na != a)
+            changed = true;
+        new_args.push_back(na);
+    }
+    auto new_elem = t->element_type ? normalize_spec_arg_tree(t->element_type) : nullptr;
+    if (new_elem != t->element_type)
+        changed = true;
+    // type_argsを持つのにnameがマングル済み/表示形のstaleなツリー（name="Vector__int"・args=[int]等）は、
+    // nameを素の基底へ再建する（正準ツリー=素の基底名+構造化args。staleな名前は置換後のローカル型として
+    // codegenへ漏れ、lookup欠落のフォールバック形状になる）
+    std::string plain_base;
+    if ((t->kind == hir::TypeKind::Struct || t->kind == hir::TypeKind::TypeAlias) &&
+        !t->type_args.empty() &&
+        (t->name.find("__") != std::string::npos || t->name.find('$') != std::string::npos ||
+         t->name.find('<') != std::string::npos) &&
+        (!hir_struct_defs || hir_struct_defs->find(t->name) == hir_struct_defs->end())) {
+        plain_base = t->name;
+        auto lt = plain_base.find('<');
+        if (lt != std::string::npos)
+            plain_base = plain_base.substr(0, lt);
+        plain_base = typekey::spec_base_name(plain_base);
+        if (plain_base != t->name)
+            changed = true;
+    }
+    if (changed) {
+        result = std::make_shared<hir::Type>(*t);
+        result->type_args = std::move(new_args);
+        result->element_type = new_elem;
+        if (!plain_base.empty())
+            result->name = plain_base;
+    }
+    return result;
+}
+
+// 特殊化構造体のシンボルキーを生成する（$全面化＝mono-flat-name-elimination③）。
+// 常に可逆な$長さ接頭辞エンコードを使う。フラット名（base__k1__k2）はネスト特殊化で本質的に曖昧
+// （Box<Box<int>>とBox<Box,int>とユーザー定義Box__Box__intが衝突）であり、曖昧性の供給源だったフラット既定を廃止した
+// （$は識別子に使えない文字のためユーザー名との衝突も構造的に消える）。
+// 引数キーはdecode対応のarg_symbol_key（先行特殊化で具体名化されたフラットリーフを正準へ再エンコード）で計算する。
+// 関数名ドメイン（base__argkey__method）へはspec_fn_prefixのドメイン橋が変換する
 std::string Monomorphization::struct_symbol_key(const std::string& base_name,
                                                 const std::vector<hir::TypePtr>& type_args) const {
     if (type_args.empty())
         return base_name;
-
-    // 産生の$全面化（フラット名全廃）は、フラットfn接頭辞=フラット構造体キーの歴史的一致へ依存する
-    // 結合（HIR期の呼び出し名・derive関数名・演算子経路・dtor登録名）を広く露出させるため、
-    // ドメイン分離の移行計画（設計文書の実装記録参照）に沿った専用の検証枠で行う。
-    // 現段は従来どおりフラット既定+曖昧時$退避（Q2/C8）とし、キー産生のチョークポイント化のみ完了している
     std::vector<std::string> keys;
-    bool simple = true;
-    for (const auto& arg : type_args) {
+    keys.reserve(type_args.size());
+    for (const auto& arg : type_args)
         keys.push_back(arg_symbol_key(arg));
-        // Q2: 複数引数基底で引数キー自体が特殊化（__入り）だとフラット名が曖昧になるため$エンコードへ退避する。1引数基底は全セグメント結合で可逆のためフラット名を維持する
-        if (keys.back().find('$') != std::string::npos ||
-            (type_args.size() > 1 && keys.back().find("__") != std::string::npos)) {
-            simple = false;
-        }
-    }
-    if (simple) {
-        std::string flat = base_name;
-        for (const auto& k : keys)
-            flat += "__" + k;
-        // C8: フラット名がユーザー定義構造体と同名になる場合のみエンコード名へ退避する
-        if (!hir_struct_defs || hir_struct_defs->find(flat) == hir_struct_defs->end())
-            return flat;
-    }
     std::string out = base_name + "$" + std::to_string(keys.size()) + "$";
     for (const auto& k : keys)
         out += std::to_string(k.size()) + "$" + k;

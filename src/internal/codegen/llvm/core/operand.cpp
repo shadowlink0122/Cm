@@ -564,99 +564,18 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                          targetStructType->kind == hir::TypeKind::Generic)) {
                     structName = targetStructType->name;
 
-                    // ジェネリック構造体の場合、型引数を考慮した名前を生成
-                    // 例: Node<int> -> Node__int
-                    // 既にマングリング済み(__含む)の場合はスキップ
+                    // 受け手構造体の参照キーはモノモーフ化のキー産生と同じ正準関数で構築する（mono-flat-name-elimination②）。
+                    // 従来は手組みのフラット連結でネスト・特殊化引数の乖離があり、フィールド投影の構造体解決が外れていた
                     if (!targetStructType->type_args.empty() &&
-                        structName.find("__") == std::string::npos) {
-                        for (const auto& typeArg : targetStructType->type_args) {
-                            if (typeArg) {
-                                structName += "__";
-                                if (typeArg->kind == hir::TypeKind::Struct) {
-                                    structName += typeArg->name;
-                                } else {
-                                    switch (typeArg->kind) {
-                                        case hir::TypeKind::Int:
-                                            structName += "int";
-                                            break;
-                                        case hir::TypeKind::UInt:
-                                            structName += "uint";
-                                            break;
-                                        case hir::TypeKind::Long:
-                                            structName += "long";
-                                            break;
-                                        case hir::TypeKind::ULong:
-                                            structName += "ulong";
-                                            break;
-                                        case hir::TypeKind::Float:
-                                            structName += "float";
-                                            break;
-                                        case hir::TypeKind::Double:
-                                            structName += "double";
-                                            break;
-                                        case hir::TypeKind::Bool:
-                                            structName += "bool";
-                                            break;
-                                        case hir::TypeKind::Char:
-                                            structName += "char";
-                                            break;
-                                        case hir::TypeKind::String:
-                                            structName += "string";
-                                            break;
-                                        case hir::TypeKind::Pointer: {
-                                            // ポインタ型: ptr_xxx 形式で追加
-                                            structName += "ptr_";
-                                            // 要素型を再帰的に追加
-                                            if (typeArg->element_type) {
-                                                switch (typeArg->element_type->kind) {
-                                                    case hir::TypeKind::Int:
-                                                        structName += "int";
-                                                        break;
-                                                    case hir::TypeKind::UInt:
-                                                        structName += "uint";
-                                                        break;
-                                                    case hir::TypeKind::Long:
-                                                        structName += "long";
-                                                        break;
-                                                    case hir::TypeKind::ULong:
-                                                        structName += "ulong";
-                                                        break;
-                                                    case hir::TypeKind::Float:
-                                                        structName += "float";
-                                                        break;
-                                                    case hir::TypeKind::Double:
-                                                        structName += "double";
-                                                        break;
-                                                    case hir::TypeKind::Bool:
-                                                        structName += "bool";
-                                                        break;
-                                                    case hir::TypeKind::Char:
-                                                        structName += "char";
-                                                        break;
-                                                    case hir::TypeKind::String:
-                                                        structName += "string";
-                                                        break;
-                                                    case hir::TypeKind::Struct:
-                                                        structName += typeArg->element_type->name;
-                                                        break;
-                                                    default:
-                                                        structName += "void";
-                                                        break;
-                                                }
-                                            } else {
-                                                structName += "void";
-                                            }
-                                            break;
-                                        }
-                                        default:
-                                            if (!typeArg->name.empty()) {
-                                                structName += typeArg->name;
-                                            }
-                                            break;
-                                    }
-                                }
-                            }
+                        structName.find("__") == std::string::npos &&
+                        structName.find('$') == std::string::npos) {
+                        std::string base = structName;
+                        auto lt = base.find('<');
+                        if (lt != std::string::npos) {
+                            base = base.substr(0, lt);
                         }
+                        structName = cm::mir::typekey::struct_key_from_tree(
+                            base, targetStructType->type_args);
                     }
 
                     auto it = structTypes.find(structName);

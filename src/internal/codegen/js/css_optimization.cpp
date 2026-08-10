@@ -415,11 +415,10 @@ bool JSCodeGen::tryEmitObjectLiteralReturn(const mir::MirFunction& func) {
     if (!source_info.type || source_info.type->kind != ast::TypeKind::Struct) {
         return false;
     }
-    auto struct_it = struct_map_.find(source_info.type->name);
-    if (struct_it == struct_map_.end() || !struct_it->second) {
+    const auto* mirStruct = findStructDef(*source_info.type);
+    if (!mirStruct) {
         return false;
     }
-    const auto* mirStruct = struct_it->second;
 
     struct FieldAssign {
         std::string key;

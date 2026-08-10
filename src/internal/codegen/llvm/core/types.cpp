@@ -168,185 +168,22 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 lookupName = normalized;
             }
 
-            // ジェネリック構造体の場合、型引数を考慮した名前を生成
-            // 例: Node<int> -> Node__int
-            // 既にマングリング済み(__含む)の場合はスキップ
-            // ただし、<>を含む場合はまだ変換が必要
-            bool needsMangling =
-                !type->type_args.empty() && (lookupName.find("__") == std::string::npos ||
-                                             lookupName.find('<') != std::string::npos ||
-                                             lookupName.find('>') != std::string::npos);
-            if (needsMangling) {
-                for (const auto& typeArg : type->type_args) {
-                    if (typeArg) {
-                        lookupName += "__";
-                        // 型名を正規化（Pointer<int>ならptr_int等）
-                        if (typeArg->kind == hir::TypeKind::Struct) {
-                            // ネストジェネリックの場合、再帰的にマングリング
-                            std::string nestedName = typeArg->name;
-                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
-                            if (!typeArg->type_args.empty()) {
-                                for (const auto& nestedArg : typeArg->type_args) {
-                                    if (nestedArg) {
-                                        nestedName += "__";
-                                        switch (nestedArg->kind) {
-                                            case hir::TypeKind::Int:
-                                                nestedName += "int";
-                                                break;
-                                            case hir::TypeKind::UInt:
-                                                nestedName += "uint";
-                                                break;
-                                            case hir::TypeKind::Long:
-                                                nestedName += "long";
-                                                break;
-                                            case hir::TypeKind::ULong:
-                                                nestedName += "ulong";
-                                                break;
-                                            case hir::TypeKind::Float:
-                                                nestedName += "float";
-                                                break;
-                                            case hir::TypeKind::Double:
-                                                nestedName += "double";
-                                                break;
-                                            case hir::TypeKind::Bool:
-                                                nestedName += "bool";
-                                                break;
-                                            case hir::TypeKind::Char:
-                                                nestedName += "char";
-                                                break;
-                                            case hir::TypeKind::String:
-                                                nestedName += "string";
-                                                break;
-                                            case hir::TypeKind::Struct:
-                                                nestedName += nestedArg->name;
-                                                break;
-                                            default:
-                                                if (!nestedArg->name.empty()) {
-                                                    nestedName += nestedArg->name;
-                                                }
-                                                break;
-                                        }
-                                    }
-                                }
-                            }
-                            lookupName += nestedName;
-                        } else if (typeArg->kind == hir::TypeKind::Pointer) {
-                            // ポインタ型の場合：ptr_xxx 形式でマングリング
-                            lookupName += "ptr_";
-                            if (typeArg->element_type) {
-                                switch (typeArg->element_type->kind) {
-                                    case hir::TypeKind::Int:
-                                        lookupName += "int";
-                                        break;
-                                    case hir::TypeKind::Long:
-                                        lookupName += "long";
-                                        break;
-                                    case hir::TypeKind::Float:
-                                        lookupName += "float";
-                                        break;
-                                    case hir::TypeKind::Double:
-                                        lookupName += "double";
-                                        break;
-                                    case hir::TypeKind::Bool:
-                                        lookupName += "bool";
-                                        break;
-                                    case hir::TypeKind::Char:
-                                        lookupName += "char";
-                                        break;
-                                    case hir::TypeKind::Struct:
-                                        lookupName += typeArg->element_type->name;
-                                        break;
-                                    default:
-                                        lookupName += "void";
-                                        break;
-                                }
-                            } else {
-                                lookupName += "void";
-                            }
-                        } else {
-                            // プリミティブ型の場合
-                            switch (typeArg->kind) {
-                                case hir::TypeKind::Int:
-                                    lookupName += "int";
-                                    break;
-                                case hir::TypeKind::UInt:
-                                    lookupName += "uint";
-                                    break;
-                                case hir::TypeKind::Long:
-                                    lookupName += "long";
-                                    break;
-                                case hir::TypeKind::ULong:
-                                    lookupName += "ulong";
-                                    break;
-                                case hir::TypeKind::Float:
-                                    lookupName += "float";
-                                    break;
-                                case hir::TypeKind::Double:
-                                    lookupName += "double";
-                                    break;
-                                case hir::TypeKind::Bool:
-                                    lookupName += "bool";
-                                    break;
-                                case hir::TypeKind::Char:
-                                    lookupName += "char";
-                                    break;
-                                case hir::TypeKind::String:
-                                    lookupName += "string";
-                                    break;
-                                case hir::TypeKind::Pointer: {
-                                    // ポインタ型: ptr_xxx 形式で追加
-                                    lookupName += "ptr_";
-                                    if (typeArg->element_type) {
-                                        switch (typeArg->element_type->kind) {
-                                            case hir::TypeKind::Int:
-                                                lookupName += "int";
-                                                break;
-                                            case hir::TypeKind::UInt:
-                                                lookupName += "uint";
-                                                break;
-                                            case hir::TypeKind::Long:
-                                                lookupName += "long";
-                                                break;
-                                            case hir::TypeKind::ULong:
-                                                lookupName += "ulong";
-                                                break;
-                                            case hir::TypeKind::Float:
-                                                lookupName += "float";
-                                                break;
-                                            case hir::TypeKind::Double:
-                                                lookupName += "double";
-                                                break;
-                                            case hir::TypeKind::Bool:
-                                                lookupName += "bool";
-                                                break;
-                                            case hir::TypeKind::Char:
-                                                lookupName += "char";
-                                                break;
-                                            case hir::TypeKind::String:
-                                                lookupName += "string";
-                                                break;
-                                            case hir::TypeKind::Struct:
-                                                lookupName += typeArg->element_type->name;
-                                                break;
-                                            default:
-                                                lookupName += "void";
-                                                break;
-                                        }
-                                    } else {
-                                        lookupName += "void";
-                                    }
-                                    break;
-                                }
-                                default:
-                                    // その他の型は型名をそのまま使用
-                                    if (!typeArg->name.empty()) {
-                                        lookupName += typeArg->name;
-                                    }
-                                    break;
-                            }
-                        }
-                    }
+            // ジェネリック構造体の参照キーはモノモーフ化のキー産生と同じ正準関数で構築する（mono-flat-name-elimination②）。
+            // 従来はここで手組みのフラット連結（Node<int>→Node__int）を自作しており、$キーで登録された
+            // 特殊化structのlookupを外すとtypedef-unionの8バイトフォールバック形状へ落ちてレイアウトが壊れていた。
+            // enum特殊化はTagged Union経路（後段のenumDefs参照）のため対象外
+            bool needsMangling = !type->type_args.empty() &&
+                                 (lookupName.find("__") == std::string::npos ||
+                                  lookupName.find('<') != std::string::npos ||
+                                  lookupName.find('>') != std::string::npos) &&
+                                 lookupName.find('$') == std::string::npos;
+            if (needsMangling && enumDefs.count(lookupName) == 0) {
+                std::string base = lookupName;
+                auto lt = base.find('<');
+                if (lt != std::string::npos) {
+                    base = base.substr(0, lt);
                 }
+                lookupName = cm::mir::typekey::struct_key_from_tree(base, type->type_args);
             }
 
             auto it = structTypes.find(lookupName);

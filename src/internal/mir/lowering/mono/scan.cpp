@@ -192,6 +192,9 @@ void Monomorphization::scan_generic_calls(
 
     auto record = [&](const std::string& generic_name, std::vector<hir::TypePtr> type_args,
                       size_t block_idx) {
+        // 置換に使うツリーを正準化（フラット名リーフの復号）。キーとツリーの両方が正準になる
+        for (auto& a : type_args)
+            a = normalize_spec_arg_tree(a);
         const std::string spec_name = make_specialized_name(generic_name, type_args);
         auto& req = needed[spec_name];
         if (req.generic_name.empty()) {

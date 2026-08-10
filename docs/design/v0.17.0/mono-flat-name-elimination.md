@@ -91,3 +91,14 @@ struct_symbol_keyを常時$へ切り替えると全13スイートで約20件が�
 - **今回の恒久分**: ctor呼名の手組み複製2箇所（HIR let経路・checker let経路）を `mangle::ctor_name` へ一本化した（挙動同一。①実施時の置換点を2→1へ集約）。②③はフラット既定へ復元し、全ネストジェネリック回帰の同値を確認した。
 
 移行計画は「①呼び出し側の関数名ドメイン正準化（上記サイト一覧）→②codegen型参照の正準キー化→③キー産生$切替→④逆算器削除」で確定（②③のパッチ内容は本記録と前回記録のとおり）。
+
+## 実装記録（②③の完遂＝キー産生の$全面化とcodegen正準キー化・2026-08-11）
+
+移行計画②③を完遂し、特殊化の同定からフラット名を全廃した。前回記録の「残る1件」（ネストVectorのget参照ストライド）も本記録の正規化で解消した。
+
+- **③キー産生の$切替**: `struct_symbol_key` を常時$エンコードへ切替えた（フラット既定+曖昧時退避を廃止。$は識別子に使えない文字のためC8のユーザー名衝突検査も不要になり削除）。`arg_symbol_key` はdecode対応へ拡張し、先行特殊化で具体名化されたフラット/エンコード名のリーフ（name="Vector__int"・args空）を可逆復号してから正準キーへ再エンコードする（ユーザー定義の__入り同名structはC8ガードで復号しない）。
+- **特殊化引数ツリーの正準化（残1件の真因）**: 前回「未特定の第3の解決経路」とされていたのは、**キーでなく置換に使う型ツリー自体のstale名**だった。チェッカ/HIR由来のツリーに「name=旧フラット名のままtype_argsは構造化済み」（name="Vector__int"・args=[int]）というstale形が混入し、置換後のパラメータ/ローカル型としてcodegenへ漏れ、lookup欠落でtypedef-unionの8バイトフォールバック形状に落ちて値渡し構造体が切り詰められていた（外側pushのmemcpyが12バイト＝row1.len()誤値の直接原因）。`normalize_spec_arg_tree` を新設し、特殊化要求の記録チョークポイント3箇所（scanのrecord・mono_structsの2箇所）で「フラットリーフの復号」と「stale名のtype_args併存ツリーの基底名再建」を再帰適用するようにした。
+- **②codegen型参照の正準キー化**: LLVM types.cppの型引数付き構造体の手組みフラット連結（約180行の型名switch群）とoperand.cppのフィールド投影の受け手構造体名構築を、`typekey::struct_key_from_tree` の正準キー参照へ置換した（enum特殊化はTagged Union経路のため除外ガード・$含み名はスキップ）。非ジェネリック関数の具体型引数（`Iterator<int>*` 等）が手組み連結でlookupを外しフォールバック形状に落ちていた欠陥もこれで解消した。
+- **②JSエミッタの構造体定義解決の正準化**: JS backendは構造体フィールド名の解決に `struct_map_` の名前直引き＋`type_to_mangled_name`（旧フラット名）フォールバックを使っており、$キー化でlookupが外れると位置名 `fieldN` へ退避してフィールドの読み書きが分裂する実害があった（`(*p).val = 100` の書きだけ `field0` へ落ち、読み `.val` と乖離）。`findStructDef`（名前直引き→$正準キー再検索）をJSCodeGenの単一ヘルパとして新設し、フィールド投影・place型追跡・格納先型解決・デフォルト値生成・CSS最適化の全lookupサイトを同ヘルパへ一本化した（旧フラット名フォールバックは削除）。
+- **検証**: interpreterスイート全数（705件中700 PASS・0 FAIL）・unit・regression・ネスト系の重点回帰（nested_collection_generics・nested_vector_lifecycle_test・nested_generic_destructor・iter_generic・method_interp・flat_name_collision）が$レジーム下で全PASS。テスト計画のネスト特殊化マトリクス（`Pair<Box<int>, Box<string>>`・順序違い・逆ネスト・`Tri`3引数混載）を `tests/common/generics/nested/spec_matrix.cm` として追加し、interpreter/llvm/jsの3バックエンド一致を確認した。生成シンボルの$はLLVM・JS（識別子に$可）・SV（IEEE 1800の単純識別子は非先頭$可）でいずれも合法。
+- **残（①④）**: ①HIR/checker期の呼び出し名・型名のフラット産生の置換（現状はmono境界の正規化で吸収しており、入力デコーダとしての `parse_flat_type_args` はこのため存置）と、①完了後の④逆算器削除。同定（identity）は$のみとなったため、フラット名は「HIR由来入力の互換デコード」に役割が縮小した。

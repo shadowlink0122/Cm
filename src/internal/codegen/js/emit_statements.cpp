@@ -169,10 +169,9 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                     }
                     if (proj.kind == mir::ProjectionKind::Field) {
                         if (slotType->kind == TypeKind::Struct) {
-                            auto sit = struct_map_.find(slotType->name);
-                            if (sit != struct_map_.end() && sit->second &&
-                                proj.field_id < sit->second->fields.size()) {
-                                slotType = sit->second->fields[proj.field_id].type;
+                            const auto* st = findStructDef(*slotType);
+                            if (st && proj.field_id < st->fields.size()) {
+                                slotType = st->fields[proj.field_id].type;
                                 continue;
                             }
                         }
@@ -292,10 +291,9 @@ void JSCodeGen::emitStatement(const mir::MirStatement& stmt, const mir::MirFunct
                     }
                     if (proj.kind == mir::ProjectionKind::Field) {
                         if (slotType->kind == TypeKind::Struct) {
-                            auto sit = struct_map_.find(slotType->name);
-                            if (sit != struct_map_.end() && sit->second &&
-                                proj.field_id < sit->second->fields.size()) {
-                                slotType = sit->second->fields[proj.field_id].type;
+                            const auto* st = findStructDef(*slotType);
+                            if (st && proj.field_id < st->fields.size()) {
+                                slotType = st->fields[proj.field_id].type;
                                 continue;
                             }
                         }
