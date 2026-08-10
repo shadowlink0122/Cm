@@ -462,7 +462,8 @@ PY
                         local sim_output="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}.log"
                         iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
                         if [ $? -eq 0 ]; then
-                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            # テストベンチの $dumpfile は相対名のため、波形(.vcd)がリポジトリルートへ漏れないようTEMP_DIRをCWDにして実行する
+                            (cd "$TEMP_DIR" && vvp "$sim_binary") > "$sim_output" 2>&1
                             local sim_exit=$?
                             if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
                                 # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）

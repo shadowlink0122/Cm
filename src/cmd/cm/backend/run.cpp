@@ -34,10 +34,14 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
     if (opts.target == "js" || opts.target == "web" || opts.target == "ts") {
         // JS生成 → Node.jsで実行（tsターゲットも実行は型注釈を除去したJSで行う。TSは同一コード生成結果へstripされる）
         cm::codegen::js::JSCodeGenOptions js_opts;
-        js_opts.outputFile =
-            opts.output_file.empty()
-                ? (std::filesystem::temp_directory_path() / "cm_run_output.js").string()
-                : opts.output_file;
+        std::string default_js_out;
+        if (opts.output_file.empty()) {
+            // 中間JSは他の中間生成物（.tmp/test・.tmp/module-cache等）と同じく.tmp配下へ置く（従来はシステムのtempディレクトリで固定名が全プロセス共有だった）
+            std::filesystem::create_directories(".tmp/run");
+            default_js_out =
+                ".tmp/run/" + std::filesystem::path(opts.input_file).stem().string() + ".js";
+        }
+        js_opts.outputFile = opts.output_file.empty() ? default_js_out : opts.output_file;
         js_opts.generateHTML = false;
         js_opts.verbose = opts.verbose || opts.debug;
         try {
