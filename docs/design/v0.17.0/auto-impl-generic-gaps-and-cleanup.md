@@ -52,7 +52,7 @@ derive-as-source-expansion（archive済み）で非ジェネリック構造体�
 ジェネリック構造体のderiveを単一総称implソース合成へ載せ替え`generate_*_for_monomorphized`系を全廃する後半は、以下の言語機能が前提となることが実測で判明したため、それらの整備後に実施する。
 
 - **プリミティブへの一様メソッド付与**: Hash/Debug/Display/Cssの合成本体はフィールド型に応じ`self.v.hash()`/`self.v.debug()`（構造体）か`(self.v as int)`/補間（スカラ）へ分岐する。総称構造体のフィールド`T v`は単一の合成本体を持ち特殊化で確定するため、`self.v.hash()`形に固定すると型引数が`int`等のプリミティブのとき`int.hash()`が存在せず成立しない（実測: `Unknown method 'hash' for type 'int'`）。プリミティブに`hash()`/`debug()`/`toString()`を一様に付与すれば単一総称implで賄える。Eq/Ord/Cloneは`self.v == other.v`・`self.v < other.v`・`return self;`で全型引数に成立するが、Hash/Debug/Display/Cssと生成経路を分けると二重管理になるため、全トレイト一括の載せ替えを一様メソッド整備後に行う。
-- **ユニオンの等価演算子の正当化**: 型引数がユニオン（`Box<int | string>`）のEqは、合成本体`self.v == other.v`がユニオン`==`へ落ちるが、ユニオン`==`自体が活性値でなく生表現を比較し誤値になる（実測: `IU a = 1; IU c = 2; a == c` が`true`）。ユニオン型引数は現状R21の特殊化時診断（`Cannot derive 'Eq'`）で停止させたままとし、ユニオン`==`の是正後に載せ替える。
+- **ユニオンの等価演算子の正当化（是正済み）**: 型引数がユニオン（`Box<int | string>`）のEqは、合成本体`self.v == other.v`がユニオン`==`へ落ちる。ユニオン`==`は生表現比較の誤値（実測: `IU a = 1; IU c = 2; a == c` が`true`）だったが、MIR loweringの「タグ一致＋アクティブ変種のペイロード比較」脱糖で是正済み（tests/common/types/union/equality.cm）。これによりユニオン型引数のEq載せ替えの前提は満たされた（載せ替え自体はプリミティブ一様メソッドと同時の第3段後半で行う。なおスライス変種を含むユニオンは、抽出`u as int[]`のnative既知課題が別途残る）。
 - スライス型引数（`Box<int[]>`）のEqはスライス`==`が内容比較で正しく動作するため、上記2点の整備と同時にR21診断から正常動作へ移行できる（`tests/common/errors/derive/generic_slice_arg.cm`は載せ替え時に正常系へ移す）。
 
 現時点で`generate_*_for_monomorphized`系と特例群（auto_impl_info_等）は上記前提が未整備のため現役維持する。

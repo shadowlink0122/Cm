@@ -39,6 +39,151 @@ void cm_flatten_string_concat(const hir::HirExpr& e, std::vector<const hir::HirE
     out.push_back(&e);
 }
 
+// ユニオンの等値比較を「タグ一致＋アクティブ変種のペイロード比較」のCFGへ脱糖する。
+// 従来は生表現のMIR Eqへ落ち、native/jitはタグのみ比較（1==2がtrue）、jsはオブジェクト参照比較（1==1がfalse）と全バックエンドで誤値だった。
+// 既存のis（Cast check_only=タグ比較）・as（Cast=ペイロード抽出）・型付きEq（string=内容比較等はバックエンドがオペランド型で解決）のみで構築するため、バックエンド個別対応は不要。
+// 対象: union==union（同一union型）と union==変種値（片側が変種型に一致）。Ne は結果の反転。
+// null変種は is null 同士のタグ一致のみで等値とする
+LocalId cm_lower_union_equality(bool is_ne, LocalId lhs, LocalId rhs, const hir::TypePtr& lt,
+                                const hir::TypePtr& rt, bool l_union, bool r_union,
+                                LoweringContext& ctx) {
+    LocalId result = ctx.new_temp(hir::make_bool());
+    MirConstant false_const;
+    false_const.value = false;
+    false_const.type = hir::make_bool();
+    ctx.push_statement(
+        MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::constant(false_const))));
+    BlockId end_block = ctx.new_block();
+
+    auto emit_is = [&](LocalId v, const hir::TypePtr& vt) -> LocalId {
+        LocalId t = ctx.new_temp(hir::make_bool());
+        ctx.push_statement(MirStatement::assign(
+            MirPlace{t}, MirRvalue::cast(MirOperand::copy(MirPlace{v}), vt, /*check_only=*/true)));
+        return t;
+    };
+    auto emit_as = [&](LocalId v, const hir::TypePtr& vt) -> LocalId {
+        LocalId t = ctx.new_temp(vt);
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{t}, MirRvalue::cast(MirOperand::copy(MirPlace{v}), vt)));
+        return t;
+    };
+    // p1 == p2 を result へ格納して end へ合流する（比較の型はvt。string等の内容比較はバックエンドがオペランド型で解決する）。
+    // 動的スライス変種はHIRの配列比較と同じ正準ランタイム cm_slice_equal で内容比較する（生のMIR Eqはnativeでクラッシュする）
+    auto finish_with_eq = [&](LocalId p1, const hir::TypePtr& t1, LocalId p2,
+                              const hir::TypePtr& t2) {
+        LocalId eq = ctx.new_temp(hir::make_bool());
+        const bool is_dyn_slice =
+            t1 && t1->kind == hir::TypeKind::Array && !t1->array_size.has_value();
+        if (is_dyn_slice) {
+            BlockId success = ctx.new_block();
+            std::vector<MirOperandPtr> args;
+            args.push_back(MirOperand::copy(MirPlace{p1}, t1));
+            args.push_back(MirOperand::copy(MirPlace{p2}, t2));
+            auto call_term = std::make_unique<MirTerminator>();
+            call_term->kind = MirTerminator::Call;
+            call_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_equal"),
+                                                      std::move(args),
+                                                      MirPlace{eq},
+                                                      success,
+                                                      std::nullopt,
+                                                      "",
+                                                      "",
+                                                      false};
+            ctx.set_terminator(std::move(call_term));
+            ctx.switch_to_block(success);
+        } else {
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{eq},
+                MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace{p1}, t1),
+                                  MirOperand::copy(MirPlace{p2}, t2), hir::make_bool())));
+        }
+        ctx.push_statement(
+            MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{eq}))));
+        ctx.set_terminator(MirTerminator::goto_block(end_block));
+    };
+
+    if (l_union && r_union) {
+        const auto* ut = static_cast<const ast::UnionType*>(lt.get());
+        for (const auto& variant : ut->variants) {
+            if (variant.fields.empty() || !variant.fields[0]) {
+                continue;
+            }
+            const hir::TypePtr& vt = variant.fields[0];
+            BlockId chk_rhs = ctx.new_block();
+            BlockId next_variant = ctx.new_block();
+            LocalId t1 = emit_is(lhs, vt);
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{t1}),
+                                                         {{1, chk_rhs}}, next_variant));
+            ctx.switch_to_block(chk_rhs);
+            LocalId t2 = emit_is(rhs, vt);
+            if (vt->kind == hir::TypeKind::Null) {
+                // null変種: 両側がnull変種ならペイロードは無く等値
+                BlockId set_true = ctx.new_block();
+                ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{t2}),
+                                                             {{1, set_true}}, end_block));
+                ctx.switch_to_block(set_true);
+                MirConstant true_const;
+                true_const.value = true;
+                true_const.type = hir::make_bool();
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{result}, MirRvalue::use(MirOperand::constant(true_const))));
+                ctx.set_terminator(MirTerminator::goto_block(end_block));
+            } else {
+                BlockId payload = ctx.new_block();
+                ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{t2}),
+                                                             {{1, payload}}, end_block));
+                ctx.switch_to_block(payload);
+                LocalId p1 = emit_as(lhs, vt);
+                LocalId p2 = emit_as(rhs, vt);
+                finish_with_eq(p1, vt, p2, vt);
+            }
+            ctx.switch_to_block(next_variant);
+        }
+        // どの変種タグでもない（不正状態）→ false のまま end へ
+        ctx.set_terminator(MirTerminator::goto_block(end_block));
+    } else {
+        // 片側union: unionでない側の型に一致する変種のタグ検査＋ペイロード比較
+        LocalId uv = l_union ? lhs : rhs;
+        LocalId sv = l_union ? rhs : lhs;
+        const hir::TypePtr& union_t = l_union ? lt : rt;
+        const hir::TypePtr& scalar_t = l_union ? rt : lt;
+        const auto* ut = static_cast<const ast::UnionType*>(union_t.get());
+        hir::TypePtr vt = nullptr;
+        const std::string scalar_key = ast::type_to_string(*scalar_t);
+        for (const auto& variant : ut->variants) {
+            if (!variant.fields.empty() && variant.fields[0] &&
+                ast::type_to_string(*variant.fields[0]) == scalar_key) {
+                vt = variant.fields[0];
+                break;
+            }
+        }
+        if (vt) {
+            BlockId payload = ctx.new_block();
+            LocalId t1 = emit_is(uv, vt);
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{t1}),
+                                                         {{1, payload}}, end_block));
+            ctx.switch_to_block(payload);
+            LocalId p = emit_as(uv, vt);
+            finish_with_eq(p, vt, sv, scalar_t);
+        } else {
+            // 変種に無い型との比較は常にfalse
+            ctx.set_terminator(MirTerminator::goto_block(end_block));
+        }
+    }
+
+    ctx.switch_to_block(end_block);
+    if (is_ne) {
+        LocalId neg = ctx.new_temp(hir::make_bool());
+        auto unary_rvalue = std::make_unique<MirRvalue>();
+        unary_rvalue->kind = MirRvalue::UnaryOp;
+        unary_rvalue->data =
+            MirRvalue::UnaryOpData{MirUnaryOp::Not, MirOperand::copy(MirPlace{result})};
+        ctx.push_statement(MirStatement::assign(MirPlace{neg}, std::move(unary_rvalue)));
+        return neg;
+    }
+    return result;
+}
+
 }  // namespace
 
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
@@ -526,6 +671,18 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
     // 左辺と右辺をlowering
     LocalId lhs = lower_expression(*bin.lhs, ctx);
     LocalId rhs = lower_expression(*bin.rhs, ctx);
+
+    // ユニオンの等値比較（Eq/Ne）: 生表現比較は誤値になるため、タグ一致＋アクティブ変種のペイロード比較へ脱糖する
+    if (bin.op == hir::HirBinaryOp::Eq || bin.op == hir::HirBinaryOp::Ne) {
+        hir::TypePtr lt = ctx.resolve_typedef(bin.lhs ? bin.lhs->type : nullptr);
+        hir::TypePtr rt = ctx.resolve_typedef(bin.rhs ? bin.rhs->type : nullptr);
+        const bool l_union = lt && lt->kind == hir::TypeKind::Union;
+        const bool r_union = rt && rt->kind == hir::TypeKind::Union;
+        if (l_union || r_union) {
+            return cm_lower_union_equality(bin.op == hir::HirBinaryOp::Ne, lhs, rhs, lt, rt,
+                                           l_union, r_union, ctx);
+        }
+    }
 
     // 構造体の比較演算子の特別処理（with による自動実装）
     if (bin.op == hir::HirBinaryOp::Eq || bin.op == hir::HirBinaryOp::Ne) {

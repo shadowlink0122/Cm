@@ -72,6 +72,27 @@ int main() {
 > Slice-variant checks and extraction (`v is int[]` / `v as int[]`) are also supported since v0.17.0 (previously `int[]` was a syntax error in this position).
 > Variant values can be passed directly to union-typed function parameters (`take_union(9)`; no `as` needed since v0.17.0), and as/is against a typedef alias (`v as IntSlice`) matches by the resolved type.
 
+### Union equality (fixed in v0.17.0)
+
+`==`/`!=` between unions, or between a union and a variant value, compares **tag equality plus the active variant's payload** (string variants compare contents):
+
+```cm
+typedef IU = int | string;
+
+IU a = 1 as IU;
+IU b = 1 as IU;
+IU c = 2 as IU;
+IU s = "hello" as IU;
+
+a == b    // true (same variant, same value)
+a == c    // false (same variant, different value)
+a == s    // false (different variants)
+a == 1    // true (direct comparison with a variant value)
+a != c    // true
+```
+
+> **Note for versions before v0.17.0:** comparisons fell through to raw-representation compares — native/JIT compared tags only (`1 == 2` was true) and JS compared references (`1 == 1` was false) — wrong on every backend.
+
 ### Runtime Type Discrimination: the `is` Operator and Match Type Patterns (v0.16.0)
 
 The `is` operator safely discriminates the active variant of a union value at runtime. Check with `is` first, then extract with `as` without panicking.
