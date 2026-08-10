@@ -126,15 +126,31 @@ Read and write sub-ranges of `bit[N]` / integer values using SV-style descending
 ```cm
 bit[16] word = 0xABCD;
 bit[8] hi = word[15:8];      // 0xAB (constant range)
-word[11:4] = 0xFF;           // partial assignment (read-modify-write)
+word[11:4] = 0xFF;           // partial assignment
 
 uint i = 1;
 bit[4] nib = word[i*4 +: 4]; // variable base + constant width
+bit[4] dn = word[7 -: 4];    // downward direction (bits 7..4, v0.17.0)
 ```
 
-- Range/width must be **integer literals** (v0.16.0 restriction); the base of `+:` may be any integer expression
-- Desugared to shifts+masks shared by all backends, so execution backends (JIT/native/WASM/JS) produce identical results
+- Range/width must be **integer literals**; the base of `+:`/`-:` may be any integer expression or `bit[N]` value
+- `x[base -: w]` selects `[base : base-w+1]` downward from the base (v0.17.0)
+- On execution backends (JIT/native/WASM/JS) this desugars to shifts+masks, producing identical results on all backends
 - Max width 64; the result type is `bit[w]` (interchangeable with integers)
+
+### Native part-select output (v0.17.0)
+
+On the SV target, bit-slice reads and writes emit **native SV part-select syntax** instead of shift+mask:
+
+| Cm | Generated SV |
+|----|--------------|
+| `hi = din[15:8];` | `hi <= din[15:8];` |
+| `nib = word[i +: 4];` | `nib <= word[i +: 4];` |
+| `dn = word[7 -: 4];` | `dn <= word[7 -: 4];` |
+| `word[7:4] = v;` | `word[7:4] <= v;` (LHS part-select) |
+
+- Blocking/non-blocking for partial assignments follows the same rules as ordinary assignments (`<=` for global signals in always_ff/posedge functions)
+- Inside `#[test]` functions and initial blocks the shift+mask form is kept as before (testbench-generation compatibility)
 
 ## Reduction operators (v0.17.0)
 

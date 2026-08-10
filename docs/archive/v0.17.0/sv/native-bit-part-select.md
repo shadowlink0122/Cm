@@ -2,7 +2,7 @@
 
 **分類:** idiom改善（合成結果は等価だが可読性・ツール互換）＋ 一部新機能（`[-:]`）
 **優先度:** High
-**ステータス:** 未実装（v0.17.0 SVギャップ調査で検出）
+**ステータス:** 実装済み（native出力＋`-:`新構文＋bit基点許容）
 
 ## 現状（実測: cm 2026-08-08ビルド、プローブ `.tmp/svgap/`）
 
@@ -38,3 +38,14 @@ Cmはビットスライス・部分選択を**shift+maskへ降下**し、SVの n
 ## テスト計画
 
 `tests/sv/basic/` へ: 定数範囲読み・可変基点`+:`読み・`-:`読み・部分代入の各々が native part-select を出力し（生成SVのgrep）、かつiverilogシミュレーションで値がshift+mask版と一致することを確認。bit基点`+:`が受理されることの回帰。`.expect`はSIM_OK＋値行。
+
+## 実装記録
+
+提案の4項目（定数範囲読み・インデックスド読み`+:`/`-:`・部分代入・bit基点許容）を全て実装した。実装方針の「part-selectノード保持」はMIR/SVExprのノード追加でなく、HIR loweringのSVターゲット分岐でpart-select専用ビルトイン呼び出しへ落とし、SVコード生成のCallターミネータ写像で構文を出力する方式（SV-N2/N3と同じ機構）を採った。
+
+- **構文（`-:`）**: レキサへ `MinusColon` トークンを追加し、パーサのインデックスドパートセレクト分岐を `+:`/`-:` 両対応にした（`ast::SliceExpr::part_select_down`）。`-1` 等の負数リテラルは `-` の直後が `:` でないため既存の字句解釈と衝突しない。
+- **型検査**: `-:` は `+:` と同じ検査（基点=整数式・幅=1〜64の整数リテラル）を共有する。基点の型検査を拡張し、`bit`/`bit[N]` を整数として許容した（従来は `TypeTheBaseOfAPart` で拒否）。
+- **HIR lowering**（`expr.cpp`）: 読みは `__builtin_sv_range_select(x, hi, lo)`・`__builtin_sv_part_select[_down](x, base, w)`、部分代入は `__builtin_sv_range_assign(x, hi, lo, v)`・`__builtin_sv_part_assign[_down](x, base, w, v)`（値を返さない代入文）へ落とす。非SVターゲットは従来のshift+mask脱糖を維持し、`-:` のシフト量は `base-(w-1)`。`#[test]`関数・initialブロックはSVテストベンチ生成がHIR式を直接消費するため、`hir_retained_context_` フラグで脱糖を抑止し従来のshift+mask式を保つ。
+- **SVコード生成**（`emit_control.cpp`）: Callターミネータの各ビルトインを `dest = x[hi:lo];`・`dest = x[base +: w];`・`x[hi:lo] <= v;` 等へ写像する。基点が定数の場合はサイズ無し10進で出力（`32'sd7` でなく `7`）。部分代入のブロッキング/ノンブロッキングは対象信号のルートlocal（copy/ref逆引き）から通常代入と同じ規則（async/always_ffのグローバル・posedgeパラメータ関数のフォールバック込み）で判定する。
+- **テスト**: `tests/sv/basic/bit-ops/partselect.cm`（定数範囲・`+:`・`-:`・部分代入のiverilogシミュレーション、2入力ベクタ）・`tests/regression/cases/sv/expr/partselect_native.cm`＋`SVCodegenTest.NativePartSelect`（native構文の出力とshift+mask非残存のgrep検証。bit[N]判定に型注釈が要るため型チェッカ経由の `compile_to_sv_checked` を新設）・`tests/common/basic/arrays-slices/partselect_down.cm`（`-:` の非SVバックエンド一致・`+:`との等価性・下降部分代入）。既存 `bitslice.cm`（SIM）・`bitslice.cm`（common）は無変更で通過し、意味論の不変を確認した。
+- **範囲外**: SVExprへのpart-selectノード種別追加（提案の実装方針2）は、Callターミネータ写像で全ケースが賄えるため不要と判断した。読み結果は一時信号経由（`_t = x[7:4]; y <= _t;`）になるが合成等価で、SVの可読性目標（native構文の出力）は満たしている。

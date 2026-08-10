@@ -157,7 +157,7 @@ export const operators: TmRepositoryEntry = {
   patterns: [
     {
       name: 'keyword.operator.bitslice.cm',
-      match: '\\+:',
+      match: '\\+:|-:',
     },
     {
       name: 'keyword.operator.logical.cm',

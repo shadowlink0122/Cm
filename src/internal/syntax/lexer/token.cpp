@@ -274,6 +274,8 @@ const char* token_kind_to_string(TokenKind kind) {
             return ":";
         case TokenKind::PlusColon:
             return "+:";
+        case TokenKind::MinusColon:
+            return "-:";
         case TokenKind::ColonColon:
             return "::";
         case TokenKind::Arrow:

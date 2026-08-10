@@ -773,6 +773,7 @@ Token Lexer::scan_operator(uint32_t start, char c) {
             return match('>')   ? make(TokenKind::ThinArrow)
                    : match('-') ? make(TokenKind::MinusMinus)
                    : match('=') ? make(TokenKind::MinusEq)
+                   : match(':') ? make(TokenKind::MinusColon)
                                 : make(TokenKind::Minus);
         case '*':
             return match('=') ? make(TokenKind::StarEq) : make(TokenKind::Star);

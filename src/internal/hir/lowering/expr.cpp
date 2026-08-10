@@ -422,10 +422,39 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
         // ビットスライスへの代入（v0.16.0）:
         // x[hi:lo] = v → x = (x & ~(mask<<lo)) | ((v & mask) << lo)
         // （read-modify-write脱糖。対象式は副作用のない左辺値であること）
+        // SVターゲットはnative部分代入（x[hi:lo] = v / x[base +: w] = v）出力用のビルトイン呼び出し文へ落とす（SV-N1）
         if (auto* sl = binary.left->as<ast::SliceExpr>()) {
             ast::TypePtr sobj_type = sl->object ? sl->object->type : nullptr;
             if (is_bits_type(sobj_type) &&
                 (sl->is_part_select || (sl->start && sl->end && !sl->step))) {
+                if (sv_target_ && !hir_retained_context_) {
+                    std::optional<int64_t> whi;
+                    std::optional<int64_t> wlo;
+                    std::optional<int64_t> wwidth;
+                    if (sl->is_part_select) {
+                        wwidth = slice_lit(sl->end);
+                    } else {
+                        whi = slice_lit(sl->start);
+                        wlo = slice_lit(sl->end);
+                    }
+                    if ((whi && wlo && *whi >= *wlo) || (wwidth && *wwidth > 0)) {
+                        auto hir = std::make_unique<HirCall>();
+                        hir->args.push_back(lower_expr(*sl->object));
+                        if (wwidth) {
+                            hir->func_name = sl->part_select_down ? "__builtin_sv_part_assign_down"
+                                                                  : "__builtin_sv_part_assign";
+                            hir->args.push_back(lower_expr(*sl->start));
+                            hir->args.push_back(make_int_lit(*wwidth, ast::make_int()));
+                        } else {
+                            hir->func_name = "__builtin_sv_range_assign";
+                            hir->args.push_back(make_int_lit(*whi, ast::make_int()));
+                            hir->args.push_back(make_int_lit(*wlo, ast::make_int()));
+                        }
+                        hir->args.push_back(lower_expr(*binary.right));
+                        // 値を返さない代入文（SVコード生成が x[...] = v; へ写像する）
+                        return std::make_unique<HirExpr>(std::move(hir), ast::make_void());
+                    }
+                }
                 int64_t width = 0;
                 HirExprPtr shift1;  // mask<<shift 用
                 HirExprPtr shift2;  // (v&mask)<<shift 用
@@ -433,8 +462,21 @@ HirExprPtr HirLowering::lower_binary(ast::BinaryExpr& binary, TypePtr type) {
                     auto w = slice_lit(sl->end);
                     if (w) {
                         width = *w;
-                        shift1 = lower_expr(*sl->start);
-                        shift2 = lower_expr(*sl->start);
+                        if (sl->part_select_down) {
+                            // 下降方向: シフト量は base-(w-1)
+                            auto mk_sub = [&]() {
+                                auto sub = std::make_unique<HirBinary>();
+                                sub->op = HirBinaryOp::Sub;
+                                sub->lhs = lower_expr(*sl->start);
+                                sub->rhs = make_int_lit(width - 1, ast::make_int());
+                                return std::make_unique<HirExpr>(std::move(sub), ast::make_int());
+                            };
+                            shift1 = mk_sub();
+                            shift2 = mk_sub();
+                        } else {
+                            shift1 = lower_expr(*sl->start);
+                            shift2 = lower_expr(*sl->start);
+                        }
                     }
                 } else {
                     auto hi = slice_lit(sl->start);
@@ -1148,30 +1190,63 @@ HirExprPtr HirLowering::lower_slice(ast::SliceExpr& slice, TypePtr type) {
         obj_type = slice.object->type;
     }
     // ビットスライスの読み取り（v0.16.0）:
-    // x[hi:lo] → (x >> lo) & ((1<<w)-1) / x[base +: w] → (x >> base) & ((1<<w)-1)
-    // 全バックエンド共通のシフト+マスク脱糖（SVへの[hi:lo]直接出力は将来最適化）
+    // x[hi:lo] → (x >> lo) & ((1<<w)-1) / x[base +: w] → (x >> base) & ((1<<w)-1) /
+    // x[base -: w] → (x >> (base-(w-1))) & ((1<<w)-1)
+    // 非SVはシフト+マスク脱糖、SVターゲットはnative part-select出力用のビルトイン呼び出しへ落とす（SV-N1）
     if (is_bits_type(obj_type) &&
         (slice.is_part_select || (slice.start && slice.end && !slice.step))) {
         int64_t width = 0;
         HirExprPtr shift_amount;
+        std::optional<int64_t> const_hi;
+        std::optional<int64_t> const_lo;
         if (slice.is_part_select) {
             auto w = slice_lit(slice.end);
             if (w) {
                 width = *w;
-                shift_amount = lower_expr(*slice.start);
+                if (slice.part_select_down) {
+                    // 下降方向: 選択範囲は [base : base-w+1] のためシフト量は base-(w-1)
+                    auto sub = std::make_unique<HirBinary>();
+                    sub->op = HirBinaryOp::Sub;
+                    sub->lhs = lower_expr(*slice.start);
+                    sub->rhs = make_int_lit(width - 1, ast::make_int());
+                    shift_amount = std::make_unique<HirExpr>(std::move(sub), ast::make_int());
+                } else {
+                    shift_amount = lower_expr(*slice.start);
+                }
             }
         } else {
             auto hi = slice_lit(slice.start);
             auto lo = slice_lit(slice.end);
             if (hi && lo && *hi >= *lo) {
                 width = *hi - *lo + 1;
+                const_hi = hi;
+                const_lo = lo;
                 shift_amount = make_int_lit(*lo, ast::make_int());
             }
         }
         if (width > 0 && shift_amount) {
-            int64_t mask = (width >= 64) ? -1 : ((int64_t{1} << width) - 1);
             ast::TypePtr result_type =
                 ast::make_array(ast::make_bit(), static_cast<uint32_t>(width));
+            // SVターゲット: native part-select（x[hi:lo]・x[base +: w]・x[base -: w]）を
+            // 出力するためのビルトイン呼び出しへ落とす（テストベンチ等のHIR直接消費文脈は除く）
+            if (sv_target_ && !hir_retained_context_) {
+                auto hir = std::make_unique<HirCall>();
+                if (const_hi && const_lo) {
+                    hir->func_name = "__builtin_sv_range_select";
+                    hir->args.push_back(std::move(obj_hir));
+                    hir->args.push_back(make_int_lit(*const_hi, ast::make_int()));
+                    hir->args.push_back(make_int_lit(*const_lo, ast::make_int()));
+                } else {
+                    hir->func_name = slice.part_select_down ? "__builtin_sv_part_select_down"
+                                                            : "__builtin_sv_part_select";
+                    hir->args.push_back(std::move(obj_hir));
+                    // 基点はソースの式そのもの（下降方向の -(w-1) 補正はSV側の -: が担う）
+                    hir->args.push_back(lower_expr(*slice.start));
+                    hir->args.push_back(make_int_lit(width, ast::make_int()));
+                }
+                return std::make_unique<HirExpr>(std::move(hir), result_type);
+            }
+            int64_t mask = (width >= 64) ? -1 : ((int64_t{1} << width) - 1);
             // (obj >> shift)
             auto shr = std::make_unique<HirBinary>();
             shr->op = HirBinaryOp::Shr;

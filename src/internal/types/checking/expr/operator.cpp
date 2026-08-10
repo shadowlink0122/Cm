@@ -647,9 +647,13 @@ ast::TypePtr TypeChecker::infer_slice(ast::SliceExpr& slice) {
             return std::nullopt;
         };
         if (obj_is_bits && slice.is_part_select) {
-            // base は任意の整数式、width は正の整数リテラル
+            // base は任意の整数式（bit/bit[N]も整数として許容。SV-N1）、width は正の整数リテラル
             auto base_type = infer_type(*slice.start);
-            if (!base_type || !base_type->is_integer()) {
+            bool base_is_bits =
+                base_type && (base_type->is_integer() || base_type->kind == ast::TypeKind::Bit ||
+                              (base_type->kind == ast::TypeKind::Array && base_type->element_type &&
+                               base_type->element_type->kind == ast::TypeKind::Bit));
+            if (!base_is_bits) {
                 error(current_span_, i18n::msg(i18n::MsgId::TypeTheBaseOfAPart));
             }
             auto w = lit_value(slice.end);

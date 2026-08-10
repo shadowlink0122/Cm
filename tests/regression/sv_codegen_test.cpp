@@ -13,6 +13,7 @@
 #include "../../src/internal/mir/passes/scalar/folding.hpp"
 #include "../../src/internal/syntax/lexer/lexer.hpp"
 #include "../../src/internal/syntax/parser/parser.hpp"
+#include "../../src/internal/types/type_checker.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -72,6 +73,33 @@ class SVCodegenTest : public ::testing::Test {
         options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
         options.emitMemfile = emit_memfile;
         options.strictLint = strict_lint;
+        options.topModule = top_module;
+        codegen::sv::SVCodeGen gen(options);
+        gen.compile(mir);
+        return gen.getGeneratedCode();
+    }
+
+    // Cmソース → 生成SV文字列（型チェッカ経由）。
+    // native part-select等、HIR loweringがAST型注釈（bit[N]判定）を必要とするケース用
+    std::string compile_to_sv_checked(const std::string& code) {
+        Lexer lex(code, LexerPlatform::SV);
+        std::vector<Token> tokens = lex.tokenize();
+        Parser p(tokens);
+        auto ast = p.parse();
+        std::string top_module = codegen::sv::extract_top_module_name(ast);
+
+        TypeChecker checker;
+        checker.set_sv_platform(true);
+        checker.check(ast);
+
+        hir::HirLowering hir_lowering;
+        hir_lowering.set_sv_target(true);
+        auto hir = hir_lowering.lower(ast);
+        mir::MirLowering mir_lowering;
+        auto mir = mir_lowering.lower(hir);
+
+        codegen::sv::SVCodeGenOptions options;
+        options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
         options.topModule = top_module;
         codegen::sv::SVCodeGen gen(options);
         gen.compile(mir);
@@ -601,4 +629,16 @@ TEST_F(SVCodegenTest, PriorityCaseAttribute) {
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "priority case (sel)");
     expect_not_contains(sv, "unique case (sel)");
+}
+
+// native part-select（SV-N1）: ビット範囲の読みがshift+maskでなく x[hi:lo]・x[base +: w]・x[base -: w] で出力され、部分代入は左辺part-selectになる
+TEST_F(SVCodegenTest, NativePartSelect) {
+    const std::string code = load_case("expr/partselect_native");
+    std::string sv = compile_to_sv_checked(code);
+    expect_contains(sv, "din[15:8]");
+    expect_contains(sv, "word[i +: 4]");
+    expect_contains(sv, "word[7 -: 4]");
+    expect_contains(sv, "word[7:4] <= ");
+    expect_not_contains(sv, ">> 32'sd8 &");  // 旧shift+mask読みが残らない
+    expect_not_contains(sv, "din >> ");
 }

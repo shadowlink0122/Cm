@@ -1,0 +1,26 @@
+// 下降方向のインデックスドパートセレクト x[base -: width]（SV-N1）: 選択範囲は [base : base-width+1]。
+// 非SVバックエンドではシフト+マスク（シフト量 base-(width-1)）へ脱糖され、全実行系で同一結果になることを検証
+import std::io::println;
+
+int main() {
+    uint word = 0xABCD;
+
+    // 定数基点: bits 7..4 = 0xC
+    const uint a = (word[7 -: 4]) as uint;
+    println("down: {a}");
+
+    // 変数基点: bits 15..8 = 0xAB
+    uint base = 15;
+    const uint b = (word[base -: 8]) as uint;
+    println("downvar: {b}");
+
+    // 上昇方向との対応: word[7 -: 4] == word[4 +: 4]
+    const uint c = (word[4 +: 4]) as uint;
+    println("eq: {a == c}");
+
+    // 下降方向の部分代入: bits 7..4 を 0xF に
+    word[7 -: 4] = 0xF;
+    println("write: {word}");
+
+    return 0;
+}

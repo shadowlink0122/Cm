@@ -63,11 +63,15 @@ HirDeclPtr HirLowering::lower_extern_block(ast::ExternBlockDecl& extern_block) {
 // SV initial ブロック
 HirDeclPtr HirLowering::lower_initial_block(ast::InitialBlockDecl& initial_block) {
     auto hir_initial = std::make_unique<HirInitialBlock>();
+    // initialブロックはSVコード生成がHIR文を直接消費するため、SV専用ビルトインへの脱糖を抑止する（SV-N1）
+    const bool saved_retained = hir_retained_context_;
+    hir_retained_context_ = true;
     for (const auto& stmt : initial_block.body) {
         if (auto hir_stmt = lower_stmt(*stmt)) {
             hir_initial->body.push_back(std::move(hir_stmt));
         }
     }
+    hir_retained_context_ = saved_retained;
     for (const auto& attr : initial_block.attributes) {
         hir_initial->attributes.push_back(attr.name);
     }
@@ -124,11 +128,24 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
 
     debug::hir::log(debug::hir::Id::FunctionBody, "statements=" + std::to_string(func.body.size()),
                     debug::Level::Trace);
+    // #[test]関数はSVテストベンチ生成がHIR文を直接消費するため、SV専用ビルトインへの脱糖を抑止する（SV-N1）
+    bool is_test_fn = false;
+    for (const auto& attr : func.attributes) {
+        if (attr.name == "test") {
+            is_test_fn = true;
+            break;
+        }
+    }
+    const bool saved_retained = hir_retained_context_;
+    if (is_test_fn) {
+        hir_retained_context_ = true;
+    }
     for (auto& stmt : func.body) {
         if (auto hir_stmt = lower_stmt(*stmt)) {
             hir_func->body.push_back(std::move(hir_stmt));
         }
     }
+    hir_retained_context_ = saved_retained;
 
     return std::make_unique<HirDecl>(std::move(hir_func));
 }

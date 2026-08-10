@@ -29,6 +29,9 @@ class HirLowering {
    private:
     // SVターゲットフラグ（リダクション脱糖の分岐に使用）
     bool sv_target_ = false;
+    // HIRを直接消費する文脈（#[test]関数・initialブロック。テストベンチ生成がHIR式を直接読むため、
+    // SV専用ビルトインへの脱糖（part-select等）を抑止し従来のshift+mask式を維持する）
+    bool hir_retained_context_ = false;
     // キャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;

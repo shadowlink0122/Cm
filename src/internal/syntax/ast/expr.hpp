@@ -289,6 +289,8 @@ struct SliceExpr {
     ExprPtr step;   // nullならstep=1
     // x[base +: width] 形式（SVのインデックスドパートセレクト）
     bool is_part_select = false;
+    // x[base -: width] 形式（下降方向。is_part_selectと併用。選択範囲は [base : base-width+1]）
+    bool part_select_down = false;
 
     SliceExpr(ExprPtr o, ExprPtr s, ExprPtr e, ExprPtr st = nullptr)
         : object(std::move(o)), start(std::move(s)), end(std::move(e)), step(std::move(st)) {}

@@ -25,9 +25,9 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | 機能 | 状態 | 備考 |
 |------|------|------|
 | 連接`{}`・複製`{n{}}`・三項・算術右シフト`>>>`・`$signed`/`$unsigned`・サイズ付きリテラル | ✅ | |
-| ビットスライス`x[hi:lo]`（読み） | 🟡 | shift+maskへ降下（native `[hi:lo]`非出力） → [SV-N1](native-bit-part-select.md) |
-| インデックス付き部分選択`x[i +: w]`（読み）・部分代入`x[hi:lo] = v` | 🟡 | 同上（shift+mask・read-modify-write） → [SV-N1](native-bit-part-select.md) |
-| `x[i -: w]` | 🔴 | → [SV-N1](native-bit-part-select.md) |
+| ビットスライス`x[hi:lo]`（読み） | ✅ | native `[hi:lo]` を出力 → [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md)（実装済み） |
+| インデックス付き部分選択`x[i +: w]`（読み）・部分代入`x[hi:lo] = v` | ✅ | native `[+:]`・左辺part-select代入を出力 → [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md)（実装済み） |
+| `x[i -: w]` | ✅ | 下降方向を新構文として追加（非SVはshift+mask脱糖） → [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md)（実装済み） |
 | リダクション演算子`&x`/`\|x`/`^x`/`~&`/`~\|`/`~^` | ✅ | 組み込み関数 `reduce_and/or/xor/nand/nor/xnor` → [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md)（実装済み） |
 | 型キャスト`type'(expr)`（enum/struct）・ストリーミング演算子 | 🔴 | → [SV-N8](misc-synth-gaps.md) |
 
@@ -66,7 +66,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 
 | ID | 項目 | 優先度 | 分類 |
 |----|------|--------|------|
-| [SV-N1](native-bit-part-select.md) | native ビット選択・部分選択の出力（`[hi:lo]`/`[+:]`/`[-:]`・部分代入） | High | idiom（合成結果は等価だが可読性・ツール互換） |
+| [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md) | native ビット選択・部分選択の出力（`[hi:lo]`/`[+:]`/`[-:]`・部分代入・実装済み） | High | idiom（合成結果は等価だが可読性・ツール互換） |
 | [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md) | リダクション演算子（組み込み関数＋SV出力・実装済み） | High | 新機能 |
 | [SV-N3](../../../archive/v0.17.0/sv/casez-casex-priority.md) | `casez`とpriority/unique0 case修飾（実装済み） | High | idiom＋新機能 |
 | [SV-N4](generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ展開 | Medium | 新機能（A5/A6） |

@@ -110,13 +110,16 @@ ast::ExprPtr Parser::parse_postfix() {
                 start_expr = parse_expr();
             }
 
-            // インデックスドパートセレクト: x[base +: width]（ビットスライス）
-            if (start_expr && consume_if(TokenKind::PlusColon)) {
+            // インデックスドパートセレクト: x[base +: width]（ビットスライス）・x[base -: width]（下降方向）
+            if (start_expr && (check(TokenKind::PlusColon) || check(TokenKind::MinusColon))) {
+                const bool down = check(TokenKind::MinusColon);
+                advance();
                 auto width_expr = parse_expr();
                 expect(TokenKind::RBracket);
                 auto slice = std::make_unique<ast::SliceExpr>(
                     std::move(expr), std::move(start_expr), std::move(width_expr));
                 slice->is_part_select = true;
+                slice->part_select_down = down;
                 expr = std::make_unique<ast::Expr>(std::move(slice));
                 continue;
             }

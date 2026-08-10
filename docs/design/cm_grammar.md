@@ -298,6 +298,9 @@ unary_operator ::= '&' | '*' | '+' | '-' | '~' | '!'
 ```bnf
 postfix_expr ::= primary_expr
                | postfix_expr '[' expression ']'         # 配列添字
+               | postfix_expr '[' expression ':' expression ']'    # スライス/ビットスライス（x[hi:lo]）
+               | postfix_expr '[' expression '+:' expression ']'   # インデックスドパートセレクト（上昇方向）
+               | postfix_expr '[' expression '-:' expression ']'   # インデックスドパートセレクト（下降方向。v0.17.0）
                | postfix_expr '(' argument_list? ')'     # 関数呼び出し
                | postfix_expr '.' identifier             # メンバアクセス
                | postfix_expr '->' identifier            # ポインタメンバアクセス

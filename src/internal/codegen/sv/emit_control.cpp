@@ -499,7 +499,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 ss << indent() << "assert (" << cond << ") else $error(\"" << message << "\");\n";
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
             } else if (func_name == "__builtin_concat" || func_name == "__builtin_replicate" ||
-                       func_name.rfind("__builtin_reduce_", 0) == 0) {
+                       func_name.rfind("__builtin_reduce_", 0) == 0 ||
+                       func_name.rfind("__builtin_sv_", 0) == 0) {
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
@@ -573,6 +574,118 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     if (cd.destination) {
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
+                    }
+                } else if (func_name.rfind("__builtin_sv_", 0) == 0) {
+                    // native part-select（SV-N1）: ビット範囲の読み書きをshift+maskでなく
+                    // SVのpart-select構文（x[hi:lo]・x[base +: w]・x[base -: w]）へ写像する
+
+                    // 定数int引数の取得（直接定数またはconst_map経由のテンポラリ）
+                    auto const_int_arg = [&](size_t idx, int64_t fallback) -> int64_t {
+                        if (idx >= cd.args.size() || !cd.args[idx]) {
+                            return fallback;
+                        }
+                        const auto& op = *cd.args[idx];
+                        if (op.kind == mir::MirOperand::Constant) {
+                            if (auto* iv = std::get_if<int64_t>(
+                                    &std::get<mir::MirConstant>(op.data).value)) {
+                                return *iv;
+                            }
+                        } else if (op.kind == mir::MirOperand::Move ||
+                                   op.kind == mir::MirOperand::Copy) {
+                            const auto& place = std::get<mir::MirPlace>(op.data);
+                            auto it = const_map.find(place.local);
+                            if (it != const_map.end()) {
+                                if (auto* iv = std::get_if<int64_t>(&it->second.first.value)) {
+                                    return *iv;
+                                }
+                            }
+                        }
+                        return fallback;
+                    };
+                    // 対象信号のルートlocal（copy/ref逆引きで辿る。ノンブロッキング判定用）
+                    auto trace_root_local = [&](size_t idx) -> std::optional<mir::LocalId> {
+                        if (idx >= cd.args.size() || !cd.args[idx]) {
+                            return std::nullopt;
+                        }
+                        const auto& op = *cd.args[idx];
+                        if (op.kind != mir::MirOperand::Move && op.kind != mir::MirOperand::Copy) {
+                            return std::nullopt;
+                        }
+                        mir::MirPlace p = std::get<mir::MirPlace>(op.data);
+                        while (true) {
+                            auto c = copy_map.find(p.local);
+                            if (c != copy_map.end()) {
+                                p = c->second;
+                                continue;
+                            }
+                            auto r = ref_map.find(p.local);
+                            if (r != ref_map.end()) {
+                                p = r->second;
+                                continue;
+                            }
+                            break;
+                        }
+                        return p.local;
+                    };
+                    // part-select本体（x[hi:lo] / x[base +: w] / x[base -: w]）の構築
+                    const std::string target =
+                        (!cd.args.empty() && cd.args[0]) ? resolveArg(*cd.args[0]) : "0";
+                    std::string select;
+                    if (func_name == "__builtin_sv_range_select" ||
+                        func_name == "__builtin_sv_range_assign") {
+                        const int64_t hi = const_int_arg(1, 0);
+                        const int64_t lo = const_int_arg(2, 0);
+                        select = target + "[" + std::to_string(hi) + ":" + std::to_string(lo) + "]";
+                    } else {
+                        // 基点が定数ならサイズ無しの10進で出力する（32'sd7でなく7）
+                        const int64_t cbase = const_int_arg(1, INT64_MIN);
+                        const std::string base =
+                            cbase != INT64_MIN
+                                ? std::to_string(cbase)
+                                : ((cd.args.size() > 1 && cd.args[1]) ? resolveArg(*cd.args[1])
+                                                                      : "0");
+                        const int64_t w = const_int_arg(2, 1);
+                        const bool down = func_name.rfind("_down") != std::string::npos;
+                        select = target + "[" + base + (down ? " -: " : " +: ") +
+                                 std::to_string(w) + "]";
+                    }
+
+                    if (func_name == "__builtin_sv_range_select" ||
+                        func_name == "__builtin_sv_part_select" ||
+                        func_name == "__builtin_sv_part_select_down") {
+                        // 読み: dest = x[...];
+                        if (cd.destination) {
+                            std::string lhs = emitPlace(*cd.destination, func);
+                            ss << indent() << lhs << (use_nb ? " <= " : " = ") << select << ";\n";
+                        }
+                    } else {
+                        // 書き（部分代入）: x[...] = v; ノンブロッキング判定は対象信号のルートlocalで行う
+                        bool assign_nb =
+                            func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
+                        auto root = trace_root_local(0);
+                        const bool root_is_global =
+                            root && *root < func.locals.size() && func.locals[*root].is_global;
+                        if (assign_nb && root && !root_is_global) {
+                            assign_nb = false;
+                        }
+                        // posedge/negedge型パラメータを持つ関数のグローバル信号書き込みはノンブロッキング（汎用代入経路と同一規則）
+                        if (!assign_nb && root_is_global) {
+                            for (const auto& local : func.locals) {
+                                if (local.is_global) {
+                                    continue;
+                                }
+                                if (local.type && (local.type->kind == hir::TypeKind::Posedge ||
+                                                   local.type->kind == hir::TypeKind::Negedge)) {
+                                    assign_nb = true;
+                                    break;
+                                }
+                            }
+                        }
+                        const size_t vidx = cd.args.size() - 1;
+                        const std::string value = (cd.args.size() >= 4 && cd.args[vidx])
+                                                      ? resolveArg(*cd.args[vidx])
+                                                      : "0";
+                        ss << indent() << select << (assign_nb ? " <= " : " = ") << value << ";\n";
                     }
                 } else {
                     // SVリダクション演算子（SV-N2）: __builtin_reduce_* をベクタ全ビットを1ビットへ

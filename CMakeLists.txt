@@ -840,6 +840,7 @@ if(BUILD_TESTING)
             ${CM_LEXER_SOURCES}
             ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             ${CM_I18N_SOURCES}
