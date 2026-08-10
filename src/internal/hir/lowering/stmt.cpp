@@ -1,6 +1,7 @@
 // lowering_stmt.cpp - 文のlowering
 #include "expr_internal.hpp"
 #include "fwd.hpp"
+#include "internal/base/mangle.hpp"
 #include "internal/base/text_utils.hpp"
 
 #include <memory>
@@ -201,10 +202,9 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
 
     if (should_call_ctor && let.type) {
         std::string type_name = type_to_string(*let.type);
-        std::string ctor_name = type_name + "__ctor";
-        if (!let.ctor_args.empty()) {
-            ctor_name += "_" + std::to_string(let.ctor_args.size());
-        }
+        // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。checker側と同一規則を共有する）
+        std::string ctor_name =
+            mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());
 
         debug::hir::log(debug::hir::Id::LetInit, "Adding constructor call: " + ctor_name,
                         debug::Level::Debug);

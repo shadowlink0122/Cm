@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/base/mangle.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>
@@ -392,10 +393,9 @@ void TypeChecker::check_let(ast::LetStmt& let) {
 
     if (let.has_ctor_call && let.type) {
         std::string type_name = ast::type_to_string(*let.type);
-        std::string ctor_name = type_name + "__ctor";
-        if (!let.ctor_args.empty()) {
-            ctor_name += "_" + std::to_string(let.ctor_args.size());
-        }
+        // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。手組み複製はHIR側と規則が乖離する温床）
+        std::string ctor_name =
+            mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());
 
         for (auto& arg : let.ctor_args) {
             infer_type(*arg);
