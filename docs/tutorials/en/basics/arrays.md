@@ -37,12 +37,17 @@ int[3] values = [1, 2, 3];
 int[5] partial = [1, 2];  // [1, 2, 0, 0, 0]
 ```
 
-Array sizes may also be integer-literal constant expressions (folded at compile time).
+Array sizes may also be compile-time constant integer expressions (folded at compile time), including expressions with const names and `sizeof`.
 
 ```cm
+const int N = 2;
 int[2 + 1] a = [1, 2, 3];        // same as int[3]
 int[(1 + 2) * 2] b;              // int[6]
+int[N + 1] c;                    // int[3] (arithmetic with const names)
+int[sizeof(int)] d;              // int[4] (sizeof of primitives, pointers, and fixed arrays of them)
 ```
+
+Values only known at runtime (such as non-const variables) are a compile error.
 
 ## Element Access
 

@@ -514,6 +514,7 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
     if (consume_if(TokenKind::LBracket)) {
         std::optional<uint32_t> size;
         std::string size_param_name;
+        ast::ExprPtr size_expr_ast;
 
         if (check(TokenKind::IntLiteral) && peek_kind() == TokenKind::RBracket) {
             // 単純な整数リテラル: T[3]
@@ -528,14 +529,17 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
             size_param_name = std::string(current().get_string());
             advance();
         } else if (!check(TokenKind::RBracket) && !check(TokenKind::Colon)) {
-            // 定数式: T[2+1]・T[(1+2)*3] 等。整数リテラルの算術をコンパイル時に畳む（局所処理調査Aの補足。従来は Expected ']' の構文エラー）
-            auto size_expr = parse_expr();
-            auto folded = size_expr ? fold_array_size_const(*size_expr) : std::nullopt;
+            // 定数式: T[2+1]・T[(1+2)*3]（リテラル算術）はパース時に畳む（局所処理調査Aの補足。従来は Expected ']' の構文エラー）。
+            // const名を含む算術 T[N+1] 等はスコープが要りパース時に畳めないため、式を保持して型チェッカへ解決を委ねる（畳めない場合の診断も型チェッカが出す）
+            auto parsed = parse_expr();
+            auto folded = parsed ? fold_array_size_const(*parsed) : std::nullopt;
             if (folded && *folded >= 0) {
                 size = static_cast<uint32_t>(*folded);
                 if (base_type && base_type->kind == ast::TypeKind::Bit && *size == 0) {
                     error(i18n::msg(i18n::MsgId::PsSvBitWidthZero));
                 }
+            } else if (parsed) {
+                size_expr_ast = std::move(parsed);
             } else {
                 error(i18n::msg(i18n::MsgId::PsArraySizeNotConstant));
             }
@@ -556,6 +560,8 @@ ast::TypePtr Parser::check_array_suffix(ast::TypePtr base_type) {
         ast::TypePtr arr_type;
         if (!size_param_name.empty()) {
             arr_type = ast::make_array_with_param(std::move(base_type), size_param_name);
+        } else if (size_expr_ast) {
+            arr_type = ast::make_array_with_expr(std::move(base_type), std::move(size_expr_ast));
         } else {
             arr_type = ast::make_array(std::move(base_type), size);
         }

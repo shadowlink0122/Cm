@@ -13,6 +13,26 @@
 
 namespace cm {
 
+// sizeof(型)のコンパイル時評価: プリミティブ・ポインタ・その固定長配列のバイトサイズを返す。
+// 構造体サイズはレイアウト計算がHIR層にあるためここでは畳まない（呼び出し側で診断へ落ちる）
+static std::optional<int64_t> const_sizeof_of_type(const ast::TypePtr& t) {
+    if (!t) {
+        return std::nullopt;
+    }
+    if (t->kind == ast::TypeKind::Array && t->array_size.has_value()) {
+        auto elem = const_sizeof_of_type(t->element_type);
+        if (!elem) {
+            return std::nullopt;
+        }
+        return *elem * static_cast<int64_t>(*t->array_size);
+    }
+    auto info = t->info();
+    if (info.size > 0) {
+        return static_cast<int64_t>(info.size);
+    }
+    return std::nullopt;
+}
+
 // ============================================================
 // コンパイル時定数評価（const強化）
 // ============================================================
@@ -128,6 +148,14 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
                      : evaluate_const_expr(*ternary->else_expr);
     }
 
+    // sizeof(型): プリミティブ・ポインタ・その固定長配列のバイトサイズを畳む（int[sizeof(int)] 等の配列サイズ式用。局所処理調査Aの補足）
+    if (auto* szf = expr.as<ast::SizeofExpr>()) {
+        if (szf->target_type) {
+            return const_sizeof_of_type(szf->target_type);
+        }
+        return std::nullopt;
+    }
+
     // その他の式はコンパイル時評価不可
     return std::nullopt;
 }
@@ -138,6 +166,22 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
 void TypeChecker::resolve_array_size(ast::TypePtr& type, bool best_effort) {
     if (!type)
         return;
+
+    // 配列型で定数サイズ式（int[N+1]等）が保持されている場合はコンパイル時評価で畳む。
+    // パーサがリテラルへ畳めずsize_exprへ退避したもの（const名を含む算術はスコープが要るため後段化）
+    if (type->kind == ast::TypeKind::Array && type->size_expr && !type->array_size.has_value()) {
+        auto folded = evaluate_const_expr(*type->size_expr);
+        if (folded && *folded > 0 && *folded <= INT32_MAX) {
+            type->array_size = static_cast<uint32_t>(*folded);
+            type->size_expr = nullptr;  // 解決済み（後段は具体サイズのみ見る）
+            debug::tc::log(debug::tc::Id::TypeInfer,
+                           "Resolved array size expression = " + std::to_string(*folded),
+                           debug::Level::Debug);
+        } else if (!best_effort) {
+            // 畳めない（実行時値・未定義const・非正の値）はコンパイル時定数式でない旨を診断する
+            error(current_span_, i18n::msg(i18n::MsgId::PsArraySizeNotConstant));
+        }
+    }
 
     // 配列型でsize_param_nameが設定されている場合
     if (type->kind == ast::TypeKind::Array && !type->size_param_name.empty()) {

@@ -1,14 +1,25 @@
-// 配列サイズに整数リテラルの定数式を書ける（局所処理調査Aの補足）:
-// int[2 + 1] 等の算術式がパース時にコンパイル時定数へ畳まれ、局所・フィールド・仮引数の全位置で int[3] と同じに動く。
-// 旧: int[2 + 1] は Expected ']' の構文エラーだった
+// 配列サイズにコンパイル時定数の整数式を書ける（局所処理調査Aの補足）:
+// int[2 + 1] 等のリテラル算術はパース時に畳まれ、const名を含む int[N + 1] や int[sizeof(int)] は型チェッカのコンパイル時評価で畳まれる。
+// いずれも局所・フィールド・仮引数の全位置で int[3] と同じに動く。
+// 旧: int[2 + 1] は Expected ']' の構文エラー、int[N + 1]・int[sizeof(int)] は診断エラーだった
 import std::io::println;
+
+const int N = 2;
 
 struct Buf {
     int[2 + 1] data;
 }
 
+struct ConstBuf {
+    int[N + 1] data;
+}
+
 int first(int[1 + 1] xs) {
     return xs[0];
+}
+
+int last_of(int[N * 2] xs) {
+    return xs[3];
 }
 
 int main() {
@@ -31,6 +42,28 @@ int main() {
 
     // 仮引数位置
     println(first([7, 8]));
+
+    // const名を含む算術（型チェッカのコンパイル時評価で畳む）
+    int[N + 1] d = [4, 5, 6];
+    println(d.len());
+    println(d[2]);
+
+    // const名のフィールド位置・仮引数位置
+    ConstBuf cbuf;
+    cbuf.data[2] = 42;
+    println(cbuf.data[2]);
+    println(last_of([1, 2, 3, 44]));
+
+    // sizeof（プリミティブ・ポインタ・固定長配列のバイトサイズ）
+    int[sizeof(int)] e;
+    e[3] = 7;
+    println(e.len());
+    utiny[sizeof(long)] f;
+    println(f.len());
+    int[sizeof(int) + N] g;
+    println(g.len());
+    int[sizeof(int[4])] h;
+    println(h.len());
 
     return 0;
 }

@@ -123,6 +123,10 @@ struct Type {
     // typeof(式) 型（kind==Inferred・name=="__typeof__"）の被演算式。型チェッカで具体型へ解決する（従来は破棄していた）
     std::shared_ptr<Expr> typeof_operand;
 
+    // 配列用: パース時にリテラルへ畳めなかった定数サイズ式（int[N+1]・int[N*2]等）。
+    // 型チェッカがevaluate_const_exprで畳んでarray_sizeへ確定する（const名を含む算術はスコープが要るため解決を後段化する）
+    std::shared_ptr<Expr> size_expr;
+
     // コンストラクタ
     explicit Type(TypeKind k) : kind(k) {}
 
@@ -281,6 +285,14 @@ inline TypePtr make_array_with_param(TypePtr elem, const std::string& param_name
     auto t = std::make_shared<Type>(TypeKind::Array);
     t->element_type = std::move(elem);
     t->size_param_name = param_name;
+    return t;
+}
+
+// パース時に畳めない定数サイズ式（int[N+1]等）による配列。型チェッカで具体サイズへ畳む
+inline TypePtr make_array_with_expr(TypePtr elem, std::shared_ptr<Expr> size_expr) {
+    auto t = std::make_shared<Type>(TypeKind::Array);
+    t->element_type = std::move(elem);
+    t->size_expr = std::move(size_expr);
     return t;
 }
 
