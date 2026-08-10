@@ -487,13 +487,20 @@ LocalId LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& e
             hir::TypePtr numeric_variant = nullptr;
             int slice_count = 0;
             int numeric_count = 0;
+            // nullリテラルはcheckerでvoid型が付くため、Null変種との照合ではNull扱いにする
+            const hir::TypeKind src_kind_for_match =
+                src->kind == hir::TypeKind::Void ? hir::TypeKind::Null : src->kind;
             for (const auto& v : variants) {
                 auto rv = resolve_typedef(v);
                 if (!rv) {
                     continue;
                 }
-                if (rv->kind == src->kind &&
-                    (rv->kind != hir::TypeKind::Struct || rv->name == src->name)) {
+                if (rv->kind == src_kind_for_match &&
+                    (rv->kind != hir::TypeKind::Struct || rv->name == src->name) &&
+                    (rv->kind != hir::TypeKind::Array ||
+                     rv->array_size.has_value() == src->array_size.has_value())) {
+                    // Arrayは動的/固定長の別まで一致して初めて完全一致（固定長配列がスライス変種にkindだけで
+                    // 一致扱いされると実体化がスキップされ、生データのままwrapされてしまう）
                     exact = true;
                     break;
                 }

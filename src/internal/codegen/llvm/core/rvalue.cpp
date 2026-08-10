@@ -222,11 +222,16 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         if (!variantTypes.empty()) {
                             // まずHIR型（kind + 構造体名）で照合する
                             if (sourceHirType) {
+                                // nullリテラルはcheckerでvoid型が付くため、Null変種との照合ではNull扱いにする
+                                const auto srcKindForMatch =
+                                    sourceHirType->kind == hir::TypeKind::Void
+                                        ? hir::TypeKind::Null
+                                        : sourceHirType->kind;
                                 for (size_t vi = 0; vi < variantTypes.size(); ++vi) {
                                     auto& varType = variantTypes[vi];
                                     if (!varType)
                                         continue;
-                                    if (varType->kind == sourceHirType->kind &&
+                                    if (varType->kind == srcKindForMatch &&
                                         (varType->kind != hir::TypeKind::Struct ||
                                          varType->name == sourceHirType->name)) {
                                         tagValue = static_cast<int32_t>(vi);

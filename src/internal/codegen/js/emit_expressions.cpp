@@ -23,12 +23,15 @@ int computeUnionTag(const hir::TypePtr& union_type, const hir::TypePtr& value_ty
         return -1;
     }
     auto variants = ast::union_variant_types(union_type);
+    // nullリテラルはcheckerでvoid型が付くため、Null変種との照合ではNull扱いにする
+    const auto value_kind_for_match =
+        value_type->kind == TypeKind::Void ? TypeKind::Null : value_type->kind;
     for (size_t vi = 0; vi < variants.size(); ++vi) {
         const auto& v = variants[vi];
         if (!v) {
             continue;
         }
-        if (v->kind == value_type->kind &&
+        if (v->kind == value_kind_for_match &&
             (v->kind != TypeKind::Struct || v->name == value_type->name)) {
             return static_cast<int>(vi);
         }

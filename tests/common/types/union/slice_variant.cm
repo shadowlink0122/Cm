@@ -1,0 +1,34 @@
+// ユニオンのスライス変種（int[] | string）の構築・判別・抽出。
+// 従来は固定長配列がスライス実体化されずに生データのままwrapされ（kindのみの完全一致判定で実体化がスキップ）、
+// native/jitで抽出のスライスヘッダがゴミ値になっていた
+import std::io::println;
+
+typedef SU = int[] | string;
+
+int main() {
+    int[3] arr = [7, 8, 9];
+
+    // as キャスト経由の構築
+    SU u1 = arr as SU;
+    println(u1 is int[]);
+    println(u1 is string);
+    int[] ex = u1 as int[];
+    println(ex.len());
+    println(ex[0]);
+    println(ex[2]);
+
+    // let（暗黙変換）経由の構築
+    SU u2 = arr;
+    println((u2 as int[])[1]);
+
+    // 動的スライスからの構築
+    int[] sl = arr;
+    SU u3 = sl as SU;
+    println((u3 as int[]).len());
+
+    // 文字列変種と混在
+    SU us = "hi" as SU;
+    println(us is string);
+    println(us as string);
+    return 0;
+}

@@ -579,6 +579,17 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                                     static_cast<uint32_t>(dataLayout.getTypeAllocSize(llvmType));
                                 break;
                             }
+                            case hir::TypeKind::Array:
+                                // 動的スライスはポインタ表現（8バイト）、固定長配列は実サイズ
+                                if (!variantType->array_size.has_value()) {
+                                    variantSize = 8;
+                                } else {
+                                    auto* llvmType = convertType(variantType);
+                                    auto& dataLayout = module->getDataLayout();
+                                    variantSize = static_cast<uint32_t>(
+                                        dataLayout.getTypeAllocSize(llvmType));
+                                }
+                                break;
                             default:
                                 variantSize = 8;  // その他の型は8バイト仮定
                                 break;

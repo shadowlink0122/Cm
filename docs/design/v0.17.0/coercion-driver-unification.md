@@ -87,3 +87,12 @@ checker側の受理判定（utils/compat.cpp・utils/conversion.cpp）とMIR側�
 - 回帰: union/coerce_sites.cmを変種リテラル直接渡し・typedef別名経由のas抽出込みへ更新（native/js一致・全13スイートPASS）。
 
 残り: 第2段の本丸（インターフェースupcastのMIR化・4バックエンドassign認識撤去・return heap-boxing統一）・第3段本体（checkerが受理した変換種のHIR注釈化とconversion_kind表の単一真実化）。
+
+## 実装記録（ユニオン変種の実体化・照合の是正・2026-08-11）
+
+ユニオン等値比較の修正時に実害化した2件（第1段記録の周辺欠陥）を処置した。
+
+- **スライス変種の実体化スキップ**: `coerce_to_expected` の完全一致判定がkindのみの比較だったため、固定長配列（`int[3]`）がスライス変種（`int[]`）に完全一致扱いされ、第1段で導入した「固定長配列→唯一のスライス変種の実体化」が一度も発火していなかった（生の配列データがペイロードへbitcast格納され、native/jitの抽出 `u as int[]` がゴミ値のスライスヘッダになる）。完全一致判定へ `array_size.has_value()` の一致（動的/固定長の別）を追加した。あわせて明示 `as` キャストのユニオン向け経路（`lower_cast`）を統一ドライバ `coerce_to_expected` へ委譲し、let/代入/asの3経路が同一の実体化＋wrapを通るようにした。LLVMのユニオン変種サイズ計算（types.cpp）へArrayケース（動的=ポインタ8バイト・固定長=実サイズ）も追加した。
+- **null変種の誤タグ**: nullリテラルの型はcheckerで`void`のため、構築時の変種照合（kind一致）がNull変種にヒットせずタグ0へフォールバックしていた。変種照合の3箇所——MIR統一ドライバ（`coerce_to_expected`の完全一致判定）・LLVM構築（rvalue.cppのタグ照合）・JS構築（`computeUnionTag`）——へvoid→Null写像を追加した（void型の値式はnullリテラル以外に存在しないため安全。checkerのnullリテラル型をNull化する全面変更はポインタnull互換への波及があるため採らなかった）。
+- 回帰テスト: `tests/common/types/union/slice_variant.cm`（as/let/動的スライスからの構築・判別・抽出）・`null_variant.cm`（null/int変種の構築とis判別・再代入）・`equality.cm`（スライス変種の内容比較を含む14ケース）。いずれもinterpreter/llvm/jsの3バックエンド一致。
+- 残: 第2段の本丸（インターフェースupcastのMIR構築物化・4バックエンドassign認識撤去・return heap-boxing統一）・第3段（checker注釈駆動化）は未着手のまま。

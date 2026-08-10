@@ -1,0 +1,22 @@
+// ユニオンのnull変種（int | null）の構築とis判別。
+// 従来はnullリテラルのvoid型が変種照合に失敗し、null構築のタグがint変種（0）になっていた
+import std::io::println;
+
+typedef NU = int | null;
+
+int main() {
+    NU n = null as NU;
+    println(n is null);
+    println(n is int);
+
+    NU m = 5 as NU;
+    println(m is null);
+    println(m is int);
+    println(m as int);
+
+    // 再代入で変種が切り替わる
+    n = 7 as NU;
+    println(n is int);
+    println(n as int);
+    return 0;
+}

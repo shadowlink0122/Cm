@@ -110,6 +110,14 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
         return result;
     }
 
+    // ユニオンへのasキャストは暗黙変換の統一ドライバへ委譲する（let/代入経路と同一化）。
+    // 固定長配列→スライス変種の実体化（cm_array_to_slice）・数値変種の正規化を経てからwrapされる。
+    // 従来は生のCastを発行し、固定長配列のペイロードが生データのままbitcast格納されて
+    // スライス変種の抽出（u as int[]）がゴミ値のスライスヘッダになっていた
+    if (target_type && target_type->kind == hir::TypeKind::Union) {
+        return ctx.coerce_to_expected(operand, target_type);
+    }
+
     // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入
     // Bug#9修正: パーサーは &b as void* を &(b as void*) として解析する
     // b as void* で配列全体がコピーされるのを防ぐため、配列のアドレスを取得してからポインタキャストを行う

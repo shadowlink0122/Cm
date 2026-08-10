@@ -3,6 +3,7 @@
 import std::io::println;
 
 typedef IU = int | string;
+typedef SU = int[] | string;
 
 int main() {
     // 同変種・値不一致
@@ -34,9 +35,17 @@ int main() {
     println(s1 == "hello");
     println(1 == a);
 
-    // スライス変種（int[] | string）の等値は、ユニオンからのスライス抽出（u as int[]）が
-    // native/jitでヘッダ切り詰めのゴミ値になる既知の別課題（LLVMユニオンのペイロード形状）のため未検証。
-    // 比較自体は正準のcm_slice_equalへ写像済みで、抽出の修正後に自動で正しくなる
+    // スライス変種の内容比較（固定長配列はwrap前にスライスへ実体化される）
+    int[3] arr1 = [1, 2, 3];
+    int[3] arr2 = [1, 2, 3];
+    int[3] arr3 = [9, 9, 9];
+    SU u1 = arr1 as SU;
+    SU u2 = arr2 as SU;
+    SU u3 = arr3 as SU;
+    SU us = "text" as SU;
+    println(u1 == u2);
+    println(u1 == u3);
+    println(u1 == us);
 
     return 0;
 }
