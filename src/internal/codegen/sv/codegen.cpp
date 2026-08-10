@@ -577,7 +577,18 @@ std::string SVCodeGen::getMemfilePath(const mir::MirGlobalVar& gv) {
     return "";
 }
 
-// memfile属性があれば $readmemh を、無ければ要素代入のinitialブロックを生成する
+// #[sv::memfile("f.bin", radix: bin)] の基数指定を取り出す（既定はhex。SV-N8）
+static bool memfileRadixIsBin(const mir::MirGlobalVar& gv) {
+    for (const auto& attr : gv.attributes) {
+        if ((attr.rfind("sv::memfile(", 0) == 0 || attr.rfind("verilog::memfile(", 0) == 0) &&
+            attr.find("radix:bin") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// memfile属性があれば $readmemh/$readmemb を、無ければ要素代入のinitialブロックを生成する
 std::string SVCodeGen::buildArrayInitialOrReadmem(const mir::MirGlobalVar& gv,
                                                   const std::string& var_name) {
     std::string memfile = getMemfilePath(gv);
@@ -585,7 +596,9 @@ std::string SVCodeGen::buildArrayInitialOrReadmem(const mir::MirGlobalVar& gv,
         return buildArrayInitial(gv, var_name);
     }
     emitMemfileIfRequested(gv, memfile);
-    return "initial $readmemh(\"" + memfile + "\", " + var_name + ");\n";
+    // radix: bin 指定は2進メモリファイル（$readmemb）として読み込む
+    const char* readmem = memfileRadixIsBin(gv) ? "$readmemb" : "$readmemh";
+    return std::string("initial ") + readmem + "(\"" + memfile + "\", " + var_name + ");\n";
 }
 
 // --emit-memfile 指定時、配列リテラル初期値を.hexファイルとして書き出す。
@@ -627,14 +640,26 @@ void SVCodeGen::emitMemfileIfRequested(const mir::MirGlobalVar& gv,
                 }
             }
         }
-        // 要素幅に合わせた16進値を1行1要素で出力（$readmemh形式）
+        // 要素幅に合わせた値を1行1要素で出力（radix: bin なら$readmemb形式の2進、既定は$readmemh形式の16進）
         int width = getBitWidth(gv.type ? gv.type->element_type : nullptr);
-        int hex_digits = (width + 3) / 4;
-        if (hex_digits <= 0) {
-            hex_digits = 1;
-        }
         uint64_t mask = (width >= 64) ? ~0ULL : ((1ULL << width) - 1);
-        file << std::hex << std::setw(hex_digits) << std::setfill('0') << (value & mask) << "\n";
+        if (memfileRadixIsBin(gv)) {
+            int bin_digits = width > 0 ? width : 1;
+            std::string bits(static_cast<size_t>(bin_digits), '0');
+            for (int b = 0; b < bin_digits; ++b) {
+                if ((value >> b) & 1) {
+                    bits[static_cast<size_t>(bin_digits - 1 - b)] = '1';
+                }
+            }
+            file << bits << "\n";
+        } else {
+            int hex_digits = (width + 3) / 4;
+            if (hex_digits <= 0) {
+                hex_digits = 1;
+            }
+            file << std::hex << std::setw(hex_digits) << std::setfill('0') << (value & mask)
+                 << "\n";
+        }
     }
     if (options_.verbose) {
         std::cout << "Generated memfile: " << out_path.string() << "\n";
@@ -1042,6 +1067,17 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
                 return SVExpr::atom("0");
             }
             SVExprPtr operand_tree = buildOperandTree(*cast.operand, func);
+            // 型名キャスト type'(expr)（SV-N8）: enum典型（typedef enum logic）・packed struct への
+            // asキャストは、幅キャストでなくSVの型名キャストとして出力する（ビット→enum/構造体の再解釈を明示する）
+            if (cast.target_type && !cast.target_type->name.empty()) {
+                const std::string& tname = cast.target_type->name;
+                const bool is_enum_typedef = enum_typedef_names_.count(tname) > 0;
+                const bool is_packed_struct = cast.target_type->kind == hir::TypeKind::Struct &&
+                                              struct_defs_.count(tname) > 0;
+                if (is_enum_typedef || is_packed_struct) {
+                    return SVExpr::atom(tname + "'(" + operand_tree->to_string() + ")");
+                }
+            }
             // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。
             // 出力しないと式の途中の縮小キャスト（例: (a + 300) as utiny）の切り捨てが失われ、計算結果そのものが変わってしまう
             int cast_w = is_integer_type(cast.target_type) ? getBitWidth(cast.target_type) : 0;
@@ -1415,6 +1451,13 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
     for (const auto& st : program.structs) {
         if (st) {
             struct_defs_[st->name] = st.get();
+        }
+    }
+    // typedef enum として出力される値enum名（type'(expr) キャストの判定用。Tagged Unionは対象外）
+    enum_typedef_names_.clear();
+    for (const auto& e : program.enums) {
+        if (e && !e->is_tagged_union()) {
+            enum_typedef_names_.insert(e->name);
         }
     }
 

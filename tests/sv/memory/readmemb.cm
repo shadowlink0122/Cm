@@ -1,0 +1,19 @@
+//! platform: sv
+
+// #[sv::memfile(..., radix: bin)] 属性のテスト（SV-N8）:
+// radix: bin 指定の配列は initial $readmemb("<path>", <var>); として出力される。
+// binファイル自体は合成/シミュレーション環境で用意する（--emit-memfile を使えばコンパイル時に2進形式で生成できる）。
+
+#[input] posedge clk;
+#[input] uint idx;
+#[output] utiny out = 0;
+
+#[sv::bram]
+#[sv::memfile("pattern.bin", radix: bin)]
+utiny[16] pattern_rom;
+
+async void read(posedge clk) {
+    if (idx < 16) {
+        out = pattern_rom[idx];
+    }
+}

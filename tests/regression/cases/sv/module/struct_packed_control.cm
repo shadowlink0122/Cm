@@ -1,0 +1,23 @@
+// #[sv::unpacked] によるpacked性制御（SV-N8）: 既定はpacked、属性付きはunpackedで出力される
+#[input] bool clk = false;
+#[input] bit[8] v;
+#[output] bit[8] o = 0;
+
+#[sv::unpacked]
+struct Cfg {
+    bit[8] a;
+    bit[8] b;
+}
+
+struct Pk {
+    bit[4] x;
+    bit[4] y;
+}
+
+void f(posedge clk) {
+    Cfg c;
+    c.a = v;
+    Pk p;
+    p.x = v[3:0];
+    o = c.a;
+}

@@ -439,7 +439,8 @@ struct HirStruct {
     bool is_export = false;
     bool has_explicit_constructor = false;
     bool is_css = false;
-    bool is_extern = false;  // extern struct（外部HWモジュール）
+    bool is_extern = false;               // extern struct（外部HWモジュール）
+    std::vector<std::string> attributes;  // 構造体属性（sv::packed/sv::unpacked 等）
 };
 
 // メソッドシグネチャ

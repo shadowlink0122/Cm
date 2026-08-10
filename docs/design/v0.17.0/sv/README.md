@@ -17,9 +17,9 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | 機能 | 状態 | 備考 |
 |------|------|------|
 | logic/signed/unsigned・整数幅写像・`bit[N]`・unpacked配列・多次元配列・typedef enum | ✅ | |
-| packed struct | ✅ | ただし全structを一律packed出力（`#[sv::packed]`制御は未実装、TODO analyze.cpp:863） |
+| packed struct | ✅ | 既定packed・`#[sv::unpacked]`でunpacked出力を選択可能（SV-N8で実装） |
 | packed union | 🔴 | → [SV-N6](packed-union.md) |
-| 2-state `bit`型・native `reg`宣言 | 🟡/🔴 | `bit`は`logic`(4-state)へ写像・`reg`は非出力 → [SV-N8](misc-synth-gaps.md) |
+| 2-state `bit`型・native `reg`宣言 | ⛔ | 現状維持を決定（logicがregを包含・合成同一） → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ### 式・ビット操作
 | 機能 | 状態 | 備考 |
@@ -29,7 +29,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | インデックス付き部分選択`x[i +: w]`（読み）・部分代入`x[hi:lo] = v` | ✅ | native `[+:]`・左辺part-select代入を出力 → [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md)（実装済み） |
 | `x[i -: w]` | ✅ | 下降方向を新構文として追加（非SVはshift+mask脱糖） → [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md)（実装済み） |
 | リダクション演算子`&x`/`\|x`/`^x`/`~&`/`~\|`/`~^` | ✅ | 組み込み関数 `reduce_and/or/xor/nand/nor/xnor` → [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md)（実装済み） |
-| 型キャスト`type'(expr)`（enum/struct）・ストリーミング演算子 | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+| 型キャスト`type'(expr)` | ✅/🟡 | struct分は`Pair'(bits)`出力・enum分はenum同一性の正規化遅延待ち（分岐実装済み）。ストリーミング演算子は非対応 → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ### 制御構文
 | 機能 | 状態 | 備考 |
@@ -46,21 +46,21 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | generate/genvar/for-generate/if-generate | 🔴 | 定数ループ展開が部分代替 → [SV-N4](generate-genvar.md) |
 | パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`（ロードマップA6）・パラメータ依存ループ展開(A5) | 🔴 | → [SV-N4](generate-genvar.md) |
 | モジュールインスタンス配列・位置ベースポート接続 | 🔴 | → [SV-N5](module-instance-arrays.md) |
-| SV `task`（自動生成） | 🔴 | void関数はalways化（設計選択）→ [SV-N8](misc-synth-gaps.md) |
+| SV `task`（自動生成） | ⛔ | 見送りを決定（function automaticで代替・1関数=1プロセス設計を維持） → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ### メモリ・属性・実機I/O
 | 機能 | 状態 | 備考 |
 |------|------|------|
 | 内部配列/RAM・配列初期化・`$readmemh`・`#[sv::bram/lutram/memfile]`・`--emit-memfile` | ✅ | |
 | ピン制約`#[sv::pin]`(.cst/.xdc/.tcl)・トライステート`#[sv::tri]`・CDC同期`#[sv::sync]` | ✅ | 正常系の統合テストは薄い（チュートリアルのみの項目あり） |
-| `$readmemb` | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+| `$readmemb` | ✅ | `#[sv::memfile(..., radix: bin)]`＋`--emit-memfile`の2進出力 → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md)（実装済み） |
 
 ### テストベンチ・検証
 | 機能 | 状態 | 備考 |
 |------|------|------|
 | TB自動生成(`//! test:`)・`#[test]`刺激関数+`step()`・即時アサーション`assert(...) else $error`・`$display`/`$finish`/`$dumpvars`・クロック生成 | ✅ | （`//! test:`期待値の非検証は別途R15で対応中） |
 | 並行アサーション`assert property`/`sequence`/`property` | 🔴 | → [SV-N7](concurrent-assertions-sva.md) |
-| `$time`・`final`ブロック | 🔴 | → [SV-N8](misc-synth-gaps.md) |
+| `$time`・`final`ブロック | ⛔ | 見送りを決定（$display＋$finishで代替） → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ## 新規実装項目（優先度順）
 
@@ -73,7 +73,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | [SV-N5](module-instance-arrays.md) | モジュールインスタンス配列・位置ベースポート接続 | Medium | 新機能 |
 | [SV-N6](packed-union.md) | packed union（ビット再解釈） | Low | 新機能 |
 | [SV-N7](concurrent-assertions-sva.md) | 並行アサーション（SVA property/sequence） | Medium | 検証機能 |
-| [SV-N8](misc-synth-gaps.md) | 小粒ギャップ集（$readmemb・type'(expr)・SV task・$time/final・native reg/2-state bit・#[sv::packed]） | Low | 混在 |
+| [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) | 小粒ギャップ集（$readmemb・type'(expr)・#[sv::unpacked]は実装、task/$time/final/reg・2-stateは判断記録で完了） | Low | 混在 |
 
 ## 設計上の非目標（⛔ 対象外・実装しない）
 

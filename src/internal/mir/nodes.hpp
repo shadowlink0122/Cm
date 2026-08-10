@@ -497,7 +497,8 @@ struct MirStruct {
     std::vector<MirStructField> fields;
     // 注: 構造体全体のサイズ・アライメントは保持しない（MirStructFieldのoffsetと同じ理由。M13）
     bool is_css = false;
-    bool is_extern = false;  // extern struct（外部HWモジュール）
+    bool is_extern = false;               // extern struct（外部HWモジュール）
+    std::vector<std::string> attributes;  // 構造体属性（sv::packed/sv::unpacked 等）
 
     // インターフェース実装情報
     std::vector<std::string> implemented_interfaces;

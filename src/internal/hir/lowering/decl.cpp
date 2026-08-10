@@ -159,6 +159,10 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     hir_st->is_export = st.visibility == ast::Visibility::Export;
     hir_st->is_extern = st.is_extern;
     hir_st->auto_impls = st.auto_impls;
+    // 構造体属性を伝播（sv::packed/sv::unpacked 等、SV用）
+    for (const auto& attr : st.attributes) {
+        hir_st->attributes.push_back(attr.name);
+    }
     for (const auto& iface_name : st.auto_impls) {
         if (iface_name == "Css") {
             hir_st->is_css = true;

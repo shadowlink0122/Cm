@@ -40,6 +40,20 @@ initial $readmemh("font.hex", font_rom);
 - Works with uninitialized arrays (provide the hex file in your synthesis/simulation environment)
 - When combined with an array literal, `$readmemh` takes precedence
 
+### Binary memory files (`radix: bin`, v0.17.0)
+
+Specifying `radix: bin` loads via `$readmemb` (binary format) — handy for bit-pattern tables, LED fonts, and other data that is easier to maintain in binary:
+
+```cm
+#[sv::memfile("pattern.bin", radix: bin)]
+utiny[16] pattern_rom;
+```
+
+```systemverilog
+logic [7:0] pattern_rom [0:15];
+initial $readmemb("pattern.bin", pattern_rom);
+```
+
 ## 3. The `--emit-memfile` option
 
 Writes array literal initializers out as `.hex` files at compile time (next to the generated SV):
@@ -49,8 +63,9 @@ cm compile --target=sv rom.cm -o rom.sv --emit-memfile
 ```
 
 The initial values stay managed in Cm source while the generated SV references `$readmemh`, keeping the SV small for large ROMs.
+Arrays marked `radix: bin` are written as element-width binary digits (e.g. `10101010`) and referenced via `$readmemb`.
 
-Regression tests: `tests/sv/memory/array_init`, `tests/sv/memory/readmemh`
+Regression tests: `tests/sv/memory/array_init`, `tests/sv/memory/readmemh`, `tests/sv/memory/readmemb`
 
 ---
 

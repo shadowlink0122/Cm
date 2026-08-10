@@ -132,6 +132,8 @@ class SVCodeGen : public BufferedCodeGenerator {
     std::unordered_map<mir::LocalId, SVExprPtr> temp_trees_;
     // データ構造体の定義（名前→MirStruct）。フィールドをメンバ名で出力するために使用
     std::unordered_map<std::string, const mir::MirStruct*> struct_defs_;
+    // typedef enum として出力される値enum名の集合（type'(expr) キャスト出力の判定に使用。SV-N8）
+    std::unordered_set<std::string> enum_typedef_names_;
     std::unordered_set<mir::LocalId> single_def_temps_;
 
     // 現在出力中の関数のループヘッダ→ラッチ一覧（DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）

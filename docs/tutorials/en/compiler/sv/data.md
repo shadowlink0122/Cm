@@ -48,6 +48,24 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ---
 
+## Packed control and type-name casts (v0.17.0)
+
+Cm `struct`s are emitted as `typedef struct packed` by default (usable as bit vectors). When an unpacked struct is needed (array layout or tool constraints), annotate with `#[sv::unpacked]`:
+
+```cm
+#[sv::unpacked]
+struct Cfg { bit[8] a; bit[8] b; }   // → typedef struct { ... } Cfg;
+struct Pk  { bit[4] x; bit[4] y; }   // → typedef struct packed { ... } Pk; (default)
+```
+
+An `as` cast from raw bits to a packed struct is emitted as an SV type-name cast (making the bit reinterpretation explicit):
+
+```cm
+Pair p = raw as Pair;   // → p = Pair'(raw);
+```
+
+The first field of a packed struct maps to the MSB side (`Pair { hi; lo; }` filled with 16'hABCD gives hi=0xAB, lo=0xCD). Execution backends interpret struct layout differently, so treat bit-reinterpretation casts as SV-specific idiom.
+
 ## Enums (FSM)
 
 Cm's `enum` is converted to SV's `typedef enum logic`. The bit width is automatically computed from the **maximum tag value** (explicit tag values are supported):

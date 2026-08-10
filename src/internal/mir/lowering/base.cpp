@@ -395,6 +395,8 @@ MirStruct MirLoweringBase::create_mir_struct(const hir::HirStruct& st) {
     mir_struct.name = st.name;
     mir_struct.is_css = st.is_css;
     mir_struct.is_extern = st.is_extern;
+    // 構造体属性を伝播（sv::packed/sv::unpacked 等、SV用）
+    mir_struct.attributes = st.attributes;
 
     for (const auto& field : st.fields) {
         MirStructField mir_field;

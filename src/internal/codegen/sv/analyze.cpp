@@ -860,9 +860,16 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
         if (is_io_contract)
             continue;
-        // TODO: sv::packed属性チェック（現状は全structをpacked出力）
+        // #[sv::unpacked] 属性でpacked性を制御する（既定はpacked。SV-N8）
+        bool is_unpacked = false;
+        for (const auto& attr : st->attributes) {
+            if (attr == "sv::unpacked" || attr == "verilog::unpacked") {
+                is_unpacked = true;
+                break;
+            }
+        }
         std::ostringstream ss;
-        ss << "typedef struct packed {\n";
+        ss << (is_unpacked ? "typedef struct {\n" : "typedef struct packed {\n");
         for (const auto& f : st->fields) {
             ss << "    " << mapType(f.type) << " " << f.name << ";\n";
         }

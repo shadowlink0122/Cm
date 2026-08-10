@@ -642,3 +642,29 @@ TEST_F(SVCodegenTest, NativePartSelect) {
     expect_not_contains(sv, ">> 32'sd8 &");  // 旧shift+mask読みが残らない
     expect_not_contains(sv, "din >> ");
 }
+
+// #[sv::unpacked] によるpacked性制御（SV-N8）: 属性付きstructはunpacked、既定はpackedで出力される
+TEST_F(SVCodegenTest, StructPackedControl) {
+    const std::string code = load_case("module/struct_packed_control");
+    std::string sv = compile_to_sv(code);
+    // Cfgはunpacked（"struct packed" でない "struct {"）、Pkは既定のpacked
+    size_t cfg_pos = sv.find("} Cfg;");
+    size_t pk_pos = sv.find("} Pk;");
+    EXPECT_NE(cfg_pos, std::string::npos) << sv;
+    EXPECT_NE(pk_pos, std::string::npos) << sv;
+    size_t cfg_def = sv.rfind("typedef struct", cfg_pos);
+    size_t pk_def = sv.rfind("typedef struct", pk_pos);
+    EXPECT_EQ(sv.compare(cfg_def, 16, "typedef struct {"), 0)
+        << "Cfgがunpackedで出力されていません:\n"
+        << sv;
+    EXPECT_EQ(sv.compare(pk_def, 22, "typedef struct packed "), 0)
+        << "Pkが既定のpackedで出力されていません:\n"
+        << sv;
+}
+
+// 型名キャスト type'(expr)（SV-N8）: packed structへのasキャストがSVの型名キャストで出力される
+TEST_F(SVCodegenTest, StructNameCast) {
+    const std::string code = load_case("expr/struct_name_cast");
+    std::string sv = compile_to_sv_checked(code);
+    expect_contains(sv, "Pair'(raw)");
+}

@@ -172,7 +172,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 - [SV-N1](../../archive/v0.17.0/sv/native-bit-part-select.md) native ビット選択・部分選択の出力（実装済み）・[SV-N2](../../archive/v0.17.0/sv/reduction-operators.md) リダクション演算子（実装済み）・[SV-N3](../../archive/v0.17.0/sv/casez-casex-priority.md) casez・priority case（実装済み）（High）
 - [SV-N4](sv/generate-genvar.md) generate/genvar・パラメータ幅配列（A5/A6）・[SV-N5](sv/module-instance-arrays.md) インスタンス配列・[SV-N7](sv/concurrent-assertions-sva.md) 並行アサーション（Medium）
-- [SV-N6](sv/packed-union.md) packed union・[SV-N8](sv/misc-synth-gaps.md) 小粒ギャップ集（$readmemb・type'(expr)・SV task・native reg/2-state bit・#[sv::packed]ほか）（Low）
+- [SV-N6](sv/packed-union.md) packed union・[SV-N8](../../archive/v0.17.0/sv/misc-synth-gaps.md) 小粒ギャップ集（完了: $readmemb・struct型名キャスト・#[sv::unpacked]実装＋task/$time/final/reg・2-state判断記録）（Low）
 
 ## 全体複雑度レビュー（未実装のリファクタリング提案）
 

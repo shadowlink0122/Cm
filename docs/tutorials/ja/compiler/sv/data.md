@@ -48,6 +48,24 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ---
 
+## packed性の制御と型名キャスト（v0.17.0）
+
+Cmの `struct` は既定で `typedef struct packed` として出力されます（ビットベクタとして扱える）。配列レイアウトやツール制約でunpackedが必要な場合は `#[sv::unpacked]` を付与します:
+
+```cm
+#[sv::unpacked]
+struct Cfg { bit[8] a; bit[8] b; }   // → typedef struct { ... } Cfg;
+struct Pk  { bit[4] x; bit[4] y; }   // → typedef struct packed { ... } Pk;（既定）
+```
+
+生ビットからpacked structへの `as` キャストは、SVの型名キャストとして出力されます（ビット再解釈の明示）:
+
+```cm
+Pair p = raw as Pair;   // → p = Pair'(raw);
+```
+
+packed structの上位フィールドがMSB側に対応します（`Pair { hi; lo; }` に16'hABCDを入れると hi=0xAB・lo=0xCD）。実行系バックエンドのstructレイアウトとはビット順の解釈が異なるため、ビット再解釈キャストはSV専用の書き方として使ってください。
+
 ## 列挙型 (FSM)
 
 Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:

@@ -148,6 +148,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 - [reduction-operators.md](sv/reduction-operators.md) — SV-N2: リダクション演算子の組み込み関数（reduce_and/or/xor/nand/nor/xnor。SVはnative単項演算子・非SVは算術脱糖）
 - [casez-casex-priority.md](sv/casez-casex-priority.md) — SV-N3: don't-care matchのnative casez出力とcase修飾属性（#[sv::priority]/#[sv::unique0]）
 - [native-bit-part-select.md](sv/native-bit-part-select.md) — SV-N1: ビットスライスのnative part-select出力（[hi:lo]/[+:]/[-:]・左辺part-select代入）と下降方向`-:`新構文・bit基点許容
+- [misc-synth-gaps.md](sv/misc-synth-gaps.md) — SV-N8: 小粒ギャップ集（$readmemb・struct型名キャスト・#[sv::unpacked]を実装、SV task/$time/final/native reg・2-state bitは見送り/現状維持の判断を記録）
 
 ## architecture/ — コンパイラ基盤の構造的リファクタリング
 
