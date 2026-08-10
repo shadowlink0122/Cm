@@ -436,9 +436,12 @@ std::vector<BlockId> SparseConditionalConstantPropagation::compute_successors(
             if (discr.kind == LatticeKind::Constant) {
                 if (auto* v = std::get_if<int64_t>(&discr.constant.value)) {
                     BlockId target = data.otherwise;
-                    for (const auto& [case_value, case_target] : data.targets) {
-                        if (case_value == *v) {
-                            target = case_target;
+                    // マスク付きcase（SVのdon't-care。SV-N3）は (v & mask) == value で先頭から順に判定する
+                    for (size_t ci = 0; ci < data.targets.size(); ++ci) {
+                        const int64_t mask =
+                            ci < data.target_masks.size() ? data.target_masks[ci] : -1;
+                        if ((*v & mask) == data.targets[ci].first) {
+                            target = data.targets[ci].second;
                             break;
                         }
                     }
@@ -1026,9 +1029,12 @@ std::optional<BlockId> SparseConditionalConstantPropagation::simplify_switch(
         LatticeValue discr = eval_operand(func, *switch_data.discriminant, state);
         if (discr.kind == LatticeKind::Constant) {
             if (auto* v = std::get_if<int64_t>(&discr.constant.value)) {
-                for (const auto& [case_value, case_target] : switch_data.targets) {
-                    if (case_value == *v) {
-                        return case_target;
+                // マスク付きcase（SVのdon't-care。SV-N3）は (v & mask) == value で先頭から順に判定する
+                for (size_t ci = 0; ci < switch_data.targets.size(); ++ci) {
+                    const int64_t mask =
+                        ci < switch_data.target_masks.size() ? switch_data.target_masks[ci] : -1;
+                    if ((*v & mask) == switch_data.targets[ci].first) {
+                        return switch_data.targets[ci].second;
                     }
                 }
                 return switch_data.otherwise;

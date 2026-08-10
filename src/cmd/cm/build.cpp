@@ -318,10 +318,10 @@ int run_build(cli::Options& opts, const char* argv0) {
             std::cout << "=== HIR Lowering ===\n";
         auto phase_hir_start = std::chrono::steady_clock::now();
         hir::HirLowering hir_lowering;
-        // SVターゲットではリダクション演算子を native 出力用にビルトイン呼び出しへ残す（SV-N2）
+        // SVターゲットではリダクション演算子をnative出力用にビルトイン呼び出しへ残し（SV-N2）、don't-care matchをswitchへ脱糖する（SV-N3）。
+        // 実際の出力ターゲットのみで判定する（//! platform: sv のファイルは非SVターゲットでは上のディレクティブ不一致検査で停止済み。cm testはこの時点でtargetをsvへ書換え済み）
         hir_lowering.set_sv_target(opts.target == "sv" || opts.target == "verilog" ||
-                                   opts.target == "systemverilog" ||
-                                   code.find("//! platform: sv") != std::string::npos);
+                                   opts.target == "systemverilog");
         hir = hir_lowering.lower(program);
         // HIR型不変条件の監査（typed-hir-single-source）: CM_HIR_TYPE_AUDIT=1で違反集計、=2でサンプル出力
         if (const char* audit_env = std::getenv("CM_HIR_TYPE_AUDIT");

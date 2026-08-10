@@ -202,7 +202,10 @@ expression_statement ::= expression ';'
 
 if_statement ::= 'if' '(' expression ')' statement ('else' statement)?
 
-switch_statement ::= 'switch' '(' expression ')' '{' case_clause* '}'
+switch_statement ::= sv_case_attribute? 'switch' '(' expression ')' '{' case_clause* '}'
+
+# SVのcase修飾属性（v0.17.0）: switch/match文の直前にのみ前置できる（priority=順序優先のpriority case・unique0=該当なし許容のunique0 case。非SVターゲットでは無視される）
+sv_case_attribute ::= '#[' ('sv::priority' | 'sv::unique0') ']'
 
 case_clause ::= 'case' const_expr ':' statement*
               | 'default' ':' statement*

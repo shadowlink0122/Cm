@@ -1643,6 +1643,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcReductionArgMustBeBits
     {"the argument to '{0}' must be an integer or bit[N] type",
      "'{0}' の引数は整数型または bit[N] 型である必要があります"},
+    // PsStmtAttributeOnlyCaseModifier
+    {"statement attribute '{0}' is not supported here (only #[sv::priority] / #[sv::unique0] immediately before a switch/match statement)",
+     "文の属性 '{0}' はこの位置では使用できません（switch/match文の直前の #[sv::priority] / #[sv::unique0] のみ対応）"},
 };
 // clang-format on
 

@@ -571,6 +571,7 @@ enum class MsgId : int {
     TcCastToArrayUnsupported,
     TcIndirectCallExprUnsupported,
     TcReductionArgMustBeBits,
+    PsStmtAttributeOnlyCaseModifier,
     Count,
 };
 

@@ -38,6 +38,25 @@ ast::StmtPtr Parser::parse_stmt() {
         error(i18n::msg(i18n::MsgId::PsConstexprVarUnsupported));
     }
 
+    // SVのcase修飾属性（SV-N3）: switch/match文の直前の #[sv::priority] / #[sv::unique0] のみ受理する
+    uint8_t sv_case_modifier = 0;
+    while (check(TokenKind::Hash) && pos_ + 1 < tokens_.size() &&
+           tokens_[pos_ + 1].kind == TokenKind::LBracket) {
+        auto attr = parse_attribute();
+        if (attr.name == "sv::priority") {
+            sv_case_modifier = 1;
+        } else if (attr.name == "sv::unique0") {
+            sv_case_modifier = 2;
+        } else {
+            error(i18n::msgf(i18n::MsgId::PsStmtAttributeOnlyCaseModifier, attr.name));
+        }
+    }
+    if (sv_case_modifier != 0 && !check(TokenKind::KwSwitch) && !check(TokenKind::KwMatch)) {
+        error(i18n::msgf(i18n::MsgId::PsStmtAttributeOnlyCaseModifier,
+                         sv_case_modifier == 1 ? "sv::priority" : "sv::unique0"));
+        sv_case_modifier = 0;
+    }
+
     // ブロック
     if (check(TokenKind::LBrace)) {
         auto stmts = parse_block();
@@ -133,13 +152,27 @@ ast::StmtPtr Parser::parse_stmt() {
         }
 
         expect(TokenKind::RBrace);
-        return ast::make_switch(std::move(expr), std::move(cases), Span{start_pos, previous().end});
+        auto switch_stmt =
+            ast::make_switch(std::move(expr), std::move(cases), Span{start_pos, previous().end});
+        // SVのcase修飾属性を反映（SV-N3）
+        if (sv_case_modifier != 0) {
+            if (auto* sw = switch_stmt->as<ast::SwitchStmt>()) {
+                sw->sv_case_modifier = sv_case_modifier;
+            }
+        }
+        return switch_stmt;
     }
 
     // v0.13.0: match文（セミコロン不要のブロックベース構文）
     if (consume_if(TokenKind::KwMatch)) {
         debug::par::log(debug::par::Id::Stmt, "match statement", debug::Level::Trace);
         auto match_expr = parse_match_expr(start_pos);
+        // SVのcase修飾属性を反映（SV-N3）
+        if (sv_case_modifier != 0 && match_expr) {
+            if (auto* me = match_expr->as<ast::MatchExpr>()) {
+                me->sv_case_modifier = sv_case_modifier;
+            }
+        }
         // ExprStmtとしてラップ（セミコロンは不要）
         return ast::make_expr_stmt(std::move(match_expr), Span{start_pos, previous().end});
     }

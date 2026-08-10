@@ -135,8 +135,9 @@ MirTerminatorPtr clone_terminator_with_subst(
         }
         case MirTerminator::SwitchInt: {
             auto& switch_data = std::get<MirTerminator::SwitchIntData>(term->data);
-            result->data = MirTerminator::SwitchIntData{clone_operand(switch_data.discriminant),
-                                                        switch_data.targets, switch_data.otherwise};
+            result->data = MirTerminator::SwitchIntData{
+                clone_operand(switch_data.discriminant), switch_data.targets, switch_data.otherwise,
+                switch_data.target_masks, switch_data.sv_case_modifier};
             break;
         }
         case MirTerminator::Call: {

@@ -143,10 +143,13 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
                 if (auto* value = std::get_if<int64_t>(&constant->value)) {
                     BlockId target = switch_data.otherwise;
 
-                    // 一致するターゲットを探す
-                    for (const auto& [case_value, case_target] : switch_data.targets) {
-                        if (case_value == *value) {
-                            target = case_target;
+                    // 一致するターゲットを探す（マスク付きcase＝SVのdon't-careは (v & mask) == value で先頭から順に判定する。SV-N3）
+                    for (size_t ci = 0; ci < switch_data.targets.size(); ++ci) {
+                        const int64_t mask = ci < switch_data.target_masks.size()
+                                                 ? switch_data.target_masks[ci]
+                                                 : -1;
+                        if ((*value & mask) == switch_data.targets[ci].first) {
+                            target = switch_data.targets[ci].second;
                             break;
                         }
                     }

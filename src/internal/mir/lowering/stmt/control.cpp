@@ -478,6 +478,8 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
 
     // 各caseのブロックを作成
     std::vector<std::pair<int64_t, BlockId>> cases;
+    // don't-careビットマスク（casesと同順。-1は完全一致。SVターゲットのmatch脱糖でのみ非-1になる。SV-N3）
+    std::vector<int64_t> case_masks;
     std::vector<BlockId> case_blocks;
     for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
         // else/defaultケース（patternがnull）はスキップ
@@ -502,6 +504,12 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
                 case_value = extract_case_value(switch_stmt.cases[i].value);
             }
             cases.push_back({case_value, case_block});
+            case_masks.push_back(-1);
+
+        } else if (pat.kind == hir::HirSwitchPattern::Masked) {
+            // don't-careビットパターン: (discriminant & mask) == value で判定する（SV-N3）
+            cases.push_back({pat.masked_value, case_block});
+            case_masks.push_back(pat.masked_mask);
 
         } else if (pat.kind == hir::HirSwitchPattern::Or) {
             // Orパターン: 各サブパターンの値を同じブロックに分岐
@@ -510,12 +518,17 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
                     if (sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
                         int64_t sub_value = extract_case_value(sub_pat->value);
                         cases.push_back({sub_value, case_block});
+                        case_masks.push_back(-1);
+                    } else if (sub_pat->kind == hir::HirSwitchPattern::Masked) {
+                        cases.push_back({sub_pat->masked_value, case_block});
+                        case_masks.push_back(sub_pat->masked_mask);
                     } else if (sub_pat->kind == hir::HirSwitchPattern::Range) {
                         int64_t range_start = extract_case_value(sub_pat->range_start);
                         int64_t range_end = extract_case_value(sub_pat->range_end);
                         if (range_end - range_start <= 256) {
                             for (int64_t v = range_start; v <= range_end; ++v) {
                                 cases.push_back({v, case_block});
+                                case_masks.push_back(-1);
                             }
                         }
                     }
@@ -530,6 +543,7 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
             if (range_end - range_start <= 256) {
                 for (int64_t v = range_start; v <= range_end; ++v) {
                     cases.push_back({v, case_block});
+                    case_masks.push_back(-1);
                 }
             }
         }
@@ -539,9 +553,24 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
     BlockId default_block = ctx.new_block();
     BlockId exit_block = ctx.new_block();
 
-    // switch終端命令
-    ctx.set_terminator(
-        MirTerminator::switch_int(MirOperand::copy(MirPlace{discriminant}), cases, default_block));
+    // switch終端命令（マスク付きcaseまたはSVのcase修飾がある場合のみ追加フィールドを設定する）
+    auto switch_term =
+        MirTerminator::switch_int(MirOperand::copy(MirPlace{discriminant}), cases, default_block);
+    {
+        bool has_mask = false;
+        for (int64_t m : case_masks) {
+            if (m != -1) {
+                has_mask = true;
+                break;
+            }
+        }
+        auto& sd = std::get<MirTerminator::SwitchIntData>(switch_term->data);
+        if (has_mask) {
+            sd.target_masks = case_masks;
+        }
+        sd.sv_case_modifier = switch_stmt.sv_case_modifier;
+    }
+    ctx.set_terminator(std::move(switch_term));
 
     // 各caseをlowering（else/default以外）
     for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {

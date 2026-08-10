@@ -105,6 +105,8 @@ MirTerminatorPtr clone_terminator(const MirTerminator& src) {
         nd.discriminant = clone_operand(*d.discriminant);
         nd.targets = d.targets;
         nd.otherwise = d.otherwise;
+        nd.target_masks = d.target_masks;
+        nd.sv_case_modifier = d.sv_case_modifier;
         term->data = std::move(nd);
     } else if (std::holds_alternative<MirTerminator::CallData>(src.data)) {
         const auto& d = std::get<MirTerminator::CallData>(src.data);

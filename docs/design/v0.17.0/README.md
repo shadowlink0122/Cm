@@ -170,7 +170,7 @@ CANONICAL_SPEC・cm_grammar.md・レクサ/パーサ実装・libs・tests全域�
 
 SVバックエンドが生成できるSV構文・機能を全面調査し（コード生成の精読・tests/svとチュートリアルの実証範囲・validation.cppの明示制限の3系統、主要ギャップは実機裏取り）、未対応の新規実装項目8件をまとめた。索引・カバレッジマトリクス・非目標一覧は [sv/README.md](sv/README.md)。合成可能サブセットの多くは対応済みで、非目標（force/release・specify・UDP・fork/join・DPI-C・interface/modport・遅延ほか）は対象外。
 
-- [SV-N1](sv/native-bit-part-select.md) native ビット選択・部分選択の出力（現状shift+mask降下）・[SV-N2](../../archive/v0.17.0/sv/reduction-operators.md) リダクション演算子（実装済み）・[SV-N3](sv/casez-casex-priority.md) casez/casex・priority case（High）
+- [SV-N1](sv/native-bit-part-select.md) native ビット選択・部分選択の出力（現状shift+mask降下）・[SV-N2](../../archive/v0.17.0/sv/reduction-operators.md) リダクション演算子（実装済み）・[SV-N3](../../archive/v0.17.0/sv/casez-casex-priority.md) casez・priority case（実装済み）（High）
 - [SV-N4](sv/generate-genvar.md) generate/genvar・パラメータ幅配列（A5/A6）・[SV-N5](sv/module-instance-arrays.md) インスタンス配列・[SV-N7](sv/concurrent-assertions-sva.md) 並行アサーション（Medium）
 - [SV-N6](sv/packed-union.md) packed union・[SV-N8](sv/misc-synth-gaps.md) 小粒ギャップ集（$readmemb・type'(expr)・SV task・native reg/2-state bit・#[sv::packed]ほか）（Low）
 

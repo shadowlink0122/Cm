@@ -1,10 +1,12 @@
 // lowering_stmt.cpp - 文のlowering
+#include "expr_internal.hpp"
 #include "fwd.hpp"
 #include "internal/base/text_utils.hpp"
 
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cm::hir {
@@ -485,6 +487,8 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
 HirStmtPtr HirLowering::lower_switch(ast::SwitchStmt& switch_stmt) {
     auto hir_switch = std::make_unique<HirSwitch>();
     hir_switch->expr = lower_expr(*switch_stmt.expr);
+    // SVのcase修飾（#[sv::priority]/#[sv::unique0]）を引き継ぐ（SV-N3）
+    hir_switch->sv_case_modifier = switch_stmt.sv_case_modifier;
 
     for (auto& case_ : switch_stmt.cases) {
         HirSwitchCase hir_case;
@@ -657,8 +661,128 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
 
 // v0.13.0: match式を文として処理（if-elseチェーンに変換）
 // 式形式とブロック形式の両方をサポート
+// SVターゲット: don't-careビットパターン（0b1?00等）を含む整数matchをHirSwitchへ脱糖する（SV-N3）。
+// if-elseチェーンでなくMIRのSwitchIntへ落とすことで、SVコード生成がnative casezを出力できるようにする。
+// 変換対象はガード・束縛の無い Masked/整数リテラル/末尾ワイルドカード/それらのOr のみで、他はnullptrを返し従来のif-elseチェーンへフォールバックする
+HirStmtPtr HirLowering::try_lower_match_as_masked_switch(ast::MatchExpr& match) {
+    // scrutineeが整数系であること（checker非経由で型注釈が無い場合はパターン形のみで判定する）
+    if (match.scrutinee && match.scrutinee->type && !is_bits_type(match.scrutinee->type)) {
+        return nullptr;
+    }
+
+    // 整数リテラルパターンか判定するヘルパー
+    auto is_int_literal = [](const ast::MatchPattern& p) -> bool {
+        if (p.kind != ast::MatchPatternKind::Literal || !p.value) {
+            return false;
+        }
+        auto* lit = p.value->as<ast::LiteralExpr>();
+        return lit && std::holds_alternative<int64_t>(lit->value);
+    };
+
+    // 全アームの適格性検査（Maskedを1つ以上含み、他はリテラル・末尾ワイルドカード・そのOrのみ）
+    bool has_masked = false;
+    for (size_t i = 0; i < match.arms.size(); ++i) {
+        const auto& arm = match.arms[i];
+        if (!arm.pattern || arm.guard) {
+            return nullptr;
+        }
+        switch (arm.pattern->kind) {
+            case ast::MatchPatternKind::Masked:
+                has_masked = true;
+                break;
+            case ast::MatchPatternKind::Literal:
+                if (!is_int_literal(*arm.pattern)) {
+                    return nullptr;
+                }
+                break;
+            case ast::MatchPatternKind::Wildcard:
+                // 途中のワイルドカードは以降のアームを隠すため末尾のみ許可（matchの先勝ち意味論を保存）
+                if (i + 1 != match.arms.size()) {
+                    return nullptr;
+                }
+                break;
+            case ast::MatchPatternKind::Or:
+                for (const auto& sub : arm.pattern->or_patterns) {
+                    if (!sub) {
+                        return nullptr;
+                    }
+                    if (sub->kind == ast::MatchPatternKind::Masked) {
+                        has_masked = true;
+                    } else if (!is_int_literal(*sub)) {
+                        return nullptr;
+                    }
+                }
+                break;
+            default:
+                return nullptr;
+        }
+    }
+    if (!has_masked) {
+        return nullptr;
+    }
+
+    // HirSwitchを構築（アーム順を保存。SVコード生成が順序保存のcasezへ出力する）
+    auto hir_switch = std::make_unique<HirSwitch>();
+    hir_switch->expr = lower_expr(*match.scrutinee);
+    hir_switch->sv_case_modifier = match.sv_case_modifier;
+
+    auto make_hir_pattern = [&](const ast::MatchPattern& p) -> std::unique_ptr<HirSwitchPattern> {
+        auto hp = std::make_unique<HirSwitchPattern>();
+        if (p.kind == ast::MatchPatternKind::Masked) {
+            hp->kind = HirSwitchPattern::Masked;
+            hp->masked_value = p.masked_value;
+            hp->masked_mask = p.masked_mask;
+        } else {
+            hp->kind = HirSwitchPattern::SingleValue;
+            hp->value = lower_expr(*p.value);
+        }
+        return hp;
+    };
+
+    for (auto& arm : match.arms) {
+        HirSwitchCase hir_case;
+        if (arm.pattern->kind == ast::MatchPatternKind::Wildcard) {
+            // ワイルドカードはdefaultケース（pattern=nullptr）
+        } else if (arm.pattern->kind == ast::MatchPatternKind::Or) {
+            auto or_pat = std::make_unique<HirSwitchPattern>();
+            or_pat->kind = HirSwitchPattern::Or;
+            for (const auto& sub : arm.pattern->or_patterns) {
+                or_pat->or_patterns.push_back(make_hir_pattern(*sub));
+            }
+            hir_case.pattern = std::move(or_pat);
+        } else {
+            hir_case.pattern = make_hir_pattern(*arm.pattern);
+        }
+
+        // アーム本体（ブロック形式・式形式）
+        if (arm.is_block_form) {
+            for (auto& stmt : arm.block_body) {
+                if (auto hir_stmt = lower_stmt(*stmt)) {
+                    hir_case.stmts.push_back(std::move(hir_stmt));
+                }
+            }
+        } else if (arm.expr_body) {
+            auto expr = lower_expr(*arm.expr_body);
+            auto expr_stmt = std::make_unique<HirExprStmt>();
+            expr_stmt->expr = std::move(expr);
+            hir_case.stmts.push_back(std::make_unique<HirStmt>(std::move(expr_stmt)));
+        }
+
+        hir_switch->cases.push_back(std::move(hir_case));
+    }
+
+    return std::make_unique<HirStmt>(std::move(hir_switch));
+}
+
 HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
     debug::hir::log(debug::hir::Id::StmtLower, "Lowering match as statement", debug::Level::Debug);
+
+    // SVターゲットではdon't-careビットパターンのmatchをswitchへ脱糖し、native casez出力を可能にする（SV-N3）
+    if (sv_target_) {
+        if (auto masked_switch = try_lower_match_as_masked_switch(match)) {
+            return masked_switch;
+        }
+    }
 
     // AST段階の元の型名を保存（enum_defs_検索用）
     std::string original_enum_name;

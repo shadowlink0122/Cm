@@ -1,0 +1,20 @@
+//! platform: sv
+//! test: op=12, cycles=2 -> kind=1
+//! test: op=8, cycles=2 -> kind=1
+//! test: op=4, cycles=2 -> kind=2
+//! test: op=3, cycles=2 -> kind=0
+
+// 重なりのあるdon't-careパターン（SV-N3）: 先に書いたアームが優先される（matchの先勝ち意味論）。
+// SVでは priority casez が出力され、シミュレーションでも先勝ちが保存されることを検証する
+
+#[input] posedge clk;
+#[input] bit[4] op;
+#[output] uint kind = 0;
+
+async void decode(posedge clk) {
+    match (op) {
+        0b1??? => { kind = 1; }
+        0b?100 => { kind = 2; }
+        _ => { kind = 0; }
+    }
+}

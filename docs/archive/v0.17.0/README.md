@@ -1,6 +1,6 @@
 # v0.17.0 実装済み設計文書アーカイブ（索引）
 
-v0.17.0で処置が完了した設計文書をサブシステム別カテゴリに整理したもの。全文書は「設計方針・段階分割・実装記録・不採用判断・将来課題」を記録している。変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）、調査ラウンドの索引は設計側README（[docs/design/v0.17.0/README.md](../../design/v0.17.0/README.md)）を参照。
+v0.17.0で処置が完了した設計文書をサブシステム別カテゴリに整理したもの。全文書は「設計方針・段階分割・実装記録・不採用判断・将来課題」を記録している。変更の要約はリリースノート（[docs/releases/v0.17.0.md](../../releases/v0.17.0.md)）、調査系列の索引は設計側README（[docs/design/v0.17.0/README.md](../../design/v0.17.0/README.md)）を参照。
 
 ## type-system/ — 型システム（型・ジェネリクス・モノモーフ化・型解決）
 
@@ -142,6 +142,11 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 - [sv-test-verification-soundness.md](backends/sv-test-verification-soundness.md) — R15: SVテスト検証の健全性（`//! test:`期待値が非検証・assertのx楽観性）
 - [ts-bigint-number-generation.md](backends/ts-bigint-number-generation.md) — R19: TS出力がlong/ulongフィールドへnumberリテラルを代入しtscを通らない
 - [wasm-reduce-closure-trap.md](backends/wasm-reduce-closure-trap.md) — wasmのreduceクロージャのランタイムトラップ
+
+## sv/ — SVバックエンドの新規実装項目（SVギャップ調査）
+
+- [reduction-operators.md](sv/reduction-operators.md) — SV-N2: リダクション演算子の組み込み関数（reduce_and/or/xor/nand/nor/xnor。SVはnative単項演算子・非SVは算術脱糖）
+- [casez-casex-priority.md](sv/casez-casex-priority.md) — SV-N3: don't-care matchのnative casez出力とcase修飾属性（#[sv::priority]/#[sv::unique0]）
 
 ## architecture/ — コンパイラ基盤の構造的リファクタリング
 

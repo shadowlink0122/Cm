@@ -1,0 +1,12 @@
+// 重なりのあるdon't-careパターン（SV-N3）: matchの先勝ち意味論を表明する priority casez を出力する
+#[input] bool clk = false;
+#[input] bit[4] op;
+#[output] uint kind = 0;
+
+void decode(posedge clk) {
+    match (op) {
+        0b1??? => { kind = 1; }
+        0b1?00 => { kind = 2; }
+        _ => { kind = 0; }
+    }
+}

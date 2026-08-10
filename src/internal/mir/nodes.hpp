@@ -343,6 +343,11 @@ struct MirTerminator {
         MirOperandPtr discriminant;
         std::vector<std::pair<int64_t, BlockId>> targets;
         BlockId otherwise;
+        // SVターゲット専用（SV-N3）: don't-careビットマスク（targetsと同順。空なら全件が完全一致・-1は完全一致）。
+        // 判定は先頭から順に (discriminant & mask) == value（matchの先勝ち意味論）。定数評価するパスはこの規則で判定すること
+        std::vector<int64_t> target_masks;
+        // SVターゲット専用（SV-N3）: case修飾（0=既定(unique)・1=priority・2=unique0。#[sv::priority]/#[sv::unique0]由来）
+        uint8_t sv_case_modifier = 0;
     };
 
     struct CallData {

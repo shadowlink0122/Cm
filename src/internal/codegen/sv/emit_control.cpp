@@ -232,36 +232,110 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     merge = findMergeBlock(func, sd.targets[0].second, sd.targets[1].second);
                 }
 
-                // matchは網羅性検査済み・switchはdefault生成があるため、シミュレーション時の重複ヒット検出が得られる unique case を出力する
-                ss << indent() << "unique case (" << cond << ")\n";
-                increaseIndent();
-
-                // 各ターゲットのケース（同じ遷移先ブロックごとに値をカンマ区切りでグループ化）
-                std::map<size_t, std::vector<int64_t>> target_groups;
-                std::vector<size_t> target_order;
-                for (const auto& [val, target] : sd.targets) {
-                    if (target_groups.find(target) == target_groups.end()) {
-                        target_order.push_back(target);
+                // don't-careビットマスク付きcase（matchの0b1?00等。SV-N3）は native casez を出力する
+                bool has_masks = false;
+                for (int64_t m : sd.target_masks) {
+                    if (m != -1) {
+                        has_masks = true;
+                        break;
                     }
-                    target_groups[target].push_back(val);
                 }
 
-                for (size_t target : target_order) {
-                    const auto& vals = target_groups[target];
-                    ss << indent();
-                    for (size_t i = 0; i < vals.size(); ++i) {
-                        ss << vals[i];
-                        if (i + 1 < vals.size()) {
-                            ss << ", ";
+                // case修飾の決定: 属性指定（#[sv::priority]/#[sv::unique0]）が最優先。
+                // 指定が無いcasezはパターンの重なりで自動選択する（互いに素→unique・重なりあり→priority＝matchの先勝ち意味論を表明）。
+                // 通常のcaseは従来どおりunique（matchは網羅性検査済み・switchはdefault生成があるため重複ヒット検出が得られる）
+                std::string case_modifier = "unique";
+                if (sd.sv_case_modifier == 1) {
+                    case_modifier = "priority";
+                } else if (sd.sv_case_modifier == 2) {
+                    case_modifier = "unique0";
+                } else if (has_masks) {
+                    bool overlapping = false;
+                    for (size_t i = 0; i < sd.targets.size() && !overlapping; ++i) {
+                        for (size_t j = i + 1; j < sd.targets.size(); ++j) {
+                            const int64_t mi = i < sd.target_masks.size() ? sd.target_masks[i] : -1;
+                            const int64_t mj = j < sd.target_masks.size() ? sd.target_masks[j] : -1;
+                            const int64_t common = mi & mj;
+                            if ((sd.targets[i].first & common) == (sd.targets[j].first & common)) {
+                                overlapping = true;
+                                break;
+                            }
                         }
                     }
-                    ss << ": begin\n";
-                    increaseIndent();
-                    std::set<size_t> case_visited = visited;
-                    emitBlockRecursive(func, target, case_visited, ss, merge);
-                    visited.insert(case_visited.begin(), case_visited.end());
-                    decreaseIndent();
-                    ss << indent() << "end\n";
+                    case_modifier = overlapping ? "priority" : "unique";
+                }
+
+                ss << indent() << case_modifier << (has_masks ? " casez (" : " case (") << cond
+                   << ")\n";
+                increaseIndent();
+
+                if (has_masks) {
+                    // casez: スクルーチニの型幅でワイルドカードビット付き2進リテラルを出力する。
+                    // 先勝ち意味論を保存するためcase項の順序はMIRエントリ順を維持し、連続する同一遷移先のみカンマでまとめる
+                    int width = getBitWidth(resolve_operand_type(*sd.discriminant, func));
+                    if (width <= 0 || width > 64) {
+                        width = 32;
+                    }
+                    auto render_masked = [&](int64_t val, int64_t mask) {
+                        std::string lit = std::to_string(width) + "'b";
+                        for (int b = width - 1; b >= 0; --b) {
+                            if ((mask >> b) & 1) {
+                                lit += ((val >> b) & 1) ? '1' : '0';
+                            } else {
+                                lit += '?';
+                            }
+                        }
+                        return lit;
+                    };
+                    for (size_t i = 0; i < sd.targets.size();) {
+                        const size_t target = sd.targets[i].second;
+                        ss << indent();
+                        size_t j = i;
+                        for (; j < sd.targets.size() && sd.targets[j].second == target; ++j) {
+                            if (j > i) {
+                                ss << ", ";
+                            }
+                            const int64_t mask =
+                                j < sd.target_masks.size() ? sd.target_masks[j] : -1;
+                            ss << render_masked(sd.targets[j].first, mask);
+                        }
+                        ss << ": begin\n";
+                        increaseIndent();
+                        std::set<size_t> case_visited = visited;
+                        emitBlockRecursive(func, target, case_visited, ss, merge);
+                        visited.insert(case_visited.begin(), case_visited.end());
+                        decreaseIndent();
+                        ss << indent() << "end\n";
+                        i = j;
+                    }
+                } else {
+                    // 各ターゲットのケース（同じ遷移先ブロックごとに値をカンマ区切りでグループ化）
+                    std::map<size_t, std::vector<int64_t>> target_groups;
+                    std::vector<size_t> target_order;
+                    for (const auto& [val, target] : sd.targets) {
+                        if (target_groups.find(target) == target_groups.end()) {
+                            target_order.push_back(target);
+                        }
+                        target_groups[target].push_back(val);
+                    }
+
+                    for (size_t target : target_order) {
+                        const auto& vals = target_groups[target];
+                        ss << indent();
+                        for (size_t i = 0; i < vals.size(); ++i) {
+                            ss << vals[i];
+                            if (i + 1 < vals.size()) {
+                                ss << ", ";
+                            }
+                        }
+                        ss << ": begin\n";
+                        increaseIndent();
+                        std::set<size_t> case_visited = visited;
+                        emitBlockRecursive(func, target, case_visited, ss, merge);
+                        visited.insert(case_visited.begin(), case_visited.end());
+                        decreaseIndent();
+                        ss << indent() << "end\n";
+                    }
                 }
 
                 // defaultケース (otherwise)

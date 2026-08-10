@@ -79,6 +79,8 @@ class HirLowering {
     HirStmtPtr lower_defer(ast::DeferStmt& defer);
     HirStmtPtr lower_must_block(ast::MustBlockStmt& must);
     HirStmtPtr lower_match_as_stmt(ast::MatchExpr& match);  // v0.13.0: match文対応
+    // SVターゲット: don't-careビットパターンを含む整数matchをswitchへ脱糖する（SV-N3。native casez出力用）。変換できない形はnullptrを返しif-elseチェーンへフォールバックする
+    HirStmtPtr try_lower_match_as_masked_switch(ast::MatchExpr& match);
     std::unique_ptr<HirSwitchPattern> lower_pattern(ast::Pattern& pattern);
 
     // 式のlowering

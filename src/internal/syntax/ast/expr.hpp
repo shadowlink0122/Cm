@@ -564,6 +564,8 @@ struct MatchExpr {
     std::vector<MatchArm> arms;  // マッチアームのリスト
     // R12: 網羅性検査が「全ケース被覆」と確定した場合にセットする（return網羅解析がワイルドカード無しの全variant被覆matchも終端と認識できるようにする）
     bool known_exhaustive = false;
+    // SVのcase修飾（#[sv::priority]/#[sv::unique0] を文の直前に付与。0=既定・1=priority・2=unique0。非SVターゲットでは無視される）
+    uint8_t sv_case_modifier = 0;
 
     MatchExpr(ExprPtr s, std::vector<MatchArm> a) : scrutinee(std::move(s)), arms(std::move(a)) {}
 };

@@ -291,13 +291,16 @@ struct HirSwitchPattern {
     enum Kind {
         SingleValue,  // 単一値
         Range,        // 範囲
-        Or            // ORで結合された複数パターン
+        Or,           // ORで結合された複数パターン
+        Masked  // don't-careビット付きリテラル（0b1?00。SVターゲットのmatch脱糖用）
     } kind;
 
     HirExprPtr value;                                            // 単一値の場合
     HirExprPtr range_start;                                      // 範囲の開始値
     HirExprPtr range_end;                                        // 範囲の終了値
     std::vector<std::unique_ptr<HirSwitchPattern>> or_patterns;  // ORパターンのリスト
+    int64_t masked_value = 0;                                    // Masked用: 比較値（?は0）
+    int64_t masked_mask = -1;  // Masked用: 有効ビットマスク（?は0。-1は完全一致）
 };
 
 // switch文のケース
@@ -313,6 +316,8 @@ struct HirSwitchCase {
 struct HirSwitch {
     HirExprPtr expr;
     std::vector<HirSwitchCase> cases;
+    // SVのcase修飾（0=既定(unique)・1=priority・2=unique0。#[sv::priority]/#[sv::unique0]由来。非SVでは無視）
+    uint8_t sv_case_modifier = 0;
 };
 
 // asmオペランド（制約+変数名または定数値）

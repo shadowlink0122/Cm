@@ -51,6 +51,8 @@ class SVCodegenTest : public ::testing::Test {
         std::string top_module = codegen::sv::extract_top_module_name(ast);
 
         hir::HirLowering hir_lowering;
+        // 本番のSVパイプラインと同じターゲット分岐（リダクションのビルトイン保持・don't-care matchのswitch脱糖）
+        hir_lowering.set_sv_target(true);
         auto hir = hir_lowering.lower(ast);
 
         mir::MirLowering mir_lowering;
@@ -89,6 +91,8 @@ class SVCodegenTest : public ::testing::Test {
         std::string top_module = codegen::sv::extract_top_module_name(ast);
 
         hir::HirLowering hir_lowering;
+        // 本番のSVパイプラインと同じターゲット分岐
+        hir_lowering.set_sv_target(true);
         auto hir = hir_lowering.lower(ast);
         mir::MirLowering mir_lowering;
         auto mir = mir_lowering.lower(hir);
@@ -569,4 +573,32 @@ TEST_F(SVCodegenTest, ConstantFoldingNotAppliedByDefault) {
     const std::string code = load_case("expr/const_fold");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "32'sd2 * 32'sd3 + 32'sd4");
+}
+
+// don't-careビットパターンのmatch（SV-N3）: mask三項チェーンでなく native casez を出力し、パターンはスクルーチニ幅の2進リテラル（?=don't-care）になる。互いに素なパターンは unique casez
+TEST_F(SVCodegenTest, CasezMaskedMatch) {
+    const std::string code = load_case("control/casez_masked_match");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "unique casez (op)");
+    expect_contains(sv, "4'b1?00");
+    expect_contains(sv, "4'b0?1?");
+    expect_contains(sv, "default:");
+    expect_not_contains(sv, "& 32'sd11");  // 旧mask比較チェーンが残らない
+}
+
+// 重なりのあるdon't-careパターン（SV-N3）: matchの先勝ち意味論を表明する priority casez を出力し、case項はアーム順を維持する
+TEST_F(SVCodegenTest, CasezPriorityOverlap) {
+    const std::string code = load_case("control/casez_priority_overlap");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "priority casez (op)");
+    // 先勝ち保存のためアーム順（1???が先）を維持する
+    EXPECT_LT(sv.find("4'b1???"), sv.find("4'b1?00"));
+}
+
+// #[sv::priority] 属性（SV-N3）: switch文の case修飾が unique から priority へ切り替わる
+TEST_F(SVCodegenTest, PriorityCaseAttribute) {
+    const std::string code = load_case("control/priority_case_attr");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "priority case (sel)");
+    expect_not_contains(sv, "unique case (sel)");
 }
