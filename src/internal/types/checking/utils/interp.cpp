@@ -244,6 +244,31 @@ void desugar_string_interpolation(ast::LiteralExpr& lit, const Span& span) {
     }
 }
 
+// 集約型のprint/補間直接整形の診断（局所処理調査G3）。
+// 従来は共有規則が無く各バックエンドが即興整形しており、配列/スライスの補間はinterp/nativeが空・ゴミバイト、JSが"1,2,3"、
+// 構造体はinterp/nativeが空、JSが"[object Object]"、直接引数println(arr)はnative/jitがLLVM検証失敗でクラッシュと分裂していた。
+// 要素の個別出力またはdebug()等のstringを返すメソッドへ誘導する。
+// 対象は非bit配列/スライスと登録済み構造体のみ: bitベクタは整数として、ユニオンはタグで実バリアントを整形する対応済み機能（v0.16.0）のため対象外。
+// 未登録名の構造体型（ジェネリック型パラメータT等）はモノモーフ化前の見かけの型のため対象外とする
+void TypeChecker::check_print_aggregate(const ast::TypePtr& type, const Span& span) {
+    if (!type) {
+        return;
+    }
+    auto resolved = resolve_typedef(type);
+    if (!resolved) {
+        return;
+    }
+    const bool is_bits_vector = resolved->kind == ast::TypeKind::Array && resolved->element_type &&
+                                resolved->element_type->kind == ast::TypeKind::Bit;
+    const bool is_plain_array = resolved->kind == ast::TypeKind::Array && !is_bits_vector;
+    const bool is_known_struct =
+        resolved->kind == ast::TypeKind::Struct && get_struct(resolved->name) != nullptr;
+    if (is_plain_array || is_known_struct) {
+        error(span,
+              i18n::msgf(i18n::MsgId::TcPrintAggregateUnsupported, type_to_string(*resolved)));
+    }
+}
+
 void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
     desugar_string_interpolation(lit, current_span_);
     // 脱糖はプリパス（match_hoist）が先行することがあるため、記録済みの失敗をここで一度だけ報告する

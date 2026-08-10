@@ -106,6 +106,26 @@ int main() {
 }
 ```
 
+## 整形できる型（v0.17.0）
+
+プレースホルダとprint/printlnの直接引数に書けるのは、単一の値として整形できる型（数値・bool・char・string・enum値・ユニオン）です。集約型（配列・スライス・構造体）を直接渡すとコンパイルエラーになります（従来はバックエンドごとに空・ゴミ・`[object Object]` 等へ分裂していました）:
+
+```cm
+#[derive(Debug)]
+struct P { int x; int y; }
+
+int main() {
+    int[3] a = [1, 2, 3];
+    // println("{a}");        // エラー: cannot format a value of type 'int[3]' ...
+    println("{a[0]}, len={a.len()}");   // OK: 要素・スカラーは整形できる
+
+    P p = P{x: 1, y: 2};
+    // println(p);            // エラー
+    println("{p.debug()}");   // OK: P { x: 1, y: 2 }（derive(Debug)の文字列化）
+    return 0;
+}
+```
+
 ## フォーマット指定子
 
 `{変数:指定子}` の形式で基数などを指定できます。

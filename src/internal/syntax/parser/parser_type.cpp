@@ -149,6 +149,10 @@ ast::TypePtr Parser::parse_type() {
     if (check(TokenKind::LParen)) {
         advance();  // '(' を消費
         auto inner = parse_type_with_union();
+        // (int, string) のようなカンマ区切りはタプル型として誤解されやすいため専用診断で誘導する
+        if (check(TokenKind::Comma)) {
+            error(i18n::msg(i18n::MsgId::PsTupleUnsupported));
+        }
         expect(TokenKind::RParen);
         if (has_const && inner) {
             inner->qualifiers.is_const = true;

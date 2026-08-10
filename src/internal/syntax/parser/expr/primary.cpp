@@ -636,6 +636,10 @@ ast::ExprPtr Parser::parse_primary() {
             diagnostics_.pop_back();
         }
         auto expr = parse_expr();
+        // (a, b) のようなカンマ区切りはタプル/分解代入として誤解されやすいため専用診断で誘導する
+        if (check(TokenKind::Comma)) {
+            error(i18n::msg(i18n::MsgId::PsTupleUnsupported));
+        }
         expect(TokenKind::RParen);
         debug::par::log(debug::par::Id::ParenClose, "Closed parenthesized expression",
                         debug::Level::Trace);

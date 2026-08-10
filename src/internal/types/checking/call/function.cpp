@@ -75,7 +75,10 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             }
 
             for (auto& arg : call.args) {
-                infer_type(*arg);
+                auto arg_type = infer_type(*arg);
+                // 集約型（配列/スライス・構造体・ユニオン）の直接引数は診断で停止する（局所処理調査G3）。
+                // 従来はnative/jitがLLVM検証失敗でクラッシュし、JSだけ[ 1, 2, 3 ]等を出力する分裂だった
+                check_print_aggregate(arg_type, arg->span.start != 0 ? arg->span : current_span_);
             }
 
             // 補間プレースホルダのスコープ・move検査は、infer_literalの脱糖（desugar_interpolation_parts）後の通常推論が行う（第4段b）

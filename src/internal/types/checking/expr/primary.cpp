@@ -458,7 +458,10 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
             Span lit_span = current_span_;
             for (auto& [content, pexpr] : lit.interp_parts) {
                 if (pexpr) {
-                    infer_type(*pexpr);
+                    auto ptype = infer_type(*pexpr);
+                    // 集約型（配列/スライス・構造体・ユニオン）のプレースホルダは診断で停止する（局所処理調査G3）。
+                    // 従来はバックエンドごとに即興整形され、interp/nativeが空・ゴミバイト、JSが1,2,3/[object Object]と分裂していた
+                    check_print_aggregate(ptype, pexpr->span.start != 0 ? pexpr->span : lit_span);
                 }
             }
             current_span_ = lit_span;

@@ -205,6 +205,8 @@ class TypeChecker {
     // 文字列リテラルの補間プレースホルダを一度だけ実ASTへ脱糖する（第4段b）。
     // 以後の推論・HIR/MIR loweringはテキスト再パースせずlit.interp_partsの式を消費する
     void desugar_interpolation_parts(ast::LiteralExpr& lit);
+    // 集約型（配列/スライス・構造体・ユニオン・インターフェース）のprint/補間直接整形を診断で停止する（局所処理調査G3。bitベクタは整数として整形されるため対象外）
+    void check_print_aggregate(const ast::TypePtr& type, const Span& span);
 
     // 名前空間内の非修飾型名を「現在の名前空間::名前」として解決する（内側から外側へ探索。解決できた場合は修飾名を返す）
     std::optional<std::string> resolve_in_namespace(const std::string& name) const;

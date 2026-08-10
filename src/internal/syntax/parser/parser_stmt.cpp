@@ -543,6 +543,33 @@ bool Parser::is_type_start() {
             }
             return i < tokens_.size() && tokens_[i].kind == TokenKind::Ident;
         }
+        case TokenKind::LParen: {
+            // 括弧付き型の宣言（局所処理調査A1のparen分）: (int) k = 5; ・ (int | string) u = 1; を宣言と認識する。
+            // 括弧を閉じた直後（ポインタ/配列サフィックスを挟んで）に識別子が来る形は式として不成立（(expr) ident は無効）のため宣言と確定できる。
+            // 型として無効な中身（(a+b) c 等）は宣言経路のparse_typeが診断する
+            size_t i = pos_ + 1;  // '(' の次
+            int depth = 1;
+            while (i < tokens_.size() && depth > 0) {
+                if (tokens_[i].kind == TokenKind::LParen) {
+                    depth++;
+                } else if (tokens_[i].kind == TokenKind::RParen) {
+                    depth--;
+                } else if (tokens_[i].kind == TokenKind::Eof) {
+                    break;
+                }
+                i++;
+            }
+            if (depth != 0) {
+                return false;
+            }
+            // 閉じ括弧後のポインタ/配列サフィックスをスキップ（typeof宣言の先読みと同型）
+            while (i < tokens_.size() &&
+                   (tokens_[i].kind == TokenKind::Star || tokens_[i].kind == TokenKind::LBracket ||
+                    tokens_[i].kind == TokenKind::RBracket)) {
+                i++;
+            }
+            return i < tokens_.size() && tokens_[i].kind == TokenKind::Ident;
+        }
         case TokenKind::Ident:
             // 識別子の後に識別子が来たら変数宣言 (Type name)
             // 識別子の後に::が来たら名前空間修飾型の可能性 (ns::Type name)

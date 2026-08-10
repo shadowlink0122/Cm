@@ -160,6 +160,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 - [large-scale-bottleneck-audit.md](audit/large-scale-bottleneck-audit.md) — Cm大規模開発ボトルネック監査
 - [move-closure-interp-audit.md](audit/move-closure-interp-audit.md) — native/jit網羅検証で検出したバグ（move・クロージャ・補間式添字）
 - [syntax-audit-bugfixes.md](audit/syntax-audit-bugfixes.md) — 構文網羅検証で検出したバグの修正（索引）
+- [local-processing-audit.md](audit/local-processing-audit.md) — 局所処理の全体調査（正準実装の複製とドリフト。A〜G全系統を修正・受理対称化・診断統一で処置完了）
 
 ## tooling/ — ツール（VSCode拡張・セルフホスト準備）
 

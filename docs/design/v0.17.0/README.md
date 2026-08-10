@@ -229,7 +229,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 ## 監査・網羅検証
 
-- [局所処理の全体調査](local-processing-audit.md) — 「正準実装の複製とドリフト」の観点でコンパイラ全体を5系統×実測プローブ監査。型文法の呼び出し側複製（is_type_start/sizeof判定/as-is配列サフィックス/paren・generic-argの非union再帰）・期待型伝播の透過ノード未対応（三項/match/ジェネリック置換）・配列高階関数のslice_dispatch未移行（double/string/struct要素の無診断誤コンパイル）・補間の制限文法・縮小診断の文脈差・JS無指定補間の符号破壊などの未修正所見を根本原因付きで列挙（主要所見は再現確認済み）
+- [局所処理の全体調査](../../archive/v0.17.0/audit/local-processing-audit.md) — 「正準実装の複製とドリフト」の観点でコンパイラ全体を5系統×実測プローブ監査し、全所見を処置して完了（型文法の呼び出し側複製・期待型伝播の透過ノード・配列HOFのslice_dispatch移行・補間の制限文法・縮小診断の文脈差・集約printの診断統一など。archive済み）
 - [large-scale-bottleneck-audit.md](../../archive/v0.17.0/audit/large-scale-bottleneck-audit.md) — 大規模開発ボトルネック監査の全57所見（C/H/M/L系、全件対応完了）
 - [syntax-audit-bugfixes.md](../../archive/v0.17.0/audit/syntax-audit-bugfixes.md) — 構文網羅検証（B1〜B9の総括）
 - [move-closure-interp-audit.md](../../archive/v0.17.0/audit/move-closure-interp-audit.md) — move・クロージャ・補間式添字の検証（V1〜V8の総括）

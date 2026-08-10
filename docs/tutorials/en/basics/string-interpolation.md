@@ -106,6 +106,26 @@ int main() {
 }
 ```
 
+## Formattable types (v0.17.0)
+
+Placeholders and direct print/println arguments accept types that format as a single value (numerics, bool, char, string, enum values, unions). Passing an aggregate (array, slice, struct) directly is a compile error (previously each backend improvised: empty output, garbage bytes, or `[object Object]`):
+
+```cm
+#[derive(Debug)]
+struct P { int x; int y; }
+
+int main() {
+    int[3] a = [1, 2, 3];
+    // println("{a}");        // error: cannot format a value of type 'int[3]' ...
+    println("{a[0]}, len={a.len()}");   // OK: elements and scalars format fine
+
+    P p = P{x: 1, y: 2};
+    // println(p);            // error
+    println("{p.debug()}");   // OK: P { x: 1, y: 2 } (derive(Debug) stringification)
+    return 0;
+}
+```
+
 ## Format Specifiers
 
 The `{variable:specifier}` form lets you specify a radix and more.

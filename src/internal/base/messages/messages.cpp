@@ -1646,6 +1646,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsStmtAttributeOnlyCaseModifier
     {"statement attribute '{0}' is not supported here (only #[sv::priority] / #[sv::unique0] immediately before a switch/match statement)",
      "文の属性 '{0}' はこの位置では使用できません（switch/match文の直前の #[sv::priority] / #[sv::unique0] のみ対応）"},
+    // TcPrintAggregateUnsupported
+    {"cannot format a value of type '{0}' in print/interpolation; print elements individually or use a string-returning method such as debug()",
+     "型 '{0}' の値は print/補間で直接整形できません（要素を個別に出力するか、debug() 等の string を返すメソッドを使用してください）"},
+    // PsTupleUnsupported
+    {"tuple types and destructuring assignment are not supported (use a struct to group values)",
+     "タプル型・分解代入は未対応です（値のグループ化には構造体を使用してください）"},
 };
 // clang-format on
 
