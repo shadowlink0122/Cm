@@ -470,6 +470,36 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinEntry> = {
     signature: 'step(n: int) -> void',
     doc: 'SVバックエンドでクロックを `n` サイクル進める（シミュレーション用）。',
   },
+  reduce_and: {
+    receiver: 'なし',
+    signature: 'reduce_and(x: 整数/bit[N]) -> bool',
+    doc: '全ビットANDリダクション（全ビットが1のとき真）。SVでは native `&x` を出力する。',
+  },
+  reduce_or: {
+    receiver: 'なし',
+    signature: 'reduce_or(x: 整数/bit[N]) -> bool',
+    doc: '全ビットORリダクション（1ビットでも1のとき真）。SVでは native `|x` を出力する。',
+  },
+  reduce_xor: {
+    receiver: 'なし',
+    signature: 'reduce_xor(x: 整数/bit[N]) -> bool',
+    doc: '全ビットXORリダクション（1のビット数が奇数のとき真＝パリティ）。SVでは native `^x` を出力する。',
+  },
+  reduce_nand: {
+    receiver: 'なし',
+    signature: 'reduce_nand(x: 整数/bit[N]) -> bool',
+    doc: 'NANDリダクション（`reduce_and` の否定）。SVでは native `~&x` を出力する。',
+  },
+  reduce_nor: {
+    receiver: 'なし',
+    signature: 'reduce_nor(x: 整数/bit[N]) -> bool',
+    doc: 'NORリダクション（`reduce_or` の否定）。SVでは native `~|x` を出力する。',
+  },
+  reduce_xnor: {
+    receiver: 'なし',
+    signature: 'reduce_xnor(x: 整数/bit[N]) -> bool',
+    doc: 'XNORリダクション（`reduce_xor` の否定）。SVでは native `~^x` を出力する。',
+  },
 };
 
 // ---- 検索補助 ----

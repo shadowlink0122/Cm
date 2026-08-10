@@ -1640,6 +1640,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TcIndirectCallExprUnsupported
     {"calling a function pointer produced by an expression (such as fs[0](...) or getf()(...)) is not yet supported on this target; assign it to a variable first (e.g. auto f = fs[0]; f(...))",
      "式が生む関数ポインタの直接呼び出し（fs[0](...) や getf()(...) 等）はこのターゲットでは未対応です。一旦変数へ束ねてから呼び出してください（例: auto f = fs[0]; f(...)）"},
+    // TcReductionArgMustBeBits
+    {"the argument to '{0}' must be an integer or bit[N] type",
+     "'{0}' の引数は整数型または bit[N] 型である必要があります"},
 };
 // clang-format on
 

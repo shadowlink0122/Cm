@@ -28,7 +28,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | ビットスライス`x[hi:lo]`（読み） | 🟡 | shift+maskへ降下（native `[hi:lo]`非出力） → [SV-N1](native-bit-part-select.md) |
 | インデックス付き部分選択`x[i +: w]`（読み）・部分代入`x[hi:lo] = v` | 🟡 | 同上（shift+mask・read-modify-write） → [SV-N1](native-bit-part-select.md) |
 | `x[i -: w]` | 🔴 | → [SV-N1](native-bit-part-select.md) |
-| リダクション演算子`&x`/`\|x`/`^x`/`~&`/`~\|`/`~^` | 🔴 | Cmに構文なし → [SV-N2](reduction-operators.md) |
+| リダクション演算子`&x`/`\|x`/`^x`/`~&`/`~\|`/`~^` | ✅ | 組み込み関数 `reduce_and/or/xor/nand/nor/xnor` → [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md)（実装済み） |
 | 型キャスト`type'(expr)`（enum/struct）・ストリーミング演算子 | 🔴 | → [SV-N8](misc-synth-gaps.md) |
 
 ### 制御構文
@@ -67,7 +67,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | ID | 項目 | 優先度 | 分類 |
 |----|------|--------|------|
 | [SV-N1](native-bit-part-select.md) | native ビット選択・部分選択の出力（`[hi:lo]`/`[+:]`/`[-:]`・部分代入） | High | idiom（合成結果は等価だが可読性・ツール互換） |
-| [SV-N2](reduction-operators.md) | リダクション演算子（Cm構文＋SV出力） | High | 新機能 |
+| [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md) | リダクション演算子（組み込み関数＋SV出力・実装済み） | High | 新機能 |
 | [SV-N3](casez-casex-priority.md) | `casez`/`casex`とpriority/unique0 case修飾 | High | idiom＋新機能 |
 | [SV-N4](generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ展開 | Medium | 新機能（A5/A6） |
 | [SV-N5](module-instance-arrays.md) | モジュールインスタンス配列・位置ベースポート接続 | Medium | 新機能 |

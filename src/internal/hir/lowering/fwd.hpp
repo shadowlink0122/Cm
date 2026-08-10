@@ -22,7 +22,13 @@ class HirLowering {
     // メインエントリポイント
     HirProgram lower(ast::Program& program);
 
+    // SVターゲットか否かを設定する（リダクション演算子を native 出力用にビルトイン呼び出しへ残すか、
+    // 非SV向けに算術へ脱糖するかを切り替える。build.cpp が --target から設定する）
+    void set_sv_target(bool enabled) { sv_target_ = enabled; }
+
    private:
+    // SVターゲットフラグ（リダクション脱糖の分岐に使用）
+    bool sv_target_ = false;
     // キャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
@@ -81,6 +87,8 @@ class HirLowering {
     HirExprPtr lower_binary(ast::BinaryExpr& binary, TypePtr type);
     HirExprPtr lower_unary(ast::UnaryExpr& unary, TypePtr type);
     HirExprPtr lower_call(ast::CallExpr& call, TypePtr type);
+    // リダクション演算子（reduce_and/or/xor/nand/nor/xnor）の lowering（SV-N2）
+    HirExprPtr lower_reduction(ast::CallExpr& call, const std::string& name);
     HirExprPtr lower_index(ast::IndexExpr& idx, TypePtr type);
     HirExprPtr lower_slice(ast::SliceExpr& slice, TypePtr type);
     HirExprPtr lower_member(ast::MemberExpr& mem, TypePtr type);

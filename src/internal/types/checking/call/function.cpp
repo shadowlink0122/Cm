@@ -173,6 +173,31 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
+        // リダクション演算子（SV-N2）: ベクタ全ビットを1ビットへ畳み込む単項演算。
+        // SVでは native リダクション演算子（&x / |x / ^x / ~&x / ~|x / ~^x）へ写像し、
+        // 非SVバックエンドでは HIR で幅ぶんの算術（マスク比較・パリティ）へ脱糖する。戻り値は bool。
+        if (ident->name == "reduce_and" || ident->name == "reduce_or" ||
+            ident->name == "reduce_xor" || ident->name == "reduce_nand" ||
+            ident->name == "reduce_nor" || ident->name == "reduce_xnor") {
+            if (call.args.size() != 1) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcTakesOnly1Argument, ident->name,
+                                                std::to_string(call.args.size())));
+                return ast::make_error();
+            }
+            auto arg_type = infer_type(*call.args[0]);
+            // 整数型・単一bit・bit[N] のみ受理する
+            bool is_bits =
+                arg_type && (arg_type->is_integer() || arg_type->kind == ast::TypeKind::Bit ||
+                             (arg_type->kind == ast::TypeKind::Array && arg_type->element_type &&
+                              arg_type->element_type->kind == ast::TypeKind::Bit));
+            if (!is_bits) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcReductionArgMustBeBits, ident->name));
+                return ast::make_error();
+            }
+            return ast::make_bool();
+        }
+
         // SVバックエンド用ビルトイン関数のバイパス
         if (ident->name == "__builtin_concat" || ident->name == "__builtin_replicate") {
             if (ident->name == "__builtin_replicate") {

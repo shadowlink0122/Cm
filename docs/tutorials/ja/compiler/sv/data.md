@@ -136,6 +136,35 @@ bit[4] nib = word[i*4 +: 4]; // 可変基点+定数幅（インデックスド�
 - 全バックエンド共通のシフト+マスクに脱糖されるため、実行系（JIT/native/WASM/JS）でも同じ結果になります
 - 幅は最大64ビット、結果型は `bit[w]`（整数との相互代入可）
 
+## リダクション演算子（v0.17.0）
+
+ベクタの全ビットを1ビット（`bool`）へ畳み込むリダクション演算を組み込み関数として提供します。SVでは native なリダクション演算子（`&x`・`|x`・`^x`・`~&x`・`~|x`・`~^x`）を出力します:
+
+```cm
+#[input]  bit[8] flags = 0;
+#[output] bool all_set = false;
+#[output] bool parity = false;
+
+void check() {
+    all_set = reduce_and(flags);  // → all_set = &(flags);   全ビットAND
+    parity  = reduce_xor(flags);  // → parity  = ^(flags);   パリティ
+}
+```
+
+| 組み込み関数 | 意味 | SV出力 |
+|--------------|------|--------|
+| `reduce_and(x)` | 全ビットAND（全ビット1で真） | `&x` |
+| `reduce_or(x)` | 全ビットOR（1ビットでも1で真） | `\|x` |
+| `reduce_xor(x)` | 全ビットXOR（1の個数が奇数で真＝パリティ） | `^x` |
+| `reduce_nand(x)` | NAND（`reduce_and` の否定） | `~&x` |
+| `reduce_nor(x)` | NOR（`reduce_or` の否定） | `~\|x` |
+| `reduce_xnor(x)` | XNOR（`reduce_xor` の否定） | `~^x` |
+
+- 被演算子は整数型または `bit[N]` 型（非整数はコンパイルエラー）。畳み込み幅は被演算子の型幅で決まります（`bit[8]`=8ビット・`uint`=32ビット）
+- 戻り値は `bool`（1ビット）。SV出力ポートへ束ねる場合は `bool` ポートを使います
+- 非SVバックエンド（JIT/native/WASM/JS）ではマスク比較・パリティ算術へ脱糖され、全バックエンドで同じ結果になります
+- `reduce_xor`/`reduce_xnor` は被演算子を幅ぶん評価するため、副作用のある式（関数呼び出し等）ではなく変数・フィールドを渡してください
+
 
 ---
 

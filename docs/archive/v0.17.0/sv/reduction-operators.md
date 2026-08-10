@@ -2,7 +2,7 @@
 
 **分類:** 新機能（Cm構文＋SV出力）
 **優先度:** High
-**ステータス:** 未実装（v0.17.0 SVギャップ調査で検出。tests/tutorials/codegenの3系統いずれもゼロ）
+**ステータス:** 実装済み（案A＝組み込み関数を採用）
 
 ## 現状
 
@@ -41,3 +41,14 @@ bool parity  = reduce_xor(flags);   // SV: assign parity  = ^flags;
 ## テスト計画
 
 `tests/sv/basic/` へ: 6種のリダクションが native SV演算子を出力し、iverilogシミュレーションで既知入力に対し正しい1ビット結果を返すことを検証（例: `reduce_and(8'hFF)=1`・`reduce_xor(8'h07)=1`）。非SVバックエンド（jit）でも同値を返す移植性テストを`tests/common/`へ。
+
+## 実装記録（案A＝組み込み関数を採用）
+
+案A（組み込み関数）を実装した。二項演算子（`&`/`|`/`^`）との衝突を避け、非SVバックエンドでも意味を定義できる方針を優先した。
+
+- **型検査**（`types/checking/call/function.cpp`）: `reduce_and/or/xor/nand/nor/xnor` を組み込み自由関数として登録した。引数は1個・整数型または `bit[N]` 型（単一 `bit` 含む）に限定し、非整数は診断 `TcReductionArgMustBeBits`（「引数は整数型または bit[N] 型である必要があります」）で停止する。戻り値は `bool`。
+- **HIR lowering**（`hir/lowering/expr.cpp` の `lower_reduction`）: ビルトインをターゲットで分岐させた。`HirLowering::set_sv_target`（`build.cpp` が `--target` またはソースの `//! platform: sv` から設定）が真のとき、native 出力用に `__builtin_reduce_*` 呼び出しを残す。非SVでは被演算子の型幅 `W` を求め、`reduce_and`=`(x & mask) == mask`・`reduce_or`=`(x & mask) != 0`・`reduce_nand`/`reduce_nor` はその否定形、`reduce_xor`/`reduce_xnor` は `XOR_{k<W} ((x>>k) & 1)` のパリティ畳み込みへ脱糖する（LLVM/JSが既に扱える純粋な整数演算のみを生成し、バックエンド追加改修は不要）。パリティは被演算子を幅ぶん評価するため、`reduce_xor`/`reduce_xnor` の被演算子には副作用のない式を渡す前提とした。
+- **SVコード生成**（`codegen/sv/emit_control.cpp`）: Call ターミネータの `__builtin_reduce_*` を native 前置単項リダクション演算子（`&x`/`\|x`/`^x`/`~&x`/`~\|x`/`~^x`）へ写像した（連接・複製の既存分岐と同じノンブロッキング/ブロッキング代入判定を共用）。
+- **VSCode拡張**: 文法の組み込み関数一覧（`grammar/terms.ts`）と補完・ホバーのビルトインレジストリ（`navigation/builtins.ts`）へ6関数を追記し、`syntaxes/cm.tmLanguage.json` を再生成した。
+- **テスト**: `tests/sv/basic/operators/reduction.cm`（native SV演算子出力＋iverilogシミュレーションの真理値検証、2入力ベクタ）・`tests/common/basic/numeric/reduction.cm`（interpreter/llvm/js 一致の移植性検証・幅の効きを含む19行）・`tests/common/errors/numeric/reduction_arg.cm`（非整数引数の診断）。
+- 範囲外（案Aの推奨どおり見送り）: 案B（`&x` 等の単項演算子構文）はCmの `&`（アドレス取得）と衝突するため採用しない。SV出力ポートは `bool` 型で受ける（`bit` ポートへは代入型不一致になるため）。

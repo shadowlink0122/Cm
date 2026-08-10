@@ -608,7 +608,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.cm",
-          "match": "\\b(print|println|printf|assert|panic|step|exit|eprintln|eprint)\\b"
+          "match": "\\b(print|println|printf|assert|panic|step|exit|eprintln|eprint|reduce_and|reduce_or|reduce_xor|reduce_nand|reduce_nor|reduce_xnor)\\b"
         }
       ]
     },

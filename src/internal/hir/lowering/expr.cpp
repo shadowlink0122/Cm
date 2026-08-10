@@ -735,6 +735,101 @@ HirExprPtr HirLowering::lower_unary(ast::UnaryExpr& unary, TypePtr type) {
 }
 
 // 関数呼び出し
+HirExprPtr HirLowering::lower_reduction(ast::CallExpr& call, const std::string& name) {
+    // 被演算子の型からビット幅を求める（bit[N]=N・単一bit=1・整数型=バイト幅*8）
+    ast::TypePtr operand_type = call.args[0]->type;
+    int width = 0;
+    if (operand_type) {
+        if (operand_type->kind == ast::TypeKind::Array && operand_type->element_type &&
+            operand_type->element_type->kind == ast::TypeKind::Bit) {
+            width = static_cast<int>(operand_type->array_size.value_or(0));
+        } else if (operand_type->kind == ast::TypeKind::Bit) {
+            width = 1;
+        } else if (operand_type->is_integer()) {
+            width = static_cast<int>(operand_type->info().size) * 8;
+        }
+    }
+    if (width <= 0) {
+        width = 32;  // 型が取れない場合の安全側フォールバック
+    }
+
+    // SVターゲット: native リダクション演算子（&x / |x / ^x / ~&x / ~|x / ~^x）の出力用に
+    // ビルトイン呼び出しを残す（SVコード生成が __builtin_reduce_* を写像する）
+    if (sv_target_) {
+        auto hir = std::make_unique<HirCall>();
+        hir->func_name = "__builtin_" + name;
+        hir->args.push_back(lower_expr(*call.args[0]));
+        return std::make_unique<HirExpr>(std::move(hir), ast::make_bool());
+    }
+
+    // 非SV: 幅ぶんの算術へ脱糖する（LLVM/JSが既に扱える純粋な整数演算のみを生成する）
+    const int64_t mask = (width >= 64) ? int64_t{-1} : ((int64_t{1} << width) - 1);
+
+    // (operand & mask) <cmp> rhs 形式のbool式を作る（and/or/nand/nor用）
+    auto masked_cmp = [&](HirBinaryOp cmp, int64_t rhs) -> HirExprPtr {
+        auto band = std::make_unique<HirBinary>();
+        band->op = HirBinaryOp::BitAnd;
+        band->lhs = lower_expr(*call.args[0]);
+        band->rhs = make_int_lit(mask, ast::make_ulong());
+        auto band_expr = std::make_unique<HirExpr>(std::move(band), ast::make_ulong());
+        auto cmp_bin = std::make_unique<HirBinary>();
+        cmp_bin->op = cmp;
+        cmp_bin->lhs = std::move(band_expr);
+        cmp_bin->rhs = make_int_lit(rhs, ast::make_ulong());
+        return std::make_unique<HirExpr>(std::move(cmp_bin), ast::make_bool());
+    };
+
+    if (name == "reduce_and") {
+        return masked_cmp(HirBinaryOp::Eq, mask);  // 全ビット1
+    }
+    if (name == "reduce_or") {
+        return masked_cmp(HirBinaryOp::Ne, 0);  // 1ビットでも1
+    }
+    if (name == "reduce_nand") {
+        return masked_cmp(HirBinaryOp::Ne, mask);  // 全ビット1でない
+    }
+    if (name == "reduce_nor") {
+        return masked_cmp(HirBinaryOp::Eq, 0);  // 全ビット0
+    }
+
+    // reduce_xor / reduce_xnor: パリティ = XOR_{k=0..width-1} ((operand >> k) & 1)。
+    // 各ビットを個別に取り出してXOR畳み込みする（被演算子を幅ぶん評価するため、
+    // reduce_xor/xnor の被演算子には副作用のない式を渡すこと）
+    HirExprPtr parity;
+    for (int k = 0; k < width; ++k) {
+        HirExprPtr shifted;
+        if (k == 0) {
+            shifted = lower_expr(*call.args[0]);
+        } else {
+            auto shr = std::make_unique<HirBinary>();
+            shr->op = HirBinaryOp::Shr;
+            shr->lhs = lower_expr(*call.args[0]);
+            shr->rhs = make_int_lit(k, ast::make_int());
+            shifted = std::make_unique<HirExpr>(std::move(shr), ast::make_ulong());
+        }
+        auto bit = std::make_unique<HirBinary>();
+        bit->op = HirBinaryOp::BitAnd;
+        bit->lhs = std::move(shifted);
+        bit->rhs = make_int_lit(1, ast::make_ulong());
+        auto bit_expr = std::make_unique<HirExpr>(std::move(bit), ast::make_ulong());
+        if (!parity) {
+            parity = std::move(bit_expr);
+        } else {
+            auto x = std::make_unique<HirBinary>();
+            x->op = HirBinaryOp::BitXor;
+            x->lhs = std::move(parity);
+            x->rhs = std::move(bit_expr);
+            parity = std::make_unique<HirExpr>(std::move(x), ast::make_ulong());
+        }
+    }
+    // parity は 0/1。reduce_xor は parity!=0、reduce_xnor は parity==0
+    auto cmp_bin = std::make_unique<HirBinary>();
+    cmp_bin->op = (name == "reduce_xor") ? HirBinaryOp::Ne : HirBinaryOp::Eq;
+    cmp_bin->lhs = std::move(parity);
+    cmp_bin->rhs = make_int_lit(0, ast::make_ulong());
+    return std::make_unique<HirExpr>(std::move(cmp_bin), ast::make_bool());
+}
+
 HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
     debug::hir::log(debug::hir::Id::CallExprLower, "", debug::Level::Debug);
 
@@ -756,6 +851,17 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
         } else {
             debug::hir::log(debug::hir::Id::CallTarget, "callee is unknown type",
                             debug::Level::Debug);
+        }
+    }
+
+    // リダクション演算子（SV-N2）: SVターゲットは native 出力用にビルトイン呼び出しへ残し、
+    // 非SVは幅ぶんの算術（マスク比較・パリティ）へ脱糖する
+    if (auto* ident = call.callee->as<ast::IdentExpr>()) {
+        if ((ident->name == "reduce_and" || ident->name == "reduce_or" ||
+             ident->name == "reduce_xor" || ident->name == "reduce_nand" ||
+             ident->name == "reduce_nor" || ident->name == "reduce_xnor") &&
+            call.args.size() == 1) {
+            return lower_reduction(call, ident->name);
         }
     }
 

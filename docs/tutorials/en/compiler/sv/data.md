@@ -136,6 +136,35 @@ bit[4] nib = word[i*4 +: 4]; // variable base + constant width
 - Desugared to shifts+masks shared by all backends, so execution backends (JIT/native/WASM/JS) produce identical results
 - Max width 64; the result type is `bit[w]` (interchangeable with integers)
 
+## Reduction operators (v0.17.0)
+
+Reduction operations that fold every bit of a vector into a single bit (`bool`) are provided as builtin functions. On the SV target they emit native reduction operators (`&x`, `|x`, `^x`, `~&x`, `~|x`, `~^x`):
+
+```cm
+#[input]  bit[8] flags = 0;
+#[output] bool all_set = false;
+#[output] bool parity = false;
+
+void check() {
+    all_set = reduce_and(flags);  // → all_set = &(flags);   AND of all bits
+    parity  = reduce_xor(flags);  // → parity  = ^(flags);   parity
+}
+```
+
+| Builtin | Meaning | SV output |
+|---------|---------|-----------|
+| `reduce_and(x)` | AND of all bits (true when every bit is 1) | `&x` |
+| `reduce_or(x)` | OR of all bits (true when any bit is 1) | `\|x` |
+| `reduce_xor(x)` | XOR of all bits (true when the number of 1s is odd = parity) | `^x` |
+| `reduce_nand(x)` | NAND (negation of `reduce_and`) | `~&x` |
+| `reduce_nor(x)` | NOR (negation of `reduce_or`) | `~\|x` |
+| `reduce_xnor(x)` | XNOR (negation of `reduce_xor`) | `~^x` |
+
+- The operand must be an integer or `bit[N]` type (non-integers are a compile error). The fold width is the operand's type width (`bit[8]`=8 bits, `uint`=32 bits)
+- The result is `bool` (1 bit). To drive an SV output port, use a `bool` port
+- On non-SV backends (JIT/native/WASM/JS) it desugars to mask comparisons / parity arithmetic, producing identical results across all backends
+- `reduce_xor`/`reduce_xnor` evaluate the operand once per bit, so pass a variable or field rather than a side-effecting expression (such as a function call)
+
 
 ---
 

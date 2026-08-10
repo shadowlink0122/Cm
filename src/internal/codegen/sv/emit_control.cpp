@@ -424,7 +424,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                 }
                 ss << indent() << "assert (" << cond << ") else $error(\"" << message << "\");\n";
                 emitBlockRecursive(func, cd.success, visited, ss, merge_block);
-            } else if (func_name == "__builtin_concat" || func_name == "__builtin_replicate") {
+            } else if (func_name == "__builtin_concat" || func_name == "__builtin_replicate" ||
+                       func_name.rfind("__builtin_reduce_", 0) == 0) {
                 // ノンブロッキング代入の判定
                 bool use_nb = func.is_async || func.always_kind == mir::MirFunction::AlwaysKind::FF;
                 if (use_nb && cd.destination && cd.destination->local < func.locals.size()) {
@@ -463,7 +464,7 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
                     }
-                } else {
+                } else if (func_name == "__builtin_replicate") {
                     // SV複製: {N{expr}} count を直接整数値として取得
                     std::string count_str = "1";
                     if (cd.args.size() > 0 && cd.args[0]) {
@@ -495,6 +496,28 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                     std::string expr =
                         cd.args.size() > 1 && cd.args[1] ? resolveArg(*cd.args[1]) : "0";
                     std::string rhs = "{" + count_str + "{" + expr + "}}";
+                    if (cd.destination) {
+                        std::string lhs = emitPlace(*cd.destination, func);
+                        ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";
+                    }
+                } else {
+                    // SVリダクション演算子（SV-N2）: __builtin_reduce_* をベクタ全ビットを1ビットへ
+                    // 畳み込む native 前置単項演算子（&x / |x / ^x / ~&x / ~|x / ~^x）へ写像する
+                    std::string op = "&";
+                    if (func_name == "__builtin_reduce_or") {
+                        op = "|";
+                    } else if (func_name == "__builtin_reduce_xor") {
+                        op = "^";
+                    } else if (func_name == "__builtin_reduce_nand") {
+                        op = "~&";
+                    } else if (func_name == "__builtin_reduce_nor") {
+                        op = "~|";
+                    } else if (func_name == "__builtin_reduce_xnor") {
+                        op = "~^";
+                    }
+                    std::string operand =
+                        (!cd.args.empty() && cd.args[0]) ? resolveArg(*cd.args[0]) : "0";
+                    std::string rhs = op + "(" + operand + ")";
                     if (cd.destination) {
                         std::string lhs = emitPlace(*cd.destination, func);
                         ss << indent() << lhs << (use_nb ? " <= " : " = ") << rhs << ";\n";

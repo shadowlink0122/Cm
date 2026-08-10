@@ -122,6 +122,12 @@ export const BUILTIN_FUNCTIONS = [
   'exit',
   'eprintln',
   'eprint',
+  'reduce_and',
+  'reduce_or',
+  'reduce_xor',
+  'reduce_nand',
+  'reduce_nor',
+  'reduce_xnor',
 ] as const;
 export const PREPROCESSOR_BUILTINS = [
   'FILE',
