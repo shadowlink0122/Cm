@@ -42,3 +42,12 @@ typed-hir-single-source（archive済み）は「型検査後のHIRは全式が�
 - **Result/Option基底剥ぎの逐語複製を解消**: checker側（strip_spec_suffix）とHIR側（expr_member.cppの`__`分割）が同じ意味論を別実装していた基底名抽出を、typekeyの正準関数`spec_base_name`（$エンコード名対応）への委譲で単一実装に統一した。
 - **前提の充足**: 方針1の注釈ソースとなるresolve_method統一API（[method-resolution-unification.md](../../archive/v0.17.0/type-system/method-resolution-unification.md)）が導入済みになり、「その戻り値Resolutionをそのまま注釈として書く」最小コスト経路が利用可能になった。またHIR側のメソッド呼名構築は型ツリーからの正準構築（[mono-flat-name-elimination.md](../../archive/v0.17.0/type-system/mono-flat-name-elimination.md)の呼び出し名正準化）へ置換済みで、checker/HIRの名前ドメイン乖離の主経路は閉じている。
 - 残: 方針1〜3の本体（MemberExprへの解決注釈・lower_memberの注釈ディスパッチ化・未注釈検出の不変条件）。着手時はresolve_methodのMethodResolutionを注釈型としてそのまま流用する。
+
+## 実装記録（注釈駆動化の見送り判断と乖離経路の閉塞・2026-08-11）
+
+方針1〜3の注釈駆動化本体は、実装前提の実測により**見送り**を設計判断として確定した。
+
+- **見送りの根拠（構造的ブロッカー）**: lower_memberは補間ミニパイプライン産のMemberExpr（MIR lowering中にフラグメント文字列を再パースしたAST。checkerを通らず型はMIRローカル型名から復元される）を正規の入力クラスとして持つ（expr_member.cpp内の3箇所の実測コメントが対応）。注釈駆動化しても未注釈ノードの再導出フォールバックを恒久的に残す必要があり、「注釈が正・フォールバックが従」の二重機構は本文書が問題にした乖離の温床をむしろ1つ増やす。方針3の不変条件（未注釈の機械検出）も、正規の未注釈入力がある限り成立しない。
+- **前提条件の明文化**: 注釈駆動化の着手は「補間ミニパイプラインの型検査化（フラグメントASTがcheckerを通ってから HIR loweringへ入る構造）」が前提条件である。その時点でresolve_methodのMethodResolutionを注釈型として流用する経路（本文書の方針）は有効なまま残る。
+- **乖離経路は既に閉じていることの確認**: 本文書が挙げた具体的乖離——(1)Result/Option基底名の`__`剥ぎの逐語複製はtypekey::spec_base_nameへの委譲で単一実装化済み、(2)メソッド呼名の構築はHIR側が型ツリーからの正準構築（typekey::fn_prefix_from_tree）へ置換済みで、checker/HIRが同じ正準関数群を参照する、(3)checkerの解決はresolve_method統一APIへ集約済み。lower_memberの残る再導出は「同じ事実の二重実装」ではなく「共有正準関数の呼び出し」に置き換わっており、乖離バグ族の発生経路は正準関数の単一実装に集約された。
+- 結論: 本文書の目的（checker/HIRの解決乖離の構造的封止）は共有正準関数方式で達成し、注釈方式は補間ミニパイプライン型検査化の後続課題として本記録に固定する。

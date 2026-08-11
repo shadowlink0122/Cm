@@ -19,7 +19,7 @@ monomorphization-typed-instantiation（archive済み）は「型ノード駆動�
 - 曖昧逆算（Q2と同族・正確性クリティカル）8箇所: typeinfo.cpp:100-126（逆算器本体）・:204-210（フィールド型復元）、mono_structs.cpp:121-128（マングリング名からの発見）・:240-249（to_symbol_type）・:508-513（フィールドアクセス再型付け）、scan.cpp:134-141・:279-299（呼び出しサイト分割、parts数不一致で無言ドロップ）、specialize.cpp:136-146。
 - ベース名抽出（先頭`__`前を取るだけ・概ね安全だが脆い）15箇所: context.cpp:186/206/267/368、base.cpp:73、auto_impl.cpp:102/910、expr/access.cpp:117/179、expr/binary.cpp:713、expr_call.cpp:44/88/387、stmt系、program_dce.cpp:212/223。
 - フラット名産生（曖昧性の供給源）12箇所: typeinfo.cpp:77/119、scan.cpp:163、mono_internal.cpp:100/122/137/252/323/353、impl.cpp:432、lowering.cpp:485/505、stmt/let.cpp:766。
-- checker/HIRの重複剥ぎ: types/checking/call/method.cpp:260-270とhir/lowering/expr_member.cpp:128-131が逐語複製（この重複はchecker-to-hir-resolution-handoff.mdで扱う）。
+- checker/HIRの重複剥ぎ: types/checking/call/method.cpp:260-270とhir/lowering/expr_member.cpp:128-131が逐語複製（この重複はchecker-to-hir-resolution-handoff.mdで扱い、spec_base_name委譲で解消済み）。
 
 ## リファクタリング方針
 
