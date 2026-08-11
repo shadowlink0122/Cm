@@ -1,6 +1,6 @@
 // MIRプログラムをモジュール別に分割するユーティリティの実装
 
-#include "mir_splitter.hpp"
+#include "splitter.hpp"
 
 #include <algorithm>
 #include <cctype>

@@ -36,13 +36,10 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
     auto& count = statementProcessCount[&stmt];
     count++;
     if (count > 100) {
-        // std::cerr << "[MIR2LLVM] ERROR: Infinite loop detected! Statement at address " <<
-        // &stmt
-        // << " processed " << count << " times\n";
-        if (currentMIRFunction) {
-            // std::cerr << "[MIR2LLVM] Function: " << currentMIRFunction->name << "\n";
-        }
-        throw std::runtime_error("Infinite loop detected in convertStatement");
+        // 内部エラーにはMIR文脈（関数名）を付与し、バグ報告から再現位置を特定できるようにする
+        const std::string fn_ctx =
+            currentMIRFunction ? " (function: " + currentMIRFunction->name + ")" : "";
+        throw std::runtime_error("Infinite loop detected in convertStatement" + fn_ctx);
     }
 
     if (cm::debug::debug_mode() && currentMIRFunction && currentMIRFunction->name == "main") {

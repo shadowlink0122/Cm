@@ -1,8 +1,8 @@
 #pragma once
 
 #include "context.hpp"
-#include "internal/mir/mir_splitter.hpp"
 #include "internal/mir/nodes.hpp"
+#include "internal/mir/splitter.hpp"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>

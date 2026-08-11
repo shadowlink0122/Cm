@@ -30,7 +30,7 @@ class Parser {
           max_parse_depth_(0),
           is_sv_platform_(is_sv_platform) {}
 
-    // プログラム全体を解析（parser_decl.cppで実装）
+    // プログラム全体を解析（decl.cppで実装）
     ast::Program parse();
 
     const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
@@ -44,7 +44,7 @@ class Parser {
 
    private:
     // ============================================================
-    // 宣言パース（parser_decl.cppで実装）
+    // 宣言パース（decl.cppで実装）
     // ============================================================
     ast::DeclPtr parse_top_level();
     bool is_global_var_start();
@@ -70,7 +70,7 @@ class Parser {
                                        std::vector<ast::AttributeNode> attributes = {});
 
     // ============================================================
-    // 文パース（parser_stmt.cppで実装）
+    // 文パース（stmt.cppで実装）
     // ============================================================
     ast::StmtPtr parse_stmt();
 
@@ -104,7 +104,7 @@ class Parser {
     std::unique_ptr<ast::MatchPattern> parse_match_pattern_element();
 
     // ============================================================
-    // 型解析（parser_type.cppで実装）
+    // 型解析（type.cppで実装）
     // ============================================================
     std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2();
     std::vector<std::string> parse_generic_params();
