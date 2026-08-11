@@ -405,6 +405,11 @@ set(CM_SOURCES
     src/internal/mir/mir_splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)
     src/internal/fmt/formatter.cpp
+    src/internal/fmt/formatter/whitespace.cpp
+    src/internal/fmt/formatter/braces.cpp
+    src/internal/fmt/formatter/indent.cpp
+    src/internal/fmt/formatter/spacing.cpp
+    src/internal/fmt/formatter/wrap.cpp
     src/internal/base/format_string.cpp
     src/internal/base/source_location.cpp
     src/internal/base/diagnostics.cpp
@@ -896,6 +901,11 @@ if(BUILD_TESTING)
         add_executable(formatter_test
             tests/regression/formatter_test.cpp
             src/internal/fmt/formatter.cpp
+            src/internal/fmt/formatter/whitespace.cpp
+            src/internal/fmt/formatter/braces.cpp
+            src/internal/fmt/formatter/indent.cpp
+            src/internal/fmt/formatter/spacing.cpp
+            src/internal/fmt/formatter/wrap.cpp
             ${CM_I18N_SOURCES}
         )
         set_target_properties(formatter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
