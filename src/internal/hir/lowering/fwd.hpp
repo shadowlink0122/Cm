@@ -97,6 +97,24 @@ class HirLowering {
     HirExprPtr lower_index(ast::IndexExpr& idx, TypePtr type);
     HirExprPtr lower_slice(ast::SliceExpr& slice, TypePtr type);
     HirExprPtr lower_member(ast::MemberExpr& mem, TypePtr type);
+    // lower_memberの腕抽出ヘルパー: 組み込みResult/Optionメソッドの脱糖（非該当ならnullptr）
+    HirExprPtr lower_member_sum_type(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                     const HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: 配列ビルトインメソッド（非該当ならnullptrを返しobj_hirは消費しない）
+    HirExprPtr lower_member_array_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: 動的配列（スライス）ビルトインメソッド（非該当ならnullptr）
+    HirExprPtr lower_member_slice_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir, const TypePtr& type);
+    // lower_memberの腕抽出ヘルパー: 文字列ビルトインメソッド（非該当ならnullptr）
+    HirExprPtr lower_member_string_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                           HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: メソッド解決用型名の正規化（固定長配列→スライスimpl変換の要否をout引数で返す）
+    std::string resolve_method_type_name(const TypePtr& obj_type, const std::string& type_name,
+                                         bool& needs_array_to_slice);
+    // lower_memberの腕抽出ヘルパー: 関数型フィールドの呼び出し（非該当ならnullptr）
+    HirExprPtr lower_member_field_fn_call(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir);
     HirExprPtr lower_ternary(ast::TernaryExpr& tern, TypePtr type);
     HirExprPtr lower_match(ast::MatchExpr& match, TypePtr type);
     HirExprPtr lower_struct_literal(ast::StructLiteralExpr& lit, TypePtr expected_type);

@@ -102,6 +102,31 @@ class ExprLowering : public MirLoweringBase {
 
     // 値を文字列に変換するヘルパー
     LocalId convert_to_string(LocalId value, const hir::TypePtr& type, LoweringContext& ctx);
+
+    // lower_binaryの腕抽出ヘルパー: 文字列連結チェーンの平坦化（3要素以上のみ。非該当ならnullopt）
+    std::optional<LocalId> try_lower_string_concat_chain(const hir::HirBinary& bin,
+                                                         LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: 代入演算の処理
+    LocalId lower_assign(const hir::HirBinary& bin, LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: 代入RHS配列リテラルの直接要素書き込み（非該当ならnullopt）
+    std::optional<LocalId> try_lower_assign_array_literal_unroll(const hir::HirBinary& bin,
+                                                                 LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: 代入左辺値のMirPlace構築（再帰）
+    bool build_assign_lvalue_place(const hir::HirExpr* expr, MirPlace& place,
+                                   hir::TypePtr& current_type, LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: AND/OR短絡評価
+    LocalId lower_logical_and(const hir::HirBinary& bin, LoweringContext& ctx);
+    LocalId lower_logical_or(const hir::HirBinary& bin, LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: 構造体演算子の自動実装呼び出し（非該当ならnullopt）
+    std::optional<LocalId> try_lower_struct_eq_op(const hir::HirBinary& bin, LocalId lhs,
+                                                  LocalId rhs, LoweringContext& ctx);
+    std::optional<LocalId> try_lower_struct_ord_op(const hir::HirBinary& bin, LocalId lhs,
+                                                   LocalId rhs, LoweringContext& ctx);
+    std::optional<LocalId> try_lower_struct_arith_op(const hir::HirBinary& bin, LocalId lhs,
+                                                     LocalId rhs, LoweringContext& ctx);
+    // lower_binaryの腕抽出ヘルパー: 2オペランドの文字列連結（非該当ならnullopt）
+    std::optional<LocalId> try_lower_string_concat_pair(const hir::HirBinary& bin, LocalId lhs,
+                                                        LocalId rhs, LoweringContext& ctx);
 };
 
 }  // namespace cm::mir
