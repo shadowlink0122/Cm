@@ -2,8 +2,8 @@
 // HIR lowering - メンバアクセス式（メソッド呼び出し・フィールド参照）
 // ============================================================
 
-#include "fwd.hpp"
 #include "internal/base/mangle.hpp"
+#include "internal/hir/lowering/fwd.hpp"
 #include "internal/hir/slice_dispatch.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 

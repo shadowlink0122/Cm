@@ -295,9 +295,13 @@ set(CM_HIR_LOWERING_SOURCES
     src/internal/hir/lowering/impl.cpp
     src/internal/hir/lowering/decl.cpp
     src/internal/hir/lowering/stmt.cpp
-    src/internal/hir/lowering/expr.cpp
-    src/internal/hir/lowering/expr_member.cpp
-    src/internal/hir/lowering/expr_match.cpp
+    src/internal/hir/lowering/expr/dispatch.cpp
+    src/internal/hir/lowering/expr/operators.cpp
+    src/internal/hir/lowering/expr/call.cpp
+    src/internal/hir/lowering/expr/access.cpp
+    src/internal/hir/lowering/expr/literal.cpp
+    src/internal/hir/lowering/expr/member.cpp
+    src/internal/hir/lowering/expr/match.cpp
 )
 # MIRコア（lowering + 最適化パス + 解析）
 set(CM_MIR_SOURCES

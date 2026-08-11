@@ -1,8 +1,8 @@
-// lowering_stmt.cpp - 文のlowering
-#include "expr_internal.hpp"
-#include "fwd.hpp"
+// stmt.cpp - 文のlowering
 #include "internal/base/mangle.hpp"
 #include "internal/base/text_utils.hpp"
+#include "internal/hir/lowering/expr/internal.hpp"
+#include "internal/hir/lowering/fwd.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 
 #include <memory>

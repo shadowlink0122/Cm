@@ -1,15 +1,30 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <utility>
+#include <variant>
 
 // ============================================================
-// HIR式lowering内部ヘルパー（expr / expr_member / expr_match で共有）
+// HIR式lowering内部ヘルパー（expr/ 配下の各TUで共有）
 // ============================================================
 
-#include "fwd.hpp"
+#include "internal/hir/lowering/fwd.hpp"
 
 namespace cm::hir {
+
+// 整数リテラル値の取り出し（checkerで検証済みの前提）
+inline std::optional<int64_t> slice_lit(const ast::ExprPtr& e) {
+    if (!e) {
+        return std::nullopt;
+    }
+    if (auto* lit = e->as<ast::LiteralExpr>()) {
+        if (auto* iv = std::get_if<int64_t>(&lit->value)) {
+            return *iv;
+        }
+    }
+    return std::nullopt;
+}
 
 inline  // ビットスライス判定: bit[N] / bit / 整数型
     bool

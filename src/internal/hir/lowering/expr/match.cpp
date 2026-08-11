@@ -2,8 +2,8 @@
 // HIR lowering - match式（パターン条件の構築・ガード・複製）
 // ============================================================
 
-#include "expr_internal.hpp"
-#include "fwd.hpp"
+#include "internal/hir/lowering/expr/internal.hpp"
+#include "internal/hir/lowering/fwd.hpp"
 
 #include <algorithm>
 #include <memory>
