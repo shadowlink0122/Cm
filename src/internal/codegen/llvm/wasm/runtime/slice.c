@@ -1,5 +1,5 @@
 // Cm Language Runtime - Slice Functions (WASM Backend)
-// 実装本体はnative/wasm共通コア（common/runtime_slice_core.inc）へ一本化した（runtime-builtin-registry 第4段）。
+// 実装本体はnative/wasm共通コア（common/runtime/slice_core.inc）へ一本化した（runtime-builtin-registry 第4段）。
 // 本ファイルはwasmのプラットフォームフック（バンプアロケータ・手動メモリ移動・alloc+copy+free拡張）とwasm専用のqsort実装のみを持つ
 
 #include <stdbool.h>
@@ -9,7 +9,7 @@
 // Forward declarations for WASM memory functions
 void* wasm_alloc(size_t size);
 void cm_free(void* ptr);
-// memcpy and memcmp are defined in runtime_wasm.c before this file is included
+// memcpy and memcmp are defined in core.c before this file is included
 
 // wasmのプラットフォームフック
 #define CM_RT_ALLOC(size) wasm_alloc(size)
@@ -105,4 +105,4 @@ void cm_qsort(void* base, size_t nmemb, size_t size, int (*compar)(const void*, 
     cm_qsort_impl((char*)base, nmemb, size, compar);
 }
 
-#include "../../common/runtime_slice_core.inc"
+#include "../../../common/runtime/slice_core.inc"

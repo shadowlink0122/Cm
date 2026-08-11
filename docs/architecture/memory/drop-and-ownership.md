@@ -95,7 +95,7 @@ moved-out変数の読み出しをloweringする際、`is_moved_from`が立って
 | `src/internal/mir/lowering/expr/basic.cpp` | moved-out変数のデストラクタ登録解除、三項の腕スコープ |
 | `src/internal/types/checking/expr/primary.cpp` | move状態のマークとuse-after-move診断 |
 | `src/internal/codegen/llvm/core/translate/function.cpp` | 集約ローカルのゼロ初期化memset |
-| `src/internal/codegen/llvm/native/runtime_format.c` / `runtime_slice.c` | `cm_string_free`（`runtime_format.c:2206`）・`cm_slice_free`（`runtime_slice.c:44`）の実体 |
+| `src/internal/codegen/llvm/native/runtime/format.c` / `runtime/slice.c` | `cm_string_free`（`runtime/format.c:2206`）・`cm_slice_free`（`runtime/slice.c:44`）の実体 |
 
 ## 落とし穴とケア
 

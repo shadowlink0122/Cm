@@ -47,7 +47,7 @@ extern void* __cm_heap_realloc(void* ptr, size_t new_size);
 #define CM_DEFAULT_DEALLOC __cm_heap_free
 #define CM_DEFAULT_REALLOC __cm_heap_realloc
 #else
-// Standard mode: Forward declarations (implemented in runtime_alloc.c)
+// Standard mode: Forward declarations (implemented in alloc.c)
 void* __cm_default_alloc(size_t size);
 void __cm_default_dealloc(void* ptr);
 void* __cm_default_realloc(void* ptr, size_t new_size);

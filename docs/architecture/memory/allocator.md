@@ -5,15 +5,15 @@ Cmコードからは`std::mem`の`set_allocator_fns`ファサードでグロー�
 
 ## 概要
 
-アロケータ抽象の中心は`CmAllocator`構造体（`src/internal/codegen/common/runtime_alloc.h:29`）で、alloc/dealloc/reallocの関数ポインタ3本とuser_dataを持つ。
-グローバル状態は`runtime_alloc.c`内の`cm_current_allocator`1本で、初期値はlibc委譲の既定インスタンスを指す（`src/internal/codegen/common/runtime_alloc.c:35`・`:41`）。
+アロケータ抽象の中心は`CmAllocator`構造体（`src/internal/codegen/common/runtime/alloc.h:29`）で、alloc/dealloc/reallocの関数ポインタ3本とuser_dataを持つ。
+グローバル状態は`runtime/alloc.c`内の`cm_current_allocator`1本で、初期値はlibc委譲の既定インスタンスを指す（`src/internal/codegen/common/runtime/alloc.c:35`・`:41`）。
 
 確保・解放のAPIは2層ある。
 
-- ランタイムC内部用: `cm_alloc`/`cm_dealloc`/`cm_realloc`は`static inline`で現在のグローバルアロケータを経由する（`src/internal/codegen/common/runtime_alloc.h:78`〜`:92`）
-- Cm FFI用: `cm_mem_alloc`/`cm_mem_dealloc`/`cm_mem_realloc`は非inlineのエクスポート実体で、inline版が外部シンボルを持たないためにCmの`extern "C"`宣言から到達できない問題を回避する（`src/internal/codegen/common/runtime_alloc.c:67`〜`:79`）
+- ランタイムC内部用: `cm_alloc`/`cm_dealloc`/`cm_realloc`は`static inline`で現在のグローバルアロケータを経由する（`src/internal/codegen/common/runtime/alloc.h:78`〜`:92`）
+- Cm FFI用: `cm_mem_alloc`/`cm_mem_dealloc`/`cm_mem_realloc`は非inlineのエクスポート実体で、inline版が外部シンボルを持たないためにCmの`extern "C"`宣言から到達できない問題を回避する（`src/internal/codegen/common/runtime/alloc.c:67`〜`:79`）
 
-差し替えは`cm_set_allocator_fns`（`src/internal/codegen/common/runtime_alloc.c:81`）がCm関数ポインタ3本から`CmAllocator`を構成してグローバルへ登録し、`cm_reset_allocator`（`:92`）が既定へ戻す。
+差し替えは`cm_set_allocator_fns`（`src/internal/codegen/common/runtime/alloc.c:81`）がCm関数ポインタ3本から`CmAllocator`を構成してグローバルへ登録し、`cm_reset_allocator`（`:92`）が既定へ戻す。
 Cm側の関数シグネチャ（`void* f(long)` / `void f(void*)` / `void* f(void*, long)`）はLP64のC ABIと互換のため、Cm関数をそのまま関数ポインタとして渡せる。
 いずれかがNULLなら何もしない防御があり、部分的な差し替え（allocだけカスタムでdeallocが既定のまま）による確保・解放のペア不一致を構造的に作れないようにしている。
 
@@ -51,14 +51,14 @@ reset_allocator();  // 既定（libc委譲）へ戻す
 
 ランタイムの動的確保はすべて`cm_alloc`系を経由する。
 
-- スライス: `cm_slice_new`がヘッダとデータ領域を`cm_alloc`で確保し（`src/internal/codegen/llvm/native/runtime_slice.c:31`・`:38`）、`cm_slice_free`が`cm_dealloc`で返却（`:44`）、growは`cm_realloc`（`:122`）
-- 文字列: `cm_str_alloc`がヘッダ付き文字列バッファを`cm_alloc`で確保し（`src/internal/codegen/llvm/native/runtime_format.c:48`〜`:52`）、`cm_string_free`がヘッダから確保起点を復元して`cm_dealloc`する（`:2206`）
+- スライス: `cm_slice_new`がヘッダとデータ領域を`cm_alloc`で確保し（`src/internal/codegen/llvm/native/runtime/slice.c:31`・`:38`）、`cm_slice_free`が`cm_dealloc`で返却（`:44`）、growは`cm_realloc`（`:122`）
+- 文字列: `cm_str_alloc`がヘッダ付き文字列バッファを`cm_alloc`で確保し（`src/internal/codegen/llvm/native/runtime/format.c:48`〜`:52`）、`cm_string_free`がヘッダから確保起点を復元して`cm_dealloc`する（`:2206`）
 
 このため`set_allocator_fns`での差し替えは、ユーザーの明示確保（`std::mem::alloc`）とコンパイラ挿入の一時解放・`Vector`等の内部確保の双方に同時に効く。
 
 ### native/jitへの配線
 
-ランタイムは`runtime.c`が全コンポーネントを`#include`する単一コンパイル単位で（`src/internal/codegen/llvm/native/runtime.c`が`../../common/runtime_alloc.c`等を取り込む）、CMakeが`cm_runtime.o`にビルドする（`CMakeLists.txt`の`CM_RUNTIME_SOURCE`/`CM_RUNTIME_OUTPUT`定義部）。
+ランタイムは`runtime.c`が全コンポーネントを`#include`する単一コンパイル単位で（`src/internal/codegen/llvm/native/runtime/core.c`が`../../common/runtime/alloc.c`等を取り込む）、CMakeが`cm_runtime.o`にビルドする（`CMakeLists.txt`の`CM_RUNTIME_SOURCE`/`CM_RUNTIME_OUTPUT`定義部）。
 
 - jit: `cm_runtime.o`は`cm`実行ファイル自体にリンクされ、ORC JITの`DynamicLibrarySearchGenerator::GetForCurrentProcess`（`src/internal/codegen/llvm/jit/jit_engine.cpp:88`）がホストプロセスから`cm_mem_alloc`等のシンボルを解決する。明示的なシンボル登録テーブルは持たない
 - native: `findRuntimeLibrary`（`src/internal/codegen/llvm/native/codegen.cpp:1270`）が`CM_RUNTIME_PATH`（ビルド埋め込み）→`~/.cm/lib/cm_runtime.o`（make install）→相対パスの順に`cm_runtime.o`を探し、生成オブジェクトとともにリンクする
@@ -68,7 +68,7 @@ reset_allocator();  // 既定（libc委譲）へ戻す
 
 ### 他バックエンドとの境界
 
-wasmはフリーリスト方式の独自アロケータ固定であり、`cm_set_allocator_fns`はno-opとして定義される（`src/internal/codegen/llvm/wasm/runtime_wasm.c:259`）。
+wasmはフリーリスト方式の独自アロケータ固定であり、`cm_set_allocator_fns`はno-opとして定義される（`src/internal/codegen/llvm/wasm/runtime/core.c:259`）。
 js/tsはGC管理のため差し替え対象外である。
 本文書の対象はnative/jitであり、wasmアロケータの詳細は[archive設計文書](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)を参照。
 
@@ -76,12 +76,12 @@ js/tsはGC管理のため差し替え対象外である。
 
 | ファイル | 役割 |
 |---|---|
-| `src/internal/codegen/common/runtime_alloc.h` | `CmAllocator`定義、`cm_alloc`/`cm_dealloc`/`cm_realloc`（static inline）、既定アロケータのマクロ選択（no_std対応） |
-| `src/internal/codegen/common/runtime_alloc.c` | 既定実装（malloc/free/realloc委譲）、グローバルアロケータ状態、`cm_mem_*`エクスポート、`cm_set_allocator_fns`/`cm_reset_allocator` |
+| `src/internal/codegen/common/runtime/alloc.h` | `CmAllocator`定義、`cm_alloc`/`cm_dealloc`/`cm_realloc`（static inline）、既定アロケータのマクロ選択（no_std対応） |
+| `src/internal/codegen/common/runtime/alloc.c` | 既定実装（malloc/free/realloc委譲）、グローバルアロケータ状態、`cm_mem_*`エクスポート、`cm_set_allocator_fns`/`cm_reset_allocator` |
 | `libs/std/mem/mod.cm` | Cm側ファサード（`alloc`/`dealloc`/`DefaultAllocator`/`set_allocator_fns`/`reset_allocator`） |
-| `src/internal/codegen/llvm/native/runtime.c` | ランタイム全体のアンブレラ（単一コンパイル単位） |
-| `src/internal/codegen/llvm/native/runtime_slice.c` | スライスの確保・解放・grow（すべてcm_alloc系経由） |
-| `src/internal/codegen/llvm/native/runtime_format.c` | 文字列バッファの確保（`cm_str_alloc`）と解放（`cm_string_free`） |
+| `src/internal/codegen/llvm/native/runtime/core.c` | ランタイム全体のアンブレラ（単一コンパイル単位） |
+| `src/internal/codegen/llvm/native/runtime/slice.c` | スライスの確保・解放・grow（すべてcm_alloc系経由） |
+| `src/internal/codegen/llvm/native/runtime/format.c` | 文字列バッファの確保（`cm_str_alloc`）と解放（`cm_string_free`） |
 | `src/internal/codegen/llvm/jit/jit_engine.cpp` | JITのランタイムシンボル解決（ホストプロセス検索） |
 | `src/internal/codegen/llvm/native/codegen.cpp` | nativeリンク時の`cm_runtime.o`探索 |
 | `src/internal/codegen/llvm/core/translate/signature.cpp` | アロケータ関数へのNoInline付与 |

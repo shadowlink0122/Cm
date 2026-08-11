@@ -1,4 +1,4 @@
-/// @file runtime_file.h
+/// @file file.h
 /// @brief ファイル操作ランタイム関数宣言
 
 #pragma once

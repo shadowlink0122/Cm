@@ -1,7 +1,7 @@
 // Cm Language Runtime - Allocator Implementation
 // Default allocator using standard C library
 
-#include "runtime_alloc.h"
+#include "alloc.h"
 
 #ifndef CM_NO_STD
 #include <stdlib.h>

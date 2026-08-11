@@ -1,7 +1,7 @@
 // Cm Language Runtime - WASM Platform Implementation
 // Uses static memory pool and WASI for I/O
 
-#include "../common/runtime_platform.h"
+#include "../../../common/runtime/platform.h"
 #include <stdint.h>
 
 // WASI imports

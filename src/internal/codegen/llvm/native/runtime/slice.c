@@ -1,8 +1,8 @@
 // Cm Language Runtime - Slice Functions (LLVM Backend)
-// 実装本体はnative/wasm共通コア（common/runtime_slice_core.inc）へ一本化した（runtime-builtin-registry 第4段）。
+// 実装本体はnative/wasm共通コア（common/runtime/slice_core.inc）へ一本化した（runtime-builtin-registry 第4段）。
 // 本ファイルはnativeのプラットフォームフック（アロケータ・メモリ移動・拡張）の定義のみを持つ
 
-#include "../../common/runtime_alloc.h"
+#include "../../../common/runtime/alloc.h"
 
 #include <stdint.h>
 
@@ -30,4 +30,4 @@ static inline void* cm_rt_grow_native(void* old_ptr, int64_t old_bytes, int64_t 
 #define CM_RT_GROW(old_ptr, old_bytes, new_bytes) \
     cm_rt_grow_native((old_ptr), (old_bytes), (new_bytes))
 
-#include "../../common/runtime_slice_core.inc"
+#include "../../../common/runtime/slice_core.inc"

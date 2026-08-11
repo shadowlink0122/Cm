@@ -3,7 +3,7 @@
 // v0.13.0: イベントループ実装
 // ============================================================
 
-#include "runtime_event_loop.h"
+#include "event_loop.h"
 
 #include <errno.h>
 #include <stdlib.h>

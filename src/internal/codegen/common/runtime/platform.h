@@ -4,7 +4,7 @@
 #ifndef CM_RUNTIME_PLATFORM_H
 #define CM_RUNTIME_PLATFORM_H
 
-#include "runtime_alloc.h"
+#include "alloc.h"
 
 #include <stddef.h>
 
@@ -15,7 +15,7 @@ extern "C" {
 // ============================================================
 // Memory Allocation
 // ============================================================
-// Memory allocation is now handled by runtime_alloc.h
+// Memory allocation is now handled by alloc.h
 // Use cm_alloc(), cm_dealloc(), cm_realloc() from there.
 //
 // For backwards compatibility, cm_free is aliased to cm_dealloc:
@@ -43,7 +43,7 @@ void cm_write_stderr(const char* str, size_t len);
 // Memory Operations
 // ============================================================
 
-// Note: Optimized versions with alignment are in runtime_format.c
+// Note: Optimized versions with alignment are in format.c
 // These are simple fallback implementations
 #ifndef CM_HAVE_OPTIMIZED_MEM
 

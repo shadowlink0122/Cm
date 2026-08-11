@@ -4,8 +4,8 @@
 // Define this to use our optimized mem functions instead of platform.h's
 #define CM_HAVE_OPTIMIZED_MEM
 
-#include "../../common/runtime_alloc.h"
-#include "../../common/runtime_platform.h"
+#include "../../../common/runtime/alloc.h"
+#include "../../../common/runtime/platform.h"
 
 #ifndef CM_NO_STD
 #include <stdarg.h>
@@ -14,7 +14,7 @@
 #include <string.h>
 #endif
 
-#include "../../common/runtime_common.h"
+#include "../../../common/runtime/common.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1278,12 +1278,12 @@ char* __builtin_string_replace(const char* str, const char* from, const char* to
 // Array Slice Functions
 // ============================================================
 // 配列スライス・HOF/検索ビルトイン: native/wasm共通コア（runtime-hof-common-source 第1段）
-// 実装本体はcommon/runtime_hof_core.incへ一本化した。プラットフォーム差はCM_RT_*フックで注入する
+// 実装本体はcommon/runtime/hof_core.incへ一本化した。プラットフォーム差はCM_RT_*フックで注入する
 // ============================================================
 #define CM_RT_ALLOC(size) cm_alloc(size)
 #define CM_RT_FREE(ptr) cm_dealloc(ptr)
 #define CM_RT_MEMCPY(dst, src, n) memcpy((dst), (src), (size_t)(n))
-#include "../../common/runtime_hof_core.inc"
+#include "../../../common/runtime/hof_core.inc"
 
 // ============================================================
 // Escape Processing

@@ -48,7 +48,7 @@ if (generator) {
 }
 ```
 
-このジェネレータはlookupで未解決のシンボルをホストプロセス（cm実行ファイル自身とロード済み動的ライブラリ）から探すため、`printf`・`malloc` 等のlibcと `cm_print_*`・`cm_slice_*` 等のCmランタイム関数が自動解決される。前提として、コアランタイム `cm_runtime.o`（runtime.cが runtime_print.c / runtime_format.c / runtime_slice.c 等を単一翻訳単位に束ねたもの、src/internal/codegen/llvm/native/runtime.c:18-25）がcmバイナリ自体にリンクされている（CMakeLists.txt:605-624 でビルドし、CMakeLists.txt:659 の `target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})` でリンク）。
+このジェネレータはlookupで未解決のシンボルをホストプロセス（cm実行ファイル自身とロード済み動的ライブラリ）から探すため、`printf`・`malloc` 等のlibcと `cm_print_*`・`cm_slice_*` 等のCmランタイム関数が自動解決される。前提として、コアランタイム `cm_runtime.o`（runtime.cが runtime/print.c / runtime/format.c / runtime/slice.c 等を単一翻訳単位に束ねたもの、src/internal/codegen/llvm/native/runtime/core.c:18-25）がcmバイナリ自体にリンクされている（CMakeLists.txt:605-624 でビルドし、CMakeLists.txt:659 の `target_link_libraries(cm PRIVATE ${CM_RUNTIME_OUTPUT})` でリンク）。
 
 ### execute: MIRから関数ポインタ実行まで
 
@@ -88,7 +88,7 @@ for (const auto* fn : test_fns) {
 | src/cmd/cm/build.cpp:660-662 | Runコマンドから `emit_jit_run` への振り分け |
 | src/cmd/cm/options.cpp:92-95, 146-147 | `cm test`/`--test` による `test_mode` の設定 |
 | src/internal/codegen/llvm/core/mir_to_llvm.hpp | MIR→LLVM IR変換器（JIT・AOT共通） |
-| src/internal/codegen/llvm/native/runtime.c | JITシンボル解決の対象となるコアランタイム（cmバイナリへリンク） |
+| src/internal/codegen/llvm/native/runtime/core.c | JITシンボル解決の対象となるコアランタイム（cmバイナリへリンク） |
 | CMakeLists.txt:605-624, 659 | `cm_runtime.o` のビルドとcmバイナリへのリンク |
 
 ## 落とし穴とケア
@@ -103,7 +103,7 @@ for (const auto* fn : test_fns) {
 ## 関連資料
 
 - [JITコンパイラ概要（初期設計）](../../archive/v0.11.0/jit/001_jit_compiler_overview.md)
-- [JITランタイム関数一覧（初期設計）](../../archive/v0.11.0/jit/003_jit_runtime_functions.md)
+- [JITランタイム関数一覧（初期設計）](../../archive/v0.11.0/jit/003_jit_runtime/functions.md)
 - [境界チェック方針（bounds sanitizeの設計）](../../archive/v0.17.0/arrays-slices/bounds-checking-policy.md)
 - [サニタイザ設計](../../archive/v0.16.2/06_sanitizer.md)
 - [インクリメンタルビルド・並列コード生成（AOT側のビルド基盤）](../build/incremental-and-parallel-codegen.md)

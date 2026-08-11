@@ -4,7 +4,7 @@
 //   CM_RT_ALLOC(size)        確保（native=cm_alloc / wasm=wasm_alloc）
 //   CM_RT_FREE(ptr)          解放（native=cm_dealloc / wasm=cm_free）
 //   CM_RT_MEMCPY(dst,src,n)  メモリコピー
-// ソートはcm_qsort（各ターゲットのプラットフォーム側定義）、文字列比較はstrcmp（wasmはruntime_format.c内の自前定義）を使う。
+// ソートはcm_qsort（各ターゲットのプラットフォーム側定義）、文字列比較はstrcmp（wasmはformat.c内の自前定義）を使う。
 // __builtin_array_*の追加・変更は本ファイルで行い、プラットフォーム側への個別実装は禁止する（scripts/check_builtin_signatures.pyが重複定義を検査する）
 // ============================================================
 
@@ -22,7 +22,7 @@ int strcmp(const char* s1, const char* s2);
 // out_len: 出力配列の長さを格納するポインタ
 void* __builtin_array_slice(void* arr, int64_t elem_size, int64_t arr_len, int64_t start,
                             int64_t end, int64_t* out_len) {
-    // スライス構造体のインポート（runtime_slice.cと同じ形式）
+    // スライス構造体のインポート（slice.cと同じ形式）
     typedef struct {
         void* data;
         int64_t len;

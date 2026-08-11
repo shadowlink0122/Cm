@@ -1,4 +1,4 @@
-/// @file runtime_file.c
+/// @file file.c
 /// @brief ファイル操作ランタイム関数
 
 #include <dirent.h>
@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-// メモリアロケータ（runtime_alloc.hから）
+// メモリアロケータ（alloc.hから）
 extern void* cm_alloc(size_t size);
 extern void cm_dealloc(void* ptr);
 
@@ -140,7 +140,7 @@ long cm_file_size(const char* path) {
 // ディレクトリ列挙・バイナリ安全I/O（セルフホスト準備 第2段）
 // ============================================================
 
-// CmSliceレイアウト（runtime_slice.cと同一。ヘッダ共有を避けるためのローカル定義）
+// CmSliceレイアウト（slice.cと同一。ヘッダ共有を避けるためのローカル定義）
 typedef struct {
     void* data;
     int64_t len;

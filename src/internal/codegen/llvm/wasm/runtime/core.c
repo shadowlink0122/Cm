@@ -2,8 +2,8 @@
 // This is the main runtime file that combines all runtime components for WASM
 //
 // Components are split into separate files for maintainability:
-// - runtime_print.c  : WASI-based output functions
-// - runtime_format.c : Formatting functions (allocation, conversion, formatting)
+// - print.c  : WASI-based output functions
+// - format.c : Formatting functions (allocation, conversion, formatting)
 //
 // This file includes both components and provides the WASI entry point
 
@@ -23,7 +23,7 @@ __wasi_fd_write_direct(int fd, const void* iovs, size_t iovs_len, size_t* nwritt
 
 // ============================================================
 // Memory operations (memcpy, memcmp, memmove, memset)
-// These must be defined before including runtime_slice.c
+// These must be defined before including slice.c
 // ============================================================
 void* memcpy(void* dest, const void* src, size_t n) {
     char* d = (char*)dest;
@@ -69,10 +69,10 @@ void* memset(void* s, int c, size_t n) {
 }
 
 // Include runtime components
-#include "runtime_format.c"
-#include "runtime_math.c"
-#include "runtime_print.c"
-#include "runtime_slice.c"
+#include "format.c"
+#include "math.c"
+#include "print.c"
+#include "slice.c"
 
 // ============================================================
 // Legacy aliases for compatibility
@@ -236,7 +236,7 @@ int printf(const char* format, ...) {
 }
 
 // ============================================================
-// Memory allocation (wrapping wasm_alloc from runtime_format.c)
+// Memory allocation (wrapping wasm_alloc from format.c)
 // ============================================================
 void* malloc(size_t size) {
     return wasm_alloc(size);
@@ -265,7 +265,7 @@ void cm_set_allocator_fns(void* alloc_fn, void* dealloc_fn, void* realloc_fn) {
 
 void cm_reset_allocator(void) {}
 
-// フリーリストアロケータの解放関数（実装はruntime_format.c。H11）
+// フリーリストアロケータの解放関数（実装はformat.c。H11）
 extern void wasm_free(void* ptr);
 extern size_t wasm_alloc_size(const void* ptr);
 
@@ -275,7 +275,7 @@ void free(void* ptr) {
     wasm_free(ptr);
 }
 
-// cm_free: Cmランタイムの解放関数。runtime_slice.c 等が参照する
+// cm_free: Cmランタイムの解放関数。slice.c 等が参照する
 void cm_free(void* ptr) {
     wasm_free(ptr);
 }

@@ -1,7 +1,7 @@
-/// @file runtime_functions.cpp
+/// @file functions.cpp
 /// @brief ランタイム関数宣言の実装
 
-#include "runtime_functions.hpp"
+#include "functions.hpp"
 
 #include <string>
 #include <vector>

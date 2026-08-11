@@ -14,7 +14,7 @@ Cmの文字列はUTF-8バイト列であり、ユーザー向けの長さ・添�
 
 ### コードポイント数のカウント
 
-`__builtin_string_codepoint_len`は継続バイトを数えない1パス走査で、ヘッダ由来のバイト長を境界として使うため埋め込みNULも1コードポイントとして数える（src/internal/codegen/llvm/native/runtime_format.c:1003-1017）。
+`__builtin_string_codepoint_len`は継続バイトを数えない1パス走査で、ヘッダ由来のバイト長を境界として使うため埋め込みNULも1コードポイントとして数える（src/internal/codegen/llvm/native/runtime/format.c:1003-1017）。
 
 ```c
 size_t __builtin_string_codepoint_len(const char* str) {
@@ -35,7 +35,7 @@ ASCIIのみの文字列では`len()`と`byte_len()`は一致するため、ASCII
 
 ### コードポイント添字→バイトオフセット変換
 
-コードポイント添字APIの共通基盤は`cm_cp_index_to_byte`で、指定個数のコードポイント開始をスキップしてバイトオフセットを返す（runtime_format.c:1043-1063）。末尾を越える添字は文字列末尾のバイトオフセットに丸められ、継続バイトの途中で止まらないよう次のコードポイント開始まで進める後処理を持つ。
+コードポイント添字APIの共通基盤は`cm_cp_index_to_byte`で、指定個数のコードポイント開始をスキップしてバイトオフセットを返す（runtime/format.c:1043-1063）。末尾を越える添字は文字列末尾のバイトオフセットに丸められ、継続バイトの途中で止まらないよう次のコードポイント開始まで進める後処理を持つ。
 
 ```c
 static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
@@ -59,19 +59,19 @@ static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
 
 ### substring / slice
 
-`substring`と`slice`は同一のビルトイン`__builtin_string_substring`へ写像され（expr_member.cpp:823-833）、添字はコードポイント単位、負添字はPython風（末尾からの位置）に解決される（runtime_format.c:1068-1094）。範囲確定後に`cm_cp_index_to_byte`で両端のバイトオフセットを求め、その区間をヘッダ付き新規バッファへ`memcpy`するため、切り出し結果がコードポイント境界を跨ぐことはない。
+`substring`と`slice`は同一のビルトイン`__builtin_string_substring`へ写像され（expr_member.cpp:823-833）、添字はコードポイント単位、負添字はPython風（末尾からの位置）に解決される（runtime/format.c:1068-1094）。範囲確定後に`cm_cp_index_to_byte`で両端のバイトオフセットを求め、その区間をヘッダ付き新規バッファへ`memcpy`するため、切り出し結果がコードポイント境界を跨ぐことはない。
 
 ### codepoint_at
 
-`codepoint_at(i)`はコードポイント添字iのUnicodeスカラ値を`uint`で返す（expr_member.cpp:801-811）。実体はUTF-8の1〜4バイト列を先頭バイトのパターン（`0xxxxxxx`/`110xxxxx`/`1110xxxx`/`11110xxx`）と継続バイト検証付きでデコードし、範囲外・不正列は0を返す（runtime_format.c:1097-1121）。
+`codepoint_at(i)`はコードポイント添字iのUnicodeスカラ値を`uint`で返す（expr_member.cpp:801-811）。実体はUTF-8の1〜4バイト列を先頭バイトのパターン（`0xxxxxxx`/`110xxxxx`/`1110xxxx`/`11110xxx`）と継続バイト検証付きでデコードし、範囲外・不正列は0を返す（runtime/format.c:1097-1121）。
 
 ### indexOf
 
-`indexOf`は`strstr`で検出したバイト位置を、先頭からの継続バイトを除いたカウントでコードポイント添字へ変換して返す（runtime_format.c:1124-1137）。未検出は-1のままである。戻り値をそのまま`substring`へ渡せる（添字単位が一致している）ことがこの設計の要点で、libs/std/strings/split.cm:19-25の`split`実装はまさに`indexOf`の戻り値と`sep.len()`（コードポイント数）を`substring`の添字として合成している。
+`indexOf`は`strstr`で検出したバイト位置を、先頭からの継続バイトを除いたカウントでコードポイント添字へ変換して返す（runtime/format.c:1124-1137）。未検出は-1のままである。戻り値をそのまま`substring`へ渡せる（添字単位が一致している）ことがこの設計の要点で、libs/std/strings/split.cm:19-25の`split`実装はまさに`indexOf`の戻り値と`sep.len()`（コードポイント数）を`substring`の添字として合成している。
 
 ### chars()
 
-`chars()`はコードポイント列を`uint[]`スライスとして実体化して返し、for-inで列挙できる（expr_member.cpp:793-800）。実体は2パス（コードポイント数カウント→`cm_slice_new`で確保→デコードして充填）で、遅延イテレータではなく実体化スライスである（src/internal/codegen/llvm/native/runtime_slice.c:55-98）。現行のイテレータ基盤で全バックエンドの観測一致を優先した設計判断であり、経緯はarchive文書に記録されている。
+`chars()`はコードポイント列を`uint[]`スライスとして実体化して返し、for-inで列挙できる（expr_member.cpp:793-800）。実体は2パス（コードポイント数カウント→`cm_slice_new`で確保→デコードして充填）で、遅延イテレータではなく実体化スライスである（src/internal/codegen/llvm/native/runtime/slice.c:55-98）。現行のイテレータ基盤で全バックエンドの観測一致を優先した設計判断であり、経緯はarchive文書に記録されている。
 
 ### バイトAPIとの分離
 
@@ -82,8 +82,8 @@ static size_t cm_cp_index_to_byte(const char* str, int64_t cp_index) {
 | ファイル | 役割 |
 |---|---|
 | src/internal/hir/lowering/expr_member.cpp | メソッド名→ビルトイン写像: len/size/length（:777-783）、byte_len（:785-792）、chars（:793-800）、codepoint_at（:801-811）、charAt/at（:812-822）、substring/slice（:823-833）、indexOf（:834-844） |
-| src/internal/codegen/llvm/native/runtime_format.c | codepoint_len（:1003-1017）、cm_cp_index_to_byte（:1043-1063）、substring（:1068-1094）、codepoint_at（:1097-1121）、indexOf（:1124-1137）、charAt/first/last（:1019-1039） |
-| src/internal/codegen/llvm/native/runtime_slice.c | chars()の実体化スライス生成（:55-98） |
+| src/internal/codegen/llvm/native/runtime/format.c | codepoint_len（:1003-1017）、cm_cp_index_to_byte（:1043-1063）、substring（:1068-1094）、codepoint_at（:1097-1121）、indexOf（:1124-1137）、charAt/first/last（:1019-1039） |
+| src/internal/codegen/llvm/native/runtime/slice.c | chars()の実体化スライス生成（:55-98） |
 | src/internal/codegen/llvm/core/runtime/builtins.cpp | 各ビルトインのLLVMシグネチャ登録（:145-165） |
 | libs/std/strings/split.cm | コードポイント添字APIの合成利用例（split/lines） |
 

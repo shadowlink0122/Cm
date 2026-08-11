@@ -1,4 +1,4 @@
-// runtime_asm.c - インラインアセンブリランタイム関数
+// asm.c - インラインアセンブリランタイム関数
 // v0.13.0: std::asm モジュールのバックエンド
 
 #include <stdbool.h>

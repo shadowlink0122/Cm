@@ -1,7 +1,7 @@
 # インラインアセンブリのlowering
 
 Cmのインラインアセンブリは、`__asm__("...")` に単一の文字列リテラルとしてアセンブリコードとCm独自のオペランド記法 `${制約:変数名}` を書き、HIR loweringで記法を `$N` 番号へ展開、MIRでは最適化から隔離される専用の `Asm` 文として保持し、LLVMコード生成（`convertAsmStatement`）でGCC互換の制約文字列を組み立てて `llvm::InlineAsm` の呼び出しに変換する設計である。
-本書は表層構文からHIR/MIRでの表現、LLVM `InlineAsm` への変換アルゴリズム（制約の並べ替え・オペランド番号の再マッピング・clobberの自動付与・レジスタ非リマップ方針）、x86_64/arm64のアーキテクチャ差、`runtime_asm.c` が提供するランタイム関数、jitでの動作までを記述する。
+本書は表層構文からHIR/MIRでの表現、LLVM `InlineAsm` への変換アルゴリズム（制約の並べ替え・オペランド番号の再マッピング・clobberの自動付与・レジスタ非リマップ方針）、x86_64/arm64のアーキテクチャ差、`runtime/asm.c` が提供するランタイム関数、jitでの動作までを記述する。
 
 ## 概要
 
@@ -113,13 +113,13 @@ export ulong read_byte(ulong addr) {
 | Asm文を保持したまま複製するパス（インライン化・ループ展開・単相化） | `src/internal/mir/passes/interprocedural/inlining.cpp:250`, `passes/loop/const_unroll.cpp:88`, `lowering/monomorphization_utils.cpp:107` |
 | LLVM `InlineAsm` 変換本体 | `src/internal/codegen/llvm/core/statement/asm.cpp` |
 | 変換ディスパッチ（`MirStatement::Asm` ケース） | `src/internal/codegen/llvm/core/statement.cpp:59` |
-| ランタイム補助関数（`cm_asm_*`） | `src/internal/codegen/llvm/native/runtime_asm.c`（`runtime.c` 経由で `cm_runtime.o` に含まれる） |
+| ランタイム補助関数（`cm_asm_*`） | `src/internal/codegen/llvm/native/runtime/asm.c`（`runtime.c` 経由で `cm_runtime.o` に含まれる） |
 | jit実行エンジン（同一IRをLLJITで実行、AsmParser初期化） | `src/internal/codegen/llvm/jit/jit_engine.cpp:41-42,198` |
 | MIRダンプでのAsm文表示 | `src/internal/mir/printer.cpp:290-320` |
 
-### runtime_asm.c が提供するもの
+### runtime/asm.c が提供するもの
 
-`runtime_asm.c` はコンパイラが生成する `InlineAsm` とは独立の、C側で `__asm__ volatile` を使って実装されたランタイム関数群である。
+`runtime/asm.c` はコンパイラが生成する `InlineAsm` とは独立の、C側で `__asm__ volatile` を使って実装されたランタイム関数群である。
 `nop`/`pause`(`yield`)/`mfence`(`dmb sy`)/`sfence`/`lfence` に対応する `cm_asm_nop`・`cm_asm_pause`・`cm_asm_barrier`・`cm_asm_store_barrier`・`cm_asm_load_barrier`、算術検証用の `cm_asm_add`・`cm_asm_mul`、タイムスタンプの `cm_asm_rdtsc_low`（arm64では `cntvct_el0` を読む）、アーキテクチャ検出の `cm_asm_is_x86`・`cm_asm_is_arm64`、ポインタ入出力の `cm_asm_ptr`/`cm_asm_val`/`cm_asm_inout_*` 系を含む。
 各関数はx86_64/arm64それぞれのアセンブリ実装と、その他アーキテクチャ向けのC実装フォールバックを持つため、どの環境でもリンク可能である。
 これらは `extern "C"` 宣言によるFFIで呼び出す通常のランタイムシンボルであり、nativeでは `cm_runtime.o` のリンクで、jitではホストプロセス（cm本体にリンク済み）のシンボル解決で束縛される（解決経路は [FFIとextern宣言のlowering](ffi-extern.md) と同一）。

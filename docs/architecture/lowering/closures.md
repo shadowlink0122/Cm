@@ -86,8 +86,8 @@ auto* envAlloca = entryBuilder.CreateAlloca(envArrTy, nullptr, "hof_env");
 3. `fn(void* env, [acc,] elem)` シグネチャのサンク関数をラムダ×ランタイム変種ごとに1つ合成する（名前は `lambdaName + "$env_thunk_" + variant`、`invoke.cpp:115-126`）。サンク本体はenvから各キャプチャをロードして型調整し、キャプチャ前置版の実ラムダを呼ぶ（`invoke.cpp:155-167`）。
 4. 実引数列からキャプチャを除去し、関数ポインタをサンクへ差し替え、envを末尾へ追加して `[arr, size, サンク, env]`（reduceは `[arr, size, サンク, init, env]`）へ正規化する（`invoke.cpp:183-188`）。
 
-nativeランタイム側は環境ポインタを受けるシグネチャで統一されている（`src/internal/codegen/llvm/native/runtime_slice.c:494-497` の `typedef int32_t (*MapFnI32Closure)(void*, int32_t);` 等）。
-`__builtin_array_map_closure`（`runtime_slice.c:528`）は要素ごとに `fn(env, arr[i])`（`runtime_slice.c:546`）とサンクを適用する。
+nativeランタイム側は環境ポインタを受けるシグネチャで統一されている（`src/internal/codegen/llvm/native/runtime/slice.c:494-497` の `typedef int32_t (*MapFnI32Closure)(void*, int32_t);` 等）。
+`__builtin_array_map_closure`（`runtime/slice.c:528`）は要素ごとに `fn(env, arr[i])`（`runtime/slice.c:546`）とサンクを適用する。
 LLVMコア側のビルトイン宣言も第4引数が `ptr`（env）で固定されている（`src/internal/codegen/llvm/core/runtime/builtins.cpp:605-611`、reduce/forEach等の `_closure` 変種は `builtins.cpp:632-673`）。
 
 ## 実装箇所
@@ -104,7 +104,7 @@ LLVMコア側のビルトイン宣言も第4引数が `ptr`（env）で固定さ
 | 間接呼び出し→直接化・env正規化（LLVM） | `src/internal/codegen/llvm/core/terminator/invoke.cpp:18-188`, `invoke.cpp:618-702` |
 | _closure 変種の検出 | `src/internal/codegen/llvm/core/terminator/call.cpp:306-311` |
 | マングリング除外・到達可能起点・インライン禁止 | `src/internal/codegen/llvm/core/translate/signature.cpp:31-34,129-132`, `core/translate/program.cpp:396`, `src/internal/mir/passes/interprocedural/inlining.cpp:118-121` |
-| nativeランタイム（env版HOF） | `src/internal/codegen/llvm/native/runtime_slice.c:494-548` |
+| nativeランタイム（env版HOF） | `src/internal/codegen/llvm/native/runtime/slice.c:494-548` |
 
 ## 落とし穴とケア
 

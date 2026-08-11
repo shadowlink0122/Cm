@@ -3,7 +3,7 @@
 // v0.13.0: 非同期実行ランタイム
 // ============================================================
 
-#include "runtime_async.h"
+#include "async.h"
 
 #include <stdio.h>
 #include <string.h>

@@ -1,4 +1,4 @@
-/// @file runtime_functions.hpp
+/// @file functions.hpp
 /// @brief ランタイム関数宣言の共通定義
 ///
 /// native/wasmで共通のランタイム関数宣言

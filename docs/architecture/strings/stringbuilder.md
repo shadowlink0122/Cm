@@ -4,16 +4,16 @@
 
 ## 概要
 
-- ランタイム実体は`{char* data; size_t len; size_t cap;}`の容量倍増バッファで、native/jitともsrc/internal/codegen/llvm/native/runtime_format.c:2228-2316の同一実装を使う（jitはcmバイナリにリンク済みのランタイムシンボルを解決する。[representation.md](representation.md)参照）。
+- ランタイム実体は`{char* data; size_t len; size_t cap;}`の容量倍増バッファで、native/jitともsrc/internal/codegen/llvm/native/runtime/format.c:2228-2316の同一実装を使う（jitはcmバイナリにリンク済みのランタイムシンボルを解決する。[representation.md](representation.md)参照）。
 - API面はlibs/std/strings/builder.cmの`StringBuilder`構造体（`append`/`to_string`/`len`/`clear`/デストラクタ）で、`extern "C"`宣言経由でランタイムへ委譲する。
-- ハンドルはCmの`long`（=常に64ビット）であり、ランタイム側のシグネチャはCの`long`ではなく`int64_t`で固定されている。wasm32ではCの`long`が32ビットになりCmの`long`と幅が食い違うため、全ターゲットで同一幅になる`int64_t`をABIとして選んでいる（native/wasmで同一シグネチャを保つ設計。src/internal/codegen/llvm/wasm/runtime_format.c:1387にも同型の実装がある）。
-- 素朴な`+`連結は毎回「両辺の長さ取得+新規確保+全コピー」（runtime_format.c:2187-2203）なので、ループ内で累積するとO(n²)になる。StringBuilderはこれを償却O(1)追記へ置き換える手段であり、単一式内の`a + b + c (+ d)`はMIR loweringが`cm_string_concat3/4`へ自動集約するため書き換え不要である（src/internal/mir/lowering/expr/binary.cpp:43-108）。
+- ハンドルはCmの`long`（=常に64ビット）であり、ランタイム側のシグネチャはCの`long`ではなく`int64_t`で固定されている。wasm32ではCの`long`が32ビットになりCmの`long`と幅が食い違うため、全ターゲットで同一幅になる`int64_t`をABIとして選んでいる（native/wasmで同一シグネチャを保つ設計。src/internal/codegen/llvm/wasm/runtime/format.c:1387にも同型の実装がある）。
+- 素朴な`+`連結は毎回「両辺の長さ取得+新規確保+全コピー」（runtime/format.c:2187-2203）なので、ループ内で累積するとO(n²)になる。StringBuilderはこれを償却O(1)追記へ置き換える手段であり、単一式内の`a + b + c (+ d)`はMIR loweringが`cm_string_concat3/4`へ自動集約するため書き換え不要である（src/internal/mir/lowering/expr/binary.cpp:43-108）。
 
 ## データ構造とアルゴリズム
 
 ### ランタイムバッファ
 
-バッファ本体とその管理構造体はランタイム内部に閉じ、Cm側にはポインタ値をint64へ詰めたハンドルだけが渡る（runtime_format.c:2228-2246）。
+バッファ本体とその管理構造体はランタイム内部に閉じ、Cm側にはポインタ値をint64へ詰めたハンドルだけが渡る（runtime/format.c:2228-2246）。
 
 ```c
 typedef struct {
@@ -35,7 +35,7 @@ int64_t cm_sb_create(void) {
 
 ### 償却O(1)のappend
 
-`cm_sb_append`は不足時のみ容量を2倍ずつ拡張し、通常経路は`memcpy`1回で済む（runtime_format.c:2249-2274）。拡張回数は対数オーダーなので、n回のappendの総コピー量はO(n)（償却O(1)/回）になる。
+`cm_sb_append`は不足時のみ容量を2倍ずつ拡張し、通常経路は`memcpy`1回で済む（runtime/format.c:2249-2274）。拡張回数は対数オーダーなので、n回のappendの総コピー量はO(n)（償却O(1)/回）になる。
 
 ```c
 void cm_sb_append(int64_t handle, const char* s) {
@@ -61,10 +61,10 @@ void cm_sb_append(int64_t handle, const char* s) {
 
 ### to_string / len / clear / destroy
 
-- `cm_sb_to_string`は現在の内容を`cm_str_alloc`（長さヘッダ付き）の新規バッファへコピーして返す。戻り値は呼び出し側所有で、builderは継続使用できる（runtime_format.c:2277-2293）。ヘッダ付きで返るため、生成された文字列の`byte_len()`はO(1)である。
-- `cm_sb_len`は内部カウンタを返すだけのO(1)である（runtime_format.c:2295-2298）。
-- `cm_sb_clear`は`len = 0`にするだけで容量は維持し、再利用時の再確保を避ける（runtime_format.c:2301-2306）。
-- `cm_sb_destroy`はデータバッファと管理構造体を解放する（runtime_format.c:2308-2316）。
+- `cm_sb_to_string`は現在の内容を`cm_str_alloc`（長さヘッダ付き）の新規バッファへコピーして返す。戻り値は呼び出し側所有で、builderは継続使用できる（runtime/format.c:2277-2293）。ヘッダ付きで返るため、生成された文字列の`byte_len()`はO(1)である。
+- `cm_sb_len`は内部カウンタを返すだけのO(1)である（runtime/format.c:2295-2298）。
+- `cm_sb_clear`は`len = 0`にするだけで容量は維持し、再利用時の再確保を避ける（runtime/format.c:2301-2306）。
+- `cm_sb_destroy`はデータバッファと管理構造体を解放する（runtime/format.c:2308-2316）。
 
 ### Cm側API
 
@@ -99,18 +99,18 @@ export impl StringBuilder {
 
 | ファイル | 役割 |
 |---|---|
-| src/internal/codegen/llvm/native/runtime_format.c | CmStringBuilderと`cm_sb_create/append/to_string/len/clear/destroy`（:2228-2316）。native AOTとjitの共用実体 |
+| src/internal/codegen/llvm/native/runtime/format.c | CmStringBuilderと`cm_sb_create/append/to_string/len/clear/destroy`（:2228-2316）。native AOTとjitの共用実体 |
 | libs/std/strings/builder.cm | `StringBuilder`構造体とextern "C"宣言（:7-12, :18-52） |
 | libs/std/strings/mod.cm | `std::strings`からのre-export |
 | src/internal/mir/lowering/expr/binary.cpp | 単一式の連結チェーン集約（StringBuilderを不要にする側の最適化、:43-108） |
-| src/internal/codegen/llvm/wasm/runtime_format.c | 同一シグネチャのwasm実装（:1382-1470。int64_tハンドルABIをnativeと共有） |
+| src/internal/codegen/llvm/wasm/runtime/format.c | 同一シグネチャのwasm実装（:1382-1470。int64_tハンドルABIをnativeと共有） |
 | src/internal/codegen/llvm/core/runtime/builtins.cpp | ランタイム関数のLLVMシグネチャ登録 |
 
 ## 落とし穴とケア
 
 - 防ぐバグのクラス: ループ連結の二次時間（`+`累積は文字列長に比例するコピーを毎回行う）、および長大文字列生成時の中間バッファ大量確保・解放によるアロケータ負荷。
 - ハンドル幅の不変条件: `cm_sb_*`のハンドルは`int64_t`固定を維持すること。Cの`long`に変えるとwasm32（C longが32ビット）でCmの`long`（64ビット）と幅が食い違い、ハンドル値の上位が欠落する。native/jitだけを見ると`long`でも動いてしまうため、シグネチャ変更時はこの理由を確認すること。
-- `cm_sb_append`は追記長を`strlen(s)`で測る（runtime_format.c:2254）ため、埋め込みNULを含む文字列は最初のNULまでしか追記されない。埋め込みNULを保持したままバイト列を組み立てる用途には`std::strings::from_bytes`側の経路を使う（[representation.md](representation.md)参照）。
+- `cm_sb_append`は追記長を`strlen(s)`で測る（runtime/format.c:2254）ため、埋め込みNULを含む文字列は最初のNULまでしか追記されない。埋め込みNULを保持したままバイト列を組み立てる用途には`std::strings::from_bytes`側の経路を使う（[representation.md](representation.md)参照）。
 - `to_string()`は呼び出しごとに全内容をコピーした新規バッファを返す。ループ内で毎回`to_string()`を呼ぶとStringBuilderを使う意味が消えるので、取り出しは最後に1回にする。
 - ハンドルはただの整数値なのでコピーできてしまうが、所有者は1つとして扱うこと。構造体を値コピーして両方のデストラクタが走ると二重解放になる（ハンドル方式共通の制約）。
 - `clear()`は容量を維持する仕様であり、巨大な内容を一度でも保持したbuilderはメモリを持ち続ける。長寿命オブジェクトで使い回す場合はこの点を考慮する。

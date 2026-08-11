@@ -4,7 +4,7 @@ title: 非同期実行機構（async/await構文と非同期ランタイム）
 
 # 非同期実行機構（async/await構文と非同期ランタイム）
 
-Cmは `async` 関数と `await` 式を言語構文として持つが、非同期の実行意味論を実装しているのはJSバックエンドのみであり、native/jitターゲットではMIR検証段階で明示エラーとして拒否される。一方でnativeランタイム側にはFuture・エグゼキュータ・イベントループのC実装（runtime_async.c / runtime_event_loop.c）が存在するが、これらはコアランタイム `cm_runtime.o` のビルド対象に含まれておらず、native/jitのコード生成もこれらのAPI呼び出しを一切生成しない準備実装である。現状のnative/jitにおける実際の並行処理は、pthreadをバッキングとする `native::thread`・`native::sync` ランタイムが担う。
+Cmは `async` 関数と `await` 式を言語構文として持つが、非同期の実行意味論を実装しているのはJSバックエンドのみであり、native/jitターゲットではMIR検証段階で明示エラーとして拒否される。一方でnativeランタイム側にはFuture・エグゼキュータ・イベントループのC実装（runtime/async.c / runtime/event_loop.c）が存在するが、これらはコアランタイム `cm_runtime.o` のビルド対象に含まれておらず、native/jitのコード生成もこれらのAPI呼び出しを一切生成しない準備実装である。現状のnative/jitにおける実際の並行処理は、pthreadをバッキングとする `native::thread`・`native::sync` ランタイムが担う。
 
 ## 概要
 
@@ -33,10 +33,10 @@ for (const auto& func : mir.functions) {
 
 ### 非同期ランタイムのデータ構造（未リンクの準備実装）
 
-runtime_async.hはRustのFuture/Waker/Executorモデルを簡略化したポーリングベースの構造を定義する。
+runtime/async.hはRustのFuture/Waker/Executorモデルを簡略化したポーリングベースの構造を定義する。
 
 ```c
-// src/internal/codegen/llvm/native/runtime_async.h:25-31
+// src/internal/codegen/llvm/native/runtime/async.h:25-31
 typedef struct CmFuture {
     void* state;                                   // ステートマシン状態
     CmPollState (*poll)(struct CmFuture*, void*);  // ポーリング関数
@@ -46,14 +46,14 @@ typedef struct CmFuture {
 } CmFuture;
 ```
 
-`CmExecutor` はタスク（`CmTask`）の単方向リンクドリストを保持するシングルスレッドエグゼキュータで（runtime_async.h:57-71）、`cm_spawn` はリスト先頭への挿入（runtime_async.c:112-124）、`cm_run_until_complete` は全タスクを完了までラウンドロビンでポーリングする（runtime_async.c:130-168）。`cm_block_on` は単一Futureを `CM_POLL_READY` までビジーループでポーリングする同期実行プリミティブである（runtime_async.c:54-81）。`CmWaker` 構造体は定義されているが、実装上はゼロ初期化のダミーが渡されるだけで、PENDINGなFutureの再スケジュール通知は機能していない。グローバルエグゼキュータは `__attribute__((constructor))` でプロセス起動時に生成される（runtime_async.c:239-248）。
+`CmExecutor` はタスク（`CmTask`）の単方向リンクドリストを保持するシングルスレッドエグゼキュータで（runtime/async.h:57-71）、`cm_spawn` はリスト先頭への挿入（runtime/async.c:112-124）、`cm_run_until_complete` は全タスクを完了までラウンドロビンでポーリングする（runtime/async.c:130-168）。`cm_block_on` は単一Futureを `CM_POLL_READY` までビジーループでポーリングする同期実行プリミティブである（runtime/async.c:54-81）。`CmWaker` 構造体は定義されているが、実装上はゼロ初期化のダミーが渡されるだけで、PENDINGなFutureの再スケジュール通知は機能していない。グローバルエグゼキュータは `__attribute__((constructor))` でプロセス起動時に生成される（runtime/async.c:239-248）。
 
 ### イベントループ（kqueue / epoll / pollの三段選択）
 
-runtime_event_loop.hはプラットフォームごとのI/O多重化APIをコンパイル時に選択する。
+runtime/event_loop.hはプラットフォームごとのI/O多重化APIをコンパイル時に選択する。
 
 ```c
-// src/internal/codegen/llvm/native/runtime_event_loop.h:14-24
+// src/internal/codegen/llvm/native/runtime/event_loop.h:14-24
 #ifdef __APPLE__
 #include <sys/event.h>  // kqueue
 #define CM_USE_KQUEUE 1
@@ -66,22 +66,22 @@ runtime_event_loop.hはプラットフォームごとのI/O多重化APIをコン
 #endif
 ```
 
-`CmEventLoop` はkqueue fd・epoll fd・pollfd配列のいずれかと、発火イベントを詰め替える `pending_events` バッファを持つ（runtime_event_loop.h:49-63）。`cm_event_loop_run` は「エグゼキュータの全タスクを1周ポーリング→未完了タスクが残っていればI/Oイベントを10msタイムアウトで待機」を繰り返すハイブリッド方式で、タイマーFutureのようなfdを持たない待機と、fd登録型のI/O待機を1つのループで両立させる構造になっている（runtime_event_loop.c:266-303）。時刻源はmacOSでは `mach_absolute_time`、それ以外は `CLOCK_MONOTONIC` のモノトニック時計で統一する（runtime_event_loop.c:26-39）。組み込みFutureとして即値完了の `cm_ready_future_i64`（runtime_async.c:202-222）と満了時刻比較方式の `cm_sleep_ms`（runtime_event_loop.c:340-361）が用意されている。
+`CmEventLoop` はkqueue fd・epoll fd・pollfd配列のいずれかと、発火イベントを詰め替える `pending_events` バッファを持つ（runtime/event_loop.h:49-63）。`cm_event_loop_run` は「エグゼキュータの全タスクを1周ポーリング→未完了タスクが残っていればI/Oイベントを10msタイムアウトで待機」を繰り返すハイブリッド方式で、タイマーFutureのようなfdを持たない待機と、fd登録型のI/O待機を1つのループで両立させる構造になっている（runtime/event_loop.c:266-303）。時刻源はmacOSでは `mach_absolute_time`、それ以外は `CLOCK_MONOTONIC` のモノトニック時計で統一する（runtime/event_loop.c:26-39）。組み込みFutureとして即値完了の `cm_ready_future_i64`（runtime/async.c:202-222）と満了時刻比較方式の `cm_sleep_ms`（runtime/event_loop.c:340-361）が用意されている。
 
 ### リンク実態: コアランタイムに含まれない
 
-nativeコード生成がリンクする `cm_runtime.o` は runtime.c を単一翻訳単位としてビルドされるが、そのinclude連結に runtime_async.c と runtime_event_loop.c は含まれていない。
+nativeコード生成がリンクする `cm_runtime.o` は runtime.c を単一翻訳単位としてビルドされるが、そのinclude連結に runtime/async.c と runtime/event_loop.c は含まれていない。
 
 ```c
-// src/internal/codegen/llvm/native/runtime.c:18-25
-#include "../../common/runtime_alloc.c"
-#include "../../common/runtime_file.c"
-#include "runtime_asm.c"
-#include "runtime_format.c"
-#include "runtime_io.c"
-#include "runtime_platform.c"
-#include "runtime_print.c"
-#include "runtime_slice.c"
+// src/internal/codegen/llvm/native/runtime/core.c:18-25
+#include "../../common/runtime/alloc.c"
+#include "../../common/runtime/file.c"
+#include "runtime/asm.c"
+#include "runtime/format.c"
+#include "runtime/io.c"
+#include "runtime/platform.c"
+#include "runtime/print.c"
+#include "runtime/slice.c"
 ```
 
 またnative/jitのコード生成（MIR→LLVM IR変換およびランタイム関数宣言の登録）には `cm_block_on`・`cm_spawn`・`CmFuture` 等への参照が存在しない。したがって非同期ランタイムは「コンパイラが呼び出しを生成せず、リンクもされない」状態のC実装であり、async/awaitをnativeで実行可能にする際のランタイム側の下地として保守されている。Cm側のラッパー `libs/std/core/async/mod.cm` も、Future型がCm側で表現できないため実際にexportしているのはモノトニック時刻の `now_ms()`（extern `cm_now_ms`）とlibc `usleep` によるブロッキングsleep、経過時間計測の `Timer` のみである。
@@ -101,9 +101,9 @@ native/jitで現実に使える並行処理は、非同期エグゼキュータ�
 | src/internal/mir/lowering/expr_call.cpp:336-346 | `is_awaited` の `MirTerminator::CallData` への伝播 |
 | src/cmd/cm/build.cpp:554-601 | 非JS/SVターゲットでのasync/await拒否バリデーション |
 | src/internal/codegen/js/emit_function.cpp, emit_statements.cpp | `async function`・`await`・`Promise<T>` へのJS lowering（境界のみ） |
-| src/internal/codegen/llvm/native/runtime_async.{h,c} | Future・Waker・Task・Executorと `cm_block_on`/`cm_spawn`（未リンク） |
-| src/internal/codegen/llvm/native/runtime_event_loop.{h,c} | kqueue/epoll/pollイベントループ・タイマーFuture・`cm_now_ms`（未リンク） |
-| src/internal/codegen/llvm/native/runtime.c:18-25 | コアランタイムのinclude連結（async系を含まないことの根拠） |
+| src/internal/codegen/llvm/native/runtime/async.{h,c} | Future・Waker・Task・Executorと `cm_block_on`/`cm_spawn`（未リンク） |
+| src/internal/codegen/llvm/native/runtime/event_loop.{h,c} | kqueue/epoll/pollイベントループ・タイマーFuture・`cm_now_ms`（未リンク） |
+| src/internal/codegen/llvm/native/runtime/core.c:18-25 | コアランタイムのinclude連結（async系を含まないことの根拠） |
 | libs/std/core/async/mod.cm | Cm側ラッパー（now_ms・ブロッキングsleep・Timerのみ） |
 | libs/native/thread/, libs/native/sync/ | pthreadバッキングのスレッド・同期・チャネル実装 |
 | src/internal/codegen/llvm/core/runtime/system.cpp:267-303 | `cm_thread_*` 等のコード生成用シグネチャ登録 |
@@ -112,7 +112,7 @@ native/jitで現実に使える並行処理は、非同期エグゼキュータ�
 ## 落とし穴とケア
 
 - **async/awaitをnativeで「動くはず」と誤解しない**: 構文・AST・HIR・MIRまで全段が受理するため一見サポート済みに見えるが、実行意味論を持つのはJSバックエンドだけである。native/jit/wasmではMIR検証がエラーにするので、非同期処理が必要なら `native::thread`+`native::sync` へ設計を寄せるか `--target=js` を使う。
-- **runtime_async.c / runtime_event_loop.c はリンクされていない**: これらに関数を追加してもcm_runtime.oには入らず、externしたCmコードはJITのシンボルlookupまたはAOTリンクで未解決になる。実際に `libs/std/core/async/mod.cm` の `now_ms()` が依存する `cm_now_ms` はruntime_event_loop.cにしか定義がなく、リンク経路が存在しない。async実行機構をnativeへ導入する際は、runtime.cのinclude連結とCMakeのDEPENDS（CMakeLists.txt:606-624）への追加が前提条件になる。
+- **runtime/async.c / runtime/event_loop.c はリンクされていない**: これらに関数を追加してもcm_runtime.oには入らず、externしたCmコードはJITのシンボルlookupまたはAOTリンクで未解決になる。実際に `libs/std/core/async/mod.cm` の `now_ms()` が依存する `cm_now_ms` はruntime/event_loop.cにしか定義がなく、リンク経路が存在しない。async実行機構をnativeへ導入する際は、runtime.cのinclude連結とCMakeのDEPENDS（CMakeLists.txt:606-624）への追加が前提条件になる。
 - **`cm_block_on` はビジーウェイトである**: WakerがダミーのためPENDINGのFutureを待つ手段がポーリング再試行しかなく、そのままリンクして使うとCPUを100%消費する。イベントループ統合（`cm_event_loop_run` の10msタイムアウト待機）かWakerの実装が先に必要で、これがこのランタイムを既定リンクに含めていない理由でもある。
 - **SVターゲットの `async` は別物**: 同じ `is_async` フラグをSVバックエンドはノンブロッキング代入・エッジセンシティブなプロセス生成の指示として解釈する。このためasync拒否バリデーションはSVターゲットを除外しており、SV向けコードをnativeへ流用すると同じ構文が今度はエラーになる。
 - **エグゼキュータのタスク順序はLIFO**: `cm_spawn` はリンクドリスト先頭への挿入のため、実行順はspawn順の逆になる。順序に依存するテストや設計をこの上に載せないこと。

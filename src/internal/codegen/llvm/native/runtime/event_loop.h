@@ -6,7 +6,7 @@
 #ifndef CM_RUNTIME_EVENT_LOOP_H
 #define CM_RUNTIME_EVENT_LOOP_H
 
-#include "runtime_async.h"
+#include "async.h"
 
 #include <stdbool.h>
 #include <stdint.h>

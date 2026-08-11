@@ -472,7 +472,7 @@ if(CM_USE_LLVM)
     list(APPEND CM_SOURCES
         # Common codegen
         src/internal/codegen/common/type_converter.cpp
-        src/internal/codegen/common/runtime_functions.cpp
+        src/internal/codegen/common/runtime/functions.cpp
         # LLVM core (shared between native and wasm)
         src/internal/codegen/llvm/core/context.cpp
         src/internal/codegen/llvm/core/mir_to_llvm.cpp
@@ -631,7 +631,7 @@ if(CM_USE_LLVM)
         
         # コアランタイムのビルド（JITシンボル解決に必須）
         # cm_runtime.oはcm実行ファイルにリンクされるためCMakeで管理
-        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime.c)
+        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/core.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
         add_custom_command(
@@ -639,17 +639,17 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_alloc.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_file.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_asm.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_format.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_io.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_time.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_platform.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_print.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_slice.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_slice_core.inc
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_hof_core.inc
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/alloc.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/file.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/asm.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/format.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/io.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/time.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/platform.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/print.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/slice_core.inc
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/hof_core.inc
             COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
@@ -665,7 +665,7 @@ if(CM_USE_LLVM)
             NO_DEFAULT_PATH
         )
         if(CM_WASM_CLANG)
-            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_wasm.c)
+            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/core.c)
             add_custom_command(
                 OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
@@ -674,12 +674,12 @@ if(CM_USE_LLVM)
                     -nostdlib -D__wasi__
                     -I${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm
                 DEPENDS ${CM_RUNTIME_WASM_SOURCE}
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_format.c
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_math.c
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_print.c
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_slice.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_slice_core.inc
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_hof_core.inc
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/format.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/math.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/print.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/slice_core.inc
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/hof_core.inc
                 COMMENT "Building Cm WASM runtime library (wasm32-wasi)"
             )
             add_custom_target(cm_runtime_wasm ALL DEPENDS ${CM_RUNTIME_WASM_OUTPUT})

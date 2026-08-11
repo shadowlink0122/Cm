@@ -4,7 +4,7 @@
 
 ## 概要
 
-リンク経路は2系統ある。単一モジュールコンパイルの `LLVMCodeGen::emitExecutable()`（`src/internal/codegen/llvm/native/codegen.cpp:1066-1267`）と、モジュール分割コンパイルで複数.oをまとめる `LLVMCodeGen::linkObjects()`（`codegen.cpp:466-666`）で、どちらも同じ判定ロジックでリンクコマンドを構築し `std::system` で実行する。ランタイムのC実体は `src/internal/codegen/llvm/native/runtime.c` を傘ファイルとする分割Cソース群にあり、宣言契約は `src/internal/codegen/common/runtime_common.h` で全バックエンドと共有する。
+リンク経路は2系統ある。単一モジュールコンパイルの `LLVMCodeGen::emitExecutable()`（`src/internal/codegen/llvm/native/codegen.cpp:1066-1267`）と、モジュール分割コンパイルで複数.oをまとめる `LLVMCodeGen::linkObjects()`（`codegen.cpp:466-666`）で、どちらも同じ判定ロジックでリンクコマンドを構築し `std::system` で実行する。ランタイムのC実体は `src/internal/codegen/llvm/native/runtime/core.c` を傘ファイルとする分割Cソース群にあり、宣言契約は `src/internal/codegen/common/runtime/common.h` で全バックエンドと共有する。
 
 ## データ構造とアルゴリズム
 
@@ -58,7 +58,7 @@ needsHTTP = needsHTTP || has_prefix(called, "cm_http_");
 1. ビルド時マクロ `CM_RUNTIME_PATH` が指すパス（存在すれば最優先、`codegen.cpp:1283-1287`）
 2. `build/lib/cm_runtime.o`・`./build/lib/`・`../build/lib/`・`.tmp/cm_runtime.o`（リポジトリ内ビルド向け、`codegen.cpp:1294-1299`）
 3. `$HOME/.cm/lib/cm_runtime.o`（`make install` 済み環境、`codegen.cpp:1289-1301`）
-4. どれも無ければ `compileRuntimeOnDemand()`（`codegen.cpp:1313-1346`）がソース `src/internal/codegen/llvm/native/runtime.c` を探して `clang -c ... -O2` で `build/lib/cm_runtime.o` を生成する
+4. どれも無ければ `compileRuntimeOnDemand()`（`codegen.cpp:1313-1346`）がソース `src/internal/codegen/llvm/native/runtime/core.c` を探して `clang -c ... -O2` で `build/lib/cm_runtime.o` を生成する
 
 Wasmターゲットは同様に `CM_RUNTIME_WASM_PATH`→`build/lib/cm_runtime_wasm.o`→オンデマンドコンパイルの順で、オンデマンド時はHomebrew LLVMのclangを探して `--target=wasm32-wasi -nostdlib` でビルドする（`codegen.cpp:1271-1281`・`1349-1409`）。net/sync/thread/http/gpuの各ランタイムも同型の探索（`CM_*_RUNTIME_PATH` マクロ→`build/lib`→`~/.cm/lib`）を持つ（`findStdRuntimeLibrary` `codegen.cpp:1520-1565`、`findGPURuntimeLibrary` `codegen.cpp:1492-1517`）。syncのみ拡張子が `.a` で他は `.o` である（`codegen.cpp:1542-1543`）。
 
@@ -67,29 +67,29 @@ Wasmターゲットは同様に `CM_RUNTIME_WASM_PATH`→`build/lib/cm_runtime_w
 `cm_runtime.o` の実体は傘ファイル `runtime.c` が分割Cソースを1コンパイル単位に束ねたものである。
 
 ```c
-// src/internal/codegen/llvm/native/runtime.c:18-25
-#include "../../common/runtime_alloc.c"
-#include "../../common/runtime_file.c"
-#include "runtime_asm.c"
-#include "runtime_format.c"
-#include "runtime_io.c"
-#include "runtime_platform.c"
-#include "runtime_print.c"
-#include "runtime_slice.c"
+// src/internal/codegen/llvm/native/runtime/core.c:18-25
+#include "../../common/runtime/alloc.c"
+#include "../../common/runtime/file.c"
+#include "runtime/asm.c"
+#include "runtime/format.c"
+#include "runtime/io.c"
+#include "runtime/platform.c"
+#include "runtime/print.c"
+#include "runtime/slice.c"
 ```
 
 | ソース | 内容 |
 |---|---|
-| `common/runtime_alloc.c` | メモリアロケータ抽象（バックエンド共通） |
-| `common/runtime_file.c` | ファイルI/O・stdin入力（バックエンド共通） |
-| `native/runtime_platform.c` | プラットフォーム固有の低レベル出力 |
-| `native/runtime_print.c` | `cm_print_*`/`cm_println_*` 出力関数 |
-| `native/runtime_format.c` | `cm_format_*`/`cm_*_to_string` 書式化と長さヘッダ付き文字列 |
-| `native/runtime_slice.c` | スライス（動的配列）操作 `cm_slice_*` |
-| `native/runtime_io.c` | POSIX I/Oラッパ `cm_io_*` |
-| `native/runtime_asm.c` | ASM連携補助 |
+| `common/runtime/alloc.c` | メモリアロケータ抽象（バックエンド共通） |
+| `common/runtime/file.c` | ファイルI/O・stdin入力（バックエンド共通） |
+| `native/runtime/platform.c` | プラットフォーム固有の低レベル出力 |
+| `native/runtime/print.c` | `cm_print_*`/`cm_println_*` 出力関数 |
+| `native/runtime/format.c` | `cm_format_*`/`cm_*_to_string` 書式化と長さヘッダ付き文字列 |
+| `native/runtime/slice.c` | スライス（動的配列）操作 `cm_slice_*` |
+| `native/runtime/io.c` | POSIX I/Oラッパ `cm_io_*` |
+| `native/runtime/asm.c` | ASM連携補助 |
 
-このほかasync/イベントループ（`native/runtime_async.c`・`runtime_event_loop.c`）があり、net/sync/thread/http/gpuの各ランタイムは別ライブラリとしてビルドされ前述の検出で条件リンクされる。関数宣言の契約は `common/runtime_common.h` にあり、LLVMコア側は `runtime/builtins.cpp`・`runtime/system.cpp` が同じシグネチャで宣言だけを生成し、実体はリンク時にこれらの.oで解決される。
+このほかasync/イベントループ（`native/runtime/async.c`・`runtime/event_loop.c`）があり、net/sync/thread/http/gpuの各ランタイムは別ライブラリとしてビルドされ前述の検出で条件リンクされる。関数宣言の契約は `common/runtime/common.h` にあり、LLVMコア側は `runtime/builtins.cpp`・`runtime/system.cpp` が同じシグネチャで宣言だけを生成し、実体はリンク時にこれらの.oで解決される。
 
 ## 実装箇所
 
@@ -97,12 +97,12 @@ Wasmターゲットは同様に `CM_RUNTIME_WASM_PATH`→`build/lib/cm_runtime_w
 |---|---|
 | `src/internal/codegen/llvm/native/codegen.cpp` | emitExecutable/linkObjectsのリンクコマンド組み立て、`cm_*` 検出、ランタイム探索・オンデマンドコンパイル |
 | `src/internal/codegen/llvm/native/codegen.hpp` | LLVMCodeGenのオプション（sanitize系・OutputFormat）と探索APIの宣言 |
-| `src/internal/codegen/llvm/native/runtime.c` | ランタイム傘ファイル（分割Cソースを単一コンパイル単位へ結合） |
-| `src/internal/codegen/llvm/native/runtime_*.c` | ネイティブ向けランタイム実体（format/print/slice/io/platform/asm/async/event_loop） |
-| `src/internal/codegen/common/runtime_common.h` | LLVM/WASM共有のランタイム関数宣言契約 |
-| `src/internal/codegen/common/runtime_alloc.c` / `runtime_file.c` | バックエンド共通のアロケータ・ファイルI/O実体 |
+| `src/internal/codegen/llvm/native/runtime/core.c` | ランタイム傘ファイル（分割Cソースを単一コンパイル単位へ結合） |
+| `src/internal/codegen/llvm/native/runtime/*.c` | ネイティブ向けランタイム実体（format/print/slice/io/platform/asm/async/event_loop） |
+| `src/internal/codegen/common/runtime/common.h` | LLVM/WASM共有のランタイム関数宣言契約 |
+| `src/internal/codegen/common/runtime/alloc.c` / `runtime/file.c` | バックエンド共通のアロケータ・ファイルI/O実体 |
 | `src/internal/codegen/llvm/core/runtime/builtins.cpp` / `system.cpp` | LLVM IR側のランタイム関数宣言生成（実体はリンクで解決） |
-| `src/internal/codegen/llvm/wasm/runtime_*.c` | Wasm向けランタイム実体（`wasm-ld` でリンクされる別実装） |
+| `src/internal/codegen/llvm/wasm/runtime/*.c` | Wasm向けランタイム実体（`wasm-ld` でリンクされる別実装） |
 
 ## 落とし穴とケア
 
@@ -118,5 +118,5 @@ Wasmターゲットは同様に `CM_RUNTIME_WASM_PATH`→`build/lib/cm_runtime_w
 
 - [オブジェクトファイル出力](object-emission.md)
 - [MIR→LLVM IR変換の構造](mir-to-llvm.md)
-- [数値出力とキャストの一貫性](numeric-and-casts.md)（runtime_format.cの書式化実装）
+- [数値出力とキャストの一貫性](numeric-and-casts.md)（runtime/format.cの書式化実装）
 - アロケータと一時プールの設計: [../../archive/v0.17.0/memory/allocator-and-temp-pool.md](../../archive/v0.17.0/memory/allocator-and-temp-pool.md)

@@ -1,7 +1,7 @@
 // Cm Language Runtime - Native Platform Implementation
 // Uses standard C library functions
 
-#include "../../common/runtime_platform.h"
+#include "../../../common/runtime/platform.h"
 
 #ifndef CM_NO_STD
 #include <stdio.h>
@@ -31,7 +31,7 @@ char* cm_strcat(char* dst, const char* src) {
     return strcat(dst, src);
 }
 
-// Note: cm_strcmp and cm_strncmp are implemented in runtime_format.c
+// Note: cm_strcmp and cm_strncmp are implemented in format.c
 // as no_std-compatible versions
 
 #endif  // !CM_NO_STD

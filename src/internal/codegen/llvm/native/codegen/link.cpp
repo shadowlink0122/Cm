@@ -268,9 +268,9 @@ std::string LLVMCodeGen::findRuntimeLibrary() {
 // ランタイムをオンデマンドでコンパイル
 std::string LLVMCodeGen::compileRuntimeOnDemand() {
     std::vector<std::string> sourcePaths = {
-        "src/internal/codegen/llvm/native/runtime.c",
-        "./src/internal/codegen/llvm/native/runtime.c",
-        "../src/internal/codegen/llvm/native/runtime.c",
+        "src/internal/codegen/llvm/native/runtime/core.c",
+        "./src/internal/codegen/llvm/native/runtime/core.c",
+        "../src/internal/codegen/llvm/native/runtime/core.c",
     };
 
     std::string runtimeSource;
@@ -304,9 +304,9 @@ std::string LLVMCodeGen::compileRuntimeOnDemand() {
 // WASMランタイムをオンデマンドでコンパイル
 std::string LLVMCodeGen::compileWasmRuntimeOnDemand() {
     std::vector<std::string> sourcePaths = {
-        "src/internal/codegen/llvm/wasm/runtime_wasm.c",
-        "./src/internal/codegen/llvm/wasm/runtime_wasm.c",
-        "../src/internal/codegen/llvm/wasm/runtime_wasm.c",
+        "src/internal/codegen/llvm/wasm/runtime/core.c",
+        "./src/internal/codegen/llvm/wasm/runtime/core.c",
+        "../src/internal/codegen/llvm/wasm/runtime/core.c",
     };
 
     std::string runtimeSource;

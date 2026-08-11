@@ -1,6 +1,6 @@
 # print系ビルトインと文字列補間
 
-`println("x = {x}")` のような補間付き出力は、型検査時にプレースホルダを実AST部分式へ脱糖し（`LiteralExpr.interp_parts`）、MIR loweringが型検査済みの部分式を「位置プレースホルダ化されたフォーマット文字列＋値ローカル列」として消費し、LLVMコード生成が引数の型ごとに `cm_print_*`／`cm_format_replace_*` などのランタイム関数呼び出しへディスパッチする三段構成で実装されている。書式化の実体はC実装のランタイム（`runtime_print.c`／`runtime_format.c`）に一本化されており、nativeはAOTリンク、jitはホストプロセス内シンボル解決で同一の実装を共有するため、両者の出力は常に一致する。
+`println("x = {x}")` のような補間付き出力は、型検査時にプレースホルダを実AST部分式へ脱糖し（`LiteralExpr.interp_parts`）、MIR loweringが型検査済みの部分式を「位置プレースホルダ化されたフォーマット文字列＋値ローカル列」として消費し、LLVMコード生成が引数の型ごとに `cm_print_*`／`cm_format_replace_*` などのランタイム関数呼び出しへディスパッチする三段構成で実装されている。書式化の実体はC実装のランタイム（`runtime/print.c`／`runtime/format.c`）に一本化されており、nativeはAOTリンク、jitはホストプロセス内シンボル解決で同一の実装を共有するため、両者の出力は常に一致する。
 
 ## 概要
 
@@ -69,20 +69,20 @@ convert_func = field.type->name + "__toString";
 `{:x}` などの指定子はMIR・codegenを素通りしてフォーマット文字列内に残り、解釈はランタイムの `cm_format_replace_*` が行う。
 
 ```c
-// src/internal/codegen/llvm/native/runtime_format.c:2425-2432 — 指定子の解釈はランタイム側
+// src/internal/codegen/llvm/native/runtime/format.c:2425-2432 — 指定子の解釈はランタイム側
 if (strcmp(specifier, ":x") == 0) {
     formatted_value = cm_format_int_hex(value);
 } else if (strcmp(specifier, ":X") == 0) {
     formatted_value = cm_format_int_HEX(value);
 ```
 
-置換の骨格は `cm_format_replace`（`runtime_format.c:2358`）で、最初の `{...}` を値文字列で置き換えた新規文字列を返す（1呼び出し1プレースホルダ消費）。基数変換・精度・ゼロ詰め・最短round-trip表現といった書式化アルゴリズム自体の設計は本書の範囲外で、[numeric-and-casts.md](numeric-and-casts.md) が正典である。
+置換の骨格は `cm_format_replace`（`runtime/format.c:2358`）で、最初の `{...}` を値文字列で置き換えた新規文字列を返す（1呼び出し1プレースホルダ消費）。基数変換・精度・ゼロ詰め・最短round-trip表現といった書式化アルゴリズム自体の設計は本書の範囲外で、[numeric-and-casts.md](numeric-and-casts.md) が正典である。
 
 ### eprintln と native/jit の共通性
 
 `eprint`/`eprintln` はビルトインではなくCm標準ライブラリの通常関数で、`string` を受けて `write(STDERR_FD, ...)` するだけである（`libs/std/io/console/output.cm:40-51`）。したがって `eprintln("x = {x}")` の補間は引数側の文字列リテラル経路（`cm_format_string`）で呼び出し前に解決済みの文字列が渡る。
 
-print・format系ランタイムの実体は `runtime_print.c`/`runtime_format.c` の1組しかなく、nativeでは生成オブジェクトとAOTリンクされ（[linking-and-runtime.md](linking-and-runtime.md)）、jitでは `DynamicLibrarySearchGenerator::GetForCurrentProcess` がcmバイナリ自身に埋め込まれた同じ実装をホストプロセスから解決する（`src/internal/codegen/llvm/jit/jit_engine.cpp:83-95`）。生成されるLLVM IRはnative/jitで同一であり、差はオブジェクト出力かインプロセス実行かのみである。
+print・format系ランタイムの実体は `runtime/print.c`/`runtime/format.c` の1組しかなく、nativeでは生成オブジェクトとAOTリンクされ（[linking-and-runtime.md](linking-and-runtime.md)）、jitでは `DynamicLibrarySearchGenerator::GetForCurrentProcess` がcmバイナリ自身に埋め込まれた同じ実装をホストプロセスから解決する（`src/internal/codegen/llvm/jit/jit_engine.cpp:83-95`）。生成されるLLVM IRはnative/jitで同一であり、差はオブジェクト出力かインプロセス実行かのみである。
 
 ## 実装箇所
 
@@ -97,8 +97,8 @@ print・format系ランタイムの実体は `runtime_print.c`/`runtime_format.c
 | `src/internal/codegen/llvm/core/terminator/call.cpp` | `cm_println_format`/`cm_format_string`/`__print__` 系のcodegenディスパッチ |
 | `src/internal/codegen/llvm/core/print_codegen.cpp` | 型ディスパッチ（`generateFormatReplace`/`generateValueToString`/`generatePrint*Call`） |
 | `src/internal/codegen/llvm/core/runtime/builtins.cpp` | `cm_format_*`/`cm_*_to_string` 宣言シグネチャの一元生成 |
-| `src/internal/codegen/llvm/native/runtime_print.c` | `cm_print_*`/`cm_println_*` の出力実体 |
-| `src/internal/codegen/llvm/native/runtime_format.c` | `cm_format_*`/`cm_format_replace_*`/エスケープ解除の実体 |
+| `src/internal/codegen/llvm/native/runtime/print.c` | `cm_print_*`/`cm_println_*` の出力実体 |
+| `src/internal/codegen/llvm/native/runtime/format.c` | `cm_format_*`/`cm_format_replace_*`/エスケープ解除の実体 |
 | `libs/std/io/console/output.cm` | `print`/`println`/`eprint`/`eprintln` のstdlib実装（fd直書き） |
 
 ## 落とし穴とケア

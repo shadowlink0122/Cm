@@ -62,7 +62,7 @@ if (!resolved) {
 
 ### スライス要素レシーバの参照場所化
 
-多次元スライスでは内側スライスの`CmSlice`ヘッダが外側スライスのデータバッファへインライン格納されている（[ランタイム表現](runtime-representation.md)参照）。そこで`cm_slice_get_subslice_ref`（`src/internal/codegen/llvm/native/runtime_slice.c:792-800`）は格納中ヘッダのアドレスをそのまま返す:
+多次元スライスでは内側スライスの`CmSlice`ヘッダが外側スライスのデータバッファへインライン格納されている（[ランタイム表現](runtime-representation.md)参照）。そこで`cm_slice_get_subslice_ref`（`src/internal/codegen/llvm/native/runtime/slice.c:792-800`）は格納中ヘッダのアドレスをそのまま返す:
 
 ```c
 // 内側スライスヘッダへの参照を返す（コピーしない）。
@@ -76,7 +76,7 @@ void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
 }
 ```
 
-この参照をレシーバ場所とすることで、push/pop/delete/clear/len/capの変異・読みが格納中のヘッダへ直接作用し、明示的な書き戻し処理が不要になる（`access.cpp:295-298`のコメント）。読み取り専用の添字アクセス（`rows[0][1]`のような値の取り出し）は逆にコピー版の`cm_slice_get_subslice`（`runtime_slice.c:802-827`）を使い、`lower_index`が中間レベルをsubslice連鎖で辿って単一添字読みへ還元する（`access.cpp:608-659`）。
+この参照をレシーバ場所とすることで、push/pop/delete/clear/len/capの変異・読みが格納中のヘッダへ直接作用し、明示的な書き戻し処理が不要になる（`access.cpp:295-298`のコメント）。読み取り専用の添字アクセス（`rows[0][1]`のような値の取り出し）は逆にコピー版の`cm_slice_get_subslice`（`runtime/slice.c:802-827`）を使い、`lower_index`が中間レベルをsubslice連鎖で辿って単一添字読みへ還元する（`access.cpp:608-659`）。
 
 ### 呼び出し戻り値レシーバと単一評価
 
@@ -97,7 +97,7 @@ void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
 | src/internal/mir/lowering/expr/access.cpp:608-659 | 多次元スライスの多重添字読みのsubslice連鎖への還元 |
 | src/internal/mir/lowering/expr_slice.cpp | スライスbuiltinのlowering（全builtinがヘルパを呼ぶ。失敗時診断） |
 | src/internal/hir/lowering/expr_member.cpp:589-651 | メソッド構文から`__builtin_slice_*`への脱糖（レシーバを`args[0]`へ） |
-| src/internal/codegen/llvm/native/runtime_slice.c:792-827 | `cm_slice_get_subslice_ref`（参照）と`cm_slice_get_subslice`（コピー） |
+| src/internal/codegen/llvm/native/runtime/slice.c:792-827 | `cm_slice_get_subslice_ref`（参照）と`cm_slice_get_subslice`（コピー） |
 | src/internal/types/checking/match_hoist.cpp | 呼び出しを含むレシーバの一時変数退避（単一評価の保証） |
 | src/internal/codegen/llvm/core/runtime/builtins.cpp:352 | `cm_slice_get_subslice(_ref)`のLLVM宣言登録 |
 
@@ -106,7 +106,7 @@ void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
 - 防ぐバグのクラス（黙って欠落）: レシーバ解決が変数参照とメンバに限定されていた場合、`m[0].push(x)`はコンパイルは通るのに文ごと消えるという最悪の失敗様式になる。この「黙殺」を防ぐため、(1) 場所化の式種別・降下規約を`lower_place`1本へ集約し、(2) 解決失敗は必ず診断でハードエラーにする、という二重の防御を維持すること。新しいbuiltinや新しいレシーバ式種別を追加するときも、builtin個別のVarRef/Member分岐を書かず`lower_place`へ寄せること。
 - 防ぐバグのクラス（コピーへの変異）: レシーバを`lower_expression`で安易に実体化すると読み取りは動くが変異が捨てられる。変異系builtinのレシーバ実体化は禁止であり、場所化できない場合は診断で止める。スライスの構造体blob要素は`cm_slice_get_element_ptr`＋Derefで格納中の実体を場所化する（コピーではなく要素ポインタ経由。access.cpp:317-355）。
 - 防ぐバグのクラス（多重評価）: 呼び出しを含むレシーバの脱糖でAST複製を行うと、`parse_int(s).unwrap_or(0)`のタグ比較とペイロード取得が別々に評価され誤った値を返す。呼び出しを含むレシーバは`match_hoist`の退避対象であることを保ち、退避してはいけない位置（ループ条件等）のリストも同時に維持すること。
-- `cm_slice_get_subslice_ref`が返す参照は外側スライスのデータバッファ内を指すため、外側への`push`が再確保を起こすと無効化される。loweringは「参照取得→直後のメソッド呼び出し」の1ステップでのみ使用しており、この参照を複数文にまたがって保持するコードを生成してはならない（`runtime_slice.c:788-791`）。
+- `cm_slice_get_subslice_ref`が返す参照は外側スライスのデータバッファ内を指すため、外側への`push`が再確保を起こすと無効化される。loweringは「参照取得→直後のメソッド呼び出し」の1ステップでのみ使用しており、この参照を複数文にまたがって保持するコードを生成してはならない（`runtime/slice.c:788-791`）。
 - 固定長配列要素とスライス要素で場所化の手段が異なる（indexプロジェクション vs subslice_ref/element_ptr呼び出し）。判別は`is_fixed_array_type`（`access.cpp:260-264`）が「`array_size`の有無と次元値」で行っており、スライスの`dimensions`に0が入るケースがあるため両方を見る必要がある。
 - 回帰テスト: `tests/common/chaining/index_receiver_method_test.cm`（添字レシーバのpushと反映確認）、`call_return_receiver.cm`（呼び出し戻り値レシーバ）、`mixed_chain_receiver_test.cm`（`g.cells[i].push(v)`混合チェーン）。マップの呼び出しレシーバチェーンは`tests/common/collections/hashmap_option_get_test.cm`等が検証する。
 

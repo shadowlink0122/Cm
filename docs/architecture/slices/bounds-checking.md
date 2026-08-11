@@ -4,7 +4,7 @@ Cmの境界検査は「既定は無検査（性能優先）、`--sanitize=bounds
 
 ## 概要
 
-native/jitの既定ビルドでは、スライスの境界外アクセスはランタイム関数側のセンチネル返しに委ねられる。読み取り（`cm_slice_get_*`）は範囲外で0/NULLを返し（`src/internal/codegen/llvm/native/runtime_slice.c:372-373`等）、書き込みの土台である`cm_slice_get_element_ptr`は範囲外でNULLを返す（`runtime_slice.c:778-779`）ため、範囲外書き込みはNULLストアとしてSIGSEGVになる。`cm_slice_delete`の範囲外は何もしない（`runtime_slice.c:463-464`）。この既定挙動には検査コストが無い代わりに、範囲外読みが「黙って0を返す」ことを許す。
+native/jitの既定ビルドでは、スライスの境界外アクセスはランタイム関数側のセンチネル返しに委ねられる。読み取り（`cm_slice_get_*`）は範囲外で0/NULLを返し（`src/internal/codegen/llvm/native/runtime/slice.c:372-373`等）、書き込みの土台である`cm_slice_get_element_ptr`は範囲外でNULLを返す（`runtime/slice.c:778-779`）ため、範囲外書き込みはNULLストアとしてSIGSEGVになる。`cm_slice_delete`の範囲外は何もしない（`runtime/slice.c:463-464`）。この既定挙動には検査コストが無い代わりに、範囲外読みが「黙って0を返す」ことを許す。
 
 `--sanitize=bounds`を指定すると、検査は2系統で挿入される。スライスはMIR計装パス（LLVMに依存しないため全実行系で同一動作）、固定長配列はLLVMの`BoundsCheckingPass`（alloca等の静的にサイズが分かるアクセスへのトラップ挿入）である。両者は補完関係にあり、`src/cmd/cm/build.cpp:652-654`のコメントがこの分担を明記している。
 
@@ -42,7 +42,7 @@ ERR:  Call cm_bounds_error(index, len) -> Unreachable
 
 ### トラップの実装
 
-`cm_bounds_error`はランタイムのnoreturn関数で、`src/internal/codegen/llvm/native/runtime_print.c:261-266`:
+`cm_bounds_error`はランタイムのnoreturn関数で、`src/internal/codegen/llvm/native/runtime/print.c:261-266`:
 
 ```c
 __attribute__((noreturn)) void cm_bounds_error(long long index, long long len) {
@@ -52,7 +52,7 @@ __attribute__((noreturn)) void cm_bounds_error(long long index, long long len) {
 }
 ```
 
-wasmランタイムにも同名関数があり（`src/internal/codegen/llvm/wasm/runtime_wasm.c:118`）、全実行系で同一メッセージ・終了コード1に統一されている。シグナルではなくメッセージ付きの正常系exitであるため、テストハーネスが出力を検証できる。
+wasmランタイムにも同名関数があり（`src/internal/codegen/llvm/wasm/runtime/core.c:118`）、全実行系で同一メッセージ・終了コード1に統一されている。シグナルではなくメッセージ付きの正常系exitであるため、テストハーネスが出力を検証できる。
 
 ### 固定長配列（LLVM BoundsCheckingPass）
 
@@ -74,12 +74,12 @@ wasmランタイムにも同名関数があり（`src/internal/codegen/llvm/wasm
 | src/internal/mir/passes/instrumentation/bounds.cpp | スライスアクセスへのMIRレベル境界検査挿入パス |
 | src/internal/mir/passes/instrumentation/bounds.hpp | パスのインターフェイス（`instrument_bounds_checks`） |
 | src/cmd/cm/build.cpp:648-658 | sanitize検証と計装パスの適用（MIR最適化後・コード生成前） |
-| src/internal/codegen/llvm/native/runtime_print.c:261-266 | `cm_bounds_error`トラップ関数（native/jit） |
+| src/internal/codegen/llvm/native/runtime/print.c:261-266 | `cm_bounds_error`トラップ関数（native/jit） |
 | src/internal/codegen/llvm/native/codegen.cpp:945-990 | 固定長配列向け`BoundsCheckingPass`の適用（native AOT） |
 | src/internal/codegen/llvm/jit/jit_engine.cpp:183-237 | JITでの`BoundsCheckingPass`適用（`sanitizeBounds`引数） |
 | src/cmd/cm/options.cpp:28-31 | `--sanitize=`の有効値定義 |
 | src/cmd/cm/backend/llvm.cpp:117-125 / run.cpp:112-143 | AOT/JITそれぞれへのフラグ伝搬 |
-| src/internal/codegen/llvm/native/runtime_slice.c:367-455, :774-783 | 既定ビルドのセンチネル挙動（OOB読み0/NULL） |
+| src/internal/codegen/llvm/native/runtime/slice.c:367-455, :774-783 | 既定ビルドのセンチネル挙動（OOB読み0/NULL） |
 
 ## 落とし穴とケア
 

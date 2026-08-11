@@ -14,8 +14,8 @@ import collections
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 REGISTRY = os.path.join(ROOT, "src", "internal", "codegen", "common", "builtin_registry.hpp")
 RUNTIME_DIRS = {
-    "native": os.path.join(ROOT, "src", "internal", "codegen", "llvm", "native"),
-    "wasm": os.path.join(ROOT, "src", "internal", "codegen", "llvm", "wasm"),
+    "native": os.path.join(ROOT, "src", "internal", "codegen", "llvm", "native", "runtime"),
+    "wasm": os.path.join(ROOT, "src", "internal", "codegen", "llvm", "wasm", "runtime"),
 }
 
 # C型→レジストリ型タグの写像。ポインタは全てPtrへ正規化する
@@ -77,12 +77,12 @@ def c_type_to_tag(ctype, filename, warnings):
     return C_TYPE_MAP.get(t)
 
 
-COMMON_DIR = os.path.join(ROOT, "src", "internal", "codegen", "common")
+COMMON_DIR = os.path.join(ROOT, "src", "internal", "codegen", "common", "runtime")
 
 
 def parse_c_functions(directory):
     funcs = {}
-    # native/wasm共通コア（common/*.inc。第4段の一本化ソース）は両プラットフォームの実装として扱う
+    # native/wasm共通コア（common/runtime/*.inc。第4段の一本化ソース）は両プラットフォームの実装として扱う
     sources = [os.path.join(COMMON_DIR, fn) for fn in sorted(os.listdir(COMMON_DIR)) if fn.endswith(".inc")]
     sources += [os.path.join(directory, fn) for fn in sorted(os.listdir(directory)) if fn.endswith(".c")]
     for path in sources:

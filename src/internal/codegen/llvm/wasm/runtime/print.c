@@ -1,6 +1,6 @@
 // Cm Language Runtime - Print Functions (WASM Backend)
 // WASI-based output implementations
-// Note: This file is included from runtime_wasm.c AFTER runtime_format.c
+// Note: This file is included from core.c AFTER format.c
 
 #include <stddef.h>
 #include <stdint.h>
@@ -25,7 +25,7 @@ static void wasm_write_stdout(const char* str, size_t len) {
     __wasi_fd_write(1, &iov, 1, &nwritten);
 }
 
-// wasm_strlen, wasm_int_to_str, wasm_uint_to_str are defined in runtime_format.c
+// wasm_strlen, wasm_int_to_str, wasm_uint_to_str are defined in format.c
 
 // Forward declarations
 char* cm_unescape_braces(const char* str);
@@ -90,7 +90,7 @@ void cm_println_uint(unsigned int value) {
 // ============================================================
 // 64-bit Integer Output (long / ulong)
 // ============================================================
-// wasm_int64_to_str はruntime_format.c内で定義されている（staticなので再宣言）
+// wasm_int64_to_str はformat.c内で定義されている（staticなので再宣言）
 static void wasm_ulong_to_str(unsigned long long value, char* buffer, size_t* len) {
     char temp[32];
     int i = 0;
@@ -139,7 +139,7 @@ void cm_println_ulong(unsigned long long value) {
 // ============================================================
 // Floating Point Output (simplified)
 // ============================================================
-// cm_format_double は runtime_format.c で定義（このTUより前にインクルードされる）
+// cm_format_double は format.c で定義（このTUより前にインクルードされる）
 char* cm_format_double(double value);
 
 void cm_print_double(double value) {

@@ -1,18 +1,18 @@
 // Cm Language Runtime - Print Functions (LLVM Backend)
 // Platform-specific output implementations
 
-// ヘッダ付き文字列対応の解放（runtime_format.c実装。H9第4段）
+// ヘッダ付き文字列対応の解放（format.c実装。H9第4段）
 extern void cm_string_free(char* str);
 
-#include "../../common/runtime_alloc.h"
-#include "../../common/runtime_platform.h"
+#include "../../../common/runtime/alloc.h"
+#include "../../../common/runtime/platform.h"
 #include <stdint.h>
 
 #ifndef CM_NO_STD
 #include <stdio.h>
 #endif
 
-#include "../../common/runtime_common.h"
+#include "../../../common/runtime/common.h"
 
 // Forward declarations
 char* cm_unescape_braces(const char* str);

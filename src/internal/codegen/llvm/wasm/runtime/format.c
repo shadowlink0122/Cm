@@ -214,7 +214,7 @@ static void* wasm_bump_alloc(size_t total) {
     return (void*)addr;
 }
 
-// Non-static for use in runtime_slice.c
+// Non-static for use in slice.c
 void* wasm_alloc(size_t size) {
     // 8バイト境界に整列（誤整列アクセス回避）
     size = (size + 7u) & ~(size_t)7u;
@@ -2210,13 +2210,13 @@ int strcmp(const char* s1, const char* s2) {
 
 // ============================================================
 // 配列スライス・HOF/検索ビルトイン: native/wasm共通コア（runtime-hof-common-source 第1段）
-// 実装本体はcommon/runtime_hof_core.incへ一本化した。フック定義は後続includeのruntime_slice.cと同一テキストにして良性再定義に保つ
+// 実装本体はcommon/runtime/hof_core.incへ一本化した。フック定義は後続includeのslice.cと同一テキストにして良性再定義に保つ
 // ============================================================
-// cm_freeは同一TU後続のruntime_wasm.c側定義（wasm_allocは本ファイル冒頭で宣言済み）
+// cm_freeは同一TU後続のcore.c側定義（wasm_allocは本ファイル冒頭で宣言済み）
 void cm_free(void* ptr);
 #define CM_RT_ALLOC(size) wasm_alloc(size)
 #define CM_RT_FREE(ptr) cm_free(ptr)
 #define CM_RT_MEMCPY(dst, src, n) memcpy((dst), (src), (size_t)(n))
-#include "../../common/runtime_hof_core.inc"
+#include "../../../common/runtime/hof_core.inc"
 
 
