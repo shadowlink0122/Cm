@@ -3,6 +3,7 @@
 #include "context.hpp"
 
 #include "internal/base/target.hpp"
+#include "internal/syntax/ast/convkind.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 #include "layout.hpp"
 
@@ -470,9 +471,16 @@ LocalId LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& e
     if (!dest) {
         return value;
     }
+    // 変換種のディスパッチは受理側（checkerのtypes_compatible）と同じ分類表から導く（受理と挿入の同表化）
+    ast::convkind::Env conv_env;
+    conv_env.resolve = [this](const hir::TypePtr& t) { return resolve_typedef(t); };
+    conv_env.is_interface = [this](const std::string& n) {
+        return interface_names && interface_names->count(n) > 0;
+    };
+    const auto conv_kind = ast::convkind::classify(dest, func->locals[value].type, conv_env);
     if (dest->kind == hir::TypeKind::Union) {
         hir::TypePtr src = resolve_typedef(func->locals[value].type);
-        if (src && src->kind != hir::TypeKind::Union) {
+        if (conv_kind == ast::convkind::Kind::UnionWrap && src) {
             const auto variants = ast::union_variant_types(dest);
             auto is_numeric = [](hir::TypeKind k) {
                 return k == hir::TypeKind::Tiny || k == hir::TypeKind::UTiny ||
@@ -526,43 +534,40 @@ LocalId LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& e
         }
         return coerce_to_union(value, dest);
     }
-    // インターフェースupcast（値）: 宛先がinterface構造体で値が具象構造体なら、fat pointer構築を
-    // MIRの構築物（iface_upcast Cast）として発行する。ペイロードはヒープへ実体化（boxed）してから包む
-    // （戻り値経由でスタックローカルを指したままダングリングする分裂の恒久修正。coercion第2段）
-    if (interface_names && dest->kind == hir::TypeKind::Struct &&
-        interface_names->count(dest->name) > 0) {
+    // インターフェースupcast（値）: fat pointer構築をMIRの構築物（iface_upcast Cast）として発行する。
+    // ペイロードはヒープへ実体化（boxed）してから包む（戻り値経由でスタックローカルを指したまま
+    // ダングリングする分裂の恒久修正）
+    if (conv_kind == ast::convkind::Kind::IfaceValueUpcast) {
         hir::TypePtr src = resolve_typedef(func->locals[value].type);
-        if (src && src->kind == hir::TypeKind::Struct && interface_names->count(src->name) == 0 &&
-            !src->name.empty()) {
+        if (src) {
             LocalId fat = new_temp(dest);
             push_statement(MirStatement::assign(
                 MirPlace{fat}, MirRvalue::iface_upcast(MirOperand::copy(MirPlace{value}), dest,
                                                        src->name, false, true)));
             return fat;
         }
+        return value;
     }
-    // インターフェースupcast（ポインタ）: 宛先がinterfaceポインタで値が具象構造体ポインタなら、
-    // 指し先アドレスをdataとするfat pointerを構築する（boxingなし＝既存ストレージを指す）
-    if (interface_names && dest->kind == hir::TypeKind::Pointer && dest->element_type) {
-        auto dest_elem = resolve_typedef(dest->element_type);
-        if (dest_elem && dest_elem->kind == hir::TypeKind::Struct &&
-            interface_names->count(dest_elem->name) > 0) {
-            hir::TypePtr src = resolve_typedef(func->locals[value].type);
-            if (src && src->kind == hir::TypeKind::Pointer && src->element_type) {
-                auto src_elem = resolve_typedef(src->element_type);
-                if (src_elem && src_elem->kind == hir::TypeKind::Struct &&
-                    interface_names->count(src_elem->name) == 0 && !src_elem->name.empty()) {
-                    LocalId fat = new_temp(dest);
-                    push_statement(MirStatement::assign(
-                        MirPlace{fat}, MirRvalue::iface_upcast(MirOperand::copy(MirPlace{value}),
-                                                               dest, src_elem->name, true, false)));
-                    return fat;
-                }
-            }
+    // インターフェースupcast（ポインタ）: 指し先アドレスをdataとするfat pointerを構築する
+    // （boxingなし＝既存ストレージを指す）
+    if (conv_kind == ast::convkind::Kind::IfacePtrUpcast) {
+        hir::TypePtr src = resolve_typedef(func->locals[value].type);
+        auto src_elem = (src && src->element_type) ? resolve_typedef(src->element_type) : nullptr;
+        if (src_elem) {
+            LocalId fat = new_temp(dest);
+            push_statement(MirStatement::assign(
+                MirPlace{fat}, MirRvalue::iface_upcast(MirOperand::copy(MirPlace{value}), dest,
+                                                       src_elem->name, true, false)));
+            return fat;
         }
+        return value;
     }
-    value = coerce_numeric_context(value, dest);
-    value = coerce_fixed_array_to_slice(value, dest);
+    if (conv_kind == ast::convkind::Kind::NumericImplicit) {
+        return coerce_numeric_context(value, dest);
+    }
+    if (conv_kind == ast::convkind::Kind::ArrayToSlice) {
+        return coerce_fixed_array_to_slice(value, dest);
+    }
     return value;
 }
 

@@ -89,7 +89,7 @@
 
 - 警告が出る: let初期化・代入・return・三項の結果。
 - 警告が出ない（silent）: **関数引数・配列要素リテラル・構造体フィールド初期化**。
-- 「ある文脈では黙って受理し別文脈では警告」という典型的な非汎用。[coercion-driver-unification](coercion-driver-unification.md) の方針4（受理と挿入の同表化）に一部関連するが、この文脈別の警告欠落は現状の欠陥として未記載。
+- 「ある文脈では黙って受理し別文脈では警告」という典型的な非汎用。[coercion-driver-unification](../type-system/coercion-driver-unification.md) の方針4（受理と挿入の同表化）に一部関連するが、この文脈別の警告欠落は現状の欠陥として未記載。
 
 **処置記録（F系）**: 正準の `check_numeric_conversion_policy`（Z5）を関数引数（`call/function.cpp`）・配列要素リテラル（`stmt.cpp` のlet初期化要素ループ）・構造体フィールド初期化（`expr/primary.cpp`）の3文脈へ適用し、let/代入/return/三項と同一規則（適合リテラル免除・`uint/usize→int` 免除・`--strict` でエラー昇格）で診断するようにした。掃引で発覚した既存の暗黙縮小4箇所——stdlibの `vector.cm` の `memcpy(…, long)`・`io/console/input.cm` の `malloc(long)`・テスト2件の同型 `malloc(long)`——は従来挙動と同じ切り詰めを `as int` で明示化した。回帰テスト: `tests/regression/narrowing_diag_test.cpp`（cases/narrowing_diag/、3文脈の警告発火と適合リテラル無診断）。
 
@@ -118,7 +118,7 @@
 - B系（typeof型）: [parenthesized-type-and-typeof-cast](../../archive/v0.17.0/type-system/parenthesized-type-and-typeof-cast.md)（処置済み。`ast::Type` に被演算式を持たせ `resolve_typeof` で解決。残はB2・仮引数型）。
 - C系（期待型伝播）: `infer_type_expecting`/`propagate_literal_expected_type` の**透過ノード（三項・match・ジェネリック置換）への拡張が未完**。
 - E系（HOFディスパッチ）: [method-resolution-unification](method-resolution-unification.md) のビルトインラダー表駆動化と方向性は同じだが、**高階関数の `slice_dispatch.hpp` 移行と要素型ゲートは別作業**。
-- F/G1（変換・整形）: [coercion-driver-unification](coercion-driver-unification.md) の受理/挿入同表化に隣接するが、**文脈別警告欠落**と**JS無指定補間の符号処理**は個別対応が必要。
+- F/G1（変換・整形）: [coercion-driver-unification](../type-system/coercion-driver-unification.md) の受理/挿入同表化に隣接するが、**文脈別警告欠落**と**JS無指定補間の符号処理**は個別対応が必要。
 - G4（間接呼び出し）: 関数ポインタ呼び出し/配列のコード生成は未対応既知項目。
 
 ## 推奨する統一の方向（優先度順）

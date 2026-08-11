@@ -178,7 +178,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 修正履歴の同族バグ分析（変換サイト欠落族・メソッド解決分裂族・名前逆算族）と全ソースの実測（サイト×変換種マトリクス・キー計算箇所の棚卸し・ランタイムdiff・関数長スキャン）に基づき、複雑すぎる実装をシンプルかつバグが再発しない構造へ変えるための提案。優先度順。
 
-- [暗黙変換の統一ドライバ化](coercion-driver-unification.md) — **第1段実施済み**（coerce_to_expected新設と11サイト置換・ユニオンのインラインCast3サイト吸収・メンバ代入の全変換種対応・ユニオン変種の保守的再帰ディスパッチ。発見した既存バグ3件は**修正済み**——真因はLLVMでなくGVNのCSEキー欠陥（is/as混同）とパーサのis/asスライス型右辺未対応+補間パース失敗の黙殺だった。受理乖離2件も解消——types_compatibleのtypedef実体解決一元化でユニオン引数への変種リテラル直接渡しを受理、is/as変種照合の解決済み比較でtypedef別名経由asを受理）。残: 第2段の本丸（upcastのMIR化）・第3段本体（checker注釈駆動化）（Critical）
+- [暗黙変換の統一ドライバ化](../../archive/v0.17.0/type-system/coercion-driver-unification.md) — **完遂・archive移動済み**（coerce_to_expected統一ドライバと11サイト集約・インターフェースupcastのMIR構築物化とバックエンド認識6系統の撤去・受理と挿入のconvkind分類表同表化。HIR注釈駆動化は分類表共有で真因が閉じるため見送りを設計判断として記録）
 - [モノモーフ化のフラット名逆算の完全廃止](../../archive/v0.17.0/type-system/mono-flat-name-elimination.md) — **完遂・archive移動済み**（①呼び出し名の正準化=fn_prefix_from_tree・②codegen型参照の正準キー化=LLVM/JS・③キー産生の$全面化+stale型ツリー正規化・④parse_flat_type_argsとtype_to_mangled_nameの削除。typekeyはsyntax/ast層へ移動し、特殊化の同定は$エンコードキーのみとなった）
 - [メソッド解決の一元化](method-resolution-unification.md) — **第1段（throw診断化・for-inプロトコル検証）とキー正準化実施済み**（generic_def_method_key/strip_spec_suffixの正準関数2種へ、method.cpp/function.cpp/auto_impl.cppのバイト一致必須な組み立て4実装を統一。Q4/Q1/Q5は個別修正済み）。残: resolve_method統一API・ビルトインラダー表駆動化・namespace方式1本化・第3段（High）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）

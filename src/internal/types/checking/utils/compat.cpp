@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/syntax/ast/convkind.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <algorithm>
@@ -148,10 +149,17 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         }
     }
 
-    // ユニオン型への代入互換性チェック
+    // 変換種のディスパッチは挿入側（MIR loweringのcoerce_to_expected）と同じ分類表から導く
+    // （受理と挿入の同表化。新しい変換種の追加はconvkind::classifyの1箇所で受理・挿入の両方へ届く）
+    ast::convkind::Env conv_env;
+    conv_env.resolve = [this](const ast::TypePtr& t) { return resolve_typedef(t); };
+    conv_env.is_interface = [this](const std::string& n) { return interface_names_.count(n) > 0; };
+    const auto conv_kind = ast::convkind::classify(a, b, conv_env);
+
+    // ユニオン型への代入互換性チェック（受理規則: いずれかの変種と互換）
     // 例: int | null x = null; → a=Union{int,null}, b=Void
     // 例: int | null x = 42;   → a=Union{int,null}, b=Int
-    if (a->kind == ast::TypeKind::Union) {
+    if (conv_kind == ast::convkind::Kind::UnionWrap || a->kind == ast::TypeKind::Union) {
         auto* union_type = static_cast<const ast::UnionType*>(a.get());
         if (union_type) {
             // nullリテラル（Void型）の代入: Nullバリアントがあれば許可
@@ -223,15 +231,11 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     a = resolve_typedef(a);
     b = resolve_typedef(b);
 
-    // インターフェース互換性チェック
-    if (a->kind == ast::TypeKind::Struct && interface_names_.count(a->name)) {
-        if (b->kind == ast::TypeKind::Struct && !interface_names_.count(b->name)) {
-            auto it = impl_interfaces_.find(b->name);
-            if (it != impl_interfaces_.end()) {
-                if (it->second.count(a->name)) {
-                    return true;
-                }
-            }
+    // インターフェースupcast（受理規則: 具象構造体がinterfaceを実装していること）
+    if (conv_kind == ast::convkind::Kind::IfaceValueUpcast) {
+        auto it = impl_interfaces_.find(b->name);
+        if (it != impl_interfaces_.end() && it->second.count(a->name)) {
+            return true;
         }
     }
 
@@ -313,8 +317,8 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         return true;
     }
 
-    // 数値型間の暗黙変換
-    if (a->is_numeric() && b->is_numeric()) {
+    // 数値型間の暗黙変換（受理の可否はZ5の数値ポリシー表が別途診断する。同kindは上の同型判定で受理済み）
+    if (conv_kind == ast::convkind::Kind::NumericImplicit) {
         return true;
     }
 

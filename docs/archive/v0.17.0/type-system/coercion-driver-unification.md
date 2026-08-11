@@ -107,3 +107,13 @@ checker側の受理判定（utils/compat.cpp・utils/conversion.cpp）とMIR側�
 - **MIR loweringのインライン一時の削除**: 旧H1のインライン一時パターン2箇所（stmt/let.cppのスライスリテラル要素・expr_slice.cppのpush）は「interface型の一時への素の代入」でバックエンド認識に依存していたため、認識撤去に伴い削除した（ドライバのupcast発行が代替）。
 - **回帰テスト**: `tests/common/interface/misc/upcast_sites.cm` を新設し、サイト×upcast形のマトリクス（let/再代入/構造体リテラルフィールド/射影付き代入/引数/return2形（直接・interfaceローカル経由）/固定長配列リテラル・要素上書き/スライスリテラル・push/ポインタupcastの書き込み可視性）をinterpreter・llvm O0/O2・jsで検証した。既存interfaceテスト61件もinterpreter/llvm-O2/jsで全PASS。
 - 残: 第3段（checker注釈駆動化。types_compatibleの構造変換分岐を注釈生成へ置き換え、受理・挿入の2実装をconversion_kind表の単一真実へ畳む）。
+
+## 実装記録（受理と挿入の同表化＝conversion_kind分類表・2026-08-11）
+
+方針4の中核である「受理と挿入が変換種のディスパッチを別々の条件分岐で再導出できる構造」を解消した。
+
+- **共有分類表**: `syntax/ast/convkind.{hpp,cpp}` を新設し、変換種（NumericImplicit / UnionWrap / ArrayToSlice / IfaceValueUpcast / IfacePtrUpcast / None）の分類関数 `convkind::classify(dest, src, env)` を単一の真実とした。層規律上checker（types→syntax）とMIR lowering（mir→syntax）の双方から参照でき、環境差（typedef実体解決・interface名判定）はEnvコールバックで注入する。
+- **挿入側の配線**: `coerce_to_expected` の変換選択を分類表のディスパッチへ置き換えた（ユニオンwrap前の変種事前正規化・数値/スライス実体化の各機構は従来のまま、どの機構を起動するかの判定だけが表へ移った）。
+- **受理側の配線**: `types_compatible` のユニオンwrap受理・インターフェースupcast受理・数値暗黙変換受理の3分岐を分類表のディスパッチへ置き換えた（受理の可否そのもの——変種互換の再帰判定・impl実装の有無・Z5数値ポリシー——は従来の規則が担う）。これにより新しい変換種の追加は `classify` の1箇所で受理・挿入の両方へ届く。
+- **注釈駆動化の見送り（設計判断）**: 「checkerが受理した変換をHIRノードへ注釈し、loweringは注釈を読むだけにする」案は今回見送った。理由は(1)分類表の共有で「受理と挿入のディスパッチ乖離」という真因が既に閉じること、(2)HIR注釈はcheckerとlowering間の全式パスへの注釈搬送（補間ミニパイプライン・脱糖経路含む）を要し、注釈欠落時のフォールバック（=現行の再導出）を残す限り二重機構になること。将来、変換規則そのもの（変種互換・数値ポリシー）の乖離が実害化した場合は、規則本体の同表化を次の段として起票する。
+- 検証: interpreterスイート全数・unit・regression・変換系重点回帰（upcast_sites・union slice_variant/null_variant/equality・spec_matrix）全PASS。
