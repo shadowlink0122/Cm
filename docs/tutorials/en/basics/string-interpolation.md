@@ -213,7 +213,17 @@ int main() {
 }
 ```
 
-For multiline raw strings, the **minimum indentation of the continuation lines is stripped** (relative indentation is preserved). In the example the common 4 spaces are removed and `indented line` keeps its 4-space relative indent. Indenting the literal to match the surrounding code nesting does not leak into the output.
+For multiline raw strings, **the indentation of the line where the literal starts is stripped from every continuation line** (like Python's dedent — the code-position indentation does not leak into the string content). Indentation deeper than the opening line is preserved relative to it, so intentional uniform leading whitespace survives:
+
+```cm
+int main() {
+    const string items = `items:
+      - a
+      - b`;
+    // → "items:\n  - a\n  - b" (the 4-space code indent is stripped; the intended 2 spaces remain)
+    return 0;
+}
+```
 
 The formatter (`cm fmt`) never modifies lines inside backticks (leading whitespace is part of the string content).
 

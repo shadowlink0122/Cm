@@ -591,7 +591,7 @@ Token Lexer::scan_raw_string(uint32_t start) {
     }
     if (!is_at_end())
         advance();
-    value = normalize_raw_indent(std::move(value));
+    value = normalize_raw_indent(std::move(value), raw_indent_at(start));
     debug::lex::log(debug::lex::Id::String, "`...`", debug::Level::Trace);
     return Token(TokenKind::StringLiteral, start, pos_, std::move(value));
 }
@@ -843,35 +843,15 @@ bool Lexer::match(char expected) {
     return true;
 }
 
-// raw文字列のインデント正規化
-std::string Lexer::normalize_raw_indent(std::string value) {
+// raw文字列のインデント正規化（dedent）。
+// リテラル開始行のインデント幅を各継続行から剥がす（Pythonのdedentと同様に、コード位置の
+// 字下げが文字列内容へ漏れない）。開始行より深いインデントは相対的に保持され、
+// 開始行より浅い行は行頭空白ぶんだけ剥がす（クランプ）。
+// 従来の「継続行の最小インデント」基準は、全継続行へ一様に付けた意図的な先頭空白まで
+// 剥がしてしまい、コード字下げと文字列内容の字下げを区別できなかった
+std::string Lexer::normalize_raw_indent(std::string value, size_t indent) {
     size_t first_newline = value.find('\n');
-    if (first_newline == std::string::npos) {
-        return value;
-    }
-
-    size_t min_indent = std::string::npos;
-    size_t pos = first_newline + 1;
-    while (pos < value.size()) {
-        size_t line_end = value.find('\n', pos);
-        size_t line_start = pos;
-        size_t idx = line_start;
-        while (idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
-            idx++;
-        }
-        if (idx < value.size() && value[idx] != '\n' && value[idx] != '\r') {
-            size_t indent = idx - line_start;
-            if (min_indent == std::string::npos || indent < min_indent) {
-                min_indent = indent;
-            }
-        }
-        if (line_end == std::string::npos) {
-            break;
-        }
-        pos = line_end + 1;
-    }
-
-    if (min_indent == std::string::npos || min_indent == 0) {
+    if (first_newline == std::string::npos || indent == 0) {
         return value;
     }
 
@@ -879,12 +859,11 @@ std::string Lexer::normalize_raw_indent(std::string value) {
     result.reserve(value.size());
     result.append(value.substr(0, first_newline + 1));
 
-    pos = first_newline + 1;
+    size_t pos = first_newline + 1;
     while (pos < value.size()) {
         size_t line_end = value.find('\n', pos);
-        size_t line_start = pos;
-        size_t idx = line_start;
-        size_t drop = min_indent;
+        size_t idx = pos;
+        size_t drop = indent;
         while (drop > 0 && idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
             idx++;
             drop--;
@@ -897,8 +876,21 @@ std::string Lexer::normalize_raw_indent(std::string value) {
         result.push_back('\n');
         pos = line_end + 1;
     }
-
     return result;
+}
+
+// リテラル開始行のインデント幅（行頭の空白文字数）
+size_t Lexer::raw_indent_at(uint32_t token_start) const {
+    size_t line_start = token_start;
+    while (line_start > 0 && source_[line_start - 1] != '\n') {
+        --line_start;
+    }
+    size_t indent = 0;
+    while (line_start + indent < source_.size() &&
+           (source_[line_start + indent] == ' ' || source_[line_start + indent] == '\t')) {
+        ++indent;
+    }
+    return indent;
 }
 
 }  // namespace cm

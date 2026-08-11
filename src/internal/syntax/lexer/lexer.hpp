@@ -97,7 +97,9 @@ class Lexer {
     static bool is_alnum(char c) { return is_alpha(c) || is_digit(c); }
 
     // raw文字列のインデント正規化
-    std::string normalize_raw_indent(std::string value);
+    std::string normalize_raw_indent(std::string value, size_t indent);
+    // リテラル開始行のインデント幅（行頭の空白文字数）を求める（raw文字列のdedent量）
+    size_t raw_indent_at(uint32_t token_start) const;
 
     std::string_view source_;
     uint32_t pos_;

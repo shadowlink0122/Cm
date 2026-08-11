@@ -1,0 +1,28 @@
+import std::io::println;
+
+// raw文字列のdedent意味論: リテラル開始行のインデント幅を各継続行から剥がす
+// （Pythonのdedentと同様にコード位置の字下げが内容へ漏れない）。
+// 開始行より深いインデントは相対的に保持され、浅い行は行頭空白ぶんだけ剥がす（クランプ）。
+// 旧「継続行の最小インデント」基準では、全継続行へ一様に付けた意図的な先頭空白まで剥がれていた
+
+int main() {
+    const string plain = `line1
+    line2
+    line3`;
+    println(plain);
+    println("---");
+    // 継続行が開始行より2深い → 2スペースの意図的インデントが保持される
+    const string kept = `items:
+      - a
+      - b`;
+    println(kept);
+    println("---");
+    if (true) {
+        // ネスト位置（8字下げ）でも開始行基準で剥がれる
+        const string nested = `x:
+        y
+            z`;
+        println(nested);
+    }
+    return 0;
+}
