@@ -196,6 +196,27 @@ To emit a `${x}`-style placeholder literally, escape the leading `$` with `\$` (
 **Known limitation**: if an interpolated value itself contains `{` or `}`, later placeholders in the same string may be mis-detected (for example, embedding a variable whose content is `{x}` can break the placeholders that follow).
 When embedding values that contain braces, build the string with `+` concatenation instead.
 
+## Raw strings (backticks) and multiline text
+
+Raw strings delimited by backticks `` ` `` do not interpret escape sequences (`\n` is a backslash followed by `n`) and may span multiple lines verbatim. The only exception is embedding the delimiter itself with ``\` ``. Braces `{}` are always literal; only `${expr}` interpolates:
+
+```cm
+int twice(int x) { return x * 2; }
+
+int main() {
+    int v = 21;
+    const string s = `result=${twice(v)}
+        indented line
+    literal braces: {v}  quote: "q"  backslash: \n`;
+    println(s);
+    return 0;
+}
+```
+
+For multiline raw strings, the **minimum indentation of the continuation lines is stripped** (relative indentation is preserved). In the example the common 4 spaces are removed and `indented line` keeps its 4-space relative indent. Indenting the literal to match the surrounding code nesting does not leak into the output.
+
+The formatter (`cm fmt`) never modifies lines inside backticks (leading whitespace is part of the string content).
+
 ## Interpolation on the SV Backend
 
 On the SystemVerilog target, strings are treated as packed vector constants, so `println`-style interpolation is only usable in limited contexts such as simulation `initial` blocks. See the [SV Backend Semantic Guarantees](../compiler/sv/semantics.html) for details.

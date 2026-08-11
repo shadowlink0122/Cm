@@ -92,6 +92,31 @@ std::string strip_for_scan(const std::string& text) {
             i = (i + 1 < n) ? i + 2 : n;
             continue;
         }
+        if (c == '`') {
+            // raw文字列（バッククォート）: 補間 ${...} 内部のみ識別子走査対象として残す
+            ++i;
+            while (i < n && text[i] != '`') {
+                if (text[i] == '\\' && i + 1 < n && text[i + 1] == '`') {
+                    i += 2;
+                    continue;
+                }
+                if (text[i] == '$' && i + 1 < n && text[i + 1] == '{') {
+                    i += 2;
+                    while (i < n && text[i] != '}' && text[i] != '`') {
+                        out += text[i];
+                        ++i;
+                    }
+                    out += ' ';
+                    continue;
+                }
+                ++i;
+            }
+            if (i < n) {
+                ++i;
+            }
+            out += ' ';
+            continue;
+        }
         if (c == '"') {
             ++i;
             bool in_interp = false;
@@ -141,6 +166,172 @@ void collect_identifiers(const std::string& text, std::unordered_set<std::string
          it != std::sregex_iterator(); ++it) {
         out.insert(it->str());
     }
+}
+
+// ==== 識別子のトークン精密改名（module-graph-ast-emission 第2段） ====
+// プライベート改名・エイリアス改名複製で使用する。従来の\b正規表現置換は文字列リテラルの
+// 内容やコメント内の同名語も書き換えて破壊していた（実測: 改名対象ヘルパー名を含む文字列
+// "call hidden_calc ..." の内容が改名される）。strip_for_scanと同じ走査規則で、コメントは
+// 改名対象外・文字列リテラルは補間プレースホルダ{...}内部の識別子のみ改名する
+std::string rename_identifiers(const std::string& text,
+                               const std::vector<std::pair<std::string, std::string>>& renames) {
+    if (renames.empty()) {
+        return text;
+    }
+    std::unordered_map<std::string, const std::string*> map;
+    for (const auto& [from, to] : renames) {
+        map.emplace(from, &to);
+    }
+    auto is_ident_start = [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+    };
+    auto is_ident_char = [&](char c) { return is_ident_start(c) || (c >= '0' && c <= '9'); };
+    std::string out;
+    out.reserve(text.size() + 64);
+    size_t i = 0;
+    const size_t n = text.size();
+    bool in_string = false;
+    bool in_interp = false;
+    // 現在位置の識別子を（必要なら改名して）出力する。識別子でなければfalse
+    auto emit_ident = [&]() -> bool {
+        if (!is_ident_start(text[i])) {
+            return false;
+        }
+        size_t j = i + 1;
+        while (j < n && is_ident_char(text[j])) {
+            ++j;
+        }
+        const std::string name = text.substr(i, j - i);
+        auto it = map.find(name);
+        out += (it != map.end()) ? *it->second : name;
+        i = j;
+        return true;
+    };
+    while (i < n) {
+        const char c = text[i];
+        if (!in_string) {
+            if (c == '/' && i + 1 < n && text[i + 1] == '/') {
+                while (i < n && text[i] != '\n') {
+                    out += text[i];
+                    ++i;
+                }
+                continue;
+            }
+            if (c == '/' && i + 1 < n && text[i + 1] == '*') {
+                out += text[i];
+                out += text[i + 1];
+                i += 2;
+                while (i + 1 < n && !(text[i] == '*' && text[i + 1] == '/')) {
+                    out += text[i];
+                    ++i;
+                }
+                if (i + 1 < n) {
+                    out += text[i];
+                    out += text[i + 1];
+                    i += 2;
+                } else if (i < n) {
+                    out += text[i];
+                    ++i;
+                }
+                continue;
+            }
+            if (c == '"') {
+                in_string = true;
+                in_interp = false;
+                out += c;
+                ++i;
+                continue;
+            }
+            if (c == '`') {
+                // raw文字列（バッククォート）: エスケープは\`のみ・複数行可。
+                // 内容は改名対象外で、補間 ${...} 内部の識別子のみ改名する
+                out += c;
+                ++i;
+                while (i < n && text[i] != '`') {
+                    if (text[i] == '\\' && i + 1 < n && text[i + 1] == '`') {
+                        out += text[i];
+                        out += text[i + 1];
+                        i += 2;
+                        continue;
+                    }
+                    if (text[i] == '$' && i + 1 < n && text[i + 1] == '{') {
+                        out += "${";
+                        i += 2;
+                        while (i < n && text[i] != '}' && text[i] != '`') {
+                            if (emit_ident()) {
+                                continue;
+                            }
+                            out += text[i];
+                            ++i;
+                        }
+                        continue;
+                    }
+                    out += text[i];
+                    ++i;
+                }
+                if (i < n) {
+                    out += text[i];
+                    ++i;
+                }
+                continue;
+            }
+            if (c == '\'') {
+                // charリテラル: 内容（'"'・'{'等）が文字列/補間の状態機械を壊さないよう丸ごと通過させる
+                out += c;
+                ++i;
+                while (i < n && text[i] != '\'') {
+                    if (text[i] == '\\' && i + 1 < n) {
+                        out += text[i];
+                        ++i;
+                    }
+                    out += text[i];
+                    ++i;
+                }
+                if (i < n) {
+                    out += text[i];
+                    ++i;
+                }
+                continue;
+            }
+            if (emit_ident()) {
+                continue;
+            }
+            out += c;
+            ++i;
+            continue;
+        }
+        // 文字列リテラル内
+        if (c == '\\' && i + 1 < n) {
+            out += text[i];
+            out += text[i + 1];
+            i += 2;
+            continue;
+        }
+        if (c == '"') {
+            in_string = false;
+            out += c;
+            ++i;
+            continue;
+        }
+        if (c == '{') {
+            in_interp = true;
+            out += c;
+            ++i;
+            continue;
+        }
+        if (c == '}') {
+            in_interp = false;
+            out += c;
+            ++i;
+            continue;
+        }
+        if (in_interp && emit_ident()) {
+            continue;
+        }
+        out += c;
+        ++i;
+    }
+    return out;
 }
 
 // ==== 包含判定のAST化（module-graph-ast-emission 第1段） ====
@@ -1508,9 +1699,8 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
                 priv_renames.push_back({name, "__cm_priv_" + prefix + "_" +
                                                   std::to_string(priv_index++) + "_" + name});
             }
-            for (const auto& [name, renamed] : priv_renames) {
-                filtered = std::regex_replace(filtered, std::regex("\\b" + name + "\\b"), renamed);
-            }
+            // トークン精密改名（文字列内容・コメントを破壊しない。補間{...}内部は改名対象）
+            filtered = rename_identifiers(filtered, priv_renames);
         }
         append_source(path, filtered);
 
@@ -1523,10 +1713,11 @@ GraphResult build(const std::string& root_file, const std::string& root_source,
             const size_t s = std::min(fit->second.span_start, info.source.size());
             const size_t e = std::min(fit->second.span_end, info.source.size());
             std::string text = info.source.substr(s, e - s);
-            text = std::regex_replace(text, std::regex("\\b" + name + "\\b"), alias);
-            for (const auto& [pname, renamed] : priv_renames) {
-                text = std::regex_replace(text, std::regex("\\b" + pname + "\\b"), renamed);
-            }
+            // 本体名→別名とプライベート改名をトークン精密に適用する
+            std::vector<std::pair<std::string, std::string>> copy_renames;
+            copy_renames.emplace_back(name, alias);
+            copy_renames.insert(copy_renames.end(), priv_renames.begin(), priv_renames.end());
+            text = rename_identifiers(text, copy_renames);
             append_source(path, text);
         }
 

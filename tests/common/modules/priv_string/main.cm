@@ -1,0 +1,11 @@
+import ./util_str;
+import std::io::println;
+
+int main() {
+    println(util_str::use_calc(21));
+    println(util_str::describe());
+    println(util_str::interp_note(5));
+    println(util_str::raw_doc());
+    println(util_str::raw_note(7));
+    return 0;
+}

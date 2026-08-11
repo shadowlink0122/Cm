@@ -1,0 +1,22 @@
+import std::io::println;
+
+// raw文字列の複数行+補間${...}+リテラル波括弧+引用符の組合せ回帰。
+// バッククォート内はエスケープ非解釈（\`のみ例外）・{}は常にリテラル・補間は${...}のみ。
+// 複数行は継続行の最小インデントが剥がされる（相対インデントは保持。レキサのnormalize_raw_indent）。
+// フォーマッタはバッククォート内の行を一切変更しない（行頭空白は文字列内容）
+
+int twice(int x) {
+    return x * 2;
+}
+
+int main() {
+    int v = 21;
+    const string s = `result=${twice(v)}
+        indented line
+    tick=\` end`;
+    println(s);
+    const string t = `a
+b`;
+    println(t);
+    return 0;
+}

@@ -390,7 +390,9 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
         std::string content =
             (content_start != std::string::npos) ? line.substr(content_start) : "";
 
-        // バッククォート文字列内の行はインデント変更しない（相対インデント保持）
+        // バッククォート文字列内の行は一切変更しない（行頭空白も文字列内容の一部。
+        // 従来は内部行を絶対深さで再インデントしており、相対インデントが変わると
+        // レキサの最小インデント正規化後の実行時文字列内容まで変わる実バグだった）
         if (in_backtick) {
             // 閉じバッククォートを含む行かチェック
             bool has_close_backtick = false;
@@ -402,13 +404,8 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
             }
 
             if (has_close_backtick) {
-                // 閉じバッククォート行：開始深さでインデント
-                size_t indent = static_cast<size_t>(backtick_base_depth) * indent_width_;
-                std::string new_line = std::string(indent, ' ') + content;
-                if (new_line != line) {
-                    changes++;
-                }
-                result << new_line;
+                // 閉じバッククォート行も行頭空白は文字列内容のため原文のまま出力する
+                result << line;
                 in_backtick = false;
 
                 // 閉じバッククォート以降の内容を解析（`);等）
@@ -448,13 +445,8 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                 // 閉じ行（`); 等）でasm文は完結する
                 stmt_open = false;
             } else {
-                // バッククォート内の通常行：1段インデント追加
-                size_t indent = static_cast<size_t>(backtick_base_depth + 1) * indent_width_;
-                std::string new_line = std::string(indent, ' ') + content;
-                if (new_line != line) {
-                    changes++;
-                }
-                result << new_line;
+                // バッククォート内の通常行：原文のまま出力する
+                result << line;
             }
             continue;
         }

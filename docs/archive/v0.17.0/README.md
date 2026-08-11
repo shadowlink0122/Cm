@@ -86,6 +86,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 ## modules/ — モジュール・import・可視性・マングリング
 
 - [mangling-collision-detection.md](modules/mangling-collision-detection.md) — マングリング名の衝突検出（実装済み）
+- [module-graph-ast-emission.md](modules/module-graph-ast-emission.md) — モジュールグラフのテキスト手術脱却（包含判定のAST化・改名のトークン精密化）
 - [module-system-structural-imports.md](modules/module-system-structural-imports.md) — モジュールシステムの構造化（テキストインライン展開の廃止）
 - [module-visibility-and-import-dedup.md](modules/module-visibility-and-import-dedup.md) — モジュール可視性の強制と選択importの重複排除
 - [private-field-access-unchecked.md](modules/private-field-access-unchecked.md) — privateフィールドの外部アクセスが無検査（X2）
