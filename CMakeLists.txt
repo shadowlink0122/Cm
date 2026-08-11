@@ -280,7 +280,7 @@ set(CM_I18N_SOURCES
     src/internal/base/messages/messages.cpp
 )
 set(CM_PARSER_SOURCES
-    src/internal/syntax/parser/parser_stmt.cpp
+    src/internal/syntax/parser/stmt.cpp
     src/internal/syntax/parser/expr/binary.cpp
     src/internal/syntax/parser/expr/postfix.cpp
     src/internal/syntax/parser/expr/primary.cpp
@@ -288,8 +288,8 @@ set(CM_PARSER_SOURCES
     src/internal/syntax/parser/module/decl.cpp
     src/internal/syntax/parser/module/attribute.cpp
     src/internal/syntax/parser/module/toplevel.cpp
-    src/internal/syntax/parser/parser_decl.cpp
-    src/internal/syntax/parser/parser_type.cpp
+    src/internal/syntax/parser/decl.cpp
+    src/internal/syntax/parser/type.cpp
 )
 set(CM_HIR_LOWERING_SOURCES
     src/internal/hir/lowering/impl.cpp
@@ -306,7 +306,7 @@ set(CM_HIR_LOWERING_SOURCES
 # MIRコア（lowering + 最適化パス + 解析）
 set(CM_MIR_SOURCES
     src/internal/mir/nodes.cpp
-    src/internal/mir/optimizations/optimization_pipeline.cpp
+    src/internal/mir/optimizations/pipeline.cpp
     src/internal/mir/lowering/context.cpp
     src/internal/mir/lowering/base.cpp
     src/internal/mir/lowering/lowering.cpp
@@ -406,7 +406,7 @@ set(CM_SOURCES
     src/internal/mir/printer.cpp
     # auto_impl (トレイト別自動実装)
     # MIR分割ユーティリティ（モジュール別分離コンパイル用）
-    src/internal/mir/mir_splitter.cpp
+    src/internal/mir/splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)
     src/internal/fmt/formatter.cpp
     src/internal/fmt/formatter/whitespace.cpp
@@ -503,7 +503,10 @@ if(CM_USE_LLVM)
         src/internal/codegen/llvm/optimizations/vectorization/vectorizer.cpp
         src/internal/codegen/llvm/optimizations/loop_unrolling/loop_unroller.cpp
         # LLVM native backend
-        src/internal/codegen/llvm/native/codegen.cpp
+        src/internal/codegen/llvm/native/codegen/driver.cpp
+        src/internal/codegen/llvm/native/codegen/optimize.cpp
+        src/internal/codegen/llvm/native/codegen/emit.cpp
+        src/internal/codegen/llvm/native/codegen/link.cpp
         src/internal/codegen/llvm/native/target.cpp
         src/internal/codegen/llvm/native/loop_detector.cpp
         # JIT backend
@@ -984,7 +987,7 @@ if(BUILD_TESTING)
         # Unit tests - MIRモジュール分割（H14。モジュール名正規化・グローバル所有権・型定義の全配布）
         add_executable(mir_splitter_test
             tests/unit/mir_splitter_test.cpp
-            src/internal/mir/mir_splitter.cpp
+            src/internal/mir/splitter.cpp
             src/internal/mir/nodes.cpp
             ${CM_AST_SOURCES}
         )
@@ -1032,7 +1035,7 @@ if(BUILD_TESTING)
         # add_executable(mir_interpreter_test
         #     tests/regression/mir_interpreter_test.cpp
         #     src/internal/syntax/lexer/token.cpp
-        #     src/internal/syntax/parser/parser_stmt.cpp
+        #     src/internal/syntax/parser/stmt.cpp
         #     src/internal/syntax/parser/expr/*.cpp
         #     src/internal/syntax/parser/module/*.cpp
         # )
