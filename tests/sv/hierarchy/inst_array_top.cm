@@ -1,0 +1,33 @@
+//! platform: sv
+//! test: x=12, y=10, cycles=3 -> total=13
+
+// モジュールインスタンス配列テスト: #[sv::instance_array(N)]で同一サブモジュールをN個並べ、
+// generate-forとして出力する。配列信号は各レーンへ分配され、スカラ信号はブロードキャストされる。
+// レーン0: 12^10=6・レーン1: (12+1)^10=7 → total=6+7=13
+
+import ./pe_xor;
+
+#[input] posedge clk;
+
+struct InstArrayIo {
+    #[input] uint x;
+    #[input] uint y;
+    #[output] uint total = 0;
+};
+
+InstArrayIo io;
+
+uint[2] pa;
+uint[2] pb;
+uint[2] pr;
+
+#[sv::instance_array(2)]
+pe_xor::PeXorIo lanes = pe_xor::PeXorIo { a: pa, b: pb, r: pr };
+
+async void update(posedge clk) {
+    pa[0] = io.x;
+    pa[1] = io.x + 1;
+    pb[0] = io.y;
+    pb[1] = io.y;
+    io.total = pr[0] + pr[1];
+}

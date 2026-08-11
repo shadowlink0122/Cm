@@ -405,12 +405,23 @@ TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
     EXPECT_EQ(sv.find("logic clk", first + 1), std::string::npos) << sv;
 }
 
-// プロセス内ループはwhileループとして再構成され、ループ後のコードが到達可能な位置に出力される
+// プロセス内ループはループとして再構成され、ループ後のコードが到達可能な位置に出力される。
+// 単純カウントループ（var=定数 … var=var±定数）は合成ツールが受理するfor形で出力される
+// （always内whileは合成不能）。カウントパターン外のループは従来どおりwhile形
 TEST_F(SVCodegenTest, WhileLoopReconstruction) {
     const std::string code = load_case("control/while_loop_reconstruction");
     std::string sv = compile_to_sv(code);
-    expect_contains(sv, "while (");
+    expect_contains(sv, "for (");
+    expect_not_contains(sv, "while (");
     // 代入方式（ブロッキング/ノンブロッキング）は文脈依存のため "= total;" で両対応
+    expect_contains(sv, "= total;");
+}
+
+// カウントパターン外（増分が定数でない）のループはwhile形の再構成を維持する
+TEST_F(SVCodegenTest, NonCountedLoopKeepsWhile) {
+    const std::string code = load_case("control/non_counted_while");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "while (");
     expect_contains(sv, "= total;");
 }
 

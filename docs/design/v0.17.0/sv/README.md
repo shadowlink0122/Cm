@@ -43,9 +43,9 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 |------|------|------|
 | module/ポート(in/out/inout)・`#(parameter)`・localparam・名前付きポート接続・階層(export IO struct) | ✅ | |
 | SV `function automatic`（戻り値あり関数） | ✅ | |
-| generate/genvar/for-generate/if-generate | 🔴 | 定数ループ展開が部分代替 → [SV-N4](generate-genvar.md) |
-| パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`（ロードマップA6）・パラメータ依存ループ展開(A5) | 🔴 | → [SV-N4](generate-genvar.md) |
-| モジュールインスタンス配列・位置ベースポート接続 | 🔴 | → [SV-N5](module-instance-arrays.md) |
+| generate/genvar/for-generate | ✅ | パラメータ境界ループのfor形・インスタンス反復のgenerate-for → [SV-N4](../../../archive/v0.17.0/sv/generate-genvar.md)（実装済み。if-generateは見送り記録） |
+| パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`（A6）・パラメータ依存ループ(A5) | ✅ | `logic [WIDTH-1:0] mem [0:DEPTH-1]`と合成可能for出力 → [SV-N4](../../../archive/v0.17.0/sv/generate-genvar.md)（実装済み） |
+| モジュールインスタンス配列 | ✅ | `#[sv::instance_array(N)]`でgenerate-for出力・配列信号分配/スカラブロードキャスト → [SV-N5](../../../archive/v0.17.0/sv/module-instance-arrays.md)（実装済み。位置ベース接続は見送り記録） |
 | SV `task`（自動生成） | ⛔ | 見送りを決定（function automaticで代替・1関数=1プロセス設計を維持） → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ### メモリ・属性・実機I/O
@@ -69,8 +69,8 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | [SV-N1](../../../archive/v0.17.0/sv/native-bit-part-select.md) | native ビット選択・部分選択の出力（`[hi:lo]`/`[+:]`/`[-:]`・部分代入・実装済み） | High | idiom（合成結果は等価だが可読性・ツール互換） |
 | [SV-N2](../../../archive/v0.17.0/sv/reduction-operators.md) | リダクション演算子（組み込み関数＋SV出力・実装済み） | High | 新機能 |
 | [SV-N3](../../../archive/v0.17.0/sv/casez-casex-priority.md) | `casez`とpriority/unique0 case修飾（実装済み） | High | idiom＋新機能 |
-| [SV-N4](generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ展開 | Medium | 新機能（A5/A6） |
-| [SV-N5](module-instance-arrays.md) | モジュールインスタンス配列・位置ベースポート接続 | Medium | 新機能 |
+| [SV-N4](../../../archive/v0.17.0/sv/generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ | Medium | 新機能（実装済み） |
+| [SV-N5](../../../archive/v0.17.0/sv/module-instance-arrays.md) | モジュールインスタンス配列 | Medium | 新機能（実装済み） |
 | [SV-N6](../../../archive/v0.17.0/sv/packed-union.md) | packed union（ビット再解釈） | Low | 新機能（実装済み） |
 | [SV-N7](concurrent-assertions-sva.md) | 並行アサーション（SVA property/sequence） | Medium | 検証機能 |
 | [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) | 小粒ギャップ集（$readmemb・type'(expr)・#[sv::unpacked]は実装、task/$time/final/reg・2-stateは判断記録で完了） | Low | 混在 |

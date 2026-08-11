@@ -1,0 +1,15 @@
+//! platform: sv
+
+// インスタンス配列テスト用のPE（処理要素）サブモジュール（inst_array_top.cmから配列化される）
+
+export struct PeXorIo {
+    #[input] uint a;
+    #[input] uint b;
+    #[output] uint r;
+};
+
+PeXorIo io;
+
+void pe_comb() {
+    io.r = io.a ^ io.b;
+}

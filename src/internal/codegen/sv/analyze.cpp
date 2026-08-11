@@ -168,6 +168,16 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
         }
     }
 
+    // モジュールスコープの配列信号名（非bit要素の配列）: インスタンス配列のポート結線で
+    // 信号が配列ならgenvar添字を付けるための判定に使う（generate-for出力）
+    std::set<std::string> array_signal_names;
+    for (const auto& gv : program.global_vars) {
+        if (gv && gv->type && gv->type->kind == hir::TypeKind::Array && gv->type->element_type &&
+            gv->type->element_type->kind != hir::TypeKind::Bit) {
+            array_signal_names.insert(strip_namespace(gv->name));
+        }
+    }
+
     // グローバル変数からポートと内部シグナルを生成
     bool has_clk = false;
     bool has_rst = false;
@@ -258,6 +268,23 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
             }
             if (extern_st) {
                 if (emitted_var_names.count(var_name) == 0) {
+                    // #[sv::instance_array(N)]: 同一サブモジュールをN個並べるgenerate-for出力（SV-N5）。
+                    // Nはリテラルまたは#[sv::parameter]のパラメータ名
+                    std::string inst_count;
+                    for (const auto& attr : gv->attributes) {
+                        for (const char* prefix :
+                             {"sv::instance_array(", "verilog::instance_array("}) {
+                            if (attr.rfind(prefix, 0) == 0 && attr.back() == ')') {
+                                inst_count =
+                                    attr.substr(strlen(prefix), attr.size() - strlen(prefix) - 1);
+                                // 属性引数の文字列化で付く引用符を除去する（リテラル・識別子とも）
+                                if (inst_count.size() >= 2 && inst_count.front() == '"' &&
+                                    inst_count.back() == '"') {
+                                    inst_count = inst_count.substr(1, inst_count.size() - 2);
+                                }
+                            }
+                        }
+                    }
                     // インスタンス化文を生成。
                     // importされたモジュール内で宣言されたインスタンスは型名が名前空間修飾付き（mod::PLL等）になるため除去する
                     std::string inst;
@@ -336,6 +363,11 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                                 io_instance_fields_.count(sig.substr(0, dot)) != 0) {
                                 sig = sig.substr(dot + 1);
                             }
+                            // インスタンス配列: 結線先が配列信号ならgenvarで各レーンへ分配し、
+                            // スカラ信号はそのまま全レーンへブロードキャストする
+                            if (!inst_count.empty() && array_signal_names.count(sig) > 0) {
+                                sig += "[__gi_" + var_name + "]";
+                            }
                             ports.push_back("." + field.name + "(" + sig + ")");
                         }
                     }
@@ -365,7 +397,27 @@ void SVCodeGen::analyzeMIR(const mir::MirProgram& program) {
                     }
 
                     inst += ";";
-                    default_mod.instance_blocks.push_back(inst);
+                    if (!inst_count.empty()) {
+                        // generate-forで包む（genvar添字は結線側で付与済み）
+                        std::string gi = "__gi_" + var_name;
+                        std::string gen;
+                        gen += "genvar " + gi + ";\n";
+                        gen += "generate\n";
+                        gen += "    for (" + gi + " = 0; " + gi + " < " + inst_count + "; " + gi +
+                               " = " + gi + " + 1) begin : " + var_name + "_gen\n";
+                        {
+                            std::istringstream inst_lines(inst);
+                            std::string line;
+                            while (std::getline(inst_lines, line)) {
+                                gen += "        " + line + "\n";
+                            }
+                        }
+                        gen += "    end\n";
+                        gen += "endgenerate";
+                        default_mod.instance_blocks.push_back(gen);
+                    } else {
+                        default_mod.instance_blocks.push_back(inst);
+                    }
                     emitted_var_names.insert(var_name);
                 }
                 continue;

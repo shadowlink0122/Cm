@@ -2,7 +2,7 @@
 
 **分類:** 新機能（構造的パラメトリック生成）
 **優先度:** Medium
-**ステータス:** 一部実装済み（A5=パラメータ境界ループのfor形出力・A6=パラメータ幅メモリ配列を実装。generate-for/ifは未実装）
+**ステータス:** 実装済み（A5=パラメータ境界ループのfor形出力・A6=パラメータ幅メモリ配列・generate-for=インスタンス反復。generate-ifは見送りを設計判断として記録）
 
 ## 現状（実測: cm 2026-08-08ビルド）
 
@@ -55,3 +55,9 @@
 - **添字**: MIR loweringの固定長/スライス判別が`array_size.has_value()`のみで、記号サイズ配列がスライス扱いになりスライスランタイム呼び出し（cm_slice_get_subslice等＝SVで無意味）へ落ちていた。記号サイズ（size_param_name）はエラボレーション時に確定する静的サイズとして固定長側へ分類するよう、判別サイト6箇所（is_fixed_array_type・多重添字walk・要素内側スライス判定・代入左辺のスライス基点判定）を拡張した。
 - **検証**: `tests/sv/memory/param_width_mem.cm`（書き込み→読み出しのシミュレーション値検証SIM_OK・verilator/yosys通過）。判別変更は全バックエンド共通のMIRだが記号サイズ配列はSV文脈でのみ出現し、interpreter/llvm/jsスイートの回帰なしを確認。
 - 残: generate-for/genvar（モジュールスコープの反復インスタンス・assign生成。SV-N5と連携）・generate-if。
+
+## 実装記録（generate-for＝インスタンス反復・generate-ifの見送り・2026-08-11）
+
+- **generate-for（提案1）**: モジュールスコープの反復生成の主用途であるインスタンス反復を、`#[sv::instance_array(N)]`（[module-instance-arrays.md](../../../archive/v0.17.0/sv/module-instance-arrays.md)）のgenerate-for出力として実装した。assign・信号の反復は、alwaysブロック内のfor文（A5のfor形出力）が合成上同等の展開になるため専用のgenerate出力は設けない。
+- **generate-if（提案2）の見送り**: Cmにはモジュールスコープの条件構文の対応物がなく、パラメータ条件の`if`はalwaysブロック内で記述すれば合成器が静的に除去して同等のハードウェアになる。条件付きインスタンス生成の需要が出た時点で、instance_array同様の属性駆動（例: `#[sv::instance_if(COND)]`）を検討する。
+- これで本文書の全提案（A5・A6・generate-for・generate-if判断）の処置が完了した。

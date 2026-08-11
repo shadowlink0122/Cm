@@ -187,3 +187,33 @@ async void update(posedge clk) {
 
 <!-- nav -->
 ← 前: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - 実機I/O（ピン制約・トライステート・CDC）](board-io.html) →
+
+## モジュールインスタンス配列（#[sv::instance_array]・v0.17.0）
+
+同一サブモジュールをN個並べる（PE配列・並列レーン・多チャンネル）には、インスタンス宣言へ`#[sv::instance_array(N)]`を付けます。generate-forとして出力され、結線先が配列信号なら各レーンへ分配、スカラ信号なら全レーンへブロードキャストされます:
+
+```cm
+import ./pe_xor;
+
+uint[2] pa;
+uint[2] pb;
+uint[2] pr;
+
+#[sv::instance_array(2)]
+pe_xor::PeXorIo lanes = pe_xor::PeXorIo { a: pa, b: pb, r: pr };
+```
+
+```systemverilog
+genvar __gi_lanes;
+generate
+    for (__gi_lanes = 0; __gi_lanes < 2; __gi_lanes = __gi_lanes + 1) begin : lanes_gen
+        pe_xor lanes (
+            .a(pa[__gi_lanes]),
+            .b(pb[__gi_lanes]),
+            .r(pr[__gi_lanes])
+        );
+    end
+endgenerate
+```
+
+Nには`#[sv::parameter]`のパラメータ名も使えます。

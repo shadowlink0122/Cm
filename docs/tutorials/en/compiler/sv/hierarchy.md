@@ -159,3 +159,33 @@ async void update(posedge clk) {
 
 <!-- nav -->
 ← Prev: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) | [Contents](index.html) | Next: [SV Backend - Board I/O (Pin Constraints, Tristate, CDC)](board-io.html) →
+
+## Module instance arrays (#[sv::instance_array], v0.17.0)
+
+To replicate a submodule N times (PE arrays, parallel lanes, multi-channel), annotate the instance declaration with `#[sv::instance_array(N)]`. The instances are emitted as a generate-for; connections to array signals are distributed per lane, and scalar signals are broadcast to all lanes:
+
+```cm
+import ./pe_xor;
+
+uint[2] pa;
+uint[2] pb;
+uint[2] pr;
+
+#[sv::instance_array(2)]
+pe_xor::PeXorIo lanes = pe_xor::PeXorIo { a: pa, b: pb, r: pr };
+```
+
+```systemverilog
+genvar __gi_lanes;
+generate
+    for (__gi_lanes = 0; __gi_lanes < 2; __gi_lanes = __gi_lanes + 1) begin : lanes_gen
+        pe_xor lanes (
+            .a(pa[__gi_lanes]),
+            .b(pb[__gi_lanes]),
+            .r(pr[__gi_lanes])
+        );
+    end
+endgenerate
+```
+
+N can also be a `#[sv::parameter]` name.
