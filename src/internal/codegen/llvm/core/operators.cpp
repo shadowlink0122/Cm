@@ -107,6 +107,14 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
         return t && t->kind == ast::TypeKind::Pointer;
     };
     const bool pointer_compare = is_pointer_type(lhs_type) || is_pointer_type(rhs_type);
+    // 動的スライスの等値は正準ランタイムcm_slice_equalの内容比較にする。
+    // 総称derive合成のEq本体（self.v == other.v・v: T）は生MIR Eqのまま特殊化されるため、
+    // ここでスライス型を見ないとCmSlice*がstrcmpのcatch-allへ落ち、ヘッダをC文字列として
+    // 読む境界外アクセス（環境依存SIGSEGV）になっていた
+    auto is_dyn_slice_type = [](const hir::TypePtr& t) {
+        return t && t->kind == ast::TypeKind::Array && !t->array_size.has_value();
+    };
+    const bool slice_compare = is_dyn_slice_type(lhs_type) && is_dyn_slice_type(rhs_type);
     switch (op) {
         // 算術演算
         case mir::MirBinaryOp::Add: {
@@ -433,6 +441,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
                 rhs->getType()->isPointerTy()) {
                 return builder->CreateICmpEQ(lhs, rhs, "ptr_eq");
             }
+            // 動的スライス同士は内容比較（cm_slice_equal）
+            if (slice_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto sliceEqFunc = module->getOrInsertFunction(
+                    "cm_slice_equal",
+                    llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto eqResult = builder->CreateCall(sliceEqFunc, {lhs, rhs}, "slice_eq");
+                return builder->CreateICmpNE(eqResult, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                             "slice_eq_b");
+            }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             // 残りのptr同士（string/cstringのほか、派生Eqが構造体フィールドを直接Eqに落とすケース等）は既存挙動のstrcmpを維持する（C2）
             if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
@@ -479,6 +497,16 @@ llvm::Value* MIRToLLVM::convertBinaryOp(mir::MirBinaryOp op, llvm::Value* lhs, l
             if (pointer_compare && !string_compare && lhs->getType()->isPointerTy() &&
                 rhs->getType()->isPointerTy()) {
                 return builder->CreateICmpNE(lhs, rhs, "ptr_ne");
+            }
+            // 動的スライス同士は内容比較の否定（cm_slice_equal）
+            if (slice_compare && lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                auto sliceEqFunc = module->getOrInsertFunction(
+                    "cm_slice_equal",
+                    llvm::FunctionType::get(ctx.getI8Type(), {ctx.getPtrType(), ctx.getPtrType()},
+                                            false));
+                auto eqResult = builder->CreateCall(sliceEqFunc, {lhs, rhs}, "slice_eq");
+                return builder->CreateICmpEQ(eqResult, llvm::ConstantInt::get(ctx.getI8Type(), 0),
+                                             "slice_ne_b");
             }
             // 文字列比較 (cm_strcmp: 自前実装、no_std対応)
             // 残りのptr同士は既存挙動のstrcmpを維持する（Eqと同じ理由、C2）

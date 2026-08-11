@@ -54,6 +54,38 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
             }
         }
 
+        // ジェネリック構造体のリテラル: フィールド型の型パラメータをリテラルの具象型引数で置換する。
+        // 置換しないとフィールド T v（T=int[]）がスライスフィールドと判定されず、固定配列blobが
+        // 生格納されて不正なCmSlice*になり、内容比較等の参照でSIGSEGVしていた
+        if (field_type && struct_def && !struct_def->generic_params.empty() &&
+            struct_type->type_args.size() == struct_def->generic_params.size()) {
+            std::function<hir::TypePtr(const hir::TypePtr&)> subst_param =
+                [&](const hir::TypePtr& t) -> hir::TypePtr {
+                if (!t) {
+                    return t;
+                }
+                if (t->type_args.empty()) {
+                    for (size_t gi = 0; gi < struct_def->generic_params.size(); ++gi) {
+                        if (t->name == struct_def->generic_params[gi].name) {
+                            return struct_type->type_args[gi];
+                        }
+                    }
+                }
+                if (t->element_type || !t->type_args.empty()) {
+                    auto c = std::make_shared<hir::Type>(*t);
+                    if (t->element_type) {
+                        c->element_type = subst_param(t->element_type);
+                    }
+                    for (auto& a : c->type_args) {
+                        a = subst_param(a);
+                    }
+                    return c;
+                }
+                return t;
+            };
+            field_type = subst_param(field_type);
+        }
+
         // スライスフィールドへの配列リテラル代入をチェック
         bool is_slice_field = field_type && field_type->kind == hir::TypeKind::Array &&
                               !field_type->array_size.has_value();

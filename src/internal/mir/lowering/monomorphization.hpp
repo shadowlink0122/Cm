@@ -120,6 +120,9 @@ class Monomorphization : public MirLoweringBase {
         SpecRequests& needed);
 
     // ジェネリック関数の特殊化を生成
+    // 特殊化後の等値比較の正準化（ユニオン/動的スライスの生Eq/Neの書き換え。実装はmono/specialize.cpp）
+    void canonicalize_specialized_equality(MirFunction& func);
+
     void generate_generic_specializations(
         MirProgram& program,
         const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,

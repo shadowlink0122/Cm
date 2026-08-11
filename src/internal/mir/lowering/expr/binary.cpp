@@ -39,6 +39,8 @@ void cm_flatten_string_concat(const hir::HirExpr& e, std::vector<const hir::HirE
     out.push_back(&e);
 }
 
+}  // namespace
+
 // ユニオンの等値比較を「タグ一致＋アクティブ変種のペイロード比較」のCFGへ脱糖する。
 // 従来は生表現のMIR Eqへ落ち、native/jitはタグのみ比較（1==2がtrue）、jsはオブジェクト参照比較（1==1がfalse）と全バックエンドで誤値だった。
 // 既存のis（Cast check_only=タグ比較）・as（Cast=ペイロード抽出）・型付きEq（string=内容比較等はバックエンドがオペランド型で解決）のみで構築するため、バックエンド個別対応は不要。
@@ -183,8 +185,6 @@ LocalId cm_lower_union_equality(bool is_ne, LocalId lhs, LocalId rhs, const hir:
     }
     return result;
 }
-
-}  // namespace
 
 LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& ctx) {
     // 文字列連結チェーンの平坦化（H9第5段）: a + b + c (+ d ...) をcm_string_concat3/4へ

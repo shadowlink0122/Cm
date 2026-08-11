@@ -2,6 +2,8 @@
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
+#include "internal/mir/lowering/context.hpp"
+#include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
@@ -21,6 +23,113 @@
 namespace cm::mir {
 
 // ジェネリック関数の特殊化を生成
+
+// 特殊化後の等値比較の正準化。総称本体の `a == b` はローワ時に型がT（未確定）で
+// HIRのユニオン/配列脱糖の対象外のため生MIR Eq/Neのまま特殊化される。型確定後のここで
+// ユニオンはタグ+ペイロード比較のCFGへ、動的スライス同士はcm_slice_equalへ書き換える
+void Monomorphization::canonicalize_specialized_equality(MirFunction& func) {
+    for (size_t bi = 0; bi < func.basic_blocks.size(); ++bi) {
+        auto* block = func.basic_blocks[bi].get();
+        if (!block) {
+            continue;
+        }
+        for (size_t si = 0; si < block->statements.size(); ++si) {
+            auto& stmt = block->statements[si];
+            if (!stmt || stmt->kind != MirStatement::Assign) {
+                continue;
+            }
+            auto& ad = std::get<MirStatement::AssignData>(stmt->data);
+            if (!ad.rvalue || ad.rvalue->kind != MirRvalue::BinaryOp ||
+                !ad.place.projections.empty()) {
+                continue;
+            }
+            auto& bd = std::get<MirRvalue::BinaryOpData>(ad.rvalue->data);
+            if (bd.op != MirBinaryOp::Eq && bd.op != MirBinaryOp::Ne) {
+                continue;
+            }
+            auto local_of = [&](const MirOperandPtr& op) -> std::optional<LocalId> {
+                if (!op || (op->kind != MirOperand::Copy && op->kind != MirOperand::Move)) {
+                    return std::nullopt;
+                }
+                const auto& pl = std::get<MirPlace>(op->data);
+                if (!pl.projections.empty() || pl.local >= func.locals.size()) {
+                    return std::nullopt;
+                }
+                return pl.local;
+            };
+            auto ll = local_of(bd.lhs);
+            auto rl = local_of(bd.rhs);
+            if (!ll || !rl) {
+                continue;
+            }
+            hir::TypePtr lt = func.locals[*ll].type;
+            hir::TypePtr rt = func.locals[*rl].type;
+            const bool l_union = lt && lt->kind == hir::TypeKind::Union;
+            const bool r_union = rt && rt->kind == hir::TypeKind::Union;
+            const bool both_dyn_slice = lt && rt && lt->kind == hir::TypeKind::Array &&
+                                        rt->kind == hir::TypeKind::Array &&
+                                        !lt->array_size.has_value() && !rt->array_size.has_value();
+            if (!l_union && !r_union && !both_dyn_slice) {
+                continue;
+            }
+            const bool is_ne = (bd.op == MirBinaryOp::Ne);
+            const LocalId target = ad.place.local;
+            const LocalId lhs_local = *ll;
+            const LocalId rhs_local = *rl;
+
+            // ブロックを比較文で分割し、後続文とターミネータを継続ブロックへ退避する
+            LoweringContext ctx(&func);
+            BlockId cont = ctx.new_block();
+            auto* cont_block = func.get_block(cont);
+            auto* cur = func.basic_blocks[bi].get();  // new_blockで再取得（vector再確保対策）
+            for (size_t mi = si + 1; mi < cur->statements.size(); ++mi) {
+                cont_block->statements.push_back(std::move(cur->statements[mi]));
+            }
+            cur->statements.resize(si);
+            cont_block->terminator = std::move(cur->terminator);
+            ctx.switch_to_block(static_cast<BlockId>(bi));
+
+            LocalId result;
+            if (l_union || r_union) {
+                result = cm_lower_union_equality(is_ne, lhs_local, rhs_local, lt, rt, l_union,
+                                                 r_union, ctx);
+            } else {
+                LocalId eq = ctx.new_temp(hir::make_bool());
+                BlockId success = ctx.new_block();
+                std::vector<MirOperandPtr> args;
+                args.push_back(MirOperand::copy(MirPlace{lhs_local}, lt));
+                args.push_back(MirOperand::copy(MirPlace{rhs_local}, rt));
+                auto call_term = std::make_unique<MirTerminator>();
+                call_term->kind = MirTerminator::Call;
+                call_term->data =
+                    MirTerminator::CallData{MirOperand::function_ref("cm_slice_equal"),
+                                            std::move(args),
+                                            MirPlace{eq},
+                                            success,
+                                            std::nullopt,
+                                            "",
+                                            "",
+                                            false};
+                ctx.set_terminator(std::move(call_term));
+                ctx.switch_to_block(success);
+                if (is_ne) {
+                    LocalId neg = ctx.new_temp(hir::make_bool());
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{neg},
+                        MirRvalue::unary(MirUnaryOp::Not, MirOperand::copy(MirPlace{eq}))));
+                    result = neg;
+                } else {
+                    result = eq;
+                }
+            }
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{target}, MirRvalue::use(MirOperand::copy(MirPlace{result}))));
+            ctx.set_terminator(MirTerminator::goto_block(cont));
+            break;  // このブロックは分割済み。継続ブロックは外側ループが後続indexで走査する
+        }
+    }
+}
+
 void Monomorphization::generate_generic_specializations(
     MirProgram& program,
     const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
@@ -662,6 +771,10 @@ void Monomorphization::generate_generic_specializations(
             }
         }
 
+        // 特殊化後の正準化: 総称本体の生Eq/Neはローワ時に型がT（未確定）でHIRの脱糖対象外のため、
+        // 型確定後のここでユニオン=タグ+ペイロード比較・動的スライス=内容比較（cm_slice_equal）へ書き換える。
+        // 放置すると生MIR Eqがcodegenでタグのみ比較/strcmp扱いになり、無言の誤値・境界外アクセスになる
+        canonicalize_specialized_equality(*specialized);
         program.functions.push_back(std::move(specialized));
 
         // 呼び出し箇所を書き換え

@@ -9,6 +9,13 @@
 
 namespace cm::mir {
 
+// ユニオン等値比較の正準脱糖（タグ一致＋アクティブ変種のペイロード比較のCFG構築）。
+// HIR loweringのbinary Eq/Neと、モノモーフィゼーションの特殊化後正準化（総称derive本体の
+// 生Eqがユニオンへ確定したときの書き換え）で共有する。実装はexpr/binary.cpp
+LocalId cm_lower_union_equality(bool is_ne, LocalId lhs, LocalId rhs, const hir::TypePtr& lt,
+                                const hir::TypePtr& rt, bool l_union, bool r_union,
+                                LoweringContext& ctx);
+
 // ============================================================
 // 式のLowering
 // HIRの各種式をMIRのローカル変数に変換
