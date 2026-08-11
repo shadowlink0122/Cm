@@ -176,6 +176,69 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
             return ast::make_void();
         }
 
+        // 並行アサーション（SVA）組み込み（#[test]テストベンチ専用）:
+        // sv_assert_property(clk, 性質) はSVのassert propertyへ、時相演算子
+        // implies/implies_next/after/rose/fell/stable/past は |->・|=>・##N・$rose等へ写像される
+        if (ident->name == "sv_assert_property") {
+            if (call.args.size() != 2) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name,
+                                                "2 (clock, property)"));
+                return ast::make_void();
+            }
+            for (auto& a : call.args) {
+                infer_type(*a);
+            }
+            return ast::make_void();
+        }
+        if (ident->name == "implies" || ident->name == "implies_next") {
+            if (call.args.size() != 2) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name,
+                                                "2 (antecedent, consequent)"));
+                return ast::make_bool();
+            }
+            for (auto& a : call.args) {
+                infer_type(*a);
+            }
+            return ast::make_bool();
+        }
+        if (ident->name == "after") {
+            if (call.args.size() != 2) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name, "2 (expr, cycles)"));
+                return ast::make_bool();
+            }
+            infer_type(*call.args[0]);
+            auto cyc = infer_type(*call.args[1]);
+            if (!cyc || !cyc->is_integer()) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name,
+                                                "2 (expr, integer cycles)"));
+            }
+            return ast::make_bool();
+        }
+        if (ident->name == "rose" || ident->name == "fell" || ident->name == "stable") {
+            if (call.args.size() != 1) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name, "1 (signal)"));
+                return ast::make_bool();
+            }
+            infer_type(*call.args[0]);
+            return ast::make_bool();
+        }
+        if (ident->name == "past") {
+            if (call.args.size() != 2) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name,
+                                                "2 (signal, cycles)"));
+                return ast::make_error();
+            }
+            auto t0 = infer_type(*call.args[0]);
+            auto cyc = infer_type(*call.args[1]);
+            if (!cyc || !cyc->is_integer()) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcSvaBuiltinArity, ident->name,
+                                                "2 (signal, integer cycles)"));
+            }
+            return t0 ? t0 : ast::make_error();
+        }
+
         // リダクション演算子（SV-N2）: ベクタ全ビットを1ビットへ畳み込む単項演算。
         // SVでは native リダクション演算子（&x / |x / ^x / ~&x / ~|x / ~^x）へ写像し、
         // 非SVバックエンドでは HIR で幅ぶんの算術（マスク比較・パリティ）へ脱糖する。戻り値は bool。

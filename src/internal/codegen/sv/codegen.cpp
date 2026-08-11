@@ -1505,6 +1505,7 @@ void SVCodeGen::compile(const mir::MirProgram& program) {
     // 空のテストベンチを出力しない）
     if (!modules_.empty()) {
         std::string tb_code = generateTestbench(modules_[0]);
+        testbench_code_ = tb_code;
         if (!tb_code.empty()) {
             std::string tb_path = options_.outputFile;
             auto dot = tb_path.rfind('.');

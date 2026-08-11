@@ -456,6 +456,19 @@ TEST_F(SVCodegenTest, MemfileReadmemh) {
     expect_not_contains(sv, "rom[0] = 10;");
 }
 
+// 並行アサーション（SVA）: sv_assert_propertyがモジュールスコープのassert propertyへ巻き上げられ、
+// implies+afterは$pastシフト形（verilator/iverilogが##N結論のimplication未対応のため）で出力される
+TEST_F(SVCodegenTest, SvaAssertProperty) {
+    std::string tb = compile_to_tb("simulation/sva_builtins");
+    expect_contains(tb, "assert property (@(posedge clk) $past(req, 2) |-> ack)");
+    expect_contains(tb, "assert property (@(posedge clk) $rose(req) |-> ack)");
+    expect_contains(tb, "assert property (@(posedge clk) $past(req, 1) |-> $stable(ack))");
+    // 手続きコード（initialブロック）内には出力されない
+    const auto initial_pos = tb.find("initial begin");
+    ASSERT_NE(initial_pos, std::string::npos);
+    EXPECT_EQ(tb.find("assert property", initial_pos), std::string::npos) << tb;
+}
+
 // 初期値なしの #[sv::memfile] 配列（外部hex提供）でも $readmemh が出力される
 TEST_F(SVCodegenTest, MemfileWithoutInitializer) {
     const std::string code = load_case("memory/memfile_without_initializer");

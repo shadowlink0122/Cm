@@ -211,6 +211,31 @@ cm compile --target=sv design.cm -o design.sv  # synthesis (tests removed)
 Custom `-D` defines such as `-D SIM` can still be combined as before.
 
 
+## Concurrent assertions (SVA, v0.17.0)
+
+Immediate assertions can only check values at a single instant. `sv_assert_property` monitors temporal properties — such as "ack must rise two cycles after req" — as SV concurrent assertions (`assert property`). Written inside a `#[test]` function, they are hoisted to the testbench module scope and monitored for the whole simulation:
+
+```cm
+#[test]
+void check_req_ack() {
+    // ack rises 2 cycles after req
+    sv_assert_property(clk, implies(req, after(ack, 2)));
+    // ack in the same cycle as a rising edge of req
+    sv_assert_property(clk, implies(rose(req), ack));
+    req = true;
+    step(4);
+}
+```
+
+```systemverilog
+assert property (@(posedge clk) $past(req, 2) |-> ack) else $fatal(1, "SVA_FAIL");
+assert property (@(posedge clk) $rose(req) |-> ack) else $fatal(1, "SVA_FAIL");
+```
+
+Available temporal operators: `implies(a, b)` (`a |-> b`), `implies_next(a, b)` (next-cycle implication), `after(b, n)` (only as the consequent of implies; n cycles later), and `rose(x)`/`fell(x)`/`stable(x)`/`past(x, n)` (mapped to `$rose` etc.).
+
+> Delayed implications are emitted in the equivalent `$past`-shifted form (`$past(req, 2) |-> ack`) because open-source tools (verilator/iverilog) do not accept implications with `##N` consequents. Icarus Verilog does not support concurrent assertions at all — use verilator to verify testbenches containing SVA.
+
 ---
 
 <!-- nav -->

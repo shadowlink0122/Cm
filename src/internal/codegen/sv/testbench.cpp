@@ -142,6 +142,34 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
     ss << "// 自動生成テストベンチ - Cm compiler\n";
     ss << "`timescale 1ns / 1ps\n\n";
 
+    // 事前パス: #[test]本体の並行アサーション（sv_assert_property）をモジュールスコープへ巻き上げる
+    sva_assertions_.clear();
+    for (const auto* fn : testbench_fns_) {
+        if (!fn) {
+            continue;
+        }
+        for (const auto* st : fn->hir_stmts) {
+            if (!st) {
+                continue;
+            }
+            const auto* es = std::get_if<std::unique_ptr<hir::HirExprStmt>>(&st->kind);
+            if (!es || !*es || !(*es)->expr) {
+                continue;
+            }
+            const auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&(*es)->expr->kind);
+            if (!call || !*call) {
+                continue;
+            }
+            const auto& c = **call;
+            if (c.func_name == "sv_assert_property" && c.args.size() == 2) {
+                std::string clk_sig = emitHirExpr(*c.args[0]);
+                std::string prop = translateSvaExpr(*c.args[1]);
+                sva_assertions_.push_back("assert property (@(posedge " + clk_sig + ") " + prop +
+                                          ") else $fatal(1, \"SVA_FAIL\");");
+            }
+        }
+    }
+
     ss << "module " << mod.name << "_tb;\n\n";
 
     // モジュールパラメータをTB側にlocalparamとして写す（信号宣言の [WIDTH-1:0] などがTB内でも解決できるように）
@@ -173,6 +201,15 @@ std::string SVCodeGen::generateTestbench(const SVModule& mod) {
         ss << "\n";
     }
     ss << "    );\n\n";
+
+    // 並行アサーション（#[test]本体から巻き上げたassert property）
+    if (!sva_assertions_.empty()) {
+        ss << "    // 並行アサーション（SVA）\n";
+        for (const auto& a : sva_assertions_) {
+            ss << "    " << a << "\n";
+        }
+        ss << "\n";
+    }
 
     // クロック生成: "clk" ポート、なければプロセスのクロックとして
     // 使われている入力ポート（pixel_clk 等）を採用する
@@ -374,6 +411,51 @@ void SVCodeGen::validateTestbenchAssignTarget(const hir::HirExpr& lhs) {
 
 // #[test] 関数のHIR文をテストベンチのinitial文へ変換する。
 // 対応: 代入（DUT入力の駆動）/ step(n)（nクロック待機）/ assert(cond, msg)（PASS/FAIL表示・失敗時$fatal）/ println（$display）
+// SVA性質式の翻訳（SV-N7）。時相演算子の組み込み呼び出しをSVA構文へ写像し、
+// それ以外の式は通常のTB式出力（DUT内部信号のdut.階層参照を含む）で埋め込む
+std::string SVCodeGen::translateSvaExpr(const hir::HirExpr& expr) {
+    if (const auto* call = std::get_if<std::unique_ptr<hir::HirCall>>(&expr.kind)) {
+        const auto& c = **call;
+        if (c.func_name == "implies" && c.args.size() == 2) {
+            // implies(a, after(b, n)) は遅延結論形 a |-> ##n b と等価な $past シフト形
+            // $past(a, n) |-> b で出力する（verilator/iverilogとも ##N 結論のimplicationを
+            // 未対応のため、オープンソースツールで検証可能な形を正とする）
+            if (const auto* inner = std::get_if<std::unique_ptr<hir::HirCall>>(&c.args[1]->kind)) {
+                const auto& ic = **inner;
+                if (ic.func_name == "after" && ic.args.size() == 2) {
+                    return "$past(" + translateSvaExpr(*c.args[0]) + ", " +
+                           emitHirExpr(*ic.args[1]) + ") |-> " + translateSvaExpr(*ic.args[0]);
+                }
+            }
+            return translateSvaExpr(*c.args[0]) + " |-> " + translateSvaExpr(*c.args[1]);
+        }
+        if (c.func_name == "implies_next" && c.args.size() == 2) {
+            // a |=> b は a |-> ##1 b の略記のため、同じく $past(a, 1) |-> b で出力する
+            return "$past(" + translateSvaExpr(*c.args[0]) + ", 1) |-> " +
+                   translateSvaExpr(*c.args[1]);
+        }
+        if (c.func_name == "after" && c.args.size() == 2) {
+            // implies の結論以外での after は表現手段がない（##N 単独はツール未対応）
+            throw std::runtime_error(
+                "エラー[SV007]: after(expr, n) は implies(antecedent, after(expr, n)) の"
+                "結論としてのみ使用できます");
+        }
+        if (c.func_name == "rose" && c.args.size() == 1) {
+            return "$rose(" + emitHirExpr(*c.args[0]) + ")";
+        }
+        if (c.func_name == "fell" && c.args.size() == 1) {
+            return "$fell(" + emitHirExpr(*c.args[0]) + ")";
+        }
+        if (c.func_name == "stable" && c.args.size() == 1) {
+            return "$stable(" + emitHirExpr(*c.args[0]) + ")";
+        }
+        if (c.func_name == "past" && c.args.size() == 2) {
+            return "$past(" + emitHirExpr(*c.args[0]) + ", " + emitHirExpr(*c.args[1]) + ")";
+        }
+    }
+    return emitHirExpr(expr);
+}
+
 std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
     const std::string ind = "        ";
 
@@ -428,10 +510,17 @@ std::string SVCodeGen::emitTestbenchStmt(const hir::HirStmt& stmt) {
                 }
                 return ind + "$display(\"" + msg + "\");\n";
             }
+            // 並行アサーション（SVA）: モジュールスコープのassert propertyへ巻き上げる。
+            // 手続きコード内には出力しない（時相的性質はシミュレーション全体で監視される）
+            if (c.func_name == "sv_assert_property" && c.args.size() == 2) {
+                // 事前パスでモジュールスコープへ巻き上げ済みのため、手続きコードには何も出力しない
+                return "";
+            }
             // その他の呼び出しは非対応（静かに握り潰さず明示エラーにする）
             throw std::runtime_error(
                 "エラー[SV007]: #[test] 関数内で非対応の呼び出しです: " + c.func_name +
-                "（使用できるのは step / assert / println と入力ポートへの代入です）");
+                "（使用できるのは step / assert / println / sv_assert_property "
+                "と入力ポートへの代入です）");
         }
 
         // 代入式（HirBinary Assign）: ブロッキング代入でDUT入力を駆動

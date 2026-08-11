@@ -290,6 +290,7 @@ enum class MsgId : int {
     SvSv007UnsupportedExpressionOnThe,
     SvSv007UnsupportedStatementOnThe,
     SvSv008AlwaysFfRequiresEdge,
+    TcSvaBuiltinArity,
     SvSv009PackedUnionWidthMismatch,
     SvSv009PackedUnionUnsupportedMember,
     SvSvTargetFunctionAssignsState,

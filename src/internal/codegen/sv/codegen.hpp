@@ -89,10 +89,13 @@ class SVCodeGen : public BufferedCodeGenerator {
 
     // 生成されたSVコードを取得
     std::string getGeneratedCode() const { return generated_code_; }
+    // 生成されたテストベンチコードを取得（#[test]も//! test:も無い場合は空）
+    std::string getTestbenchCode() const { return testbench_code_; }
 
    private:
     SVCodeGenOptions options_;
     std::string generated_code_;
+    std::string testbench_code_;
     // #[sv::parameter] 付きconstの名前（幅の記号出力用）
     std::set<std::string> sv_param_names_;
     // #[test] 関数（テストベンチ生成で使用、宣言順）
@@ -244,6 +247,10 @@ class SVCodeGen : public BufferedCodeGenerator {
     // === テストベンチ自動生成 ===
     std::string generateTestbench(const SVModule& mod);
     std::string emitTestbenchStmt(const hir::HirStmt& stmt);
+    // 並行アサーション（SVA）の性質式をSVA構文へ翻訳する（implies→|->・after→##N等）
+    std::string translateSvaExpr(const hir::HirExpr& expr);
+    // #[test]本体から巻き上げた並行アサーション（モジュールスコープのassert propertyとして出力）
+    std::vector<std::string> sva_assertions_;
     // #[test] からの代入先を検証（入力ポート以外への代入をエラーにする）
     void validateTestbenchAssignTarget(const hir::HirExpr& lhs);
 

@@ -806,6 +806,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv008AlwaysFfRequiresEdge
     {"error[SV008]: always_ff function '{0}' has no edge parameter (add 'posedge clk' or similar; edge-less sequential logic would silently become combinational)",
      "エラー[SV008]: always_ff関数 '{0}' にエッジパラメータがありません（'posedge clk'等を追加してください。エッジ無し順序回路は黙って組み合わせ回路になります）"},
+    // TcSvaBuiltinArity
+    {"error: '{0}' expects {1} argument(s)",
+     "エラー: '{0}' の引数は {1} です"},
     // SvSv009PackedUnionWidthMismatch
     {"error[SV009]: packed union '{0}' member '{1}' is {2} bits but the union view width is {3} bits; all members of a packed union must have the same bit width",
      "エラー[SV009]: packed union '{0}' のメンバ '{1}' は{2}ビットですが、ユニオンのビュー幅は{3}ビットです。packed unionの全メンバは同一ビット幅である必要があります"},
