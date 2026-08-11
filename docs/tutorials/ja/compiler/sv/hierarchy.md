@@ -168,7 +168,19 @@ async void update(posedge clk) {
 // → for (i = 32'sd0; i < N; i = i + 32'sd1) begin ... end
 ```
 
-> パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は未対応です（ロードマップ A6）。
+パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は`logic [WIDTH-1:0] mem [0:DEPTH-1];`として出力され、添字で読み書きできます（v0.17.0）:
+
+```cm
+#[sv::parameter] const uint WIDTH = 8;
+#[sv::parameter] const uint DEPTH = 4;
+
+bit[WIDTH][DEPTH] mem;
+
+async void update(posedge clk) {
+    mem[waddr] = din;
+    dout = mem[0];
+}
+```
 
 
 ---

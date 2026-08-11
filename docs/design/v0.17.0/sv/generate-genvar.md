@@ -2,7 +2,7 @@
 
 **分類:** 新機能（構造的パラメトリック生成）
 **優先度:** Medium
-**ステータス:** 一部実装済み（A5=パラメータ境界ループのfor形出力を実装。generate-for/if・A6は未実装）
+**ステータス:** 一部実装済み（A5=パラメータ境界ループのfor形出力・A6=パラメータ幅メモリ配列を実装。generate-for/ifは未実装）
 
 ## 現状（実測: cm 2026-08-08ビルド）
 
@@ -46,3 +46,12 @@
 - **適用条件**: ヘッダの残余文が全て単一定義テンポラリ（インライン展開されSV行を出さない）であること（for文は条件を自動再評価するため）。単一ラッチのみ。パターン外のループは従来どおりwhile出力（シミュレーション系ツールは受理する）。
 - **検証**: `tests/sv/control/loop/param_bound.cm`（`#[sv::parameter] const uint N`境界のXOR畳み込み・シミュレーション値検証SIM_OK・yosys synth通過を実測）。既存ループテスト（break/for/while/nested/const_unroll）を含むSVスイート全数PASS。
 - 残: generate-for/genvar（モジュールスコープの反復インスタンス・assign生成。SV-N5と連携）・generate-if・A6（パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`の`logic [WIDTH-1:0] mem [0:DEPTH-1]`出力）。
+
+## 実装記録（A6＝パラメータ幅メモリ配列・2026-08-11）
+
+提案3（パラメータ幅配列）を実装した。`bit[WIDTH][DEPTH]`（WIDTH/DEPTHが`#[sv::parameter]`）が`logic [WIDTH-1:0] mem [0:DEPTH-1];`として出力され、添字読み書きが直接インデックス（`mem[waddr]`）になる。
+
+- **宣言**: SVコード生成のアンパックド次元出力（getArraySuffix）がarray_size前提で記号深度を落としていたため、size_param_name登録済みの場合に`[0:DEPTH-1]`を記号のまま出力する分岐を追加した。
+- **添字**: MIR loweringの固定長/スライス判別が`array_size.has_value()`のみで、記号サイズ配列がスライス扱いになりスライスランタイム呼び出し（cm_slice_get_subslice等＝SVで無意味）へ落ちていた。記号サイズ（size_param_name）はエラボレーション時に確定する静的サイズとして固定長側へ分類するよう、判別サイト6箇所（is_fixed_array_type・多重添字walk・要素内側スライス判定・代入左辺のスライス基点判定）を拡張した。
+- **検証**: `tests/sv/memory/param_width_mem.cm`（書き込み→読み出しのシミュレーション値検証SIM_OK・verilator/yosys通過）。判別変更は全バックエンド共通のMIRだが記号サイズ配列はSV文脈でのみ出現し、interpreter/llvm/jsスイートの回帰なしを確認。
+- 残: generate-for/genvar（モジュールスコープの反復インスタンス・assign生成。SV-N5と連携）・generate-if。

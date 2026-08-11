@@ -282,8 +282,11 @@ LocalId ExprLowering::lower_member(const hir::HirMember& member, LoweringContext
 namespace {
 // 固定長配列かどうか。スライスはdimensionsに0が入るケースがあるためarray_sizeと次元値の両方で判別する
 bool is_fixed_array_type(const cm::hir::TypePtr& t) {
+    // #[sv::parameter]等の記号サイズ（size_param_name）はエラボレーション時に確定する静的サイズであり、
+    // スライスでなく固定長として添字投影する（SVのメモリ配列 bit[WIDTH][DEPTH] が対象）
     return t && t->kind == cm::hir::TypeKind::Array &&
-           (t->array_size.has_value() || (!t->dimensions.empty() && t->dimensions[0] > 0));
+           (t->array_size.has_value() || !t->size_param_name.empty() ||
+            (!t->dimensions.empty() && t->dimensions[0] > 0));
 }
 }  // namespace
 
@@ -335,9 +338,9 @@ bool ExprLowering::lower_place(const hir::HirExpr* expr, LoweringContext& ctx, M
             auto elem = cur->element_type ? ctx.resolve_typedef(cur->element_type) : nullptr;
             const bool is_slice = is_array && !is_fixed_array_type(cur);
             // スライス要素が内側スライスの場合、ヘッダは外側dataバッファへインライン格納されているため生index投影ではなく参照版subsliceで降下する（W2/H10第3段）。これで読み・書き・レシーバ変異のすべてが格納中の実体へ届く
-            const bool elem_is_inline_slice = is_slice && elem &&
-                                              elem->kind == hir::TypeKind::Array &&
-                                              !elem->array_size.has_value();
+            const bool elem_is_inline_slice =
+                is_slice && elem && elem->kind == hir::TypeKind::Array &&
+                !elem->array_size.has_value() && elem->size_param_name.empty();
             // 構造体・ユニオンblob要素は要素ポインタ（cm_slice_get_element_ptr）＋Derefで場所化する（旧get_member_placeと同じ規約）。
             // スライスへの生Index投影の書き込みはwasmバックエンドが未対応で変異が失われるため、blob要素はランタイム降下に統一する
             const bool elem_is_blob =
@@ -521,7 +524,8 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         // 多次元配列またはポインタの場合、インデックス数の深さまで要素型を辿る
         for (size_t i = 0; i < index_locals.size() && current_type; ++i) {
             if (current_type->kind == hir::TypeKind::Array) {
-                is_slice = !current_type->array_size.has_value();
+                is_slice =
+                    !current_type->array_size.has_value() && current_type->size_param_name.empty();
                 if (current_type->element_type) {
                     current_type = current_type->element_type;
                 } else {
@@ -561,7 +565,8 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
             current_type = array_type;
             for (size_t i = 0; i < index_locals.size() && current_type; ++i) {
                 if (current_type->kind == hir::TypeKind::Array) {
-                    is_slice = !current_type->array_size.has_value();
+                    is_slice = !current_type->array_size.has_value() &&
+                               current_type->size_param_name.empty();
                     if (current_type->element_type) {
                         current_type = current_type->element_type;
                     } else {
@@ -615,7 +620,8 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         std::vector<hir::TypePtr> level_types;
         bool all_slice = true;
         for (size_t i = 0; i < index_locals.size(); ++i) {
-            if (!walk || walk->kind != hir::TypeKind::Array || walk->array_size.has_value()) {
+            if (!walk || walk->kind != hir::TypeKind::Array || walk->array_size.has_value() ||
+                !walk->size_param_name.empty()) {
                 all_slice = false;
                 break;
             }
@@ -662,7 +668,8 @@ LocalId ExprLowering::lower_index(const hir::HirIndex& index_expr, LoweringConte
         // 要素型が可変長スライスの場合はインラインヘッダをサブスライスとして取得する。
         // 固定長配列要素はインラインblob格納（Y6）のため、構造体と同じ要素ポインタ+デリファレンスで読む
         const bool elem_is_inner_slice = elem_type && elem_type->kind == hir::TypeKind::Array &&
-                                         !elem_type->array_size.has_value();
+                                         !elem_type->array_size.has_value() &&
+                                         elem_type->size_param_name.empty();
         const bool elem_is_fixed_array = elem_type && elem_type->kind == hir::TypeKind::Array &&
                                          elem_type->array_size.has_value();
 

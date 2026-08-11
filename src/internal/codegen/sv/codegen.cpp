@@ -163,7 +163,10 @@ std::string SVCodeGen::getArraySuffix(const hir::TypePtr& type) const {
     if (!type)
         return "";
     // 通常の配列型（非bit配列）の場合、アンパックドディメンションを生成
-    if (type->kind == hir::TypeKind::Array && type->array_size && *type->array_size > 0) {
+    // （#[sv::parameter]の記号深度はarray_sizeが無くてもsize_param_nameで出力する）
+    if (type->kind == hir::TypeKind::Array &&
+        ((type->array_size && *type->array_size > 0) ||
+         (!type->size_param_name.empty() && sv_param_names_.count(type->size_param_name) > 0))) {
         // bit[N] は packed dimension として mapType で処理済みなのでスキップ
         if (type->element_type && type->element_type->kind == hir::TypeKind::Bit) {
             return "";

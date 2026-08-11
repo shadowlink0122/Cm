@@ -468,7 +468,8 @@ LocalId ExprLowering::lower_binary(const hir::HirBinary& bin, LoweringContext& c
             for (size_t pi = 0; pi < place.projections.size(); ++pi) {
                 const auto& proj = place.projections[pi];
                 bool is_slice_base = walk_type && walk_type->kind == hir::TypeKind::Array &&
-                                     !walk_type->array_size.has_value();
+                                     !walk_type->array_size.has_value() &&
+                                     walk_type->size_param_name.empty();
                 if (proj.kind == ProjectionKind::Index && is_slice_base) {
                     hir::TypePtr elem_type =
                         walk_type->element_type ? walk_type->element_type : hir::make_int();
