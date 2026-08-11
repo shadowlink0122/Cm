@@ -1,5 +1,5 @@
-import ./modules_alias_src/a::{compute};
-import ./modules_alias_src/b::{compute as compute_b};
+import ../modules_alias_src/a::{compute};
+import ../modules_alias_src/b::{compute as compute_b};
 import std::io::println;
 
 // M2回帰: 同名シンボルの衝突はエイリアスで回避でき、両方の実装を呼び分けられることを検証する。

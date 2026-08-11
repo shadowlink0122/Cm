@@ -1,6 +1,6 @@
 import std::io::println;
 // Test namespace access
-import ./selective_import/math;
+import ../selective_import/math;
 
 int main() {
     // 名前空間アクセス形式でテスト

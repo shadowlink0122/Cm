@@ -1,6 +1,6 @@
 import std::io::println;
 // test_hierarchical.cm - Test hierarchical module direct import
-import ./hierarchical/std/io/file::{read_file, write_file};
+import ../hierarchical/std/io/file::{read_file, write_file};
 
 int main() {
     // 直接インポートでファイル関数をテスト

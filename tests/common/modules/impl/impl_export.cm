@@ -1,6 +1,6 @@
 import std::io::println;
 // test_impl_export.cm - モジュール構造体テスト
-import ./impl_export/calculator;
+import ../impl_export/calculator;
 
 int main() {
     calculator::Doubler d;

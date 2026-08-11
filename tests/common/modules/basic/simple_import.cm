@@ -1,7 +1,7 @@
 import std::io::println;
 // test_simple_import.cm - シンプルなインポートテスト
 
-import ./simple_math/math::{add_int, add_double, multiply_int};
+import ../simple_math/math::{add_int, add_double, multiply_int};
 
 int main() {
     // インポートした関数を使用

@@ -1,6 +1,6 @@
 import std::io::println;
 // test_basic_reexport.cm - std::io 再エクスポートテスト
-import ./basic_reexport/std::io::add;
+import ../basic_reexport/std::io::add;
 
 int main() {
     // std.cm が module std; を宣言し、io を再エクスポート

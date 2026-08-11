@@ -2,13 +2,13 @@ import std::io::println;
 // test_import_namespace.cm - 名前空間アクセスの統合テスト
 
 // 1. モジュール全体インポート（名前空間アクセス用）
-import ./selective_import/math;
+import ../selective_import/math;
 
 // 2. エイリアスインポート
-import ./alias_import/very_long_module_name as m;
+import ../alias_import/very_long_module_name as m;
 
 // 3. 選択的インポート（直接呼び出し用）
-import ./nested_namespace/utils::{double_value, triple_value};
+import ../nested_namespace/utils::{double_value, triple_value};
 
 int main() {
     // 1. 名前空間アクセス（module::func形式）

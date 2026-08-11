@@ -1,5 +1,5 @@
 import std::io::println;
-import ./basic_reexport/std::io;
+import ../basic_reexport/std::io;
 
 int main() {
     const int result = io::add(10, 20);

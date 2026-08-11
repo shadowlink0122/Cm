@@ -1,6 +1,6 @@
 import std::io::println;
 // test_nested_namespace.cm - Test utility functions
-import ./nested_namespace/utils::{double_value, triple_value};
+import ../nested_namespace/utils::{double_value, triple_value};
 
 int main() {
     const int x = 5;

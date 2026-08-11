@@ -1,7 +1,7 @@
 import std::io::println;
 // test_selective_import_main.cm - 選択的インポートテスト
 // add と multiply のみをインポート（subtract, divide は使用不可）
-import ./selective_import/math::{add, multiply};
+import ../selective_import/math::{add, multiply};
 
 int main() {
     // インポートした関数は直接呼び出せる（名前空間不要）
