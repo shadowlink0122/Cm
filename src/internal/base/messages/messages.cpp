@@ -168,8 +168,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"=== MIR (before optimization) ===\n",
      "=== MIR (最適化前) ===\n"},
     // CliMirFunctions
-    {"MIR functions: {0}\n\n{1}",
-     "MIR関数数: {0}\n\n{1}"},
+    {"MIR functions: {0}\n\n",
+     "MIR関数数: {0}\n\n"},
     // CliMirOptimizationMs
     {"  MIR optimization: {0}ms\n",
      "  MIR最適化: {0}ms\n"},

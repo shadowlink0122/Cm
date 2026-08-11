@@ -360,6 +360,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/passes/interprocedural/tail_call_elimination.cpp
     src/internal/mir/passes/loop/licm.cpp
     src/internal/mir/passes/loop/const_unroll.cpp
+    src/internal/mir/passes/sv/floatfold.cpp
     src/internal/mir/passes/redundancy/gvn.cpp
     src/internal/mir/passes/core/base.cpp
     src/internal/mir/passes/core/manager.cpp

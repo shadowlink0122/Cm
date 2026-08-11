@@ -22,6 +22,7 @@
 #include "internal/mir/passes/instrumentation/undefined.hpp"
 #include "internal/mir/passes/loop/const_unroll.hpp"
 #include "internal/mir/passes/scalar/folding.hpp"
+#include "internal/mir/passes/sv/floatfold.hpp"
 #include "internal/mir/printer.hpp"
 #include "internal/module/resolver.hpp"
 #include "internal/preprocessor/conditional.hpp"
@@ -461,6 +462,9 @@ int run_build(cli::Options& opts, const char* argv0) {
             // SVターゲット: 定数トリップカウントのループを静的展開する（generate/genvar相当。合成ツールは動的whileを展開できないため）
             if (is_sv) {
                 mir::opt::unroll_constant_loops(mir);
+                // 定数計算可能なfloatチェーン（const uint x = FREQ * 0.02 相当の関数本体版）を整数定数へ畳む。
+                // const宣言では通る式が本体でSV004になる非対称の解消（最適化レベル非依存で常時実行）
+                mir::opt::sv_fold_constant_float_chains(mir);
                 // 合成前の定数畳み込み・恒等式簡約（2*3+4→10、x*1→x 等）。
                 // 文数・CFG形状を変えない書き換えのみで、DCE/CopyProp等の文除去系パスはHWロジックを消すため引き続き実行しない
                 if (opts.optimization_level > 0) {
