@@ -54,3 +54,10 @@ SVバックエンドは`error[SV009]`のような診断コード付き文字列�
 
 総称derive特殊化のSIGSEGV調査（2026-08-11）で、クラッシュがcatch-allに到達せずプロセス死する一方、仮に例外化されていても「internal error (mir)」では原因段の特定ができない構造を確認した。
 ユーザーからのリファクタリング提案募集（tryの範囲を適切にまとめる）を受けて実測・起案した。
+
+## 実装記録（第1段・2026-08-11）
+
+- run_buildの3つのフェーズ包括try（parse/typecheck/lowering）を、単一実装の例外境界ヘルパ`run_protected(stage, fn)`（本体は継続=nullopt/終了=終了コードを返すラムダ）へ集約した。catch-allの重複3箇所が1箇所になり、段階名はヘルパ引数で運ぶ。
+- 従来例外境界を持たなかったバックエンドディスパッチ区画（sanitize検査+emit_jit_run/emit_sv/emit_js/emit_llvm）も`codegen`段として包んだ。従来はcodegen層のthrow（native 13箇所・SV 13箇所等）がmain.cppの最外周まで素通りし「internal error (main)」と報告され段階情報が失われていた。
+- 挙動変更はcodegen段のエラー表記（main→codegen）のみで、正常系・診断系の出力は同一。全バックエンドスイートで確認。
+- 第2段（ユーザー起因系throwのDiagnostic化: target.cpp・module_resolve.cpp・SV系のi18n収容と`.error`テスト整備）と第3段（内部バグ系メッセージへのMIR文脈付与）は未着手の残件。
