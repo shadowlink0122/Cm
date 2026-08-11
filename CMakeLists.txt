@@ -251,7 +251,13 @@ set(CM_AST_SOURCES
 set(CM_TYPECHECK_SOURCES
     src/internal/types/scope.cpp
     src/internal/types/generic_context.cpp
-    src/internal/types/checking/decl.cpp
+    src/internal/types/checking/decl/driver.cpp
+    src/internal/types/checking/decl/namespace.cpp
+    src/internal/types/checking/decl/dispatch.cpp
+    src/internal/types/checking/decl/attributes.cpp
+    src/internal/types/checking/decl/impl.cpp
+    src/internal/types/checking/decl/typedecl.cpp
+    src/internal/types/checking/decl/function.cpp
     src/internal/types/checking/stmt.cpp
     src/internal/types/checking/expr/primary.cpp
     src/internal/types/checking/expr/operator.cpp
