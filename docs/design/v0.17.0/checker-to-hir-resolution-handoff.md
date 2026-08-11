@@ -34,3 +34,11 @@ typed-hir-single-source（archive済み）は「型検査後のHIRは全式が�
 ## 検出経緯
 
 全体複雑度レビュー（2026-08-05）。lower_member 1100行は関数長スキャンの全ソース中最大で、checker再導出が主因と特定した。
+
+## 実装記録（前提整備と逐語複製の解消・2026-08-11）
+
+注釈導入の前提となる周辺整備が他文書の完遂で進み、本文書の具体的複製1件を解消した。
+
+- **Result/Option基底剥ぎの逐語複製を解消**: checker側（strip_spec_suffix）とHIR側（expr_member.cppの`__`分割）が同じ意味論を別実装していた基底名抽出を、typekeyの正準関数`spec_base_name`（$エンコード名対応）への委譲で単一実装に統一した。
+- **前提の充足**: 方針1の注釈ソースとなるresolve_method統一API（[method-resolution-unification.md](../../archive/v0.17.0/type-system/method-resolution-unification.md)）が導入済みになり、「その戻り値Resolutionをそのまま注釈として書く」最小コスト経路が利用可能になった。またHIR側のメソッド呼名構築は型ツリーからの正準構築（[mono-flat-name-elimination.md](../../archive/v0.17.0/type-system/mono-flat-name-elimination.md)の呼び出し名正準化）へ置換済みで、checker/HIRの名前ドメイン乖離の主経路は閉じている。
+- 残: 方針1〜3の本体（MemberExprへの解決注釈・lower_memberの注釈ディスパッチ化・未注釈検出の不変条件）。着手時はresolve_methodのMethodResolutionを注釈型としてそのまま流用する。

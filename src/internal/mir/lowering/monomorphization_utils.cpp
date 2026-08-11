@@ -64,8 +64,15 @@ MirRvaluePtr clone_rvalue(const MirRvaluePtr& rv) {
         }
         case MirRvalue::Cast: {
             auto& cast_data = std::get<MirRvalue::CastData>(rv->data);
-            result->data =
-                MirRvalue::CastData{clone_operand(cast_data.operand), cast_data.target_type};
+            // Castの全フィールドを保存してクローンする（check_only・インターフェースupcast情報）
+            MirRvalue::CastData nd;
+            nd.operand = clone_operand(cast_data.operand);
+            nd.target_type = cast_data.target_type;
+            nd.check_only = cast_data.check_only;
+            nd.iface_concrete = cast_data.iface_concrete;
+            nd.iface_from_pointer = cast_data.iface_from_pointer;
+            nd.iface_boxed = cast_data.iface_boxed;
+            result->data = std::move(nd);
             break;
         }
         case MirRvalue::FormatConvert: {

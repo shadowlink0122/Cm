@@ -243,6 +243,8 @@ set(CM_LEXER_SOURCES
 # AST型ノード（型ヘルパー・型文字列化の実装）
 set(CM_AST_SOURCES
     src/internal/syntax/ast/types.cpp
+    src/internal/syntax/ast/typekey.cpp
+    src/internal/syntax/ast/convkind.cpp
 )
 # メッセージi18nカタログ本文テーブル（i18n::msg/msgf を使うターゲットは必ずリンクする）
 # 型検査（cm本体と回帰テストターゲットで共有。型情報に依存するMIR loweringの検証に必要）
@@ -308,8 +310,6 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp
-    src/internal/syntax/ast/convkind.cpp
-    src/internal/syntax/ast/typekey.cpp
     src/internal/mir/lowering/mono_internal.cpp
     src/internal/mir/lowering/mono_structs.cpp
     src/internal/mir/lowering/monomorphization_utils.cpp

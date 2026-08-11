@@ -172,7 +172,11 @@ MirRvaluePtr MirRvalue::ref(MirPlace place, bool is_mutable) {
 MirRvaluePtr MirRvalue::cast(MirOperandPtr operand, hir::TypePtr target_type, bool check_only) {
     auto rv = std::make_unique<MirRvalue>();
     rv->kind = Cast;
-    rv->data = CastData{std::move(operand), target_type, check_only};
+    CastData data;
+    data.operand = std::move(operand);
+    data.target_type = target_type;
+    data.check_only = check_only;
+    rv->data = std::move(data);
     return rv;
 }
 

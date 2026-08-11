@@ -183,11 +183,9 @@ HirExprPtr HirLowering::lower_member(ast::MemberExpr& mem, TypePtr type) {
             if (enum_base.rfind(kTaggedPrefix, 0) == 0) {
                 enum_base = enum_base.substr(kTaggedPrefix.size());
             }
-            // モノモーフィズド名（Result__int__string等）は基底名へ切り詰める
-            auto dunder = enum_base.find("__");
-            if (dunder != std::string::npos && dunder > 0) {
-                enum_base = enum_base.substr(0, dunder);
-            }
+            // モノモーフィズド名（Result__int__string・Result$2$...等）は正準関数で基底名へ切り詰める
+            // （checker側のstrip_spec_suffixと同じ意味論をtypekeyの共有実装で担い、逐語複製を解消。checker-to-hir-resolution-handoff）
+            enum_base = ast::typekey::spec_base_name(enum_base);
         }
         // enum_defs_はミニパイプライン（補間式）ではprelude宣言が無く空になるため、ビルトイン登録・seedで必ず入るenum_values_のタグキーで判定する（ユーザーが同名structを定義した場合はタグキーが無いので誤脱糖しない）
         const bool is_builtin_sum_type =

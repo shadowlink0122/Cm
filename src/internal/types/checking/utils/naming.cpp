@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "internal/types/naming_rules.hpp"
 #include "internal/types/type_checker.hpp"
 
@@ -306,16 +307,14 @@ std::string TypeChecker::generic_def_method_key(const std::string& base_name) co
 
 // 特殊化サフィックスの除去（Result<int, string>・Result__int__string → Result）
 std::string TypeChecker::strip_spec_suffix(const std::string& name) {
+    // 表示形（Name<...>）を基底へ切ってから、特殊化名（$エンコード/フラット）の基底抽出は
+    // typekeyの正準関数へ委譲する（HIR側の同じ剥ぎと単一実装を共有。checker-to-hir-resolution-handoff）
     std::string base = name;
     auto lt = base.find('<');
     if (lt != std::string::npos) {
         base = base.substr(0, lt);
     }
-    auto us = base.find("__");
-    if (us != std::string::npos && us > 0) {
-        base = base.substr(0, us);
-    }
-    return base;
+    return ast::typekey::spec_base_name(base);
 }
 
 }  // namespace cm
