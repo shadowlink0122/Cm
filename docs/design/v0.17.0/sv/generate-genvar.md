@@ -2,7 +2,7 @@
 
 **分類:** 新機能（構造的パラメトリック生成）
 **優先度:** Medium
-**ステータス:** 未実装（v0.17.0 SVギャップ調査で検出。ロードマップA5/A6に対応）
+**ステータス:** 一部実装済み（A5=パラメータ境界ループのfor形出力を実装。generate-for/if・A6は未実装）
 
 ## 現状（実測: cm 2026-08-08ビルド）
 
@@ -37,3 +37,12 @@
 ## テスト計画
 
 `tests/sv/hierarchy/`・`tests/sv/control/` へ: パラメータNのgenerate-forによるビット並列XOR・N段シフトレジスタ、generate-ifによる条件付きロジック、パラメータ幅BRAM（`bit[WIDTH][DEPTH]`）が正しいSVを出力しiverilogで値検証（複数のパラメータ値でインスタンス化）。既存の定数ループ展開テストは非パラメータ経路として維持。
+
+## 実装記録（A5＝パラメータ境界ループの合成可能化・2026-08-11）
+
+提案4（パラメータ依存ループ）を実装した。方針の「while+パラメータ境界」は合成ツールが受理しない（yosys実測: While loops are only allowed in constant functions）ため、for文出力を採った。
+
+- **for形再構成**: SVコード生成のCFG走査へ事前解析`computeForLoops`を追加した。各自然ループについて「ラッチ末尾の`var = var ± 定数`（増分）」と「ループ外先行ブロック末尾の`var = 定数`（初期値）」の単純カウントパターンを検出し、`for (i = 0; i < N; i = i + 1) begin ... end`として出力する（初期値・増分文は元位置から抑止）。MIRでは値が単一定義テンポラリの多段連鎖（`t1=copy(i); t2=t1+1; i=copy(t2)`）になるため、Use(Copy(温))連鎖を定義rvalueまで辿って照合する。
+- **適用条件**: ヘッダの残余文が全て単一定義テンポラリ（インライン展開されSV行を出さない）であること（for文は条件を自動再評価するため）。単一ラッチのみ。パターン外のループは従来どおりwhile出力（シミュレーション系ツールは受理する）。
+- **検証**: `tests/sv/control/loop/param_bound.cm`（`#[sv::parameter] const uint N`境界のXOR畳み込み・シミュレーション値検証SIM_OK・yosys synth通過を実測）。既存ループテスト（break/for/while/nested/const_unroll）を含むSVスイート全数PASS。
+- 残: generate-for/genvar（モジュールスコープの反復インスタンス・assign生成。SV-N5と連携）・generate-if・A6（パラメータ幅メモリ配列`bit[WIDTH][DEPTH]`の`logic [WIDTH-1:0] mem [0:DEPTH-1]`出力）。

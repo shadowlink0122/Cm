@@ -125,7 +125,22 @@ shifter::ShifterIo sh0 = shifter::ShifterIo { WIDTH: 16, clk: clk, din: data_in,
 // → shifter #(.WIDTH(16)) sh0 (...);
 ```
 
-> Parameter-dependent constant-loop unrolling and parameter-width memories (`bit[WIDTH][DEPTH]`) are not yet supported (roadmap A5/A6).
+Loops bounded by a parameter (`for (uint i = 0; i < N; i = i + 1)` with `N` declared `#[sv::parameter]`) are emitted as synthesizable SV for statements (v0.17.0; while loops are rejected by synthesis tools, so counted loops are reconstructed into for form):
+
+```cm
+#[sv::parameter] const uint N = 4;
+
+async void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < N; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    out = acc;
+}
+// → for (i = 32'sd0; i < N; i = i + 32'sd1) begin ... end
+```
+
+> Parameter-width memories (`bit[WIDTH][DEPTH]`) are not yet supported (roadmap A6).
 
 
 ---

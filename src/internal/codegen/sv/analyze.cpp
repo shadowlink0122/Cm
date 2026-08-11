@@ -1099,6 +1099,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
                 // ループヘッダ情報とテンポラリ情報を関数ごとに1回だけ計算する
                 collectSingleDefTemps(func);
                 current_loop_latches_ = compute_loop_latches(func);
+                computeForLoops(func);
                 std::set<size_t> visited;
                 std::ostringstream body_ss;
                 emitBlockRecursive(func, 0, visited, body_ss);
@@ -1405,6 +1406,7 @@ void SVCodeGen::analyzeFunction(const mir::MirFunction& func, SVModule& mod) {
         // ループヘッダ情報とテンポラリ情報を関数ごとに1回だけ計算する
         collectSingleDefTemps(func);
         current_loop_latches_ = compute_loop_latches(func);
+        computeForLoops(func);
         std::set<size_t> visited;
         emitBlockRecursive(func, 0, visited, raw_ss);
     }

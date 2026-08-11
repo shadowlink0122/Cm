@@ -139,6 +139,18 @@ class SVCodeGen : public BufferedCodeGenerator {
     // 現在出力中の関数のループヘッダ→ラッチ一覧（DominatorTree構築は高コストのため関数ごとに1回だけ計算してキャッシュ）
     std::unordered_map<size_t, std::vector<size_t>> current_loop_latches_;
 
+    // カウントループのfor形再構成（generate/genvar系）。合成ツールはalways内のwhileを
+    // 「定数関数のみ」と拒否するため、初期値・増分が単純パターン（var=定数 … var=var±定数）の
+    // ループをSVのfor文で出力する。パラメータ境界（#[sv::parameter]）のループが合成可能になる
+    struct ForLoopInfo {
+        std::string var;        // ループ変数のSV名
+        std::string init_expr;  // 初期値式
+        std::string step_expr;  // 増分の右辺式（var + 1 等）
+    };
+    std::unordered_map<size_t, ForLoopInfo> for_loops_;  // ヘッダブロックID→for情報
+    std::set<std::pair<size_t, size_t>> suppressed_stmts_;  // for形へ吸収した(ブロックID,文index)
+    void computeForLoops(const mir::MirFunction& func);
+
     // === 型マッピング ===
     // Cm型 → SV型文字列（packed dimension のみ）
     std::string mapType(const hir::TypePtr& type) const;

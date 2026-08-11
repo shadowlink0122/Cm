@@ -153,7 +153,22 @@ shifter::ShifterIo sh0 = shifter::ShifterIo { WIDTH: 16, clk: clk, din: data_in,
 // → shifter #(.WIDTH(16)) sh0 (.clk(clk), ...);
 ```
 
-> パラメータに依存する定数ループ展開や、パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は未対応です（v0.16.0ロードマップ A5/A6）。
+パラメータ境界のループ（`for (uint i = 0; i < N; i = i + 1)`でNが`#[sv::parameter]`）は、合成ツールが受理するSVのfor文として出力されます（v0.17.0。whileは合成不能のためfor形へ再構成されます）:
+
+```cm
+#[sv::parameter] const uint N = 4;
+
+async void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < N; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    out = acc;
+}
+// → for (i = 32'sd0; i < N; i = i + 32'sd1) begin ... end
+```
+
+> パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は未対応です（ロードマップ A6）。
 
 
 ---

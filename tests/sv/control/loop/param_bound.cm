@@ -1,0 +1,21 @@
+//! platform: sv
+//! test: din=15, cycles=2 -> out=10
+
+// パラメータ境界ループのfor形出力テスト（generate/genvar系）:
+// 境界が#[sv::parameter]のループは展開できないため、合成ツールが受理するfor文
+// （for (i = 0; i < N; i = i + 1)）として出力される（whileは合成不能）。
+// N=4既定でdin=15のとき out = 15 ^ (15>>1) ^ (15>>2) ^ (15>>3) = 10
+
+#[sv::parameter] const uint N = 4;
+
+#[input] posedge clk;
+#[input] uint din;
+#[output] uint out = 0;
+
+async void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < N; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    out = acc;
+}

@@ -18,6 +18,289 @@
 
 namespace cm::codegen::sv {
 
+// === カウントループのfor形再構成の事前解析 ===
+// 各自然ループについて「ラッチ末尾の var = var ± 定数（増分）」と「ループ外先行ブロック末尾の
+// var = 定数（初期値）」の単純パターンを検出し、for文として出力できるループを登録する。
+// ヘッダの残余文（条件計算）が全て単一定義テンポラリ（インライン展開されSV行を出さない）で
+// あることを条件とする（for文は条件を自動再評価するため、残余文があると意味が変わる）
+void SVCodeGen::computeForLoops(const mir::MirFunction& func) {
+    for_loops_.clear();
+    suppressed_stmts_.clear();
+    for (const auto& [header, latches] : current_loop_latches_) {
+        if (latches.empty() || header >= func.basic_blocks.size() || !func.basic_blocks[header]) {
+            continue;
+        }
+        // ヘッダの全文が単一定義テンポラリへの代入（=出力行なし）であること
+        bool header_clean = true;
+        for (const auto& stmt : func.basic_blocks[header]->statements) {
+            if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                if (stmt && stmt->kind != mir::MirStatement::Nop &&
+                    stmt->kind != mir::MirStatement::StorageLive &&
+                    stmt->kind != mir::MirStatement::StorageDead) {
+                    header_clean = false;
+                    break;
+                }
+                continue;
+            }
+            const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+            if (!ad.place.projections.empty() || single_def_temps_.count(ad.place.local) == 0) {
+                header_clean = false;
+                break;
+            }
+        }
+        if (!header_clean) {
+            continue;
+        }
+        // ラッチ末尾側から増分文 var = var ± 定数 を探す（単一ラッチのみ対象）
+        if (latches.size() != 1) {
+            continue;
+        }
+        const size_t latch = latches[0];
+        if (latch >= func.basic_blocks.size() || !func.basic_blocks[latch]) {
+            continue;
+        }
+        const auto& latch_stmts = func.basic_blocks[latch]->statements;
+        size_t step_idx = SIZE_MAX;
+        mir::LocalId loop_var = 0;
+        std::string step_rhs;
+        // rvalueが「var ± 定数」のBinaryOpか判定する（増分パターン）。
+        // MIRでは値が単一定義テンポラリの多段連鎖（t1=copy(i); t2=t1+1; i=copy(t2)等）になるため、
+        // Use(Copy(テンポラリ))の連鎖を定義rvalueまで辿って照合する
+        auto find_temp_def = [&](mir::LocalId local) -> const mir::MirRvalue* {
+            for (const auto& def_stmt : latch_stmts) {
+                if (!def_stmt || def_stmt->kind != mir::MirStatement::Assign) {
+                    continue;
+                }
+                const auto& dad = std::get<mir::MirStatement::AssignData>(def_stmt->data);
+                if (dad.place.projections.empty() && dad.place.local == local && dad.rvalue) {
+                    return dad.rvalue.get();
+                }
+            }
+            return nullptr;
+        };
+        // Use(Copy(temp))連鎖を実体のrvalueまで解決する（最大8段）
+        auto resolve_rvalue = [&](const mir::MirRvalue* rv) -> const mir::MirRvalue* {
+            for (int hop = 0; rv && hop < 8; ++hop) {
+                if (rv->kind != mir::MirRvalue::Use) {
+                    return rv;
+                }
+                const auto& ud = std::get<mir::MirRvalue::UseData>(rv->data);
+                if (!ud.operand || ud.operand->kind != mir::MirOperand::Copy) {
+                    return rv;
+                }
+                const auto& tp = std::get<mir::MirPlace>(ud.operand->data);
+                if (!tp.projections.empty() || single_def_temps_.count(tp.local) == 0) {
+                    return rv;
+                }
+                const auto* def = find_temp_def(tp.local);
+                if (!def) {
+                    return rv;
+                }
+                rv = def;
+            }
+            return rv;
+        };
+        // オペランドのローカルをテンポラリ連鎖の根の非テンポラリlocalまで解決する
+        auto resolve_operand_local = [&](const mir::MirOperand& op,
+                                         mir::LocalId& out_local) -> bool {
+            if (op.kind != mir::MirOperand::Copy) {
+                return false;
+            }
+            const auto* place = &std::get<mir::MirPlace>(op.data);
+            for (int hop = 0; hop < 8; ++hop) {
+                if (!place->projections.empty()) {
+                    return false;
+                }
+                if (single_def_temps_.count(place->local) == 0) {
+                    out_local = place->local;
+                    return true;
+                }
+                const auto* def = find_temp_def(place->local);
+                if (!def || def->kind != mir::MirRvalue::Use) {
+                    return false;
+                }
+                const auto& ud = std::get<mir::MirRvalue::UseData>(def->data);
+                if (!ud.operand || ud.operand->kind != mir::MirOperand::Copy) {
+                    return false;
+                }
+                place = &std::get<mir::MirPlace>(ud.operand->data);
+            }
+            return false;
+        };
+        auto match_step = [&](const mir::MirRvalue& rv, mir::LocalId var,
+                              std::string& out_rhs) -> bool {
+            const mir::MirRvalue* target = resolve_rvalue(&rv);
+            if (!target || target->kind != mir::MirRvalue::BinaryOp) {
+                return false;
+            }
+            const auto& bd = std::get<mir::MirRvalue::BinaryOpData>(target->data);
+            if (bd.op != mir::MirBinaryOp::Add && bd.op != mir::MirBinaryOp::Sub) {
+                return false;
+            }
+            if (!bd.lhs || !bd.rhs) {
+                return false;
+            }
+            mir::LocalId lhs_root = 0;
+            if (!resolve_operand_local(*bd.lhs, lhs_root) || lhs_root != var) {
+                return false;
+            }
+            // 増分は定数のみfor形にする（定数がテンポラリ経由=Copy(t); t=Use(定数) の場合も解決する）
+            const mir::MirOperand* rhs_const = nullptr;
+            if (bd.rhs->kind == mir::MirOperand::Constant) {
+                rhs_const = bd.rhs.get();
+            } else if (bd.rhs->kind == mir::MirOperand::Copy) {
+                const auto& rp = std::get<mir::MirPlace>(bd.rhs->data);
+                if (rp.projections.empty() && single_def_temps_.count(rp.local) > 0) {
+                    if (const auto* def = find_temp_def(rp.local)) {
+                        const auto* resolved = resolve_rvalue(def);
+                        if (resolved && resolved->kind == mir::MirRvalue::Use) {
+                            const auto& rud = std::get<mir::MirRvalue::UseData>(resolved->data);
+                            if (rud.operand && rud.operand->kind == mir::MirOperand::Constant) {
+                                rhs_const = rud.operand.get();
+                            }
+                        }
+                    }
+                }
+            }
+            if (!rhs_const) {
+                return false;
+            }
+            std::string rhs_str = emitOperand(*rhs_const, func);
+            mir::MirPlace vp{var};
+            const std::string op_str = (bd.op == mir::MirBinaryOp::Add) ? " + " : " - ";
+            out_rhs = emitPlace(vp, func) + op_str + rhs_str;
+            return true;
+        };
+        for (size_t i = latch_stmts.size(); i-- > 0;) {
+            const auto& stmt = latch_stmts[i];
+            if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                continue;
+            }
+            const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+            if (!ad.place.projections.empty() || !ad.rvalue) {
+                continue;
+            }
+            // 出力行を持つ代入（テンポラリ代入は行を出さない）を末尾から走査し、最後のものを増分候補とする
+            if (single_def_temps_.count(ad.place.local) > 0) {
+                continue;
+            }
+            std::string rhs;
+            if (match_step(*ad.rvalue, ad.place.local, rhs)) {
+                loop_var = ad.place.local;
+                step_idx = i;
+                step_rhs = rhs;
+            }
+            break;
+        }
+        if (step_idx == SIZE_MAX) {
+            continue;
+        }
+        // 初期値: ヘッダへ入るループ外の先行ブロックで、末尾側の var = 定数
+        size_t init_block = SIZE_MAX;
+        size_t init_idx = SIZE_MAX;
+        std::string init_expr;
+        for (size_t b = 0; b < func.basic_blocks.size(); ++b) {
+            if (b == header || !func.basic_blocks[b] || !func.basic_blocks[b]->terminator) {
+                continue;
+            }
+            // ヘッダへの辺を持つか（Goto/SwitchIntの行き先）
+            bool goes_to_header = false;
+            const auto& term = *func.basic_blocks[b]->terminator;
+            if (term.kind == mir::MirTerminator::Goto) {
+                goes_to_header = std::get<mir::MirTerminator::GotoData>(term.data).target == header;
+            } else if (term.kind == mir::MirTerminator::SwitchInt) {
+                const auto& sd = std::get<mir::MirTerminator::SwitchIntData>(term.data);
+                for (const auto& t : sd.targets) {
+                    goes_to_header = goes_to_header || t.second == header;
+                }
+                goes_to_header = goes_to_header || sd.otherwise == header;
+            }
+            if (!goes_to_header) {
+                continue;
+            }
+            // ラッチ（ループ内後方辺）は初期値の供給元ではない
+            if (b == latch || in_natural_loop(func, b, header, latches)) {
+                continue;
+            }
+            const auto& stmts = func.basic_blocks[b]->statements;
+            // ブロック内のUse(Copy(テンポラリ))連鎖を定数まで解決する（初期値もi = copy(t); t = 定数 の形になる）
+            auto resolve_const_in_block = [&](const mir::MirOperand& op) -> const mir::MirOperand* {
+                if (op.kind == mir::MirOperand::Constant) {
+                    return &op;
+                }
+                const mir::MirOperand* cur = &op;
+                for (int hop = 0; hop < 8; ++hop) {
+                    if (cur->kind != mir::MirOperand::Copy) {
+                        return nullptr;
+                    }
+                    const auto& cp = std::get<mir::MirPlace>(cur->data);
+                    if (!cp.projections.empty() || single_def_temps_.count(cp.local) == 0) {
+                        return nullptr;
+                    }
+                    const mir::MirRvalue* def = nullptr;
+                    for (const auto& ds : stmts) {
+                        if (!ds || ds->kind != mir::MirStatement::Assign) {
+                            continue;
+                        }
+                        const auto& dad = std::get<mir::MirStatement::AssignData>(ds->data);
+                        if (dad.place.projections.empty() && dad.place.local == cp.local &&
+                            dad.rvalue) {
+                            def = dad.rvalue.get();
+                            break;
+                        }
+                    }
+                    if (!def || def->kind != mir::MirRvalue::Use) {
+                        return nullptr;
+                    }
+                    const auto& dud = std::get<mir::MirRvalue::UseData>(def->data);
+                    if (!dud.operand) {
+                        return nullptr;
+                    }
+                    if (dud.operand->kind == mir::MirOperand::Constant) {
+                        return dud.operand.get();
+                    }
+                    cur = dud.operand.get();
+                }
+                return nullptr;
+            };
+            for (size_t i = stmts.size(); i-- > 0;) {
+                const auto& stmt = stmts[i];
+                if (!stmt || stmt->kind != mir::MirStatement::Assign) {
+                    continue;
+                }
+                const auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+                if (!ad.place.projections.empty() || ad.place.local != loop_var || !ad.rvalue ||
+                    ad.rvalue->kind != mir::MirRvalue::Use) {
+                    continue;
+                }
+                const auto& ud = std::get<mir::MirRvalue::UseData>(ad.rvalue->data);
+                const auto* cval = ud.operand ? resolve_const_in_block(*ud.operand) : nullptr;
+                if (!cval) {
+                    break;  // 最後の代入が定数でなければfor形にしない
+                }
+                init_block = b;
+                init_idx = i;
+                init_expr = emitOperand(*cval, func);
+                break;
+            }
+            if (init_block != SIZE_MAX) {
+                break;
+            }
+        }
+        if (init_block == SIZE_MAX) {
+            continue;
+        }
+        mir::MirPlace var_place{loop_var};
+        ForLoopInfo info;
+        info.var = emitPlace(var_place, func);
+        info.init_expr = init_expr;
+        info.step_expr = step_rhs;
+        for_loops_[header] = info;
+        suppressed_stmts_.insert({init_block, init_idx});
+        suppressed_stmts_.insert({latch, step_idx});
+    }
+}
+
 // === CFG再帰走査ベースのブロック出力 ===
 void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id,
                                    std::set<size_t>& visited, std::ostringstream& ss,
@@ -39,9 +322,12 @@ void SVCodeGen::emitBlockRecursive(const mir::MirFunction& func, size_t block_id
     visited.insert(block_id);
     const auto& bb = *func.basic_blocks[block_id];
 
-    // ブロック内の文を出力
-    for (const auto& stmt : bb.statements) {
+    // ブロック内の文を出力（for形再構成へ吸収した初期値・増分文は抑止する）
+    for (size_t si = 0; si < bb.statements.size(); ++si) {
+        const auto& stmt = bb.statements[si];
         if (!stmt)
+            continue;
+        if (suppressed_stmts_.count({block_id, si}) > 0)
             continue;
         std::string line = emitStatement(*stmt, func);
         if (!line.empty()) {
@@ -101,11 +387,22 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             size_t exit = true_in_loop ? false_block : true_block;
                             std::string loop_cond = true_in_loop ? cond : "!(" + cond + ")";
 
-                            // ループ脱出（disable）用の名前付きブロックで囲む
+                            // ループ脱出（disable）用の名前付きブロックで囲む。
+                            // 単純カウントループはfor形で出力する（合成ツールはalways内whileを
+                            // 拒否するため。パラメータ境界#[sv::parameter]のループも合成可能になる）
+                            auto for_it = for_loops_.find(current_block);
+                            const bool as_for = for_it != for_loops_.end();
                             std::string loop_name = "__loop" + std::to_string(loop_name_counter_++);
                             ss << indent() << "begin : " << loop_name << "\n";
                             increaseIndent();
-                            ss << indent() << "while (" << loop_cond << ") begin\n";
+                            if (as_for) {
+                                ss << indent() << "for (" << for_it->second.var << " = "
+                                   << for_it->second.init_expr << "; " << loop_cond << "; "
+                                   << for_it->second.var << " = " << for_it->second.step_expr
+                                   << ") begin\n";
+                            } else {
+                                ss << indent() << "while (" << loop_cond << ") begin\n";
+                            }
                             increaseIndent();
                             // ループ本体を出力。ループ脱出（exitへの分岐）を検出できるよう
                             // exitブロックをスタックに積む。ヘッダへの後方エッジはvisited済みのため自然に停止する
@@ -115,7 +412,8 @@ void SVCodeGen::emitTerminator(const mir::MirTerminator& term, const mir::MirFun
                             loop_name_stack_.pop_back();
                             loop_exit_stack_.pop_back();
                             // ヘッダブロックの文（ループ条件の再計算）を本体末尾で再実行する。条件のテンポラリが2箇所で代入されることになり、インライン展開の対象からも自動的に外れる
-                            if (current_block < func.basic_blocks.size() &&
+                            // （for形はfor文が条件を再評価するため再実行しない。for形の条件は全て単一定義テンポラリのインライン展開で構成される）
+                            if (!as_for && current_block < func.basic_blocks.size() &&
                                 func.basic_blocks[current_block]) {
                                 for (const auto& stmt :
                                      func.basic_blocks[current_block]->statements) {
