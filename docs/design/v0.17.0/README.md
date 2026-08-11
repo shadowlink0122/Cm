@@ -180,7 +180,7 @@ SVバックエンドが生成できるSV構文・機能を全面調査し（コ�
 
 - [暗黙変換の統一ドライバ化](../../archive/v0.17.0/type-system/coercion-driver-unification.md) — **完遂・archive移動済み**（coerce_to_expected統一ドライバと11サイト集約・インターフェースupcastのMIR構築物化とバックエンド認識6系統の撤去・受理と挿入のconvkind分類表同表化。HIR注釈駆動化は分類表共有で真因が閉じるため見送りを設計判断として記録）
 - [モノモーフ化のフラット名逆算の完全廃止](../../archive/v0.17.0/type-system/mono-flat-name-elimination.md) — **完遂・archive移動済み**（①呼び出し名の正準化=fn_prefix_from_tree・②codegen型参照の正準キー化=LLVM/JS・③キー産生の$全面化+stale型ツリー正規化・④parse_flat_type_argsとtype_to_mangled_nameの削除。typekeyはsyntax/ast層へ移動し、特殊化の同定は$エンコードキーのみとなった）
-- [メソッド解決の一元化](method-resolution-unification.md) — **第1段（throw診断化・for-inプロトコル検証）とキー正準化実施済み**（generic_def_method_key/strip_spec_suffixの正準関数2種へ、method.cpp/function.cpp/auto_impl.cppのバイト一致必須な組み立て4実装を統一。Q4/Q1/Q5は個別修正済み）。残: resolve_method統一API・ビルトインラダー表駆動化・namespace方式1本化・第3段（High）
+- [メソッド解決の一元化](../../archive/v0.17.0/type-system/method-resolution-unification.md) — **完遂・archive移動済み**（throw診断化・for-inプロトコル検証・キー正準化・resolve_method統一API=infer_member5分岐/for-in/静的呼び出しの同一入口化・演算子受理のresolve_method統合。ビルトインラダー表駆動化とenum正規化遅延は根拠付きで残置を記録）
 - [型検査の解決結果をHIRへ引き渡す](checker-to-hir-resolution-handoff.md) — MemberExprが解決結果を捨てるためlower_member（単一関数1100行・全ソース最大）がcheckerの解決を全再導出。解決注釈の導入で再導出コードを削除する（Medium）
 - [モジュールグラフのテキスト手術脱却](module-graph-ast-emission.md) — **第1段（判定のAST化）実施済み**（参照収集を正規表現テキストスキャンからAST walk（AstRefCollector）へ置換・除外規則は従来と一致・全13スイート一発PASSで判定同値を実証・CM_GRAPH_TEXT_SCANフォールバック残置。テスト計画実施時に発見した補間受理リストの先頭'_'欠落も修正済み）。残: 第2段（出力のAST化）（Medium）
 - 型サイズ照会の一本化 — **実施済み**（[archive移動](../../archive/v0.17.0/optimizer-codegen/layout-size-single-source.md)。実測でsizeof(Pair<char,int>)=16（正8）等の誤値がユーザーへ到達していた。HIRのStruct/Generic分岐へ型引数置換の実レイアウト計算を実装しフィールド数×8と暫定256を削除、MIR見積もりは`__`分割逆算ごとlayout_size委譲サンク化。見積もり実装0件に。sizeof_generic回帰マトリクス追加）

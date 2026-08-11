@@ -117,7 +117,7 @@
 - A系（型文法の複製）: [type-resolution-simplification](../../archive/v0.17.0/architecture/type-resolution-simplification.md) が場所解決・スライス表引き・期待型API化・補間の脱糖を扱ったが、**型文法そのものの呼び出し側複製（is_type_start / sizeof判定 / as-is配列サフィックス / paren・generic-arg の非union再帰）は未統一**。
 - B系（typeof型）: [parenthesized-type-and-typeof-cast](../../archive/v0.17.0/type-system/parenthesized-type-and-typeof-cast.md)（処置済み。`ast::Type` に被演算式を持たせ `resolve_typeof` で解決。残はB2・仮引数型）。
 - C系（期待型伝播）: `infer_type_expecting`/`propagate_literal_expected_type` の**透過ノード（三項・match・ジェネリック置換）への拡張が未完**。
-- E系（HOFディスパッチ）: [method-resolution-unification](method-resolution-unification.md) のビルトインラダー表駆動化と方向性は同じだが、**高階関数の `slice_dispatch.hpp` 移行と要素型ゲートは別作業**。
+- E系（HOFディスパッチ）: [method-resolution-unification](../type-system/method-resolution-unification.md) のビルトインラダー表駆動化と方向性は同じだが、**高階関数の `slice_dispatch.hpp` 移行と要素型ゲートは別作業**。
 - F/G1（変換・整形）: [coercion-driver-unification](../type-system/coercion-driver-unification.md) の受理/挿入同表化に隣接するが、**文脈別警告欠落**と**JS無指定補間の符号処理**は個別対応が必要。
 - G4（間接呼び出し）: 関数ポインタ呼び出し/配列のコード生成は未対応既知項目。
 

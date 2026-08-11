@@ -5,6 +5,7 @@ v0.17.0で処置が完了した設計文書をサブシステム別カテゴリ�
 ## type-system/ — 型システム（型・ジェネリクス・モノモーフ化・型解決）
 
 - [chain-receiver-resolution.md](type-system/chain-receiver-resolution.md) — チェーンレシーバ解決の任意式対応
+- [method-resolution-unification.md](type-system/method-resolution-unification.md) — メソッド解決の一元化（キー正準化・resolve_method統一API・演算子受理の統合）
 - [coercion-driver-unification.md](type-system/coercion-driver-unification.md) — 暗黙変換の統一ドライバ化（coerce_to_expected集約・インターフェースupcastのMIR構築物化・受理と挿入のconvkind同表化）
 - [generic-pointer-param-inference.md](type-system/generic-pointer-param-inference.md) — R3: ジェネリック`T*`引数の型パラメータ束縛失敗（swap等が全経路SIGSEGV）
 - [generic-struct-literal.md](type-system/generic-struct-literal.md) — ジェネリック構造体リテラルの構築不能

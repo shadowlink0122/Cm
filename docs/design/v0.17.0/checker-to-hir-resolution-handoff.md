@@ -25,7 +25,7 @@ typed-hir-single-source（archive済み）は「型検査後のHIRは全式が�
 ## 効果とリスク
 
 - 効果: lower_memberの大幅縮小（再導出分岐の削除）、`__`剥ぎ複製の解消、checker/HIRの解決乖離バグ族の構造的封止。
-- リスク: AST↔checker↔HIRの契約変更でメンバ系テスト全域に触れる。メソッド解決一元化（method-resolution-unification.md）のresolve_method導入後に、その戻り値Resolutionをそのまま注釈として書く順序が最小コストである。
+- リスク: AST↔checker↔HIRの契約変更でメンバ系テスト全域に触れる。メソッド解決一元化（../../archive/v0.17.0/type-system/method-resolution-unification.md）のresolve_method導入後に、その戻り値Resolutionをそのまま注釈として書く順序が最小コストである。
 
 ## テスト計画
 
