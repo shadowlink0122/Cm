@@ -764,6 +764,7 @@ void TypeChecker::check_attribute_list(const std::vector<ast::AttributeNode>& at
         "sv::clock_domain",
         "sv::latch",
         "sv::packed",
+        "sv::packed_union",
         "sv::unpacked",
         "sv::pipeline",
         "sv::share",

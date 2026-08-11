@@ -66,6 +66,36 @@ Pair p = raw as Pair;   // → p = Pair'(raw);
 
 packed structの上位フィールドがMSB側に対応します（`Pair { hi; lo; }` に16'hABCDを入れると hi=0xAB・lo=0xCD）。実行系バックエンドのstructレイアウトとはビット順の解釈が異なるため、ビット再解釈キャストはSV専用の書き方として使ってください。
 
+## packed union（ビット再解釈の複数ビュー・v0.17.0）
+
+`#[sv::packed_union]` を付けたstructは `typedef union packed` として出力され、同一ビット領域を複数のビュー（生ビット・packed structのフィールド分解）で再解釈できます。レジスタマップやプロトコルヘッダのRTL頻出パターンです:
+
+```cm
+struct Fields {
+    bit[8] opcode;
+    bit[8] dst;
+    bit[16] imm;
+}
+
+#[sv::packed_union]
+struct Word {
+    bit[32] raw;      // ビュー1: 生32ビット
+    Fields fields;    // ビュー2: フィールド分解（合計32ビット）
+}
+
+Word w;
+// w.raw = in_word; の後に w.fields.opcode で上位8ビットを読める
+```
+
+```systemverilog
+typedef union packed {
+    logic [31:0] raw;
+    Fields fields;
+} Word;
+```
+
+全メンバのビット幅は一致している必要があり、不一致はコンパイル時エラー（SV009）になります。メンバに使えるのはビットベクタ・整数型・packed structです。ビット再解釈（あるビューへの書き込みを別ビューで読む）はSVターゲット専用の意味論で、実行系バックエンドではフィールドは独立したストレージになります。
+
 ## 列挙型 (FSM)
 
 Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:

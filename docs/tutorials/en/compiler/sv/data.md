@@ -66,6 +66,36 @@ Pair p = raw as Pair;   // → p = Pair'(raw);
 
 The first field of a packed struct maps to the MSB side (`Pair { hi; lo; }` filled with 16'hABCD gives hi=0xAB, lo=0xCD). Execution backends interpret struct layout differently, so treat bit-reinterpretation casts as SV-specific idiom.
 
+## packed union (multi-view bit reinterpretation, v0.17.0)
+
+A struct annotated with `#[sv::packed_union]` is emitted as `typedef union packed`, letting you reinterpret the same bit region through multiple views (raw bits and a packed-struct field breakdown) — a common RTL pattern for register maps and protocol headers:
+
+```cm
+struct Fields {
+    bit[8] opcode;
+    bit[8] dst;
+    bit[16] imm;
+}
+
+#[sv::packed_union]
+struct Word {
+    bit[32] raw;      // view 1: raw 32 bits
+    Fields fields;    // view 2: field breakdown (32 bits total)
+}
+
+Word w;
+// after w.raw = in_word; you can read the top 8 bits via w.fields.opcode
+```
+
+```systemverilog
+typedef union packed {
+    logic [31:0] raw;
+    Fields fields;
+} Word;
+```
+
+All members must have the same bit width; a mismatch is a compile-time error (SV009). Members may be bit vectors, integer types, or packed structs. The bit-reinterpretation semantics (write one view, read another) is SV-target-specific; execution backends treat the fields as independent storage.
+
 ## Enums (FSM)
 
 Cm's `enum` is converted to SV's `typedef enum logic`. The bit width is automatically computed from the **maximum tag value** (explicit tag values are supported):

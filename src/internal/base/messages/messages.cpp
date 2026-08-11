@@ -806,6 +806,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv008AlwaysFfRequiresEdge
     {"error[SV008]: always_ff function '{0}' has no edge parameter (add 'posedge clk' or similar; edge-less sequential logic would silently become combinational)",
      "エラー[SV008]: always_ff関数 '{0}' にエッジパラメータがありません（'posedge clk'等を追加してください。エッジ無し順序回路は黙って組み合わせ回路になります）"},
+    // SvSv009PackedUnionWidthMismatch
+    {"error[SV009]: packed union '{0}' member '{1}' is {2} bits but the union view width is {3} bits; all members of a packed union must have the same bit width",
+     "エラー[SV009]: packed union '{0}' のメンバ '{1}' は{2}ビットですが、ユニオンのビュー幅は{3}ビットです。packed unionの全メンバは同一ビット幅である必要があります"},
+    // SvSv009PackedUnionUnsupportedMember
+    {"error[SV009]: packed union '{0}' member '{1}' has a type whose bit width cannot be determined for synthesis; use bit vectors, integer types, or packed structs",
+     "エラー[SV009]: packed union '{0}' のメンバ '{1}' の型は合成ビット幅を確定できません。ビットベクタ・整数型・packed structを使用してください"},
     // SvSvTargetFunctionAssignsState
     {"warning: SV target: function '{0}' assigns state variable '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n",
      "警告: SVターゲット: 関数 '{0}' 内で代入した状態変数 '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n"},

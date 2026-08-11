@@ -1,0 +1,1 @@
+error[SV009]: packed union 'Word' member 'fields' is 24 bits but the union view width is 32 bits

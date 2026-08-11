@@ -18,7 +18,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 |------|------|------|
 | logic/signed/unsigned・整数幅写像・`bit[N]`・unpacked配列・多次元配列・typedef enum | ✅ | |
 | packed struct | ✅ | 既定packed・`#[sv::unpacked]`でunpacked出力を選択可能（SV-N8で実装） |
-| packed union | 🔴 | → [SV-N6](packed-union.md) |
+| packed union | ✅ | `#[sv::packed_union]`で`typedef union packed`出力・幅一致検査 → [SV-N6](../../../archive/v0.17.0/sv/packed-union.md)（実装済み） |
 | 2-state `bit`型・native `reg`宣言 | ⛔ | 現状維持を決定（logicがregを包含・合成同一） → [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) |
 
 ### 式・ビット操作
@@ -71,7 +71,7 @@ Cmの`--target=sv`（合成可能RTL＋テストベンチ自動生成）が、Sy
 | [SV-N3](../../../archive/v0.17.0/sv/casez-casex-priority.md) | `casez`とpriority/unique0 case修飾（実装済み） | High | idiom＋新機能 |
 | [SV-N4](generate-genvar.md) | generate/genvar・パラメータ幅配列・パラメータ依存ループ展開 | Medium | 新機能（A5/A6） |
 | [SV-N5](module-instance-arrays.md) | モジュールインスタンス配列・位置ベースポート接続 | Medium | 新機能 |
-| [SV-N6](packed-union.md) | packed union（ビット再解釈） | Low | 新機能 |
+| [SV-N6](../../../archive/v0.17.0/sv/packed-union.md) | packed union（ビット再解釈） | Low | 新機能（実装済み） |
 | [SV-N7](concurrent-assertions-sva.md) | 並行アサーション（SVA property/sequence） | Medium | 検証機能 |
 | [SV-N8](../../../archive/v0.17.0/sv/misc-synth-gaps.md) | 小粒ギャップ集（$readmemb・type'(expr)・#[sv::unpacked]は実装、task/$time/final/reg・2-stateは判断記録で完了） | Low | 混在 |
 
