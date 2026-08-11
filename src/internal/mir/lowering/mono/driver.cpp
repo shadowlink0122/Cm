@@ -25,6 +25,8 @@ void Monomorphization::monomorphize(
     const std::unordered_map<std::string, const hir::HirStruct*>& hir_structs) {
     hir_funcs = &hir_functions;
     hir_struct_defs = &hir_structs;
+    // ユニオンtypedefの実体解決用（特殊化キーのtypedef同一視。normalize_spec_arg_treeが参照する）
+    typedef_defs_ = &program.typedef_defs;
 
     // 構造体のモノモーフィゼーション（関数より先に実行、1回のみ）
     monomorphize_structs(program);

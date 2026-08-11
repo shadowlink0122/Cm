@@ -198,13 +198,6 @@ void TypeChecker::validate_derive_instantiation(const ast::StructDecl& st,
                 substituted = resolved;
             }
             std::string reason = derive_field_unsupported_reason(iface_name, substituted);
-            // ユニオン型引数のEqは宣言フィールドのユニオン（HIR脱糖が効く）と異なり、
-            // 特殊化キーのユニオン正準エンコードとtypedef同一視が未整備のため特殊化時は拒否する
-            // （同一ユニオンがtypedef名と表示形で別特殊化になり、表示形は識別子不正・比較はタグのみに退化する）
-            if (reason.empty() && iface_name == "Eq" && substituted &&
-                substituted->kind == ast::TypeKind::Union) {
-                reason = "union type arguments are not supported for derive specialization";
-            }
             if (!reason.empty()) {
                 error(current_span_, i18n::msgf(i18n::MsgId::TcCannotDeriveStructField, iface_name,
                                                 inst_name, field.name, reason));

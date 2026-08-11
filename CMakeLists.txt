@@ -307,6 +307,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/impl.cpp
     src/internal/mir/lowering/mono/scan.cpp
     src/internal/mir/lowering/mono/specialize.cpp
+    src/internal/mir/lowering/mono/canonicalize.cpp
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp

@@ -1,5 +1,6 @@
 #include "builtins.hpp"
 #include "codegen.hpp"
+#include "internal/syntax/ast/typedef.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 #include "runtime.hpp"
 #include "types.hpp"
@@ -132,6 +133,27 @@ const mir::MirStruct* JSCodeGen::findStructDef(const hir::Type& type) const {
         }
     }
     return nullptr;
+}
+
+hir::TypePtr JSCodeGen::resolveUnionAlias(const hir::TypePtr& type) const {
+    if (!type) {
+        return type;
+    }
+    // 既に変種を持つユニオンはそのまま
+    if (!ast::union_variant_types(type).empty()) {
+        return type;
+    }
+    // typedef名（IU等）を実体解決し、連鎖typedefは再帰で辿る。実体がユニオンの場合のみ採用する
+    if (!type->name.empty()) {
+        auto it = typedef_map_.find(type->name);
+        if (it != typedef_map_.end() && it->second && it->second != type) {
+            auto resolved = resolveUnionAlias(it->second);
+            if (resolved && resolved->kind == TypeKind::Union) {
+                return resolved;
+            }
+        }
+    }
+    return type;
 }
 
 bool JSCodeGen::isCssStruct(const std::string& struct_name) const {

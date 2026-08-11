@@ -48,6 +48,9 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
         }
     }
 
+    // typedefマップ（ユニオンtypedef名→実体の解決用。変種が引けない名前のままではタグ計算が失敗する）
+    typedef_map_ = program.typedef_defs;
+
     // インターフェース名を収集
     for (const auto& iface : program.interfaces) {
         if (iface) {

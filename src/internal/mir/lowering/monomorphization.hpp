@@ -59,6 +59,8 @@ class Monomorphization : public MirLoweringBase {
    private:
     const std::unordered_map<std::string, const hir::HirFunction*>* hir_funcs = nullptr;
     const std::unordered_map<std::string, const hir::HirStruct*>* hir_struct_defs = nullptr;
+    // ユニオンtypedefの実体解決用（MirProgram::typedef_defsへの参照。特殊化キーのtypedef同一視）
+    const std::unordered_map<std::string, hir::TypePtr>* typedef_defs_ = nullptr;
 
     // 生成済みの特殊化構造体名を追跡
     std::unordered_set<std::string> generated_struct_specializations;
@@ -119,9 +121,10 @@ class Monomorphization : public MirLoweringBase {
         const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
         SpecRequests& needed);
 
-    // ジェネリック関数の特殊化を生成
-    // 特殊化後の等値比較の正準化（ユニオン/動的スライスの生Eq/Neの書き換え。実装はmono/specialize.cpp）
-    void canonicalize_specialized_equality(MirFunction& func);
+    // 特殊化後正準化パス（実装はmono/canonicalize.cpp）。
+    // 総称本体でTが未確定のためHIR脱糖できなかった生命令を、特殊化で型が確定した後に正準形へ書き換える。
+    // 書き換え規則は登録制（現在はユニオン/動的スライスの生Eq/Neの等値規則）で、新しい正準化は規則表へ追加する
+    void canonicalize_specialized_function(MirFunction& func);
 
     void generate_generic_specializations(
         MirProgram& program,

@@ -187,6 +187,39 @@ TEST(TypeKeyTest, DisplayNameIsHumanReadable) {
     EXPECT_EQ(display_name(std::string("Point")), "Point");
 }
 
+TEST(TypeKeyTest, UnionRoundtripAndTypedefConvergence) {
+    // int | string -> "$U2$3$int6$string"（変種順=タグ順のため並べ替えない）
+    auto make_union = [](std::vector<ast::TypePtr> variants, const std::string& name) {
+        auto t = std::make_shared<ast::Type>(ast::TypeKind::Union);
+        t->type_args = std::move(variants);
+        t->name = name;
+        return t;
+    };
+    auto anon = make_union({ast::make_int(), ast::make_string()}, "int | string");
+    EXPECT_EQ(encode_type_key(anon), "$U2$3$int6$string");
+    expect_roundtrip(anon);
+
+    // typedef名（IU）を持つ同一構造のユニオンは同じキーへ収束する（typedef同一視）
+    auto aliased = make_union({ast::make_int(), ast::make_string()}, "IU");
+    EXPECT_EQ(encode_type_key(aliased), encode_type_key(anon));
+
+    // 変種順が違えば別キー（タグ値の意味が異なる）
+    auto reordered = make_union({ast::make_string(), ast::make_int()}, "");
+    EXPECT_NE(encode_type_key(reordered), encode_type_key(anon));
+
+    // ジェネリック型引数位置のユニオン: Box<int | string>
+    auto boxed = named("Box", {anon});
+    expect_roundtrip(boxed);
+    EXPECT_TRUE(is_encoded_key(encode_type_key(boxed)));
+
+    // arg_key_from_treeも$U規約（typedef名の素通しをしない）
+    EXPECT_EQ(arg_key_from_tree(aliased), "$U2$3$int6$string");
+
+    // 表示名: typedef名があれば優先、無ければ " | " 連結
+    EXPECT_EQ(display_name(aliased), "IU");
+    EXPECT_EQ(display_name(make_union({ast::make_int(), ast::make_string()}, "")), "int | string");
+}
+
 TEST(TypeKeyTest, MalformedKeysReturnNull) {
     EXPECT_EQ(decode_type_key(""), nullptr);
     EXPECT_EQ(decode_type_key("Box$"), nullptr);

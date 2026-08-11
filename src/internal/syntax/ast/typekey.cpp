@@ -2,6 +2,8 @@
 
 #include "typekey.hpp"
 
+#include "typedef.hpp"
+
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -130,6 +132,33 @@ ast::TypePtr decode_whole(std::string_view s) {
                 return ast::make_array(elem, static_cast<uint32_t>(*size));
             return ast::make_array(elem);
         }
+        if (marker == 'U') {
+            // "$U" 変種個数 '$' の後に各変種を「<長さ>'$'<エンコード>」で連結（変種順=タグ順）
+            size_t pos = 2;
+            auto argc = read_number(s, pos);
+            if (!argc || pos >= s.size() || s[pos] != '$')
+                return nullptr;
+            ++pos;
+            std::vector<ast::TypePtr> variants;
+            for (size_t i = 0; i < *argc; ++i) {
+                auto len = read_number(s, pos);
+                if (!len || pos >= s.size() || s[pos] != '$')
+                    return nullptr;
+                ++pos;
+                if (pos + *len > s.size())
+                    return nullptr;
+                auto v = decode_whole(s.substr(pos, *len));
+                if (!v)
+                    return nullptr;
+                variants.push_back(v);
+                pos += *len;
+            }
+            if (pos != s.size())
+                return nullptr;
+            auto t = std::make_shared<ast::Type>(ast::TypeKind::Union);
+            t->type_args = std::move(variants);
+            return t;
+        }
         return nullptr;
     }
 
@@ -194,6 +223,20 @@ std::string encode_type_key(const ast::TypePtr& type) {
             return "$A" + size_str + "$" +
                    (type->element_type ? encode_type_key(type->element_type) : "void");
         }
+        case ast::TypeKind::Union: {
+            // 変種構造でエンコードする（typedef名・表示名によらず同一ユニオンは単一キーへ収束）。
+            // 変種はtype_args形式とUnionType::variants形式の両対応（union_variant_types）。変種未解決は名前ベースへフォールバック
+            auto variants = ast::union_variant_types(type);
+            if (!variants.empty()) {
+                std::string out = "$U" + std::to_string(variants.size()) + "$";
+                for (const auto& v : variants) {
+                    std::string enc = v ? encode_type_key(v) : "void";
+                    out += std::to_string(enc.size()) + "$" + enc;
+                }
+                return out;
+            }
+            break;
+        }
         default:
             break;
     }
@@ -245,6 +288,12 @@ std::string arg_key_from_tree(const ast::TypePtr& arg) {
             std::string size_str = arg->array_size ? std::to_string(*arg->array_size) : "";
             return "$A" + size_str + "$" + arg_key_from_tree(arg->element_type);
         }
+        case ast::TypeKind::Union:
+            // ユニオン型引数は変種構造の$Uキー（typedef名と表示名の分裂を防ぐ）。変種未解決は名前へフォールバック
+            if (!ast::union_variant_types(arg).empty()) {
+                return encode_type_key(arg);
+            }
+            break;
         default:
             break;
     }
@@ -353,6 +402,23 @@ std::string display_name(const ast::TypePtr& type) {
         case ast::TypeKind::Array: {
             std::string size_str = type->array_size ? std::to_string(*type->array_size) : "";
             return display_name(type->element_type) + "[" + size_str + "]";
+        }
+        case ast::TypeKind::Union: {
+            // 変種を " | " で連結（typedef名があればそちらを優先して可読にする）
+            if (!type->name.empty() && type->name.find('|') == std::string::npos) {
+                return type->name;
+            }
+            auto variants = ast::union_variant_types(type);
+            if (!variants.empty()) {
+                std::string out;
+                for (size_t i = 0; i < variants.size(); ++i) {
+                    if (i > 0)
+                        out += " | ";
+                    out += display_name(variants[i]);
+                }
+                return out;
+            }
+            break;
         }
         default:
             break;

@@ -204,6 +204,13 @@ class JSCodeGen {
     // 構造体型からMirStruct定義を解決する（名前直引き→ジェネリックは$正準キーで再検索）
     const mir::MirStruct* findStructDef(const hir::Type& type) const;
 
+    // ユニオンtypedef名（IU等）を実体のユニオン型へ解決する（変種を引けない名前のままではタグ計算が-1になる）。
+    // 既に変種を持つ型・typedefでない型はそのまま返す
+    hir::TypePtr resolveUnionAlias(const hir::TypePtr& type) const;
+
+    // typedef定義（MirProgram::typedef_defsのコピー。resolveUnionAliasが参照する）
+    std::unordered_map<std::string, hir::TypePtr> typedef_map_;
+
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;
 

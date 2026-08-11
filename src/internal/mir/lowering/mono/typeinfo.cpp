@@ -5,6 +5,7 @@
 #include "internal/mir/lowering/mono_internal.hpp"
 #include "internal/mir/lowering/monomorphization.hpp"
 #include "internal/mir/lowering/monomorphization_utils.hpp"
+#include "internal/syntax/ast/typedef.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 
 #include <map>
@@ -24,8 +25,10 @@ bool Monomorphization::is_interface_type(const std::string& type_name) const {
     return interface_names.count(type_name) > 0;
 }
 
-// 型引数1個分のシンボルキーを生成（既存の__フラット規約を維持する）
-std::string Monomorphization::arg_symbol_key(const hir::TypePtr& arg) const {
+// 型引数1個分のシンボルキーを生成（既存の__フラット規約を維持する）。
+// 入口で引数ツリーを正準化する（ユニオンtypedefの実体解決を含む。キー産生の全サイトがここで収束する）
+std::string Monomorphization::arg_symbol_key(const hir::TypePtr& raw_arg) const {
+    hir::TypePtr arg = normalize_spec_arg_tree(raw_arg);
     if (!arg)
         return "void";
     switch (arg->kind) {
@@ -38,6 +41,12 @@ std::string Monomorphization::arg_symbol_key(const hir::TypePtr& arg) const {
             std::string size_str = arg->array_size ? std::to_string(*arg->array_size) : "";
             return "$A" + size_str + "$" + arg_symbol_key(arg->element_type);
         }
+        case hir::TypeKind::Union:
+            // ユニオンは変種構造の$Uキー（typekey正準実装へ委譲。変種はtype_args/UnionType::variants両対応）。
+            // typedef名や表示形"int | string"を名前ベースでキー化すると同一ユニオンが別特殊化へ分裂する
+            if (!ast::union_variant_types(arg).empty())
+                return ast::typekey::encode_type_key(arg);
+            break;
         default:
             break;
     }
@@ -76,6 +85,22 @@ std::string Monomorphization::arg_symbol_key(const hir::TypePtr& arg) const {
 hir::TypePtr Monomorphization::normalize_spec_arg_tree(const hir::TypePtr& t) const {
     if (!t)
         return t;
+    // ユニオンtypedef名のリーフ（name="IU"・type_args空）は実体のユニオン構造へ解決する（typedef同一視）。
+    // 解決しないと同一ユニオンがtypedef名と表示形で別の特殊化キーへ分裂する。ユニオン以外のtypedefは既存経路に任せる
+    if ((t->kind == hir::TypeKind::Struct || t->kind == hir::TypeKind::TypeAlias) &&
+        t->type_args.empty() && typedef_defs_ && !t->name.empty()) {
+        auto td = typedef_defs_->find(t->name);
+        if (td != typedef_defs_->end() && td->second &&
+            (td->second->kind == hir::TypeKind::Union ||
+             td->second->kind == hir::TypeKind::Struct ||
+             td->second->kind == hir::TypeKind::TypeAlias)) {
+            // 連鎖typedef（typedef A = B; typedef B = int | string）も再帰で解決し、最終実体がユニオンの場合のみ採用する
+            auto resolved = normalize_spec_arg_tree(td->second);
+            if (resolved && resolved->kind == hir::TypeKind::Union) {
+                return resolved;
+            }
+        }
+    }
     if ((t->kind == hir::TypeKind::Struct || t->kind == hir::TypeKind::TypeAlias) &&
         t->type_args.empty() &&
         (t->name.find("__") != std::string::npos || ast::typekey::is_encoded_key(t->name)) &&
@@ -255,6 +280,9 @@ int64_t Monomorphization::calculate_specialized_type_align(const hir::TypePtr& t
         }
         case hir::TypeKind::Array:
             return calculate_specialized_type_align(type->element_type);
+        case hir::TypeKind::Union:
+            // tagged union {i32 tag, [N x i8]} のアライメントは4（layout_alignと同一基準）
+            return 4;
         default:
             return 8;
     }
@@ -315,6 +343,20 @@ int64_t Monomorphization::calculate_specialized_type_size(const hir::TypePtr& ty
                        type->array_size.value();
             }
             return 8;
+        case hir::TypeKind::Union: {
+            // tagged union {i32 tag, [N x i8] payload} のallocサイズ（LoweringContext::layout_sizeと同一基準）。
+            // ペイロード = 最大バリアントサイズ（最低8バイト）。変種はtype_args/UnionType::variants両対応
+            int64_t payload = 8;
+            auto variants = ast::union_variant_types(type);
+            if (!variants.empty()) {
+                payload = 0;
+                for (const auto& variant : variants) {
+                    payload = std::max(payload, calculate_specialized_type_size(variant));
+                }
+                payload = std::max<int64_t>(payload, 8);
+            }
+            return align_to(4 + payload, 4);
+        }
         default:
             return 8;
     }

@@ -105,12 +105,12 @@ LocalId cm_lower_union_equality(bool is_ne, LocalId lhs, LocalId rhs, const hir:
     };
 
     if (l_union && r_union) {
-        const auto* ut = static_cast<const ast::UnionType*>(lt.get());
-        for (const auto& variant : ut->variants) {
-            if (variant.fields.empty() || !variant.fields[0]) {
+        // 変種はtype_args形式（$Uデコード産）とUnionType::variants形式の両対応（union_variant_types）。
+        // UnionTypeへのstatic_castはtype_args形式の素のast::Typeでvariants読みが不正アクセスになる
+        for (const auto& vt : ast::union_variant_types(lt)) {
+            if (!vt) {
                 continue;
             }
-            const hir::TypePtr& vt = variant.fields[0];
             BlockId chk_rhs = ctx.new_block();
             BlockId next_variant = ctx.new_block();
             LocalId t1 = emit_is(lhs, vt);
@@ -149,13 +149,11 @@ LocalId cm_lower_union_equality(bool is_ne, LocalId lhs, LocalId rhs, const hir:
         LocalId sv = l_union ? rhs : lhs;
         const hir::TypePtr& union_t = l_union ? lt : rt;
         const hir::TypePtr& scalar_t = l_union ? rt : lt;
-        const auto* ut = static_cast<const ast::UnionType*>(union_t.get());
         hir::TypePtr vt = nullptr;
         const std::string scalar_key = ast::type_to_string(*scalar_t);
-        for (const auto& variant : ut->variants) {
-            if (!variant.fields.empty() && variant.fields[0] &&
-                ast::type_to_string(*variant.fields[0]) == scalar_key) {
-                vt = variant.fields[0];
+        for (const auto& variant : ast::union_variant_types(union_t)) {
+            if (variant && ast::type_to_string(*variant) == scalar_key) {
+                vt = variant;
                 break;
             }
         }

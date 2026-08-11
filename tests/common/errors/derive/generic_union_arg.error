@@ -1,1 +1,0 @@
-error: Cannot derive 'Eq' for struct 'Box<IU>': field 'v' (union type arguments are not supported for derive specialization)

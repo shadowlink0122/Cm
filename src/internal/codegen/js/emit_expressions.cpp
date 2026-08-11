@@ -400,7 +400,8 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する（構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
             if (data.check_only) {
                 if (data.target_type) {
-                    hir::TypePtr srcUnion = getOperandType(*data.operand, func);
+                    // typedef名（IU等）のままではタグ計算が-1になり常にfalseへ落ちるため実体解決してから判定する
+                    hir::TypePtr srcUnion = resolveUnionAlias(getOperandType(*data.operand, func));
                     int expected_tag = computeUnionTag(srcUnion, data.target_type);
                     std::string typeof_check;
                     if (data.target_type->kind == TypeKind::String) {
@@ -423,8 +424,9 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             //   構築（T → Union）: タグ付き表現 {field0: tag, field1: value} で包む
             //   取り出し（Union as T）: タグ検査 + field1参照（生値はtypeofフォールバック）
             {
-                hir::TypePtr srcType = getOperandType(*data.operand, func);
-                hir::TypePtr tgtResolved = data.target_type;
+                // 構築/取り出しの判定もtypedef名を実体解決してから行う（is判定と同一基準）
+                hir::TypePtr srcType = resolveUnionAlias(getOperandType(*data.operand, func));
+                hir::TypePtr tgtResolved = resolveUnionAlias(data.target_type);
                 if (tgtResolved && tgtResolved->kind == TypeKind::Union &&
                     (!srcType || srcType->kind != TypeKind::Union)) {
                     // ユニオン構築: 変種タグを付けてbox化

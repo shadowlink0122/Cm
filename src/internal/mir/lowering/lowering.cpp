@@ -76,6 +76,9 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
 
     if (cm::debug::debug_mode())
         std::cerr << "[MIR] Pass 4: perform_monomorphization" << std::endl;
+    // typedef定義をMirProgramへコピーしてからモノモーフ化する
+    // （特殊化キーのユニオンtypedef同一視がnormalize_spec_arg_tree経由で参照する。従来はlower末尾のコピーのみでmono時は空だった）
+    mir_program.typedef_defs = typedef_defs;
     // Pass 4: モノモーフィゼーション（インターフェース特殊化）
     perform_monomorphization();
 

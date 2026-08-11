@@ -40,3 +40,15 @@
 ## 検出経緯
 
 総称derive特殊化のスライス比較SIGSEGV修正（2026-08-11）で、個別対応の正準化パスを新設した際に一般化の必要性とユニオン型引数の前提不足を確認し、恒久解として起案した。
+
+## 実装記録（2026-08-11）
+
+3段階を全て実装し、ユニオン型引数のderive特殊化を診断から正常系へ昇格した。
+
+- **第1段（正準化パスの一般機構化）**: canonicalize_specialized_equalityを`mono/canonicalize.cpp`へ移設し、書き換え規則表（対象判定matches+正準形発行emitの組`kRules`）と共有の走査・ブロック分割枠組みへ再編した（`canonicalize_specialized_function`）。等値規則が最初の登録項目で、発行はcm_lower_union_equality・cm_slice_equal生成の既存正準実装を再利用する。
+- **第2段（typekeyのユニオン正準エンコード）**: `$U<変種数>$<長さ>$<変種キー>…`形式をencode/decodeへ追加した（変種順=タグ順のため並べ替えない。unitテストで往復不変・typedef収束・順序区別を固定）。実装で判明した前提2件を併せて処置した——(1)ユニオンの変種はtype_args形式とUnionType::variants形式（サブクラス）の二形があり、エンコード・display_name・cm_lower_union_equalityのstatic_cast読み（$Uデコード産の素のast::Typeで不正アクセス=SIGSEGVになる）を`union_variant_types`両対応へ統一した。(2)`ast::substitute_type_params`が置換対象を含まないリーフをクローンするとUnionTypeがスライスされ変種情報を失うため、リーフは共有のまま返すようにした。
+- **第2段（typedef同一視）**: `normalize_spec_arg_tree`がユニオンtypedef名のリーフ（name="IU"・type_args空）を`MirProgram::typedef_defs`で実体解決するようにし、`arg_symbol_key`の入口で正準化を適用してキー産生の全サイトを単一のチョークポイントへ収束させた。typedef表のMirProgramへのコピーがlower末尾のみでmono時に空だった順序も修正（Pass 4前へ移動）。実測でtypedef名キー（`Box$1$2$IU`）と$Uキーの分裂が解消し、単一特殊化`Box$1$17$$U2$3$int6$string`へ収束した。
+- **第3段（ユニオン型引数deriveの解禁）**: validate_derive_instantiationのユニオン拒否を削除し、`tests/common/errors/derive/generic_union_arg`を正常系`tests/common/interface/derive/generic_union_arg.cm`へ移設した（等値・ペイロード不等・!=・変種違い・string変種等値の5ケース）。特殊化サイズ計算へUnionレイアウト（{i32 tag+最大変種ペイロード}。layout_sizeと同一基準）も追加した。
+- **第3段の追加修正（jsバックエンドのユニオンtypedef解決）**: 総称構造体メンバのユニオンis/as判定で、jsのタグ計算がtypedef名（IU）のまま変種を引けず-1（判定常時false）になっていた。従来は構築側も未解決で生値のままtypeofフォールバックが偶然一致していたが、$U正準化で構築がタグ付きboxへ揃ったため判定側の欠落が顕在化した。JSCodeGenへ`resolveUnionAlias`（MirProgram::typedef_defsによる実体解決）を追加し、is判定・構築・取り出しの3サイトへ適用した。
+- **検証**: typekey unit（$U往復・typedef収束・変種順区別・arg_key_from_tree）・regression・jit/native/jsの実測一致（true/false/true/false/true）・総称フィールドマトリクス（field_materialize_matrix.cm）・全バックエンドスイート。
+- **未着手の残件**: UnionType::variants内の型パラメータ置換（`T | string`形の総称ユニオン変種）は未対応の既知制限（従来から変化なし）。
