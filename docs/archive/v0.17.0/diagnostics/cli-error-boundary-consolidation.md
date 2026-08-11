@@ -61,3 +61,12 @@ SVバックエンドは`error[SV009]`のような診断コード付き文字列�
 - 従来例外境界を持たなかったバックエンドディスパッチ区画（sanitize検査+emit_jit_run/emit_sv/emit_js/emit_llvm）も`codegen`段として包んだ。従来はcodegen層のthrow（native 13箇所・SV 13箇所等）がmain.cppの最外周まで素通りし「internal error (main)」と報告され段階情報が失われていた。
 - 挙動変更はcodegen段のエラー表記（main→codegen）のみで、正常系・診断系の出力は同一。全バックエンドスイートで確認。
 - 第2段（ユーザー起因系throwのDiagnostic化: target.cpp・module_resolve.cpp・SV系のi18n収容と`.error`テスト整備）と第3段（内部バグ系メッセージへのMIR文脈付与）は未着手の残件。
+
+## 実装記録（第2段・第3段の精査と完遂・2026-08-11）
+
+第2段の前提を実測で精査した結果、起案時の「文字列throwがフェーズcatch-allへ素通りする」という想定は現状と乖離していた。
+- **module_resolve.cppのthrow**は上流のimport前処理が捕捉して`preprocessor error: cannot resolve import ...`のユーザー向け診断へ変換済み（実測確認）。
+- **SV系のthrow（SV009等のコード付き文字列）とtarget.cpp・link系のthrow**は、バックエンドディスパッチ層（backend/sv.cpp・backend/llvm.cpp・backend/js.cpp）が各自のcatch境界でi18nメッセージ（CliSystemverilogCodeGenerationError等）に包んで報告済み。
+つまりユーザー起因系は既にバックエンド別の適切な報告面を持っており、throw文字列の全面Diagnostic化（Span付与・i18n収容）は費用対効果が低いため見送りと判断した（メッセージ本文の多言語化は将来のi18n拡張として別枠）。
+第3段は該当を精査し、MIR変換層の内部エラー（core/statement.cppのconvertStatement無限ループ検出）へ関数名文脈を付与した（core/translate/program.cppの上限検出はプログラム単位のため文脈対象外）。
+以上で本設計文書の3段階は全て処置完了（第1段=境界集約・第2段=精査の結果現状の境界で満足と記録・第3段=文脈付与）。

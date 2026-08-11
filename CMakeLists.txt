@@ -452,6 +452,7 @@ list(APPEND CM_SOURCES
     src/internal/codegen/sv/codegen/module.cpp
     src/internal/codegen/sv/codegen/expr.cpp
     src/internal/codegen/sv/codegen/stmt.cpp
+    src/internal/codegen/sv/codegen/control.cpp
     src/internal/codegen/sv/analyze.cpp
     src/internal/codegen/sv/analyze/globals.cpp
     src/internal/codegen/sv/analyze/ports.cpp
@@ -459,7 +460,6 @@ list(APPEND CM_SOURCES
     src/internal/codegen/sv/analyze/declarations.cpp
     src/internal/codegen/sv/analyze/function.cpp
     src/internal/codegen/sv/self_param.cpp
-    src/internal/codegen/sv/emit_control.cpp
     src/internal/codegen/sv/validation.cpp
     src/internal/codegen/sv/testbench.cpp
     src/internal/codegen/sv/expr_tree.cpp
@@ -882,6 +882,7 @@ if(BUILD_TESTING)
             src/internal/codegen/sv/codegen/module.cpp
             src/internal/codegen/sv/codegen/expr.cpp
             src/internal/codegen/sv/codegen/stmt.cpp
+            src/internal/codegen/sv/codegen/control.cpp
             src/internal/codegen/sv/analyze.cpp
             src/internal/codegen/sv/analyze/globals.cpp
             src/internal/codegen/sv/analyze/ports.cpp
@@ -889,7 +890,6 @@ if(BUILD_TESTING)
             src/internal/codegen/sv/analyze/declarations.cpp
             src/internal/codegen/sv/analyze/function.cpp
             src/internal/codegen/sv/self_param.cpp
-            src/internal/codegen/sv/emit_control.cpp
             src/internal/codegen/sv/validation.cpp
             src/internal/codegen/sv/testbench.cpp
             src/internal/codegen/sv/constraints.cpp

@@ -62,6 +62,17 @@
 - **段階3（共通lower系の巨大関数）**: lower_member（約1100行→本体115行）とlower_binary（約970行→本体84行）を、腕ごとの静的ヘルパー抽出でディスパッチが見通せる形へ縮めた。全13スイート相当（unit・regression・interpreter/llvm/js/sv）で挙動同一を確認。
 - **残件**: graph.cpp（1,748行）はモジュールグラフAST化の設計文書側で扱う方針のまま未着手。hir/lowering/expr.cpp（1,618行）・llvm/native/codegen.cpp（1,604行）・SVのconvert系関数（emit_control.cpp内）は未分割の継続候補。
 
+## 実装記録（残件処置と配置整理・2026-08-12）
+
+前記残件のうちgraph.cpp以外を全て処置し、あわせて規約「ファイル名にアンダースコアで階層を埋め込まない」の全体適用を実施した。
+
+- **hir/lowering/expr.cpp（1,618行）**: expr.cppを削除しexpr/配下6ファイル（dispatch/operators/call/access/literal+移設のmatch/member/internal.hpp）へ関数移動で分割した。
+- **llvm/native/codegen.cpp（1,604行）**: codegen.cppを削除しcodegen/配下4ファイル（driver/optimize/emit/link）へドライバ工程別に分割した。
+- **SVのemitTerminator（約820行）**: 本体を32行の純ディスパッチへ縮め、SwitchInt系・Call系の腕別ヘルパーへ抽出した（3箇所重複のノンブロッキング代入判定も1本化）。computeForLoops（約280行）も3段へ分割した。
+- **ファイル配置の整理**: mir/loweringのexpr_*→expr/・mono系→mono/・auto_impl系→auto_impl/の14ファイル、hir/loweringのexpr_*→expr/、SVのemit_control→codegen/control.cpp・sv_internal.hpp→internal.hpp、parser_decl/stmt/type→parser/直下名・mir_splitter→splitter・optimization_pipeline→pipelineの改名を実施し、リポジトリ全体の#includeとCMakeLists.txtを追従した。
+- **検証**: 各コミット単位でunit・regression+関連バックエンドスイート、最終状態で全4スイート（interpreter/llvm/js/sv）。
+- **最終残件**: graph.cpp（モジュールグラフAST化側で処置予定）のみ。本設計文書の提案範囲は完遂。
+
 ## 検出経緯
 
 ユーザーからのリファクタリング提案募集（ファイルや機能ごとに実装の分割）を受け、行数実測と過去の複雑度調査の関数規模データを統合して起案した。
