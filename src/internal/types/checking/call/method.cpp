@@ -148,6 +148,21 @@ std::optional<TypeChecker::MethodResolution> TypeChecker::resolve_method(
     return std::nullopt;
 }
 
+// 演算子オーバーロードの受理判定（仕様はchecker.hppの宣言コメントを参照）
+bool TypeChecker::type_implements_operator(const ast::TypePtr& t, const std::string& op_symbol,
+                                           const std::string& iface_name) {
+    if (!t) {
+        return false;
+    }
+    // 演算子implのMethodInfo（register_implが登録）を統一機構で引く
+    if (resolve_method(t, "operator" + op_symbol)) {
+        return true;
+    }
+    // derive/withによる自動実装はメソッド表へ演算子を書かないため集合員判定へフォールバック
+    auto it = impl_interfaces_.find(t->name);
+    return it != impl_interfaces_.end() && it->second.count(iface_name) > 0;
+}
+
 ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
     // メソッド呼び出しの受け手は評価前に初期化済み・変更ありとしてマークする（arr.dim() / v.push() 等を「使用前の未初期化」と誤検出しない。
     // 受け手の型を推論する時点で使用チェックが先に発火するため、ここで行う）

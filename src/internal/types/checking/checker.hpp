@@ -244,6 +244,13 @@ class TypeChecker {
     };
     std::optional<MethodResolution> resolve_method(const ast::TypePtr& recv_type,
                                                    const std::string& method_name);
+
+    // 演算子オーバーロードの受理判定（method-resolution-unification）。
+    // 演算子implのMethodInfo（operator+等のキー）をresolve_methodの統一機構で引き、
+    // 無ければimpl_interfaces_の集合員判定へフォールバックする（derive/withによる自動実装は
+    // メソッド表へ演算子を書かないため）
+    bool type_implements_operator(const ast::TypePtr& t, const std::string& op_symbol,
+                                  const std::string& iface_name);
     // R10: constジェネリックパラメータ（<N: const int>）は実体化未実装のため宣言時に明示診断で拒否する
     void reject_const_generic_params(const std::vector<ast::GenericParam>& params, Span span);
 

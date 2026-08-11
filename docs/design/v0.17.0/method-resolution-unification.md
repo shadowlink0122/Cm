@@ -62,3 +62,12 @@ parent: v0.17.0 Design
 - **静的呼び出しの集約**: Type::method解決の直接検索+ジェネリック定義キーfallback+型引数文字列切り出しを、レシーバ型ツリーの構築（基底名+型引数）→resolve_method委譲へ再構成した（R22の型引数プリミティブ化と未置換T比較の修正は維持。型引数パースが単純名のみ対応の制限も従来どおり）。
 - 検証: interpreterスイート全数・unit・regression・重点回帰（static_generic_call・upcast_sites・iterator一式）全PASS。
 - 残: ビルトインラダー（infer_array_method/infer_string_methodの約500行）の表駆動化・namespace方式3種の1本化（resolve_methodの検索リスト内へ2種は集約済み・resolve_in_namespaceとの統合が残）・第3段（enum正規化遅延と演算子解決のresolve_method統合）。
+
+## 実装記録（演算子解決のresolve_method統合・2026-08-11）
+
+第3段のうち演算子解決の統合を実施した（LHS型を返す現挙動は保存）。
+
+- **演算子MethodInfoの登録**: register_implの演算子ループで、演算子実装のシグネチャを `operator+` 等のキーでメソッド表（type_methods_）へ登録するようにした。従来はimpl_interfaces_への集合登録のみで、「auto_implが書いた演算子MethodInfoは型検査では未消費」（検出時の指摘）と対を成す「ユーザー演算子implのMethodInfoが表に存在しない」状態だった。
+- **受理判定の統一**: `type_implements_operator(t, op_symbol, iface_name)` を新設し、演算子オーバーロードの受理4サイト（複合代入・Add・Sub・その他算術/ビット演算）を置換した。判定はresolve_methodの統一機構（`operator<記号>` キー）を第一とし、derive/withによる自動実装（メソッド表へ演算子を書かない）はimpl_interfaces_集合員判定へフォールバックする。resolve_method経由になったことで、namespaced・ジェネリックレシーバの演算子implも通常メソッドと同じ検索順で解決される。
+- 検証: interpreterスイート全数・unit・regression・演算子テスト一式（interface/operator/*）全PASS。
+- 残: ビルトインラダー表駆動化（各エントリの検査が要素型依存の期待型伝播・クロージャ拒否・HOFラムダ検査等で異質なため、表化はエントリごとのハンドラ登録形になる。実害バグの温床ではないため優先度を下げて残置）・namespace方式のresolve_in_namespace統合・enum正規化遅延（Q5の名前保持方式で実用上閉じているため、正規化遅延そのものは将来課題）。

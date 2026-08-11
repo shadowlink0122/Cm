@@ -992,6 +992,72 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
                            type_name + " implements " + iface_name + " (via operator)",
                            debug::Level::Debug);
         }
+        // 演算子実装のMethodInfoをメソッド表へ登録する（operator+等のキー。
+        // 型検査の演算子オーバーロード判定がresolve_methodの統一機構で引けるようにする）
+        {
+            std::string op_symbol;
+            switch (op->op) {
+                case ast::OperatorKind::Eq:
+                    op_symbol = "==";
+                    break;
+                case ast::OperatorKind::Ne:
+                    op_symbol = "!=";
+                    break;
+                case ast::OperatorKind::Lt:
+                    op_symbol = "<";
+                    break;
+                case ast::OperatorKind::Gt:
+                    op_symbol = ">";
+                    break;
+                case ast::OperatorKind::Le:
+                    op_symbol = "<=";
+                    break;
+                case ast::OperatorKind::Ge:
+                    op_symbol = ">=";
+                    break;
+                case ast::OperatorKind::Add:
+                    op_symbol = "+";
+                    break;
+                case ast::OperatorKind::Sub:
+                    op_symbol = "-";
+                    break;
+                case ast::OperatorKind::Mul:
+                    op_symbol = "*";
+                    break;
+                case ast::OperatorKind::Div:
+                    op_symbol = "/";
+                    break;
+                case ast::OperatorKind::Mod:
+                    op_symbol = "%";
+                    break;
+                case ast::OperatorKind::BitAnd:
+                    op_symbol = "&";
+                    break;
+                case ast::OperatorKind::BitOr:
+                    op_symbol = "|";
+                    break;
+                case ast::OperatorKind::BitXor:
+                    op_symbol = "^";
+                    break;
+                case ast::OperatorKind::Shl:
+                    op_symbol = "<<";
+                    break;
+                case ast::OperatorKind::Shr:
+                    op_symbol = ">>";
+                    break;
+                default:
+                    break;
+            }
+            if (!op_symbol.empty()) {
+                MethodInfo op_info;
+                op_info.name = "operator" + op_symbol;
+                for (const auto& param : op->params) {
+                    op_info.param_types.push_back(param.type);
+                }
+                op_info.return_type = op->return_type ? op->return_type : impl.target_type;
+                type_methods_[type_name][op_info.name] = op_info;
+            }
+        }
     }
 
     for (const auto& method : impl.methods) {

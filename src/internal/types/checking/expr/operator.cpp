@@ -19,6 +19,35 @@ namespace cm {
 
 namespace {
 
+// 演算子インターフェース名から演算子記号を引く（オーバーロード受理判定のメソッド表キーoperator<記号>用）
+std::string op_symbol_for(const std::string& iface_name) {
+    if (iface_name == "Add")
+        return "+";
+    if (iface_name == "Sub")
+        return "-";
+    if (iface_name == "Mul")
+        return "*";
+    if (iface_name == "Div")
+        return "/";
+    if (iface_name == "Mod")
+        return "%";
+    if (iface_name == "BitAnd")
+        return "&";
+    if (iface_name == "BitOr")
+        return "|";
+    if (iface_name == "BitXor")
+        return "^";
+    if (iface_name == "Shl")
+        return "<<";
+    if (iface_name == "Shr")
+        return ">>";
+    if (iface_name == "Eq")
+        return "==";
+    if (iface_name == "Ord")
+        return "<";
+    return "";
+}
+
 // オペランドを昇格先型へ包む明示Castノードを挿入する（Y4）。
 // 型検査を変換判断の唯一の点とし、HIR/MIR/コード生成は「二項演算のオペランドは同型」を前提にできる
 void wrap_operand_cast(ast::ExprPtr& operand, const ast::TypePtr& target) {
@@ -311,8 +340,8 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                         break;
                 }
                 if (!iface_name.empty()) {
-                    auto it = impl_interfaces_.find(type_name);
-                    if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
+                    // 演算子オーバーロードの受理判定は統一機構（type_implements_operator）で行う
+                    if (type_implements_operator(ltype, op_symbol_for(iface_name), iface_name)) {
                         return ltype;  // オペレーターオーバーロード対応
                     }
                     error(binary.left->span, i18n::msgf(i18n::MsgId::TcTypeDoesNotImplementOperator,
@@ -340,13 +369,10 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->is_integer() && rtype->kind == ast::TypeKind::Pointer) {
                 return rtype;  // int + pointer = pointer
             }
-            // 演算子オーバーロード: impl for Add
-            if (ltype->kind == ast::TypeKind::Struct) {
-                std::string type_name = ltype->name;
-                auto it = impl_interfaces_.find(type_name);
-                if (it != impl_interfaces_.end() && it->second.count("Add")) {
-                    return ltype;
-                }
+            // 演算子オーバーロード: impl for Add（受理判定は統一機構）
+            if (ltype->kind == ast::TypeKind::Struct &&
+                type_implements_operator(ltype, "+", "Add")) {
+                return ltype;
             }
             error(current_span_, i18n::msg(i18n::MsgId::TcAddOperatorRequiresNumericOperands));
             return ast::make_error();
@@ -363,13 +389,10 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             if (ltype->kind == ast::TypeKind::Pointer && rtype->kind == ast::TypeKind::Pointer) {
                 return ast::make_long();  // ポインタ差分はlong
             }
-            // 演算子オーバーロード: impl for Sub
-            if (ltype->kind == ast::TypeKind::Struct) {
-                std::string type_name = ltype->name;
-                auto it = impl_interfaces_.find(type_name);
-                if (it != impl_interfaces_.end() && it->second.count("Sub")) {
-                    return ltype;
-                }
+            // 演算子オーバーロード: impl for Sub（受理判定は統一機構）
+            if (ltype->kind == ast::TypeKind::Struct &&
+                type_implements_operator(ltype, "-", "Sub")) {
+                return ltype;
             }
             error(current_span_, i18n::msg(i18n::MsgId::TcSubOperatorRequiresNumericOperands));
             return ast::make_error();
@@ -396,11 +419,9 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                         iface_name = "Shl";
                     else if (binary.op == ast::BinaryOp::Shr)
                         iface_name = "Shr";
-                    if (!iface_name.empty()) {
-                        auto it = impl_interfaces_.find(type_name);
-                        if (it != impl_interfaces_.end() && it->second.count(iface_name)) {
-                            return ltype;
-                        }
+                    if (!iface_name.empty() &&
+                        type_implements_operator(ltype, op_symbol_for(iface_name), iface_name)) {
+                        return ltype;
                     }
                 }
                 error(current_span_,
