@@ -585,12 +585,25 @@ LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::T
     if (!src || src->kind != hir::TypeKind::Array || !src->array_size.has_value()) {
         return value;
     }
-    const int64_t array_size = static_cast<int64_t>(src->array_size.value_or(0));
-    const int64_t elem_stride = layout::array_elem_stride(*this, src->element_type);
+    return materialize_array_to_slice(MirPlace{value}, src, dest);
+}
 
-    LocalId addr_local = new_temp(hir::make_pointer(src->element_type));
-    push_statement(
-        MirStatement::assign(MirPlace{addr_local}, MirRvalue::ref(MirPlace{value}, false)));
+// 固定長配列place→ヒープスライスの実体化コア（cm_array_to_slice呼び出しの唯一の発行箇所）。
+// let初期化・構造体リテラルフィールド・グローバル初期化・return・push要素の全サイトが共有する
+LocalId LoweringContext::materialize_array_to_slice(const MirPlace& src,
+                                                    const hir::TypePtr& src_array_type,
+                                                    const hir::TypePtr& slice_type,
+                                                    std::optional<MirPlace> dest,
+                                                    const hir::TypePtr& elem_hint) {
+    const int64_t array_size =
+        static_cast<int64_t>(src_array_type ? src_array_type->array_size.value_or(0) : 0);
+    // 空配列リテラル等でelement_typeが無い場合は宛先スライスの要素型ヒントでストライドを計算する
+    hir::TypePtr stride_elem =
+        (src_array_type && src_array_type->element_type) ? src_array_type->element_type : elem_hint;
+    const int64_t elem_stride = layout::array_elem_stride(*this, stride_elem);
+
+    LocalId addr_local = new_temp(hir::make_pointer(stride_elem));
+    push_statement(MirStatement::assign(MirPlace{addr_local}, MirRvalue::ref(src, false)));
 
     LocalId size_local = new_temp(hir::make_long());
     MirConstant size_const;
@@ -606,7 +619,8 @@ LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::T
     push_statement(MirStatement::assign(MirPlace{stride_local},
                                         MirRvalue::use(MirOperand::constant(stride_const))));
 
-    LocalId slice_local = new_temp(dest);
+    // 宛先が指定されていればそこへ、なければスライス型の一時へ格納する
+    MirPlace result_place = dest ? *dest : MirPlace{new_temp(slice_type)};
     BlockId success_block = new_block();
     std::vector<MirOperandPtr> conv_args;
     conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
@@ -616,7 +630,7 @@ LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::T
     conv_term->kind = MirTerminator::Call;
     conv_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
                                               std::move(conv_args),
-                                              MirPlace{slice_local},
+                                              result_place,
                                               success_block,
                                               std::nullopt,
                                               "",
@@ -624,7 +638,7 @@ LocalId LoweringContext::coerce_fixed_array_to_slice(LocalId value, const hir::T
                                               false};
     set_terminator(std::move(conv_term));
     switch_to_block(success_block);
-    return slice_local;
+    return result_place.local;
 }
 
 // LLVMのDataLayout（自然アライメント・パッキングなし）と一致するアライメントを計算する

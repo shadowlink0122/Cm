@@ -230,6 +230,15 @@ class LoweringContext {
     // 該当しない場合はvalueをそのまま返す。変換はヒープコピーであり、呼び出し先での変異は元配列へ反映されない
     LocalId coerce_fixed_array_to_slice(LocalId value, const hir::TypePtr& dest_type);
 
+    // 固定長配列のplace（変数・deref先・return値等）をcm_array_to_sliceでヒープスライスへ実体化する正準ヘルパ。
+    // src_array_typeは固定長配列型（サイズ・要素ストライドの真実）、destを渡すとそこへ格納し、省略時はslice_typeの一時を確保して返す。
+    // elem_hintは空配列リテラル等でsrc_array_typeのelement_typeが無い場合のストライド計算用フォールバック。
+    // 検査は行わない（呼び出し側が固定長配列→スライスであることを確認してから呼ぶ。ゲート付きはcoerce_fixed_array_to_slice）
+    LocalId materialize_array_to_slice(const MirPlace& src, const hir::TypePtr& src_array_type,
+                                       const hir::TypePtr& slice_type,
+                                       std::optional<MirPlace> dest = std::nullopt,
+                                       const hir::TypePtr& elem_hint = nullptr);
+
     // 宛先型がユニオンで値が変種型の場合、タグ+ペイロードを書き込むユニオン構築Castを経由した一時を返す（Y1〜Y3）。
     // 該当しない（宛先が非ユニオン・値が既にユニオン）場合はvalueをそのまま返す。
     // 値消費サイト（return・構造体リテラルフィールド・push引数・スライスリテラル要素等）はこのヘルパを通し、タグ未構築のペイロード直書きを防ぐ

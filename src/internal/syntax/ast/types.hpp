@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -321,5 +322,14 @@ inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param
 // 型の文字列表現
 // ============================================================
 std::string type_to_string(const Type& t);
+
+// ============================================================
+// 型パラメータ置換（正準API）
+// ============================================================
+// 型ツリー内の型パラメータ名を実引数ツリーで置換する（名前の平坦化を行わず構造を保つ）。
+// element_type・type_argsを再帰置換し、"Box<T>"表記が名前に残る場合は基底名へ正規化する（type_argsが真実）。
+// モノモーフィゼーション・MIRローワの総称フィールド型判定が共有する（フィールド型・要素型の判定は必ず置換後の型で行う）
+TypePtr substitute_type_params(const TypePtr& type,
+                               const std::unordered_map<std::string, TypePtr>& subst);
 
 }  // namespace cm::ast

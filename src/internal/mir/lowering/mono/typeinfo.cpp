@@ -150,31 +150,10 @@ std::string Monomorphization::struct_symbol_key(const std::string& base_name,
     return out;
 }
 
-// 型パラメータを実引数ツリーで置換する（名前の平坦化を行わず構造を保つ）
+// 型パラメータを実引数ツリーで置換する（実装は正準APIのast::substitute_type_params）
 hir::TypePtr Monomorphization::substitute_type_tree(
     const hir::TypePtr& type, const std::unordered_map<std::string, hir::TypePtr>& subst) const {
-    if (!type)
-        return nullptr;
-
-    if (!type->name.empty()) {
-        auto it = subst.find(type->name);
-        if (it != subst.end())
-            return it->second;
-    }
-
-    auto result = std::make_shared<hir::Type>(*type);
-    if (type->element_type)
-        result->element_type = substitute_type_tree(type->element_type, subst);
-    for (auto& arg : result->type_args)
-        arg = substitute_type_tree(arg, subst);
-
-    // "Box<T>" 表記が名前に残っている場合は基底名へ正規化する（type_argsが真実）
-    if (!result->type_args.empty()) {
-        auto lt = result->name.find('<');
-        if (lt != std::string::npos)
-            result->name = result->name.substr(0, lt);
-    }
-    return result;
+    return ast::substitute_type_params(type, subst);
 }
 
 // 型ツリー内に未解決のジェネリック型パラメータが残っているか

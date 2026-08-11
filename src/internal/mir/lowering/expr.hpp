@@ -53,6 +53,13 @@ class ExprLowering : public MirLoweringBase {
     LocalId lower_enum_construct(const hir::HirEnumConstruct& ec, LoweringContext& ctx);
     LocalId lower_enum_payload(const hir::HirEnumPayload& ep, LoweringContext& ctx);
 
+    // スライスリテラルの実体化（cm_slice_new確保+slice_elem_dispatch表引きの要素pushループ。実装はexpr/materialize.cpp）。
+    // let初期化・構造体リテラルフィールドの配列リテラル→スライス経路が共有する。destを渡すとそこへ、省略時はslice_typeの一時へ格納する。
+    // 空のelementsは容量0の空スライス確保になる（スライス型letの無初期化と同形）
+    LocalId materialize_slice_literal(const std::vector<hir::HirExprPtr>& elements,
+                                      const hir::TypePtr& slice_type, LoweringContext& ctx,
+                                      std::optional<MirPlace> dest = std::nullopt);
+
     // 唯一の場所化API（type-resolution-simplification 領域2）。
     // 変数・メンバ・添字・デリファレンスの任意チェーンからMirPlaceを構築し、代入左辺値・メソッドレシーバ・参照取得のすべてで共用する。
     // スライスヘッダ降下（内側スライス要素はcm_slice_get_subslice_refで参照降下、それ以外の要素はcodegenがヘッダ経由で解決するIndex投影）とtypedef解決・ジェネリックフィールド型置換はここにのみ存在させる

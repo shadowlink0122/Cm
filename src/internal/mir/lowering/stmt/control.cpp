@@ -52,47 +52,9 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
             if (value_type && value_type->kind == hir::TypeKind::Array &&
                 value_type->array_size.has_value() && ret_type &&
                 ret_type->kind == hir::TypeKind::Array && !ret_type->array_size.has_value()) {
-                const int64_t array_size = value_type->array_size.value_or(0);
-                const int64_t elem_size = layout::array_elem_stride(ctx, value_type->element_type);
-
-                LocalId addr_local = ctx.new_temp(hir::make_pointer(value_type->element_type));
-                ctx.push_statement(
-                    MirStatement::assign(MirPlace{addr_local}, MirRvalue::ref(return_src, false)));
-
-                LocalId size_local = ctx.new_temp(hir::make_long());
-                MirConstant size_const;
-                size_const.value = array_size;
-                size_const.type = hir::make_long();
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
-
-                LocalId elem_size_local = ctx.new_temp(hir::make_long());
-                MirConstant elem_size_const;
-                elem_size_const.value = elem_size;
-                elem_size_const.type = hir::make_long();
-                ctx.push_statement(
-                    MirStatement::assign(MirPlace{elem_size_local},
-                                         MirRvalue::use(MirOperand::constant(elem_size_const))));
-
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> args;
-                args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                args.push_back(MirOperand::copy(MirPlace{size_local}));
-                args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data =
-                    MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
-                                            std::move(args),
-                                            MirPlace{ctx.func->return_local},
-                                            success_block,
-                                            std::nullopt,
-                                            "",
-                                            "",
-                                            false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
+                // 固定長配列の値をヒープスライスへ実体化してreturnローカルへ格納する（正準ヘルパへ委譲）
+                ctx.materialize_array_to_slice(return_src, value_type, ret_type,
+                                               MirPlace{ctx.func->return_local});
                 returned_as_slice = true;
             }
         }

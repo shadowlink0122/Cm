@@ -40,16 +40,6 @@ void emit_call(LoweringContext& ctx, const std::string& func, std::vector<MirOpe
     ctx.switch_to_block(next);
 }
 
-// 整数定数をローカルへ実体化する
-LocalId make_const(LoweringContext& ctx, int64_t v, const hir::TypePtr& type) {
-    LocalId l = ctx.new_temp(type);
-    MirConstant c;
-    c.value = v;
-    c.type = type;
-    ctx.push_statement(MirStatement::assign(MirPlace{l}, MirRvalue::use(MirOperand::constant(c))));
-    return l;
-}
-
 // 値ローカルのアドレスを取ってポインタローカルを返す（Blob規約のアドレス渡し）
 LocalId make_addr(LoweringContext& ctx, LocalId value_local) {
     hir::TypePtr vt =
@@ -58,11 +48,6 @@ LocalId make_addr(LoweringContext& ctx, LocalId value_local) {
     ctx.push_statement(
         MirStatement::assign(MirPlace{addr}, MirRvalue::ref(MirPlace{value_local}, false)));
     return addr;
-}
-
-// 要素型の確保バイト幅はlayout APIへ一元化（Z2/Y6。手書き表の再複製を避ける）
-int64_t elem_size_of(LoweringContext& ctx, const hir::TypePtr& t) {
-    return layout::array_elem_stride(ctx, t);
 }
 
 }  // namespace
@@ -155,22 +140,10 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
         if (disp.cls == hir::SliceElemClass::InnerSlice && value_local < ctx.func->locals.size()) {
             hir::TypePtr vt = ctx.func->locals[value_local].type;
             if (vt && vt->kind == hir::TypeKind::Array && vt->array_size.has_value()) {
-                // 空リテラル[]は要素型をレシーバの内側スライスから取る
-                hir::TypePtr inner_elem = vt->element_type
-                                              ? vt->element_type
-                                              : (elem_type ? elem_type->element_type : nullptr);
-                LocalId addr = make_addr(ctx, value_local);
-                LocalId size_local = make_const(
-                    ctx, static_cast<int64_t>(vt->array_size.value_or(0)), hir::make_long());
-                LocalId ies_local =
-                    make_const(ctx, elem_size_of(ctx, inner_elem), hir::make_long());
-                LocalId conv = ctx.new_temp(elem_type ? elem_type : slice_type->element_type);
-                std::vector<MirOperandPtr> conv_args;
-                conv_args.push_back(MirOperand::copy(MirPlace{addr}));
-                conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
-                conv_args.push_back(MirOperand::copy(MirPlace{ies_local}));
-                emit_call(ctx, "cm_array_to_slice", std::move(conv_args), MirPlace{conv});
-                value_local = conv;
+                // 空リテラル[]は要素型をレシーバの内側スライスから取る（elem_hint。正準ヘルパへ委譲）
+                value_local = ctx.materialize_array_to_slice(
+                    MirPlace{value_local}, vt, elem_type ? elem_type : slice_type->element_type,
+                    std::nullopt, elem_type ? elem_type->element_type : nullptr);
             }
         }
 

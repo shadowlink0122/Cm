@@ -325,6 +325,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/expr/basic.cpp
     src/internal/mir/lowering/expr/access.cpp
     src/internal/mir/lowering/expr/construct.cpp
+    src/internal/mir/lowering/expr/materialize.cpp
     src/internal/mir/lowering/expr/cast.cpp
     src/internal/mir/lowering/expr/binary.cpp
     src/internal/mir/lowering/expr/unary.cpp

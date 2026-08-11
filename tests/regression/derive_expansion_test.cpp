@@ -53,15 +53,22 @@ struct Unit with Eq {
     EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
 }
 
-TEST(DeriveExpansionTest, GenericStructIsNotExpanded) {
-    // 総称演算子implのモノモーフ化が未対応のため、ジェネリック構造体は手組み生成経路に残す
+TEST(DeriveExpansionTest, GenericStructExpandsToGenericImpl) {
+    // ジェネリック構造体は#[__derived]マーカー付きの総称implへソース合成される（特殊化時検証はマーカー経由）
     auto program = parse_source(R"(
 struct Pair<T, U> with Eq {
     T first;
     U second;
 }
 )");
-    EXPECT_EQ(macro_expand::synthesize_derive_impls(program), "");
+    const std::string expected =
+        "#[__derived]\n"
+        "impl Pair<T, U> for Eq {\n"
+        "    operator bool ==(Pair<T, U> other) {\n"
+        "        return self.first == other.first && self.second == other.second;\n"
+        "    }\n"
+        "}\n";
+    EXPECT_EQ(macro_expand::synthesize_derive_impls(program), expected);
 }
 
 TEST(DeriveExpansionTest, ExpandAddsImplAndStripsHandledTrait) {

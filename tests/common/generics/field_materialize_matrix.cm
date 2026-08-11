@@ -1,0 +1,61 @@
+// 総称構造体×フィールド型（スライス/ユニオン/ネスト構造体）×値経路（リテラル・let・代入・引数渡し・return）のマトリクス
+// スライス実体化ヘルパ一本化（materialize_slice_literal/materialize_array_to_slice）と型パラメータ置換共有APIの回帰固定
+import std::io::println;
+
+typedef IU = int | string;
+
+struct Box<T> {
+    T v;
+}
+
+struct Inner {
+    int x;
+}
+
+// 引数渡し: 総称構造体のスライスフィールドを関数越しに参照する
+int sum_box(Box<int[]> b) {
+    int total = 0;
+    for (int i = 0; i < b.v.len() as int; i++) {
+        total = total + b.v[i];
+    }
+    return total;
+}
+
+// return: 固定長配列をスライス戻り値で返す（materialize_array_to_sliceのreturn経路）
+int[] make_slice() {
+    int[3] arr = [7, 8, 9];
+    return arr;
+}
+
+int main() {
+    // リテラル: スライスフィールドへの配列リテラル（cm_slice_new+push経路）
+    Box<int[]> a = { v: [1, 2, 3] };
+    println("{a.v.len()}");
+    println("{a.v[0]} {a.v[2]}");
+    println("{sum_box(a)}");
+
+    // let: 配列リテラル→スライス・非リテラル（変数参照）→スライス
+    int[] s1 = [4, 5];
+    println("{s1.len()} {s1[1]}");
+    int[2] fixed = [6, 7];
+    int[] s2 = fixed;
+    println("{s2.len()} {s2[0]}");
+
+    // return経路のスライス実体化
+    int[] s3 = make_slice();
+    println("{s3.len()} {s3[2]}");
+
+    // ユニオンフィールド: 総称構造体の型引数ユニオン（型パラメータ置換の置換後判定）
+    Box<IU> u = { v: 42 };
+    println("{u.v is int}");
+
+    // ネスト構造体フィールド: 置換後のstruct判定（blob格納）
+    Box<Inner> n = { v: Inner { x: 5 } };
+    println("{n.v.x}");
+
+    // 多次元: スライスフィールドへのネストリテラル（内側実体化経路）
+    Box<int[][]> g = { v: [[1, 2], [3]] };
+    println("{g.v.len()} {g.v[0].len()} {g.v[1][0]}");
+
+    return 0;
+}

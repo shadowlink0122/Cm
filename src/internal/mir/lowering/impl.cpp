@@ -320,42 +320,8 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
             if (gtype_is_slice && vt && vt->kind == hir::TypeKind::Array &&
                 vt->array_size.has_value()) {
                 // スライス型グローバルへ固定長配列で実体化された初期化子は
-                // cm_array_to_sliceでヒープスライスへ変換して格納
-                const int64_t arr_size = static_cast<int64_t>(vt->array_size.value_or(0));
-                const int64_t elem_size = layout::array_elem_stride(ctx, vt->element_type);
-                LocalId addr_local = ctx.new_temp(hir::make_pointer(vt->element_type));
-                ctx.push_statement(MirStatement::assign(MirPlace{addr_local},
-                                                        MirRvalue::ref(MirPlace{init_val}, false)));
-                LocalId size_local = ctx.new_temp(hir::make_long());
-                MirConstant size_const;
-                size_const.value = arr_size;
-                size_const.type = hir::make_long();
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
-                LocalId es_local = ctx.new_temp(hir::make_long());
-                MirConstant es_const;
-                es_const.value = elem_size;
-                es_const.type = hir::make_long();
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{es_local}, MirRvalue::use(MirOperand::constant(es_const))));
-                BlockId conv_block = ctx.new_block();
-                std::vector<MirOperandPtr> conv_args;
-                conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
-                conv_args.push_back(MirOperand::copy(MirPlace{es_local}));
-                auto conv_term = std::make_unique<MirTerminator>();
-                conv_term->kind = MirTerminator::Call;
-                conv_term->data =
-                    MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
-                                            std::move(conv_args),
-                                            MirPlace{gid},
-                                            conv_block,
-                                            std::nullopt,
-                                            "",
-                                            "",
-                                            false};
-                ctx.set_terminator(std::move(conv_term));
-                ctx.switch_to_block(conv_block);
+                // cm_array_to_sliceでヒープスライスへ変換して格納（正準ヘルパへ委譲）
+                ctx.materialize_array_to_slice(MirPlace{init_val}, vt, gtype, MirPlace{gid});
             } else {
                 ctx.push_statement(MirStatement::assign(
                     MirPlace{gid}, MirRvalue::use(MirOperand::copy(MirPlace{init_val}))));
