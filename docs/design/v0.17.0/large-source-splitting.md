@@ -53,6 +53,15 @@
 - 各段階の完了ごとに全13スイート（interpreter/llvm各O0-O3/js/ts/sv/unit/regression）で挙動同一を確認する。
 - 巨大関数の分割前に、当該関数の主要分岐を通すregressionケースの網羅を確認し、不足分岐は先にテストを追加する。
 
+## 実装記録（2026-08-11）
+
+段階1〜3を実装した（各段階を独立コミットで実施）。
+
+- **段階1（SVバックエンド）**: analyze.cppをオーケストレータ42行+analyze/配下5ファイル（globals/ports/clock/declarations/function）へ、codegen.cppをエントリ160行+codegen/配下5ファイル（types/emitter/module/expr/stmt）へ分割した。フェーズ間の共有ローカル状態はメンバ昇格せず引数で明示した。
+- **段階2（checker/フォーマッタ）**: decl.cppを削除しdecl/配下7ファイル（driver/namespace/dispatch/attributes/impl/typedecl/function）へ、formatter.cppをエントリ97行+formatter/配下5ファイル（whitespace/braces/indent/spacing/wrap）へ分割した。旧新の正規化diff・関数本体のbyte一致・make formatのCmソース差分ゼロで挙動同一を機械的に確認した。
+- **段階3（共通lower系の巨大関数）**: lower_member（約1100行→本体115行）とlower_binary（約970行→本体84行）を、腕ごとの静的ヘルパー抽出でディスパッチが見通せる形へ縮めた。全13スイート相当（unit・regression・interpreter/llvm/js/sv）で挙動同一を確認。
+- **残件**: graph.cpp（1,748行）はモジュールグラフAST化の設計文書側で扱う方針のまま未着手。hir/lowering/expr.cpp（1,618行）・llvm/native/codegen.cpp（1,604行）・SVのconvert系関数（emit_control.cpp内）は未分割の継続候補。
+
 ## 検出経緯
 
 ユーザーからのリファクタリング提案募集（ファイルや機能ごとに実装の分割）を受け、行数実測と過去の複雑度調査の関数規模データを統合して起案した。
