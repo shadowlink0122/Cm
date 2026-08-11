@@ -432,6 +432,11 @@ list(APPEND CM_SOURCES
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/internal/codegen/sv/codegen.cpp
+    src/internal/codegen/sv/codegen/types.cpp
+    src/internal/codegen/sv/codegen/emitter.cpp
+    src/internal/codegen/sv/codegen/module.cpp
+    src/internal/codegen/sv/codegen/expr.cpp
+    src/internal/codegen/sv/codegen/stmt.cpp
     src/internal/codegen/sv/analyze.cpp
     src/internal/codegen/sv/analyze/globals.cpp
     src/internal/codegen/sv/analyze/ports.cpp
@@ -854,6 +859,11 @@ if(BUILD_TESTING)
             ${CM_I18N_SOURCES}
             src/internal/codegen/buffered_codegen.cpp
             src/internal/codegen/sv/codegen.cpp
+            src/internal/codegen/sv/codegen/types.cpp
+            src/internal/codegen/sv/codegen/emitter.cpp
+            src/internal/codegen/sv/codegen/module.cpp
+            src/internal/codegen/sv/codegen/expr.cpp
+            src/internal/codegen/sv/codegen/stmt.cpp
             src/internal/codegen/sv/analyze.cpp
             src/internal/codegen/sv/analyze/globals.cpp
             src/internal/codegen/sv/analyze/ports.cpp
