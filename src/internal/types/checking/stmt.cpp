@@ -340,8 +340,9 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                                                     ast::type_to_string(*arg), ct->name));
                 }
             }
-            // R21: derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
-            if (!ct->type_args.empty() && !sd_it->second->auto_impls.empty()) {
+            // derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
+            // （derive合成で展開済みのトレイトはderived_generic_impls_側で判定するためauto_impls空でも呼ぶ）
+            if (!ct->type_args.empty()) {
                 validate_derive_instantiation(*sd_it->second, ct);
             }
         }

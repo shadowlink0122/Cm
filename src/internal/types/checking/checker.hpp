@@ -372,6 +372,9 @@ class TypeChecker {
 
     // ジェネリック構造体の登録情報（構造体名 → ジェネリックパラメータリスト）
     std::unordered_map<std::string, std::vector<std::string>> generic_structs_;
+    // derive合成された総称impl（#[__derived]マーカー付き）の基底名→トレイト集合。
+    // 特殊化時のフィールド型検証（validate_derive_instantiation）が展開後もderive規則を適用するために使う
+    std::unordered_map<std::string, std::set<std::string>> derived_generic_impls_;
 
     // 組み込みインターフェースのジェネリックパラメータ
     std::unordered_map<std::string, std::vector<std::string>> builtin_interface_generic_params_;

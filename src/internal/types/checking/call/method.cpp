@@ -158,6 +158,19 @@ bool TypeChecker::type_implements_operator(const ast::TypePtr& t, const std::str
     if (resolve_method(t, "operator" + op_symbol)) {
         return true;
     }
+    // 型パラメータは境界（where T: Ord / <T: Eq>等）で受理する（総称derive合成の比較本体で使用）
+    {
+        const std::string tname = ast::type_to_string(*t);
+        if (generic_context_.has_type_param(tname)) {
+            if (const auto* tp = generic_context_.get_type_param(tname)) {
+                for (const auto& b : tp->bounds) {
+                    if (b == iface_name) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
     // derive/withによる自動実装はメソッド表へ演算子を書かないため集合員判定へフォールバック
     auto it = impl_interfaces_.find(t->name);
     return it != impl_interfaces_.end() && it->second.count(iface_name) > 0;

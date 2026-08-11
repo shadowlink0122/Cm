@@ -116,7 +116,7 @@ Phase 2はデッドコード整理として独立に実施でき、後続の集�
 
 ## 関連
 
-- `docs/design/v0.17.0/large-scale-bottleneck-audit.md`（監査本体、テーマ5「集約を値として動かす経路の未成熟」）
+- `docs/archive/v0.17.0/audit/large-scale-bottleneck-audit.md`（監査本体、テーマ5「集約を値として動かす経路の未成熟」）
 - `src/internal/codegen/llvm/core/statement/assign.cpp`（構造体代入・memcpy発火条件`needsStructCopy`）
 - `src/internal/codegen/llvm/core/operand.cpp`（構造体allocaのオペランド変換）
 - `src/internal/mir/lowering/context.cpp`（`layout_size`、正しいレイアウト計算）

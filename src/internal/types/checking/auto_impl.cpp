@@ -92,6 +92,10 @@ std::string TypeChecker::derive_field_unsupported_reason(const std::string& ifac
     }
 
     if (t->kind == ast::TypeKind::Union || t->kind == ast::TypeKind::LiteralUnion) {
+        // Eqはユニオン==（タグ一致+アクティブ変種のペイロード比較）が是正済みのため許容する
+        if (iface_name == "Eq" && t->kind == ast::TypeKind::Union) {
+            return "";
+        }
         return "union-typed fields are not supported";
     }
     if (t->kind == ast::TypeKind::Array) {
@@ -99,6 +103,11 @@ std::string TypeChecker::derive_field_unsupported_reason(const std::string& ifac
             !t->is_multidim_array() && (t->array_size.has_value() || t->dimensions.size() == 1);
         const auto& elem = t->element_type;
         if (iface_name == "Eq") {
+            // 動的スライス（1次元）はスライス==が内容比較のため許容する
+            if (!t->array_size.has_value() && !t->is_multidim_array() && elem &&
+                elem->is_primitive() && elem->kind != ast::TypeKind::Void) {
+                return "";
+            }
             bool elem_ok = elem && elem->is_primitive() && elem->kind != ast::TypeKind::Void;
             if (!fixed_1d) {
                 return "only fixed-size one-dimensional arrays can be compared";
@@ -162,7 +171,14 @@ bool TypeChecker::validate_derive_field_types(const ast::StructDecl& st,
 // 従来はBox<int[]>のEqがスライスヘッダの生バイナリ比較（無言の誤値）・Box<ユニオン>がリンク失敗へ落ちていた
 void TypeChecker::validate_derive_instantiation(const ast::StructDecl& st,
                                                 const ast::TypePtr& type) {
-    if (st.auto_impls.empty() || st.generic_params.empty() || !type ||
+    // derive合成へ展開済みのトレイト（#[__derived]総称impl）もフィールド型検証の対象に含める
+    // （展開でauto_implsから除去されるため、除去後も特殊化時のderive規則を適用する）
+    std::set<std::string> ifaces(st.auto_impls.begin(), st.auto_impls.end());
+    auto dit = derived_generic_impls_.find(st.name);
+    if (dit != derived_generic_impls_.end()) {
+        ifaces.insert(dit->second.begin(), dit->second.end());
+    }
+    if (ifaces.empty() || st.generic_params.empty() || !type ||
         type->type_args.size() != st.generic_params.size()) {
         return;
     }
@@ -170,7 +186,7 @@ void TypeChecker::validate_derive_instantiation(const ast::StructDecl& st,
     if (!validated_derive_instantiations_.insert(inst_name).second) {
         return;
     }
-    for (const auto& iface_name : st.auto_impls) {
+    for (const auto& iface_name : ifaces) {
         for (const auto& field : st.fields) {
             if (!field.type) {
                 continue;

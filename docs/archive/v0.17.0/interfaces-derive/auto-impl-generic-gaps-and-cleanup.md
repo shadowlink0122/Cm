@@ -56,3 +56,15 @@ derive-as-source-expansion（archive済み）で非ジェネリック構造体�
 - スライス型引数（`Box<int[]>`）のEqはスライス`==`が内容比較で正しく動作するため、上記2点の整備と同時にR21診断から正常動作へ移行できる（`tests/common/errors/derive/generic_slice_arg.cm`は載せ替え時に正常系へ移す）。
 
 現時点で`generate_*_for_monomorphized`系と特例群（auto_impl_info_等）は上記前提が未整備のため現役維持する。
+
+## 実装記録（第3段後半＝ジェネリックderiveの単一ソース化と生成器全廃・2026-08-11）
+
+前提2件の充足を確認・整備し、第3段後半を完遂した。本文書の全段階が完了となる。
+
+- **プリミティブへの一様メソッド付与（前提1）**: derive合成の一部としてソース合成した。総称構造体のderiveがHash/Debug/Displayを含むとき、`impl int for Hash { int hash() { return self as int; } }`等（整数族+bool+char、Debug/Displayは浮動小数とstringも）を同時に合成する（ユーザーが同じプリミティブ×インターフェースのimplを書いている場合は重複を避けて出力しない）。string.debug()/toString()は自身を返し、非ジェネリック合成の整形規則（stringフィールドは生値）と出力が一致する。
+- **総称implのソース合成**: ジェネリック構造体のderiveを単一の総称impl（`impl G<T> for Hash where T: Hash { ... }`）へ合成する。型パラメータのフィールドはメソッド形（`self.v.hash()`/`.debug()`/`.toString()`）+where境界で合成され、具象型フィールドは従来の型別整形をそのまま使う。Eq/Ord/Cloneは型非依存の本体（`==`/`<`/`return self;`）で境界はOrdのみ（比較演算子の受理に使用）。合成implには`#[__derived]`内部マーカーを付ける。
+- **必要だった基盤整備**: (1)`impl G<T> for Iface`形式（プレフィックス`<T>`なし）のターゲット型引数を型パラメータとしてgeneric_contextへ登録（where句の境界も配線。従来は未登録でT値へのメソッド呼び出しが解決不能だった）。(2)演算子受理（type_implements_operator）へ型パラメータ境界の分岐を追加（`where T: Ord`の`<`受理）。(3)特殊化時のフィールド型検証（validate_derive_instantiation）は、auto_implsが展開で除去された後も`#[__derived]`総称implの記録（derived_generic_impls_）から従来のderive規則を適用する。
+- **診断から正常系への昇格**: スライス型引数のEq（`Box<int[]>`＝スライス==の内容比較）とユニオン型引数のEq（ユニオン==のタグ+ペイロード比較）は是正済みの意味論で正しく動作するため、derive規則を緩和して正常系へ昇格した（`tests/common/interface/derive/generic_{slice,union}_arg.cm`へ移設）。string/浮動小数型引数のHash等の未対応組合せは従来どおり特殊化時に診断される（G<string> with Hashの実測で確認）。
+- **生成器の全廃**: モノモーフィゼーション後の手組みMIR生成パス一式——ディスパッチャgenerate_monomorphized_auto_impls・生成器9本（clone/hash/debug/display/eq/lt/css/to_css/is_css）・generic_struct_auto_impls_収集——を削除した（約1,200行）。保持系のeq/lt生成器（ユーザー定義インターフェースの演算子auto-impl用）のネスト再帰は保持系生成器+HIR構造体名引きへ置き換えた。
+- **auto_impl_info_の役割縮小（設計判断）**: checker側のauto_impl_info_と適合判定の参照は、with句適合（<T: Eq>境界の充足判定）とCopy・非derive可ケースの診断経路という現役の意味を持つため全廃せず、「MIR生成器の存在を仮定した特例」から「with句適合の登録」へ役割が縮小したことを記録する。
+- **検証**: interpreterスイート全数（704 PASS・0 FAIL。昇格2件込み）・unit・regression・generic_derive_methods（Debug書式・Display書式・clone・hash等値・string型引数・ネスト構造体の全出力が従来と同一）・llvm/js/svスイート。

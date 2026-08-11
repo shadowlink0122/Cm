@@ -924,6 +924,16 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
     }
 
     if (!impl.interface_name.empty()) {
+        // derive合成の総称impl（#[__derived]マーカー）を記録する。特殊化時のフィールド型検証が
+        // auto_impls除去後もderive規則を適用できるようにする
+        if (impl.target_type && !impl.target_type->type_args.empty()) {
+            for (const auto& attr : impl.attributes) {
+                if (attr.name == "__derived") {
+                    derived_generic_impls_[impl.target_type->name].insert(impl.interface_name);
+                    break;
+                }
+            }
+        }
         // インターフェースの存在チェック（Q4: 例外→通常診断。従来はbuild側のcatchで内部エラー表示になっていた）
         if (interface_names_.find(impl.interface_name) == interface_names_.end()) {
             error(current_span_,
@@ -1115,7 +1125,40 @@ void TypeChecker::check_impl(ast::ImplDecl& impl) {
                     break;
                 }
             }
+            // where句の境界（impl G<T> for Hash where T: Hash 等）も本文検査の解決に使う
+            // （従来は受理のみで境界が未配線のため、T値へのメソッド呼び出しが解決できなかった）
+            for (const auto& wc : impl.where_clauses) {
+                if (wc.type_param == param) {
+                    for (const auto& iface : wc.constraint.interfaces) {
+                        bounds.push_back(iface);
+                    }
+                }
+            }
             generic_context_.add_type_param(param, bounds);
+        }
+    }
+    // impl G<T> for Iface 形式（プレフィックス<T>なし）: ターゲット型引数のうち既知の型でない
+    // 裸名を型パラメータとして登録する（where句の境界も付与）。従来は未登録のため、
+    // 本文のT値へのメソッド呼び出しが境界経由で解決できなかった
+    if (impl.generic_params.empty() && impl.target_type && !impl.target_type->type_args.empty()) {
+        for (const auto& targ : impl.target_type->type_args) {
+            if (!targ || targ->name.empty() || !targ->type_args.empty()) {
+                continue;
+            }
+            if (struct_defs_.count(targ->name) > 0 || enum_names_.count(targ->name) > 0 ||
+                typedef_defs_.count(targ->name) > 0 || interface_names_.count(targ->name) > 0 ||
+                targ->is_primitive()) {
+                continue;
+            }
+            std::vector<std::string> bounds;
+            for (const auto& wc : impl.where_clauses) {
+                if (wc.type_param == targ->name) {
+                    for (const auto& iface : wc.constraint.interfaces) {
+                        bounds.push_back(iface);
+                    }
+                }
+            }
+            generic_context_.add_type_param(targ->name, bounds);
         }
     }
 

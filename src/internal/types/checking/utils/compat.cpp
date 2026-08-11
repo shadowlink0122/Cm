@@ -650,8 +650,7 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
                 // R21: derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
                 // （宣言時はTのため検査不能。従来はスライス型引数のEqが生バイナリ比較の無言誤値、ユニオン型引数がリンク失敗へ落ちていた）
                 if (sd_it != struct_defs_.end() && sd_it->second && !type->type_args.empty() &&
-                    type->type_args.size() == sd_it->second->generic_params.size() &&
-                    !sd_it->second->auto_impls.empty()) {
+                    type->type_args.size() == sd_it->second->generic_params.size()) {
                     validate_derive_instantiation(*sd_it->second, type);
                 }
                 return true;

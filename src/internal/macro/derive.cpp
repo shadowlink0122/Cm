@@ -4,6 +4,7 @@
 #include "internal/syntax/parser/parser.hpp"
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -123,6 +124,32 @@ void append_field_eq(std::string& expr, const ast::TypePtr& type, const std::str
 }
 
 // Eq: 全フィールドの==を&&で連結する（空構造体は常にtrue。手組みMIR実装と同一の意味論）
+// 型パラメータ名の集合（ジェネリック構造体の合成でフィールド型が型パラメータかを判定する）
+std::set<std::string> generic_param_set(const ast::StructDecl& st) {
+    return std::set<std::string>(st.generic_params.begin(), st.generic_params.end());
+}
+
+// フィールド型が型パラメータそのもの（T等）か
+bool is_param_field(const ast::TypePtr& t, const std::set<std::string>& params) {
+    return t && !t->name.empty() && t->type_args.empty() && params.count(t->name) > 0;
+}
+
+// ジェネリック構造体の合成implに付けるwhere句（全型パラメータへ境界traitを課す）。
+// 型パラメータのフィールドはメソッド形（self.f.hash()等）で合成され、境界経由で解決される
+std::string where_clause_for(const ast::StructDecl& st, const std::string& bound_iface) {
+    if (st.generic_params.empty() || bound_iface.empty()) {
+        return "";
+    }
+    std::string w = " where ";
+    for (size_t i = 0; i < st.generic_params.size(); ++i) {
+        if (i > 0) {
+            w += ", ";
+        }
+        w += st.generic_params[i] + ": " + bound_iface;
+    }
+    return w;
+}
+
 std::string synthesize_eq_impl(const ast::StructDecl& st) {
     const std::string type_text = struct_type_text(st);
     std::string body;
@@ -137,6 +164,9 @@ std::string synthesize_eq_impl(const ast::StructDecl& st) {
         body = "        return " + expr + ";\n";
     }
     std::string source;
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
     source += "impl " + type_text + " for Eq {\n";
     source += "    operator bool ==(" + type_text + " other) {\n";
     source += body;
@@ -157,7 +187,10 @@ std::string synthesize_ord_impl(const ast::StructDecl& st) {
     }
     body += "        return false;\n";
     std::string source;
-    source += "impl " + type_text + " for Ord {\n";
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
+    source += "impl " + type_text + " for Ord" + where_clause_for(st, "Ord") + " {\n";
     source += "    operator bool <(" + type_text + " other) {\n";
     source += body;
     source += "    }\n";
@@ -169,6 +202,9 @@ std::string synthesize_ord_impl(const ast::StructDecl& st) {
 std::string synthesize_clone_impl(const ast::StructDecl& st) {
     const std::string type_text = struct_type_text(st);
     std::string source;
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
     source += "impl " + type_text + " for Clone {\n";
     source += "    " + type_text + " clone() {\n";
     source += "        return self;\n";
@@ -185,10 +221,15 @@ std::string synthesize_hash_impl(const ast::StructDecl& st, const EnumTaggedMap&
     auto mix = [&body](const std::string& value_expr) {
         body += "        h = (h ^ " + value_expr + ") * 16777619;\n";
     };
+    const auto params = generic_param_set(st);
     for (const auto& field : st.fields) {
         const auto& t = field.type;
-        // 値enumフィールドはint値として混合する（.hash()呼び出しはenumのint正規化後に解決不能。R21）
-        if (t && t->kind == ast::TypeKind::Struct && !is_value_enum_field(t, enums)) {
+        // 型パラメータのフィールドは一様にhash()メソッド形（境界T: Hash経由で解決。
+        // プリミティブ型引数はプリミティブへの一様hash()実装が受ける）
+        if (is_param_field(t, params)) {
+            mix("self." + field.name + ".hash()");
+        } else if (t && t->kind == ast::TypeKind::Struct && !is_value_enum_field(t, enums)) {
+            // 値enumフィールドはint値として混合する（.hash()呼び出しはenumのint正規化後に解決不能。R21）
             mix("self." + field.name + ".hash()");
         } else if (t && t->kind == ast::TypeKind::Array && t->array_size.has_value()) {
             for (uint32_t j = 0; j < t->array_size.value(); ++j) {
@@ -200,7 +241,10 @@ std::string synthesize_hash_impl(const ast::StructDecl& st, const EnumTaggedMap&
     }
     body += "        return h;\n";
     std::string source;
-    source += "impl " + type_text + " for Hash {\n";
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
+    source += "impl " + type_text + " for Hash" + where_clause_for(st, "Hash") + " {\n";
     source += "    int hash() {\n";
     if (st.fields.empty()) {
         source += "        return -2128831035;\n";
@@ -241,7 +285,10 @@ std::string synthesize_debug_impl(const ast::StructDecl& st, const EnumTaggedMap
     }
     expr += st.fields.empty() ? "}\"" : " }\"";
     std::string source;
-    source += "impl " + type_text + " for Debug {\n";
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
+    source += "impl " + type_text + " for Debug" + where_clause_for(st, "Debug") + " {\n";
     source += "    string debug() {\n";
     source += "        return " + expr + ";\n";
     source += "    }\n";
@@ -261,7 +308,10 @@ std::string synthesize_display_impl(const ast::StructDecl& st, const EnumTaggedM
     }
     expr += " + \")\"";
     std::string source;
-    source += "impl " + type_text + " for Display {\n";
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
+    source += "impl " + type_text + " for Display" + where_clause_for(st, "Display") + " {\n";
     source += "    string toString() {\n";
     source += "        return " + expr + ";\n";
     source += "    }\n";
@@ -299,9 +349,14 @@ std::string synthesize_css_impl(const ast::StructDecl& st, const EnumTaggedMap& 
             body += "            s = s + \"" + key + "; \";\n";
             body += "        }\n";
         } else if (field.type && field.type->kind == ast::TypeKind::Struct &&
-                   !is_value_enum_field(field.type, enums)) {
+                   !is_value_enum_field(field.type, enums) &&
+                   generic_param_set(st).count(field.type->name) == 0) {
             body +=
                 "        s = s + \"" + key + " { \" + self." + field.name + ".css() + \" } \";\n";
+        } else if (field.type && generic_param_set(st).count(field.type->name) > 0 &&
+                   field.type->type_args.empty()) {
+            // 型パラメータのフィールドは補間で値整形する（プリミティブ型引数を想定。Css境界は課さない）
+            body += "        s = s + \"" + key + ": {self." + field.name + "}; \";\n";
         } else {
             body += "        s = s + \"" + key + ": \" + " +
                     field_value_piece(field, "css", enums) + " + \"; \";\n";
@@ -310,6 +365,9 @@ std::string synthesize_css_impl(const ast::StructDecl& st, const EnumTaggedMap& 
     body += "        return s;\n";
 
     std::string source;
+    if (!st.generic_params.empty()) {
+        source += "#[__derived]\n";
+    }
     source += "impl " + type_text + " for Css {\n";
     source += "    string css() {\n";
     source += body;
@@ -345,9 +403,80 @@ EnumTaggedMap collect_enum_tagged_map(const ast::Program& program) {
     return enums;
 }
 
+// 総称derive合成が使うプリミティブへの一様メソッド実装を合成する。
+// 型パラメータのフィールドはメソッド形（self.v.hash()等）で合成されるため、
+// int等のプリミティブ型引数の特殊化ではプリミティブ自身がhash()/debug()/toString()を持つ必要がある。
+// ユーザーが同じ（プリミティブ, インターフェース）のimplを書いている場合は重複を避けて出力しない
+std::string synthesize_primitive_uniform_impls(const ast::Program& program,
+                                               const std::set<std::string>& needed_ifaces) {
+    if (needed_ifaces.empty()) {
+        return "";
+    }
+    // 既存のユーザーimpl（プリミティブ×インターフェース）を収集
+    std::set<std::pair<std::string, std::string>> existing;
+    for (const auto& decl : program.declarations) {
+        const auto* imp = const_cast<ast::Decl&>(*decl).as<ast::ImplDecl>();
+        if (imp && imp->target_type && !imp->interface_name.empty()) {
+            existing.insert({ast::type_to_string(*imp->target_type), imp->interface_name});
+        }
+    }
+    static const char* kIntLike[] = {"tiny", "utiny", "short", "ushort", "int",  "uint",
+                                     "long", "ulong", "isize", "usize",  "bool", "char"};
+    static const char* kFloatLike[] = {"float", "double"};
+    std::string source;
+    auto emit = [&](const std::string& prim, const std::string& iface, const std::string& body) {
+        if (existing.count({prim, iface}) > 0) {
+            return;
+        }
+        source += "impl " + prim + " for " + iface + " {\n" + body + "}\n";
+    };
+    if (needed_ifaces.count("Hash") > 0) {
+        for (const char* prim : kIntLike) {
+            emit(prim, "Hash", "    int hash() {\n        return self as int;\n    }\n");
+        }
+    }
+    if (needed_ifaces.count("Debug") > 0) {
+        for (const char* prim : kIntLike) {
+            emit(prim, "Debug", "    string debug() {\n        return \"{self}\";\n    }\n");
+        }
+        for (const char* prim : kFloatLike) {
+            emit(prim, "Debug", "    string debug() {\n        return \"{self}\";\n    }\n");
+        }
+        emit("string", "Debug", "    string debug() {\n        return self;\n    }\n");
+    }
+    if (needed_ifaces.count("Display") > 0) {
+        for (const char* prim : kIntLike) {
+            emit(prim, "Display", "    string toString() {\n        return \"{self}\";\n    }\n");
+        }
+        for (const char* prim : kFloatLike) {
+            emit(prim, "Display", "    string toString() {\n        return \"{self}\";\n    }\n");
+        }
+        emit("string", "Display", "    string toString() {\n        return self;\n    }\n");
+    }
+    return source;
+}
+
 std::string synthesize_derive_impls(const ast::Program& program) {
     const EnumTaggedMap enums = collect_enum_tagged_map(program);
     std::string source;
+    // 総称構造体のderiveが必要とするプリミティブ一様メソッドの対象トレイトを収集
+    std::set<std::string> prim_ifaces;
+    for (const auto& decl : program.declarations) {
+        if (!decl) {
+            continue;
+        }
+        const auto* gst = const_cast<ast::Decl&>(*decl).as<ast::StructDecl>();
+        if (!gst || gst->generic_params.empty() || gst->auto_impls.empty()) {
+            continue;
+        }
+        for (const auto& iface : gst->auto_impls) {
+            if ((iface == "Hash" || iface == "Debug" || iface == "Display") &&
+                is_source_expanded_trait(iface) && fields_derivable(*gst, iface, enums)) {
+                prim_ifaces.insert(iface);
+            }
+        }
+    }
+    source += synthesize_primitive_uniform_impls(program, prim_ifaces);
     for (const auto& decl : program.declarations) {
         if (!decl) {
             continue;
@@ -356,13 +485,9 @@ std::string synthesize_derive_impls(const ast::Program& program) {
         if (!st || st->auto_impls.empty()) {
             continue;
         }
-        // ジェネリック構造体は対象外（総称演算子implのモノモーフ化は実装済みだが、
-        // Hash/Debug/Display/Cssの合成本体はフィールドT上で self.v.hash()/self.v.debug() を呼ぶ形になり、
-        // 型引数がint等のプリミティブのときプリミティブに該当メソッドが無く合成が成立しない。
-        // 単一総称implへの移行にはプリミティブへの一様メソッド付与が前提となるためモノモーフ化後の手組み生成を維持する）
-        if (!st->generic_params.empty()) {
-            continue;
-        }
+        // ジェネリック構造体も単一の総称implソースへ合成する（第3段後半）。
+        // 型パラメータのフィールドはメソッド形（self.v.hash()等）+ where境界で合成され、
+        // プリミティブ型引数は同時に合成されるプリミティブへの一様メソッド実装が受ける
         for (const auto& iface : st->auto_impls) {
             if (!is_source_expanded_trait(iface) || !fields_derivable(*st, iface, enums)) {
                 continue;
@@ -404,7 +529,7 @@ int expand_derives(ast::Program& program) {
             continue;
         }
         auto* st = decl->as<ast::StructDecl>();
-        if (!st || st->auto_impls.empty() || !st->generic_params.empty()) {
+        if (!st || st->auto_impls.empty()) {
             continue;
         }
         std::vector<std::string> remaining;

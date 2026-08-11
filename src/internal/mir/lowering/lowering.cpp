@@ -79,10 +79,8 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
     // Pass 4: モノモーフィゼーション（インターフェース特殊化）
     perform_monomorphization();
 
-    if (cm::debug::debug_mode())
-        std::cerr << "[MIR] Pass 5: generate_monomorphized_auto_impls" << std::endl;
-    // Pass 5: モノモーフィゼーション後のジェネリック構造体に対する自動実装を生成
-    generate_monomorphized_auto_impls();
+    // 旧Pass 5（モノモーフィゼーション後のジェネリック構造体への手組みMIR自動実装）は
+    // 総称implのソース合成（macro/derive.cpp）への一本化により廃止した（auto-impl第3段）
 
     if (cm::debug::debug_mode())
         std::cerr << "[MIR] Pass 6: rewrite_struct_comparison_operators" << std::endl;
