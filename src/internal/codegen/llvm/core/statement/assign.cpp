@@ -32,216 +32,34 @@ void MIRToLLVM::convertAssignStatement(const mir::MirStatement::AssignData& assi
             return;
         }
     }
-    // interface型へのcoercion（動的ディスパッチ用 fat pointer 構築）
-    // - Shape sh = sq;      : dest=interface値、src=具象構造体
-    // - Shape* p = &sq;     : dest=interfaceポインタ、src=具象構造体へのRef
+    // interface値のアドレス取得（&sh）: fat pointerのコピーとして扱う。
+    // 具象→interfaceのupcast（fat pointer構築）はMIRのiface_upcast Cast構築物へ一元化済みのため、
+    // 旧来のassign認識（値upcast・ポインタupcast・射影スロットupcast）はここには存在しない（coercion第2段）
     if (assign.place.projections.empty() && currentMIRFunction &&
         assign.place.local < currentMIRFunction->locals.size()) {
         const auto& destType = currentMIRFunction->locals[assign.place.local].type;
-
-        // Case A: interface値への具象構造体の代入
-        if (destType && destType->kind == hir::TypeKind::Struct &&
-            isInterfaceType(destType->name) && assign.rvalue->kind == mir::MirRvalue::Use) {
-            auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
-            if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
-                                    useData.operand->kind == mir::MirOperand::Move)) {
-                auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
-                if (srcPlace.projections.empty() &&
-                    srcPlace.local < currentMIRFunction->locals.size()) {
-                    const auto& srcType = currentMIRFunction->locals[srcPlace.local].type;
-                    if (srcType && srcType->kind == hir::TypeKind::Struct &&
-                        !isInterfaceType(srcType->name)) {
-                        // 具象構造体のallocaをdataポインタとしてfat pointerを構築
-                        auto srcAddr = locals[srcPlace.local];
-                        if (srcAddr) {
-                            llvm::Value* dataPtr = srcAddr;
-                            // fat pointerのペイロードはヒープへ実体化（boxing）してから包む（Q3）。
-                            // スタックのローカルを指したままだと戻り値経由（return Rect{...}; や Shape s = r; return s;）で
-                            // return後にダングリングになり、O0では偶然正しく読めO2でゴミ値・wasmで誤値という分裂を起こしていた。
-                            // upcastはMIRがコピー一時を挟むスナップショット（値）意味論のためboxingしても観測挙動は変わらない。
-                            // ヒープペイロードの解放は将来のdrop対応課題。
-                            // wasmはnoStdだがランタイム（runtime_wasm.c）がmallocを提供するため自前宣言で呼ぶ。
-                            // malloc無しのベアメタル系noStdターゲットのみ実体化をスキップする（リンク不能を避ける）
-                            const auto& targetConfig = ctx.getTargetConfig();
-                            const bool has_malloc =
-                                !targetConfig.noStd || targetConfig.target == BuildTarget::Wasm;
-                            if (has_malloc) {
-                                auto structTy = convertType(srcType);
-                                const auto& dl = module->getDataLayout();
-                                const uint64_t payload_size = dl.getTypeAllocSize(structTy);
-                                auto sizeTy = dl.getIntPtrType(module->getContext());
-                                auto mallocCallee = module->getOrInsertFunction(
-                                    "malloc",
-                                    llvm::FunctionType::get(ctx.getPtrType(), {sizeTy}, false));
-                                auto heap = builder->CreateCall(
-                                    mallocCallee, {llvm::ConstantInt::get(sizeTy, payload_size)},
-                                    "iface_box");
-                                builder->CreateMemCpy(heap, llvm::MaybeAlign(), srcAddr,
-                                                      llvm::MaybeAlign(), payload_size);
-                                dataPtr = heap;
-                            }
-                            auto fat =
-                                createInterfaceFatPtr(dataPtr, srcType->name, destType->name);
-                            if (allocatedLocals.count(assign.place.local) > 0 &&
-                                locals[assign.place.local]) {
-                                builder->CreateStore(fat, locals[assign.place.local]);
-                            } else {
-                                // SSA形式のローカルにはfat値を直接束縛する
-                                locals[assign.place.local] = fat;
-                            }
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Case B: interfaceポインタへの具象構造体アドレスの代入
         if (destType && destType->kind == hir::TypeKind::Pointer && destType->element_type &&
             destType->element_type->kind == hir::TypeKind::Struct &&
-            isInterfaceType(destType->element_type->name)) {
-            // Ref rvalue（&sq）またはUse copy（ポインタ変数経由）でソースが具象構造体を指す場合
-            const std::string& ifaceName = destType->element_type->name;
-            llvm::Value* dataPtr = nullptr;
-            std::string concreteName;
-
-            if (assign.rvalue->kind == mir::MirRvalue::Ref) {
-                // &sq を直接代入するケース
-                auto& refData = std::get<mir::MirRvalue::RefData>(assign.rvalue->data);
-                const auto& refPlace = refData.place;
-                if (refPlace.projections.empty() &&
-                    refPlace.local < currentMIRFunction->locals.size()) {
-                    const auto& srcType = currentMIRFunction->locals[refPlace.local].type;
-                    if (srcType && srcType->kind == hir::TypeKind::Struct &&
-                        !isInterfaceType(srcType->name) && locals[refPlace.local]) {
-                        dataPtr = locals[refPlace.local];
-                        concreteName = srcType->name;
+            isInterfaceType(destType->element_type->name) &&
+            assign.rvalue->kind == mir::MirRvalue::Ref) {
+            auto& refData2 = std::get<mir::MirRvalue::RefData>(assign.rvalue->data);
+            const auto& rp = refData2.place;
+            if (rp.projections.empty() && rp.local < currentMIRFunction->locals.size()) {
+                const auto& st = currentMIRFunction->locals[rp.local].type;
+                if (st && st->kind == hir::TypeKind::Struct && isInterfaceType(st->name) &&
+                    locals[rp.local]) {
+                    auto fatType = getInterfaceFatPtrType(st->name);
+                    llvm::Value* fatVal = locals[rp.local];
+                    if (fatVal->getType()->isPointerTy()) {
+                        fatVal = builder->CreateLoad(fatType, fatVal, "iface_copy");
                     }
-                }
-            } else if (assign.rvalue->kind == mir::MirRvalue::Use) {
-                // 具象構造体ポインタ変数のコピー（&sq が一旦 *Sq テンポラリを経由するケース）
-                auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
-                if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
-                                        useData.operand->kind == mir::MirOperand::Move)) {
-                    auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
-                    if (srcPlace.projections.empty() &&
-                        srcPlace.local < currentMIRFunction->locals.size()) {
-                        const auto& srcType = currentMIRFunction->locals[srcPlace.local].type;
-                        if (srcType && srcType->kind == hir::TypeKind::Pointer &&
-                            srcType->element_type &&
-                            srcType->element_type->kind == hir::TypeKind::Struct &&
-                            !isInterfaceType(srcType->element_type->name) &&
-                            locals[srcPlace.local]) {
-                            // ポインタ値をロードしてdataポインタとする
-                            dataPtr = builder->CreateLoad(ctx.getPtrType(), locals[srcPlace.local],
-                                                          "iface_src");
-                            concreteName = srcType->element_type->name;
-                        }
+                    if (allocatedLocals.count(assign.place.local) > 0 &&
+                        locals[assign.place.local]) {
+                        builder->CreateStore(fatVal, locals[assign.place.local]);
+                    } else {
+                        locals[assign.place.local] = fatVal;
                     }
-                }
-            }
-
-            if (dataPtr && !concreteName.empty()) {
-                // Shape* はfat pointer値そのもの:
-                // dataフィールドが実装オブジェクトを直接指す
-                auto fat = createInterfaceFatPtr(dataPtr, concreteName, ifaceName);
-                if (allocatedLocals.count(assign.place.local) > 0 && locals[assign.place.local]) {
-                    builder->CreateStore(fat, locals[assign.place.local]);
-                } else {
-                    // SSA形式のローカルにはfat値を直接束縛する
-                    locals[assign.place.local] = fat;
-                }
-                return;
-            }
-
-            // &sh（interface値のアドレス取得）: 同じオブジェクトを指す
-            // fat pointerのコピーとして扱う
-            if (assign.rvalue->kind == mir::MirRvalue::Ref) {
-                auto& refData2 = std::get<mir::MirRvalue::RefData>(assign.rvalue->data);
-                const auto& rp = refData2.place;
-                if (rp.projections.empty() && rp.local < currentMIRFunction->locals.size()) {
-                    const auto& st = currentMIRFunction->locals[rp.local].type;
-                    if (st && st->kind == hir::TypeKind::Struct && isInterfaceType(st->name) &&
-                        locals[rp.local]) {
-                        auto fatType = getInterfaceFatPtrType(st->name);
-                        llvm::Value* fatVal = locals[rp.local];
-                        if (fatVal->getType()->isPointerTy()) {
-                            fatVal = builder->CreateLoad(fatType, fatVal, "iface_copy");
-                        }
-                        if (allocatedLocals.count(assign.place.local) > 0 &&
-                            locals[assign.place.local]) {
-                            builder->CreateStore(fatVal, locals[assign.place.local]);
-                        } else {
-                            locals[assign.place.local] = fatVal;
-                        }
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    // Case A2 (H2): 射影付きplace（構造体フィールド・配列/スライス要素）のinterface型スロットへ
-    // 具象構造体を代入する場合もfat pointerを構築する。
-    // 従来はcoercionが射影なし代入限定で、Box{sh: sq} や b.sh = sq2 のような集約への格納は
-    // 生の具象値がそのまま格納され、動的ディスパッチが不正なvtableを読んでクラッシュしていた
-    if (!assign.place.projections.empty() && currentMIRFunction &&
-        assign.place.local < currentMIRFunction->locals.size() &&
-        assign.rvalue->kind == mir::MirRvalue::Use) {
-        // 射影後の格納先型を解決する（Field: 構造体定義、Index/Deref: 要素型）
-        hir::TypePtr slotType = currentMIRFunction->locals[assign.place.local].type;
-        for (const auto& proj : assign.place.projections) {
-            if (!slotType) {
-                break;
-            }
-            if (proj.result_type) {
-                slotType = proj.result_type;
-                continue;
-            }
-            if (proj.kind == mir::ProjectionKind::Field) {
-                if (slotType->kind == hir::TypeKind::Struct) {
-                    auto sit = structDefs.find(slotType->name);
-                    if (sit != structDefs.end() && sit->second &&
-                        proj.field_id < sit->second->fields.size()) {
-                        slotType = sit->second->fields[proj.field_id].type;
-                        continue;
-                    }
-                }
-                slotType = nullptr;
-            } else {
-                slotType = slotType->element_type;
-            }
-        }
-
-        if (slotType && slotType->kind == hir::TypeKind::Struct &&
-            isInterfaceType(slotType->name)) {
-            auto& useData = std::get<mir::MirRvalue::UseData>(assign.rvalue->data);
-            if (useData.operand && (useData.operand->kind == mir::MirOperand::Copy ||
-                                    useData.operand->kind == mir::MirOperand::Move)) {
-                auto& srcPlace = std::get<mir::MirPlace>(useData.operand->data);
-                if (srcPlace.projections.empty() &&
-                    srcPlace.local < currentMIRFunction->locals.size()) {
-                    const auto& srcType = currentMIRFunction->locals[srcPlace.local].type;
-                    if (srcType && srcType->kind == hir::TypeKind::Struct &&
-                        !isInterfaceType(srcType->name)) {
-                        llvm::Value* srcAddr = locals[srcPlace.local];
-                        if (srcAddr && !srcAddr->getType()->isPointerTy()) {
-                            // SSA値の場合はスタックへ退避して実体アドレスを得る
-                            auto* tmp =
-                                builder->CreateAlloca(srcAddr->getType(), nullptr, "iface_src_tmp");
-                            builder->CreateStore(srcAddr, tmp);
-                            srcAddr = tmp;
-                        }
-                        if (srcAddr) {
-                            auto fat =
-                                createInterfaceFatPtr(srcAddr, srcType->name, slotType->name);
-                            auto destAddr = convertPlaceToAddress(assign.place);
-                            if (destAddr) {
-                                builder->CreateStore(fat, destAddr);
-                                return;
-                            }
-                        }
-                    }
+                    return;
                 }
             }
         }

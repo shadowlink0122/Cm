@@ -526,6 +526,41 @@ LocalId LoweringContext::coerce_to_expected(LocalId value, const hir::TypePtr& e
         }
         return coerce_to_union(value, dest);
     }
+    // インターフェースupcast（値）: 宛先がinterface構造体で値が具象構造体なら、fat pointer構築を
+    // MIRの構築物（iface_upcast Cast）として発行する。ペイロードはヒープへ実体化（boxed）してから包む
+    // （戻り値経由でスタックローカルを指したままダングリングする分裂の恒久修正。coercion第2段）
+    if (interface_names && dest->kind == hir::TypeKind::Struct &&
+        interface_names->count(dest->name) > 0) {
+        hir::TypePtr src = resolve_typedef(func->locals[value].type);
+        if (src && src->kind == hir::TypeKind::Struct && interface_names->count(src->name) == 0 &&
+            !src->name.empty()) {
+            LocalId fat = new_temp(dest);
+            push_statement(MirStatement::assign(
+                MirPlace{fat}, MirRvalue::iface_upcast(MirOperand::copy(MirPlace{value}), dest,
+                                                       src->name, false, true)));
+            return fat;
+        }
+    }
+    // インターフェースupcast（ポインタ）: 宛先がinterfaceポインタで値が具象構造体ポインタなら、
+    // 指し先アドレスをdataとするfat pointerを構築する（boxingなし＝既存ストレージを指す）
+    if (interface_names && dest->kind == hir::TypeKind::Pointer && dest->element_type) {
+        auto dest_elem = resolve_typedef(dest->element_type);
+        if (dest_elem && dest_elem->kind == hir::TypeKind::Struct &&
+            interface_names->count(dest_elem->name) > 0) {
+            hir::TypePtr src = resolve_typedef(func->locals[value].type);
+            if (src && src->kind == hir::TypeKind::Pointer && src->element_type) {
+                auto src_elem = resolve_typedef(src->element_type);
+                if (src_elem && src_elem->kind == hir::TypeKind::Struct &&
+                    interface_names->count(src_elem->name) == 0 && !src_elem->name.empty()) {
+                    LocalId fat = new_temp(dest);
+                    push_statement(MirStatement::assign(
+                        MirPlace{fat}, MirRvalue::iface_upcast(MirOperand::copy(MirPlace{value}),
+                                                               dest, src_elem->name, true, false)));
+                    return fat;
+                }
+            }
+        }
+    }
     value = coerce_numeric_context(value, dest);
     value = coerce_fixed_array_to_slice(value, dest);
     return value;

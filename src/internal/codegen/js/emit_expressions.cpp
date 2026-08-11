@@ -384,6 +384,18 @@ std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFu
             const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
             std::string operand = emitOperand(*data.operand, func);
 
+            // インターフェースupcast（MIRのiface_upcast構築物）: {data, vtable}のfatオブジェクトを構築する。
+            // JSはGC参照のためboxing・ポインタ/値の区別は不要（dataは同一オブジェクト参照）
+            if (!data.iface_concrete.empty() && data.target_type) {
+                std::string ifaceName = data.target_type->name;
+                if (data.iface_from_pointer && data.target_type->element_type) {
+                    ifaceName = data.target_type->element_type->name;
+                }
+                std::string vtableName = sanitizeIdentifier(data.iface_concrete) + "_" +
+                                         sanitizeIdentifier(ifaceName) + "_vtable";
+                return "{ data: " + operand + ", vtable: " + vtableName + " }";
+            }
+
             // ユニオン型の実行時型判別 (expr is Type):
             // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する（構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
             if (data.check_only) {

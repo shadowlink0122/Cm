@@ -96,3 +96,14 @@ checker側の受理判定（utils/compat.cpp・utils/conversion.cpp）とMIR側�
 - **null変種の誤タグ**: nullリテラルの型はcheckerで`void`のため、構築時の変種照合（kind一致）がNull変種にヒットせずタグ0へフォールバックしていた。変種照合の3箇所——MIR統一ドライバ（`coerce_to_expected`の完全一致判定）・LLVM構築（rvalue.cppのタグ照合）・JS構築（`computeUnionTag`）——へvoid→Null写像を追加した（void型の値式はnullリテラル以外に存在しないため安全。checkerのnullリテラル型をNull化する全面変更はポインタnull互換への波及があるため採らなかった）。
 - 回帰テスト: `tests/common/types/union/slice_variant.cm`（as/let/動的スライスからの構築・判別・抽出）・`null_variant.cm`（null/int変種の構築とis判別・再代入）・`equality.cm`（スライス変種の内容比較を含む14ケース）。いずれもinterpreter/llvm/jsの3バックエンド一致。
 - 残: 第2段の本丸（インターフェースupcastのMIR構築物化・4バックエンドassign認識撤去・return heap-boxing統一）・第3段（checker注釈駆動化）は未着手のまま。
+
+## 実装記録（第2段の完遂＝インターフェースupcastのMIR構築物化・2026-08-11）
+
+第2段の本丸を完遂した。fat pointer構築はMIRの構築物として一意に表現され、バックエンドの認識ヒューリスティックは全廃した。
+
+- **MIR構築物**: `MirRvalue::CastData` へ `iface_concrete`（具象構造体名。非空でupcastを表す）・`iface_from_pointer`（ポインタupcast＝既存ストレージを指す）・`iface_boxed`（値upcastのヒープ実体化）を追加し、ファクトリ `MirRvalue::iface_upcast` を新設した。新Rvalue種でなくCast拡張としたのは、全最適化パス（DCE/DSE/GVN/LICM/伝播/SCCP等）のオペランド列挙がCastを既に正しく扱っており波及を最小化できるため。GVNのCastキーへupcast情報を追加し、boxed upcastはmalloc副作用（CSE共有すると2つのfat pointerが同一ヒープを指しinterface経由の変更が相互に漏れる）のためCSE対象外（空キー）とした。
+- **発行の一元化**: `coerce_to_expected` へインターフェイスディスパッチを追加した——宛先がinterface構造体×値が具象構造体なら値upcast（boxed）、宛先がinterfaceポインタ×値が具象ポインタならポインタupcast（非boxed）。これによりlet/単純代入/メンバ・添字・deref代入/return/構造体リテラルフィールド/push/引数/デフォルト引数/複合代入の全サイトが同一機構でfat pointerを得る。**returnのheap-boxingはboxedフラグ1つに統一され、LLVM assign認識にしか存在しなかったboxingの非対称（Q3系の真因）が消えた**。配列リテラル要素サイト（construct.cpp）は生Castのkind不一致ヒューリスティックのみでドライバ未経由だったため `coerce_to_expected` を先行挿入した（interface要素の固定長配列 `Shape[2] = [sq, ci]` が旧射影認識の削除でクラッシュ化して発覚。残余のkind不一致は従来の生Castフォールバックを維持）。
+- **バックエンド実装と認識撤去**: LLVMは `convertInterfaceUpcast`（interface.cpp）がboxing（malloc+memcpy。ベアメタルnoStdのみスキップ・wasmはランタイムmalloc）とfat pointer構築を担い、assign.cppの認識3系統（値upcast・ポインタupcast・射影スロットupcast＝H2）とinvoke.cppの引数認識を削除した（interface値のアドレス取得 `&sh` のfat pointerコピーはupcastでないため存置）。JSはCast経路で `{data, vtable}` を構築し（GC参照のためboxing不要）、emit_statements.cppのassign認識2系統を削除した。SVは動的ディスパッチ自体をエラー化済みのため対象外。interpreterはjit（LLVM経路）のため個別実装なし。
+- **MIR loweringのインライン一時の削除**: 旧H1のインライン一時パターン2箇所（stmt/let.cppのスライスリテラル要素・expr_slice.cppのpush）は「interface型の一時への素の代入」でバックエンド認識に依存していたため、認識撤去に伴い削除した（ドライバのupcast発行が代替）。
+- **回帰テスト**: `tests/common/interface/misc/upcast_sites.cm` を新設し、サイト×upcast形のマトリクス（let/再代入/構造体リテラルフィールド/射影付き代入/引数/return2形（直接・interfaceローカル経由）/固定長配列リテラル・要素上書き/スライスリテラル・push/ポインタupcastの書き込み可視性）をinterpreter・llvm O0/O2・jsで検証した。既存interfaceテスト61件もinterpreter/llvm-O2/jsで全PASS。
+- 残: 第3段（checker注釈駆動化。types_compatibleの構造変換分岐を注釈生成へ置き換え、受理・挿入の2実装をconversion_kind表の単一真実へ畳む）。

@@ -51,6 +51,75 @@ llvm::Value* MIRToLLVM::createInterfaceFatPtr(llvm::Value* dataPtr,
     return fat;
 }
 
+// インターフェースupcast（MIRのiface_upcast Cast構築物）をfat pointer値へ変換する。
+// 値upcast: 具象構造体のアドレスをdataとし、boxed指定時はヒープへ実体化してから包む
+// （戻り値経由でスタックローカルを指したままダングリングする分裂の恒久修正）。
+// ポインタupcast: 具象ポインタ値をそのままdataとする（既存ストレージを指す）
+llvm::Value* MIRToLLVM::convertInterfaceUpcast(const mir::MirRvalue::CastData& castData) {
+    if (!castData.operand || !castData.target_type) {
+        return nullptr;
+    }
+    // 宛先interface名（値upcastは構造体名・ポインタupcastは指し先名）
+    std::string ifaceName = castData.target_type->name;
+    if (castData.iface_from_pointer && castData.target_type->element_type) {
+        ifaceName = castData.target_type->element_type->name;
+    }
+
+    if (castData.iface_from_pointer) {
+        auto ptrVal = convertOperand(*castData.operand);
+        if (!ptrVal) {
+            return nullptr;
+        }
+        return createInterfaceFatPtr(ptrVal, castData.iface_concrete, ifaceName);
+    }
+
+    // 値upcast: オペランド（具象構造体ローカル）の実体アドレスを得る
+    llvm::Value* srcAddr = nullptr;
+    hir::TypePtr srcHirType = getOperandType(*castData.operand);
+    if (castData.operand->kind == mir::MirOperand::Copy ||
+        castData.operand->kind == mir::MirOperand::Move) {
+        const auto& place = std::get<mir::MirPlace>(castData.operand->data);
+        if (place.projections.empty() && place.local < locals.size()) {
+            srcAddr = locals[place.local];
+        } else {
+            srcAddr = convertPlaceToAddress(place);
+        }
+    }
+    if (srcAddr && !srcAddr->getType()->isPointerTy()) {
+        // SSA値はスタックへ退避して実体アドレスを得る
+        auto* tmp = builder->CreateAlloca(srcAddr->getType(), nullptr, "iface_src_tmp");
+        builder->CreateStore(srcAddr, tmp);
+        srcAddr = tmp;
+    }
+    if (!srcAddr) {
+        return nullptr;
+    }
+
+    llvm::Value* dataPtr = srcAddr;
+    if (castData.iface_boxed) {
+        // ペイロードをヒープへ実体化（boxing）してから包む。malloc無しのベアメタルnoStdのみスキップ
+        // （wasmはランタイムがmallocを提供する）。ヒープペイロードの解放は将来のdrop対応課題
+        const auto& targetConfig = ctx.getTargetConfig();
+        const bool has_malloc = !targetConfig.noStd || targetConfig.target == BuildTarget::Wasm;
+        if (has_malloc && srcHirType) {
+            auto structTy = convertType(srcHirType);
+            if (structTy) {
+                const auto& dl = module->getDataLayout();
+                const uint64_t payload_size = dl.getTypeAllocSize(structTy);
+                auto sizeTy = dl.getIntPtrType(module->getContext());
+                auto mallocCallee = module->getOrInsertFunction(
+                    "malloc", llvm::FunctionType::get(ctx.getPtrType(), {sizeTy}, false));
+                auto heap = builder->CreateCall(
+                    mallocCallee, {llvm::ConstantInt::get(sizeTy, payload_size)}, "iface_box");
+                builder->CreateMemCpy(heap, llvm::MaybeAlign(), srcAddr, llvm::MaybeAlign(),
+                                      payload_size);
+                dataPtr = heap;
+            }
+        }
+    }
+    return createInterfaceFatPtr(dataPtr, castData.iface_concrete, ifaceName);
+}
+
 // vtable生成
 void MIRToLLVM::generateVTables(const mir::MirProgram& program) {
     for (const auto& vtable : program.vtables) {

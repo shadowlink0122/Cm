@@ -179,6 +179,13 @@ std::string GVN::stringify_rvalue(const MirRvalue& rvalue) {
         // ペイロードが1（true）や5e-324（bit 1のdouble解釈）に化けるミスコンパイルの真因だった
         if (cast->check_only)
             ss << ",is";
+        // boxed upcastはmalloc副作用を持ち、CSE共有すると2つのfat pointerが同一ヒープを指して
+        // インターフェース経由の変更が相互に漏れるためCSE対象外（空キー）にする
+        if (!cast->iface_concrete.empty() && cast->iface_boxed)
+            return std::string();
+        // インターフェースupcastは通常Castと別値（fat pointer構築）
+        if (!cast->iface_concrete.empty())
+            ss << ",up:" << cast->iface_concrete << (cast->iface_from_pointer ? ",p" : "");
         ss << ")";
         return ss.str();
     }

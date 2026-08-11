@@ -378,72 +378,8 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                     }
                 }
 
-                // 構造体をインターフェースパラメータに渡す場合、fat pointerを作成
-                if (!actualTypeName.empty() && !isInterfaceType(actualTypeName)) {
-                    std::string expectedInterfaceName;
-                    if (currentProgram) {
-                        for (const auto& func : currentProgram->functions) {
-                            if (func && func->name == funcName) {
-                                if (i < func->arg_locals.size()) {
-                                    auto argLocal = func->arg_locals[i];
-                                    if (argLocal < func->locals.size()) {
-                                        auto& paramLocal = func->locals[argLocal];
-                                        if (paramLocal.type &&
-                                            isInterfaceType(paramLocal.type->name)) {
-                                            expectedInterfaceName = paramLocal.type->name;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!expectedInterfaceName.empty()) {
-                        auto fatPtrType = getInterfaceFatPtrType(expectedInterfaceName);
-                        std::string vtableKey = actualTypeName + "_" + expectedInterfaceName;
-                        llvm::Value* vtablePtr = nullptr;
-                        auto vtableIt = vtableGlobals.find(vtableKey);
-                        if (vtableIt != vtableGlobals.end()) {
-                            vtablePtr = vtableIt->second;
-                        } else {
-                            vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
-                        }
-
-                        // 引数が構造体へのポインタの場合、そのポインタをdata pointerとして使用
-                        llvm::Value* dataPtr = args[i];
-
-                        // 構造体値の場合は、その値をヒープにコピーする
-                        // これにより、インターフェース呼び出し後もデータが有効になる
-                        if (!dataPtr->getType()->isPointerTy()) {
-                            // スタック上に永続的なコピーを作成（呼び出し後も有効）
-                            auto structType = dataPtr->getType();
-                            auto structAlloca =
-                                builder->CreateAlloca(structType, nullptr, "interface_data");
-                            builder->CreateStore(dataPtr, structAlloca);
-                            dataPtr = structAlloca;
-                        }
-
-                        auto fatPtrAlloca = builder->CreateAlloca(fatPtrType, nullptr, "fat_ptr");
-                        auto dataFieldPtr =
-                            builder->CreateStructGEP(fatPtrType, fatPtrAlloca, 0, "data_field");
-                        auto dataPtrCast =
-                            builder->CreateBitCast(dataPtr, ctx.getPtrType(), "data_ptr_cast");
-                        builder->CreateStore(dataPtrCast, dataFieldPtr);
-
-                        auto vtableFieldPtr =
-                            builder->CreateStructGEP(fatPtrType, fatPtrAlloca, 1, "vtable_field");
-                        auto vtablePtrCast =
-                            builder->CreateBitCast(vtablePtr, ctx.getPtrType(), "vtable_ptr_cast");
-                        builder->CreateStore(vtablePtrCast, vtableFieldPtr);
-
-                        // Fat pointerを値として渡す
-                        auto fatPtrValue =
-                            builder->CreateLoad(fatPtrType, fatPtrAlloca, "fat_ptr_value");
-                        args[i] = fatPtrValue;
-                        continue;
-                    }
-                }
+                // 具象→interfaceパラメータのfat pointer構築はMIRのiface_upcast Cast構築物へ
+                // 一元化済みのため、引数側の認識ヒューリスティックはここには存在しない（coercion第2段）
 
                 if (expectedType->isPointerTy() && actualType->isPointerTy()) {
                     args[i] = builder->CreateBitCast(args[i], expectedType);

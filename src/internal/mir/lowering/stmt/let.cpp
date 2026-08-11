@@ -467,26 +467,10 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                         } else {
                             elem_value = expr_lowering->lower_expression(*elem, ctx);
 
-                            // ユニオン要素スライスの変種値要素はユニオン構築Cast経由でタグ+ペイロードを揃える（Y3）
+                            // ユニオン要素スライスの変種値要素はユニオン構築Cast経由でタグ+ペイロードを揃え、
+                            // インターフェイス要素スライスへの具象構造体要素はfat pointer構築（iface_upcast）を発行する
+                            // （旧H1のインライン一時＝バックエンドassign認識頼みの複製は統一ドライバへ吸収済み）
                             elem_value = ctx.coerce_to_expected(elem_value, elem_type);
-
-                            // インターフェイス要素スライスへの具象構造体要素:
-                            // インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
-                            if (elem_kind == hir::TypeKind::Struct && ctx.interface_names &&
-                                ctx.interface_names->count(elem_type->name) > 0) {
-                                hir::TypePtr actual_type = nullptr;
-                                if (elem_value < ctx.func->locals.size()) {
-                                    actual_type = ctx.func->locals[elem_value].type;
-                                }
-                                if (actual_type && actual_type->kind == hir::TypeKind::Struct &&
-                                    actual_type->name != elem_type->name) {
-                                    LocalId iface_tmp = ctx.new_temp(elem_type);
-                                    ctx.push_statement(MirStatement::assign(
-                                        MirPlace{iface_tmp},
-                                        MirRvalue::use(MirOperand::copy(MirPlace{elem_value}))));
-                                    elem_value = iface_tmp;
-                                }
-                            }
 
                             // floatスライスへのdouble要素の場合、floatにキャスト
                             // 浮動小数点リテラルはデフォルトでdoubleとして解析される

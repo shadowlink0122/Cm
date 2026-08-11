@@ -174,21 +174,8 @@ std::optional<LocalId> ExprLowering::try_lower_slice_builtin(const hir::HirCall&
             }
         }
 
-        // インターフェイス要素スライスへの具象構造体push: インターフェイス型の一時へ代入してfat pointerを構築してからblob格納する（H1）
-        if (disp.cls == hir::SliceElemClass::Blob && elem_type &&
-            elem_type->kind == hir::TypeKind::Struct && ctx.interface_names &&
-            ctx.interface_names->count(elem_type->name) > 0) {
-            hir::TypePtr actual = (value_local < ctx.func->locals.size())
-                                      ? ctx.func->locals[value_local].type
-                                      : nullptr;
-            if (actual && actual->kind == hir::TypeKind::Struct &&
-                actual->name != elem_type->name) {
-                LocalId iface_tmp = ctx.new_temp(elem_type);
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{iface_tmp}, MirRvalue::use(MirOperand::copy(MirPlace{value_local}))));
-                value_local = iface_tmp;
-            }
-        }
+        // インターフェイス要素スライスへの具象構造体pushはcoerce_to_expectedがfat pointer構築
+        // （iface_upcast）を発行済み（旧H1のインライン一時＝バックエンドassign認識頼みの複製は統一ドライバへ吸収）
 
         std::vector<MirOperandPtr> args;
         args.push_back(MirOperand::copy(slice_place));

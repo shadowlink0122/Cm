@@ -263,13 +263,17 @@ LocalId ExprLowering::lower_array_literal(const hir::HirArrayLiteral& lit,
     for (size_t i = 0; i < lit.elements.size(); ++i) {
         LocalId elem_value = lower_expression(*lit.elements[i], ctx);
 
+        // 変換統一ドライバ: numeric/ユニオン/インターフェイスupcast（fat pointer構築）を1系統で挿入する
+        // （旧来はkind不一致の生Castのみで、interface要素スロットはバックエンドの射影assign認識頼みだった）
+        elem_value = ctx.coerce_to_expected(elem_value, elem_type);
+
         // 要素の型が期待される型と異なる場合、型変換が必要
         hir::TypePtr actual_elem_type = nullptr;
         if (elem_value < ctx.func->locals.size()) {
             actual_elem_type = ctx.func->locals[elem_value].type;
         }
 
-        // 型変換が必要かチェック
+        // 型変換が必要かチェック（ドライバが扱わない残余のkind不一致の生Castフォールバック）
         bool needs_cast = false;
         if (actual_elem_type && elem_type) {
             // floatとdoubleの変換

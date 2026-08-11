@@ -1,0 +1,104 @@
+import std::io::println;
+
+// coercion統一ドライバのインターフェイスupcast回帰: 変換サイト×upcast形（値・ポインタ）のマトリクス。
+// fat pointer構築はMIRのiface_upcast構築物へ一元化され、バックエンドのassign/引数認識は撤去済み。
+// 値upcastはヒープboxingを伴う（戻り値経由でスタックローカルを指すダングリングの恒久修正）。
+
+interface Greeter {
+    int id();
+}
+
+struct En {
+    int base;
+}
+
+struct Ja {
+    int base;
+    int offset;
+}
+
+impl En for Greeter {
+    int id() {
+        return self.base;
+    }
+}
+
+impl Ja for Greeter {
+    int id() {
+        return self.base + self.offset;
+    }
+}
+
+struct Holder {
+    Greeter g;
+}
+
+// 引数サイト: 具象値を直接渡す
+int describe(Greeter g) {
+    return g.id();
+}
+
+// returnサイト: ローカル具象値をinterfaceで返す（boxingでダングリングしない）
+Greeter make_greeter(int b) {
+    Ja j = Ja{base: b, offset: 7};
+    return j;
+}
+
+// returnサイト: interfaceローカル経由の返却
+Greeter make_via_local(int b) {
+    En e = En{base: b};
+    Greeter g = e;
+    return g;
+}
+
+int main() {
+    En en = En{base: 10};
+    Ja ja = Ja{base: 20, offset: 5};
+
+    // letサイト（値upcast）
+    Greeter g1 = en;
+    println(g1.id());
+
+    // 単純代入サイト（再代入で別具象型へ）
+    g1 = ja;
+    println(g1.id());
+
+    // メンバ代入サイト（構造体リテラルフィールド・射影付き代入）
+    Holder h = Holder{g: en};
+    println(h.g.id());
+    h.g = ja;
+    println(h.g.id());
+
+    // 引数サイト
+    println(describe(en));
+    println(describe(ja));
+
+    // returnサイト（別フレームの具象ローカル→interface。boxingの検証）
+    Greeter r1 = make_greeter(100);
+    Greeter r2 = make_via_local(200);
+    println(r1.id());
+    println(r2.id());
+
+    // 配列要素サイト（固定長配列リテラル・要素上書き）
+    Greeter[2] arr = [en, ja];
+    println(arr[0].id() + arr[1].id());
+    arr[0] = ja;
+    println(arr[0].id());
+
+    // スライス要素サイト（リテラル初期化とpush）
+    Greeter[] list = [en];
+    list.push(ja);
+    int total = 0;
+    for (int i = 0; i < list.len(); i++) {
+        total = total + list[i].id();
+    }
+    println(total);
+
+    // ポインタupcastサイト（既存ストレージを指す・書き込みが元に見える）
+    Greeter* p = &en;
+    println((*p).id());
+    en.base = 42;
+    println((*p).id());
+
+    return 0;
+}

@@ -231,6 +231,8 @@ class MIRToLLVM {
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);
     llvm::Value* createInterfaceFatPtr(llvm::Value* dataPtr, const std::string& concreteTypeName,
                                        const std::string& interfaceName);
+    /// インターフェースupcast（MIRのiface_upcast Cast構築物）をfat pointer値へ変換
+    llvm::Value* convertInterfaceUpcast(const mir::MirRvalue::CastData& castData);
 
     /// vtableを生成
     void generateVTables(const mir::MirProgram& program);

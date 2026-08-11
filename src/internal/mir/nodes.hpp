@@ -226,6 +226,15 @@ struct MirRvalue {
         hir::TypePtr target_type;
         // ユニオン型の実行時型判別 (expr is Type)。trueならタグ比較のboolを返す
         bool check_only = false;
+        // インターフェースupcast（具象→interfaceのfat pointer構築）。
+        // 非空なら具象構造体名で、target_typeのinterfaceへvtableを引いてfat pointerを組む。
+        // バックエンドのassign/引数認識ヒューリスティックを廃し、MIRの構築物として一意に表現する（coercion第2段）
+        std::string iface_concrete;
+        // operandが具象構造体へのポインタ（Shape* p = &sq 経路）。falseは値upcast
+        bool iface_from_pointer = false;
+        // 値upcastのペイロードをヒープへ実体化（boxing）してから包む（Q3: 戻り値経由のダングリング防止）。
+        // malloc不能なベアメタルnoStdターゲットではバックエンドがスキップしてよい
+        bool iface_boxed = false;
     };
 
     struct FormatConvertData {
@@ -246,6 +255,10 @@ struct MirRvalue {
     static MirRvaluePtr ref(MirPlace place, bool is_mutable);
     static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type,
                              bool check_only = false);
+    // インターフェースupcast構築（fat pointer）。値upcastはboxed指定可・ポインタupcastはfrom_pointer=true
+    static MirRvaluePtr iface_upcast(MirOperandPtr operand, hir::TypePtr iface_type,
+                                     const std::string& concrete_name, bool from_pointer,
+                                     bool boxed);
 };
 
 // ============================================================

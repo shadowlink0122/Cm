@@ -176,6 +176,21 @@ MirRvaluePtr MirRvalue::cast(MirOperandPtr operand, hir::TypePtr target_type, bo
     return rv;
 }
 
+MirRvaluePtr MirRvalue::iface_upcast(MirOperandPtr operand, hir::TypePtr iface_type,
+                                     const std::string& concrete_name, bool from_pointer,
+                                     bool boxed) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = Cast;
+    CastData data;
+    data.operand = std::move(operand);
+    data.target_type = iface_type;
+    data.iface_concrete = concrete_name;
+    data.iface_from_pointer = from_pointer;
+    data.iface_boxed = boxed;
+    rv->data = std::move(data);
+    return rv;
+}
+
 // ============================================================
 // MirStatement
 // ============================================================

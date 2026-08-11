@@ -72,6 +72,11 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return nullptr;
             }
 
+            // インターフェースupcast（fat pointer構築）はMIRの構築物として一意に処理する（coercion第2段）
+            if (!castData.iface_concrete.empty()) {
+                return convertInterfaceUpcast(castData);
+            }
+
             auto value = convertOperand(*castData.operand);
             if (!value) {
                 return nullptr;
