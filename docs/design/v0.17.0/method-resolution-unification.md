@@ -51,3 +51,14 @@ parent: v0.17.0 Design
 - 挙動変更なしの純リファクタリングとして全13スイートPASS（ジェネリックレシーバ・静的ジェネリック呼び出し・enum inherentメソッド・deriveメソッド解決の既存回帰を含む）。
 
 残り: resolve_method統一API（infer_memberの9分岐・静的分岐・for-in検索の同一入口化）・ビルトインラダー約500行の表駆動化・namespace方式3種の1本化・第3段（enum正規化遅延と演算子解決の統合）。
+
+## 実装記録（resolve_method統一APIの導入・2026-08-11）
+
+第2段の残りであるresolve_method統一APIを導入し、メソッド表検索の3系統を同一入口へ集約した。
+
+- **統一入口**: `TypeChecker::resolve_method(recv_type, method_name) -> optional<MethodResolution>` を新設した。検索順は従来のinfer_member分岐と同一——直接名（フル名/namespace剥ぎ/int正規化された値enumの元enum名）→ジェネリック定義キー（generic_def_method_key）→interface表→型パラメータ境界（<T: Shape>の宣言シグネチャ）→enum基底名（strip_spec_suffix）。発見時は解決経路（Via列挙: Direct/GenericDef/Interface/GenericBound/EnumBase）と置換に必要な情報（定義パラメータ名・レシーバ型引数）ごと返し、呼び出しサイトは検査（private・引数）と型置換だけを担う。
+- **infer_memberの集約**: メソッド検索5分岐（各分岐が個別に引数検査・置換・デバッグログを複製していた約230行）をresolve_method呼び出し+経路別の検査へ畳んだ。private検査はDirect経路のみ・GenericDef経路はinfer_type_expectingでの引数注釈・GenericBound経路のGeneric戻り値→レシーバ型置換という従来の経路別挙動を保存した。
+- **for-inの集約**: iter()検索とイテレータプロトコル検査（has_next/next）のtype_methods_直接参照3箇所をresolve_methodへ乗せ替えた（方針4の予定どおり）。ジェネリックレシーバのiter()戻り値は型引数を置換して具体化する（従来は表キー不一致で未解決だった経路が解決可能になる）。
+- **静的呼び出しの集約**: Type::method解決の直接検索+ジェネリック定義キーfallback+型引数文字列切り出しを、レシーバ型ツリーの構築（基底名+型引数）→resolve_method委譲へ再構成した（R22の型引数プリミティブ化と未置換T比較の修正は維持。型引数パースが単純名のみ対応の制限も従来どおり）。
+- 検証: interpreterスイート全数・unit・regression・重点回帰（static_generic_call・upcast_sites・iterator一式）全PASS。
+- 残: ビルトインラダー（infer_array_method/infer_string_methodの約500行）の表駆動化・namespace方式3種の1本化（resolve_methodの検索リスト内へ2種は集約済み・resolve_in_namespaceとの統合が残）・第3段（enum正規化遅延と演算子解決のresolve_method統合）。

@@ -297,140 +297,111 @@ ast::TypePtr TypeChecker::infer_call(ast::CallExpr& call) {
                 std::string type_name = ident->name.substr(0, last_colon);
                 std::string method_name = ident->name.substr(last_colon + 2);
 
-                // 型名からジェネリック型パラメータを抽出（Vec<int>など）
-                // まず直接検索を試みる
-                auto it = type_methods_.find(type_name);
-                if (it == type_methods_.end()) {
-                    // ジェネリック型の場合: Vec<int> -> Vec<T> の定義キーへ正準関数で変換して検索（method.cppと同一実装の複製を排除）
+                // レシーバ型を構築して統一解決API（resolve_method）へ委譲する。
+                // Vec<int>は基底名+型引数の構造化ツリーへ変換する（型引数のパースは単純名のみ対応＝従来と同じ制限。
+                // プリミティブ名は正しいTypeKindで作らないと型同一性が壊れる。R22）
+                ast::TypePtr recv;
+                {
                     size_t lt_pos = type_name.find('<');
-                    if (lt_pos != std::string::npos) {
-                        std::string base_name = type_name.substr(0, lt_pos);
-                        if (generic_structs_.count(base_name) > 0) {
-                            it = type_methods_.find(generic_def_method_key(base_name));
+                    if (lt_pos != std::string::npos && type_name.back() == '>') {
+                        recv = ast::make_named(type_name.substr(0, lt_pos));
+                        std::string type_args_str =
+                            type_name.substr(lt_pos + 1, type_name.size() - lt_pos - 2);
+                        auto make_type_arg = [](const std::string& n) -> ast::TypePtr {
+                            if (n == "int")
+                                return ast::make_int();
+                            if (n == "uint")
+                                return ast::make_uint();
+                            if (n == "long")
+                                return ast::make_long();
+                            if (n == "ulong")
+                                return ast::make_ulong();
+                            if (n == "short")
+                                return ast::make_short();
+                            if (n == "ushort")
+                                return ast::make_ushort();
+                            if (n == "tiny")
+                                return ast::make_tiny();
+                            if (n == "utiny")
+                                return ast::make_utiny();
+                            if (n == "isize")
+                                return ast::make_isize();
+                            if (n == "usize")
+                                return ast::make_usize();
+                            if (n == "float")
+                                return ast::make_float();
+                            if (n == "double")
+                                return ast::make_double();
+                            if (n == "bool")
+                                return ast::make_bool();
+                            if (n == "char")
+                                return ast::make_char();
+                            if (n == "string")
+                                return ast::make_string();
+                            return ast::make_named(n);
+                        };
+                        std::istringstream iss(type_args_str);
+                        std::string type_arg_name;
+                        while (std::getline(iss, type_arg_name, ',')) {
+                            size_t s_pos = type_arg_name.find_first_not_of(" ");
+                            size_t e_pos = type_arg_name.find_last_not_of(" ");
+                            if (s_pos != std::string::npos && e_pos != std::string::npos) {
+                                type_arg_name = type_arg_name.substr(s_pos, e_pos - s_pos + 1);
+                            }
+                            recv->type_args.push_back(make_type_arg(type_arg_name));
                         }
+                    } else {
+                        recv = ast::make_named(type_name);
                     }
                 }
 
-                if (it != type_methods_.end()) {
-                    auto method_it = it->second.find(method_name);
-                    if (method_it != it->second.end()) {
-                        const auto& method_info = method_it->second;
+                if (auto res = resolve_method(recv, method_name)) {
+                    const auto& method_info = *res->info;
 
-                        // 静的メソッドかチェック
-                        if (!method_info.is_static) {
-                            error(current_span_,
-                                  i18n::msgf(i18n::MsgId::TcMethodTypeNotStaticMethod, method_name,
-                                             type_name));
-                            return ast::make_error();
-                        }
-
-                        // 型名の型引数（Mutex<int>のint等）を抽出する。プリミティブ名は正しいTypeKindで
-                        // 作らないと型同一性が壊れる（make_namedはStruct kindになり、Mutex<int>同士の
-                        // 比較がkind不一致で失敗し「expected Mutex<int>, got Mutex<int>」になる。R22）
-                        // 注: 文字列切り出しはmethod-resolution-unification（resolve_method API）で構造化予定
-                        std::vector<ast::TypePtr> concrete_type_args;
-                        std::vector<std::string> generic_param_names;
-                        size_t lt_pos = type_name.find('<');
-                        if (lt_pos != std::string::npos) {
-                            std::string base_name = type_name.substr(0, lt_pos);
-                            auto gen_it = generic_structs_.find(base_name);
-                            if (gen_it != generic_structs_.end()) {
-                                generic_param_names = gen_it->second;
-                                std::string type_args_str = type_name.substr(lt_pos + 1);
-                                type_args_str = type_args_str.substr(0, type_args_str.size() - 1);
-                                auto make_type_arg = [](const std::string& n) -> ast::TypePtr {
-                                    if (n == "int")
-                                        return ast::make_int();
-                                    if (n == "uint")
-                                        return ast::make_uint();
-                                    if (n == "long")
-                                        return ast::make_long();
-                                    if (n == "ulong")
-                                        return ast::make_ulong();
-                                    if (n == "short")
-                                        return ast::make_short();
-                                    if (n == "ushort")
-                                        return ast::make_ushort();
-                                    if (n == "tiny")
-                                        return ast::make_tiny();
-                                    if (n == "utiny")
-                                        return ast::make_utiny();
-                                    if (n == "isize")
-                                        return ast::make_isize();
-                                    if (n == "usize")
-                                        return ast::make_usize();
-                                    if (n == "float")
-                                        return ast::make_float();
-                                    if (n == "double")
-                                        return ast::make_double();
-                                    if (n == "bool")
-                                        return ast::make_bool();
-                                    if (n == "char")
-                                        return ast::make_char();
-                                    if (n == "string")
-                                        return ast::make_string();
-                                    return ast::make_named(n);
-                                };
-                                std::istringstream iss(type_args_str);
-                                std::string type_arg_name;
-                                while (std::getline(iss, type_arg_name, ',')) {
-                                    size_t start = type_arg_name.find_first_not_of(" ");
-                                    size_t end = type_arg_name.find_last_not_of(" ");
-                                    if (start != std::string::npos && end != std::string::npos) {
-                                        type_arg_name =
-                                            type_arg_name.substr(start, end - start + 1);
-                                    }
-                                    concrete_type_args.push_back(make_type_arg(type_arg_name));
-                                }
-                            }
-                        }
-
-                        // パラメータ型へ型引数を代入する（従来は未置換のTと比較して
-                        // 「expected T, got int」の誤診断だった。R22）
-                        auto substituted_param = [&](size_t i) -> ast::TypePtr {
-                            if (concrete_type_args.empty()) {
-                                return method_info.param_types[i];
-                            }
-                            return substitute_generic_type(method_info.param_types[i],
-                                                           generic_param_names, concrete_type_args);
-                        };
-
-                        // 引数の型チェック
-                        if (call.args.size() != method_info.param_types.size()) {
-                            error(
-                                current_span_,
-                                i18n::msgf(i18n::MsgId::TcStaticMethodExpectsArguments, ident->name,
-                                           std::to_string(method_info.param_types.size()),
-                                           std::to_string(call.args.size())));
-                        } else {
-                            for (size_t i = 0; i < call.args.size(); ++i) {
-                                ast::TypePtr expected_type = substituted_param(i);
-                                propagate_literal_expected_type(*call.args[i], expected_type);
-                                auto arg_type = infer_type(*call.args[i]);
-                                if (!types_compatible(expected_type, arg_type)) {
-                                    std::string expected = ast::type_to_string(*expected_type);
-                                    std::string actual = ast::type_to_string(*arg_type);
-                                    error(
-                                        current_span_,
-                                        i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
-                                                   ident->name, expected, actual));
-                                }
-                            }
-                        }
-
-                        // 戻り値型を返す（ジェネリック型パラメータを具体化する）
-                        auto return_type = method_info.return_type;
-                        if (!concrete_type_args.empty() && return_type) {
-                            return_type = substitute_generic_type(return_type, generic_param_names,
-                                                                  concrete_type_args);
-                        }
-
-                        debug::tc::log(debug::tc::Id::Resolved,
-                                       "Static method call: " + ident->name +
-                                           "() : " + ast::type_to_string(*return_type),
-                                       debug::Level::Debug);
-                        return return_type;
+                    // 静的メソッドかチェック
+                    if (!method_info.is_static) {
+                        error(current_span_, i18n::msgf(i18n::MsgId::TcMethodTypeNotStaticMethod,
+                                                        method_name, type_name));
+                        return ast::make_error();
                     }
+
+                    // パラメータ型・戻り値型へ型引数を代入する（従来は未置換のTと比較して
+                    // 「expected T, got int」の誤診断だった。R22）
+                    auto substituted = [&](ast::TypePtr t) -> ast::TypePtr {
+                        if (t && !res->generic_params.empty() && !res->type_args.empty()) {
+                            return substitute_generic_type(t, res->generic_params, res->type_args);
+                        }
+                        return t;
+                    };
+
+                    // 引数の型チェック
+                    if (call.args.size() != method_info.param_types.size()) {
+                        error(current_span_,
+                              i18n::msgf(i18n::MsgId::TcStaticMethodExpectsArguments, ident->name,
+                                         std::to_string(method_info.param_types.size()),
+                                         std::to_string(call.args.size())));
+                    } else {
+                        for (size_t i = 0; i < call.args.size(); ++i) {
+                            ast::TypePtr expected_type = substituted(method_info.param_types[i]);
+                            propagate_literal_expected_type(*call.args[i], expected_type);
+                            auto arg_type = infer_type(*call.args[i]);
+                            if (!types_compatible(expected_type, arg_type)) {
+                                std::string expected = ast::type_to_string(*expected_type);
+                                std::string actual = ast::type_to_string(*arg_type);
+                                error(current_span_,
+                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchCallExpected,
+                                                 ident->name, expected, actual));
+                            }
+                        }
+                    }
+
+                    // 戻り値型を返す（ジェネリック型パラメータを具体化する）
+                    auto return_type = substituted(method_info.return_type);
+                    debug::tc::log(debug::tc::Id::Resolved,
+                                   "Static method call: " + ident->name +
+                                       "() : " + ast::type_to_string(*return_type),
+                                   debug::Level::Debug);
+                    return return_type;
                 }
 
                 // ============================================================

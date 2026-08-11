@@ -34,6 +34,120 @@ std::string method_arity_error(const std::string& method_name, size_t arg_count,
 
 }  // namespace
 
+// メソッド解決の統一入口（仕様はchecker.hppの宣言コメントを参照）。
+// 検索順はinfer_memberの従来分岐と同一: 直接名（フル名/namespace剥ぎ/値enum名）→
+// ジェネリック定義キー→interface表→型パラメータ境界→enum基底名
+std::optional<TypeChecker::MethodResolution> TypeChecker::resolve_method(
+    const ast::TypePtr& recv_type, const std::string& method_name) {
+    if (!recv_type) {
+        return std::nullopt;
+    }
+    const std::string type_name = ast::type_to_string(*recv_type);
+
+    // 1. 直接名（フル名・namespace剥ぎ・int正規化された値enumの元enum名）
+    std::vector<std::string> names_to_search = {type_name};
+    auto last_colon = type_name.rfind("::");
+    if (last_colon != std::string::npos) {
+        names_to_search.push_back(type_name.substr(last_colon + 2));
+    }
+    if (recv_type->kind == ast::TypeKind::Int && !recv_type->name.empty() &&
+        enum_names_.count(recv_type->name) > 0) {
+        names_to_search.push_back(recv_type->name);
+    }
+    for (const auto& key : names_to_search) {
+        auto it = type_methods_.find(key);
+        if (it != type_methods_.end()) {
+            auto mit = it->second.find(method_name);
+            if (mit != it->second.end()) {
+                MethodResolution r;
+                r.info = &mit->second;
+                r.table_key = key;
+                r.via = MethodResolution::Via::Direct;
+                return r;
+            }
+        }
+    }
+
+    // 2. ジェネリック構造体の定義キー（G<T, U>形。戻り値・引数は型引数で置換が必要）
+    if (recv_type->kind == ast::TypeKind::Struct && !recv_type->type_args.empty()) {
+        auto gen_it = generic_structs_.find(recv_type->name);
+        if (gen_it != generic_structs_.end()) {
+            auto git = type_methods_.find(generic_def_method_key(recv_type->name));
+            if (git != type_methods_.end()) {
+                auto mit = git->second.find(method_name);
+                if (mit != git->second.end()) {
+                    MethodResolution r;
+                    r.info = &mit->second;
+                    r.table_key = generic_def_method_key(recv_type->name);
+                    r.generic_params = gen_it->second;
+                    r.type_args = recv_type->type_args;
+                    r.via = MethodResolution::Via::GenericDef;
+                    return r;
+                }
+            }
+        }
+    }
+
+    // 3. インターフェース表
+    {
+        auto it = interface_methods_.find(type_name);
+        if (it != interface_methods_.end()) {
+            auto mit = it->second.find(method_name);
+            if (mit != it->second.end()) {
+                MethodResolution r;
+                r.info = &mit->second;
+                r.table_key = type_name;
+                r.via = MethodResolution::Via::Interface;
+                return r;
+            }
+        }
+    }
+
+    // 4. 型パラメータ境界（<T: Shape>の宣言シグネチャ）
+    if (generic_context_.has_type_param(type_name)) {
+        if (const auto* type_param = generic_context_.get_type_param(type_name)) {
+            for (const auto& bound : type_param->bounds) {
+                auto bit = interface_methods_.find(bound);
+                if (bit == interface_methods_.end()) {
+                    continue;
+                }
+                auto mit = bit->second.find(method_name);
+                if (mit == bit->second.end()) {
+                    continue;
+                }
+                MethodResolution r;
+                r.info = &mit->second;
+                r.table_key = bound;
+                r.via = MethodResolution::Via::GenericBound;
+                return r;
+            }
+        }
+    }
+
+    // 5. enum基底名（Result<int,string>等のインスタンス化名からベース名で引く。ジェネリックenumは置換情報付き）
+    const std::string enum_base = strip_spec_suffix(recv_type->name);
+    if (recv_type->kind == ast::TypeKind::Struct && enum_names_.count(enum_base) > 0) {
+        auto it = type_methods_.find(enum_base);
+        if (it != type_methods_.end()) {
+            auto mit = it->second.find(method_name);
+            if (mit != it->second.end()) {
+                MethodResolution r;
+                r.info = &mit->second;
+                r.table_key = enum_base;
+                r.via = MethodResolution::Via::EnumBase;
+                auto ge_it = generic_enums_.find(enum_base);
+                if (ge_it != generic_enums_.end() && !recv_type->type_args.empty()) {
+                    r.generic_params = ge_it->second;
+                    r.type_args = recv_type->type_args;
+                }
+                return r;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
     // メソッド呼び出しの受け手は評価前に初期化済み・変更ありとしてマークする（arr.dim() / v.push() 等を「使用前の未初期化」と誤検出しない。
     // 受け手の型を推論する時点で使用チェックが先に発火するため、ここで行う）
@@ -74,229 +188,87 @@ ast::TypePtr TypeChecker::infer_member(ast::MemberExpr& member) {
             return ast::make_error();
         }
 
-        // メソッド検索用の型名リストを作成（名前空間付きと名前空間なし）
-        std::vector<std::string> type_names_to_search = {type_name};
-        size_t last_colon = type_name.rfind("::");
-        if (last_colon != std::string::npos) {
-            type_names_to_search.push_back(type_name.substr(last_colon + 2));
-        }
-        // Q5: int正規化された値enum（resolve_typedefがnameへ元enum名を保持）はenum名でもメソッド表を引く（impl Color { string name() {...} }のinherent implを解決可能にする）
-        if (obj_type->kind == ast::TypeKind::Int && !obj_type->name.empty() &&
-            enum_names_.count(obj_type->name) > 0) {
-            type_names_to_search.push_back(obj_type->name);
-        }
+        // 統一解決API: 表検索（直接名/ジェネリック定義キー/interface/型パラメータ境界/enum基底）を
+        // resolve_methodの1入口へ委譲し、ここでは解決結果に応じた検査（private・引数）と型置換だけを行う
+        if (auto res = resolve_method(obj_type, member.member)) {
+            const auto& method_info = *res->info;
 
-        // 通常のメソッドを探す
-        for (const auto& search_type : type_names_to_search) {
-            auto it = type_methods_.find(search_type);
-            if (it != type_methods_.end()) {
-                auto method_it = it->second.find(member.member);
-                if (method_it != it->second.end()) {
-                    const auto& method_info = method_it->second;
-
-                    // privateメソッドのアクセスチェック
-                    if (method_info.visibility == ast::Visibility::Private) {
-                        if (current_impl_target_type_.empty() ||
-                            (current_impl_target_type_ != type_name &&
-                             current_impl_target_type_ != search_type)) {
-                            error(current_span_,
-                                  i18n::msgf(i18n::MsgId::TcCannotCallPrivateMethodFrom,
-                                             member.member, type_name));
-                            return ast::make_error();
-                        }
-                    }
-
-                    // 引数の個数チェック（デフォルト引数による省略を考慮）
-                    std::string arity_err =
-                        method_arity_error(member.member, member.args.size(), method_info);
-                    if (!arity_err.empty()) {
-                        error(current_span_, arity_err);
-                    } else {
-                        for (size_t i = 0; i < member.args.size(); ++i) {
-                            auto arg_type = infer_type(*member.args[i]);
-                            if (!types_compatible(method_info.param_types[i], arg_type)) {
-                                std::string expected =
-                                    ast::type_to_string(*method_info.param_types[i]);
-                                std::string actual = ast::type_to_string(*arg_type);
-                                error(current_span_,
-                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
-                                                 member.member, expected, actual));
-                            }
-                        }
-                    }
-
-                    debug::tc::log(debug::tc::Id::Resolved,
-                                   type_name + "." + member.member +
-                                       "() : " + ast::type_to_string(*method_info.return_type),
-                                   debug::Level::Debug);
-                    return method_info.return_type;
+            // privateメソッドのアクセスチェック（直接名解決のみ＝従来挙動）
+            if (res->via == MethodResolution::Via::Direct &&
+                method_info.visibility == ast::Visibility::Private) {
+                if (current_impl_target_type_.empty() ||
+                    (current_impl_target_type_ != type_name &&
+                     current_impl_target_type_ != res->table_key)) {
+                    error(current_span_, i18n::msgf(i18n::MsgId::TcCannotCallPrivateMethodFrom,
+                                                    member.member, type_name));
+                    return ast::make_error();
                 }
             }
-        }
 
-        // ジェネリック構造体の場合
-        if (obj_type->kind == ast::TypeKind::Struct && !obj_type->type_args.empty()) {
-            auto gen_it = generic_structs_.find(obj_type->name);
-            if (gen_it != generic_structs_.end()) {
-                // 定義キー（G<T, U>形）は正準関数で計算する（登録側type_to_string形とバイト一致）
-                std::string generic_type_name = generic_def_method_key(obj_type->name);
-
-                auto git = type_methods_.find(generic_type_name);
-                if (git != type_methods_.end()) {
-                    auto method_it = git->second.find(member.member);
-                    if (method_it != git->second.end()) {
-                        const auto& method_info = method_it->second;
-                        // 引数へ型を注釈する（typed-hir-single-source 第2段）。
-                        // 期待型は型引数を代入したパラメータ型（無名リテラルの型決定にも必要）
-                        for (size_t i = 0; i < member.args.size(); ++i) {
-                            ast::TypePtr expected =
-                                (i < method_info.param_types.size())
-                                    ? substitute_generic_type(method_info.param_types[i],
-                                                              gen_it->second, obj_type->type_args)
-                                    : nullptr;
-                            infer_type_expecting(*member.args[i], expected);
-                        }
-                        ast::TypePtr return_type = method_info.return_type;
-                        if (return_type && gen_it != generic_structs_.end()) {
-                            return_type = substitute_generic_type(return_type, gen_it->second,
-                                                                  obj_type->type_args);
-                        }
-
-                        debug::tc::log(debug::tc::Id::Resolved,
-                                       "Generic method: " + type_name + "." + member.member +
-                                           "() : " + ast::type_to_string(*return_type),
-                                       debug::Level::Debug);
-                        return return_type;
-                    }
+            // ジェネリック置換（定義キー解決・ジェネリックenum基底解決で使用。それ以外は恒等）
+            auto substitute = [&](ast::TypePtr t) -> ast::TypePtr {
+                if (t && !res->generic_params.empty() && !res->type_args.empty()) {
+                    return substitute_generic_type(t, res->generic_params, res->type_args);
                 }
-            }
-        }
+                return t;
+            };
 
-        // インターフェース型の場合
-        auto iface_it = interface_methods_.find(type_name);
-        if (iface_it != interface_methods_.end()) {
-            auto method_it = iface_it->second.find(member.member);
-            if (method_it != iface_it->second.end()) {
-                const auto& method_info = method_it->second;
-
-                std::string arity_err =
-                    method_arity_error(member.member, member.args.size(), method_info);
-                if (!arity_err.empty()) {
-                    error(current_span_, arity_err);
-                } else {
-                    for (size_t i = 0; i < member.args.size(); ++i) {
-                        auto arg_type = infer_type(*member.args[i]);
-                        if (!types_compatible(method_info.param_types[i], arg_type)) {
-                            std::string expected = ast::type_to_string(*method_info.param_types[i]);
-                            std::string actual = ast::type_to_string(*arg_type);
-                            error(current_span_,
-                                  i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
-                                             member.member, expected, actual));
-                        }
-                    }
+            if (res->via == MethodResolution::Via::GenericDef) {
+                // 引数へ型を注釈する（typed-hir-single-source）。期待型は型引数を代入したパラメータ型
+                // （無名リテラルの型決定にも必要）
+                for (size_t i = 0; i < member.args.size(); ++i) {
+                    ast::TypePtr expected = (i < method_info.param_types.size())
+                                                ? substitute(method_info.param_types[i])
+                                                : nullptr;
+                    infer_type_expecting(*member.args[i], expected);
                 }
-
+                ast::TypePtr return_type = substitute(method_info.return_type);
                 debug::tc::log(debug::tc::Id::Resolved,
-                               "Interface " + type_name + "." + member.member +
-                                   "() : " + ast::type_to_string(*method_info.return_type),
+                               "Generic method: " + type_name + "." + member.member +
+                                   "() : " + ast::type_to_string(*return_type),
                                debug::Level::Debug);
-                return method_info.return_type;
+                return return_type;
             }
-        }
 
-        // ジェネリック型パラメータの場合
-        if (generic_context_.has_type_param(type_name)) {
-            // 境界インターフェイス（<T: Shape>等）の宣言シグネチャからメソッドを解決し、戻り値型を式型へ伝搬する
-            if (const auto* type_param = generic_context_.get_type_param(type_name)) {
-                for (const auto& bound : type_param->bounds) {
-                    auto bound_it = interface_methods_.find(bound);
-                    if (bound_it == interface_methods_.end()) {
-                        continue;
+            // 個数検査+引数型検査（enum基底は期待型を置換して比較）
+            std::string arity_err =
+                method_arity_error(member.member, member.args.size(), method_info);
+            if (!arity_err.empty()) {
+                error(current_span_, arity_err);
+            } else {
+                for (size_t i = 0; i < member.args.size(); ++i) {
+                    auto arg_type = infer_type(*member.args[i]);
+                    auto expected_type = substitute(method_info.param_types[i]);
+                    if (!types_compatible(expected_type, arg_type)) {
+                        error(current_span_,
+                              i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
+                                         member.member, ast::type_to_string(*expected_type),
+                                         ast::type_to_string(*arg_type)));
                     }
-                    auto method_it = bound_it->second.find(member.member);
-                    if (method_it == bound_it->second.end()) {
-                        continue;
-                    }
-                    const auto& method_info = method_it->second;
-
-                    std::string arity_err =
-                        method_arity_error(member.member, member.args.size(), method_info);
-                    if (!arity_err.empty()) {
-                        error(current_span_, arity_err);
-                    } else {
-                        for (size_t i = 0; i < member.args.size(); ++i) {
-                            auto arg_type = infer_type(*member.args[i]);
-                            if (!types_compatible(method_info.param_types[i], arg_type)) {
-                                std::string expected =
-                                    ast::type_to_string(*method_info.param_types[i]);
-                                std::string actual = ast::type_to_string(*arg_type);
-                                error(current_span_,
-                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
-                                                 member.member, expected, actual));
-                            }
-                        }
-                    }
-
-                    // 戻り値型がインターフェイス自身の型パラメータ（Cloneのclone()等）の場合はレシーバ型で置き換える
-                    ast::TypePtr bound_return = method_info.return_type;
-                    if (bound_return && bound_return->kind == ast::TypeKind::Generic) {
-                        bound_return = obj_type;
-                    }
-                    debug::tc::log(debug::tc::Id::Resolved,
-                                   "Generic bound " + bound + "." + member.member +
-                                       "() : " + ast::type_to_string(*bound_return),
-                                   debug::Level::Debug);
-                    return bound_return;
                 }
             }
+
+            ast::TypePtr return_type = substitute(method_info.return_type);
+            // 型パラメータ境界経由: 戻り値がインターフェイス自身の型パラメータ（Cloneのclone()等）の
+            // 場合はレシーバ型で置き換える
+            if (res->via == MethodResolution::Via::GenericBound && return_type &&
+                return_type->kind == ast::TypeKind::Generic) {
+                return_type = obj_type;
+            }
+            debug::tc::log(
+                debug::tc::Id::Resolved,
+                type_name + "." + member.member + "() : " + ast::type_to_string(*return_type),
+                debug::Level::Debug);
+            return return_type;
+        }
+
+        // 型パラメータで境界に該当メソッドが無い場合は従来どおり有効と仮定する（制約検査は遅延）
+        if (generic_context_.has_type_param(type_name)) {
             debug::tc::log(debug::tc::Id::Resolved,
                            "Generic type param " + type_name + "." + member.member +
                                "() - assuming valid (constraint check deferred)",
                            debug::Level::Debug);
             return ast::make_void();
-        }
-
-        // 組み込みenum型（Result<T,E>/Option<T>）のメソッド
-        // type_methods_はベース名（"Result"）で登録されているため、インスタンス化名（"Result<int, string>" / "Result__int__string"）から
-        // ベース名で引き、戻り値・引数のジェネリックパラメータを型引数で置換する
-        const std::string enum_base = strip_spec_suffix(obj_type->name);
-        if (obj_type->kind == ast::TypeKind::Struct && enum_names_.count(enum_base) > 0) {
-            auto em_it = type_methods_.find(enum_base);
-            auto ge_it = generic_enums_.find(enum_base);
-            if (em_it != type_methods_.end()) {
-                auto method_it = em_it->second.find(member.member);
-                if (method_it != em_it->second.end()) {
-                    const auto& method_info = method_it->second;
-                    auto substitute = [&](ast::TypePtr t) -> ast::TypePtr {
-                        if (t && ge_it != generic_enums_.end() && !obj_type->type_args.empty()) {
-                            return substitute_generic_type(t, ge_it->second, obj_type->type_args);
-                        }
-                        return t;
-                    };
-                    std::string arity_err =
-                        method_arity_error(member.member, member.args.size(), method_info);
-                    if (!arity_err.empty()) {
-                        error(current_span_, arity_err);
-                    } else {
-                        for (size_t i = 0; i < member.args.size(); ++i) {
-                            auto arg_type = infer_type(*member.args[i]);
-                            auto expected_type = substitute(method_info.param_types[i]);
-                            if (!types_compatible(expected_type, arg_type)) {
-                                error(current_span_,
-                                      i18n::msgf(i18n::MsgId::TcArgumentTypeMismatchMethodCall,
-                                                 member.member, ast::type_to_string(*expected_type),
-                                                 ast::type_to_string(*arg_type)));
-                            }
-                        }
-                    }
-                    auto return_type = substitute(method_info.return_type);
-                    debug::tc::log(debug::tc::Id::Resolved,
-                                   "Enum method: " + type_name + "." + member.member +
-                                       "() : " + ast::type_to_string(*return_type),
-                                   debug::Level::Debug);
-                    return return_type;
-                }
-            }
         }
 
         // 関数型フィールドの呼び出し（obj.field(args)）: JSオブジェクトのメソッド等、関数値を保持するフィールドをメソッド呼び出し構文で起動できるようにする

@@ -225,6 +225,25 @@ class TypeChecker {
     std::string generic_def_method_key(const std::string& base_name) const;
     // 特殊化サフィックスの除去（Name<...>・Name__k → Name。enum/ジェネリックのベース名でメソッド表を引く参照側で共有）
     static std::string strip_spec_suffix(const std::string& name);
+
+    // メソッド解決の統一入口（method-resolution-unification）。
+    // レシーバ型からメソッド表の検索順（直接名/namespace剥ぎ/値enum名→ジェネリック定義キー→
+    // interface表→型パラメータ境界→enum基底名）を1箇所へ畳み、発見時は置換に必要な情報ごと返す。
+    // 呼び出しサイト（infer_member・静的呼び出し・for-in）は検索をここへ委譲し、引数検査・注釈だけを担う
+    struct MethodResolution {
+        const MethodInfo* info = nullptr;
+        // 解決に使った表キー（診断・デバッグ用）
+        std::string table_key;
+        // 戻り値・引数型のジェネリック置換が必要な場合の定義パラメータ名と実引数（不要なら空）
+        std::vector<std::string> generic_params;
+        std::vector<ast::TypePtr> type_args;
+        // どの検索段で解決したか（呼び出しサイトの検査差——private検査はDirectのみ・
+        // GenericBoundのGeneric戻り値はレシーバ型へ置換——の分岐に使う）
+        enum class Via { Direct, GenericDef, Interface, GenericBound, EnumBase };
+        Via via = Via::Direct;
+    };
+    std::optional<MethodResolution> resolve_method(const ast::TypePtr& recv_type,
+                                                   const std::string& method_name);
     // R10: constジェネリックパラメータ（<N: const int>）は実体化未実装のため宣言時に明示診断で拒否する
     void reject_const_generic_params(const std::vector<ast::GenericParam>& params, Span span);
 
