@@ -177,8 +177,26 @@ class SVCodeGen : public BufferedCodeGenerator {
     void emitPortList(const std::vector<SVPort>& ports);
 
     // === MIR解析 ===
-    // MIRからSVモジュール情報を抽出
+    // MIRからSVモジュール情報を抽出（analyze/配下の各フェーズ関数を逐次呼び出すオーケストレータ）
     void analyzeMIR(const mir::MirProgram& program);
+    // 事前収集フェーズ: #[sv::parameter]名・文字列定数長・モジュールスコープ信号名をメンバへ集める（analyze/globals.cpp）
+    void analyzeCollectGlobals(const mir::MirProgram& program);
+    // モジュール名決定フェーズ: `module NAME;`宣言・ソースファイル名・出力ファイル名の優先順で決める（analyze/globals.cpp）
+    void analyzeModuleName(SVModule& mod);
+    // 事前パスフェーズ: IOインスタンス写像・インスタンス駆動信号・配列信号名を収集する（analyze/globals.cpp）
+    void analyzePrepassInstances(const mir::MirProgram& program,
+                                 std::set<std::string>& instance_driven_signals,
+                                 std::set<std::string>& array_signal_names);
+    // ポート生成フェーズ: グローバル変数からポート・localparam・内部シグナル・インスタンス化文を生成する（analyze/ports.cpp）
+    void analyzeGlobalPorts(const mir::MirProgram& program, SVModule& mod,
+                            const std::set<std::string>& instance_driven_signals,
+                            const std::set<std::string>& array_signal_names, bool& has_clk,
+                            bool& has_rst);
+    // クロック解決フェーズ: 不足クロック入力ポートの補完と暗黙clk/rstの自動追加を行う（analyze/clock.cpp）
+    void analyzeClockPorts(const mir::MirProgram& program, SVModule& mod, bool has_clk,
+                           bool has_rst);
+    // 宣言生成フェーズ: 関数解析ループ・enum/struct typedef・initialブロックを出力する（analyze/declarations.cpp）
+    void analyzeDeclarations(const mir::MirProgram& program, SVModule& mod);
     // 関数からalways_ff/always_combブロックを生成
     void analyzeFunction(const mir::MirFunction& func, SVModule& mod);
     // 基本ブロックから文を生成

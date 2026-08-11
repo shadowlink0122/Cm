@@ -433,6 +433,11 @@ list(APPEND CM_SOURCES
 list(APPEND CM_SOURCES
     src/internal/codegen/sv/codegen.cpp
     src/internal/codegen/sv/analyze.cpp
+    src/internal/codegen/sv/analyze/globals.cpp
+    src/internal/codegen/sv/analyze/ports.cpp
+    src/internal/codegen/sv/analyze/clock.cpp
+    src/internal/codegen/sv/analyze/declarations.cpp
+    src/internal/codegen/sv/analyze/function.cpp
     src/internal/codegen/sv/self_param.cpp
     src/internal/codegen/sv/emit_control.cpp
     src/internal/codegen/sv/validation.cpp
@@ -850,6 +855,11 @@ if(BUILD_TESTING)
             src/internal/codegen/buffered_codegen.cpp
             src/internal/codegen/sv/codegen.cpp
             src/internal/codegen/sv/analyze.cpp
+            src/internal/codegen/sv/analyze/globals.cpp
+            src/internal/codegen/sv/analyze/ports.cpp
+            src/internal/codegen/sv/analyze/clock.cpp
+            src/internal/codegen/sv/analyze/declarations.cpp
+            src/internal/codegen/sv/analyze/function.cpp
             src/internal/codegen/sv/self_param.cpp
             src/internal/codegen/sv/emit_control.cpp
             src/internal/codegen/sv/validation.cpp
