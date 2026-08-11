@@ -2,7 +2,7 @@
 // モジュール名のファイルシステム安全化（"<generated>"等）と、グローバル変数の所有モジュール一本化
 // （所有モジュールのみglobal_vars、他はextern_global_vars）、全型定義の全モジュール配布を検証する（H14）。
 
-#include "internal/mir/mir_splitter.hpp"
+#include "internal/mir/splitter.hpp"
 
 #include <gtest/gtest.h>
 #include <memory>

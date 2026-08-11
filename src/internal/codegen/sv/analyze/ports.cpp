@@ -2,7 +2,7 @@
 // MIR解析フェーズ: グローバル変数からのポート・内部シグナル生成
 // ============================================================
 #include "internal/codegen/sv/codegen.hpp"
-#include "internal/codegen/sv/sv_internal.hpp"
+#include "internal/codegen/sv/internal.hpp"
 
 #include <algorithm>
 #include <cstdlib>

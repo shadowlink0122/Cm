@@ -2,7 +2,7 @@
 // MIR解析フェーズ: 事前収集・モジュール名決定・インスタンス事前パス
 // ============================================================
 #include "internal/codegen/sv/codegen.hpp"
-#include "internal/codegen/sv/sv_internal.hpp"
+#include "internal/codegen/sv/internal.hpp"
 
 #include <set>
 #include <string>

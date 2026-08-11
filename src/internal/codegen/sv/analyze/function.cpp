@@ -3,7 +3,7 @@
 // ============================================================
 #include "internal/base/i18n.hpp"
 #include "internal/codegen/sv/codegen.hpp"
-#include "internal/codegen/sv/sv_internal.hpp"
+#include "internal/codegen/sv/internal.hpp"
 
 #include <cctype>
 #include <set>

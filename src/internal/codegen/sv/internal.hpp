@@ -3,7 +3,7 @@
 // ============================================================
 // SVバックエンド内部ヘルパー
 // ============================================================
-// SVコード生成の翻訳単位（codegen/analyze/emit_control/validation/ testbench）間で共有する小さなヘルパー。外部公開APIではない
+// SVコード生成の翻訳単位（codegen/analyze/validation/testbench）間で共有する小さなヘルパー。外部公開APIではない
 
 #include "internal/base/text_utils.hpp"
 #include "internal/mir/analysis/dominators.hpp"

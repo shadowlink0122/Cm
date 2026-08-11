@@ -2,8 +2,8 @@
 // SVバックエンド検証 - 予約語・非合成型・NBA警告
 // ============================================================
 #include "codegen.hpp"
+#include "internal.hpp"
 #include "internal/base/i18n.hpp"
-#include "sv_internal.hpp"
 
 #include <algorithm>
 #include <iostream>

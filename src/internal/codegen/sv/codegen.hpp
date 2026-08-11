@@ -5,6 +5,7 @@
 #include "internal/mir/nodes.hpp"
 
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -239,6 +240,75 @@ class SVCodeGen : public BufferedCodeGenerator {
                         size_t current_block = SIZE_MAX);
     // 2つの分岐先が合流するブロックを探す
     size_t findMergeBlock(const mir::MirFunction& func, size_t then_block, size_t else_block);
+
+    // === ターミネータ腕別ヘルパー（codegen/control.cpp） ===
+    // for形再構成: ヘッダの全文が出力行を持たない単一定義テンポラリ代入のみか判定する
+    bool forHeaderClean(const mir::MirFunction& func, size_t header) const;
+    // for形再構成: ラッチ末尾側から増分文 var = var ± 定数 を検出する（見つかればtrue）
+    bool findForStep(const mir::MirFunction& func, size_t latch, mir::LocalId& loop_var,
+                     size_t& step_idx, std::string& step_rhs);
+    // for形再構成: ヘッダへ入るループ外先行ブロック末尾の var = 定数（初期値）を検出する（見つかればtrue）
+    bool findForInit(const mir::MirFunction& func, size_t header, size_t latch,
+                     const std::vector<size_t>& latches, mir::LocalId loop_var, size_t& init_block,
+                     size_t& init_idx, std::string& init_expr);
+    // SwitchInt単一ターゲット腕: ループヘッダ検出とwhile/for形ループ再構成（再構成して出力した場合true）
+    bool tryEmitLoop(const std::string& cond, size_t then_block, size_t else_block, bool is_negated,
+                     const mir::MirFunction& func, std::set<size_t>& visited,
+                     std::ostringstream& ss, size_t merge_block, size_t current_block);
+    // SwitchInt単一ターゲット腕: ループ再構成を試みた後のif/else・三項演算子の出力
+    void emitTermBranch(const mir::MirTerminator::SwitchIntData& sd, const std::string& cond,
+                        const mir::MirFunction& func, std::set<size_t>& visited,
+                        std::ostringstream& ss, size_t merge_block, size_t current_block);
+    // SwitchInt複数ターゲット腕: case/casez文の出力
+    void emitTermCase(const mir::MirTerminator::SwitchIntData& sd, const std::string& cond,
+                      const mir::MirFunction& func, std::set<size_t>& visited,
+                      std::ostringstream& ss, size_t merge_block);
+    // case腕: casezのワイルドカードビット付きcase項の出力
+    void emitCasezArms(const mir::MirTerminator::SwitchIntData& sd, const mir::MirFunction& func,
+                       std::set<size_t>& visited, std::ostringstream& ss, size_t merge);
+    // case腕: 同一遷移先ごとに値をまとめた通常case項の出力
+    void emitCaseArms(const mir::MirTerminator::SwitchIntData& sd, const mir::MirFunction& func,
+                      std::set<size_t>& visited, std::ostringstream& ss, size_t merge);
+    // Callターミネータの引数解決用逆引きマップ（テンポラリ→Ref元Place・コピー元Place・定数）
+    struct CallArgMaps {
+        std::map<mir::LocalId, mir::MirPlace> ref_map;
+        std::map<mir::LocalId, mir::MirPlace> copy_map;
+        std::map<mir::LocalId, std::pair<mir::MirConstant, hir::TypePtr>> const_map;
+    };
+    // Call腕: 全ブロックを走査してRef/copy/定数の逆引きマップを構築する
+    static CallArgMaps buildCallArgMaps(const mir::MirFunction& func);
+    // Call腕: 呼び出し引数のテンポラリを元のPlace名・定数値・式ツリーへ解決する
+    std::string resolveCallArg(const mir::MirOperand& op, const CallArgMaps& maps,
+                               const mir::MirFunction& func);
+    // Call腕: ノンブロッキング代入(<=)を使うかの判定（宛先のグローバル性とposedge/negedge型パラメータの規則）
+    static bool useNonblockingForCall(const mir::MirFunction& func,
+                                      const mir::MirTerminator::CallData& cd);
+    // Call腕のディスパッチ（関数名で各出力ヘルパーへ振り分けて成功ブロックへ続行する）
+    void emitTermCall(const mir::MirTerminator::CallData& cd, const mir::MirFunction& func,
+                      std::set<size_t>& visited, std::ostringstream& ss, size_t merge_block);
+    // Call腕: assert組み込み（即時アサーション）の出力
+    void emitCallAssert(const mir::MirTerminator::CallData& cd, const CallArgMaps& maps,
+                        const mir::MirFunction& func, std::ostringstream& ss);
+    // Call腕: SV連接 __builtin_concat の出力
+    void emitCallConcat(const mir::MirTerminator::CallData& cd, const CallArgMaps& maps,
+                        const mir::MirFunction& func, bool use_nb, std::ostringstream& ss);
+    // Call腕: SV複製 __builtin_replicate の出力
+    void emitCallReplicate(const mir::MirTerminator::CallData& cd, const CallArgMaps& maps,
+                           const mir::MirFunction& func, bool use_nb, std::ostringstream& ss);
+    // Call腕: native part-select __builtin_sv_* の出力
+    void emitCallPartSelect(const std::string& func_name, const mir::MirTerminator::CallData& cd,
+                            const CallArgMaps& maps, const mir::MirFunction& func, bool use_nb,
+                            std::ostringstream& ss);
+    // Call腕: SVリダクション演算子 __builtin_reduce_* の出力
+    void emitCallReduce(const std::string& func_name, const mir::MirTerminator::CallData& cd,
+                        const CallArgMaps& maps, const mir::MirFunction& func, bool use_nb,
+                        std::ostringstream& ss);
+    // Call腕: 文字列添字 __builtin_string_charAt/byte_at の出力
+    void emitCallStringCharAt(const mir::MirTerminator::CallData& cd, const CallArgMaps& maps,
+                              const mir::MirFunction& func, std::ostringstream& ss);
+    // Call腕: 一般関数呼び出しの出力
+    void emitCallGeneric(const std::string& func_name, const mir::MirTerminator::CallData& cd,
+                         const mir::MirFunction& func, std::ostringstream& ss);
 
     // === 配列初期値 ===
     // 配列リテラル初期値をinitialブロックとして生成
