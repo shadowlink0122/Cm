@@ -234,6 +234,10 @@
               },
               "patterns": [
                 {
+                  "name": "storage.type.primitive.cm",
+                  "match": "\\b(as|from)\\b"
+                },
+                {
                   "name": "variable.other.readwrite.cm",
                   "match": "[a-zA-Z_][a-zA-Z0-9_]*"
                 },
@@ -242,6 +246,10 @@
                   "match": ","
                 }
               ]
+            },
+            {
+              "name": "storage.type.primitive.cm",
+              "match": "\\b(as|from)\\b"
             },
             {
               "name": "entity.name.type.module.cm",
