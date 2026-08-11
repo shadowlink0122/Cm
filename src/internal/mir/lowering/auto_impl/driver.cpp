@@ -1,10 +1,10 @@
-// auto_impl.cpp - with キーワードによる自動実装（ビルトインメソッド）の生成
+// driver.cpp - with キーワードによる自動実装（ビルトインメソッド）の生成
 // eq/lt/clone/hash/css/debug/display の通常版とモノモーフィゼーション版。
 // lowering.cpp（2,912行）から分割（013 §4.3-4 巨大TU分割）
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/lowering.hpp"
 #include "internal/syntax/ast/typekey.hpp"
-#include "lowering.hpp"
 
 #include <algorithm>
 #include <memory>

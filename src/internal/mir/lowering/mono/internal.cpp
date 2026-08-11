@@ -1,9 +1,9 @@
 // ============================================================
 // 単相化内部ヘルパーの実装
 // ============================================================
-// mono_internal.hpp で宣言されたヘルパー関数の実装（monomorphization_impl / mono_structs で共有）
+// internal.hpp で宣言されたヘルパー関数の実装（mono/ 配下の各TUで共有）
 
-#include "mono_internal.hpp"
+#include "internal/mir/lowering/mono/internal.hpp"
 
 #include "internal/syntax/ast/typekey.hpp"
 

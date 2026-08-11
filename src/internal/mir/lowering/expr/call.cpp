@@ -1,8 +1,8 @@
-// expr_lowering_call.cpp - 関数呼び出しのlowering extract_named_placeholders, lower_call
+// call.cpp - 関数呼び出しのlowering extract_named_placeholders, lower_call
 
-#include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/hir/lowering/fwd.hpp"
+#include "internal/mir/lowering/expr.hpp"
 #include "internal/mir/lowering/layout.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
 #include "internal/syntax/parser/parser.hpp"

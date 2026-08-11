@@ -3,10 +3,10 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/mono/internal.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
+#include "internal/mir/lowering/mono/utils.hpp"
 #include "internal/syntax/ast/typekey.hpp"
-#include "mono_internal.hpp"
-#include "monomorphization.hpp"
-#include "monomorphization_utils.hpp"
 
 #include <iostream>
 #include <map>
@@ -804,7 +804,7 @@ void Monomorphization::fix_struct_method_self_args(MirProgram& program) {
                 continue;
 
             // Bug#10修正: ネスト呼出しでselfが既にポインタ型の場合
-            // Ref経由で作られたポインタ（expr_call.cppのDeref+Ref処理）は正しく構築済みなのでそのまま維持する。
+            // Ref経由で作られたポインタ（expr/call.cppのDeref+Ref処理）は正しく構築済みなのでそのまま維持する。
             // 元のポインタ変数（Pointer型ローカル）が直接渡された場合のみ
             // 引数を維持してスキップする。
             if (local_type->kind == hir::TypeKind::Pointer) {

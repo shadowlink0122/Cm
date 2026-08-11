@@ -2,8 +2,8 @@
 // MIR lowering - 文字列補間（f"..." / プレースホルダ抽出）
 // ============================================================
 
-#include "expr.hpp"
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/expr.hpp"
 
 #include <cctype>
 #include <deque>

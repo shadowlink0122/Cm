@@ -8,7 +8,7 @@
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/context.hpp"
 #include "internal/mir/lowering/expr.hpp"
-#include "internal/mir/lowering/monomorphization.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
 
 #include <memory>
 #include <optional>

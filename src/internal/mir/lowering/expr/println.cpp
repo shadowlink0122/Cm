@@ -2,9 +2,9 @@
 // MIR lowering - __println__ builtin（書式付き出力の展開）
 // ============================================================
 
-#include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/hir/lowering/fwd.hpp"
+#include "internal/mir/lowering/expr.hpp"
 
 #include <memory>
 #include <optional>

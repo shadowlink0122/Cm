@@ -3,8 +3,8 @@
 // ============================================================
 
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/lowering.hpp"
 #include "internal/syntax/ast/typekey.hpp"
-#include "lowering.hpp"
 
 #include <algorithm>
 #include <memory>

@@ -1,4 +1,4 @@
-#include "monomorphization_utils.hpp"
+#include "internal/mir/lowering/mono/utils.hpp"
 
 #include "internal/base/debug.hpp"
 

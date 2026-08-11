@@ -4,13 +4,13 @@
 // 要素型ごとのランタイム関数選択と呼び出し規約はslice_dispatch.hppのslice_elem_dispatchに集約し、本ファイルは表引きと共通のCall構築ヘルパのみで構成する（type-resolution-simplification 領域4）。
 // 従来はpush/pop/get各loweringが「スカラ→幅・Array→slice・Struct/Union→blob・Pointer/String→ptr」の選択と規約を個別に手書きしており、popだけがblob受け取り規約を欠いてW3（構造体pop戻り値のSIGSEGV）を招いた。
 
-#include "expr.hpp"
 #include "internal/base/debug.hpp"
 #include "internal/base/i18n.hpp"
 #include "internal/base/target.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 #include "internal/hir/slice_dispatch.hpp"
-#include "layout.hpp"
+#include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/layout.hpp"
 
 #include <memory>
 #include <optional>

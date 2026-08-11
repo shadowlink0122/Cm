@@ -4,9 +4,9 @@
 #include "internal/base/target.hpp"
 #include "internal/mir/lowering/context.hpp"
 #include "internal/mir/lowering/expr.hpp"
-#include "internal/mir/lowering/mono_internal.hpp"
-#include "internal/mir/lowering/monomorphization.hpp"
-#include "internal/mir/lowering/monomorphization_utils.hpp"
+#include "internal/mir/lowering/mono/internal.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
+#include "internal/mir/lowering/mono/utils.hpp"
 #include "internal/syntax/ast/typekey.hpp"
 
 #include <cstdio>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "base.hpp"
 #include "internal/base/debug.hpp"
+#include "internal/mir/lowering/base.hpp"
 
 #include <map>
 #include <optional>

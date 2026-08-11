@@ -306,10 +306,10 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/context.cpp
     src/internal/mir/lowering/base.cpp
     src/internal/mir/lowering/lowering.cpp
-    src/internal/mir/lowering/auto_impl.cpp
-    src/internal/mir/lowering/auto_impl_compare.cpp
-    src/internal/mir/lowering/auto_impl_css.cpp
-    src/internal/mir/lowering/auto_impl_debug.cpp
+    src/internal/mir/lowering/auto_impl/driver.cpp
+    src/internal/mir/lowering/auto_impl/compare.cpp
+    src/internal/mir/lowering/auto_impl/css.cpp
+    src/internal/mir/lowering/auto_impl/debug.cpp
     src/internal/mir/lowering/impl.cpp
     src/internal/mir/lowering/mono/scan.cpp
     src/internal/mir/lowering/mono/specialize.cpp
@@ -317,9 +317,9 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp
-    src/internal/mir/lowering/mono_internal.cpp
-    src/internal/mir/lowering/mono_structs.cpp
-    src/internal/mir/lowering/monomorphization_utils.cpp
+    src/internal/mir/lowering/mono/internal.cpp
+    src/internal/mir/lowering/mono/structs.cpp
+    src/internal/mir/lowering/mono/utils.cpp
     # src/internal/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/internal/mir/lowering/stmt/lower.cpp
     src/internal/mir/lowering/stmt/let.cpp
@@ -336,10 +336,10 @@ set(CM_MIR_SOURCES
     src/internal/mir/lowering/expr/cast.cpp
     src/internal/mir/lowering/expr/binary.cpp
     src/internal/mir/lowering/expr/unary.cpp
-    src/internal/mir/lowering/expr_call.cpp
-    src/internal/mir/lowering/expr_interp.cpp
-    src/internal/mir/lowering/expr_println.cpp
-    src/internal/mir/lowering/expr_slice.cpp
+    src/internal/mir/lowering/expr/call.cpp
+    src/internal/mir/lowering/expr/interp.cpp
+    src/internal/mir/lowering/expr/println.cpp
+    src/internal/mir/lowering/expr/slice.cpp
     # MIR passes (最適化パス実装)
     src/internal/mir/passes/instrumentation/undefined.cpp
     src/internal/mir/passes/instrumentation/bounds.cpp

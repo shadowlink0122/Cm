@@ -4,8 +4,8 @@
 // スカラ要素型（整数・浮動小数）について、スライスのelem_size（確保幅）と
 // ランタイム関数の幅サフィックス（push/pop/get）・ソート関数サフィックスを
 // 唯一の情報源として定義する。
-// 以前はこの対応表がexpr_slice.cpp・access.cpp・construct.cpp・let.cpp・
-// expr_println.cppに個別複製されており、Short/UShortの取りこぼしでelem_size=2に対し
+// 以前はこの対応表がexpr/slice.cpp・access.cpp・construct.cpp・let.cpp・
+// expr/println.cppに個別複製されており、Short/UShortの取りこぼしでelem_size=2に対し
 // 4バイト関数が選ばれヒープ破壊（C4）を招いた。ここへ集約することでelem_sizeと
 // アクセス幅の不一致を構造的に防ぎ、新しいスカラ型の追加を1箇所の変更で済ませる。
 // ポインタ・文字列・構造体・ユニオン・配列などの集約型はスカラではないためnulloptを返し、

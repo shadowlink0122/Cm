@@ -2,7 +2,7 @@
 
 #include "base.hpp"
 #include "expr.hpp"
-#include "monomorphization.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
 #include "stmt.hpp"
 
 #include <algorithm>
