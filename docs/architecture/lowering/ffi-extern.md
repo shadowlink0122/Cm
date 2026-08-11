@@ -126,7 +126,7 @@ cmバイナリ自体がlibcとCmランタイムをリンク済みであるため
 - コールバックは `関数名 as void*` で渡す: `spawn(worker as void*)` や `set_allocator_fns(counting_alloc as void*, ...)` のように関数参照を `void*` へキャストして渡し、C側で関数ポインタとして呼び出す。シグネチャの一致は検査されないためユーザー責任である。
 - プラットフォーム依存の不透明型サイズに注意: `pthread_rwlock_t` はmacOSで200バイト（Linuxは56バイト）あり、`long[8]`（64バイト）で確保すると初期化がバッファ外へ書き込みスタックを破壊してSIGILLになる。`libs/native/sync/mod.cm:89-94` の `RawRwLock` は全プラットフォームの最大に余裕を持たせた `long[32]`（256バイト）を確保しており、C側の不透明型をCm構造体で持つ場合は最大サイズ側に合わせるのが原則である。
 - `string` の受け渡しはNUL終端前提: SDS表現によりCm文字列はそのまま `char*` として渡せるが、C側は最初のNULまでしか読まないため、埋め込みNULを含む文字列やバイナリデータは `void*` + 長さで渡す。
-- js/wasmバックエンドは別経路: extern関数の `package_name` はjsバックエンドでrequire生成の判断に使われ、`"js"`・`"libc"`・空文字列は組み込み扱いでrequireを生成しない（`src/internal/codegen/js/codegen.cpp:217-238`、`src/internal/codegen/js/emit_statements.cpp:379-395`）。libc関数がnative/jitのように自動でホストのCライブラリへ束縛されるわけではなく、この境界を越えるFFIはバックエンドごとの解決機構に従う（本書の対象はnative/jitのため詳細は扱わない）。
+- js/wasmバックエンドは別経路: extern関数の `package_name` はjsバックエンドでrequire生成の判断に使われ、`"js"`・`"libc"`・空文字列は組み込み扱いでrequireを生成しない（`src/internal/codegen/js/codegen.cpp:217-238`、`src/internal/codegen/js/emit/statements.cpp:379-395`）。libc関数がnative/jitのように自動でホストのCライブラリへ束縛されるわけではなく、この境界を越えるFFIはバックエンドごとの解決機構に従う（本書の対象はnative/jitのため詳細は扱わない）。
 
 ## 関連資料
 

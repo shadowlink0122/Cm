@@ -1,7 +1,7 @@
 #pragma once
 
 #include "internal/mir/analysis/dominators.hpp"
-#include "internal/mir/analysis/loop_analysis.hpp"
+#include "internal/mir/analysis/loop.hpp"
 #include "internal/mir/nodes.hpp"
 #include "internal/mir/passes/core/base.hpp"
 

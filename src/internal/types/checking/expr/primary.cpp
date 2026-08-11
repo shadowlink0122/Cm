@@ -2,8 +2,8 @@
 // TypeChecker 実装 - 式型推論のディスパッチとリテラル・構造体リテラル・識別子の推論、move状態の追跡
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>

@@ -250,7 +250,7 @@ set(CM_AST_SOURCES
 # 型検査（cm本体と回帰テストターゲットで共有。型情報に依存するMIR loweringの検証に必要）
 set(CM_TYPECHECK_SOURCES
     src/internal/types/scope.cpp
-    src/internal/types/generic_context.cpp
+    src/internal/types/checking/generic/context.cpp
     src/internal/types/checking/decl/driver.cpp
     src/internal/types/checking/decl/namespace.cpp
     src/internal/types/checking/decl/dispatch.cpp
@@ -265,7 +265,7 @@ set(CM_TYPECHECK_SOURCES
     src/internal/types/checking/expr/lambda.cpp
     src/internal/types/checking/call/function.cpp
     src/internal/types/checking/call/method.cpp
-    src/internal/types/checking/generic.cpp
+    src/internal/types/checking/generic/infer.cpp
     src/internal/types/checking/generic/bounds.cpp
     src/internal/types/checking/auto_impl.cpp
     src/internal/types/checking/utils/compat.cpp
@@ -369,7 +369,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/passes/validation/no_std_checker.cpp
     # MIR analysis (解析モジュール)
     src/internal/mir/analysis/dominators.cpp
-    src/internal/mir/analysis/loop_analysis.cpp
+    src/internal/mir/analysis/loop.cpp
 )
 
 # Main executable
@@ -415,10 +415,10 @@ set(CM_SOURCES
     src/internal/fmt/formatter/indent.cpp
     src/internal/fmt/formatter/spacing.cpp
     src/internal/fmt/formatter/wrap.cpp
-    src/internal/base/format_string.cpp
-    src/internal/base/source_location.cpp
-    src/internal/base/diagnostics.cpp
-    src/internal/base/diag_emitter.cpp
+    src/internal/base/format/string.cpp
+    src/internal/base/source/location.cpp
+    src/internal/base/diag/diagnostics.cpp
+    src/internal/base/diag/emitter.cpp
     src/internal/hir/string_interpolation.cpp
     src/internal/diagnostics/engine.cpp
     src/internal/diagnostics/catalog.cpp
@@ -426,23 +426,23 @@ set(CM_SOURCES
 
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
-    src/internal/codegen/buffered_codegen.cpp
+    src/internal/codegen/buffered.cpp
     src/internal/codegen/llvm/monitoring/block_monitor.cpp
     src/internal/codegen/llvm/monitoring/codegen_monitor.cpp
     src/internal/codegen/llvm/monitoring/output_monitor.cpp
     src/internal/codegen/llvm/monitoring/compilation_guard.cpp
     src/internal/codegen/js/codegen.cpp
     src/internal/codegen/js/utilities.cpp
-    src/internal/codegen/js/emit_function.cpp
-    src/internal/codegen/js/analysis.cpp
-    src/internal/codegen/js/css_optimization.cpp
-    src/internal/codegen/js/structured_flow.cpp
-    src/internal/codegen/js/control_flow.cpp
-    src/internal/codegen/js/emit_statements.cpp
-    src/internal/codegen/js/emit_expressions.cpp
+    src/internal/codegen/js/emit/function.cpp
+    src/internal/codegen/js/flow/analysis.cpp
+    src/internal/codegen/js/optimizations/css.cpp
+    src/internal/codegen/js/flow/structured.cpp
+    src/internal/codegen/js/flow/control.cpp
+    src/internal/codegen/js/emit/statements.cpp
+    src/internal/codegen/js/emit/expressions.cpp
     src/internal/codegen/js/validation.cpp
-    src/internal/codegen/js/builtins.cpp
-    src/internal/codegen/js/runtime.cpp
+    src/internal/codegen/js/emit/builtins.cpp
+    src/internal/codegen/js/emit/runtime.cpp
 )
 
 # SystemVerilog backend (LLVMに依存しない)
@@ -460,10 +460,10 @@ list(APPEND CM_SOURCES
     src/internal/codegen/sv/analyze/clock.cpp
     src/internal/codegen/sv/analyze/declarations.cpp
     src/internal/codegen/sv/analyze/function.cpp
-    src/internal/codegen/sv/self_param.cpp
+    src/internal/codegen/sv/analyze/self.cpp
     src/internal/codegen/sv/validation.cpp
     src/internal/codegen/sv/testbench.cpp
-    src/internal/codegen/sv/expr_tree.cpp
+    src/internal/codegen/sv/codegen/tree.cpp
     src/internal/codegen/sv/hierarchy.cpp
     src/internal/codegen/sv/constraints.cpp
 )
@@ -876,7 +876,7 @@ if(BUILD_TESTING)
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             ${CM_I18N_SOURCES}
-            src/internal/codegen/buffered_codegen.cpp
+            src/internal/codegen/buffered.cpp
             src/internal/codegen/sv/codegen.cpp
             src/internal/codegen/sv/codegen/types.cpp
             src/internal/codegen/sv/codegen/emitter.cpp
@@ -890,11 +890,11 @@ if(BUILD_TESTING)
             src/internal/codegen/sv/analyze/clock.cpp
             src/internal/codegen/sv/analyze/declarations.cpp
             src/internal/codegen/sv/analyze/function.cpp
-            src/internal/codegen/sv/self_param.cpp
+            src/internal/codegen/sv/analyze/self.cpp
             src/internal/codegen/sv/validation.cpp
             src/internal/codegen/sv/testbench.cpp
             src/internal/codegen/sv/constraints.cpp
-            src/internal/codegen/sv/expr_tree.cpp
+            src/internal/codegen/sv/codegen/tree.cpp
         )
         set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         # ゴールデンテスト入力のCmソース断片ディレクトリ
@@ -1004,7 +1004,7 @@ if(BUILD_TESTING)
             src/internal/mir/nodes.cpp
             ${CM_AST_SOURCES}
             src/internal/mir/analysis/dominators.cpp
-            src/internal/mir/analysis/loop_analysis.cpp
+            src/internal/mir/analysis/loop.cpp
             src/internal/mir/passes/core/base.cpp
             src/internal/mir/passes/convergence/manager.cpp
             src/internal/mir/passes/instrumentation/undefined.cpp

@@ -1,5 +1,5 @@
 // JS組み込み関数の実装
-#include "builtins.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
 
 #include "internal/codegen/common/builtin_registry.hpp"
 

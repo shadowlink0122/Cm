@@ -2,8 +2,8 @@
 // TypeChecker 実装 - ラムダ式の型推論とキャプチャ解析
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>

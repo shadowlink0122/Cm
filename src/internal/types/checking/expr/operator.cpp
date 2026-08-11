@@ -2,8 +2,8 @@
 // TypeChecker 実装 - 二項・単項・三項演算子とインデックス・スライス式の型推論
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>

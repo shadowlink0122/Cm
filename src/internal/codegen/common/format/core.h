@@ -4,8 +4,8 @@
 #ifndef CM_FORMAT_CORE_H
 #define CM_FORMAT_CORE_H
 
-#include "spec.h"
 #include "../runtime/platform.h"
+#include "spec.h"
 
 #ifdef __cplusplus
 extern "C" {

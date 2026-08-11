@@ -1,5 +1,5 @@
 // std::fs - ファイルシステム操作（native/JITバックエンド）
-// ネイティブランタイム（runtime_file.c）のcm_file_*関数を呼び出す。
+// ネイティブランタイム（runtime/file.c）のcm_file_*関数を呼び出す。
 // JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
 module std.fs;
 

@@ -3,9 +3,9 @@
 
 #include "cmd/cm/driver.hpp"
 #include "internal/base/i18n.hpp"
+#include "internal/codegen/sv/analyze/self.hpp"
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"
-#include "internal/codegen/sv/self_param.hpp"
 #include "internal/mir/nodes.hpp"
 
 #include <chrono>

@@ -1,6 +1,6 @@
 // stmt.cpp - 文のlowering
+#include "internal/base/format/text.hpp"
 #include "internal/base/mangle.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/hir/lowering/expr/internal.hpp"
 #include "internal/hir/lowering/fwd.hpp"
 #include "internal/syntax/ast/typekey.hpp"

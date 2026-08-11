@@ -5,7 +5,7 @@
 // ============================================================
 
 #include "catalog.hpp"
-#include "internal/base/diagnostics.hpp"
+#include "internal/base/diag/diagnostics.hpp"
 
 #include <iostream>
 #include <string>

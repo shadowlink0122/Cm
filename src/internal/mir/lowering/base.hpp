@@ -1,8 +1,8 @@
 #pragma once
 
 #include "context.hpp"
-#include "internal/base/diagnostics.hpp"
-#include "internal/base/module_range.hpp"
+#include "internal/base/diag/diagnostics.hpp"
+#include "internal/base/source/module_range.hpp"
 #include "internal/hir/nodes.hpp"
 #include "internal/mir/nodes.hpp"
 #include "internal/syntax/ast/typedef.hpp"

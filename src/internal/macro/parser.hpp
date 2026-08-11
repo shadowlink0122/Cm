@@ -1,8 +1,8 @@
 #pragma once
 
 #include "internal/base/error.hpp"
+#include "internal/macro/token_tree.hpp"
 #include "internal/syntax/lexer/token.hpp"
-#include "token_tree.hpp"
 
 #include <memory>
 #include <optional>

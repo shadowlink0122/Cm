@@ -1,8 +1,8 @@
-#include "builtins.hpp"
 #include "codegen.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
+#include "internal/codegen/js/emit/runtime.hpp"
 #include "internal/syntax/ast/typedef.hpp"
 #include "internal/syntax/ast/typekey.hpp"
-#include "runtime.hpp"
 #include "types.hpp"
 
 #include <algorithm>

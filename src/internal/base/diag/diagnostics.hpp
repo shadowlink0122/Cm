@@ -1,7 +1,7 @@
 #pragma once
 
-#include "source.hpp"
-#include "span.hpp"
+#include "internal/base/source/source.hpp"
+#include "internal/base/source/span.hpp"
 
 #include <iostream>
 #include <string>

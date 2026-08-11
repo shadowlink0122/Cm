@@ -8,8 +8,8 @@
 // ファイル単位のmodule_rangesで、既存パイプライン（結合バッファ前提のパーサ・診断写像・MIRモジュール分割）とそのまま互換する。
 // ============================================================
 
-#include "internal/base/module_range.hpp"
-#include "internal/base/source_map.hpp"
+#include "internal/base/source/map.hpp"
+#include "internal/base/source/module_range.hpp"
 
 #include <string>
 #include <vector>

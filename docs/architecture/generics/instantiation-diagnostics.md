@@ -14,7 +14,7 @@
 | 関数の明示型引数の個数不一致 | `size_of<A, B>()` | `TypeGenericFunctionArgumentCountMismatch` | `call/function.cpp` |
 | 境界未宣言の演算子使用 | 境界なし`T`に`a < b` | `TypeGenericBoundMissing`（警告） | 宣言時の本体走査 |
 
-診断IDの定義は`src/internal/base/messages/message_ids.hpp:317-322`にある。インスタンス化時の制約充足（`<T: Ord>`に対する実型の検査）は[../interface/static-dispatch.md](../interface/static-dispatch.md)で扱う`check_type_constraints`が担う。
+診断IDの定義は`src/internal/base/messages/ids.hpp:317-322`にある。インスタンス化時の制約充足（`<T: Ord>`に対する実型の検査）は[../interface/static-dispatch.md](../interface/static-dispatch.md)で扱う`check_type_constraints`が担う。
 
 ## データ構造とアルゴリズム
 
@@ -58,7 +58,7 @@ if (explicit_type_args.size() != base_gen_it->second.size()) {
 }
 ```
 
-推論経由の呼び出しは`infer_generic_call`（`src/internal/types/checking/generic.cpp:16`）が実引数の個数（デフォルト引数考慮、`generic.cpp:36-48`）と、推論された型引数の制約充足（`generic.cpp:134-157`）を検証する。
+推論経由の呼び出しは`infer_generic_call`（`src/internal/types/checking/generic/infer.cpp:16`）が実引数の個数（デフォルト引数考慮、`infer.cpp:36-48`）と、推論された型引数の制約充足（`infer.cpp:134-157`）を検証する。
 
 ### 境界未宣言の演算子使用の前倒し検査
 
@@ -99,10 +99,10 @@ warning: type parameter 'T' uses operator '<' but no interface bound is declared
 | `src/internal/types/checking/utils/compat.cpp` | `is_valid_type`での個数・存在の再帰検証 |
 | `src/internal/types/checking/stmt.cpp` | `check_let`での宣言位置の検証（個数・引数なし・存在） |
 | `src/internal/types/checking/call/function.cpp` | 明示型引数のパースと個数検証 |
-| `src/internal/types/checking/generic.cpp` | 推論経由呼び出しの引数個数・制約充足の検証 |
+| `src/internal/types/checking/generic/infer.cpp` | 推論経由呼び出しの引数個数・制約充足の検証 |
 | `src/internal/types/checking/generic/bounds.cpp` | 宣言時の演算子能力と境界の突き合わせ |
 | `src/internal/types/checking/decl.cpp` | ジェネリック関数登録と境界検査の起動 |
-| `src/internal/base/messages/message_ids.hpp` | 診断IDの定義 |
+| `src/internal/base/messages/ids.hpp` | 診断IDの定義 |
 
 ## 落とし穴とケア
 

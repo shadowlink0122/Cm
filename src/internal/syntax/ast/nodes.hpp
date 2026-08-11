@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/span.hpp"
+#include "internal/base/source/span.hpp"
 #include "types.hpp"
 
 #include <memory>

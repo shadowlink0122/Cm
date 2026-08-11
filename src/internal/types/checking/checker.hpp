@@ -12,7 +12,7 @@
 // ============================================================
 
 #include "base.hpp"
-#include "internal/base/messages/message_ids.hpp"
+#include "internal/base/messages/ids.hpp"
 
 namespace cm {
 

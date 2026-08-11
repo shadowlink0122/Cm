@@ -7,9 +7,9 @@
 // ドライバは本クラスを構築してemit/emit_allを呼ぶだけにし、診断の表示ロジックを新規に手書きすることは禁止する
 // ============================================================
 
-#include "diagnostics.hpp"
-#include "source_location.hpp"
-#include "source_map.hpp"
+#include "internal/base/diag/diagnostics.hpp"
+#include "internal/base/source/location.hpp"
+#include "internal/base/source/map.hpp"
 
 #include <string>
 #include <unordered_map>

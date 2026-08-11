@@ -2,8 +2,8 @@
 // TypeChecker 実装 - match式の型推論・網羅性検査・パターン検査
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>

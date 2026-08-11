@@ -123,7 +123,7 @@ if (macro_it != macro_values_.end()) {
 | `src/internal/hir/lowering/fwd.hpp:59-61` | int/string/bool の名前→値マップ |
 | `src/internal/hir/lowering/expr.cpp:94-125` | 識別子参照のリテラルへのインライン置換 |
 | `src/internal/macro/token_tree.{hpp,cpp}` | （未接続）トークンツリー・フラグメント指定子・マクロルール表現 |
-| `src/internal/macro/macro_parser.{hpp,cpp}` | （未接続）`macro_rules` 風定義のパーサ |
+| `src/internal/macro/parser.{hpp,cpp}` | （未接続）`macro_rules` 風定義のパーサ |
 | `src/internal/macro/matcher.{hpp,cpp}` | （未接続）パターンマッチングとバインディング構築 |
 | `src/internal/macro/expander.{hpp,cpp}` | （未接続）展開駆動・再帰/サイズ上限・キャッシュ・エラー型 |
 | `src/internal/macro/hygiene.{hpp,cpp}` | （未接続）SyntaxContextによる識別子リネームとgensym |

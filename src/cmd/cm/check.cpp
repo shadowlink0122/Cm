@@ -3,9 +3,9 @@
 
 #include "driver.hpp"
 #include "frontend.hpp"
-#include "internal/base/diag_emitter.hpp"
+#include "internal/base/diag/emitter.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/source_location.hpp"
+#include "internal/base/source/location.hpp"
 #include "internal/lint/config.hpp"
 #include "internal/module/resolver.hpp"
 #include "internal/preprocessor/conditional.hpp"

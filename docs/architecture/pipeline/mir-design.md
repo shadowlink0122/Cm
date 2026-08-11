@@ -51,7 +51,7 @@ bool no_opt = false;  // 最適化禁止フラグ（must{}ブロック内の文�
 
 - `mir/nodes.hpp`・`nodes.cpp` — 上記データ構造の定義。
 - `mir/lowering/` — HIR→MIR変換（入口 `MirLowering::lower`: `src/internal/mir/lowering/lowering.cpp:19`）。`expr/`・`stmt/` の構文別lowering、`mono/` の単相化、`auto_impl/` のトレイト自動導出などに分割されている。
-- `mir/analysis/` — CFG解析。支配木 `DominatorTree`（`src/internal/mir/analysis/dominators.cpp:42-192`、反復データフローによる古典的計算）と自然ループ検出 `LoopAnalysis`（`src/internal/mir/analysis/loop_analysis.cpp:21-82`、バックエッジ検出とネスト木構築）。利用者はループ系パス（`passes/loop/const_unroll.cpp`・`passes/loop/licm.cpp`）である。
+- `mir/analysis/` — CFG解析。支配木 `DominatorTree`（`src/internal/mir/analysis/dominators.cpp:42-192`、反復データフローによる古典的計算）と自然ループ検出 `LoopAnalysis`（`src/internal/mir/analysis/loop.cpp:21-82`、バックエッジ検出とネスト木構築）。利用者はループ系パス（`passes/loop/const_unroll.cpp`・`passes/loop/licm.cpp`）である。
 - `mir/passes/` — 最適化・計装・検証パスの本体。`core/`（基底・パイプライン・パス生成）、`convergence/`（収束判定）、`cleanup/`（dce・dse・simplify_cfg・program_dce・string_reassign_free）、`scalar/`（folding・propagation・sccp）、`redundancy/`（gvn）、`loop/`（const_unroll・licm）、`interprocedural/`（inlining・tail_call_elimination）、`instrumentation/`（bounds・undefined）、`validation/`（no_std_checker）。
 - `mir/optimizations/` — `optimization_pipeline.cpp` のみで、`create_standard_passes` へ委譲する薄いラッパである（`src/internal/mir/optimizations/optimization_pipeline.cpp:8-16`）。
 - `mir/printer.cpp` — MIRテキストダンプ（`MirPrinter`: `src/internal/mir/printer.hpp:20-67`）。CLIの `--mir`（最適化前ダンプ、`src/cmd/cm/build.cpp:465-469`）と `--mir-opt`（最適化後ダンプして終了、`build.cpp:547-552`）から使われる。
@@ -101,7 +101,7 @@ bool no_opt = false;  // 最適化禁止フラグ（must{}ブロック内の文�
 | パス基底・パイプライン | `src/internal/mir/passes/core/base.hpp`, `base.cpp` |
 | 標準パス構成・レベル別実行 | `src/internal/mir/passes/core/manager.cpp`, `manager.hpp` |
 | 収束判定 | `src/internal/mir/passes/convergence/manager.hpp`, `smart.hpp` |
-| 支配木・ループ解析 | `src/internal/mir/analysis/dominators.cpp`, `loop_analysis.cpp` |
+| 支配木・ループ解析 | `src/internal/mir/analysis/dominators.cpp`, `loop.cpp` |
 | 各最適化パス | `src/internal/mir/passes/{cleanup,scalar,redundancy,loop,interprocedural}/` |
 | サニタイザ計装 | `src/internal/mir/passes/instrumentation/bounds.cpp`, `undefined.cpp` |
 | MIRダンプ（--mir / --mir-opt） | `src/internal/mir/printer.cpp`, `src/cmd/cm/options.cpp:127-129` |
@@ -112,7 +112,7 @@ bool no_opt = false;  // 最適化禁止フラグ（must{}ブロック内の文�
 - `no_opt` フラグの尊重が最重要の不変条件である: `must{}` ブロック由来の文は `MirStatement::no_opt = true`（`nodes.hpp:265`）で、全変換パスがこれをスキップする（例: `passes/scalar/propagation.cpp:109-110`、`passes/cleanup/dse.cpp:32-34`、`passes/scalar/folding.cpp:93-94`、`passes/cleanup/dce.cpp:115-116`、`passes/loop/licm.cpp:83-84`）。新パスを追加するときも必ず `no_opt` を検査し、インライン化のような文複製ではフラグを複製先へ引き継ぐこと（`passes/interprocedural/inlining.cpp:234`）。
 - MIRはSSAではないため、ローカルへの再代入で解析結果を無効化する処理が各パスに必要である（GVNの値番号無効化など）。SSA前提のアルゴリズムをそのまま移植してはならない。
 - インラインasmの出力オペランド変数は、`no_opt` の有無に関わらず定数・コピー追跡から除外する（`propagation.cpp:97`、`folding.cpp:81`）。asmは実行時に変数を書き換えるため、静的な値追跡が成り立たない。
-- CFGを書き換えるパスは `set_terminator` / `update_successors` / `build_cfg`（`nodes.hpp:398-401`、`nodes.hpp:469`）でpredecessor/successorの整合を保つこと。`Call` 終端の後続は `success` ブロックである点を忘れると支配木・ループ解析が壊れる（`analysis/dominators.cpp:72-77`、`analysis/loop_analysis.cpp:45-49`）。
+- CFGを書き換えるパスは `set_terminator` / `update_successors` / `build_cfg`（`nodes.hpp:398-401`、`nodes.hpp:469`）でpredecessor/successorの整合を保つこと。`Call` 終端の後続は `success` ブロックである点を忘れると支配木・ループ解析が壊れる（`analysis/dominators.cpp:72-77`、`analysis/loop.cpp:45-49`）。
 - パスの実行順には依存関係がある: `StringReassignFree` はloweringが生成した素のMIR形状（`T = concat(...) → X = copy(T)`）を前提に旧バッファ解放位置を分類するため、コピー伝播がこの形状を書き換える前、パイプライン先頭で実行しなければならない（`manager.cpp:41-44` のコメント）。この順序が、旧文字列バッファのリークや二重解放というバグのクラスを防いでいる。
 - `FunctionInlining` は登録されているが、loweringが呼び出し先を `FunctionRef` で発行するのに対して旧形式の文字列定数を期待するため実運用では作動せず、最終的なインライン展開はLLVM側インライナが担う（固定化テスト: `tests/regression/cases/mir_optimization/README.md` と `FunctionInlining_CurrentlyDormant`）。この前提を変える場合は `__lambda_` やクロージャのインライン化禁止判定（`inlining.cpp:118-121`）を維持すること。
 - 共有コードの境界: js/ts/webターゲットは `MirOptimizationOptions::no_aggregate_copy_prop`（`manager.hpp:14-20`、設定は `src/cmd/cm/build.cpp:491-493`）で集約コピー伝播を抑止し、svターゲットは文除去系パスを実行せず保存モードの `ConstantFolding(fold_terminators=false)` のみ通す（`build.cpp:512-521`）。MIRパスを変更するときは、これらの境界フラグの意味論（jsの深いコピー・svのハードウェアロジック保持）を壊さないこと。

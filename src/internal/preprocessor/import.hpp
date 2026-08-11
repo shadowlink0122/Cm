@@ -1,7 +1,7 @@
 #pragma once
 
-#include "internal/base/module_range.hpp"
-#include "internal/base/source_map.hpp"
+#include "internal/base/source/map.hpp"
+#include "internal/base/source/module_range.hpp"
 
 #include <filesystem>
 #include <string>

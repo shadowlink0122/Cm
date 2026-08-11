@@ -1,6 +1,6 @@
 #pragma once
 
-#include "emitter.hpp"
+#include "internal/codegen/js/emitter.hpp"
 
 #include <string>
 #include <unordered_set>

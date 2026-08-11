@@ -2,7 +2,7 @@
 // SourceLocationManager 実装
 // ============================================================
 
-#include "source_location.hpp"
+#include "internal/base/source/location.hpp"
 
 #include <sstream>
 #include <string>

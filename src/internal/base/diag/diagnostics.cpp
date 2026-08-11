@@ -2,7 +2,7 @@
 // Diagnostics 実装
 // ============================================================
 
-#include "diagnostics.hpp"
+#include "internal/base/diag/diagnostics.hpp"
 
 namespace cm {
 

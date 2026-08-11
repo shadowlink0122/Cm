@@ -59,7 +59,7 @@ void TypeChecker::register_mangled_symbol(const std::string& name, const std::st
 }
 ```
 
-登録対象は、本体を持つ非ジェネリック自由関数（モジュール修飾名は`flatten_qualified`でフラット化して登録、`decl.cpp:308-313`）、コンストラクタ（`decl.cpp:640`）、デストラクタ（`decl.cpp:649`）、implメソッド（`decl.cpp:756`）である。由来とシグネチャが完全一致する再登録はモジュールフラット化による同一定義の複数出現として許容し、別由来・別シグネチャの同名は`TypeMangledSymbolCollision`（`src/internal/base/messages/message_ids.hpp:318`）の診断付きハードエラーにする。これにより、メソッド`Holder.method`と自由関数`Holder__method()`のように同一リンク名へ縮退する定義は、後勝ちの黙った上書きではなくコンパイルエラーになる。
+登録対象は、本体を持つ非ジェネリック自由関数（モジュール修飾名は`flatten_qualified`でフラット化して登録、`decl.cpp:308-313`）、コンストラクタ（`decl.cpp:640`）、デストラクタ（`decl.cpp:649`）、implメソッド（`decl.cpp:756`）である。由来とシグネチャが完全一致する再登録はモジュールフラット化による同一定義の複数出現として許容し、別由来・別シグネチャの同名は`TypeMangledSymbolCollision`（`src/internal/base/messages/ids.hpp:318`）の診断付きハードエラーにする。これにより、メソッド`Holder.method`と自由関数`Holder__method()`のように同一リンク名へ縮退する定義は、後勝ちの黙った上書きではなくコンパイルエラーになる。
 
 ### 特殊化名とユーザー識別子の分離（$退避）
 
@@ -95,7 +95,7 @@ error: symbol 'Holder__method' is defined more than once: method 'Holder.method'
 | `src/internal/hir/lowering/expr_member.cpp` | メソッド呼び出し名の生成（ジェネリックレシーバの平坦化を含む） |
 | `src/internal/mir/lowering/impl.cpp` | implメソッド・演算子（`Type__op_xx`）の定義名生成 |
 | `src/internal/mir/lowering/mono/typeinfo.cpp` | 特殊化名の生成と`$`退避判定 |
-| `src/internal/base/messages/message_ids.hpp` | `TypeMangledSymbolCollision`診断ID |
+| `src/internal/base/messages/ids.hpp` | `TypeMangledSymbolCollision`診断ID |
 
 ## 落とし穴とケア
 

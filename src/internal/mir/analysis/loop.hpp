@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dominators.hpp"
+#include "internal/mir/analysis/dominators.hpp"
 #include "internal/mir/nodes.hpp"
 
 #include <map>

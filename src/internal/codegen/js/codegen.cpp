@@ -1,7 +1,7 @@
 #include "codegen.hpp"
 
-#include "builtins.hpp"
-#include "runtime.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
+#include "internal/codegen/js/emit/runtime.hpp"
 #include "types.hpp"
 
 #include <algorithm>

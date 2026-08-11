@@ -10,7 +10,7 @@ Cmのインターフェイスは、レシーバの具象型がコンパイル時
 
 ### ジェネリック境界の検証と単相化による解決
 
-境界は関数登録時に`generic_function_constraints_`へ保存される（`src/internal/types/checking/decl.cpp:264`）。呼び出しの型推論後、`infer_generic_call`が各型パラメータの推論結果を制約と突き合わせる（`src/internal/types/checking/generic.cpp:134-157`）。判定本体は`check_type_constraints`（`src/internal/types/checking/utils/compat.cpp:510-518`）で、全制約について`type_implements_interface`（`compat.cpp:459-508`）を評価する。この関数はプリミティブ型の組み込み実装（数値・文字は`Ord`、それに`bool`・`string`を加えた`Eq`/`Clone`）をハードコードで認め、ユーザー型は明示的な`impl`の登録（`impl_interfaces_`）と`with`による自動実装（`has_auto_impl`）を順に確認する。
+境界は関数登録時に`generic_function_constraints_`へ保存される（`src/internal/types/checking/decl.cpp:264`）。呼び出しの型推論後、`infer_generic_call`が各型パラメータの推論結果を制約と突き合わせる（`src/internal/types/checking/generic/infer.cpp:134-157`）。判定本体は`check_type_constraints`（`src/internal/types/checking/utils/compat.cpp:510-518`）で、全制約について`type_implements_interface`（`compat.cpp:459-508`）を評価する。この関数はプリミティブ型の組み込み実装（数値・文字は`Ord`、それに`bool`・`string`を加えた`Eq`/`Clone`）をハードコードで認め、ユーザー型は明示的な`impl`の登録（`impl_interfaces_`）と`with`による自動実装（`has_auto_impl`）を順に確認する。
 
 制約を満たした呼び出しの実体解決は単相化が行う。ジェネリック本体内の`t.method()`はHIR loweringでレシーバの静的型名からメソッド名を合成するため、型パラメータ`T`のレシーバは`T__method`という呼び出し名になる（`src/internal/hir/lowering/expr_member.cpp:1071`の`mangle::method_name`）。関数特殊化の生成時、`clone_terminator_with_subst`が呼び出し名内の型パラメータを具象型名へ書き換える。
 
@@ -76,7 +76,7 @@ int main() {
 
 | ファイル | 役割 |
 |---|---|
-| `src/internal/types/checking/generic.cpp` | インスタンス化時の制約充足検査 |
+| `src/internal/types/checking/generic/infer.cpp` | インスタンス化時の制約充足検査 |
 | `src/internal/types/checking/utils/compat.cpp` | `type_implements_interface` / `check_type_constraints` |
 | `src/internal/hir/lowering/expr_member.cpp` | メソッド呼び出し名の合成（`T__method`を含む） |
 | `src/internal/mir/lowering/monomorphization_utils.cpp` | 特殊化時の呼び出し名の型パラメータ書き換え |

@@ -5,7 +5,7 @@ Cmコンパイラのユーザー向けメッセージは、`enum MsgId × enum L
 
 ## 概要
 
-- メッセージIDは`enum class MsgId`（src/internal/base/messages/message_ids.hpp:20-330）、言語は`enum class Lang`（message_ids.hpp:12-16）で列挙され、本文は`kMessages[kMessageCount][kLangCount]`（src/internal/base/messages/messages.cpp:12）に「行=MsgIdの宣言順、列=Langの順（En, Ja）」で並ぶ。
+- メッセージIDは`enum class MsgId`（src/internal/base/messages/ids.hpp:20-330）、言語は`enum class Lang`（ids.hpp:12-16）で列挙され、本文は`kMessages[kMessageCount][kLangCount]`（src/internal/base/messages/messages.cpp:12）に「行=MsgIdの宣言順、列=Langの順（En, Ja）」で並ぶ。
 - 定義ファイル（.def）やYAMLの外部カタログは採用していない。IDはenumなのでタイプミスはコンパイルエラーになり、行の過不足は配列サイズ`kMessageCount`との不一致としてコンパイル時に検出される（messages.cpp:1-3）。
 - アクセサは`i18n::msg`（テンプレート取得）と`i18n::msgf`（プレースホルダ置換）で、いずれもsrc/internal/base/i18n.hppのインライン実装である。
 - 英語が原文であり、訳の無い言語は`nullptr`にすると英語へフォールバックする（i18n.hpp:91-98）。全メッセージに英語本文が存在することは`static_assert`で保証される（messages.cpp:918-933）。
@@ -70,7 +70,7 @@ inline std::string msgf(MsgId id, Args&&... args) {
 
 ### メッセージIDの命名とカテゴリ
 
-`MsgId`は`Cli`/`Codegen`/`Diag`/`Fmt`/`Js`/`Lint`/`Module`/`Nostd`/`Parse`/`Sv`/`Type`/`Import`のプレフィックスでカテゴリ分けされ、カテゴリ内はコメント見出し（`// ===== cli =====`等）で区切られる（message_ids.hpp:20-330）。
+`MsgId`は`Cli`/`Codegen`/`Diag`/`Fmt`/`Js`/`Lint`/`Module`/`Nostd`/`Parse`/`Sv`/`Type`/`Import`のプレフィックスでカテゴリ分けされ、カテゴリ内はコメント見出し（`// ===== cli =====`等）で区切られる（ids.hpp:20-330）。
 `DiagE001`〜`DiagL402`はE/W/L診断コードの本文専用IDで、診断カタログの定義（src/internal/diagnostics/definitions/）から参照される。
 ヘルプ本文のような長文はテーブルに置かず、`src/cli/help_<lang>.txt`をビルド時埋め込みした`textdata::kCatalogs`から言語コードで引く（i18n.hpp:80-88、src/internal/base/text_data.hpp.in）。
 
@@ -78,7 +78,7 @@ inline std::string msgf(MsgId id, Args&&... args) {
 
 | ファイル | 役割 |
 |---|---|
-| src/internal/base/messages/message_ids.hpp | `Lang`・`MsgId`の列挙と`kLangCount`/`kMessageCount` |
+| src/internal/base/messages/ids.hpp | `Lang`・`MsgId`の列挙と`kLangCount`/`kMessageCount` |
 | src/internal/base/messages/messages.hpp | `kMessages`テーブルのextern宣言 |
 | src/internal/base/messages/messages.cpp | 本文テーブルの定義と英語本文存在の`static_assert` |
 | src/internal/base/i18n.hpp | `msg`/`msgf`/言語切替（`set_language_from_string`・`language_code`）・ヘルプ本文解決 |
@@ -89,7 +89,7 @@ inline std::string msgf(MsgId id, Args&&... args) {
 
 ## 落とし穴とケア
 
-- **メッセージ追加の手順**: (1) message_ids.hppの該当カテゴリ位置へIDを1つ追加し、(2) messages.cppの**同じ位置**へ`{英語, 日本語}`の行を追加する。行=宣言順の対応が唯一の紐付けなので、位置がずれると別IDの本文を返す（コンパイルは通る）。行を挟む位置を必ずID挿入位置と一致させ、直前のコメント（`// CliXxx`）でIDを明記すること。
+- **メッセージ追加の手順**: (1) ids.hppの該当カテゴリ位置へIDを1つ追加し、(2) messages.cppの**同じ位置**へ`{英語, 日本語}`の行を追加する。行=宣言順の対応が唯一の紐付けなので、位置がずれると別IDの本文を返す（コンパイルは通る）。行を挟む位置を必ずID挿入位置と一致させ、直前のコメント（`// CliXxx`）でIDを明記すること。
 - **行の過不足はコンパイル時に落ちる**: 要素数が`kMessageCount`と合わなければ配列初期化エラー、英語本文が`nullptr`なら`static_assert`（messages.cpp:932-933）で落ちる。この検証を弱める変更（テーブルの動的構築等）をしてはならない。
 - **言語追加の手順**: (1) `Lang`へ列挙子を`Count`の前に追加し、(2) messages.cppの全行へ列を追加（訳が無い分は`nullptr`で英語フォールバック）、(3) i18n.hppの`set_language_from_string`と`language_code`へコードを追加、(4) ヘルプ本文`src/cli/help_<lang>.txt`を追加する。列順は`Lang`の宣言順と一致させる。
 - **`msg`の戻り値は`const char*`のテンプレート**: プレースホルダ入りのまま表示してはならず、引数を取るメッセージは必ず`msgf`を通す。逆に`msgf`へテンプレートに無い余剰引数を渡しても置換されず残らないが、引数不足だと`{N}`がそのまま表示される。

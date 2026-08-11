@@ -1,4 +1,4 @@
-#include "diag_emitter.hpp"
+#include "internal/base/diag/emitter.hpp"
 
 #include <fstream>
 #include <iostream>

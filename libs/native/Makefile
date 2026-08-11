@@ -90,7 +90,7 @@ clean:
 # コアランタイム
 # ========================================
 
-$(BUILD_LIB)/cm_runtime.o: $(SRC_DIR)/internal/codegen/llvm/native/runtime.c
+$(BUILD_LIB)/cm_runtime.o: $(SRC_DIR)/internal/codegen/llvm/native/runtime/core.c
 	@mkdir -p $(BUILD_LIB)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
@@ -139,7 +139,7 @@ $(BUILD_LIB)/cm_gpu_runtime.o: gpu/gpu_runtime.mm
 # WASMランタイム
 # ========================================
 
-$(BUILD_LIB)/cm_runtime_wasm.o: $(SRC_DIR)/internal/codegen/llvm/wasm/runtime_wasm.c
+$(BUILD_LIB)/cm_runtime_wasm.o: $(SRC_DIR)/internal/codegen/llvm/wasm/runtime/core.c
 	@mkdir -p $(BUILD_LIB)
 	clang -c $< -o $@ -O2 --target=wasm32-unknown-wasi -ffreestanding -fno-builtin
 

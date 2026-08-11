@@ -1,6 +1,6 @@
-#include "builtins.hpp"
-#include "codegen.hpp"
-#include "types.hpp"
+#include "internal/codegen/js/codegen.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
+#include "internal/codegen/js/types.hpp"
 
 #include <algorithm>
 #include <cctype>

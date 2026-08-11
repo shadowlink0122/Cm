@@ -5,7 +5,7 @@
 // ============================================================
 // SVコード生成の翻訳単位（codegen/analyze/validation/testbench）間で共有する小さなヘルパー。外部公開APIではない
 
-#include "internal/base/text_utils.hpp"
+#include "internal/base/format/text.hpp"
 #include "internal/mir/analysis/dominators.hpp"
 #include "internal/mir/nodes.hpp"
 

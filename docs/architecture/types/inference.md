@@ -42,7 +42,7 @@ float/double混在はdouble優先で（`operator.cpp:485-491`）、それ以外�
 
 ### ジェネリクスの型引数推論（実引数からの単一化）
 
-明示型引数のないジェネリック呼び出しは`infer_generic_call`（`src/internal/types/checking/generic.cpp:16-181`）が実引数型との構造照合で型引数を推論する。照合パターンは3種で、(1)パラメータ型がそのまま型パラメータ`T`なら実引数型を採用、(2)`Box<T>`のようなジェネリック構造体なら同名の実引数型と型引数どうしを対応付け、(3)`Node<T>*`のようなポインタはelement_typeを剥がして(2)を適用する（`generic.cpp:55-119`）。推論は先勝ち（最初に束縛した型を保持）で、結果は`call.inferred_type_args`と順序付きの`call.ordered_type_args`に保存され、後段のモノモーフィゼーションが特殊化キーとして使う（`generic.cpp:121-132`、消費側は[../generics/monomorphization.md](../generics/monomorphization.md)）。推論後に`T: Ord`等の制約を`check_type_constraints`で検査し、不成立は診断になる（`generic.cpp:134-157`）。戻り値型は推論結果で置換して返す（`generic.cpp:159-181`）。
+明示型引数のないジェネリック呼び出しは`infer_generic_call`（`src/internal/types/checking/generic/infer.cpp:16-181`）が実引数型との構造照合で型引数を推論する。照合パターンは3種で、(1)パラメータ型がそのまま型パラメータ`T`なら実引数型を採用、(2)`Box<T>`のようなジェネリック構造体なら同名の実引数型と型引数どうしを対応付け、(3)`Node<T>*`のようなポインタはelement_typeを剥がして(2)を適用する（`infer.cpp:55-119`）。推論は先勝ち（最初に束縛した型を保持）で、結果は`call.inferred_type_args`と順序付きの`call.ordered_type_args`に保存され、後段のモノモーフィゼーションが特殊化キーとして使う（`infer.cpp:121-132`、消費側は[../generics/monomorphization.md](../generics/monomorphization.md)）。推論後に`T: Ord`等の制約を`check_type_constraints`で検査し、不成立は診断になる（`infer.cpp:134-157`）。戻り値型は推論結果で置換して返す（`infer.cpp:159-181`）。
 
 ```cm
 <T: Ord> T max(T a, T b) {
@@ -78,7 +78,7 @@ const int*(int, int) add = (int a, int b) => { return a + b; };  // 本体のret
 | `src/internal/types/checking/expr/operator.cpp` | 二項・単項・三項の型合成（`infer_ternary`:440-494） |
 | `src/internal/types/checking/expr/match.cpp:23-167` | match式の合流型とアーム互換検査 |
 | `src/internal/types/checking/utils/compat.cpp:83-335`・`:442-457` | `types_compatible`（暗黙互換）と`common_type`（数値合成） |
-| `src/internal/types/checking/generic.cpp:16-181` | 実引数からの型引数推論（単一化）と制約検査 |
+| `src/internal/types/checking/generic/infer.cpp:16-181` | 実引数からの型引数推論（単一化）と制約検査 |
 | `src/internal/types/checking/expr/lambda.cpp:20-185` | ラムダ本体からの戻り値型推論と`Function`型の構築 |
 | `src/internal/types/checking/stmt.cpp:455-462`・`:669-680` | return値の突き合わせとfor-inループ変数の要素型推論 |
 | `src/internal/hir/lowering/expr.cpp:37` | HIR loweringによる`expr.type`の参照（消費境界） |
@@ -88,7 +88,7 @@ const int*(int, int) add = (int a, int b) => { return a + b; };  // 本体のret
 - `expr.type`の上書きは「情報豊富な方を採る」規則（`primary.cpp:281-293`）に従うこと。無条件上書きにするとパーサが設定した精密型（型引数付き）が壊れ、無条件保持にするとname空の仮型が残ってHIRがerror型を見る。
 - 分岐合流の型をthen側・先頭アーム固定にしてはならない。三項演算子の昇格規則（`operator.cpp:454-484`）は「`false ? 0 : uint値`が負値表示になる」バグのクラスを防いでおり、回帰は`tests/common/casting/ternary_type_promotion.cm`が固定する。
 - 整数リテラルの型判定で`is_unsigned_literal`の分岐（`primary.cpp:311-320`）を外すと、lexerがuint64→int64へbit_castした大きなhexリテラルが負のintに化ける（回帰: `tests/common/types/hex_literal_large.cm`）。
-- ジェネリクスの型引数推論は先勝ちで束縛する（`generic.cpp:63-69`）ため、複数引数から矛盾する型が来ても後続束縛は黙って無視される。矛盾検出を強化する場合も`call.ordered_type_args`の順序（`type_params`宣言順）は維持すること。モノモーフィゼーションの特殊化キーがこの順序に依存する。
+- ジェネリクスの型引数推論は先勝ちで束縛する（`infer.cpp:63-69`）ため、複数引数から矛盾する型が来ても後続束縛は黙って無視される。矛盾検出を強化する場合も`call.ordered_type_args`の順序（`type_params`宣言順）は維持すること。モノモーフィゼーションの特殊化キーがこの順序に依存する。
 - 配列リテラルの要素型は先頭要素から決まり（`infer_array_literal` `primary.cpp:342-354`）、空リテラルは`int[0]`にフォールバックする。要素間の合成型計算は行わないため、混在要素の配列は宣言型を明示する運用が前提であり、この関数に合成を足す場合は`common_type`の規則と一致させること。
 - HIR以降で型を「推論し直す」コードを書かないこと。型決定点を複数にすると、型検査とcodegenが別の型を見る分裂（例: リテラル幅の食い違いによる符号拡張ミス）が起きる。HIRは`expr.type`を読むだけという境界（`expr.cpp:37`）を保つ。
 - 回帰テストの場所: `tests/common/auto/`（auto推論）、`tests/common/types/literal_type_check.cm`・`hex_literal_large.cm`・`mixed_int_types.cm`（リテラル型付けと混在演算）、`tests/common/casting/ternary_type_promotion.cm`・`unsigned_arith_widening.cm`（合流・演算の昇格）、`tests/common/generics/`（型引数推論）。

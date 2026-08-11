@@ -2,7 +2,7 @@
 // FormatStringParser / FormatStringFormatter 実装
 // ============================================================
 
-#include "format_string.hpp"
+#include "internal/base/format/string.hpp"
 
 #include <optional>
 #include <sstream>

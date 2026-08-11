@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/span.hpp"
+#include "internal/base/source/span.hpp"
 #include "internal/hir/nodes.hpp"
 #include "internal/hir/types.hpp"
 #include "internal/syntax/lexer/token.hpp"

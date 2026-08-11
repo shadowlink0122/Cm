@@ -10,7 +10,7 @@ Cmは `async` 関数と `await` 式を言語構文として持つが、非同期
 
 async/awaitはフロントエンド全段を素通りするフラグとして実装されている。レクサが `async`/`await` をキーワード化し（src/internal/syntax/lexer/lexer.cpp:74, 78）、パーサは関数修飾子 `async` を `FunctionDecl::is_async` に（src/internal/syntax/parser/parser_decl.cpp:185, 430）、前置式 `await expr` を `AwaitExpr` ノードに載せる（src/internal/syntax/parser/expr/binary.cpp:393-399、src/internal/syntax/ast/expr.hpp:563-566）。HIR loweringは `AwaitExpr` のオペランドが関数呼び出しなら `HirCall::is_awaited` を立てて式としては透過し（src/internal/hir/lowering/expr.cpp:335-344）、MIR loweringがそれを `MirTerminator::CallData::is_awaited` へ引き継ぐ（src/internal/mir/lowering/expr_call.cpp:336-346、src/internal/mir/nodes.hpp:363-364）。つまりHIR/MIRに専用の非同期表現（ステートマシン化やCPS変換）は存在せず、「この呼び出しはawaitされている」というマーカーだけが伝播する。
 
-このマーカーの消費はターゲットごとに分かれる。JSバックエンドは `is_async` を `async function` キーワードと `Promise<T>` 戻り値注釈に、`is_awaited` を `await` 演算子にそのまま写像し（src/internal/codegen/js/emit_function.cpp:166-199、src/internal/codegen/js/emit_statements.cpp:560-563）、async mainは即時実行async関数式で包む（src/internal/codegen/js/codegen.cpp:273-286）。SVバックエンドは `async` を非同期プロセス（ノンブロッキング代入・エッジセンシティブ判定）の指示として別の意味で再利用する（src/internal/codegen/sv/emit_control.cpp:428、src/internal/codegen/sv/analyze.cpp:1429）。native/jit/wasmを含むそれ以外のターゲットでは、ドライバがMIR全関数を走査して `is_async`/`is_awaited` を検出し、検出時は「async/awaitはJSターゲット専用」というエラーで停止する（src/cmd/cm/build.cpp:554-601）。
+このマーカーの消費はターゲットごとに分かれる。JSバックエンドは `is_async` を `async function` キーワードと `Promise<T>` 戻り値注釈に、`is_awaited` を `await` 演算子にそのまま写像し（src/internal/codegen/js/emit/function.cpp:166-199、src/internal/codegen/js/emit/statements.cpp:560-563）、async mainは即時実行async関数式で包む（src/internal/codegen/js/codegen.cpp:273-286）。SVバックエンドは `async` を非同期プロセス（ノンブロッキング代入・エッジセンシティブ判定）の指示として別の意味で再利用する（src/internal/codegen/sv/emit_control.cpp:428、src/internal/codegen/sv/analyze.cpp:1429）。native/jit/wasmを含むそれ以外のターゲットでは、ドライバがMIR全関数を走査して `is_async`/`is_awaited` を検出し、検出時は「async/awaitはJSターゲット専用」というエラーで停止する（src/cmd/cm/build.cpp:554-601）。
 
 ## データ構造とアルゴリズム
 
@@ -100,7 +100,7 @@ native/jitで現実に使える並行処理は、非同期エグゼキュータ�
 | src/internal/hir/lowering/expr.cpp:335-344 | `AwaitExpr` → `HirCall::is_awaited` フラグ化 |
 | src/internal/mir/lowering/expr_call.cpp:336-346 | `is_awaited` の `MirTerminator::CallData` への伝播 |
 | src/cmd/cm/build.cpp:554-601 | 非JS/SVターゲットでのasync/await拒否バリデーション |
-| src/internal/codegen/js/emit_function.cpp, emit_statements.cpp | `async function`・`await`・`Promise<T>` へのJS lowering（境界のみ） |
+| src/internal/codegen/js/emit/function.cpp, emit/statements.cpp | `async function`・`await`・`Promise<T>` へのJS lowering（境界のみ） |
 | src/internal/codegen/llvm/native/runtime/async.{h,c} | Future・Waker・Task・Executorと `cm_block_on`/`cm_spawn`（未リンク） |
 | src/internal/codegen/llvm/native/runtime/event_loop.{h,c} | kqueue/epoll/pollイベントループ・タイマーFuture・`cm_now_ms`（未リンク） |
 | src/internal/codegen/llvm/native/runtime/core.c:18-25 | コアランタイムのinclude連結（async系を含まないことの根拠） |

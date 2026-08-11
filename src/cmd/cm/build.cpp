@@ -4,10 +4,10 @@
 
 #include "driver.hpp"
 #include "frontend.hpp"
-#include "internal/base/debug_messages.hpp"
-#include "internal/base/diag_emitter.hpp"
+#include "internal/base/debug/messages.hpp"
+#include "internal/base/diag/emitter.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/source_location.hpp"
+#include "internal/base/source/location.hpp"
 #include "internal/codegen/sv/codegen.hpp"
 #include "internal/codegen/sv/hierarchy.hpp"
 #include "internal/hir/lowering/lowering.hpp"

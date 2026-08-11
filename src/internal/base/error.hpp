@@ -4,7 +4,7 @@
 // 統一エラー型 - 全コンパイルフェーズで共通のエラー表現
 // ============================================================
 
-#include "span.hpp"
+#include "internal/base/source/span.hpp"
 
 #include <iostream>
 #include <string>

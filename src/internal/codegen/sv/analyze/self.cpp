@@ -4,7 +4,7 @@
 //   2. 呼び出し側の「_t = &place; call f(copy(_t))」を「call f(copy(place))」へ書き換え、Ref代入をNop化する
 //   3. 値渡しで意味が変わるケースは診断エラー: selfへの書き込み（SV010）・動的ディスパッチ（SV011）・ポインタ値の逃避（SV012）
 
-#include "self_param.hpp"
+#include "internal/codegen/sv/analyze/self.hpp"
 
 #include <unordered_map>
 #include <unordered_set>

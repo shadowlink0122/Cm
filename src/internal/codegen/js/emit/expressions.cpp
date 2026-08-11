@@ -1,6 +1,6 @@
-#include "codegen.hpp"
+#include "internal/codegen/js/codegen.hpp"
+#include "internal/codegen/js/types.hpp"
 #include "internal/syntax/ast/typedef.hpp"
-#include "types.hpp"
 
 #include <algorithm>
 #include <iomanip>

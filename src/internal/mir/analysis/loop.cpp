@@ -1,4 +1,4 @@
-#include "loop_analysis.hpp"
+#include "internal/mir/analysis/loop.hpp"
 
 #include <memory>
 #include <queue>

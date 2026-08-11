@@ -1,7 +1,7 @@
 #pragma once
 
-#include "control_flow.hpp"
 #include "emitter.hpp"
+#include "internal/codegen/js/flow/control.hpp"
 #include "internal/mir/nodes.hpp"
 
 #include <fstream>

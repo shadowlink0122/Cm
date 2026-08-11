@@ -193,7 +193,7 @@ char* cm_file_read_all(const char* path);
 ### WASMランタイム
 
 ```c
-// runtime_wasm.c
+// runtime/core.c
 // WASI準拠のI/O関数
 ```
 

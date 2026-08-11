@@ -2,9 +2,10 @@
 // TypeChecker 実装 - 命名規則チェック（L001 naming-convention。check/lint --strict時のみ）
 // ============================================================
 
+#include "internal/types/checking/naming.hpp"
+
 #include "internal/base/i18n.hpp"
 #include "internal/syntax/ast/typekey.hpp"
-#include "internal/types/naming_rules.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <algorithm>
@@ -19,7 +20,7 @@ namespace cm {
 
 // ============================================================
 // 命名規則チェック (L001 naming-convention。check/lint --strict時のみ)
-// 判定ロジックは frontend/types/naming_rules.hpp に分離
+// 判定ロジックは internal/types/checking/naming.hpp に分離
 // ============================================================
 
 bool TypeChecker::is_snake_case(const std::string& name) {

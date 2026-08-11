@@ -6,7 +6,7 @@
 // を出力する回帰（優先順位括弧・符号付き定数・ループ構造化等）をコード生成器のレベルで検証する。
 
 #include "../../src/internal/codegen/sv/codegen.hpp"
-#include "../../src/internal/codegen/sv/expr_tree.hpp"
+#include "../../src/internal/codegen/sv/codegen/tree.hpp"
 #include "../../src/internal/hir/lowering/lowering.hpp"
 #include "../../src/internal/mir/lowering/lowering.hpp"
 #include "../../src/internal/mir/passes/loop/const_unroll.hpp"

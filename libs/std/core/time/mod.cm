@@ -1,5 +1,5 @@
 // std/core/time/mod.cm - 時刻・タイマーモジュール
-// C実装(runtime_async.c + runtime_event_loop.c)のCmラッパー
+// C実装(runtime/async.c + runtime/event_loop.c)のCmラッパー
 // シングルスレッド非同期エグゼキュータ基盤を提供
 // 旧名std.core.asyncはasyncが予約語のためimport不能だった（R9でstd.core.timeへ改名）
 module std.core.time;

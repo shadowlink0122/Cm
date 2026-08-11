@@ -1,9 +1,9 @@
 // ============================================================
 // バッファベースコード生成の実装
 // ============================================================
-// buffered_codegen.hpp で宣言された非テンプレートメンバ関数の実装。
+// buffered.hpp で宣言された非テンプレートメンバ関数の実装。
 
-#include "buffered_codegen.hpp"
+#include "internal/codegen/buffered.hpp"
 
 #include "internal/base/i18n.hpp"
 

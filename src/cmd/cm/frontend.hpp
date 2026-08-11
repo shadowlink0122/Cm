@@ -6,8 +6,8 @@
 // ドライバはパラメータを渡して結果（プリプロセス後ソース・source_map・AST・診断）を消費するだけにし、ステージ配線の手書き複製を禁止する
 // ============================================================
 
-#include "internal/base/diag_emitter.hpp"
-#include "internal/base/diagnostics.hpp"
+#include "internal/base/diag/diagnostics.hpp"
+#include "internal/base/diag/emitter.hpp"
 #include "internal/preprocessor/import.hpp"
 #include "internal/syntax/ast/nodes.hpp"
 

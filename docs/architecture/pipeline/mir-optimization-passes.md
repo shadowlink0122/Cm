@@ -112,7 +112,7 @@
 
 - 実装: `src/internal/mir/passes/loop/licm.cpp:10`（`run`）、`licm.cpp:27`（`process_loop`）。
 - 目的: ループ内で値が変わらない純粋な計算（Use・BinaryOp・UnaryOp・Cast・FormatConvert）をループ手前のpre-headerブロックへ移動する。
-- アルゴリズム: 支配木（`src/internal/mir/analysis/dominators.cpp`）と自然ループ検出（`src/internal/mir/analysis/loop_analysis.cpp`）を構築し、ループ木を内側から再帰処理する。ループ内で変更されるローカル（代入先・asm出力・Call格納先）の集合を作り、ヘッダブロックの文のうちオペランドが全て不変（定数・FunctionRef・変更されない投影なしローカル）のものを移動候補とする（`is_invariant`、`licm.cpp:223-267`）。pre-headerは既存の単一Goto先行ブロックを再利用するか、全エントリ辺の飛び先を書き換えて新設する（`get_or_create_pre_header`、`licm.cpp:125-221`）。Ref（アドレス取得）を含むrvalueはメモリアクセス扱いで移動しない（`licm.cpp:269-271`）。
+- アルゴリズム: 支配木（`src/internal/mir/analysis/dominators.cpp`）と自然ループ検出（`src/internal/mir/analysis/loop.cpp`）を構築し、ループ木を内側から再帰処理する。ループ内で変更されるローカル（代入先・asm出力・Call格納先）の集合を作り、ヘッダブロックの文のうちオペランドが全て不変（定数・FunctionRef・変更されない投影なしローカル）のものを移動候補とする（`is_invariant`、`licm.cpp:223-267`）。pre-headerは既存の単一Goto先行ブロックを再利用するか、全エントリ辺の飛び先を書き換えて新設する（`get_or_create_pre_header`、`licm.cpp:125-221`）。Ref（アドレス取得）を含むrvalueはメモリアクセス扱いで移動しない（`licm.cpp:269-271`）。
 - 実行条件: O1以上（`manager.cpp:64`）。
 - 不変条件: 走査対象がヘッダブロックの文に限られる点が安全性の一部を担っており（ヘッダは毎周回必ず実行される）、本体ブロックへ広げる場合は条件付き実行文の投機移動（例外・トラップの前倒し）を別途正当化する必要がある。`no_opt` 文は移動しない（`licm.cpp:83-84`）。pre-header新設時はGoto・SwitchInt・Callの全エントリ辺を書き換える必要があり、漏れるとループへの横入り辺が残って移動の前提が崩れる。
 

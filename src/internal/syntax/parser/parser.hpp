@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/diagnostics.hpp"
+#include "internal/base/diag/diagnostics.hpp"
 #include "internal/syntax/ast/decl.hpp"
 #include "internal/syntax/lexer/token.hpp"
 

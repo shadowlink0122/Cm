@@ -1,7 +1,7 @@
 #include "graph.hpp"
 
 #include "internal/base/i18n.hpp"
-#include "internal/base/source_location.hpp"
+#include "internal/base/source/location.hpp"
 #include "internal/preprocessor/conditional.hpp"
 #include "internal/preprocessor/import.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
