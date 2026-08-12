@@ -54,7 +54,8 @@ const MODULE_RE = new RegExp(`^module\\s+([\\w.]+)\\s*;`);
 const USE_RE = new RegExp(`^use\\s+("[^"]*"|${NAME})`);
 const FUNCTION_RE = new RegExp(`^${VISIBILITY}${STORAGE}${GENERICS}(${TYPE})\\s+(${NAME})\\s*\\(`);
 const CTOR_RE = /^(~?self)\s*\(/;
-const OPERATOR_RE = new RegExp(`^${VISIBILITY}operator\\s*([^\\s(]+)\\s*\\(`);
+// 演算子宣言: `operator 戻り値型 記号(引数)`（例: operator bool ==(T other) / operator Vec2 +(Vec2 other)）
+const OPERATOR_RE = new RegExp(`^${VISIBILITY}operator\\s*(?:${TYPE}\\s+)?([^\\s(]+)\\s*\\(`);
 const CONSTANT_RE = new RegExp(`^${VISIBILITY}(?:const|constexpr)\\s+(${TYPE})\\s+(${NAME})\\s*=`);
 const FIELD_RE = new RegExp(`^(${TYPE})\\s+(${NAME})\\s*[;=]`);
 const VARIANT_RE = new RegExp(`^(${NAME})\\s*(?:[,({]|$)`);
@@ -224,10 +225,11 @@ function extractSignature(cleanLines: string[], declLine: number): string {
     .trim();
 }
 
-// implの対象型名（`Printable for Point` → `Point`、`HashMap<K, V>` → `HashMap`）
+// implの対象型名。Cmのimpl-forは `impl 対象型 for インターフェース` のため for の前が対象型
+// （`Point for Printable` → `Point`、inherent implの `HashMap<K, V>` → `HashMap`）
 function implTargetName(target: string): string {
-  const afterFor = target.includes(' for ') ? target.split(' for ').pop()! : target;
-  const base = afterFor.split(/\s+where\s+/)[0].trim();
+  const beforeFor = target.includes(' for ') ? target.split(' for ')[0] : target;
+  const base = beforeFor.split(/\s+where\s+/)[0].trim();
   const m = new RegExp(`^(${NAME})`).exec(base);
   return m ? m[1] : base;
 }
@@ -286,7 +288,7 @@ export function extractSymbols(text: string): CmSymbol[] {
       } else if (top?.type === 'impl' && (m = CTOR_RE.exec(trimmed))) {
         pending = { type: 'other', symbol: push('method', m[1], lineNo, top.name) };
       } else if (
-        (top?.type === 'impl' || top?.type === 'struct') &&
+        (top?.type === 'impl' || top?.type === 'struct' || top?.type === 'interface') &&
         (m = OPERATOR_RE.exec(trimmed))
       ) {
         const sym = push('method', `operator${m[1]}`, lineNo, top.name);

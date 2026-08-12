@@ -260,6 +260,13 @@ export const BUILTIN_METHODS: Record<string, BuiltinEntry[]> = {
       doc: 'バイト長をO(1)で返す（SDS方式の長さヘッダ、H9）。',
     },
   ],
+  byte_at: [
+    {
+      receiver: '文字列',
+      signature: 'string.byte_at(index: int) -> int',
+      doc: '指定バイト位置の生バイト値（0..255）を返す（バイト系API。`byte_len()` と対、R2）。',
+    },
+  ],
   chars: [
     {
       receiver: '文字列',
@@ -499,6 +506,46 @@ export const BUILTIN_FUNCTIONS: Record<string, BuiltinEntry> = {
     receiver: 'なし',
     signature: 'reduce_xnor(x: 整数/bit[N]) -> bool',
     doc: 'XNORリダクション（`reduce_xor` の否定）。SVでは native `~^x` を出力する。',
+  },
+  sv_assert_property: {
+    receiver: 'なし',
+    signature: 'sv_assert_property(clk, property) -> void',
+    doc: '`#[test]`関数内で時相的性質をSVの並行アサーション（`assert property (@(posedge clk) ...)`）として監視する（SVA・SVターゲット専用）。',
+  },
+  implies: {
+    receiver: 'なし',
+    signature: 'implies(antecedent: bool, consequent: bool) -> bool',
+    doc: 'SVAの含意（`|->`）。antecedentが真のサイクルでconsequentを検査する。`sv_assert_property`の性質として使う。',
+  },
+  implies_next: {
+    receiver: 'なし',
+    signature: 'implies_next(antecedent: bool, consequent: bool) -> bool',
+    doc: 'SVAの1サイクル後の含意（`|=>`）。antecedentが真の次サイクルでconsequentを検査する。',
+  },
+  after: {
+    receiver: 'なし',
+    signature: 'after(expr: bool, cycles: int) -> bool',
+    doc: 'SVAで`cycles`サイクル後の`expr`を表す（`##N`相当）。`implies`の結論としてのみ使用できる。',
+  },
+  rose: {
+    receiver: 'なし',
+    signature: 'rose(signal) -> bool',
+    doc: 'SVAの立ち上がり検出（`$rose`）。前サイクル0→現サイクル1のとき真。',
+  },
+  fell: {
+    receiver: 'なし',
+    signature: 'fell(signal) -> bool',
+    doc: 'SVAの立ち下がり検出（`$fell`）。前サイクル1→現サイクル0のとき真。',
+  },
+  stable: {
+    receiver: 'なし',
+    signature: 'stable(signal) -> bool',
+    doc: 'SVAの値不変検出（`$stable`）。前サイクルから値が変化していないとき真。',
+  },
+  past: {
+    receiver: 'なし',
+    signature: 'past(signal, cycles: int) -> T',
+    doc: 'SVAで`cycles`サイクル前の信号値を返す（`$past`）。',
   },
 };
 

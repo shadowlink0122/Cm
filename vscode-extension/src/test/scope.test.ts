@@ -62,6 +62,7 @@ test('importedUris: 相対パスimportを.cmファイルURIへ解決し、名前
     'import ./util;',
     'import ./sub/helper::{a, b};',
     'import ../shared/const::*;',
+    'import ../../modules/deep;', // 多段の親ディレクトリ参照（v0.17.0）
     'import ./math as M;',
     'import std::io::println;', // 名前空間import → 対象外
   ].join('\n');
@@ -69,8 +70,9 @@ test('importedUris: 相対パスimportを.cmファイルURIへ解決し、名前
   assert.ok(got.has(uriOf('pkg/util.cm')), 'util.cm');
   assert.ok(got.has(uriOf('pkg/sub/helper.cm')), 'sub/helper.cm');
   assert.ok(got.has(uriOf('shared/const.cm')), '../shared/const.cm');
+  assert.ok(got.has(uriOf('../modules/deep.cm')), '../../modules/deep.cm (多段相対)');
   assert.ok(got.has(uriOf('pkg/math.cm')), 'math.cm (as別名)');
-  assert.equal(got.size, 4, '名前空間importは含めない');
+  assert.equal(got.size, 5, '名前空間importは含めない');
 });
 
 test('scopeByReachability: 同一ファイル定義がワークスペース全体を遮蔽する', () => {

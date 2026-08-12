@@ -288,7 +288,7 @@
                   "patterns": [
                     {
                       "name": "constant.character.escape.cm",
-                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
                     },
                     {
                       "name": "invalid.illegal.escape.cm",
@@ -357,7 +357,7 @@
                   "patterns": [
                     {
                       "name": "constant.character.escape.cm",
-                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
                     },
                     {
                       "name": "invalid.illegal.escape.cm",
@@ -467,7 +467,7 @@
               "patterns": [
                 {
                   "name": "constant.character.escape.cm",
-                  "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfv0\\\\\"'$\\{\\}])"
+                  "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
                 },
                 {
                   "name": "invalid.illegal.escape.cm",
@@ -617,6 +617,11 @@
         {
           "name": "support.function.builtin.cm",
           "match": "\\b(print|println|printf|assert|panic|step|exit|eprintln|eprint|reduce_and|reduce_or|reduce_xor|reduce_nand|reduce_nor|reduce_xnor)\\b"
+        },
+        {
+          "comment": "SVA組み込み（sv_assert_property・時相演算子）。after/past等は変数名にも使える一般語のため、呼び出し位置のみ組み込み色にする",
+          "name": "support.function.builtin.cm",
+          "match": "\\b(sv_assert_property|implies|implies_next|after|rose|fell|stable|past)\\b(?=\\s*\\()"
         }
       ]
     },

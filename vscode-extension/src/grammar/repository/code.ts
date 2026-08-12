@@ -19,6 +19,7 @@ import {
   MODIFIER_KEYWORDS,
   PRIMITIVE_TYPES,
   SIZEOF_KEYWORDS,
+  SVA_FUNCTIONS,
   SV_CONTROL_KEYWORDS,
   SV_MODIFIER_KEYWORDS,
   TYPE_DECLARATION_KEYWORDS,
@@ -112,6 +113,12 @@ export const builtinFunctions: TmRepositoryEntry = {
     {
       name: 'support.function.builtin.cm',
       match: words(BUILTIN_FUNCTIONS),
+    },
+    {
+      comment:
+        'SVA組み込み（sv_assert_property・時相演算子）。after/past等は変数名にも使える一般語のため、呼び出し位置のみ組み込み色にする',
+      name: 'support.function.builtin.cm',
+      match: `\\b(${SVA_FUNCTIONS.join('|')})\\b(?=\\s*\\()`,
     },
   ],
 };

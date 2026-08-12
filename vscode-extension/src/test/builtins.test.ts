@@ -30,6 +30,7 @@ test('スライス変更系メソッドが登録されている', () => {
 test('文字列メソッドが登録されている', () => {
   for (const name of [
     'byte_len',
+    'byte_at',
     'chars',
     'codepoint_at',
     'substring',
@@ -38,6 +39,23 @@ test('文字列メソッドが登録されている', () => {
     'startsWith',
   ]) {
     assert.ok(lookupBuiltinMethod(name).length >= 1, `${name} が登録されている`);
+  }
+});
+
+test('SVA（並行アサーション）組み込み関数が登録されている', () => {
+  for (const name of [
+    'sv_assert_property',
+    'implies',
+    'implies_next',
+    'after',
+    'rose',
+    'fell',
+    'stable',
+    'past',
+  ]) {
+    const fn = lookupBuiltinFunction(name);
+    assert.ok(fn, `${name} が登録されている`);
+    assert.equal(fn?.receiver, 'なし');
   }
 });
 

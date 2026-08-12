@@ -100,10 +100,31 @@ test('トップレベル関数とimplメソッド・コンストラクタを抽�
   assert.equal(byName(symbols, 'idx'), undefined);
 });
 
-test('impl Interface for Type は対象型をコンテナにする', () => {
-  const src = ['impl Printable for Point {', '    void print_it() {', '    }', '}'].join('\n');
+test('impl 型 for インターフェース は対象型（forの前）をコンテナにする', () => {
+  const src = ['impl Point for Printable {', '    void print_it() {', '    }', '}'].join('\n');
   const symbols = extractSymbols(src);
   assert.equal(byName(symbols, 'print_it')?.container, 'Point');
+});
+
+test('演算子impl（impl 型 for Add等）とinterfaceの演算子宣言を抽出する', () => {
+  const src = [
+    'interface Comparable {',
+    '    operator bool ==(Comparable other);',
+    '}',
+    '',
+    'impl Vec2 for Add {',
+    '    operator Vec2 +(Vec2 other) {',
+    '        return Vec2{x: 1, y: 2};',
+    '    }',
+    '}',
+  ].join('\n');
+  const symbols = extractSymbols(src);
+  const plus = byName(symbols, 'operator+');
+  assert.equal(plus?.kind, 'method');
+  assert.equal(plus?.container, 'Vec2', '演算子インターフェースimplの所属は対象型');
+  const eq = byName(symbols, 'operator==');
+  assert.equal(eq?.kind, 'method');
+  assert.equal(eq?.container, 'Comparable');
 });
 
 test('複数行シグネチャを1行へ連結する', () => {
