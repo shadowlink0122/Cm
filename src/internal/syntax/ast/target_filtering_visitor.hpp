@@ -68,17 +68,8 @@ class TargetFilteringVisitor {
             d.kind);
 
         if (!attrs) {
-            // printf("No attributes (attrs is null)\n");
             return true;
         }
-
-        // printf("Checking attributes size: %zu\n", attrs->size());
-
-        /*
-        for (const auto& attr : *attrs) {
-            printf("Attr: %s\n", attr.name.c_str());
-        }
-        */
 
         return check_target_attributes(*attrs);
     }
@@ -90,13 +81,10 @@ class TargetFilteringVisitor {
                 return false;
             }
             if (attr.name == "target") {
-                // printf("Found target attr\n");
                 if (!check_target_condition(attr.args)) {
-                    // printf("Target condition failed\n");
                     return false;  // falseと評価されるtarget属性が見つかりました
                 }
             } else {
-                // printf("Ignoring attr: %s\n", attr.name.c_str());
             }
         }
         return true;  // target属性が見つからないか、すべてtrueと評価されました

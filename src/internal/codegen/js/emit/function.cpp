@@ -261,12 +261,9 @@ void JSCodeGen::emitFunctionBody(const mir::MirFunction& func, const mir::MirPro
             if (boxed_locals_.count(local.id)) {
                 std::string varName;
                 if (local.id < func.arg_locals.size()) {
-                    // named arg? getLocalVarName usually handles this but here signatures used simple names let's stick to getLocalVarName-ish logic or signature logic. implementation uses sanitizeIdentifier(local.name) for signature.
+                    // シグネチャ側はsanitizeIdentifier(引数名)で出力しているため、同じ名前で参照する
                     varName = sanitizeIdentifier(local.name);
                 } else {
-                    // signature logic was:
-                    // mir::LocalId argId = func.arg_locals[i];
-                    // ... sanitizeIdentifier(func.locals[argId].name)
                     varName = sanitizeIdentifier(local.name);
                 }
                 emitter_.emitLine(varName + " = [" + varName + "];");

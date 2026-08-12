@@ -11,7 +11,6 @@
 namespace cm::codegen::llvm_backend {
 
 void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
-    // // debug_msg("MIR2LLVM", "convertTerminator");
     switch (term.kind) {
         case mir::MirTerminator::Goto: {
             auto& gotoData = std::get<mir::MirTerminator::GotoData>(term.data);

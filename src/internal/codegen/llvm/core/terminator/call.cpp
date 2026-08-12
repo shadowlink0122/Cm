@@ -16,25 +16,18 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
     bool isIndirectCall = false;          // 関数ポインタ変数からの呼び出し
     llvm::Value* funcPtrValue = nullptr;  // 関数ポインタ値
 
-    // std::cout << "[CODEGEN] Call Operand Kind: " << (int)callData.func->kind << "\n"
-    //           << std::flush;
-
     if (callData.func->kind == mir::MirOperand::Constant) {
         auto& constant = std::get<mir::MirConstant>(callData.func->data);
         if (auto* name = std::get_if<std::string>(&constant.value)) {
             funcName = *name;
-            // std::cout << "[CODEGEN] Call Direct: " << funcName << "\n" << std::flush;
         }
     } else if (callData.func->kind == mir::MirOperand::FunctionRef) {
         funcName = std::get<std::string>(callData.func->data);
-        // std::cout << "[CODEGEN] Call FuncRef: " << funcName << "\n" << std::flush;
     } else if (callData.func->kind == mir::MirOperand::Copy ||
                callData.func->kind == mir::MirOperand::Move) {
         // 関数ポインタ変数からの呼び出し
-        // // debug_msg("MIR2LLVM", "Call: Indirect call, converting operand...");
         isIndirectCall = true;
         funcPtrValue = convertOperand(*callData.func);
-        // // debug_msg("MIR2LLVM", "Call: Operand converted");
 
         // convertOperandがFunction*を返した場合、それを関数ポインタとして扱う
         if (funcPtrValue && llvm::isa<llvm::Function>(funcPtrValue)) {
@@ -44,7 +37,6 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
             isIndirectCall = false;
             funcPtrValue = nullptr;
         }
-        // std::cout << "[CODEGEN] Call Indirect Op Converted\n" << std::flush;
     }
 
     // panic(msg): void __cm_panic(const char*) へ正規化して呼び出す（呼び出し式の型（T等）から誤ったシグネチャで宣言されると
@@ -84,9 +76,6 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
         funcName == "std::io::println") {
         bool isNewline = funcName.find("println") != std::string::npos;
         generatePrintCall(callData, isNewline);
-        // std::cout << "[CODEGEN] Print Call Gen Done, Br to bb" << callData.success <<
-        // "\n"
-        //           << std::flush;
         if (blocks.find(callData.success) == blocks.end()) {
             std::cerr << "[CODEGEN] CRITICAL: Success block bb" << callData.success
                       << " not found! Creating unreachable.\n"
@@ -95,7 +84,6 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
             return;
         }
         builder->CreateBr(blocks[callData.success]);
-        // std::cout << "[CODEGEN] Br Created\n" << std::flush;
         return;
     }
 
@@ -124,7 +112,7 @@ void MIRToLLVM::convertCallTerminator(const mir::MirTerminator::CallData& callDa
             // v0.13.0: 暫定実装 - variant constructorを検出
             // enum_info_キャッシュが実装されるまでは、未知の関数呼び出しを
             // タグ値として処理し、警告を抑制する
-            // TODO: Phase 2でMIRToLLVMにenum_info_マップを追加
+            // TODO: MIRToLLVMにenum_info_マップを追加
 
             // 現時点では単純にタグ値0を返す（シンプルなenumの場合最初の値）
             // 引数がある場合も無視（Associated dataは後で対応）

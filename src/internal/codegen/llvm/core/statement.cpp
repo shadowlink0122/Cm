@@ -64,8 +64,6 @@ void MIRToLLVM::convertStatement(const mir::MirStatement& stmt) {
 
     // 関数終了のデバッグ
     count--;
-    // std::cerr << "[MIR2LLVM]         convertStatement EXITING (depth=" << count
-    // << ", kind=" << static_cast<int>(stmt.kind) << ")\n";
 }
 
 }  // namespace cm::codegen::llvm_backend

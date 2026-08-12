@@ -205,9 +205,6 @@ llvm::Constant* MIRToLLVM::foldConstInitExpr(const hir::HirExpr& expr, const hir
 void MIRToLLVM::convert(const mir::MirProgram& program) {
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvert, "Starting MIR to LLVM conversion");
 
-    // std::cerr << "[MIR2LLVM] Starting conversion with " << program.functions.size()
-    //           << " functions\n";
-
     currentProgram = &program;
 
     // アドレス取得された関数を収集（sret変換の除外判定用。C14 Phase 4）
@@ -225,7 +222,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     isHostedTarget = !isWasmTarget && !isUefiTarget && triple.find("none") == std::string::npos;
 
     // インターフェース名を収集
-    // std::cerr << "[MIR2LLVM] Collecting interfaces (" << program.interfaces.size() << ")...\n";
     size_t iface_count = 0;
     const size_t MAX_INTERFACES = 10000;  // 無限ループ防止
     for (const auto& iface : program.interfaces) {
@@ -233,16 +229,12 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             throw std::runtime_error("Too many interfaces in MIR program");
         }
         if (iface) {
-            // std::cerr << "[MIR2LLVM]   Interface: " << iface->name << "\n";
             interfaceNames.insert(iface->name);
         }
     }
-    // std::cerr << "[MIR2LLVM] Interfaces collected\n";
 
     // 構造体型を先に定義（2パスアプローチ）
     // パス1: 全ての構造体をopaque型として作成
-    // std::cerr << "[MIR2LLVM] Pass 1: Creating struct types (" << program.structs.size() <<
-    // ")...\n";
     for (const auto& structPtr : program.structs) {
         const auto& structDef = *structPtr;
         const auto& name = structDef.name;
@@ -256,7 +248,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // パス2: フィールド型を設定
-    // std::cerr << "[MIR2LLVM] Pass 2: Setting struct bodies...\n";
     for (const auto& structPtr : program.structs) {
         const auto& structDef = *structPtr;
         const auto& name = structDef.name;
@@ -422,7 +413,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // インターフェース型（fat pointer）を定義
-    // std::cerr << "[MIR2LLVM] Creating interface fat pointer types...\n";
     for (const auto& iface : program.interfaces) {
         if (iface) {
             getInterfaceFatPtrType(iface->name);
@@ -509,7 +499,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         globalVariables[gv->name] = globalVar;
     }
     // 重複した関数はスキップ
-    // std::cerr << "[MIR2LLVM] Declaring function signatures...\n";
     std::set<std::string> declaredFunctions;
     for (const auto& func : program.functions) {
         auto funcId = generateFunctionId(*func);
@@ -524,7 +513,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     }
 
     // vtableを生成（関数宣言後に実行）
-    // std::cerr << "[MIR2LLVM] Generating vtables...\n";
     generateVTables(program);
 
     // === Dead Function Elimination (DFE) ===
@@ -656,16 +644,11 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
     // 関数実装
     // 重複した関数はスキップ
     declaredFunctions.clear();
-    // std::cerr << "[MIR2LLVM] Converting " << program.functions.size()
-    //           << " function implementations...\n";
     size_t skippedCount = 0;
     for (size_t i = 0; i < program.functions.size(); ++i) {
         const auto& func = program.functions[i];
         auto funcId = generateFunctionId(*func);
-        // std::cerr << "[MIR2LLVM] [" << (i + 1) << "/" << program.functions.size()
-        //           << "] Converting function: " << funcId << "\n";
         if (declaredFunctions.count(funcId) > 0) {
-            // std::cerr << "[MIR2LLVM]   -> Skipping duplicate\n";
             continue;
         }
         declaredFunctions.insert(funcId);
@@ -677,7 +660,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
         }
 
         convertFunction(*func);
-        // std::cerr << "[MIR2LLVM]   -> Done converting " << funcId << "\n";
     }
 
     if (skippedCount > 0) {
@@ -686,7 +668,6 @@ void MIRToLLVM::convert(const mir::MirProgram& program) {
             "DFE: skipped " + std::to_string(skippedCount) + " unreachable functions");
     }
 
-    // std::cerr << "[MIR2LLVM] Conversion complete!\n";
     cm::debug::codegen::log(cm::debug::codegen::Id::LLVMConvertEnd,
                             "MIR to LLVM conversion complete");
 }

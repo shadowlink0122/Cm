@@ -454,7 +454,6 @@ void MIRToLLVM::generateFormatStringCall(const mir::MirTerminator::CallData& cal
 // ============================================================
 
 void MIRToLLVM::generatePrintCall(const mir::MirTerminator::CallData& callData, bool isNewline) {
-    // std::cout << "[CODEGEN] generatePrintCall Start\n" << std::flush;
     if (callData.args.empty()) {
         // 引数なしの場合：改行のみ出力
         if (isNewline) {
@@ -464,20 +463,15 @@ void MIRToLLVM::generatePrintCall(const mir::MirTerminator::CallData& callData, 
             auto emptyStr = builder->CreateGlobalStringPtr("", "empty_str");
             builder->CreateCall(printFunc, {emptyStr});
         }
-        // std::cout << "[CODEGEN] generatePrintCall End (Empty)\n" << std::flush;
         return;
     }
 
     if (callData.args.size() >= 2) {
         // 複数引数の場合
-        // std::cout << "[CODEGEN] generatePrintCall Multiple Args: " << callData.args.size() <<
-        // "\n"
-        //           << std::flush;
         auto firstArg = convertOperand(*callData.args[0]);
         auto firstType = firstArg->getType();
 
         if (firstType->isPointerTy()) {
-            // std::cout << "[CODEGEN] generatePrintCall Format String Processing\n" << std::flush;
             // 最初の引数が文字列の場合：フォーマット文字列として処理
             llvm::Value* formattedStr = nullptr;
 
@@ -569,23 +563,17 @@ void MIRToLLVM::generatePrintCall(const mir::MirTerminator::CallData& callData, 
             builder->CreateCall(printFunc, {resultStr});
         }
     } else {
-        // std::cout << "[CODEGEN] generatePrintCall Single Arg\n" << std::flush;
         // 単一引数の場合
         auto arg = convertOperand(*callData.args[0]);
-        // std::cout << "[CODEGEN] generatePrintCall Single Arg Operand Converted\n" << std::flush;
         auto argType = arg->getType();
         auto hirType = getOperandType(*callData.args[0]);
 
         if (argType->isPointerTy()) {
-            // std::cout << "[CODEGEN] generatePrintCall Single Arg Pointer\n" << std::flush;
             auto printFunc = module->getOrInsertFunction(
                 isNewline ? "cm_println_string" : "cm_print_string",
                 llvm::FunctionType::get(ctx.getVoidType(), {ctx.getPtrType()}, false));
-            // std::cout << "[CODEGEN] generatePrintCall Getting Func Decl Done\n" << std::flush;
             builder->CreateCall(printFunc, {arg});
-            // std::cout << "[CODEGEN] generatePrintCall Call Created\n" << std::flush;
         } else if (argType->isIntegerTy()) {
-            // std::cout << "[CODEGEN] generatePrintCall Single Arg Integer\n" << std::flush;
             auto intType = llvm::cast<llvm::IntegerType>(argType);
             bool isBoolType = hirType && hirType->kind == hir::TypeKind::Bool;
             bool isCharType = hirType && hirType->kind == hir::TypeKind::Char;

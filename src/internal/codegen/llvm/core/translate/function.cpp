@@ -63,8 +63,6 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
                                 cm::debug::Level::Debug);
 
-        // std::cout << "[CODEGEN] Processing function: " << func.name << "\n" << std::flush;
-
         auto funcId = generateFunctionId(func);
         currentFunction = functions[funcId];
         currentMIRFunction = &func;
@@ -456,8 +454,6 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                             });
 
                         // cm_slice_new呼び出しでスライスを初期化
-                        // std::cerr << "[MIR2LLVM]     Local " << i
-                        //           << " is slice, calling cm_slice_new\n";
                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");
                         auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
                         auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
@@ -705,23 +701,16 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
-        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size()
-        //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロック / 到達不能ブロックはスキップ
             if (!func.basic_blocks[i] || reachableBlocks.count(i) == 0) {
                 continue;
             }
 
-            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size()
-            //           << "\n";
-
             // プログレス表示
             guard.show_progress("Function", i + 1, func.basic_blocks.size());
 
             convertBasicBlock(*func.basic_blocks[i]);
-
-            // std::cerr << "[MIR2LLVM]   Block " << i << " converted successfully\n";
         }
     } catch (const std::runtime_error& e) {
         // 無限ループエラーのハンドリング
@@ -732,22 +721,15 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
 // 基本ブロック変換
 void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
-    // std::cerr << "[MIR2LLVM]     Entering convertBasicBlock for block " << block.id << "\n";
-    // std::cerr << "[MIR2LLVM]       Block has " << block.statements.size() << " statements\n";
     if (block.terminator) {
-        // std::cerr << "[MIR2LLVM]       Block has terminator type "
-        // << static_cast<int>(block.terminator->kind) << "\n";
     } else {
     }
 
     // blocksはunordered_mapなので、countで存在確認
-    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
     if (blocks.count(block.id) > 0) {
-        // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
         if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
@@ -776,27 +758,14 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         }
     }
 
-    // std::cerr << "[MIR2LLVM]       Starting statement loop, total statements: "
-    //           << block.statements.size() << "\n";
-
     for (size_t stmt_idx = 0; stmt_idx < block.statements.size(); ++stmt_idx) {
         const auto& stmt = block.statements[stmt_idx];
-
-        // ステートメント処理開始のログ
-        // std::cerr << "[MIR2LLVM]       Processing statement " << stmt_idx << "/"
-        //           << block.statements.size() << " (kind=" << static_cast<int>(stmt->kind) <<
-        //           ")\n";
 
         // 問題のある12個目のステートメントの詳細ログ
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
-                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local <<
-                // "\n";
-                if (assign.rvalue) {
-                    // std::cerr << "[MIR2LLVM]       Rvalue kind: "
-                    //           << static_cast<int>(assign.rvalue->kind) << "\n";
-                }
+                if (assign.rvalue) {}
             }
         }
 
@@ -814,21 +783,12 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertStatement(*stmt);
 
-        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to "
-        // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
-        if (stmt_idx == block.statements.size() - 1) {
-            // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
-        }
-        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx <<
-        // "\n";
+        if (stmt_idx == block.statements.size() - 1) {}
     }
 
     // ターミネータ処理
     if (block.terminator) {
-        // std::cerr << "[MIR2LLVM]       Terminator exists, processing terminator (kind="
-        //           << static_cast<int>(block.terminator->kind) << ")\n";
-
         // ターミネータの生成を記録（より詳細な情報を含める）
         std::ostringstream term_str;
         term_str << "term_kind_" << static_cast<int>(block.terminator->kind);
@@ -838,26 +798,19 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
             auto& callData = std::get<mir::MirTerminator::CallData>(block.terminator->data);
             if (callData.func) {
                 if (callData.func->kind == mir::MirOperand::FunctionRef) {
-                    // std::cerr << "[MIR2LLVM]       Call target: "
-                    //           << std::get<std::string>(callData.func->data) << "\n";
                     term_str << "_" << std::get<std::string>(callData.func->data);
                 } else if (callData.func->kind == mir::MirOperand::Constant) {
                     auto& constant = std::get<mir::MirConstant>(callData.func->data);
                     if (auto* name = std::get_if<std::string>(&constant.value)) {
-                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name <<
-                        // "\n";
                         term_str << "_" << *name;
                     }
                 }
             }
-            // std::cerr << "[MIR2LLVM]       Args count: " << callData.args.size() << "\n";
         }
 
         guard.add_instruction(term_str.str());
 
-        // std::cerr << "[MIR2LLVM]       Calling convertTerminator()...\n";
         convertTerminator(*block.terminator);
-        // std::cerr << "[MIR2LLVM]       convertTerminator() done!\n";
     } else {
         if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",

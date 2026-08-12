@@ -31,8 +31,6 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
         }
         case mir::MirRvalue::BinaryOp: {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
-            // std::cerr << "[MIR2LLVM]         Converting BinaryOp, op=" << static_cast<int>(binop.op)
-            // << "\n";
 
             auto lhs = convertOperand(*binop.lhs);
             if (!lhs) {

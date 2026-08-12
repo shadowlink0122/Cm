@@ -252,8 +252,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                     uint32_t computedMax = 0;
                     for (const auto& member : enumIt->second->members) {
                         uint32_t memberSize = 0;
-                        // 一時的なLLVM
-                        // struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
+                        // 一時的なLLVM struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
                         std::vector<llvm::Type*> fieldLlvmTypes;
                         for (const auto& [fieldName, fieldType] : member.fields) {
                             if (!fieldType)

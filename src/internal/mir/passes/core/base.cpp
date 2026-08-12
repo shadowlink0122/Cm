@@ -79,7 +79,7 @@ void OptimizationPipeline::run_until_fixpoint(MirProgram& program, int max_itera
         int prev_inst_count = count_instructions(program);
         int prev_block_count = count_blocks(program);
 
-        // 一時的に変更検出用の仕組みを用意
+        // 変更検出用に実行前の命令数を記録（反復終了判定で使用）
         int before_count = count_instructions(program);
 
         // 個々のパスごとの実行回数制限

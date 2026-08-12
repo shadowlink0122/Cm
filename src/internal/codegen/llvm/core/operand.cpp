@@ -32,19 +32,11 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     // 循環参照の検出
     if (processing.count(&operand) > 0) {
-        // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
-        // "\n";
-        if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
-            // auto& place = std::get<mir::MirPlace>(operand.data);
-            // std::cerr << "[MIR2LLVM]        Place local: " << place.local << "\n";
-        }
+        if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {}
         return llvm::UndefValue::get(ctx.getI64Type());
     }
 
     if (recursion_depth >= MAX_RECURSION_DEPTH) {
-        // std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
-        // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
-        // "\n";
         return llvm::UndefValue::get(ctx.getI64Type());
     }
 
@@ -67,13 +59,10 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     RecursionGuard guard(recursion_depth, processing, &operand);
 
-    // // debug_msg("MIR2LLVM", "convertOperand called");
-
     switch (operand.kind) {
         case mir::MirOperand::Copy:
         case mir::MirOperand::Move: {
             auto& place = std::get<mir::MirPlace>(operand.data);
-            // // debug_msg("MIR2LLVM", "Place operand");
 
             // プロジェクションがある場合（フィールドアクセスなど）
             if (!place.projections.empty()) {

@@ -30,8 +30,7 @@ class LintRunner {
     LintResult run(const ast::Program& program) {
         LintResult result;
 
-        // TODO: 各診断チェックを実行
-        // 現在はスケルトン - 完全実装はv0.12.1で
+        // TODO: 各診断チェックを実行（現在はスケルトン）
         //
         // 実装予定:
         // - W001: check_unused_variables(program)
