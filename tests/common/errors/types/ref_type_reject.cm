@@ -1,0 +1,7 @@
+// R13: 参照型T&は未対応（専用診断。従来はExpected identifierの誤誘導エラーだった）
+int f(int& r) {
+    return r;
+}
+int main() {
+    return 0;
+}

@@ -1,0 +1,87 @@
+---
+title: モジュールシステムの構造化（テキストインライン展開の廃止）
+parent: v0.17.0 Design
+---
+
+# モジュールシステムの構造化（テキストインライン展開の廃止）
+
+## 概要
+
+現在のimportはプリプロセッサ（src/internal/preprocessor、4,241行）がモジュールソースをユーザーソースへテキスト前置展開する方式で、パーサは常に「全ファイルを連結した1枚のバッファ」を見る。
+この設計が、export選択のテキスト切り出し（export/extract.cpp 987行）・再エクスポートのテキスト書き換え（export/rewrite.cpp 658行）・非export関数の生ソース収集による改名（H7段階4）・行番号のずれ（X5でsource_map写像を後付け）・推移的importの重複宣言といった一連の複雑さとバグ群の根源になっている。
+rustcがファイルごとに独立へパースしてクレート内で名前解決する（rustc_parse + rustc_resolve）のと同じく、ファイル単位パース+シンボル解決へ移行してテキスト操作を廃止する。
+
+## 現状の実測と問題
+
+- preprocessor 4,241行のうち約2,500行（extract/rewrite/expand）がテキスト切り出し・書き換えで、`;` `{` `}` のコメント・文字列内誤検出との戦いを含む（複数行export初期化子の切り詰めバグの修正履歴あり）。
+- 展開後バッファの座標系がパーサ・型検査・MIRまで貫通するため、診断のたびにsource_map写像が必要になる（X5では構文エラー経路2箇所へ同じ写像コードを複製した）。
+- 同一モジュールが複数経路からimportされると宣言が重複展開され、重複許容・名前デデュープという下流の防衛実装を要求している。
+- 非export関数の可視性はテキスト改名（`__cm_priv_<stem>_<連番>_<名前>`）で擬似実装されており、真の名前解決表が存在しない。
+- 名前空間形式import（`env::get(...)`）が未対応なのも、展開ベースでは名前空間表を作れないことに起因する（backend_support_matrix.md既知問題）。
+
+## 簡素化方針
+
+1. ファイル単位パース: 各.cmファイルを独立にパースしてASTを保持する（Span はファイルID+オフセットになり、source_map写像が消滅する）。
+2. モジュールグラフ: import宣言からファイル間の依存グラフを構築し、循環検出・再訪問抑止をグラフ上で行う（現在のimported_files集合+テキストマーカーを置換）。
+3. シンボル解決（cm_resolve新設）: export表（関数・型・グローバル・再export）をAST宣言から構築し、選択的import・エイリアス・可視性（export/private）を解決表で処理する。テキストのextract/rewrite/改名は全廃する。
+4. 名前空間形式（`env::get`）は解決表の自然な帰結として同時に対応する。
+5. HIR loweringは解決済みシンボル参照を受け取り、モジュール横断の重複宣言は構造的に発生しなくなる。
+
+## 移行の互換性
+
+- 言語構文（import/export/module）は不変で、ユーザーコードへの影響はない。
+- プリプロセッサの条件コンパイル（`#ifdef`系・`//! platform:`）はファイル単位の前処理として残す（テキスト展開とは独立した小機能）。
+- SVバックエンドの「展開済み単一ソース」前提の箇所（合成モジュール出力）は、AST結合による同等出力で置換する。
+
+## 段階分割
+
+1. 第1段: ファイル単位パース+モジュールグラフを既存展開と並走させ、`CM_STRUCTURED_IMPORTS=1` で切り替え可能にする（診断座標はこの時点でファイル直参照になる）。
+2. 第2段: export/選択import/エイリアス/再exportを解決表で実装し、advanced_modulesスイートを新経路で通す（既知のimport_features skipの解消を含む）。
+3. 第3段: 可視性（H7の改名方式）を解決表の可視性チェックへ置換し、非公開シンボルの参照を診断エラーにする（現在の警告から昇格）。
+4. 第4段: 既定を新経路へ切り替え、preprocessor/のテキスト展開系（extract/rewrite/expand）とsource_map機構を削除する。
+
+## テスト計画
+
+- 既存のmodules/advanced_modules全スイートを新経路で完走させる（挙動等価）。
+- 診断の行番号がimport数に依存しないことをX5の回帰ケース拡張で検証する。
+- 循環import・ダイヤモンドimport・再export連鎖・名前空間形式のケースを新設する。
+
+## 進捗
+
+### 第1段（ファイル単位パース+モジュールグラフ）: 実装済み（CM_STRUCTURED_IMPORTS=1）
+
+- `src/internal/module/graph.cpp` を新設した。各.cmファイルを独立に条件コンパイル+パースし、ImportDecl/ExportDeclのASTからimport依存グラフを構築する（DFSの訪問状態で循環検出・重複訪問抑止）。パス解決は従来と同一の `resolve_module_path`（mod.cm・相対・階層対応）を共有する。
+- 出力は「import/export指示行を行数保存で空行化した全ファイルの依存順連結」+行単位のsource_map+ファイル単位のmodule_rangesで、既存パイプライン（結合バッファ前提の診断写像・MIRモジュール分割）とそのまま互換する。テキストのexport切り出し・再エクスポート書き換え（extract/rewrite 1,645行）はこの経路では一切使用しない。
+- 方言対応の副作用として、モジュール単体ファイル（main無し）が構文エラーで早期失敗せず実行系パイプラインへ到達するようになったため、run/test（およびNode実行前提のjs/ts/web compile）でmain不在を確定診断にした（従来この経路は未踏で、JITのエントリ解決任せの不定挙動だった）。
+- 前提として、モジュールファイル方言をパーサへ正式対応させた: パス途中のドット区切り（`std.io.console.output`）・`::*`/`::{...}`のアイテム部先読み終端・`export import PATH;`（第1段は依存辺として扱う）・exportリストの末尾セミコロン省略。この拡張は既定経路（`cm check`での単体ファイル解析等）の受理範囲も改善する。
+- フロントエンドは `CM_STRUCTURED_IMPORTS=1` で新経路へ切り替わる（既定は従来のテキスト展開のまま）。
+- 網羅計測: interpreterスイート612件中566件（92.5%）が新経路で通過。残41件の分類は (1)modules系25件=選択import・名前空間アクセス・再export面の意味論（第2段の解決表の領域） (2)全公開連結による名前衝突（テストの独自enum Optionが組み込みOptionを遮蔽しstdlib関数の検査が壊れる等）=第2段のスコープ解決の領域 (3)その他は同族の派生。第1段の全公開連結の構造的境界であり、個別修正でなく第2段で解消する。
+
+### 第2段（export/選択import/エイリアス/再exportのAST選択）: 実装済み
+
+- module/graph.cppの各import辺をEdge（選択項目・エイリアス項目・ワイルドカード・モジュール形・再export）へ解決し、要求伝播（request_item/request_wildcard）と同一ファイル内の参照クロージャ（include_function）で「出力へ残す関数」を選択する。未選択関数は行保存で空行化し、座標系は第1段のまま維持する。
+- パス解決は最長プレフィックス方式にした: 先頭から最も長く解決できるモジュール列を「解決先ファイル名がセグメント名に合致するか」で特定し、残りセグメントは再exportされたサブモジュールとして基点ファイルからの相対で辿り、辿り切れない末尾を選択項目として要求する（リゾルバが末尾の未知セグメントを飲み込んで親モジュールへ丸める挙動と、ディレクトリentry-pointがセグメント名と異なるファイルを返す挙動の両方を判別できる）。
+- モジュール形import（`import path;`/`as alias`）は従来経路と同一の二重出力にした: namespace包み複製（ns::名前の修飾アクセス用）+非alias時のみ公開関数の平坦直接アクセス。平坦側は「importer側の包含済み関数の参照集合」でフィルタする使用箇所駆動にし、無関係な公開関数の平坦展開が他モジュールの同名定義と衝突する問題（std::ioのinputとweb::htmlのinput等）を構造的に回避した。このためresolve_inclusionはroot側から処理する（依存順の逆walk。importerの包含集合が先に確定するため）。
+- 階層再export（`export { io::{file, stream} }`）はnamespace包み出力時に対象モジュールの実体を入れ子namespaceとして再帰的に再構築する（emit_namespace_block）。
+- エイリアス付き選択項目（`{get as env_get}`）は従来経路と同じく改名複製として出力する（関数スパンの複製テキストに対する単語境界置換。元名の平坦出力は要求せず、同一ファイル内の依存関数のみ包含する）。
+- FFI宣言ブロック（`use libc {...}`）は「宣言名がいずれかの包含済みコード（改名複製含む）から参照され、かつ同名のユーザー関数が包含されていない」場合のみ残す。未使用FFIの露出（`long read(fd,buf,count)`がユーザー定義`read(fd)`と衝突する等）を防ぐ。
+- 識別子スキャンはコメント・文字列リテラル本文を除去してから行う（文字列内は補間断片`{expr}`のみ残す）。コメント内の単語が使用参照と誤認されて不要な包含・衝突を招くのを防ぐ。
+- namespace包み複製を出すファイルはimplを複製側にのみ残し平坦側を空行化する（`Duplicate impl`の二重定義防止。従来経路の直接アクセス面はimplを含まないのと同一挙動）。
+- ディレクトリワイルドカード（`import ./path/*` / `import ./path/*::{mod1, mod2}`）に対応した。`/*`は字句解析でブロックコメント開始と衝突するため、パース前にimport行のみセンチネルセグメントへ置換し、graph側でディレクトリ再帰列挙+各モジュールの非aliasモジュールimportとして展開する。
+- パーサ修正: impl/interfaceのDeclにSpanが設定されていなかった（3箇所。span{0,0}のため位置に基づく処理が全て不能だった）。
+- バックエンド既存バグ2件を修正した（構造化経路が露出させたが、従来経路でも単一ファイルで再現する独立バグ）: (1) MIR loweringがグローバル変数をパラメータより先にローカル登録し「パラメータ=ローカル1..N」の規約を崩していた（グローバルconstが1つでもあるとプリミティブimplメソッドのselfが誤型になりLLVM検証エラー）。パラメータ先行+同名はパラメータ優先へ変更。 (2) LLVM関数翻訳のプリミティブself複製先の判定が添字ヒューリスティック（local番号≤2）だったため番号ずれで破綻していた。MIR文の事前走査による推移的なself複製先集合（selfのcopy/moveを直接代入される*prim型一時変数）へ置換。
+- 計測: modules系25件が全て通過（第1段時点は7件）。interpreterスイートは612件中599件通過見込み+既知差分1件=advanced_modules/simple（従来経路のprivate改名バグ`__cm_priv_...`をexpected-errorとして固定化したテストで、構造化経路では正しく動作する。第4段の既定切替時にテスト期待値を更新する）。
+
+### 第3段（可視性の診断昇格）: 実装済み
+
+- 構造化import経路のrequest_item・エイリアス項目解決で、選択importが非exportシンボル（export修飾もexportリスト掲載もない関数）へ到達した場合を確定診断にした: `function 'X' is not exported by module 'Y'`。従来経路のH7警告（checkで警告・buildは--strict時のみ）からの昇格で、同一ファイル内の非公開ヘルパー参照（include_functionのクロージャ）は従来どおり自由。
+- 既存テストへの影響なし（interpreterスイート606/612を維持）。従来経路の警告文言テスト（tests/i18n/non_export_import）は既定切替（第4段）時にエラー期待へ更新する。
+
+### 第4段（既定切替とテキスト展開系の削除）: 実装済み
+
+- 構造化importを唯一のimport実装経路にした。frontend.cppの旧テキスト展開分岐と`CM_STRUCTURED_IMPORTS`切替を削除し、モジュールグラフが全コマンド（run/compile/check/lint/test・全ターゲット）で使われる。
+- テキスト展開系を削除した: import/expand.cpp（852行）・import/parse.cpp（337行）・export/extract.cpp（987行）・export/rewrite.cpp（658行）・import_internal.hpp、およびImportPreprocessorの展開系メンバ（キャッシュ群・H7改名・M2追跡・process()）。ImportPreprocessorはモジュール指定子リゾルバ（resolve_module_path/find_module_file/find_module_entry_point/find_project_root）とProcessResult共有型のみへ縮退した（module層との共有は当初計画の「依存解消」でなく「リゾルバ+条件コンパイルの共有」として確定し、check_layer_deps.pyの注記を更新）。
+- source_mapの扱いの確定: 展開時のオフセット補正・写像複製の機構は展開系と共に消滅した。行単位のsource_map生成はモジュールグラフの連結出力が持ち（診断のファイル直参照写像）、結合バッファをファイルID+オフセットのSpanへ置換する将来の整理まで保持する。
+- 既定切替に伴う挙動差の吸収: (1) 選択的再export（`export import x::{items}`）は要求伝播で辿らない素通しにした（io/mod.cmのprintln等はMIR組み込みが実体で、Cm定義の取り込みはjs/svターゲットのvoid*/FFI非対応でエラーになる）。 (2) M2同名シンボル多重import診断をグラフへ移植した（rootの選択importが同名を異なるモジュールから取り込む場合はi18n済みメッセージでエラー）。 (3) H7段階4の非修飾遮断を出力時の`__cm_priv_`改名として復元した（閉包で取り込んだ非exportヘルパーはexport関数の内部実装としてのみ機能し、直接呼び出しは不能）。 (4) 可視性エラー（第3段）のメッセージをi18nへ収容し、ImportNonExportedSymbolの文言を警告形からエラー形へ更新した。 (5) module形importの平坦直接アクセスは全export包含にした（使用箇所駆動フィルタはwildcard importのみ）。旧経路の連結では後続ファイルが未importの兄弟モジュールへ平坦参照でき（examples/uefiのefi_text→efi_coreが該当）、この可視性を使用箇所駆動にすると未参照exportの空行化で壊れるため。
+- テスト期待値の更新: advanced_modules/simple（従来経路のprivate改名バグをexpected-errorとして固定化していたもの→正常出力の.expectへ）、tests/i18n/run_tests.shのnon_export_import（警告期待→エラー期待）。
+- 計測: interpreterスイート607/612（skip 5、失敗0）・llvm・js・sv・llvm-wasm・unit/regression・cm-test/libs/i18n/sanitize/tsの全スイートを既定経路=構造化importで完走。

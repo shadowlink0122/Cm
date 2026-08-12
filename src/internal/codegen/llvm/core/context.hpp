@@ -176,6 +176,9 @@ class LLVMContext {
     /// LLVM IR 出力（デバッグ用）
     void dumpIR() const;
 
+    // IRを無条件でstderrへ出力する（CM_DUMP_IRによる非決定性調査用）
+    void dumpIRToStderr() const;
+
    private:
     /// ターゲットマシン初期化
     void initializeTarget();

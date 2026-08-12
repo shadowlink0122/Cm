@@ -1,9 +1,9 @@
 // ============================================================
-// naming_rules.hpp の単体テスト
+// internal/types/checking/naming.hpp の単体テスト
 // check/lint --strict の命名規則判定（L001）が使うケース判定関数を検証する
 // ============================================================
 
-#include "internal/types/naming_rules.hpp"
+#include "internal/types/checking/naming.hpp"
 
 #include <gtest/gtest.h>
 

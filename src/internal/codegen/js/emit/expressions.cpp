@@ -1,0 +1,1042 @@
+#include "internal/codegen/js/codegen.hpp"
+#include "internal/codegen/js/types.hpp"
+#include "internal/syntax/ast/typedef.hpp"
+
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <type_traits>
+#include <variant>
+#include <vector>
+
+namespace cm::codegen::js {
+
+using ast::TypeKind;
+
+namespace {
+
+// ユニオン型の変種一覧から、指定した型に対応するタグ（変種インデックス）を返す。
+// 判定できない場合は-1（LLVMバックエンドのcomputeExpectedUnionTagと同じ判定基準）
+int computeUnionTag(const hir::TypePtr& union_type, const hir::TypePtr& value_type) {
+    if (!union_type || !value_type) {
+        return -1;
+    }
+    auto variants = ast::union_variant_types(union_type);
+    // nullリテラルはcheckerでvoid型が付くため、Null変種との照合ではNull扱いにする
+    const auto value_kind_for_match =
+        value_type->kind == TypeKind::Void ? TypeKind::Null : value_type->kind;
+    for (size_t vi = 0; vi < variants.size(); ++vi) {
+        const auto& v = variants[vi];
+        if (!v) {
+            continue;
+        }
+        if (v->kind == value_kind_for_match &&
+            (v->kind != TypeKind::Struct || v->name == value_type->name)) {
+            return static_cast<int>(vi);
+        }
+    }
+    return -1;
+}
+
+// boxedタグ付きユニオン（{field0: tag, field1: value}）かどうかのJS実行時判定式
+std::string unionBoxedCheck(const std::string& v) {
+    return "(" + v + " !== null && typeof " + v + " === \"object\" && " + v +
+           ".field0 !== undefined)";
+}
+
+}  // namespace
+
+std::string JSCodeGen::emitRvalue(const mir::MirRvalue& rvalue, const mir::MirFunction& func) {
+    switch (rvalue.kind) {
+        case mir::MirRvalue::Use: {
+            const auto& data = std::get<mir::MirRvalue::UseData>(rvalue.data);
+            // 代入時の構造体Copyはクローンを適用
+            return emitOperandWithClone(*data.operand, func);
+        }
+
+        case mir::MirRvalue::BinaryOp: {
+            const auto& data = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
+            std::string lhs = emitOperand(*data.lhs, func);
+            std::string rhs = emitOperand(*data.rhs, func);
+            std::string op = emitBinaryOp(data.op);
+
+            // ポインタ演算: result_typeがPointerの場合（加算・減算）
+            if (data.result_type && data.result_type->kind == TypeKind::Pointer) {
+                // ポインタ加算: ptr + n → __cm_ptr_add(ptr, n)
+                if (data.op == mir::MirBinaryOp::Add) {
+                    return "__cm_ptr_add(" + lhs + ", " + rhs + ")";
+                }
+                // ポインタ減算: ptr - n → __cm_ptr_sub(ptr, n)
+                if (data.op == mir::MirBinaryOp::Sub) {
+                    return "__cm_ptr_sub(" + lhs + ", " + rhs + ")";
+                }
+            }
+
+            // ポインタ比較: 両オペランドがPointerの場合
+            auto lhsType = getOperandType(*data.lhs, func);
+            auto rhsType = getOperandType(*data.rhs, func);
+            if (lhsType && lhsType->kind == TypeKind::Pointer && rhsType &&
+                rhsType->kind == TypeKind::Pointer) {
+                // Eq/Neはnull安全なヘルパーで比較する（null/undefinedポインタへの.__arrアクセスによるTypeErrorを防ぎ、fat pointerは__arr+__idxで比較して異なる配列上の同一インデックスが等しくなるバグも防止）
+                if (data.op == mir::MirBinaryOp::Eq) {
+                    return "__cm_ptr_eq(" + lhs + ", " + rhs + ")";
+                }
+                if (data.op == mir::MirBinaryOp::Ne) {
+                    return "!__cm_ptr_eq(" + lhs + ", " + rhs + ")";
+                }
+                // Lt/Gt/Le/Geは同一配列前提で__idxのみ比較
+                if (data.op == mir::MirBinaryOp::Lt || data.op == mir::MirBinaryOp::Gt ||
+                    data.op == mir::MirBinaryOp::Le || data.op == mir::MirBinaryOp::Ge) {
+                    return "(" + lhs + ".__idx " + op + " " + rhs + ".__idx)";
+                }
+            }
+
+            // 配列・構造体の比較には深い比較を使用
+            if (data.op == mir::MirBinaryOp::Eq || data.op == mir::MirBinaryOp::Ne) {
+                if (lhsType &&
+                    (lhsType->kind == TypeKind::Array || lhsType->kind == TypeKind::Struct)) {
+                    std::string check = "__cm_deep_equal(" + lhs + ", " + rhs + ")";
+                    if (data.op == mir::MirBinaryOp::Ne) {
+                        return "!" + check;
+                    }
+                    return check;
+                }
+            }
+
+            // 整数除算・剰余: ゼロ除算は実行時エラー、除算はMath.truncで整数化。
+            // result_typeが無い場合（文字列補間式のパース経由等）はオペランド型から整数演算かどうかを判定する
+            const bool int_operands =
+                lhsType && lhsType->is_integer() && rhsType && rhsType->is_integer();
+            const bool int_divmod = (data.result_type && data.result_type->is_integer()) ||
+                                    (!data.result_type && int_operands);
+            auto is_pre64 = [](const hir::TypePtr& t) {
+                return t && (t->kind == TypeKind::Long || t->kind == TypeKind::ULong ||
+                             t->kind == TypeKind::ISize || t->kind == TypeKind::USize);
+            };
+            const bool divmod_wide64 =
+                is_pre64(data.result_type) || is_pre64(lhsType) || is_pre64(rhsType);
+            if ((data.op == mir::MirBinaryOp::Div || data.op == mir::MirBinaryOp::Mod) &&
+                int_divmod && !divmod_wide64) {
+                std::string safe_rhs =
+                    "((" + rhs +
+                    ") || (() => { throw new Error(\"integer division by zero\"); })())";
+                if (data.op == mir::MirBinaryOp::Div) {
+                    return "__cm_trunc(" + lhs + " / " + safe_rhs + ")";
+                }
+                return "(" + lhs + " % " + safe_rhs + ")";
+            }
+
+            // 符号なし型の判定（シフト・ラップアラウンドのセマンティクス切り替え用）
+            auto is_unsigned_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::UTiny || t->kind == TypeKind::UShort ||
+                       t->kind == TypeKind::UInt || t->kind == TypeKind::ULong ||
+                       t->kind == TypeKind::USize;
+            };
+            const bool uns = is_unsigned_int(data.result_type) || is_unsigned_int(lhsType) ||
+                             is_unsigned_int(rhsType);
+
+            // 64ビット整数のビット演算はBigIntで行う。
+            // JSのビット演算子（>> >>> << & | ^）は32ビット固定のため、long/ulongではシフト量>=32やbit32以上のマスクが壊れる（精度はNumberの53bitに制限される点は従来どおり）
+            auto is_64bit_int = [](const hir::TypePtr& t) {
+                if (!t)
+                    return false;
+                return t->kind == TypeKind::Long || t->kind == TypeKind::ULong ||
+                       t->kind == TypeKind::ISize || t->kind == TypeKind::USize;
+            };
+            const bool wide64 =
+                is_64bit_int(data.result_type) || is_64bit_int(lhsType) || is_64bit_int(rhsType);
+            // 64ビット整数演算はBigIntで実行する（H5）。値はBigIntのまま保持し、
+            // 結果はasIntN/asUintN(64)でLLVM系のラップ挙動へ揃える。
+            // Number混在（len()等の戻り・32bit値）は__cm_bigの冪等変換で吸収する
+            if (wide64) {
+                const std::string reinterpret = uns ? "BigInt.asUintN" : "BigInt.asIntN";
+                const std::string blhs = "__cm_big(" + lhs + ")";
+                const std::string brhs = "__cm_big(" + rhs + ")";
+                switch (data.op) {
+                    case mir::MirBinaryOp::Add:
+                    case mir::MirBinaryOp::Sub:
+                    case mir::MirBinaryOp::Mul:
+                        return reinterpret + "(64, (" + blhs + " " + op + " " + brhs + "))";
+                    case mir::MirBinaryOp::Div:
+                    case mir::MirBinaryOp::Mod: {
+                        // BigIntの/はゼロ方向切り捨てでLLVMのsdiv/srem一致。ゼロ除算は明示エラー
+                        std::string safe_rhs =
+                            "((" + brhs +
+                            ") || (() => { throw new Error(\"integer division by zero\"); })())";
+                        return reinterpret + "(64, (" + blhs + " " + op + " " + safe_rhs + "))";
+                    }
+                    case mir::MirBinaryOp::Shr:
+                        // シフト量は幅-1でマスク（V8のmod幅意味論。BigIntシフトはマスクされないため明示する）
+                        return reinterpret + "(64, " + reinterpret + "(64, " + blhs + ") >> ((" +
+                               brhs + ") & 63n))";
+                    case mir::MirBinaryOp::Shl:
+                        return reinterpret + "(64, " + blhs + " << ((" + brhs + ") & 63n))";
+                    case mir::MirBinaryOp::BitAnd:
+                        return reinterpret + "(64, " + blhs + " & " + brhs + ")";
+                    case mir::MirBinaryOp::BitOr:
+                        return reinterpret + "(64, " + blhs + " | " + brhs + ")";
+                    case mir::MirBinaryOp::BitXor:
+                        return reinterpret + "(64, " + blhs + " ^ " + brhs + ")";
+                    case mir::MirBinaryOp::Eq:
+                        // 両辺をBigInt化し64bit幅へ符号再解釈して比較する
+                        // （ulong比較で-1リテラルが18446744073709551615と等価になるLLVM挙動へ一致）
+                        return "(" + reinterpret + "(64, " + blhs + ") === " + reinterpret +
+                               "(64, " + brhs + "))";
+                    case mir::MirBinaryOp::Ne:
+                        return "(" + reinterpret + "(64, " + blhs + ") !== " + reinterpret +
+                               "(64, " + brhs + "))";
+                    case mir::MirBinaryOp::Lt:
+                    case mir::MirBinaryOp::Le:
+                    case mir::MirBinaryOp::Gt:
+                    case mir::MirBinaryOp::Ge:
+                        // 順序比較も符号再解釈で正規化（unsignedはult相当）
+                        return "(" + reinterpret + "(64, " + blhs + ") " + op + " " + reinterpret +
+                               "(64, " + brhs + "))";
+                    default:
+                        break;
+                }
+            }
+
+            // 右シフト: JSの >> はint32の算術シフトのため、符号なし型は >>> を使う
+            if (data.op == mir::MirBinaryOp::Shr && uns) {
+                return "(" + lhs + " >>> " + rhs + ")";
+            }
+
+            // 32ビット整数演算のオーバーフロー処理
+            // JSは64ビット浮動小数点数のため、int/uint型の演算で32ビットラップアラウンドが必要。
+            // result_typeが無い場合はオペランド型で判定する
+            const hir::TypePtr& wrap_type =
+                data.result_type ? data.result_type : (lhsType ? lhsType : rhsType);
+            if (wrap_type && wrap_type->is_int32()) {
+                const bool result_unsigned = is_unsigned_int(wrap_type);
+                // 乗算: Math.imul を使用（32ビット整数乗算）
+                if (data.op == mir::MirBinaryOp::Mul) {
+                    std::string mul = "Math.imul(" + lhs + ", " + rhs + ")";
+                    // uintは符号なし32ビットへ再解釈
+                    return result_unsigned ? "(" + mul + " >>> 0)" : mul;
+                }
+                // 加算/減算: 32ビットに切り捨て（uintは >>> 0 で符号なし化）
+                if (data.op == mir::MirBinaryOp::Add || data.op == mir::MirBinaryOp::Sub) {
+                    if (result_unsigned) {
+                        return "((" + lhs + " " + op + " " + rhs + ") >>> 0)";
+                    }
+                    return "((" + lhs + " " + op + " " + rhs + ")|0)";
+                }
+                // 左シフト: uintは符号なし32ビットへ再解釈
+                if (data.op == mir::MirBinaryOp::Shl && result_unsigned) {
+                    return "((" + lhs + " << " + rhs + ") >>> 0)";
+                }
+                // ビット演算: JSの|&^はToInt32で符号付き32ビットになるため、uintは>>>0で符号なし化
+                // （0xFE<<24を含むOR結果が負値になりnativeの4277009103と分裂していた）
+                if ((data.op == mir::MirBinaryOp::BitOr || data.op == mir::MirBinaryOp::BitAnd ||
+                     data.op == mir::MirBinaryOp::BitXor) &&
+                    result_unsigned) {
+                    return "((" + lhs + " " + op + " " + rhs + ") >>> 0)";
+                }
+            }
+
+            return "(" + lhs + " " + op + " " + rhs + ")";
+        }
+
+        case mir::MirRvalue::UnaryOp: {
+            const auto& data = std::get<mir::MirRvalue::UnaryOpData>(rvalue.data);
+            std::string operand = emitOperand(*data.operand, func);
+            std::string op = emitUnaryOp(data.op);
+            return op + operand;
+        }
+
+        case mir::MirRvalue::Aggregate: {
+            const auto& data = std::get<mir::MirRvalue::AggregateData>(rvalue.data);
+            switch (data.kind.type) {
+                case mir::AggregateKind::Array: {
+                    std::string result = "[";
+                    for (size_t i = 0; i < data.operands.size(); ++i) {
+                        if (i > 0)
+                            result += ", ";
+                        result += emitOperand(*data.operands[i], func);
+                    }
+                    return result + "]";
+                }
+                case mir::AggregateKind::Struct: {
+                    // 構造体のフィールドを検索
+                    auto it = struct_map_.find(data.kind.name);
+                    if (it != struct_map_.end() && it->second) {
+                        std::string result = "{ ";
+                        for (size_t i = 0;
+                             i < data.operands.size() && i < it->second->fields.size(); ++i) {
+                            if (i > 0)
+                                result += ", ";
+                            result +=
+                                formatStructFieldKey(*it->second, it->second->fields[i].name) +
+                                ": " + emitOperand(*data.operands[i], func);
+                        }
+                        return result + " }";
+                    }
+                    return "{}";
+                }
+                case mir::AggregateKind::Tuple: {
+                    std::string result = "[";
+                    for (size_t i = 0; i < data.operands.size(); ++i) {
+                        if (i > 0)
+                            result += ", ";
+                        result += emitOperand(*data.operands[i], func);
+                    }
+                    return result + "]";
+                }
+            }
+            break;
+        }
+
+        case mir::MirRvalue::Ref: {
+            const auto& data = std::get<mir::MirRvalue::RefData>(rvalue.data);
+            // 配列要素へのRef（&arr[i]）→ ポインタオブジェクト {__arr, __idx}
+            if (!data.place.projections.empty()) {
+                const auto& lastProj = data.place.projections.back();
+                if (lastProj.kind == mir::ProjectionKind::Index) {
+                    // 配列のベースを取得（indexプロジェクション前まで）
+                    std::string base = getLocalVarName(func, data.place.local);
+                    if (boxed_locals_.count(data.place.local)) {
+                        base += "[0]";
+                    }
+                    // index前のプロジェクションを適用
+                    for (size_t i = 0; i < data.place.projections.size() - 1; ++i) {
+                        const auto& proj = data.place.projections[i];
+                        if (proj.kind == mir::ProjectionKind::Field) {
+                            hir::TypePtr currentType = nullptr;
+                            if (data.place.local < func.locals.size()) {
+                                currentType = func.locals[data.place.local].type;
+                            }
+                            if (currentType && currentType->kind == TypeKind::Struct) {
+                                const auto* st = findStructDef(*currentType);
+                                if (st && proj.field_id < st->fields.size()) {
+                                    base +=
+                                        "." + sanitizeIdentifier(st->fields[proj.field_id].name);
+                                }
+                            }
+                        } else if (proj.kind == mir::ProjectionKind::Deref) {
+                            // 構造体ポインタのDerefはno-op
+                        }
+                    }
+                    // インデックス値（inline_values_フォールバック付き）
+                    std::string idxStr;
+                    auto it_idx = inline_values_.find(lastProj.index_local);
+                    if (it_idx != inline_values_.end()) {
+                        idxStr = it_idx->second;
+                    } else {
+                        idxStr = getLocalVarName(func, lastProj.index_local);
+                    }
+                    return "{__arr: " + base + ", __idx: " + idxStr + "}";
+                }
+            }
+            // 構造体フィールドへのRef（&p.x）→ {__arr: 親オブジェクト, __idx: "フィールド名"}
+            // 文字列キーでも obj[key] で読み書きできるため、配列要素ポインタと同一のデリファレンス経路（.__arr[.__idx]）がそのまま機能する
+            if (!data.place.projections.empty() &&
+                data.place.projections.back().kind == mir::ProjectionKind::Field) {
+                std::string base = getLocalVarName(func, data.place.local);
+                if (boxed_locals_.count(data.place.local)) {
+                    base += "[0]";
+                }
+                hir::TypePtr currentType = nullptr;
+                if (data.place.local < func.locals.size()) {
+                    currentType = func.locals[data.place.local].type;
+                }
+                // 最後のFieldの手前までを辿る（ネストフィールド・ポインタ経由に対応）
+                for (size_t i = 0; i + 1 < data.place.projections.size(); ++i) {
+                    const auto& proj = data.place.projections[i];
+                    if (proj.kind == mir::ProjectionKind::Deref) {
+                        // JSでは構造体ポインタはオブジェクト参照そのものなのでno-op
+                        if (currentType && (currentType->kind == TypeKind::Pointer ||
+                                            currentType->kind == TypeKind::Reference)) {
+                            currentType = currentType->element_type;
+                        }
+                        continue;
+                    }
+                    if (proj.kind == mir::ProjectionKind::Field && currentType &&
+                        currentType->kind == TypeKind::Struct) {
+                        const auto* st = findStructDef(*currentType);
+                        if (st && proj.field_id < st->fields.size()) {
+                            base += "." + sanitizeIdentifier(st->fields[proj.field_id].name);
+                            currentType = st->fields[proj.field_id].type;
+                        }
+                    }
+                }
+                // 最後のFieldはキーとして返す
+                const auto& lastProj = data.place.projections.back();
+                if (currentType && currentType->kind == TypeKind::Struct) {
+                    const auto* st = findStructDef(*currentType);
+                    if (st && lastProj.field_id < st->fields.size()) {
+                        return "{__arr: " + base + ", __idx: \"" +
+                               sanitizeIdentifier(st->fields[lastProj.field_id].name) + "\"}";
+                    }
+                }
+            }
+            if (boxed_locals_.count(data.place.local)) {
+                // boxed変数へのRef → {__arr: boxed_wrapper, __idx: 0} boxed変数は[value]形式なので.__arr[.__idx] = [value][0] = valueで正しく動作
+                return "{__arr: " + getLocalVarName(func, data.place.local) + ", __idx: 0}";
+            }
+            return getLocalVarName(func, data.place.local);
+        }
+
+        case mir::MirRvalue::Cast: {
+            const auto& data = std::get<mir::MirRvalue::CastData>(rvalue.data);
+            std::string operand = emitOperand(*data.operand, func);
+
+            // インターフェースupcast（MIRのiface_upcast構築物）: {data, vtable}のfatオブジェクトを構築する。
+            // JSはGC参照のためboxing・ポインタ/値の区別は不要（dataは同一オブジェクト参照）
+            if (!data.iface_concrete.empty() && data.target_type) {
+                std::string ifaceName = data.target_type->name;
+                if (data.iface_from_pointer && data.target_type->element_type) {
+                    ifaceName = data.target_type->element_type->name;
+                }
+                std::string vtableName = sanitizeIdentifier(data.iface_concrete) + "_" +
+                                         sanitizeIdentifier(ifaceName) + "_vtable";
+                return "{ data: " + operand + ", vtable: " + vtableName + " }";
+            }
+
+            // ユニオン型の実行時型判別 (expr is Type):
+            // タグ付き表現（{field0: tag, field1: value}）はタグ比較で判別する（構造体同士の変種も判別可能）。移行期の生値はtypeofへフォールバック
+            if (data.check_only) {
+                if (data.target_type) {
+                    // typedef名（IU等）のままではタグ計算が-1になり常にfalseへ落ちるため実体解決してから判定する
+                    hir::TypePtr srcUnion = resolveUnionAlias(getOperandType(*data.operand, func));
+                    int expected_tag = computeUnionTag(srcUnion, data.target_type);
+                    std::string typeof_check;
+                    if (data.target_type->kind == TypeKind::String) {
+                        typeof_check = "(typeof u === \"string\")";
+                    } else if (data.target_type->is_integer() || data.target_type->is_floating()) {
+                        typeof_check = "(typeof u === \"number\")";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_check = "(typeof u === \"boolean\")";
+                    } else {
+                        typeof_check = "(typeof u === \"object\" && u !== null)";
+                    }
+                    return "((u) => " + unionBoxedCheck("u") +
+                           " ? (u.field0 === " + std::to_string(expected_tag) +
+                           ") : " + typeof_check + ")(" + operand + ")";
+                }
+                return "false";
+            }
+
+            // ユニオン変換:
+            //   構築（T → Union）: タグ付き表現 {field0: tag, field1: value} で包む
+            //   取り出し（Union as T）: タグ検査 + field1参照（生値はtypeofフォールバック）
+            {
+                // 構築/取り出しの判定もtypedef名を実体解決してから行う（is判定と同一基準）
+                hir::TypePtr srcType = resolveUnionAlias(getOperandType(*data.operand, func));
+                hir::TypePtr tgtResolved = resolveUnionAlias(data.target_type);
+                if (tgtResolved && tgtResolved->kind == TypeKind::Union &&
+                    (!srcType || srcType->kind != TypeKind::Union)) {
+                    // ユニオン構築: 変種タグを付けてbox化
+                    int tag = computeUnionTag(tgtResolved, srcType);
+                    if (tag >= 0) {
+                        return "{ field0: " + std::to_string(tag) + ", field1: " + operand + " }";
+                    }
+                    // タグ不明（型情報欠落）は従来どおり生値
+                    return operand;
+                }
+                if (srcType && srcType->kind == TypeKind::Union && data.target_type &&
+                    data.target_type->kind != TypeKind::Union) {
+                    int expected_tag = computeUnionTag(srcType, data.target_type);
+                    std::string typeof_name;
+                    std::string conv_prefix;
+                    std::string conv_suffix;
+                    if (data.target_type->kind == TypeKind::String) {
+                        typeof_name = "string";
+                    } else if (data.target_type->is_integer()) {
+                        typeof_name = "number";
+                        conv_prefix = "__cm_trunc(";
+                        conv_suffix = ")";
+                    } else if (data.target_type->is_floating()) {
+                        typeof_name = "number";
+                    } else if (data.target_type->kind == TypeKind::Bool) {
+                        typeof_name = "boolean";
+                        conv_prefix = "Boolean(";
+                        conv_suffix = ")";
+                    }
+                    const std::string fail =
+                        "{ console.log(\"invalid union cast: active variant does not match "
+                        "target type\"); ((typeof process !== \"undefined\") ? process.exit(1) "
+                        ": (() => { throw new Error(\"invalid union cast\"); })()); }";
+                    std::string boxed_branch =
+                        "(() => { if (v.field0 !== " + std::to_string(expected_tag) + ") " + fail +
+                        " return " + conv_prefix + "v.field1" + conv_suffix + "; })()";
+                    std::string raw_branch;
+                    if (!typeof_name.empty()) {
+                        raw_branch = "(() => { if (!(typeof v === \"" + typeof_name + "\" || (\"" +
+                                     typeof_name +
+                                     "\" === \"number\" && typeof v === \"bigint\"))) " + fail +
+                                     " return " + conv_prefix + "v" + conv_suffix + "; })()";
+                    } else {
+                        // 構造体変種等: 生値はtypeofで判別できないため無検査で通す
+                        raw_branch = "v";
+                    }
+                    // TS出力: union値（タグ付きオブジェクト or 生値）を受けるため引数はany注釈にする
+                    std::string vParam = options_.emitTypeScript ? "(v: any)" : "(v)";
+                    return "(" + vParam + " => " + unionBoxedCheck("v") + " ? " + boxed_branch +
+                           " : " + raw_branch + ")(" + operand + ")";
+                }
+            }
+
+            // 型変換
+            if (data.target_type) {
+                // 64bit整数（BigInt）→浮動小数はNumberへ変換する（H5。素通しだとBigInt演算に混入）
+                if (data.target_type->is_floating()) {
+                    hir::TypePtr fsrc = getOperandType(*data.operand, func);
+                    if (fsrc && (fsrc->kind == TypeKind::Long || fsrc->kind == TypeKind::ULong ||
+                                 fsrc->kind == TypeKind::ISize || fsrc->kind == TypeKind::USize)) {
+                        return "Number(" + operand + ")";
+                    }
+                }
+                if (data.target_type->is_integer()) {
+                    // M9: 範囲外float→intはバックエンドで挙動が分裂していたため、
+                    // LLVM系のfptosi.sat/fptoui.satと同じ飽和（範囲外はclamp、NaNは0）に統一する
+                    hir::TypePtr src_type = getOperandType(*data.operand, func);
+                    if (src_type && src_type->is_floating()) {
+                        const char* min_lit = "-2147483648";
+                        const char* max_lit = "2147483647";
+                        switch (data.target_type->kind) {
+                            case TypeKind::Tiny:
+                                min_lit = "-128";
+                                max_lit = "127";
+                                break;
+                            case TypeKind::UTiny:
+                                min_lit = "0";
+                                max_lit = "255";
+                                break;
+                            case TypeKind::Short:
+                                min_lit = "-32768";
+                                max_lit = "32767";
+                                break;
+                            case TypeKind::UShort:
+                                min_lit = "0";
+                                max_lit = "65535";
+                                break;
+                            case TypeKind::UInt:
+                                min_lit = "0";
+                                max_lit = "4294967295";
+                                break;
+                            case TypeKind::Long:
+                            case TypeKind::ISize:
+                                min_lit = "-9223372036854775808";
+                                max_lit = "9223372036854775807";
+                                break;
+                            case TypeKind::ULong:
+                            case TypeKind::USize:
+                                min_lit = "0";
+                                max_lit = "18446744073709551615";
+                                break;
+                            default:
+                                break;
+                        }
+                        std::string vp = options_.emitTypeScript ? "(v: number)" : "(v)";
+                        const bool tgt64 = data.target_type->kind == TypeKind::Long ||
+                                           data.target_type->kind == TypeKind::ULong ||
+                                           data.target_type->kind == TypeKind::ISize ||
+                                           data.target_type->kind == TypeKind::USize;
+                        if (tgt64) {
+                            // 64bitターゲットはBigIntで返す（H5）。NaNは0n、範囲外はclamp
+                            return "(" + vp +
+                                   " => { const t = __cm_trunc(v); return Number.isNaN(t) ? 0n : "
+                                   "BigInt(Math.min(" +
+                                   max_lit + ", Math.max(" + min_lit + ", t))); })(" + operand +
+                                   ")";
+                        }
+                        return "(" + vp +
+                               " => { const t = __cm_trunc(v); return Number.isNaN(t) ? 0 : "
+                               "Math.min(" +
+                               max_lit + ", Math.max(" + min_lit + ", t)); })(" + operand + ")";
+                    }
+                    // 整数→整数: ビット幅・符号のラップをLLVMのtrunc/ビット再解釈と一致させる。
+                    // 32ビット以下はJSのビット演算（ToInt32/ToUint32）が正確な2の補数ラップを行う。
+                    // 64ビット（long/ulong）はBigInt表現（H5）: ソースが64bitの場合は一旦
+                    // asIntN(32)等で正確に縮めてからNumberへ、ターゲットが64bitはBigInt化する
+                    if (src_type && src_type->is_integer()) {
+                        const bool src64 =
+                            src_type->kind == TypeKind::Long || src_type->kind == TypeKind::ULong ||
+                            src_type->kind == TypeKind::ISize || src_type->kind == TypeKind::USize;
+                        const std::string big_src = "__cm_big(" + operand + ")";
+                        switch (data.target_type->kind) {
+                            case TypeKind::Tiny:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(8, " + big_src + "))";
+                                }
+                                return "((" + operand + ") << 24 >> 24)";
+                            case TypeKind::UTiny:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(8, " + big_src + "))";
+                                }
+                                return "((" + operand + ") & 0xFF)";
+                            case TypeKind::Short:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(16, " + big_src + "))";
+                                }
+                                return "((" + operand + ") << 16 >> 16)";
+                            case TypeKind::UShort:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(16, " + big_src + "))";
+                                }
+                                return "((" + operand + ") & 0xFFFF)";
+                            case TypeKind::Int:
+                                if (src64) {
+                                    return "Number(BigInt.asIntN(32, " + big_src + "))";
+                                }
+                                return "((" + operand + ") | 0)";
+                            case TypeKind::UInt:
+                                if (src64) {
+                                    return "Number(BigInt.asUintN(32, " + big_src + "))";
+                                }
+                                return "((" + operand + ") >>> 0)";
+                            case TypeKind::Long:
+                            case TypeKind::ISize:
+                                return "BigInt.asIntN(64, " + big_src + ")";
+                            case TypeKind::ULong:
+                            case TypeKind::USize:
+                                return "BigInt.asUintN(64, " + big_src + ")";
+                            default:
+                                break;
+                        }
+                    }
+                    return "__cm_trunc(" + operand + ")";
+                } else if (data.target_type->kind == TypeKind::Bool) {
+                    return "Boolean(" + operand + ")";
+                } else if (data.target_type->kind == TypeKind::String) {
+                    return "String(" + operand + ")";
+                } else if (data.target_type->kind == TypeKind::Interface) {
+                    // インターフェースへのキャスト: {data, vtable} オブジェクトを作成
+                    hir::TypePtr sourceType = getOperandType(*data.operand, func);
+                    if (sourceType && sourceType->kind == TypeKind::Struct) {
+                        std::string vtableName = sanitizeIdentifier(sourceType->name) + "_" +
+                                                 sanitizeIdentifier(data.target_type->name) +
+                                                 "_vtable";
+                        return "{ data: " + operand + ", vtable: " + vtableName + " }";
+                    } else if (sourceType && sourceType->kind == TypeKind::Interface) {
+                        // Interface -> Interfaceすでにあるvtableを使うか、動的解決が必要だが、現在はそのまま返す
+                        return operand;
+                    }
+                    // ソース型が不明またはプリミティブの場合（基本的にはStruct -> Interfaceを想定）
+                    // プリミティブの実装（impl int for Interface等）の場合も考慮が必要だが、現状はStructのみ対応
+                }
+            }
+            return operand;
+        }
+
+        case mir::MirRvalue::FormatConvert: {
+            const auto& data = std::get<mir::MirRvalue::FormatConvertData>(rvalue.data);
+            std::string operand = emitOperand(*data.operand, func);
+
+            // char型の場合、format_specが空なら'c'を使用
+            std::string spec = data.format_spec;
+            if (spec.empty() && data.operand) {
+                // オペランドの型をチェック
+                if (data.operand->kind == mir::MirOperand::Copy ||
+                    data.operand->kind == mir::MirOperand::Move) {
+                    const auto& place = std::get<mir::MirPlace>(data.operand->data);
+                    if (place.local < func.locals.size()) {
+                        const auto& local = func.locals[place.local];
+                        if (local.type && local.type->kind == ast::TypeKind::Char) {
+                            spec = "c";  // char型は文字として出力
+                        }
+                    }
+                }
+            }
+
+            return "__cm_format(" + operand + ", \"" + spec + "\")";
+        }
+    }
+    return "undefined";
+}
+
+std::string JSCodeGen::emitOperand(const mir::MirOperand& operand, const mir::MirFunction& func) {
+    switch (operand.kind) {
+        case mir::MirOperand::Move:
+        case mir::MirOperand::Copy: {
+            const auto& place = std::get<mir::MirPlace>(operand.data);
+            if (place.projections.empty()) {
+                auto it = inline_values_.find(place.local);
+                if (it != inline_values_.end()) {
+                    return it->second;
+                }
+            }
+            return emitPlace(place, func);
+        }
+        case mir::MirOperand::Constant: {
+            const auto& constant = std::get<mir::MirConstant>(operand.data);
+            return emitConstant(constant);
+        }
+        case mir::MirOperand::FunctionRef: {
+            const auto& funcName = std::get<std::string>(operand.data);
+            return sanitizeIdentifier(funcName);
+        }
+    }
+    return "undefined";
+}
+
+// ラムダ関数参照時にキャプチャ変数をバインドする
+std::string JSCodeGen::emitLambdaRef(const std::string& funcName, const mir::MirFunction& func,
+                                     const std::vector<mir::LocalId>& capturedLocals) {
+    std::string safeName = sanitizeIdentifier(funcName);
+    if (capturedLocals.empty()) {
+        return safeName;
+    }
+    // キャプチャ変数をbindでバインド。
+    // 定数畳み込み等でローカル宣言が省略された変数（inline_values_）は
+    // インライン値を直接バインドする（従来は存在しない変数名を参照しReferenceErrorになっていた）
+    std::string boundCall = safeName + ".bind(null";
+    for (auto capturedId : capturedLocals) {
+        auto it = inline_values_.find(capturedId);
+        if (it != inline_values_.end()) {
+            boundCall += ", " + it->second;
+        } else {
+            boundCall += ", " + getLocalVarName(func, capturedId);
+        }
+    }
+    boundCall += ")";
+    return boundCall;
+}
+
+// 構造体Copyオペランド用のクローン付き出力
+std::string JSCodeGen::emitOperandWithClone(const mir::MirOperand& operand,
+                                            const mir::MirFunction& func) {
+    if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
+        const auto& place = std::get<mir::MirPlace>(operand.data);
+        // Copy対象のplaceが固定長配列値になるか（Index/Deref射影を型で辿る）。
+        // 固定長配列は値セマンティクスのため、JS配列の参照共有を__cm_cloneで断つ
+        // （int[3] x = y; や int[3] b = a[1]; の部分配列取り出しがLLVM系のコピーと分裂していた）。
+        // スライス（未サイズArray）は参照セマンティクスなのでクローンしない
+        auto copies_fixed_array = [&]() {
+            if (operand.kind != mir::MirOperand::Copy || place.local >= func.locals.size()) {
+                return false;
+            }
+            ast::TypePtr t = func.locals[place.local].type;
+            for (const auto& proj : place.projections) {
+                if (!t) {
+                    return false;
+                }
+                if (proj.kind == mir::ProjectionKind::Index && t->kind == ast::TypeKind::Array) {
+                    t = t->element_type;
+                } else if (proj.kind == mir::ProjectionKind::Deref &&
+                           t->kind == ast::TypeKind::Pointer) {
+                    t = t->element_type;
+                } else {
+                    return false;  // Field等は従来挙動を維持
+                }
+            }
+            return t && t->kind == ast::TypeKind::Array && t->array_size.has_value();
+        };
+        if (place.projections.empty()) {
+            auto it = inline_values_.find(place.local);
+            if (it != inline_values_.end()) {
+                if (operand.kind == mir::MirOperand::Copy && place.local < func.locals.size()) {
+                    const auto& local = func.locals[place.local];
+                    if (local.type && local.type->kind == ast::TypeKind::Struct &&
+                        !structIsForeignObject(local.type->name)) {
+                        return "__cm_clone(" + it->second + ")";
+                    }
+                }
+                if (copies_fixed_array()) {
+                    return "__cm_clone(" + it->second + ")";
+                }
+                return it->second;
+            }
+        }
+        if (operand.kind == mir::MirOperand::Copy) {
+            std::string result = emitPlace(place, func);
+            // 構造体の場合は深いコピーを作成
+            // ただしimplメソッドのself引数ソースの場合はスキップ（JSの参照渡しでselfの変更を元変数に伝搬させるため）
+            if (place.local < func.locals.size() && place.projections.empty()) {
+                const auto& local = func.locals[place.local];
+                if (local.type && local.type->kind == ast::TypeKind::Struct &&
+                    !structIsForeignObject(local.type->name)) {
+                    if (impl_self_sources_.count(place.local) == 0) {
+                        return "__cm_clone(" + result + ")";
+                    }
+                    // impl selfソース: クローンなしで参照渡し
+                }
+            }
+            if (copies_fixed_array() && impl_self_sources_.count(place.local) == 0) {
+                return "__cm_clone(" + result + ")";
+            }
+            return result;
+        }
+    }
+    return emitOperand(operand, func);
+}
+
+std::string JSCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunction& func) {
+    std::string result = getLocalVarName(func, place.local);
+
+    // ボックス化された変数の場合、[0]アクセスを追加（ただしRefの場合はemitRvalueで処理されるのでここではRead/Writeアクセス）
+    if (boxed_locals_.count(place.local)) {
+        result += "[0]";
+    }
+
+    // 現在の型を追跡（ネストしたフィールドアクセス用）
+    hir::TypePtr currentType = nullptr;
+    if (place.local < func.locals.size()) {
+        currentType = func.locals[place.local].type;
+    }
+
+    // プロジェクション
+    for (size_t pi = 0; pi < place.projections.size(); ++pi) {
+        const auto& proj = place.projections[pi];
+        switch (proj.kind) {
+            case mir::ProjectionKind::Field: {
+                // 構造体のフィールド名を取得
+                if (currentType && currentType->kind == TypeKind::Struct) {
+                    // ジェネリック構造体はfindStructDef内で$正準キーによる再検索を行う
+                    const auto* mirStruct = findStructDef(*currentType);
+                    if (mirStruct) {
+                        if (proj.field_id < mirStruct->fields.size()) {
+                            const auto& field_name = mirStruct->fields[proj.field_id].name;
+                            if (mirStruct->is_css) {
+                                result += "[" + formatStructFieldKey(*mirStruct, field_name) + "]";
+                            } else {
+                                result += "." + sanitizeIdentifier(field_name);
+                            }
+                            // 次のプロジェクション用に型を更新
+                            currentType = mirStruct->fields[proj.field_id].type;
+                            continue;
+                        }
+                    }
+                }
+                result += ".field" + std::to_string(proj.field_id);
+                currentType = nullptr;  // 型不明
+                break;
+            }
+
+            case mir::ProjectionKind::Index: {
+                // インライン値がある場合はそれを使用（変数宣言がスキップされる場合があるため）
+                std::string indexExpr;
+                auto inlineIt = inline_values_.find(proj.index_local);
+                if (inlineIt != inline_values_.end()) {
+                    indexExpr = inlineIt->second;
+                } else {
+                    indexExpr = getLocalVarName(func, proj.index_local);
+                }
+                result += "[" + indexExpr + "]";
+                // 配列のelement_typeに更新
+                if (currentType && currentType->element_type) {
+                    currentType = currentType->element_type;
+                } else {
+                    currentType = nullptr;
+                }
+                break;
+            }
+
+            case mir::ProjectionKind::Deref: {
+                // ポインタ参照外し:
+                // 注意: boxed変数の[0]はボックス解除（ポインタ値の取り出し）であって
+                // デリファレンスではない。旧実装はboxedポインタのDerefをno-opにしていたため、int** 経由で付け替えた後の *p がポインタオブジェクトのまま読まれていた（ptr_double回帰）。boxed/非boxedとも同じ
+                // ポインタ解決を適用する（resultは既にポインタ値になっている）
+                if (currentType && currentType->kind == TypeKind::Pointer &&
+                    currentType->element_type &&
+                    currentType->element_type->kind != ast::TypeKind::Struct) {
+                    // ポインタオブジェクト{__arr, __idx}のデリファレンス
+                    std::string ptrExpr = result;
+                    // 先読み: 次のプロジェクションがIndexの場合、複合変換
+                    // ptr[Deref][Index(idx)] → ptr.__arr[ptr.__idx + idx]
+                    if (pi + 1 < place.projections.size() &&
+                        place.projections[pi + 1].kind == mir::ProjectionKind::Index) {
+                        const auto& nextProj = place.projections[pi + 1];
+                        std::string indexExpr;
+                        auto inlineIt = inline_values_.find(nextProj.index_local);
+                        if (inlineIt != inline_values_.end()) {
+                            indexExpr = inlineIt->second;
+                        } else {
+                            indexExpr = getLocalVarName(func, nextProj.index_local);
+                        }
+                        result = ptrExpr + ".__arr[" + ptrExpr + ".__idx + " + indexExpr + "]";
+                        // Indexプロジェクションを消費
+                        ++pi;
+                    } else {
+                        result = ptrExpr + ".__arr[" + ptrExpr + ".__idx]";
+                    }
+                } else if (currentType && currentType->element_type &&
+                           currentType->element_type->kind == ast::TypeKind::Struct) {
+                    // 構造体ポインタ: オブジェクト直接参照ならno-op、ポインタオブジェクト（{__arr, __idx}: スライス要素ポインタ等）なら
+                    // 指し先を取り出す（実行時判定の両対応）
+                    result = "__cm_deref(" + result + ")";
+                } else {
+                    // その他: ボックス配列の[0]でアクセス
+                    result += "[0]";
+                }
+                // ポインタのelement_typeに更新
+                if (currentType && currentType->element_type) {
+                    currentType = currentType->element_type;
+                } else {
+                    currentType = nullptr;
+                }
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+std::string JSCodeGen::emitConstant(const mir::MirConstant& constant) {
+    // nullリテラル（Void型定数）はJSのnullとして出力
+    if (constant.type && constant.type->kind == ast::TypeKind::Void) {
+        return "null";
+    }
+    // long/ulong系はBigIntリテラル（123n）で出力する（H5。ulongは符号なし解釈）
+    const bool is_wide64_const = constant.type && (constant.type->kind == ast::TypeKind::Long ||
+                                                   constant.type->kind == ast::TypeKind::ULong ||
+                                                   constant.type->kind == ast::TypeKind::ISize ||
+                                                   constant.type->kind == ast::TypeKind::USize);
+    const bool wide64_unsigned = constant.type && (constant.type->kind == ast::TypeKind::ULong ||
+                                                   constant.type->kind == ast::TypeKind::USize);
+    return std::visit(
+        [is_wide64_const, wide64_unsigned](auto&& val) -> std::string {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, std::monostate>) {
+                return "undefined";
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return val ? "true" : "false";
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                // 値駆動のBigInt化（H5）: 2^53以内はNumberのまま出力し、64bit演算側の
+                // __cm_big冪等変換に委ねる（小さな64bit型付き定数が32bit文脈へ混入して
+                // TypeErrorになるのを防ぐ）。精度が必要な2^53超と、ulong型の負値エンコード
+                // （-1 = 18446744073709551615）のみBigIntリテラルにする
+                constexpr int64_t kSafeMax = 9007199254740991LL;
+                if (is_wide64_const && wide64_unsigned && val < 0) {
+                    return std::to_string(static_cast<uint64_t>(val)) + "n";
+                }
+                if (val > kSafeMax || val < -kSafeMax) {
+                    return "(" + std::to_string(val) + "n)";
+                }
+                return std::to_string(val);
+            } else if constexpr (std::is_same_v<T, double>) {
+                std::ostringstream oss;
+                oss << std::setprecision(17) << val;
+                return oss.str();
+            } else if constexpr (std::is_same_v<T, char>) {
+                // JSランタイムのchar表現は数値（文字コード）。文字列で出力すると
+                // String.fromCharCode等の数値前提の処理がNaNになる
+                return std::to_string(static_cast<int>(static_cast<unsigned char>(val)));
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return "\"" + escapeString(val) + "\"";
+            } else {
+                return "undefined";
+            }
+        },
+        constant.value);
+}
+
+std::string JSCodeGen::emitBinaryOp(mir::MirBinaryOp op) {
+    switch (op) {
+        case mir::MirBinaryOp::Add:
+            return "+";
+        case mir::MirBinaryOp::Sub:
+            return "-";
+        case mir::MirBinaryOp::Mul:
+            return "*";
+        case mir::MirBinaryOp::Div:
+            return "/";
+        case mir::MirBinaryOp::Mod:
+            return "%";
+        case mir::MirBinaryOp::BitAnd:
+            return "&";
+        case mir::MirBinaryOp::BitOr:
+            return "|";
+        case mir::MirBinaryOp::BitXor:
+            return "^";
+        case mir::MirBinaryOp::Shl:
+            return "<<";
+        case mir::MirBinaryOp::Shr:
+            return ">>";
+        case mir::MirBinaryOp::Eq:
+            return "===";
+        case mir::MirBinaryOp::Ne:
+            return "!==";
+        case mir::MirBinaryOp::Lt:
+            return "<";
+        case mir::MirBinaryOp::Le:
+            return "<=";
+        case mir::MirBinaryOp::Gt:
+            return ">";
+        case mir::MirBinaryOp::Ge:
+            return ">=";
+        case mir::MirBinaryOp::And:
+            return "&&";
+        case mir::MirBinaryOp::Or:
+            return "||";
+    }
+    return "?";
+}
+
+std::string JSCodeGen::emitUnaryOp(mir::MirUnaryOp op) {
+    switch (op) {
+        case mir::MirUnaryOp::Neg:
+            return "-";
+        case mir::MirUnaryOp::Not:
+            return "!";
+        case mir::MirUnaryOp::BitNot:
+            return "~";
+    }
+    return "?";
+}
+
+cm::hir::TypePtr JSCodeGen::getPlaceType(const mir::MirPlace& place, const mir::MirFunction& func) {
+    cm::hir::TypePtr currentType = nullptr;
+    if (place.local < func.locals.size()) {
+        currentType = func.locals[place.local].type;
+    }
+
+    for (const auto& proj : place.projections) {
+        if (!currentType)
+            return nullptr;
+
+        switch (proj.kind) {
+            case mir::ProjectionKind::Field: {
+                if (currentType->kind == TypeKind::Struct) {
+                    const auto* st = findStructDef(*currentType);
+                    if (st && proj.field_id < st->fields.size()) {
+                        currentType = st->fields[proj.field_id].type;
+                        continue;
+                    }
+                }
+                currentType = nullptr;
+                break;
+            }
+            case mir::ProjectionKind::Index: {
+                if (currentType->element_type) {
+                    currentType = currentType->element_type;
+                } else {
+                    currentType = nullptr;
+                }
+                break;
+            }
+            case mir::ProjectionKind::Deref: {
+                if (currentType->element_type) {
+                    currentType = currentType->element_type;
+                } else {
+                    currentType = nullptr;
+                }
+                break;
+            }
+        }
+    }
+    return currentType;
+}
+
+cm::hir::TypePtr JSCodeGen::getOperandType(const mir::MirOperand& operand,
+                                           const mir::MirFunction& func) {
+    if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
+        const auto& place = std::get<mir::MirPlace>(operand.data);
+        return getPlaceType(place, func);
+    }
+
+    // 定数オペランド（true/false/整数リテラル等）の型情報を返す
+    if (operand.kind == mir::MirOperand::Constant) {
+        const auto& constant = std::get<mir::MirConstant>(operand.data);
+        return constant.type;
+    }
+
+    return nullptr;
+}
+
+}  // namespace cm::codegen::js

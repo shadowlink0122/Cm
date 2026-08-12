@@ -1,0 +1,13 @@
+// H12回帰: moveした変数を文字列補間の中で使用するとエラーになることを検証する
+import std::io::println;
+
+void consume(string s) {
+    println(s);
+}
+
+int main() {
+    string s = "hello";
+    consume(move s);
+    println("value: {s}");
+    return 0;
+}

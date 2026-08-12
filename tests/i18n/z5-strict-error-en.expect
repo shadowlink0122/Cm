@@ -1,0 +1,2 @@
+error: Implicit narrowing conversion from 'long' to 'int' may lose information; use an explicit cast 'as int'
+error: Implicit conversion from 'int' to 'uint' changes the sign interpretation; use an explicit cast 'as uint'

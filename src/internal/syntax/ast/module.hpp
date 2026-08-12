@@ -1,5 +1,7 @@
 #pragma once
 
+#include "internal/base/source/span.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +22,7 @@ struct Type;  // FFI関数宣言用
 struct AttributeNode {  // Attributeという名前が衝突する可能性があるため変更
     std::string name;   // アトリビュート名
     std::vector<std::string> args;  // 引数
+    Span span{};  // 属性の位置（R7: タイポ診断・derive診断の位置に使用）
 
     AttributeNode(std::string n) : name(std::move(n)) {}
     AttributeNode(std::string n, std::vector<std::string> a)
@@ -68,6 +71,9 @@ struct ImportDecl {
     ModulePath path;                // モジュールパス
     std::vector<ImportItem> items;  // 選択的インポート項目
     bool is_wildcard = false;       // ワイルドカード（*）インポート
+    bool is_reexport = false;  // export import（取り込んだ項目を自モジュールの公開面へ再輸出）
+    // セグメント間の区切り（'/'=パス連結・':'=::・'.'=ドット。相対パスとモジュール指定子の再構成に使用）
+    std::vector<char> separators;
     std::vector<AttributeNode> attributes;
 
     ImportDecl(ModulePath p) : path(std::move(p)) {}

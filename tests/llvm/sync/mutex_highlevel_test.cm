@@ -1,0 +1,39 @@
+// 回帰(R22): native::syncの高レベルOOP API（Mutex<T>/RwLock<T>/AtomicInt/AtomicBool/Once/Channel）
+// implメソッドのexport修飾子パース対応で復活したAPIの実行検証
+import std::io::println;
+import native::sync::{Mutex, RwLock, AtomicInt, AtomicBool, Once, Channel};
+
+int main() {
+    Mutex<int> m = Mutex<int>::new(10);
+    MutexGuard<int> g = m.lock();
+    int* p = g.get();
+    *p = *p + 5;
+    g.unlock();
+    println("mutex={m.value}");
+
+    RwLock<int> rw = RwLock<int>::new(3);
+    RwLockWriteGuard<int> w = rw.write();
+    int* wp = w.get();
+    *wp = 7;
+    w.unlock();
+    RwLockReadGuard<int> r = rw.read();
+    println("rwlock={*r.get()}");
+    r.unlock();
+
+    AtomicInt a = AtomicInt::new(5);
+    a.fetch_add(3);
+    println("atomic={a.load()}");
+
+    AtomicBool b = AtomicBool::new(true);
+    println("abool={b.load()}");
+
+    Once o = Once::new();
+    println("once={o.is_completed()}");
+
+    Channel ch = Channel::new(4);
+    ch.send(42);
+    println("chan={ch.len()} recv={ch.recv()}");
+    ch.close();
+    ch.destroy();
+    return 0;
+}

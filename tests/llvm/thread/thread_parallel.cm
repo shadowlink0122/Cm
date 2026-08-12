@@ -44,9 +44,9 @@ int main() {
     const ulong t3 = spawn(calc30 as void*);
 
     // 全てのスレッドを待機
-    const int r1 = join(t1);
-    const int r2 = join(t2);
-    const int r3 = join(t3);
+    const int r1 = join(t1) as int;
+    const int r2 = join(t2) as int;
+    const int r3 = join(t3) as int;
 
     // 結果を合計（順序に依存しない）
     const int total = r1 + r2 + r3;

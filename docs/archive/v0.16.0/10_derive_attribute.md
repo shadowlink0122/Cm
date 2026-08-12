@@ -70,7 +70,7 @@ struct Color with Eq {
 | `Display` | `toString()` |
 | `Css` | `css()` / `to_css()` / `isCss()` |
 
-導出可能セットをユーザー定義interfaceへ拡張する構想（フィールドイントロスペクション等の前提機能を含む）は [設計11](../../design/v0.16.0/11_user_defined_derive.html) で前方検討する。
+導出可能セットをユーザー定義interfaceへ拡張する構想（フィールドイントロスペクション等の前提機能を含む）は [設計11](11_user_defined_derive.html) で前方検討する。
 
 ### 導出可能セットの十分性評価（2026-07-11）
 

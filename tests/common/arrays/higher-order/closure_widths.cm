@@ -1,0 +1,20 @@
+// クロージャHOFの要素幅ディスパッチ確認（局所処理調査E系: キャプチャ付きコールバック×double/tiny要素）
+import std::io::println;
+
+int main() {
+    double factor = 2.5;
+    double[] ds = [2.0, 4.0];
+    double[] dm = ds.map((double d) => d * factor);
+    println("{dm[0]} {dm[1]}");
+    double base = 1.0;
+    double dsum = ds.reduce((double a, double b) => a + b + base, 0.0);
+    println("{dsum}");
+    double limit = 3.0;
+    double[] df = ds.filter((double d) => d > limit);
+    println("{df.len()} {df[0]}");
+    tiny bias = 1 as tiny;
+    tiny[] ts = [1 as tiny, 2 as tiny];
+    tiny[] tm = ts.map((tiny t) => t + bias as tiny);
+    println("{tm[0]} {tm[1]}");
+    return 0;
+}

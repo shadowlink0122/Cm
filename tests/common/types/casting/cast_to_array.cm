@@ -1,0 +1,12 @@
+// asキャストの対象型に配列型を書くと診断エラー（局所処理調査A3）:
+// x as int[N] は後置配列サフィックスが正準のcheck_array_suffixで消費され配列型のキャストとして解析される。
+// スカラ→配列・固定長→スライスのas形はloweringに存在せず無診断のゴミ値になるため、暗黙変換（代入・呼び出し）へ誘導する診断で停止する。
+// 旧: x as int[N] は (x as int)[N] の添字式へ黙って化けていた
+import std::io::println;
+
+int main() {
+    int x = 300;
+    int y = x as int[2];
+    println(y);
+    return 0;
+}

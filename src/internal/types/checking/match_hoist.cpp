@@ -5,6 +5,10 @@
 // 多重評価になるためクローン対象外で、従来はダミー値(0)へフォールバックし誤った結果を返していた。
 // 本パスは型チェック前にASTを書き換え、呼び出しを含むscrutineeを文の直前の一時変数（auto推論）へ退避して単一評価を保証する。
 //
+// 同様に、組み込みResult/Optionメソッド（is_some/unwrap_or等）の脱糖もレシーバをclone_hir_exprで
+// 複製するため、呼び出しを含むレシーバ（parse_int(s).unwrap_or(0)・map.get(k).is_none()等）を
+// 同じ仕組みで退避する（退避しないとタグ比較とペイロード取得が別評価になり誤った値を返す）。
+//
 // 退避しない位置（評価回数・評価タイミングが変わるため）:
 // - while/forの条件式・更新式（反復ごとに評価される）
 // - &&/||の右辺、三項演算子の分岐、matchアームの式本体・ガード（短絡・条件評価）
@@ -68,6 +72,12 @@ bool contains_call(const ast::Expr& e) {
     return false;
 }
 
+// 組み込みResult/Optionのメソッド名（HIRで脱糖されレシーバが複製されるもの）
+bool is_builtin_sum_method(const std::string& name) {
+    return name == "is_ok" || name == "is_err" || name == "is_some" || name == "is_none" ||
+           name == "unwrap" || name == "unwrap_or" || name == "unwrap_err" || name == "expect";
+}
+
 class MatchHoister {
    public:
     void process_program(ast::Program& program) {
@@ -79,6 +89,12 @@ class MatchHoister {
     }
 
    private:
+    // 退避対象の式スロット（matchのscrutineeまたはenumメソッドのレシーバ）
+    struct HoistSlot {
+        ast::ExprPtr* slot;
+        const char* prefix;
+    };
+
     size_t counter_ = 0;
 
     void process_decl(ast::Decl& decl) {
@@ -115,13 +131,13 @@ class MatchHoister {
             if (!stmts[i]) {
                 continue;
             }
-            std::vector<ast::MatchExpr*> hoists;
+            std::vector<HoistSlot> hoists;
             collect_from_stmt(*stmts[i], hoists);
-            for (auto* m : hoists) {
-                std::string name = "__match_scrutinee_expr_" + std::to_string(counter_++);
-                auto let = std::make_unique<ast::LetStmt>(name, nullptr, std::move(m->scrutinee));
-                m->scrutinee = std::make_unique<ast::Expr>(std::make_unique<ast::IdentExpr>(name),
-                                                           stmts[i]->span);
+            for (auto& h : hoists) {
+                std::string name = std::string(h.prefix) + std::to_string(counter_++);
+                auto let = std::make_unique<ast::LetStmt>(name, nullptr, std::move(*h.slot));
+                *h.slot = std::make_unique<ast::Expr>(std::make_unique<ast::IdentExpr>(name),
+                                                      stmts[i]->span);
                 stmts.insert(stmts.begin() + static_cast<std::ptrdiff_t>(i),
                              std::make_unique<ast::Stmt>(std::move(let), stmts[i]->span));
                 ++i;  // 挿入した退避letの分だけ現在の文の位置を進める
@@ -130,7 +146,7 @@ class MatchHoister {
     }
 
     // 1つの文から退避対象matchを収集し、内包する文リストを再帰処理する
-    void collect_from_stmt(ast::Stmt& s, std::vector<ast::MatchExpr*>& out) {
+    void collect_from_stmt(ast::Stmt& s, std::vector<HoistSlot>& out) {
         if (auto* let = s.as<ast::LetStmt>()) {
             if (let->init) {
                 collect(*let->init, out);
@@ -191,13 +207,13 @@ class MatchHoister {
     }
 
     // 文の実行時に無条件で1回評価される部分式から退避対象matchを収集する（短絡評価の右辺・条件分岐の枝には入らない）
-    void collect(ast::Expr& e, std::vector<ast::MatchExpr*>& out) {
+    void collect(ast::Expr& e, std::vector<HoistSlot>& out) {
         if (auto* m = e.as<ast::MatchExpr>()) {
             // scrutinee内のネストしたmatchを先に退避する（挿入順=評価順を保つ）
             if (m->scrutinee) {
                 collect(*m->scrutinee, out);
                 if (contains_call(*m->scrutinee)) {
-                    out.push_back(m);
+                    out.push_back({&m->scrutinee, "__match_scrutinee_expr_"});
                 }
             }
             // アームの式本体・ガードは条件評価のため対象外。
@@ -246,6 +262,12 @@ class MatchHoister {
         if (auto* mem = e.as<ast::MemberExpr>()) {
             if (mem->object) {
                 collect(*mem->object, out);
+                // 組み込みResult/Optionメソッドの呼び出しレシーバを退避する
+                // （脱糖でレシーバが複製されるため、呼び出しを含むと多重評価で壊れる）
+                if (mem->is_method_call && is_builtin_sum_method(mem->member) &&
+                    contains_call(*mem->object)) {
+                    out.push_back({&mem->object, "__enum_recv_expr_"});
+                }
             }
             for (auto& arg : mem->args) {
                 if (arg) {
@@ -260,6 +282,17 @@ class MatchHoister {
             }
             if (idx->index) {
                 collect(*idx->index, out);
+            }
+            return;
+        }
+        if (auto* lit = e.as<ast::LiteralExpr>()) {
+            // 文字列リテラルの補間部分式は文の実行時に無条件で評価されるため退避対象に含める。
+            // 脱糖は型検査より前のここで一度だけ行う（型検査側の脱糖は冪等ガードで素通り）
+            desugar_string_interpolation(*lit, e.span);
+            for (auto& [content, part] : lit->interp_parts) {
+                if (part) {
+                    collect(*part, out);
+                }
             }
             return;
         }

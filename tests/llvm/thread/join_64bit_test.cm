@@ -1,0 +1,16 @@
+// 回帰(R25): join()の戻り値が64bit（long）で受かる（従来はintで上位32bitが無言欠落していた）
+import std::io::println;
+import native::thread::{spawn, join};
+
+void* worker(void* arg) {
+    // 0x1_0000_0007 = 4294967303（int32に収まらない値）
+    return 4294967303 as void*;
+}
+
+int main() {
+    const ulong t = spawn(&worker as void*);
+    const long r = join(t);
+    println("r={r}");
+    println("upper_preserved={r == 4294967303}");
+    return 0;
+}

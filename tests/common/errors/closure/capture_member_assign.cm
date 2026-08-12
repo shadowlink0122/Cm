@@ -1,0 +1,10 @@
+// 回帰(R4): キャプチャした構造体のメンバ書き込みも値キャプチャのため診断付き拒否（従来はjsだけ伝播しバックエンド分岐していた）
+import std::io::println;
+struct Point { int x; int y; }
+int main() {
+    Point p = {x: 10, y: 20};
+    const void*() setter = () => { p.x = 100; };
+    setter();
+    println("p.x = {p.x}");
+    return 0;
+}

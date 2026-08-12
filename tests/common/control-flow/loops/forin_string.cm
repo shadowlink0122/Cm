@@ -1,0 +1,42 @@
+// 文字列に対する for-in（局所処理調査「その他」の for-in string 非対応の解消）:
+// for (char ch in s) が s[i] と同じバイト単位で char を反復する。空文字列・break・ネストも動作する。
+// 旧: For-in requires an iterable type (array) で拒否されていた
+import std::io::println;
+
+int main() {
+    // 基本: 文字列変数を反復
+    string s = "hello";
+    for (char ch in s) {
+        println(ch);
+    }
+
+    // 文字列リテラルを反復し件数を数える
+    int count = 0;
+    for (auto c in "abc") {
+        count = count + 1;
+    }
+    println(count);
+
+    // 空文字列: 0回
+    for (char ch in "") {
+        println("unreachable");
+    }
+    println("empty-ok");
+
+    // break
+    for (char ch in "abcde") {
+        if (ch == 'c') {
+            break;
+        }
+        println(ch);
+    }
+
+    // ネスト
+    for (char x in "ab") {
+        for (char y in "12") {
+            println("{x}{y}");
+        }
+    }
+
+    return 0;
+}

@@ -1,0 +1,40 @@
+import std::io::println;
+
+// C12回帰: 条件腕（三項演算子・短絡評価の右辺）内で完結する一時のdropパスの検証。
+// 腕内で確保され腕内で消費される一時（len呼び出しへ渡る連結結果等）は腕ブロック内で解放され、
+// 腕の結果値としてエスケープする一時は解放されないことを、出力一致と値の健全性で確認する。
+
+string wrap(string s) {
+    return "<" + s + ">";
+}
+
+int main() {
+    string x = "he";
+    string y = "wo";
+
+    // 腕内で完結する一時: (x + "llo") は len 取得後に腕内で解放される
+    int i = 0;
+    while (i < 4) {
+        int r = (i % 2 == 0) ? (x + "llo").len() : (y + "rld" + "!").len();
+        println(r);
+        i++;
+    }
+
+    // 短絡評価の右辺で完結する一時: (x + y) は len 比較後に腕内で解放される
+    bool t1 = true && (x + y).len() > 3;
+    bool t2 = false || (y + x).len() > 100;
+    println("{t1} {t2}");
+
+    // 腕の結果値としてエスケープする一時: 解放されず変数の値が生きている
+    string s = (x.len() > 1) ? (x + "llo") : (y + "rld");
+    println(s);
+
+    // ユーザー関数（所有権を保持しうる）へ渡った腕内一時: 解放されない
+    string w = (s.len() > 3) ? wrap(x + y) : wrap(y + x);
+    println(w);
+
+    // ネストした三項の腕内一時
+    int deep = (x.len() == 2) ? ((y.len() == 2) ? (x + y + "!").len() : 0) : 1;
+    println(deep);
+    return 0;
+}

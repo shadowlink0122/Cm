@@ -40,7 +40,7 @@ export struct IoError {
 
 impl IoError {
     /// 新しいIoErrorを作成
-    IoError new(IoErrorKind kind, string message) {
+    static IoError new(IoErrorKind kind, string message) {
         IoError err;
         err.kind = kind;
         err.message = message;
@@ -48,23 +48,23 @@ impl IoError {
     }
 
     /// NotFoundエラーを作成
-    IoError not_found(string path) {
-        return IoError.new(IoErrorKind::NotFound, "file not found: " + path);
+    static IoError not_found(string path) {
+        return IoError::new(IoErrorKind::NotFound, "file not found: " + path);
     }
 
     /// PermissionDeniedエラーを作成
-    IoError permission_denied(string path) {
-        return IoError.new(IoErrorKind::PermissionDenied, "permission denied: " + path);
+    static IoError permission_denied(string path) {
+        return IoError::new(IoErrorKind::PermissionDenied, "permission denied: " + path);
     }
 
     /// InvalidInputエラーを作成
-    IoError invalid_input(string msg) {
-        return IoError.new(IoErrorKind::InvalidInput, msg);
+    static IoError invalid_input(string msg) {
+        return IoError::new(IoErrorKind::InvalidInput, msg);
     }
 
     /// その他のエラーを作成
-    IoError other(string msg) {
-        return IoError.new(IoErrorKind::Other, msg);
+    static IoError other(string msg) {
+        return IoError::new(IoErrorKind::Other, msg);
     }
 
     /// エラーを文字列に変換
@@ -88,41 +88,6 @@ export enum IoResult<T> {
     Err(IoError)
 }
 
-impl<T> IoResult<T> {
-    /// 成功かどうか
-    bool is_ok() {
-        match self {
-            Ok(_) => return true;
-            Err(_) => return false;
-        }
-    }
-
-    /// 失敗かどうか
-    bool is_err() {
-        return !self.is_ok();
-    }
-
-    /// 成功値を取得（失敗時はパニック）
-    T unwrap() {
-        match self {
-            Ok(v) => return v;
-            Err(e) => panic("IoResult::unwrap called on Err: " + e.message);
-        }
-    }
-
-    /// 成功値を取得、失敗時はデフォルト値
-    T unwrap_or(T default_val) {
-        match self {
-            Ok(v) => return v;
-            Err(_) => return default_val;
-        }
-    }
-
-    /// エラーを取得（成功時はパニック）
-    IoError unwrap_err() {
-        match self {
-            Ok(_) => panic("IoResult::unwrap_err called on Ok");
-            Err(e) => return e;
-        }
-    }
-}
+// 注: IoResult<T>のis_ok/unwrap等のメソッド提供は、ジェネリックenumのimplメソッドが
+// 言語未対応（特殊化メソッド本体のモノモーフ化が未実装）のため見送り。
+// 呼び出し側は match (r) { IoResult::Ok(v) => {...} IoResult::Err(e) => {...} } で分岐する（R22）

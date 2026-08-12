@@ -1,0 +1,12 @@
+// スライスの境界外書き（M1: --sanitize=boundsでcm_bounds_errorトラップ。
+// 無効時の挙動はバックエンド依存で分裂していた: native=SIGSEGV/wasm=不定書き込み/js=自動拡張）
+import std::io::println;
+
+int main() {
+    int[] a;
+    a.push(1);
+    a.push(2);
+    a[10] = 99;
+    println("after");
+    return 0;
+}

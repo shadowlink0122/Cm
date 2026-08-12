@@ -1,5 +1,6 @@
 #include "sccp.hpp"
 
+#include "../core/effects.hpp"
 #include "const_eval.hpp"
 
 #include <optional>
@@ -63,6 +64,19 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         }
     }
 
+    // グローバル/静的変数もOverdefinedに初期化する（W4）。
+    // 関数内に代入が無いグローバルはUndefined（楽観）のまま残り、
+    // acc + g がUndefined・merge(Const, Undefined)=Const の楽観連鎖で
+    // ループ内の読みが初期値の定数へ畳まれていた（実値は他関数の書き込みで変わる）
+    for (LocalId i = 0; i < local_count; ++i) {
+        if (is_call_clobbered(func, i)) {
+            for (size_t b = 0; b < block_count; ++b) {
+                in_states[b][i] = {LatticeKind::Overdefined, {}};
+                out_states[b][i] = {LatticeKind::Overdefined, {}};
+            }
+        }
+    }
+
     // Bug#5修正: ASM出力変数を事前にOverdefined化
     // インラインアセンブリの出力変数は実行時に決定されるため、定数として扱えない。
     // ループ前の初期代入（例: byte_val = 0）により定数推論されると、compute_successorsがループ本体への到達を遮断し、ASM出力のOverdefined化が反復解析で反映されない。事前マーキングで安全に回避する。
@@ -72,14 +86,12 @@ bool SparseConditionalConstantPropagation::run(MirFunction& func) {
         for (const auto& stmt : block->statements) {
             if (!stmt || stmt->kind != MirStatement::Asm)
                 continue;
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    if (operand.local_id < local_count) {
+            for (LocalId out : effects_of(*stmt).asm_outputs) {
+                {
+                    if (out < local_count) {
                         for (size_t b = 0; b < block_count; ++b) {
-                            in_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
-                            out_states[b][operand.local_id] = {LatticeKind::Overdefined, {}};
+                            in_states[b][out] = {LatticeKind::Overdefined, {}};
+                            out_states[b][out] = {LatticeKind::Overdefined, {}};
                         }
                     }
                 }
@@ -244,6 +256,15 @@ void SparseConditionalConstantPropagation::analyze(
             }
         }
 
+        // グローバル/静的変数は常にOverdefined（W4）。
+        // 関数内に代入が無いグローバルはUndefined（楽観）のまま残り、
+        // merge(Const, Undefined)=Constの楽観連鎖でループ内の読みが初期値定数へ畳まれていた
+        for (LocalId li = 0; li < merged_in.size() && li < func.locals.size(); ++li) {
+            if (is_call_clobbered(func, li)) {
+                merged_in[li] = {LatticeKind::Overdefined, {}};
+            }
+        }
+
         bool in_changed = !states_equal(merged_in, in_states[block_id]);
         if (in_changed) {
             in_states[block_id] = std::move(merged_in);
@@ -316,14 +337,10 @@ SparseConditionalConstantPropagation::transfer_block(const MirFunction& func,
         // Asmステートメント: 出力オペランドの変数をOverdefinedにマーク
         // インラインアセンブリは実行時に変数を変更するため、定数伝播を抑制
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                // 出力オペランド（+r, =rなど）は定数として扱えない
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    if (operand.local_id < state.size()) {
-                        state[operand.local_id] = {LatticeKind::Overdefined, {}};
-                    }
+            // 出力オペランド（+r, =rなど）は定数として扱えない（効果モデル参照）
+            for (LocalId out : effects_of(*stmt).asm_outputs) {
+                if (out < state.size()) {
+                    state[out] = {LatticeKind::Overdefined, {}};
                 }
             }
             continue;
@@ -419,9 +436,12 @@ std::vector<BlockId> SparseConditionalConstantPropagation::compute_successors(
             if (discr.kind == LatticeKind::Constant) {
                 if (auto* v = std::get_if<int64_t>(&discr.constant.value)) {
                     BlockId target = data.otherwise;
-                    for (const auto& [case_value, case_target] : data.targets) {
-                        if (case_value == *v) {
-                            target = case_target;
+                    // マスク付きcase（SVのdon't-care。SV-N3）は (v & mask) == value で先頭から順に判定する
+                    for (size_t ci = 0; ci < data.targets.size(); ++ci) {
+                        const int64_t mask =
+                            ci < data.target_masks.size() ? data.target_masks[ci] : -1;
+                        if ((*v & mask) == data.targets[ci].first) {
+                            target = data.targets[ci].second;
                             break;
                         }
                     }
@@ -545,8 +565,8 @@ bool SparseConditionalConstantPropagation::can_bind_constant(const MirFunction& 
     if (local >= func.locals.size()) {
         return false;
     }
-    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、定数として束縛しない（callをまたいだ古い値の伝播を防ぐ）
-    if (func.locals[local].is_global || func.locals[local].is_static) {
+    // グローバル/static変数は関数呼び出しによって外部から変更されうるため、定数として束縛しない（callをまたいだ古い値の伝播を防ぐ。効果モデルの共有述語）
+    if (is_call_clobbered(func, local)) {
         return false;
     }
     const auto& local_type = func.locals[local].type;
@@ -632,16 +652,23 @@ std::optional<MirConstant> SparseConditionalConstantPropagation::eval_binary_op(
                 case MirBinaryOp::BitXor:
                     result.value = const_eval::normalize_int(lv ^ rv, result.type);
                     return result;
-                case MirBinaryOp::Shl:
+                case MirBinaryOp::Shl: {
+                    // シフト量は結果型の幅でマスクする（V8。&63固定だとintの32以上シフトが
+                    // 畳み込み経路のみ0になり、実行時のmod幅挙動と分裂していた）
+                    const uint64_t shl_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        static_cast<int64_t>(ulv << (urv & 63)), result.type);
+                        static_cast<int64_t>(ulv << (urv & shl_mask)), result.type);
                     return result;
-                case MirBinaryOp::Shr:
-                    // 符号なし型は論理シフト、符号付き型は算術シフト
+                }
+                case MirBinaryOp::Shr: {
+                    // 符号なし型は論理シフト、符号付き型は算術シフト（シフト量は結果型幅マスク。V8）
+                    const uint64_t shr_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        uns ? static_cast<int64_t>(ulv >> (urv & 63)) : lv >> (rv & 63),
+                        uns ? static_cast<int64_t>(ulv >> (urv & shr_mask))
+                            : lv >> (rv & static_cast<int64_t>(shr_mask)),
                         result.type);
                     return result;
+                }
                 case MirBinaryOp::Eq:
                     result.value = (lv == rv);
                     return result;
@@ -734,13 +761,10 @@ bool SparseConditionalConstantPropagation::apply_constants(
 
             // ASMステートメント: 出力オペランドをOverdefinedにマーク
             if (stmt->kind == MirStatement::Asm) {
-                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                        if (operand.local_id < state.size()) {
-                            state[operand.local_id] = {LatticeKind::Overdefined, {}};
-                        }
+                // 出力オペランドをOverdefinedにマーク（効果モデル参照）
+                for (LocalId out : effects_of(*stmt).asm_outputs) {
+                    if (out < state.size()) {
+                        state[out] = {LatticeKind::Overdefined, {}};
                     }
                 }
                 continue;
@@ -1005,9 +1029,12 @@ std::optional<BlockId> SparseConditionalConstantPropagation::simplify_switch(
         LatticeValue discr = eval_operand(func, *switch_data.discriminant, state);
         if (discr.kind == LatticeKind::Constant) {
             if (auto* v = std::get_if<int64_t>(&discr.constant.value)) {
-                for (const auto& [case_value, case_target] : switch_data.targets) {
-                    if (case_value == *v) {
-                        return case_target;
+                // マスク付きcase（SVのdon't-care。SV-N3）は (v & mask) == value で先頭から順に判定する
+                for (size_t ci = 0; ci < switch_data.targets.size(); ++ci) {
+                    const int64_t mask =
+                        ci < switch_data.target_masks.size() ? switch_data.target_masks[ci] : -1;
+                    if ((*v & mask) == switch_data.targets[ci].first) {
+                        return switch_data.targets[ci].second;
                     }
                 }
                 return switch_data.otherwise;

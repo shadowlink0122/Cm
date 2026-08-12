@@ -107,6 +107,34 @@ struct Pair<T, U> {
 ```
 
 Auto implementations for generic structs are generated per instantiation after monomorphization.
+In addition to the Eq/Ord operators, the Clone/Hash/Debug/Display methods (`clone()`/`hash()`/`debug()`/`toString()`) are callable on specialized receivers such as `G<int>`.
+Type arguments are validated against the table below at every instantiation, so unsupported combinations become compile errors at the usage site.
+
+### Union and slice type arguments (v0.17.0)
+
+Eq works for specializations whose type argument is a union type (including typedefs) or a dynamic slice (previously unions were rejected with "union type arguments are not supported" and slices fell back to a raw binary comparison with wrong results).
+Union equality compares the tag plus the payload of the active variant; slice equality compares content (length plus elements).
+Passing the same union as a typedef name (`Box<IU>`) or in its spelled-out form converges to a single specialization.
+
+```cm
+typedef IU = int | string;
+
+#[derive(Eq)]
+struct Box<T> { T v; }
+
+int main() {
+    Box<IU> a = { v: 1 };
+    Box<IU> b = { v: 1 };
+    Box<IU> s = { v: "x" };
+    println("{a == b}");  // true (same variant, same value)
+    println("{a == s}");  // false (different variants)
+
+    Box<int[]> p = { v: [1, 2, 3] };
+    Box<int[]> q = { v: [1, 2, 3] };
+    println("{p == q}");  // true (slices compare by content)
+    return 0;
+}
+```
 
 ## Supported Field Types
 
@@ -116,10 +144,14 @@ Auto implementations for generic structs are generated per instantiation after m
 | float / double | ✅ | ✅ | ❌ | ✅ | ✅ |
 | string | ✅ | ✅ | ❌ | ✅ | ✅ |
 | nested struct | ✅ | ✅ | ✅ | ✅ | ✅ |
+| value enum (no payload) | ✅ | ✅ | ✅ as int | ✅ as int | ✅ |
 | fixed-size 1-D array | ✅ | ❌ | ✅ integer elements only | ❌ | ✅ |
-| multi-dim array / slice / union | ❌ | ❌ | ❌ | ❌ | ✅ |
+| union | ✅ tag + payload comparison (v0.17.0) | ❌ | ❌ | ❌ | ✅ |
+| dynamic slice | ✅ as a type argument only, content comparison (v0.17.0; declared fields are ❌) | ❌ | ❌ | ❌ | ✅ |
+| multi-dim array / payload enum | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-Combinations marked ❌ produce a compile error (never invalid code generation).
+Combinations marked ❌ produce a compile error (never invalid code generation). For generic structs the same rules are checked on the field types after substituting the type arguments.
+Value-enum fields use int semantics: Debug/Display format them as their numeric value (e.g. `c: 5`).
 
 ## Invalid Usages
 

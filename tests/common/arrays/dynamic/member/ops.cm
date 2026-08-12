@@ -1,0 +1,44 @@
+import std::io::println;
+// slice_member_ops.cm - C11回帰: 構造体メンバのスライスに対するpop/delete/clearが機能すること
+// 以前はレシーバがHirMemberの場合に黙って欠落し、pushだけが動作していた
+// 補間内のチェーンレシーバは既知の制限のため、いったん変数に受けてから出力する
+
+struct Bag {
+    int[] items;
+    short[] tags;
+}
+
+int main() {
+    Bag b;
+    b.items = [];
+    b.items.push(10);
+    b.items.push(20);
+    b.items.push(30);
+    b.items.push(40);
+
+    // メンバスライスのpop
+    const int popped = b.items.pop();
+    const int len1 = b.items.len();
+    println("pop={popped} len={len1}");
+
+    // メンバスライスのdelete（index=1の要素を削除）
+    b.items.delete(1);
+    const int len2 = b.items.len();
+    const int i0 = b.items[0];
+    const int i1 = b.items[1];
+    println("after delete: len={len2} i0={i0} i1={i1}");
+
+    // short要素のメンバスライスでもpopが2バイト幅で正しく動くこと
+    b.tags = [];
+    b.tags.push(100 as short);
+    b.tags.push(200 as short);
+    const short t = b.tags.pop();
+    const int tag_len = b.tags.len();
+    println("tag_pop={t} tag_len={tag_len}");
+
+    // メンバスライスのclear
+    b.items.clear();
+    const int len3 = b.items.len();
+    println("after clear: len={len3}");
+    return 0;
+}

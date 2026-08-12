@@ -22,7 +22,7 @@ int main() {
     println("Main thread waiting for worker");
 
     // スレッドの終了を待機
-    const int result = join(t);
+    const int result = join(t) as int;
 
     print("Worker returned: ");
     println(result);

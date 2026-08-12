@@ -12,7 +12,44 @@ pthreadベースのMutex（排他ロック）とRwLock（読み書きロック�
 
 ---
 
-## Mutex
+## 高レベルAPI: Mutex\<T\> / RwLock\<T\>（v0.17.0で利用可能に）
+
+型安全なジェネリックMutex/RwLockが使えます（従来はimplメソッドの`export`修飾子がパース不能でモジュール自体がimportできませんでした）:
+
+```cm
+import std::io::println;
+import native::sync::{Mutex, RwLock};
+
+int main() {
+    // Mutex<T>: 値を保持する排他ロック
+    Mutex<int> m = Mutex<int>::new(10);
+    MutexGuard<int> g = m.lock();
+    int* p = g.get();
+    *p = *p + 5;
+    g.unlock();
+    println("{m.value}");   // 15
+
+    // RwLock<T>: 読み書きロック
+    RwLock<int> rw = RwLock<int>::new(3);
+    RwLockWriteGuard<int> w = rw.write();
+    *w.get() = 7;
+    w.unlock();
+    RwLockReadGuard<int> r = rw.read();
+    println("{*r.get()}");  // 7
+    r.unlock();
+    return 0;
+}
+```
+
+| API | 説明 |
+|------|------|
+| `Mutex<T>::new(value)` / `m.lock()` / `m.try_lock()` | 生成・ロック（ガード取得）・試行 |
+| `MutexGuard<T>.get()` / `.unlock()` | 値ポインタ取得・解放 |
+| `RwLock<T>::new(value)` / `rw.read()` / `rw.write()` | 生成・読み/書きガード取得 |
+
+ガードの`unlock()`は明示呼び出しです（スコープ連動の自動解放は未対応）。低レベルAPIも引き続き利用できます。
+
+## 低レベルAPI
 
 ### 基本的な使い方
 

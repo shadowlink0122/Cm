@@ -35,6 +35,12 @@ utiny ut = 255;       // 8bit: 0 〜 255
 ushort us = 65535;    // 16bit: 0 〜 65535
 uint ui = 100;        // 32bit: 0 〜 2^32-1
 ulong ul = 2000000;   // 64bit: 0 〜 2^64-1
+
+// 桁区切りアンダースコア（v0.17.0）: 全基数・小数部で使用可
+int million = 1_000_000;
+int mask = 0b1010_1010;
+long color = 0xFF_FF_FF as long;
+double pi_ish = 3.141_592;
 ```
 
 ### 浮動小数点型
@@ -47,6 +53,8 @@ double d = 3.14159;   // 64bit倍精度
 ufloat uf = 2.5;      // 32bit非負
 udouble ud = 10.0;    // 64bit非負
 ```
+
+`ufloat`/`udouble`への負リテラルの代入は警告（`--strict`ではエラー）になります。実行時に負へ転じる演算までは検査されないため、非負の保証が必要な箇所では値の検証を併用してください。
 
 ### その他の型
 
@@ -76,7 +84,13 @@ int y = 2;
 int z = 3;
 ```
 
-**注意:** Cmには型推論（`var`キーワード）はありません。型は常に明示的に指定する必要があります。
+**型推論（auto / var）:** 初期化式から型を推論する場合は `auto`（または別名の `var`）を使えます。推論に頼らず型を明示するスタイルも従来どおり使えます。
+
+```cm
+auto x = 42;        // int と推論
+var name = "Cm";    // string と推論（var は auto の別名）
+auto pi = 3.14;     // double と推論
+```
 
 ---
 
@@ -142,15 +156,26 @@ int main() {
 
 ### 暗黙的な型変換
 
+値を保存する拡大変換（`int→long`・`short→int`・`int→double`・`float→double`等）は暗黙に行えます。
+
 ```cm
 int i = 10;
-double d = i;    // int → double（OK）
+double d = i;    // int → double（OK: 拡大変換）
+long l = i;      // int → long（OK: 拡大変換）
+```
 
+情報を失いうる縮小変換（`double→int`・`long→int`・`int→short`等）や符号解釈が変わる変換（`int→uint`等）は警告になります（`check/lint --strict` ではエラー）。
+この診断は変数宣言・代入・returnに加え、関数引数・配列要素リテラル・構造体フィールド初期化でも同じ規則で出ます。
+宣言型に適合するリテラル（`short s = 5;`・`float f = 2.5;`）と、`len()`・`sizeof` の結果を受けるイディオムのための `uint`/`usize`→`int` は例外として無診断です。
+
+```cm
 double pi = 3.14;
-// int x = pi;   // double → int（精度が失われる）
+// int x = pi;   // double → int は縮小変換の警告（asの付与を提案される）
 ```
 
 ### 明示的な型変換（キャスト）
+
+縮小の意図があるときは `as` で明示します。
 
 ```cm
 double pi = 3.14159;

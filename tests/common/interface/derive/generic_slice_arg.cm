@@ -1,0 +1,20 @@
+// derive付きジェネリック構造体のスライス型引数特殊化: スライス==が内容比較のため正常動作する
+// （derive単一ソース化で診断から正常系へ昇格。従来は生バイナリ比較の無言誤値→診断→内容比較の順に是正）
+import std::io::println;
+
+struct Box<T> with Eq {
+    T v;
+}
+
+int main() {
+    Box<int[]> a = { v: [1, 2, 3] };
+    Box<int[]> b = { v: [1, 2, 3] };
+    println("{a == b}");
+    // 内容が異なるスライスは不等（strcmp化の偶然一致でなく内容比較であることの検証）
+    Box<int[]> c = { v: [1, 2, 4] };
+    println("{a == c}");
+    // 長さが異なるスライスも不等
+    Box<int[]> d = { v: [1, 2] };
+    println("{a == d}");
+    return 0;
+}

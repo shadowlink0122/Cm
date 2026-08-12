@@ -1,0 +1,14 @@
+//! platform: !js|sv
+import std::io::println;
+// void* 配列には関数ポインタも格納できる。取り出しは auto、typeof は *void、cast で関数ポインタ型に戻して呼び出す（Req4の関数ポインタ版）
+int add(int a, int b) { return a + b; }
+int sub(int a, int b) { return a - b; }
+int main() {
+    void*[2] fns = [&add, &sub];
+    auto f0 = fns[0];
+    const string ty = typeof(f0);
+    int*(int, int) op0 = f0 as int*(int, int);
+    int*(int, int) op1 = fns[1] as int*(int, int);
+    println("{ty} {op0(3, 2)} {op1(10, 3)}");
+    return 0;
+}

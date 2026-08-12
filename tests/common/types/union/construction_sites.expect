@@ -1,0 +1,13 @@
+field1: true
+fieldN: true
+assign: true
+ret: true true
+payload: 10 2.5
+push: true true
+elems: 5 two
+slicelit: true true
+fixedlit: true true
+true false
+default: true
+bigvar: true
+bigpayload: 3

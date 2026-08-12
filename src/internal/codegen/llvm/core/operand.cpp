@@ -3,6 +3,7 @@
 
 #include "internal/base/debug/codegen.hpp"
 #include "internal/codegen/llvm/monitoring/compilation_guard.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -31,19 +32,11 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     // 循環参照の検出
     if (processing.count(&operand) > 0) {
-        // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
-        // "\n";
-        if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {
-            // auto& place = std::get<mir::MirPlace>(operand.data);
-            // std::cerr << "[MIR2LLVM]        Place local: " << place.local << "\n";
-        }
+        if (operand.kind == mir::MirOperand::Copy || operand.kind == mir::MirOperand::Move) {}
         return llvm::UndefValue::get(ctx.getI64Type());
     }
 
     if (recursion_depth >= MAX_RECURSION_DEPTH) {
-        // std::cerr << "[MIR2LLVM]        Current depth: " << recursion_depth << "\n";
-        // std::cerr << "[MIR2LLVM]        Operand kind: " << static_cast<int>(operand.kind) <<
-        // "\n";
         return llvm::UndefValue::get(ctx.getI64Type());
     }
 
@@ -66,13 +59,10 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
 
     RecursionGuard guard(recursion_depth, processing, &operand);
 
-    // // debug_msg("MIR2LLVM", "convertOperand called");
-
     switch (operand.kind) {
         case mir::MirOperand::Copy:
         case mir::MirOperand::Move: {
             auto& place = std::get<mir::MirPlace>(operand.data);
-            // // debug_msg("MIR2LLVM", "Place operand");
 
             // プロジェクションがある場合（フィールドアクセスなど）
             if (!place.projections.empty()) {
@@ -179,6 +169,15 @@ llvm::Value* MIRToLLVM::convertOperand(const mir::MirOperand& operand) {
                                                         baseLocal->type_args[0]) {
                                                         // type_argsがある場合は直接使用
                                                         currentType = baseLocal->type_args[0];
+                                                    } else if (cm::ast::typekey::is_encoded_key(
+                                                                   baseLocal->name)) {
+                                                        // $エンコード名はtypekeyの可逆復号で第1型引数を得る（$移行用・フラット規約下では不活性）
+                                                        auto decoded =
+                                                            cm::ast::typekey::decode_type_args(
+                                                                baseLocal->name);
+                                                        if (!decoded.empty() && decoded[0]) {
+                                                            currentType = decoded[0];
+                                                        }
                                                     } else if (baseLocal->name.find("__") !=
                                                                std::string::npos) {
                                                         // マングリング名から型引数を抽出
@@ -554,99 +553,18 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                                          targetStructType->kind == hir::TypeKind::Generic)) {
                     structName = targetStructType->name;
 
-                    // ジェネリック構造体の場合、型引数を考慮した名前を生成
-                    // 例: Node<int> -> Node__int
-                    // 既にマングリング済み(__含む)の場合はスキップ
+                    // 受け手構造体の参照キーはモノモーフ化のキー産生と同じ正準関数で構築する（mono-flat-name-elimination②）。
+                    // 従来は手組みのフラット連結でネスト・特殊化引数の乖離があり、フィールド投影の構造体解決が外れていた
                     if (!targetStructType->type_args.empty() &&
-                        structName.find("__") == std::string::npos) {
-                        for (const auto& typeArg : targetStructType->type_args) {
-                            if (typeArg) {
-                                structName += "__";
-                                if (typeArg->kind == hir::TypeKind::Struct) {
-                                    structName += typeArg->name;
-                                } else {
-                                    switch (typeArg->kind) {
-                                        case hir::TypeKind::Int:
-                                            structName += "int";
-                                            break;
-                                        case hir::TypeKind::UInt:
-                                            structName += "uint";
-                                            break;
-                                        case hir::TypeKind::Long:
-                                            structName += "long";
-                                            break;
-                                        case hir::TypeKind::ULong:
-                                            structName += "ulong";
-                                            break;
-                                        case hir::TypeKind::Float:
-                                            structName += "float";
-                                            break;
-                                        case hir::TypeKind::Double:
-                                            structName += "double";
-                                            break;
-                                        case hir::TypeKind::Bool:
-                                            structName += "bool";
-                                            break;
-                                        case hir::TypeKind::Char:
-                                            structName += "char";
-                                            break;
-                                        case hir::TypeKind::String:
-                                            structName += "string";
-                                            break;
-                                        case hir::TypeKind::Pointer: {
-                                            // ポインタ型: ptr_xxx 形式で追加
-                                            structName += "ptr_";
-                                            // 要素型を再帰的に追加
-                                            if (typeArg->element_type) {
-                                                switch (typeArg->element_type->kind) {
-                                                    case hir::TypeKind::Int:
-                                                        structName += "int";
-                                                        break;
-                                                    case hir::TypeKind::UInt:
-                                                        structName += "uint";
-                                                        break;
-                                                    case hir::TypeKind::Long:
-                                                        structName += "long";
-                                                        break;
-                                                    case hir::TypeKind::ULong:
-                                                        structName += "ulong";
-                                                        break;
-                                                    case hir::TypeKind::Float:
-                                                        structName += "float";
-                                                        break;
-                                                    case hir::TypeKind::Double:
-                                                        structName += "double";
-                                                        break;
-                                                    case hir::TypeKind::Bool:
-                                                        structName += "bool";
-                                                        break;
-                                                    case hir::TypeKind::Char:
-                                                        structName += "char";
-                                                        break;
-                                                    case hir::TypeKind::String:
-                                                        structName += "string";
-                                                        break;
-                                                    case hir::TypeKind::Struct:
-                                                        structName += typeArg->element_type->name;
-                                                        break;
-                                                    default:
-                                                        structName += "void";
-                                                        break;
-                                                }
-                                            } else {
-                                                structName += "void";
-                                            }
-                                            break;
-                                        }
-                                        default:
-                                            if (!typeArg->name.empty()) {
-                                                structName += typeArg->name;
-                                            }
-                                            break;
-                                    }
-                                }
-                            }
+                        structName.find("__") == std::string::npos &&
+                        structName.find('$') == std::string::npos) {
+                        std::string base = structName;
+                        auto lt = base.find('<');
+                        if (lt != std::string::npos) {
+                            base = base.substr(0, lt);
                         }
+                        structName = cm::ast::typekey::struct_key_from_tree(
+                            base, targetStructType->type_args);
                     }
 
                     auto it = structTypes.find(structName);
@@ -753,6 +671,68 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                     return nullptr;
                 }
 
+                // スライス型（可変長Array）へのIndexプロジェクション: CmSliceヘッダ経由で要素アドレスを計算する（B4）。
+                // 従来は固定長配列と同じフラットGEPに落ち、ヘッダポインタのスロットを要素列として誤読していた。
+                // 要素が内側スライス（多次元）の場合はインライン格納表現が異なるため従来経路に委ねる
+                {
+                    const bool cur_is_slice =
+                        currentType && currentType->kind == hir::TypeKind::Array &&
+                        !currentType->array_size.has_value() &&
+                        (currentType->dimensions.empty() || currentType->dimensions[0] == 0);
+                    // 内側「スライス」要素のみインラインヘッダ格納として従来経路へ委ねる。
+                    // 固定長配列要素はN×要素ストライドのインラインblobであり、ヘッダ経由のGEPで正しく届く（Y6）
+                    const bool elem_is_inline_slice =
+                        cur_is_slice && currentType->element_type &&
+                        currentType->element_type->kind == hir::TypeKind::Array &&
+                        !currentType->element_type->array_size.has_value();
+                    if (cur_is_slice && !elem_is_inline_slice) {
+                        // 添字値を取得（alloca格納の場合はロードしてi64へ拡張）
+                        llvm::Value* sliceIndexVal = nullptr;
+                        auto slice_idx_it = locals.find(proj.index_local);
+                        if (slice_idx_it != locals.end()) {
+                            sliceIndexVal = slice_idx_it->second;
+                            if (allocatedLocals.count(proj.index_local)) {
+                                llvm::Type* idxType = ctx.getI64Type();
+                                if (currentMIRFunction &&
+                                    proj.index_local < currentMIRFunction->locals.size()) {
+                                    auto& idxLocal = currentMIRFunction->locals[proj.index_local];
+                                    idxType = convertType(idxLocal.type);
+                                }
+                                sliceIndexVal =
+                                    builder->CreateLoad(idxType, sliceIndexVal, "idx_load");
+                                if (idxType->isIntegerTy(32)) {
+                                    sliceIndexVal = builder->CreateSExt(
+                                        sliceIndexVal, ctx.getI64Type(), "idx_ext");
+                                }
+                            }
+                        }
+                        if (!sliceIndexVal) {
+                            cm::debug::codegen::log(cm::debug::codegen::Id::LLVMError,
+                                                    "Cannot get index value for slice access",
+                                                    cm::debug::Level::Error);
+                            return nullptr;
+                        }
+
+                        // addrはCmSlice*を格納するスロット（alloca/フィールドGEP）を指すためまずヘッダポインタをロードする。
+                        // Deref直後等で既にヘッダポインタ値そのものの場合は再ロードしない
+                        llvm::Value* hdrPtr = addr;
+                        if (!llvm::isa<llvm::LoadInst>(addr)) {
+                            hdrPtr = builder->CreateLoad(ctx.getPtrType(), addr, "slice_hdr");
+                        }
+
+                        // CmSliceの先頭フィールドdataを読み、要素型ストライドでGEPする
+                        llvm::Value* dataPtr =
+                            builder->CreateLoad(ctx.getPtrType(), hdrPtr, "slice_data");
+                        llvm::Type* sliceElemType = currentType->element_type
+                                                        ? convertType(currentType->element_type)
+                                                        : ctx.getI32Type();
+                        addr = builder->CreateGEP(sliceElemType, dataPtr, sliceIndexVal,
+                                                  "slice_elem_ptr");
+                        currentType = currentType->element_type;
+                        break;
+                    }
+                }
+
                 // ポインタ型の場合は単純なポインタ演算（フラット化不要）
                 // Deref後のLoadInst結果（ポインタ値）へのインデックスアクセスも含む
                 bool isPointerIndexing =
@@ -806,9 +786,17 @@ llvm::Value* MIRToLLVM::convertPlaceToAddress(const mir::MirPlace& place) {
                         // 通常のポインタ型: element_typeを使用
                         elemType = convertType(currentType->element_type);
                     } else if (currentType && llvm::isa<llvm::LoadInst>(addr)) {
-                        // Deref後（LoadInst結果へのインデックスアクセス）:
-                        // currentType自体が要素型
-                        elemType = convertType(currentType);
+                        // Deref後（LoadInst結果へのインデックスアクセス）。
+                        // pointeeが固定長配列の場合、Indexは「配列内の要素」への添字であり、
+                        // 配列型ストライド（N×要素）でGEPすると要素ずれになる（Y6: rows[0][1]=vが隣要素へ書かれていた）。
+                        // 要素型ストライドでGEPする
+                        if (currentType->kind == hir::TypeKind::Array &&
+                            currentType->array_size.has_value() && currentType->element_type) {
+                            elemType = convertType(currentType->element_type);
+                        } else {
+                            // currentType自体が要素型
+                            elemType = convertType(currentType);
+                        }
                     }
 
                     // addrがポインタ変数を格納している場合、まずポインタ値をロード

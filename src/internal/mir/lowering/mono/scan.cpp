@@ -1,10 +1,13 @@
-// 単相化 - ジェネリック呼び出しのスキャンと型引数の推論
+// 単相化 - ジェネリック呼び出しのスキャンと型引数の構造的単一化による推論
+// （monomorphization-typed-instantiation: 特殊化の同定は型ノードで行い、名前からの型逆算は
+//   ローワリングが埋め込んだマングル済み呼び出し名の復元境界decode_type_nameの1箇所に限定する）
 
 #include "internal/base/debug.hpp"
 #include "internal/base/target.hpp"
-#include "internal/mir/lowering/mono_internal.hpp"
-#include "internal/mir/lowering/monomorphization.hpp"
-#include "internal/mir/lowering/monomorphization_utils.hpp"
+#include "internal/mir/lowering/mono/internal.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
+#include "internal/mir/lowering/mono/utils.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <map>
 #include <memory>
@@ -18,409 +21,365 @@
 
 namespace cm::mir {
 
-// ジェネリック関数呼び出しをスキャン
+namespace {
+
+// 型ツリーが指定のジェネリックパラメータ名そのものか
+bool is_generic_param_of(const hir::TypePtr& t, const hir::HirFunction* callee) {
+    if (!t || !callee) {
+        return false;
+    }
+    for (const auto& gp : callee->generic_params) {
+        if (t->name == gp.name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+// パラメータ型と実引数型の構造的単一化。
+// 名前ベース推論（T[]→"int[]"文字列の切り出し・Pair__int__stringの再分解）を置換し、
+// Pointer/Arrayの要素型・Structのtype_argsを再帰的に照合して型パラメータを束縛する
+void Monomorphization::unify_type_param(
+    const hir::TypePtr& param_type, const hir::TypePtr& arg_type, const hir::HirFunction* callee,
+    std::unordered_map<std::string, hir::TypePtr>& inferred) const {
+    if (!param_type || !arg_type) {
+        return;
+    }
+
+    // パラメータが型パラメータそのもの（T ← 実引数型）
+    if (is_generic_param_of(param_type, callee)) {
+        // 自己推論（T=T）と未解決ジェネリック残存の束縛は無意味なので除外する
+        if (!tree_has_generic_param(arg_type) && !arg_type->is_error() &&
+            inferred.find(param_type->name) == inferred.end()) {
+            inferred[param_type->name] = arg_type;
+            debug_msg("MONO", "Unified " + param_type->name + " = " + get_type_name(arg_type));
+        }
+        return;
+    }
+
+    // ポインタ/配列（スライス含む）: 要素型を再帰照合
+    if ((param_type->kind == hir::TypeKind::Pointer || param_type->kind == hir::TypeKind::Array ||
+         param_type->kind == hir::TypeKind::Reference) &&
+        param_type->element_type) {
+        hir::TypePtr arg_elem;
+        if (arg_type->kind == param_type->kind && arg_type->element_type) {
+            arg_elem = arg_type->element_type;
+        } else if (param_type->kind == hir::TypeKind::Pointer &&
+                   arg_type->kind == hir::TypeKind::Struct) {
+            // 実引数側がフラット名構造体（Node__Item等）へ縮退している場合は復元して照合する
+            arg_elem = nullptr;
+        }
+        if (arg_elem) {
+            unify_type_param(param_type->element_type, arg_elem, callee, inferred);
+        }
+        if (arg_elem || param_type->kind != hir::TypeKind::Pointer) {
+            return;
+        }
+    }
+
+    // 構造体: type_argsを対で照合する。実引数側に型引数ツリーが無い場合（フラット名縮退）は
+    // decode_type_nameで復元してから照合する
+    hir::TypePtr arg_struct = arg_type;
+    if (param_type->kind == hir::TypeKind::Pointer && param_type->element_type) {
+        // パラメータがポインタで実引数が構造体名のみ（*が名前に埋まったケース）: 要素型で照合
+        unify_type_param(param_type->element_type, arg_struct, callee, inferred);
+        return;
+    }
+    if (!param_type->type_args.empty()) {
+        if (arg_struct->type_args.empty() && !arg_struct->name.empty()) {
+            arg_struct = decode_type_name(arg_struct->name);
+        }
+        if (arg_struct && !arg_struct->type_args.empty()) {
+            for (size_t i = 0; i < param_type->type_args.size() && i < arg_struct->type_args.size();
+                 ++i) {
+                unify_type_param(param_type->type_args[i], arg_struct->type_args[i], callee,
+                                 inferred);
+            }
+        }
+    }
+}
+
+// フラット名/表示名を型ツリーへ復元する単一の境界。
+// ローワリングが呼び出し名やローカル型名に埋め込んだマングル済み名（Vector__int / Vector<int> /
+// ptr_int / *int / int）をここでのみ型ノードへ戻す（他の箇所での名前解析は禁止）
+hir::TypePtr Monomorphization::decode_type_name(const std::string& name) const {
+    if (name.empty()) {
+        return nullptr;
+    }
+    // *T 形式（ローワリングの表示形）
+    if (name.front() == '*') {
+        auto elem = decode_type_name(name.substr(1));
+        auto t = hir::make_pointer(elem);
+        t->name = "ptr_" + (elem ? elem->name : std::string("void"));
+        return t;
+    }
+    // T* 形式
+    if (name.size() > 1 && name.back() == '*') {
+        auto elem = decode_type_name(name.substr(0, name.size() - 1));
+        auto t = hir::make_pointer(elem);
+        t->name = "ptr_" + (elem ? elem->name : std::string("void"));
+        return t;
+    }
+    // T[] 形式（スライス）
+    if (name.size() > 2 && name.compare(name.size() - 2, 2, "[]") == 0) {
+        auto elem = decode_type_name(name.substr(0, name.size() - 2));
+        auto t = std::make_shared<hir::Type>(hir::TypeKind::Array);
+        t->element_type = elem;
+        t->name = name;
+        return t;
+    }
+    // $エンコード名（typekey）は可逆復号を最優先する（フラット文法は本質的に曖昧なため、逆算ヒューリスティックへは渡さない）
+    if (ast::typekey::is_encoded_key(name)) {
+        const std::string base = ast::typekey::base_name_of(name);
+        auto args = ast::typekey::decode_type_args(name);
+        if (!args.empty()) {
+            auto t = std::make_shared<hir::Type>(hir::TypeKind::Struct);
+            t->name = base;
+            t->type_args = std::move(args);
+            return t;
+        }
+    }
+    // 表示形（Vector<int>）・プリミティブ・ptr_xxx・非ジェネリック名は既存デコーダで復元
+    // （曖昧なフラット特殊化名Vector__int等の逆算は廃止済み。産生側が$エンコード/表示形へ正準化されている）
+    return make_type_from_name(name);
+}
+
+// 特殊化関数名を生成（名前生成の終端。型引数はarg_symbol_keyの__フラット規約でエンコードする）
+std::string Monomorphization::make_specialized_name(
+    const std::string& base_name, const std::vector<hir::TypePtr>& type_args) const {
+    auto pos = base_name.find("<");
+    auto end_pos = base_name.find(">__");
+
+    std::string args_str;
+    for (const auto& arg : type_args) {
+        args_str += "__" + arg_symbol_key(arg);
+    }
+
+    if (pos != std::string::npos && end_pos != std::string::npos && !type_args.empty()) {
+        // implメソッド形（Vector<T>__init → Vector__int__init）
+        return base_name.substr(0, pos) + args_str + base_name.substr(end_pos + 1);
+    }
+    return base_name + args_str;
+}
+
+// ジェネリック関数呼び出しをスキャンし、特殊化要求（型引数ツリー+呼び出しサイト）を収集する
 void Monomorphization::scan_generic_calls(
     MirFunction* func, const std::unordered_set<std::string>& generic_funcs,
     const std::unordered_map<std::string, const hir::HirFunction*>& hir_functions,
-    std::map<std::pair<std::string, std::vector<std::string>>,
-             std::vector<std::tuple<std::string, size_t>>>& needed) {
+    SpecRequests& needed) {
     if (!func)
         return;
 
-    // 各ブロックの終端命令をチェック
+    auto record = [&](const std::string& generic_name, std::vector<hir::TypePtr> type_args,
+                      size_t block_idx) {
+        // 置換に使うツリーを正準化（フラット名リーフの復号）。キーとツリーの両方が正準になる
+        for (auto& a : type_args)
+            a = normalize_spec_arg_tree(a);
+        const std::string spec_name = make_specialized_name(generic_name, type_args);
+        auto& req = needed[spec_name];
+        if (req.generic_name.empty()) {
+            req.generic_name = generic_name;
+            req.type_args = std::move(type_args);
+        }
+        req.call_sites.push_back({func->name, block_idx});
+    };
+
     for (size_t block_idx = 0; block_idx < func->basic_blocks.size(); ++block_idx) {
         auto& block = func->basic_blocks[block_idx];
-        if (!block || !block->terminator)
+        if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call)
             continue;
 
-        if (block->terminator->kind == MirTerminator::Call) {
-            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+        auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+        if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+            continue;
 
-            // 関数名を取得
-            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+        const auto& func_name = std::get<std::string>(call_data.func->data);
+
+        // 1. 総称シンボル名そのものの呼び出し: 実引数型・戻り値格納先型から構造的単一化で推論する
+        if (generic_funcs.count(func_name) > 0) {
+            auto it = hir_functions.find(func_name);
+            if (it != hir_functions.end()) {
+                auto type_args = infer_type_args(func, call_data, it->second);
+                if (!type_args.empty()) {
+                    debug_msg("MONO", "Scanned call in " + func->name + " to " + func_name +
+                                          " with type args: " + get_type_name(type_args[0]));
+                    record(func_name, std::move(type_args), block_idx);
+                } else {
+                    debug_msg("MONO", "WARNING: Could not infer type args for " + func_name +
+                                          " in " + func->name);
+                }
+            }
+            continue;
+        }
+
+        // 2〜4. ローワリングがマングル済み名を埋め込んだ呼び出し
+        //   表示形:   Container<int>__print / HashMap<int, int>__ctor_1
+        //   フラット: Vector__int__init / HashMap__int__int__put
+        // 総称シンボル（Base<...>__suffix）と基底名+サフィックスで照合し、
+        // 型引数部分はdecode_type_nameで型ツリーへ復元する
+        for (const auto& generic_name : generic_funcs) {
+            auto g_angle = generic_name.find('<');
+            auto g_close = generic_name.find(">__");
+            if (g_angle == std::string::npos || g_close == std::string::npos)
                 continue;
 
-            const auto& func_name = std::get<std::string>(call_data.func->data);
+            const std::string base_name = generic_name.substr(0, g_angle);
+            const std::string suffix = generic_name.substr(g_close + 1);  // "__print" / "__ctor_1"
+            const size_t num_params =
+                split_type_args(generic_name.substr(g_angle + 1, g_close - g_angle - 1)).size();
 
-            // ジェネリック関数かチェックまず直接チェック
-            if (generic_funcs.count(func_name) > 0) {
-                // 型引数を推論
-                auto it = hir_functions.find(func_name);
-                if (it != hir_functions.end()) {
-                    auto type_args = infer_type_args(func, call_data, it->second);
-                    if (!type_args.empty()) {
-                        auto key = std::make_pair(func_name, type_args);
-                        needed[key].push_back(std::make_tuple(func->name, block_idx));
-                        debug_msg("MONO", "Scanned call in " + func->name + " to " + func_name +
-                                              " with type args: " + type_args[0]);
+            auto it = hir_functions.find(generic_name);
+            if (it == hir_functions.end())
+                continue;
+
+            std::vector<hir::TypePtr> type_args;
+
+            // 表示形: Base<args>__suffix
+            auto f_angle = func_name.find('<');
+            if (f_angle != std::string::npos && func_name.substr(0, f_angle) == base_name) {
+                auto f_close = func_name.find(">__");
+                if (f_close != std::string::npos && func_name.substr(f_close + 1) == suffix) {
+                    auto arg_strs =
+                        split_type_args(func_name.substr(f_angle + 1, f_close - f_angle - 1));
+                    if (arg_strs.size() == num_params) {
+                        for (const auto& s : arg_strs) {
+                            type_args.push_back(decode_type_name(s));
+                        }
+                    }
+                }
+            }
+            // フラット形: Base__args__suffixTail（suffixTail = suffixの先頭__を除いた部分）。
+            // argsセグメントには表示形（Vector<TrackedItem>等）が混在し得るため、復元はdecode_type_nameに委ねる
+            else if (func_name.size() > base_name.size() + 2 &&
+                     func_name.compare(0, base_name.size() + 2, base_name + "__") == 0) {
+                const std::string suffix_tail = suffix.substr(2);  // "print" / "ctor_1"
+                const std::string remaining = func_name.substr(base_name.size() + 2);
+                if (remaining.size() > suffix_tail.size() + 2 &&
+                    remaining.compare(remaining.size() - suffix_tail.size(), suffix_tail.size(),
+                                      suffix_tail) == 0 &&
+                    remaining.compare(remaining.size() - suffix_tail.size() - 2, 2, "__") == 0) {
+                    const std::string args_part =
+                        remaining.substr(0, remaining.size() - suffix_tail.size() - 2);
+                    if (num_params == 1) {
+                        // 型パラメータ1個: 残り全体を1引数として復元（ネスト対応: Vector__int等）
+                        auto arg = decode_type_name(args_part);
+                        // 基底の型パラメータ名がそのまま残っている呼び出し（T__method等の
+                        // 未特殊化本体）からの要求は生成しない
+                        if (arg && !tree_has_generic_param(arg)) {
+                            type_args.push_back(std::move(arg));
+                        }
                     } else {
-                        debug_msg("MONO", "WARNING: Could not infer type args for " + func_name +
-                                              " in " + func->name);
+                        // 複数型パラメータ: __区切りの各セグメントを1引数として復元
+                        std::vector<std::string> parts;
+                        size_t pos = 0;
+                        while (pos <= args_part.size()) {
+                            auto next = args_part.find("__", pos);
+                            if (next == std::string::npos) {
+                                parts.push_back(args_part.substr(pos));
+                                break;
+                            }
+                            parts.push_back(args_part.substr(pos, next - pos));
+                            pos = next + 2;
+                        }
+                        if (parts.size() == num_params) {
+                            bool all_ok = true;
+                            for (const auto& s : parts) {
+                                auto arg = decode_type_name(s);
+                                if (!arg || tree_has_generic_param(arg)) {
+                                    all_ok = false;
+                                    break;
+                                }
+                                type_args.push_back(std::move(arg));
+                            }
+                            if (!all_ok) {
+                                type_args.clear();
+                            }
+                        }
                     }
                 }
-                continue;
             }
 
-            // func_name が "Container<int>__print" のような形式の場合
-            // "Container<T>__print" にマッチするジェネリック関数を探す
-            for (const auto& generic_name : generic_funcs) {
-                // generic_name = "Container<T>__print" func_name = "Container<int>__print"
-                // パターンマッチングで型引数を抽出
-                auto pos = generic_name.find("<");
-                if (pos == std::string::npos)
-                    continue;
-
-                auto end_pos = generic_name.find(">__");
-                if (end_pos == std::string::npos)
-                    continue;
-
-                std::string base_name = generic_name.substr(0, pos);  // "Container"
-                std::string method_suffix =
-                    generic_name.substr(end_pos + 2);  // "__print" (skip ">_")
-
-                // func_nameも同じパターンかチェック
-                auto func_pos = func_name.find("<");
-                if (func_pos == std::string::npos)
-                    continue;
-                if (func_name.substr(0, func_pos) != base_name)
-                    continue;
-
-                auto func_end_pos = func_name.find(">__");
-                if (func_end_pos == std::string::npos)
-                    continue;
-
-                std::string func_method_suffix = func_name.substr(func_end_pos + 2);  // "__print"
-                if (func_method_suffix != method_suffix)
-                    continue;
-
-                // 型引数を抽出
-                std::string type_arg = func_name.substr(func_pos + 1, func_end_pos - func_pos - 1);
-
-                // HIR関数を取得
-                auto it = hir_functions.find(generic_name);
-                if (it == hir_functions.end())
-                    continue;
-
-                // 特殊化が必要な呼び出しを記録
-                std::vector<std::string> type_args = {type_arg};
-                auto key = std::make_pair(generic_name, type_args);
-                needed[key].push_back(std::make_tuple(func->name, block_idx));
-
-                debug_msg("MONO", "Found call to " + func_name + " matching generic " +
-                                      generic_name + " with type arg: " + type_arg);
-                break;
+            // 件数不一致（曖昧なフラット名等）は要求を記録しない。無置換特殊化の常時検査が下流の検出網になる（無言破棄の痕跡はデバッグログへ残す）
+            if (type_args.size() != num_params) {
+                debug_msg("MONO", "scan: type-arg count mismatch, call site dropped: " + func_name);
             }
-
-            // func_name が "HashMap<int, int>__ctor_1" や "Pair<int, int>__dtor" のような形式の場合
-            // "HashMap<K, V>__ctor_1" / "Pair<K, V>__dtor" にマッチするジェネリック関数を探す
-            // パターン: Base<TypeArg1, TypeArg2>__ctor_N -> Base<K, V>__ctor_N
-            for (const auto& generic_name : generic_funcs) {
-                // コンストラクタ/デストラクタのサフィックスをチェック
-                auto ctor_pos = generic_name.find(">__ctor");
-                auto dtor_pos = generic_name.find(">__dtor");
-                if (ctor_pos == std::string::npos && dtor_pos == std::string::npos)
-                    continue;
-
-                auto suffix_pos = (ctor_pos != std::string::npos) ? ctor_pos : dtor_pos;
-                std::string ctor_suffix =
-                    generic_name.substr(suffix_pos + 1);  // "__ctor_1" or "__dtor"
-
-                // generic_name から基本名を抽出: "HashMap<K, V>" -> "HashMap"
-                auto angle_pos = generic_name.find("<");
-                if (angle_pos == std::string::npos)
-                    continue;
-                std::string base_name = generic_name.substr(0, angle_pos);  // "HashMap"
-
-                // generic_nameから型パラメータを抽出
-                std::string generic_params_str =
-                    generic_name.substr(angle_pos + 1, suffix_pos - angle_pos - 1);
-                std::vector<std::string> generic_params = split_type_args(generic_params_str);
-
-                // func_name が同じ基本名とサフィックスを持つかチェック
-                // func_name = "HashMap<int, int>__ctor_1"
-                auto func_angle_pos = func_name.find("<");
-                if (func_angle_pos == std::string::npos)
-                    continue;
-                if (func_name.substr(0, func_angle_pos) != base_name)
-                    continue;
-
-                auto func_suffix_pos = func_name.find(">__ctor");
-                if (func_suffix_pos == std::string::npos)
-                    func_suffix_pos = func_name.find(">__dtor");
-                if (func_suffix_pos == std::string::npos)
-                    continue;
-
-                std::string func_suffix = func_name.substr(func_suffix_pos + 1);
-                if (func_suffix != ctor_suffix)
-                    continue;
-
-                // 型引数を抽出: "HashMap<int, int>__ctor_1" -> "int, int"
-                std::string type_arg_str =
-                    func_name.substr(func_angle_pos + 1, func_suffix_pos - func_angle_pos - 1);
-                std::vector<std::string> type_args = split_type_args(type_arg_str);
-
-                // 型パラメータ数のチェック
-                if (type_args.size() != generic_params.size())
-                    continue;
-
-                // HIR関数を取得
-                auto it = hir_functions.find(generic_name);
-                if (it == hir_functions.end())
-                    continue;
-
-                // 特殊化が必要な呼び出しを記録
-                auto key = std::make_pair(generic_name, type_args);
-                needed[key].push_back(std::make_tuple(func->name, block_idx));
-
-                // デバッグ出力
-                std::string type_args_debug;
-                for (const auto& arg : type_args) {
-                    if (!type_args_debug.empty())
-                        type_args_debug += ", ";
-                    type_args_debug += arg;
-                }
-                debug_msg("MONO", "Found generic ctor/dtor call to " + func_name +
-                                      " matching generic " + generic_name + " with type args: [" +
-                                      type_args_debug + "]");
-                break;
-            }
-            // "Vector<T>__init" や "HashMap<K, V>__put" にマッチするジェネリック関数を探す
-            // パターン: Base__TypeArg1__TypeArg2__method -> Base<T, U>__method
-            for (const auto& generic_name : generic_funcs) {
-                // generic_name = "Vector<T>__init" または "HashMap<K, V>__put" func_name = "Vector__int__init" または "HashMap__int__int__put"
-
-                auto angle_pos = generic_name.find("<");
-                if (angle_pos == std::string::npos)
-                    continue;
-
-                auto angle_close = generic_name.find(">__");
-                if (angle_close == std::string::npos)
-                    continue;
-
-                std::string base_name = generic_name.substr(0, angle_pos);  // "Vector" or "HashMap"
-                std::string method_name = generic_name.substr(angle_close + 3);  // "init" or "put"
-
-                // func_nameがBase__で始まるかチェック
-                if (func_name.substr(0, base_name.length() + 2) != base_name + "__")
-                    continue;
-
-                // generic_nameから型パラメータの数を取得
-                std::string generic_params_str =
-                    generic_name.substr(angle_pos + 1, angle_close - angle_pos - 1);
-                std::vector<std::string> generic_params = split_type_args(generic_params_str);
-                size_t num_params = generic_params.size();
-
-                // func_nameからメソッド名と型引数を抽出
-                // "HashMap__int__int__put" -> メソッド名 "put", 型引数 ["int", "int"]
-                std::string remaining =
-                    func_name.substr(base_name.length() + 2);  // "int__int__put"
-
-                // remainingを__で分割
-                std::vector<std::string> parts;
-                size_t pos = 0;
-                while (pos < remaining.size()) {
-                    auto next = remaining.find("__", pos);
-                    if (next == std::string::npos) {
-                        parts.push_back(remaining.substr(pos));
-                        break;
-                    }
-                    parts.push_back(remaining.substr(pos, next - pos));
-                    pos = next + 2;
-                }
-
-                // 型引数の数 + メソッド名の数が必要
-                if (parts.size() < num_params + 1)
-                    continue;
-
-                // 最後の部分がメソッド名
-                std::string func_method = parts.back();
-                if (func_method != method_name)
-                    continue;
-
-                // メソッド名を除いた残りの部分を型引数として構築
-                // ネストジェネリクス対応: Vector__Vector__int__dtor -> type_args = [Vector__int] remaining = "Vector__int__dtor" (base_name "Vector" は既に除去済み)
-                // parts = [Vector, int, dtor]
-                // メソッド名 "dtor" を除いた全てを1つの型引数として連結 -> "Vector__int"
-                std::vector<std::string> type_args;
-                size_t type_parts_count = parts.size() - 1;  // メソッド名を除く
-
-                if (type_parts_count > 0 && num_params == 1) {
-                    // 型パラメータが1つの場合：メソッド名以外の全部を1つの型引数として連結
-                    std::string arg;
-                    for (size_t j = 0; j < type_parts_count; ++j) {  // j=0から開始
-                        if (!arg.empty())
-                            arg += "__";
-                        arg += parts[j];
-                    }
-                    type_args.push_back(arg);
-                } else if (type_parts_count >= num_params) {
-                    // 複数型パラメータの場合：各型パラメータに1つずつ割り当て
-                    for (size_t i = 0; i < num_params; ++i) {
-                        type_args.push_back(parts[i]);
-                    }
-                }
-
-                // HIR関数を取得
-                auto it = hir_functions.find(generic_name);
-                if (it == hir_functions.end())
-                    continue;
-
-                // 特殊化が必要な呼び出しを記録
-                auto key = std::make_pair(generic_name, type_args);
-                needed[key].push_back(std::make_tuple(func->name, block_idx));
-
-                // デバッグ出力
-                std::string type_args_debug;
-                for (const auto& arg : type_args) {
-                    if (!type_args_debug.empty())
-                        type_args_debug += ", ";
-                    type_args_debug += arg;
-                }
+            if (type_args.size() == num_params && !type_args.empty()) {
                 debug_msg("MONO", "Found mangled call to " + func_name + " matching generic " +
-                                      generic_name + " with type args: [" + type_args_debug + "]");
+                                      generic_name);
+                record(generic_name, std::move(type_args), block_idx);
                 break;
             }
         }
     }
 }
 
-// 引数の型から型パラメータを推論
-std::vector<std::string> Monomorphization::infer_type_args(const MirFunction* caller,
-                                                           const MirTerminator::CallData& call_data,
-                                                           const hir::HirFunction* callee) {
-    std::vector<std::string> result;
+// 呼び出しサイトの実引数型・戻り値格納先型から型パラメータを構造的単一化で推論する。
+// MIRローカルの型ツリー（typed-hir-single-sourceで非null保証）を直接使い、型名文字列の切り出しは行わない
+std::vector<hir::TypePtr> Monomorphization::infer_type_args(
+    const MirFunction* caller, const MirTerminator::CallData& call_data,
+    const hir::HirFunction* callee) {
+    std::vector<hir::TypePtr> result;
     if (!callee || callee->generic_params.empty())
         return result;
 
-    // 型パラメータ名 -> 推論された型のマッピング
-    std::unordered_map<std::string, std::string> inferred_map;
+    std::unordered_map<std::string, hir::TypePtr> inferred;
 
-    // 各パラメータから型を推論
+    // 実引数の型ツリーを取得するヘルパ
+    auto arg_type_of = [&](const MirOperandPtr& arg) -> hir::TypePtr {
+        if (!arg)
+            return nullptr;
+        if (arg->kind == MirOperand::Copy || arg->kind == MirOperand::Move) {
+            if (auto* place = std::get_if<MirPlace>(&arg->data)) {
+                if (place->local < caller->locals.size()) {
+                    return caller->locals[place->local].type;
+                }
+            }
+        } else if (arg->kind == MirOperand::Constant) {
+            if (auto* constant = std::get_if<MirConstant>(&arg->data)) {
+                return constant->type;
+            }
+        }
+        return nullptr;
+    };
+
+    // 各パラメータ型 × 実引数型の構造的単一化
     for (size_t i = 0; i < callee->params.size() && i < call_data.args.size(); ++i) {
         const auto& param = callee->params[i];
         if (!param.type)
             continue;
-
-        // 引数の型を取得
-        std::string arg_type_name;
-        const auto& arg = call_data.args[i];
-        if (arg && arg->kind == MirOperand::Copy) {
-            if (auto* place = std::get_if<MirPlace>(&arg->data)) {
-                if (place->local < caller->locals.size()) {
-                    auto& local = caller->locals[place->local];
-                    arg_type_name = get_type_name(local.type);
-                }
-            }
-        } else if (arg && arg->kind == MirOperand::Constant) {
-            if (auto* constant = std::get_if<MirConstant>(&arg->data)) {
-                arg_type_name = get_type_name(constant->type);
-            }
-        }
-
-        if (arg_type_name.empty())
+        auto arg_type = arg_type_of(call_data.args[i]);
+        if (!arg_type)
             continue;
-
-        // 1. 単純な型パラメータの場合（T → int）
-        for (const auto& generic_param : callee->generic_params) {
-            if (param.type->name == generic_param.name) {
-                inferred_map[generic_param.name] = arg_type_name;
-                debug_msg("MONO", "Inferred " + generic_param.name + " = " + arg_type_name +
-                                      " from simple param");
+        // 実引数がフラット/エンコード名縮退の構造体の場合は復元してから照合する
+        if (arg_type->kind == hir::TypeKind::Struct && arg_type->type_args.empty() &&
+            (arg_type->name.find("__") != std::string::npos ||
+             ast::typekey::is_encoded_key(arg_type->name))) {
+            if (auto decoded = decode_type_name(arg_type->name)) {
+                arg_type = decoded;
             }
         }
-
-        // 2. ジェネリック構造体パラメータの場合（Pair<T, U> → Pair__int__string）
-        // または ポインタ型のelement_typeがジェネリック構造体の場合（Node<T>* → Node__Item*）
-        hir::TypePtr struct_type = param.type;
-        std::string struct_arg_type_name = arg_type_name;
-
-        // ポインタ型の場合、element_typeを使用
-        if (param.type->kind == hir::TypeKind::Pointer && param.type->element_type) {
-            struct_type = param.type->element_type;
-            // 引数の型名からも*を除去
-            if (!struct_arg_type_name.empty() && struct_arg_type_name.back() == '*') {
-                struct_arg_type_name.pop_back();
-            }
-        }
-
-        if (struct_type && !struct_type->type_args.empty() && hir_struct_defs) {
-            // パラメータ型の構造体定義を取得
-            auto struct_it = hir_struct_defs->find(struct_type->name);
-            if (struct_it != hir_struct_defs->end() && struct_it->second) {
-                // 引数の型名からtype_argsを抽出（Pair__int__string → [int, string]）
-                std::string base_name = struct_type->name;
-                size_t underscore_pos = struct_arg_type_name.find("__");
-
-                if (underscore_pos != std::string::npos &&
-                    struct_arg_type_name.substr(0, underscore_pos) == base_name) {
-                    // 型引数を抽出
-                    std::vector<std::string> extracted_args;
-                    std::string remaining = struct_arg_type_name.substr(underscore_pos + 2);
-
-                    size_t start = 0;
-                    while (true) {
-                        size_t next_pos = remaining.find("__", start);
-                        if (next_pos != std::string::npos) {
-                            extracted_args.push_back(remaining.substr(start, next_pos - start));
-                            start = next_pos + 2;
-                        } else {
-                            extracted_args.push_back(remaining.substr(start));
-                            break;
-                        }
-                    }
-
-                    // 型引数とジェネリックパラメータをマッチング
-                    for (size_t j = 0;
-                         j < struct_type->type_args.size() && j < extracted_args.size(); ++j) {
-                        const auto& type_arg = struct_type->type_args[j];
-                        if (type_arg) {
-                            // このtype_argがジェネリックパラメータ名なら推論
-                            for (const auto& generic_param : callee->generic_params) {
-                                if (type_arg->name == generic_param.name) {
-                                    inferred_map[generic_param.name] = extracted_args[j];
-                                    debug_msg("MONO", "Inferred " + generic_param.name + " = " +
-                                                          extracted_args[j] +
-                                                          " from struct param " +
-                                                          struct_type->name);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        unify_type_param(param.type, arg_type, callee, inferred);
     }
 
-    // 3. 戻り値型から推論（Item got = get_data(node) → T = Item）
-    if (callee->return_type && call_data.destination) {
-        // 戻り値型がジェネリックパラメータの場合
-        for (const auto& generic_param : callee->generic_params) {
-            if (callee->return_type->name == generic_param.name) {
-                // destination（呼び出し結果の格納先）からローカル変数の型を取得
-                if (call_data.destination->local < caller->locals.size()) {
-                    const auto& dest_local = caller->locals[call_data.destination->local];
-                    if (dest_local.type) {
-                        std::string dest_type_name = get_type_name(dest_local.type);
-                        if (!dest_type_name.empty() &&
-                            inferred_map.find(generic_param.name) == inferred_map.end()) {
-                            inferred_map[generic_param.name] = dest_type_name;
-                            debug_msg("MONO", "Inferred " + generic_param.name + " = " +
-                                                  dest_type_name + " from return type");
-                        }
-                    }
-                }
-            }
+    // 戻り値型からの推論（Item got = get_data(node) → T = Item）
+    if (callee->return_type && call_data.destination &&
+        call_data.destination->local < caller->locals.size()) {
+        const auto& dest_type = caller->locals[call_data.destination->local].type;
+        if (dest_type) {
+            unify_type_param(callee->return_type, dest_type, callee, inferred);
         }
     }
 
     // 各型パラメータの推論結果を収集
     for (const auto& generic_param : callee->generic_params) {
-        auto it = inferred_map.find(generic_param.name);
-        if (it != inferred_map.end()) {
+        auto it = inferred.find(generic_param.name);
+        if (it != inferred.end()) {
             result.push_back(it->second);
         } else {
-            // 推論できなかった場合、デフォルトとしてintを使用
-            result.push_back("int");
+            // 推論できなかった場合の既定int（従来互換。typed-hirの型保証下では原則到達しない）
+            result.push_back(make_type_from_name("int"));
             debug_msg("MONO",
                       "WARNING: Could not infer " + generic_param.name + ", defaulting to int");
         }

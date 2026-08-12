@@ -1,0 +1,30 @@
+// 回帰(Z3): 構造体内ユニオンフィールドのタグ読み（フィールド位置×前置フィールド型のマトリクス）
+// 従来はnative/jit=true・wasm=falseに分裂していた（ユニオン構築の消費サイト統一Y1〜Y3とレイアウトAPI統一Z2で解消）
+import std::io::println;
+typedef Val = int | string;
+struct Inner { long a; long b; }
+struct HeadU { Val v; string[2] names; int n; }
+struct MidU { string[2] names; Val v; int n; }
+struct TailU { string[2] names; int n; Val v; }
+struct AfterStruct { Inner inner; Val v; }
+int main() {
+    HeadU h = {v: 1, names: ["a", "b"], n: 10};
+    println("head: {h.v is int} {h.names[1]} {h.n}");
+    MidU m = {names: ["c", "d"], v: "mid", n: 20};
+    println("mid: {m.v is string} {m.names[0]} {m.n}");
+    string mv = m.v as string;
+    println("midpayload: {mv}");
+    TailU t = {names: ["e", "f"], n: 30, v: 42};
+    println("tail: {t.v is int} {t.names[1]} {t.n}");
+    int tv = t.v as int;
+    println("tailpayload: {tv}");
+    t.v = "swapped";
+    println("reassign: {t.v is string}");
+    string sv = t.v as string;
+    println("{sv}");
+    AfterStruct a = {inner: {a: 100, b: 200}, v: 7};
+    println("afterstruct: {a.v is int} {a.inner.b}");
+    int av = a.v as int;
+    println("{av}");
+    return 0;
+}

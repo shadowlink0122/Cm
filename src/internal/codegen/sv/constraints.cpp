@@ -4,8 +4,8 @@
 // 設計: docs/design/v0.16.0/02_constraints_emission.md
 
 #include "codegen.hpp"
+#include "internal.hpp"
 #include "internal/base/i18n.hpp"
-#include "sv_internal.hpp"
 
 #include <algorithm>
 #include <cctype>

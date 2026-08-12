@@ -1,0 +1,14 @@
+// 回帰(R22): implメソッドにexportとprivateを同時指定すると診断エラー
+struct Pt {
+    int x;
+}
+
+impl Pt {
+    export private int getx() {
+        return self.x;
+    }
+}
+
+int main() {
+    return 0;
+}

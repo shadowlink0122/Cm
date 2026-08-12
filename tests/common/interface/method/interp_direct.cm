@@ -1,0 +1,59 @@
+import std::io::println;
+// B7回帰: インターフェイス型変数のメソッド戻り値を補間内で直接呼び出しても宣言シグネチャ通りの型で書式化されることを検証する。
+// 従来は補間ミニパイプラインがimplの具象名（Dog__name）しか引けず戻り値型が解決できないため、stringやdoubleがintとして書式化されゴミ値が表示されていた。
+
+interface Animal {
+    string name();
+    int age();
+    double weight();
+}
+
+struct Dog {}
+
+impl Dog for Animal {
+    string name() {
+        return "dog";
+    }
+
+    int age() {
+        return 3;
+    }
+
+    double weight() {
+        return 7.5;
+    }
+}
+
+struct Cat {}
+
+impl Cat for Animal {
+    string name() {
+        return "cat";
+    }
+
+    int age() {
+        return 2;
+    }
+
+    double weight() {
+        return 4.25;
+    }
+}
+
+int main() {
+    Animal a = Dog {};
+
+    // string/int/double戻り値メソッドの直接補間
+    println("{a.name()}");
+    println("{a.age()}");
+    println("{a.weight()}");
+
+    // 複数プレースホルダの混在
+    println("name={a.name()} age={a.age()} weight={a.weight()}");
+
+    // 別の具象型へ差し替えても動的ディスパッチの結果が正しい型で書式化される
+    a = Cat {};
+    println("name={a.name()} age={a.age()} weight={a.weight()}");
+
+    return 0;
+}

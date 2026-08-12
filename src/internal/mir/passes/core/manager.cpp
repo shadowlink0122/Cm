@@ -4,6 +4,7 @@
 #include "internal/mir/passes/cleanup/dce.hpp"
 #include "internal/mir/passes/cleanup/dse.hpp"
 #include "internal/mir/passes/cleanup/program_dce.hpp"
+#include "internal/mir/passes/cleanup/string_reassign_free.hpp"
 #include "internal/mir/passes/convergence/manager.hpp"
 #include "internal/mir/passes/interprocedural/inlining.hpp"
 #include "internal/mir/passes/interprocedural/tail_call_elimination.hpp"
@@ -37,13 +38,18 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
         return passes;
     }
 
+    // Phase 0: 文字列再代入の旧バッファ解放（C12）。
+    // loweringが生成した素のMIR形状（T = concat(...) → X = copy(T)）を前提に分類するため、
+    // コピー伝播等がこの形状を書き換える前のパイプライン先頭で実行する
+    passes.push_back(std::make_unique<StringReassignFree>());
+
     // Phase 1: 基礎最適化
     passes.push_back(std::make_unique<SparseConditionalConstantPropagation>());
     passes.push_back(std::make_unique<ConstantFolding>());
 
     // Phase 2: データフロー最適化
     passes.push_back(std::make_unique<GVN>());
-    passes.push_back(std::make_unique<CopyPropagation>());
+    passes.push_back(std::make_unique<CopyPropagation>(user_opts.no_aggregate_copy_prop));
 
     // Phase 3: 冗長性排除
     passes.push_back(std::make_unique<DeadStoreElimination>());
@@ -63,7 +69,7 @@ std::vector<std::unique_ptr<OptimizationPass>> create_standard_passes(
     // 最適化レベル2以上: 複数回実行
     if (optimization_level >= 2) {
         passes.push_back(std::make_unique<ConstantFolding>());
-        passes.push_back(std::make_unique<CopyPropagation>());
+        passes.push_back(std::make_unique<CopyPropagation>(user_opts.no_aggregate_copy_prop));
         passes.push_back(std::make_unique<DeadCodeElimination>());
     }
 
@@ -77,7 +83,11 @@ void run_optimization_passes(MirProgram& program, int optimization_level, bool d
     pass_mgr.enable_debug_output(debug);
 
     auto passes = create_standard_passes(optimization_level, user_opts);
+    const bool trace_passes = std::getenv("CM_TRACE_PASSES") != nullptr;
     for (auto& pass : passes) {
+        if (trace_passes) {
+            fprintf(stderr, "[PASSDBG] queued: %s\n", pass->name().c_str());
+        }
         pass_mgr.add_pass(std::move(pass));
     }
 

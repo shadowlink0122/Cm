@@ -1,6 +1,8 @@
-#include "builtins.hpp"
 #include "codegen.hpp"
-#include "runtime.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
+#include "internal/codegen/js/emit/runtime.hpp"
+#include "internal/syntax/ast/typedef.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "types.hpp"
 
 #include <algorithm>
@@ -12,9 +14,165 @@ namespace cm::codegen::js {
 
 using ast::TypeKind;
 
+// Cmの型をTypeScriptの型注釈へ写像する。
+// 数値は全てnumber、charも数値表現（ランタイムのchar表現に一致）、stringはstring、boolはboolean、
+// 構造体・enumは名前（interface宣言を別途出力）、関数型は (a: number, ...) => R、配列はT[]、ポインタ/参照は指す先の型で近似する。
+std::string JSCodeGen::tsType(const hir::Type* type) const {
+    if (!type) {
+        return "any";
+    }
+    switch (type->kind) {
+        case TypeKind::Void:
+            return "void";
+        case TypeKind::Bool:
+            return "boolean";
+        case TypeKind::Tiny:
+        case TypeKind::Short:
+        case TypeKind::Int:
+        case TypeKind::UTiny:
+        case TypeKind::UShort:
+        case TypeKind::UInt:
+        case TypeKind::Float:
+        case TypeKind::Double:
+        case TypeKind::UFloat:
+        case TypeKind::UDouble:
+        case TypeKind::Char:
+            return "number";
+        case TypeKind::Long:
+        case TypeKind::ULong:
+        case TypeKind::ISize:
+        case TypeKind::USize:
+            // 64ビット整数はBigInt表現（H5）
+            return "bigint";
+        case TypeKind::String:
+        case TypeKind::CString:
+            return "string";
+        case TypeKind::Pointer:
+        case TypeKind::Reference:
+            // JS/TSにポインタは無い。ランタイム表現はfat pointerオブジェクト・配列decay・構造体参照が混在し単一の型に定まらないためanyで安全側に倒す
+            return "any";
+        case TypeKind::Array:
+            return type->element_type ? (tsType(type->element_type.get()) + "[]") : "any[]";
+        case TypeKind::Function: {
+            std::string sig = "(";
+            for (size_t i = 0; i < type->param_types.size(); ++i) {
+                if (i > 0) {
+                    sig += ", ";
+                }
+                sig += "a" + std::to_string(i) + ": " + tsType(type->param_types[i].get());
+            }
+            sig += ") => ";
+            sig += type->return_type ? tsType(type->return_type.get()) : "void";
+            return sig;
+        }
+        case TypeKind::Struct: {
+            // export interface を実際に出力した素の構造体のみ型名として使う。
+            // コンパイラ内部型（__TaggedUnion_*）・ジェネリックのマングリング名（Foo__int）・
+            // ジェネリックパラメータ名（T等でstruct_map_に無いもの）はinterface宣言が無いためanyにする
+            if (!type->name.empty() && struct_map_.count(type->name) > 0) {
+                return sanitizeIdentifier(type->name);
+            }
+            return "any";
+        }
+        case TypeKind::Interface:
+            // interface型はfat object {data, vtable}のランタイム表現でinterface宣言も出力しないためany
+            return "any";
+        case TypeKind::Generic:
+            return "any";
+        case TypeKind::TypeAlias:
+            return type->element_type
+                       ? tsType(type->element_type.get())
+                       : (type->name.empty() ? "any" : sanitizeIdentifier(type->name));
+        case TypeKind::Null:
+            return "null";
+        default:
+            // Generic/Union/LiteralUnion/Inferred/Error等はanyで安全側に倒す
+            return "any";
+    }
+}
+
+std::string JSCodeGen::tsAnnotation(const hir::Type* type) const {
+    if (!options_.emitTypeScript) {
+        return "";
+    }
+    return ": " + tsType(type);
+}
+
+void JSCodeGen::emitStructInterface(const mir::MirStruct& st) {
+    if (!options_.emitTypeScript) {
+        return;
+    }
+    emitter_.emitLine("export interface " + sanitizeIdentifier(st.name) + " {");
+    emitter_.increaseIndent();
+    for (const auto& field : st.fields) {
+        emitter_.emitLine(formatStructFieldKey(st, field.name) + tsAnnotation(field.type.get()) +
+                          ";");
+    }
+    emitter_.decreaseIndent();
+    emitter_.emitLine("}");
+    emitter_.emitLine();
+}
+
+const mir::MirStruct* JSCodeGen::findStructDef(const hir::Type& type) const {
+    auto it = struct_map_.find(type.name);
+    if (it != struct_map_.end() && it->second) {
+        return it->second;
+    }
+    // ジェネリック構造体: base nameで見つからない場合、$正準キーで再検索（旧フラット名Krate__int等の残置キーにも直引きで対応済み）
+    if (!type.type_args.empty()) {
+        std::string base = type.name;
+        auto lt = base.find('<');
+        if (lt != std::string::npos) {
+            base = base.substr(0, lt);
+        }
+        base = cm::ast::typekey::spec_base_name(base);
+        auto key = cm::ast::typekey::struct_key_from_tree(base, type.type_args);
+        it = struct_map_.find(key);
+        if (it != struct_map_.end() && it->second) {
+            return it->second;
+        }
+    }
+    return nullptr;
+}
+
+hir::TypePtr JSCodeGen::resolveUnionAlias(const hir::TypePtr& type) const {
+    if (!type) {
+        return type;
+    }
+    // 既に変種を持つユニオンはそのまま
+    if (!ast::union_variant_types(type).empty()) {
+        return type;
+    }
+    // typedef名（IU等）を実体解決し、連鎖typedefは再帰で辿る。実体がユニオンの場合のみ採用する
+    if (!type->name.empty()) {
+        auto it = typedef_map_.find(type->name);
+        if (it != typedef_map_.end() && it->second && it->second != type) {
+            auto resolved = resolveUnionAlias(it->second);
+            if (resolved && resolved->kind == TypeKind::Union) {
+                return resolved;
+            }
+        }
+    }
+    return type;
+}
+
 bool JSCodeGen::isCssStruct(const std::string& struct_name) const {
     auto it = struct_map_.find(struct_name);
     return it != struct_map_.end() && it->second && it->second->is_css;
+}
+
+bool JSCodeGen::structIsForeignObject(const std::string& struct_name) const {
+    auto it = struct_map_.find(struct_name);
+    if (it == struct_map_.end() || !it->second) {
+        return false;
+    }
+    // 関数型フィールドを1つでも持つ構造体はJSメソッドを束ねた外部オブジェクトとみなす
+    for (const auto& field : it->second->fields) {
+        if (field.type && field.type->kind == ast::TypeKind::Function) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::unordered_set<std::string> JSCodeGen::collectUsedRuntimeHelpers(
@@ -55,6 +213,10 @@ void JSCodeGen::expandRuntimeHelperDependencies(std::unordered_set<std::string>&
     if (used.count("__cm_output")) {
         used.insert("__cm_output_element");
     }
+    if (used.count("__cm_format") || used.count("__cm_format_string")) {
+        // __cm_formatのspec無し経路が数値整形に__cm_fmt_doubleを使う
+        used.insert("__cm_fmt_double");
+    }
 }
 
 std::string JSCodeGen::toKebabCase(const std::string& name) const {
@@ -85,11 +247,10 @@ std::string JSCodeGen::getStructDefaultValue(const hir::Type& type) const {
     if (type.kind != ast::TypeKind::Struct) {
         return jsDefaultValue(type);
     }
-    auto it = struct_map_.find(type.name);
-    if (it == struct_map_.end() || !it->second || it->second->fields.empty()) {
+    const auto* mirStruct = findStructDef(type);
+    if (!mirStruct || mirStruct->fields.empty()) {
         return "{}";
     }
-    const auto* mirStruct = it->second;
     std::string result = "{ ";
     for (size_t i = 0; i < mirStruct->fields.size(); ++i) {
         if (i > 0)

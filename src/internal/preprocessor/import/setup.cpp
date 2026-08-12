@@ -3,7 +3,6 @@
 // ============================================================
 
 #include "internal/preprocessor/import.hpp"
-#include "internal/preprocessor/import_internal.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -161,84 +160,6 @@ ImportPreprocessor::ImportPreprocessor(bool debug) : debug_mode(debug) {
 
 void ImportPreprocessor::add_search_path(const std::filesystem::path& path) {
     search_paths.push_back(path);
-}
-
-ImportPreprocessor::ProcessResult ImportPreprocessor::process(
-    const std::string& source_code, const std::filesystem::path& source_file) {
-    ProcessResult result;
-    result.success = true;
-
-    try {
-        std::unordered_set<std::string> imported_files;
-
-        // インポートを処理（ソースマップも生成）
-        result.processed_source =
-            process_imports(source_code, source_file, imported_files, result.source_map,
-                            result.module_ranges, source_file.string());
-
-        if (debug_mode) {
-            std::cerr << "[IMPORT-FINAL] processed_source=" << result.processed_source.size()
-                      << " source_map=" << result.source_map.size() << "\n";
-        }
-
-        // インポートされたモジュールリストを作成
-        for (const auto& file : imported_files) {
-            result.imported_modules.push_back(file);
-        }
-
-        // resolved_filesを構築（キャッシュフィンガープリント用）
-        // メインのソースファイルを追加
-        if (!source_file.empty() && std::filesystem::exists(source_file)) {
-            result.resolved_files.push_back(std::filesystem::canonical(source_file).string());
-        }
-        // インポートされた全ファイルを追加
-        for (const auto& file : imported_files) {
-            result.resolved_files.push_back(file);
-        }
-
-        // ソースマップからモジュール範囲を再構築
-        // process_importsでは正確なバイトオフセットを追跡できないためここで計算
-        if (!result.source_map.empty() && !result.processed_source.empty()) {
-            result.module_ranges.clear();
-
-            std::string current_file;
-            size_t start_offset = 0;
-            size_t line_idx = 0;
-            size_t pos = 0;
-            size_t len = result.processed_source.length();
-
-            while (pos < len && line_idx < result.source_map.size()) {
-                // 次の改行を探す
-                size_t next_newline = result.processed_source.find('\n', pos);
-                // 改行を含む行末位置
-                size_t line_end = (next_newline == std::string::npos) ? len : next_newline + 1;
-
-                const auto& entry = result.source_map[line_idx];
-
-                // ファイルが切り替わったら範囲を保存
-                if (entry.original_file != current_file) {
-                    if (!current_file.empty()) {
-                        result.module_ranges.push_back({current_file, "", 0, start_offset, pos});
-                    }
-                    current_file = entry.original_file;
-                    start_offset = pos;
-                }
-
-                pos = line_end;
-                line_idx++;
-            }
-
-            // 最後の範囲を保存
-            if (!current_file.empty()) {
-                result.module_ranges.push_back({current_file, "", 0, start_offset, len});
-            }
-        }
-    } catch (const std::exception& e) {
-        result.success = false;
-        result.error_message = e.what();
-    }
-
-    return result;
 }
 
 }  // namespace cm::preprocessor

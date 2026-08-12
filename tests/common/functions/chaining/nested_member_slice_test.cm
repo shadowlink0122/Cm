@@ -1,0 +1,47 @@
+// B4回帰: スライス格納構造体のスライス要素経由のメンバスライス変異（bags[0].items.push(7)等）
+// 従来はレシーバ場所を解決できず変異が黙って捨てられ、後続の読み出しが未初期化ヘッダ経由でSIGSEGV・ゴミ値になっていた。
+// cm_slice_get_element_ptrで格納中の構造体blobへのポインタを取得し、要素参照からのメンバGEPで一貫して場所化する
+import std::io::println;
+
+struct Bag {
+    int[] items;
+}
+
+int main() {
+    Bag[] bags = [];
+    bags.push(Bag { items: [] });
+    bags.push(Bag { items: [100] });
+
+    // スライス要素の構造体のメンバスライスへのpushが格納中の実体へ届く
+    bags[0].items.push(7);
+    bags[0].items.push(9);
+    int a = bags[0].items[0];
+    int b = bags[0].items[1];
+    println(a);
+    println(b);
+    println(bags[0].items.len());
+
+    // 2番目の要素も独立に変異する
+    bags[1].items.push(200);
+    println(bags[1].items[0]);
+    println(bags[1].items[1]);
+    println(bags[1].items.len());
+
+    // 補間経由のネスト読み出し（従来はヘッダポインタを要素として誤読していた）
+    println("{bags[0].items[0]}");
+
+    // pop/delete/clearも格納中の実体へ届く
+    println(bags[0].items.pop());
+    println(bags[0].items.len());
+    bags[1].items.delete(0);
+    println(bags[1].items[0]);
+    bags[1].items.clear();
+    println(bags[1].items.len());
+
+    // 固定長配列要素の構造体のメンバスライスも同様
+    Bag[2] fixed = [Bag { items: [] }, Bag { items: [1] }];
+    fixed[0].items.push(3);
+    println(fixed[0].items[0]);
+    println(fixed[1].items[0]);
+    return 0;
+}

@@ -267,6 +267,8 @@ MirTerminatorPtr FunctionInlining::clone_terminator(const MirTerminator& src) {
         nd.discriminant = clone_operand(*d.discriminant);
         nd.targets = d.targets;
         nd.otherwise = d.otherwise;
+        nd.target_masks = d.target_masks;
+        nd.sv_case_modifier = d.sv_case_modifier;
         term->data = std::move(nd);
     } else if (std::holds_alternative<MirTerminator::CallData>(src.data)) {
         const auto& d = std::get<MirTerminator::CallData>(src.data);
@@ -318,7 +320,16 @@ MirRvaluePtr FunctionInlining::clone_rvalue(const MirRvalue& src) {
         rv->data = MirRvalue::UnaryOpData{d.op, clone_operand(*d.operand)};
     } else if (std::holds_alternative<MirRvalue::CastData>(src.data)) {
         const auto& d = std::get<MirRvalue::CastData>(src.data);
-        rv->data = MirRvalue::CastData{clone_operand(*d.operand), d.target_type};
+        // Castの全フィールドを保存してクローンする（check_only=is検査・インターフェースupcast情報。
+        // 集約初期化の2フィールド形は後続フィールドを既定値へ落とし、inline後にisがasへ化ける/upcastが素Castへ化ける）
+        MirRvalue::CastData nd;
+        nd.operand = clone_operand(*d.operand);
+        nd.target_type = d.target_type;
+        nd.check_only = d.check_only;
+        nd.iface_concrete = d.iface_concrete;
+        nd.iface_from_pointer = d.iface_from_pointer;
+        nd.iface_boxed = d.iface_boxed;
+        rv->data = std::move(nd);
     } else if (std::holds_alternative<MirRvalue::RefData>(src.data)) {
         const auto& d = std::get<MirRvalue::RefData>(src.data);
         rv->data = MirRvalue::RefData{d.borrow, d.place};

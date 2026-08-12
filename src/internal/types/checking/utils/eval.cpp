@@ -13,6 +13,26 @@
 
 namespace cm {
 
+// sizeof(型)のコンパイル時評価: プリミティブ・ポインタ・その固定長配列のバイトサイズを返す。
+// 構造体サイズはレイアウト計算がHIR層にあるためここでは畳まない（呼び出し側で診断へ落ちる）
+static std::optional<int64_t> const_sizeof_of_type(const ast::TypePtr& t) {
+    if (!t) {
+        return std::nullopt;
+    }
+    if (t->kind == ast::TypeKind::Array && t->array_size.has_value()) {
+        auto elem = const_sizeof_of_type(t->element_type);
+        if (!elem) {
+            return std::nullopt;
+        }
+        return *elem * static_cast<int64_t>(*t->array_size);
+    }
+    auto info = t->info();
+    if (info.size > 0) {
+        return static_cast<int64_t>(info.size);
+    }
+    return std::nullopt;
+}
+
 // ============================================================
 // コンパイル時定数評価（const強化）
 // ============================================================
@@ -128,6 +148,14 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
                      : evaluate_const_expr(*ternary->else_expr);
     }
 
+    // sizeof(型): プリミティブ・ポインタ・その固定長配列のバイトサイズを畳む（int[sizeof(int)] 等の配列サイズ式用。局所処理調査Aの補足）
+    if (auto* szf = expr.as<ast::SizeofExpr>()) {
+        if (szf->target_type) {
+            return const_sizeof_of_type(szf->target_type);
+        }
+        return std::nullopt;
+    }
+
     // その他の式はコンパイル時評価不可
     return std::nullopt;
 }
@@ -135,9 +163,25 @@ std::optional<int64_t> TypeChecker::evaluate_const_expr(ast::Expr& expr) {
 // ============================================================
 // 配列サイズのsize_param_name解決（const強化）
 // ============================================================
-void TypeChecker::resolve_array_size(ast::TypePtr& type) {
+void TypeChecker::resolve_array_size(ast::TypePtr& type, bool best_effort) {
     if (!type)
         return;
+
+    // 配列型で定数サイズ式（int[N+1]等）が保持されている場合はコンパイル時評価で畳む。
+    // パーサがリテラルへ畳めずsize_exprへ退避したもの（const名を含む算術はスコープが要るため後段化）
+    if (type->kind == ast::TypeKind::Array && type->size_expr && !type->array_size.has_value()) {
+        auto folded = evaluate_const_expr(*type->size_expr);
+        if (folded && *folded > 0 && *folded <= INT32_MAX) {
+            type->array_size = static_cast<uint32_t>(*folded);
+            type->size_expr = nullptr;  // 解決済み（後段は具体サイズのみ見る）
+            debug::tc::log(debug::tc::Id::TypeInfer,
+                           "Resolved array size expression = " + std::to_string(*folded),
+                           debug::Level::Debug);
+        } else if (!best_effort) {
+            // 畳めない（実行時値・未定義const・非正の値）はコンパイル時定数式でない旨を診断する
+            error(current_span_, i18n::msg(i18n::MsgId::PsArraySizeNotConstant));
+        }
+    }
 
     // 配列型でsize_param_nameが設定されている場合
     if (type->kind == ast::TypeKind::Array && !type->size_param_name.empty()) {
@@ -153,26 +197,28 @@ void TypeChecker::resolve_array_size(ast::TypePtr& type) {
                 debug::tc::log(debug::tc::Id::TypeInfer,
                                "Resolved array size: " + sym->name + " = " + std::to_string(size),
                                debug::Level::Debug);
-            } else {
-                error(current_span_, "Array size must be a positive integer, got " +
-                                         std::to_string(size) + " for '" + type->size_param_name +
-                                         "'");
+            } else if (!best_effort) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcArraySizeMustPositiveInteger,
+                                                std::to_string(size), type->size_param_name));
             }
+        } else if (best_effort) {
+            // ベストエフォート解決（構造体フィールド）: constとして解決できない名前は診断せず記号名のまま残す。
+            // bit[WIDTH]のように同struct内の#[sv::param]フィールドやimport越しの未束縛パラメータを幅に使うため
         } else if (sym && !sym->is_const) {
-            error(current_span_, "Array size must be a const variable, but '" +
-                                     type->size_param_name + "' is not const");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcArraySizeMustConstVariable, type->size_param_name));
         } else if (!sym) {
             error(current_span_,
-                  "Undefined variable '" + type->size_param_name + "' used as array size");
+                  i18n::msgf(i18n::MsgId::TcUndefinedVariableUsedArraySize, type->size_param_name));
         } else {
-            error(current_span_, "Const variable '" + type->size_param_name +
-                                     "' does not have a compile-time integer value");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcConstVariableDoesNotHave, type->size_param_name));
         }
     }
 
     // 要素型も再帰的に解決
     if (type->element_type) {
-        resolve_array_size(type->element_type);
+        resolve_array_size(type->element_type, best_effort);
     }
 }
 

@@ -1,0 +1,37 @@
+// 回帰(Y4): 混合数値二項演算の暗黙昇格（従来はfadd i32, double等の不正IRや無出力SIGBUSだった）
+import std::io::println;
+int main() {
+    int i = 5;
+    double d = 1.5;
+    double a = d + i;
+    println("{a}");
+    double b = i + d;
+    println("{b}");
+    double c = i + 1.5;
+    println("{c}");
+    double e = 1.5 + i;
+    println("{e}");
+    bool cmp1 = d > i;
+    bool cmp2 = i < d;
+    bool cmp3 = d == 1.5;
+    println("{cmp1} {cmp2} {cmp3}");
+    double acc = 0.0;
+    acc += i;
+    acc *= d;
+    println("{acc}");
+    float f = 2.5;
+    double g = f + i;
+    println("{g}");
+    double h = f + d;
+    println("{h}");
+    long l = 9000000000;
+    double m = l + 0.5;
+    println("{m}");
+    double q = d % 1.0;
+    double r = d % i;
+    println("{q} {r}");
+    int isum = 0;
+    isum += 3;
+    println("{isum}");
+    return 0;
+}

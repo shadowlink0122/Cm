@@ -180,7 +180,8 @@ void JITEngine::optimizeModule(llvm::Module& module, int optLevel) {
 }
 
 JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& entryPoint,
-                             int optLevel, bool sanitizeBounds) {
+                             int optLevel, bool sanitizeBounds,
+                             const std::vector<std::string>& programArgs) {
     JITResult result;
 
     // JIT初期化
@@ -203,6 +204,10 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
     // モジュール検証
     std::string verifyError;
     llvm::raw_string_ostream verifyStream(verifyError);
+    // CM_DUMP_IR=1 でJIT実行直前のモジュールIRをstderrへダンプする（プラットフォーム差の調査用）
+    if (std::getenv("CM_DUMP_IR")) {
+        llvm::errs() << llvmModule;
+    }
     if (llvm::verifyModule(llvmModule, &verifyStream)) {
         result.success = false;
         result.errorMessage = "LLVM module verification failed:\n" + verifyError;
@@ -250,7 +255,9 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
 
     // 関数ポインタを取得して実行
     // LLVM 14: getAddress(), LLVM 15+: toPtr()
-    using MainFnType = int (*)();
+    // mainはホストABIでargc/argvを受け取る（#[test]等の他エントリは無引数のまま）
+    using MainFnType = int (*)(int, char**);
+    using PlainFnType = int (*)();
 #if LLVM_VERSION_MAJOR >= 15
     auto mainFn = mainSymbol->toPtr<MainFnType>();
 #else
@@ -260,7 +267,18 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
 
     // main()を実行
     try {
-        result.exitCode = mainFn();
+        if (entryPoint == "main") {
+            // 引数配列を構築する（呼び出し中は本関数のスコープで生存する）
+            std::vector<char*> argvPtrs;
+            argvPtrs.reserve(programArgs.size() + 1);
+            for (const auto& a : programArgs) {
+                argvPtrs.push_back(const_cast<char*>(a.c_str()));
+            }
+            argvPtrs.push_back(nullptr);
+            result.exitCode = mainFn(static_cast<int>(programArgs.size()), argvPtrs.data());
+        } else {
+            result.exitCode = reinterpret_cast<PlainFnType>(reinterpret_cast<void*>(mainFn))();
+        }
     } catch (const std::exception& e) {
         result.success = false;
         result.errorMessage = std::string("Runtime exception: ") + e.what();

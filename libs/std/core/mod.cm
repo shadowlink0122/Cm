@@ -20,9 +20,7 @@ typedef u64 = ulong;
 typedef f32 = float;
 typedef f64 = double;
 
-// プラットフォーム依存サイズ型
-typedef usize = uint;
-typedef isize = int;
+// プラットフォーム依存サイズ型（usize/isizeは言語組み込み型になったためtypedef不要。R9で削除）
 
 // ============================================================
 // 外部関数宣言（ランタイム）
@@ -68,30 +66,9 @@ export <T> T clamp(T value, T min_val, T max_val) {
     return value;
 }
 
-// 絶対値を返す
-export int abs(int x) {
+// 絶対値を返す（自由関数オーバーロードは未サポートのためmin/maxと同様のジェネリック1本に統一。R9）
+export <T> T abs(T x) {
     if (x < 0) {
-        return -x;
-    }
-    return x;
-}
-
-export long abs(long x) {
-    if (x < 0) {
-        return -x;
-    }
-    return x;
-}
-
-export float abs(float x) {
-    if (x < 0.0) {
-        return -x;
-    }
-    return x;
-}
-
-export double abs(double x) {
-    if (x < 0.0) {
         return -x;
     }
     return x;

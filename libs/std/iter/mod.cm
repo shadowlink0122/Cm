@@ -60,13 +60,13 @@ impl IntArrayIterator {
     }
 
     int next() {
-        int value = self.current;
+        const int value = *self.current;
         self.current = self.current + 1;
         return value;
     }
 
     int peek() {
-        return self.current;
+        return *self.current;
     }
 
     int remaining() {
@@ -91,27 +91,21 @@ export struct Range {
     int step;
 }
 
-export Range range(int end) {
-    Range r;
-    r.start = 0;
-    r.end = end;
-    r.step = 1;
-    return r;
-}
-
-export Range range(int start, int end) {
-    Range r;
-    r.start = start;
-    r.end = end;
-    r.step = 1;
-    return r;
-}
-
-export Range range(int start, int end, int step) {
+// 自由関数オーバーロードは未サポートのため、rangeは単一シグネチャ（stepはデフォルト引数）+ range_toの2名に整理（R9）
+export Range range(int start, int end, int step = 1) {
     Range r;
     r.start = start;
     r.end = end;
     r.step = step;
+    return r;
+}
+
+/// 0からendまでの範囲（range(0, end)の別名）
+export Range range_to(int end) {
+    Range r;
+    r.start = 0;
+    r.end = end;
+    r.step = 1;
     return r;
 }
 
@@ -134,6 +128,14 @@ export int at(Range r, int n) {
     return r.start + n * r.step;
 }
 
+impl Range {
+    /// for-inプロトコル用イテレータ（for (int x in range(0, 5)) {...} を可能にする）
+    RangeIterator iter() {
+        const RangeIterator it(self);
+        return it;
+    }
+}
+
 /// Range用のイテレータ
 export struct RangeIterator {
     int current;
@@ -148,12 +150,6 @@ impl RangeIterator {
         self.step = r.step;
     }
 
-    overload self(int start, int end, int step) {
-        self.current = start;
-        self.end = end;
-        self.step = step;
-    }
-
     bool has_next() {
         if (self.step > 0) {
             return self.current < self.end;
@@ -163,7 +159,7 @@ impl RangeIterator {
     }
 
     int next() {
-        int value = self.current;
+        const int value = self.current;
         self.current = self.current + self.step;
         return value;
     }

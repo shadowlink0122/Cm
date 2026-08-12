@@ -24,7 +24,8 @@ Options:
   --force-check, --strict Enforce strict type checks/warnings at compile time
                         check/lint: enable declaration naming checks (L001)
 Compile options:
-  --target=<target>     Compilation target
+  --target=<target>     Compilation target (native, wasm, js, ts, web, sv, uefi, ...)
+                        ts = TypeScript output (typed .js twin; runs via node)
                         native:        Native executable (default)
                         wasm:          WebAssembly
                         js:            JavaScript (for Node.js)

@@ -1,6 +1,6 @@
 # v0.16.0 実装設計 4: ビットスライス構文と casez / unique case
 
-優先度: 4〜5関連: [roadmap.md](../../design/v0.16.0/roadmap.html) A4/B2/B3
+優先度: 4〜5関連: [roadmap.md](roadmap.html) A4/B2/B3
 
 > **✅ 2026-07-07 4.1実装済み**: ビットスライスは既存のPython風スライス構文
 > （SliceExpr）を流用し、オブジェクトが bit[N]/整数型のときにSV流解釈

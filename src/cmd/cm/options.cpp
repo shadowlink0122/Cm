@@ -57,6 +57,66 @@ bool parse_sanitizer_list(const std::string& list, std::vector<std::string>& out
     return true;
 }
 
+namespace {
+
+// 真偽フラグの表（名前・別名・設定先。compiler-architecture-restructure 第5段）。
+// 値付き・検証付き・副作用付きのオプションは表化せずparse_options内の明示分岐で扱う
+struct BoolFlag {
+    const char* name;
+    const char* alias;  // 無ければnullptr
+    bool Options::*field;
+};
+constexpr BoolFlag kBoolFlags[] = {
+    {"--verbose", "-v", &Options::verbose},
+    {"--quiet", "-q", &Options::quiet},
+    {"--ast", nullptr, &Options::show_ast},
+    {"--hir", nullptr, &Options::show_hir},
+    {"--mir", nullptr, &Options::show_mir},
+    {"--mir-opt", nullptr, &Options::show_mir_opt},
+    {"--lir-opt", nullptr, &Options::show_lir_opt},
+    {"--emit-llvm", nullptr, &Options::emit_llvm},
+    {"--emit-js", nullptr, &Options::emit_js},
+    {"--emit-memfile", nullptr, &Options::emit_memfile},
+    {"--sv-strict-lint", nullptr, &Options::sv_strict_lint},
+    {"--sv-always-ff", nullptr, &Options::sv_always_ff},
+    {"--sv-warn-nba", nullptr, &Options::sv_warn_nba},
+    {"--emit-constraints", nullptr, &Options::emit_constraints},
+    {"--funroll-loops", nullptr, &Options::unroll_loops},
+    {"--test", nullptr, &Options::test_mode},
+    {"--check", nullptr, &Options::fmt_check},
+    {"--run", nullptr, &Options::run_after_emit},
+    {"--force-check", "--strict", &Options::force_check},
+    {"--recursive", "-r", &Options::recursive},
+};
+
+bool apply_bool_flag(Options& opts, const std::string& arg) {
+    for (const auto& flag : kBoolFlags) {
+        if (arg == flag.name || (flag.alias && arg == flag.alias)) {
+            opts.*(flag.field) = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+// サブコマンドの表（名前→コマンド種別。test_modeはTestコマンドの付随設定）
+struct CommandEntry {
+    const char* name;
+    Command command;
+    bool test_mode;
+};
+constexpr CommandEntry kCommands[] = {
+    {"run", Command::Run, false},
+    {"compile", Command::Compile, false},
+    {"check", Command::Check, false},
+    {"lint", Command::Lint, false},
+    {"fmt", Command::Fmt, false},
+    // #[test] 関数を実行（//! platform: でSVシミュレーション/JITを振り分け）
+    {"test", Command::Test, true},
+};
+
+}  // namespace
+
 Options parse_options(int argc, char* argv[]) {
     Options opts;
 
@@ -79,20 +139,19 @@ Options parse_options(int argc, char* argv[]) {
 
     // 最初の引数でコマンドを判定
     std::string cmd = argv[1];
-    if (cmd == "run") {
-        opts.command = Command::Run;
-    } else if (cmd == "compile") {
-        opts.command = Command::Compile;
-    } else if (cmd == "check") {
-        opts.command = Command::Check;
-    } else if (cmd == "lint") {
-        opts.command = Command::Lint;
-    } else if (cmd == "fmt") {
-        opts.command = Command::Fmt;
-    } else if (cmd == "test") {
-        // #[test] 関数を実行（//! platform: でSVシミュレーション/JITを振り分け）
-        opts.command = Command::Test;
-        opts.test_mode = true;
+    bool command_matched = false;
+    for (const auto& entry : kCommands) {
+        if (cmd == entry.name) {
+            opts.command = entry.command;
+            if (entry.test_mode) {
+                opts.test_mode = true;
+            }
+            command_matched = true;
+            break;
+        }
+    }
+    if (command_matched) {
+        // 表で解決済み
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = Command::Help;
         return opts;
@@ -115,38 +174,15 @@ Options parse_options(int argc, char* argv[]) {
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
 
-        if (arg == "--verbose" || arg == "-v") {
-            opts.verbose = true;
-        } else if (arg == "--quiet" || arg == "-q") {
-            opts.quiet = true;
-        } else if (arg == "--ast") {
-            opts.show_ast = true;
-        } else if (arg == "--hir") {
-            opts.show_hir = true;
-        } else if (arg == "--mir") {
-            opts.show_mir = true;
-        } else if (arg == "--mir-opt") {
-            opts.show_mir_opt = true;
-        } else if (arg == "--lir-opt") {
-            opts.show_lir_opt = true;
-        } else if (arg == "--emit-llvm") {
-            opts.emit_llvm = true;
-        } else if (arg == "--emit-js") {
-            opts.emit_js = true;
-        } else if (arg == "--emit-memfile") {
-            opts.emit_memfile = true;
-        } else if (arg == "--sv-strict-lint") {
-            opts.sv_strict_lint = true;
-        } else if (arg == "--sv-always-ff") {
-            opts.sv_always_ff = true;
-        } else if (arg == "--sv-warn-nba") {
-            opts.sv_warn_nba = true;
-        } else if (arg == "--emit-constraints") {
-            opts.emit_constraints = true;
-        } else if (arg == "--test") {
-            opts.test_mode = true;
-        } else if (arg == "--check") {
-            opts.fmt_check = true;
+        if (arg == "--" && opts.command == Command::Run) {
+            // -- 以降はスクリプトへ渡すコマンドライン引数（std::env::args()で取得）
+            for (int j = i + 1; j < argc; ++j) {
+                opts.program_args.push_back(argv[j]);
+            }
+            break;
+        }
+        if (apply_bool_flag(opts, arg)) {
+            // 真偽フラグは表で解決
         } else if (arg == "-D" && i + 1 < argc) {
             opts.defines.push_back(argv[++i]);
         } else if (arg.rfind("-D", 0) == 0 && arg.size() > 2) {
@@ -159,8 +195,6 @@ Options parse_options(int argc, char* argv[]) {
                 opts.has_error = true;
                 return opts;
             }
-        } else if (arg == "--funroll-loops") {
-            opts.unroll_loops = true;
         } else if (arg.substr(0, 16) == "--funroll-loops=") {
             opts.unroll_loops = true;
             try {
@@ -179,8 +213,6 @@ Options parse_options(int argc, char* argv[]) {
         } else if (arg.substr(0, 9) == "--target=") {
             opts.target = arg.substr(9);
             opts.target_from_cli = true;
-        } else if (arg == "--run") {
-            opts.run_after_emit = true;
         } else if (arg == "-o") {
             if (i + 1 < argc) {
                 opts.output_file = argv[++i];
@@ -189,8 +221,6 @@ Options parse_options(int argc, char* argv[]) {
                 opts.error_message = i18n::msg(i18n::MsgId::CliTheOOptionRequiresAn);
                 return opts;
             }
-        } else if (arg == "--force-check" || arg == "--strict") {
-            opts.force_check = true;
         } else if (arg.substr(0, 2) == "-O") {
             if (arg.length() > 2) {
                 opts.optimization_level = arg[2] - '0';
@@ -235,9 +265,6 @@ Options parse_options(int argc, char* argv[]) {
             }
             opts.lang_from_cli = true;
             debug::set_lang(lang == "ja" ? 1 : 0);
-        } else if (arg == "-r" || arg == "--recursive") {
-            // -r オプション: 再帰的にディレクトリをチェック
-            opts.recursive = true;
         } else if (arg.substr(0, 10) == "--exclude=") {
             // --exclude=PATTERN: 除外パターン
             opts.exclude_patterns.push_back(arg.substr(10));

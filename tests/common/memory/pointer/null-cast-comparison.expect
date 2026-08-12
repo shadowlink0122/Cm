@@ -1,0 +1,7 @@
+cast eq null: true
+plain eq null: true
+cast ne null: false
+plain ne null: false
+nonnull cast ne: true
+nonnull cast eq: false
+nonnull plain ne: true

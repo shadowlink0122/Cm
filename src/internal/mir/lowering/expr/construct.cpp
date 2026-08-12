@@ -3,22 +3,29 @@
 #include "internal/base/debug.hpp"
 #include "internal/mir/lowering/expr.hpp"
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace cm::mir {
 
 // 構造体リテラルのlowering
-LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, LoweringContext& ctx) {
+LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit,
+                                           const hir::TypePtr& expr_type, LoweringContext& ctx) {
     debug_msg("MIR", "Lowering struct literal: " + lit.type_name);
 
     // 構造体の型を作成
     hir::TypePtr struct_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
     struct_type->name = lit.type_name;
+
+    // ジェネリック特殊化のリテラル（typedef IntPair = Pair<int,int>;由来）は型引数付きのHIR型を一時変数へ引き継ぎ、モノモーフィゼーションの特殊化・型書き換え対象にする（B8）
+    if (expr_type && expr_type->kind == hir::TypeKind::Struct && expr_type->name == lit.type_name &&
+        !expr_type->type_args.empty()) {
+        struct_type = expr_type;
+    }
 
     // 結果用の変数を作成
     LocalId result = ctx.new_temp(struct_type);
@@ -44,6 +51,18 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
             }
         }
 
+        // ジェネリック構造体のリテラル: フィールド型の型パラメータをリテラルの具象型引数で置換する。
+        // 置換しないとフィールド T v（T=int[]）がスライスフィールドと判定されず、固定配列blobが
+        // 生格納されて不正なCmSlice*になり、内容比較等の参照でSIGSEGVしていた
+        if (field_type && struct_def && !struct_def->generic_params.empty() &&
+            struct_type->type_args.size() == struct_def->generic_params.size()) {
+            std::unordered_map<std::string, hir::TypePtr> subst;
+            for (size_t gi = 0; gi < struct_def->generic_params.size(); ++gi) {
+                subst[struct_def->generic_params[gi].name] = struct_type->type_args[gi];
+            }
+            field_type = ast::substitute_type_params(field_type, subst);
+        }
+
         // スライスフィールドへの配列リテラル代入をチェック
         bool is_slice_field = field_type && field_type->kind == hir::TypeKind::Array &&
                               !field_type->array_size.has_value();
@@ -61,109 +80,15 @@ LocalId ExprLowering::lower_struct_literal(const hir::HirStructLiteral& lit, Low
         LocalId field_value;
 
         if (is_slice_field && is_array_literal && arr_lit) {
-            // 配列リテラルからスライスを作成（typedefエイリアスは解決してから判定）
-            hir::TypePtr elem_type = ctx.resolve_typedef(
-                field_type->element_type ? field_type->element_type : hir::make_int());
-
-            // 要素サイズを取得
-            int64_t elem_size = 4;  // デフォルトはint
-            auto elem_kind = elem_type->kind;
-            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                elem_size = 1;
-            } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
-                elem_size = 2;
-            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
-                       elem_kind == hir::TypeKind::Double) {
-                elem_size = 8;
-            } else if (elem_kind == hir::TypeKind::Float) {
-                elem_size = 4;
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
-                elem_size = 8;
-            } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
-                // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-                elem_size = ctx.layout_size(elem_type);
-            }
-
-            // スライス用の一時変数を作成
-            field_value = ctx.new_temp(field_type);
-
-            // cm_slice_new(elem_size, initial_capacity) を呼び出し
-            LocalId elem_size_local = ctx.new_temp(hir::make_long());
-            MirConstant elem_size_const;
-            elem_size_const.value = static_cast<int64_t>(elem_size);
-            elem_size_const.type = hir::make_long();
-            ctx.push_statement(MirStatement::assign(
-                MirPlace{elem_size_local}, MirRvalue::use(MirOperand::constant(elem_size_const))));
-
-            LocalId init_cap_local = ctx.new_temp(hir::make_long());
-            MirConstant init_cap_const;
-            init_cap_const.value = static_cast<int64_t>(arr_lit->elements.size());
-            init_cap_const.type = hir::make_long();
-            ctx.push_statement(MirStatement::assign(
-                MirPlace{init_cap_local}, MirRvalue::use(MirOperand::constant(init_cap_const))));
-
-            // cm_slice_new呼び出し
-            BlockId new_block = ctx.new_block();
-            std::vector<MirOperandPtr> new_args;
-            new_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
-            new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
-
-            auto new_term = std::make_unique<MirTerminator>();
-            new_term->kind = MirTerminator::Call;
-            new_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
-                                                     std::move(new_args),
-                                                     MirPlace{field_value},
-                                                     new_block,
-                                                     std::nullopt,
-                                                     "",
-                                                     "",
-                                                     false};
-            ctx.set_terminator(std::move(new_term));
-            ctx.switch_to_block(new_block);
-
-            // push関数名を決定
-            std::string push_func = "cm_slice_push_i32";
-            if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                push_func = "cm_slice_push_i8";
-            } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong) {
-                push_func = "cm_slice_push_i64";
-            } else if (elem_kind == hir::TypeKind::Double) {
-                push_func = "cm_slice_push_f64";
-            } else if (elem_kind == hir::TypeKind::Float) {
-                push_func = "cm_slice_push_f32";
-            } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String ||
-                       elem_kind == hir::TypeKind::Struct) {
-                push_func = "cm_slice_push_ptr";
-            }
-
-            // 各要素をpushで追加
-            for (const auto& elem : arr_lit->elements) {
-                LocalId elem_value = lower_expression(*elem, ctx);
-
-                BlockId success_block = ctx.new_block();
-                std::vector<MirOperandPtr> push_args;
-                push_args.push_back(MirOperand::copy(MirPlace{field_value}));
-                push_args.push_back(MirOperand::copy(MirPlace{elem_value}));
-
-                auto call_term = std::make_unique<MirTerminator>();
-                call_term->kind = MirTerminator::Call;
-                call_term->data = MirTerminator::CallData{MirOperand::function_ref(push_func),
-                                                          std::move(push_args),
-                                                          std::nullopt,
-                                                          success_block,
-                                                          std::nullopt,
-                                                          "",
-                                                          "",
-                                                          false};
-                ctx.set_terminator(std::move(call_term));
-                ctx.switch_to_block(success_block);
-            }
+            // 配列リテラルからスライスフィールド値を実体化する（cm_slice_new+push。正準ヘルパへ委譲）
+            field_value = materialize_slice_literal(arr_lit->elements, field_type, ctx);
         } else {
             // 通常の処理
             field_value = lower_expression(*field.value, ctx);
         }
+
+        // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する（B2/Y1）
+        field_value = ctx.coerce_to_expected(field_value, field_type);
 
         // フィールドへの代入を生成
         MirPlace place{result};
@@ -211,13 +136,17 @@ LocalId ExprLowering::lower_array_literal(const hir::HirArrayLiteral& lit,
     for (size_t i = 0; i < lit.elements.size(); ++i) {
         LocalId elem_value = lower_expression(*lit.elements[i], ctx);
 
+        // 変換統一ドライバ: numeric/ユニオン/インターフェイスupcast（fat pointer構築）を1系統で挿入する
+        // （旧来はkind不一致の生Castのみで、interface要素スロットはバックエンドの射影assign認識頼みだった）
+        elem_value = ctx.coerce_to_expected(elem_value, elem_type);
+
         // 要素の型が期待される型と異なる場合、型変換が必要
         hir::TypePtr actual_elem_type = nullptr;
         if (elem_value < ctx.func->locals.size()) {
             actual_elem_type = ctx.func->locals[elem_value].type;
         }
 
-        // 型変換が必要かチェック
+        // 型変換が必要かチェック（ドライバが扱わない残余のkind不一致の生Castフォールバック）
         bool needs_cast = false;
         if (actual_elem_type && elem_type) {
             // floatとdoubleの変換
@@ -323,6 +252,13 @@ LocalId ExprLowering::lower_enum_payload(const hir::HirEnumPayload& ep, Lowering
 
     // scrutinee.field[1]（ペイロード）を抽出
     MirPlace payload_place{scrutinee_local};
+    // Q5: selfポインタ経由のmatch（enumのinherent implメソッド内等）はderefしてからペイロードを射影する（タグ読みのlower_memberは自動derefするがこちらは手組み射影のため明示する）
+    hir::TypePtr scrutinee_type = (scrutinee_local < ctx.func->locals.size())
+                                      ? ctx.func->locals[scrutinee_local].type
+                                      : nullptr;
+    if (scrutinee_type && scrutinee_type->kind == hir::TypeKind::Pointer) {
+        payload_place.projections.push_back(PlaceProjection::deref());
+    }
     payload_place.projections.push_back(PlaceProjection::field(1));
     ctx.push_statement(
         MirStatement::assign(MirPlace{result}, MirRvalue::use(MirOperand::copy(payload_place))));

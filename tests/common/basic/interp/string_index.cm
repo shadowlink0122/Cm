@@ -1,0 +1,10 @@
+// 補間内の文字列添字・メソッド混在（旧テキストパターン照合では空出力・SIGSEGVだった形）
+import std::io::println;
+int main() {
+    string t = "abc";
+    println("{t[1]}");
+    println("{t.len()} {t[2]}");
+    int i = 0;
+    println("{t[i]} {t[i + 1]}");
+    return 0;
+}

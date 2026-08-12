@@ -176,11 +176,10 @@ impl<T> Vec<T> for Container<T> {
     private void grow() {
         // 内部ヘルパー関数
     }
-
-    // メソッドのオーバーロード
-    overload void push(T item, size_t count) { }
 }
 ```
+
+メソッドのオーバーロード（`overload`修飾子つきメソッド）は未対応であり、専用診断で拒否される（`overload`が使えるのは第3.1節のコンストラクタのみ）。
 
 ### 4.1 privateメソッド
 
@@ -343,8 +342,8 @@ void bench_sort() {
     // ベンチマークコード
 }
 
-#inline
-int square(int x) {
+// inline修飾子はキーワード形式（LLVMのinlinehint属性としてコード生成へ伝搬する）
+inline int square(int x) {
     return x * x;
 }
 
@@ -390,6 +389,46 @@ T max(T a, T b) {  // Tは自動的にジェネリックと認識
     return a > b ? a : b;
 }
 ```
+
+## 10.1 シフト演算の境界意味論（v0.17.0確定）
+
+シフト量は左オペランドの型幅でmodを取る（`int`値 `<< 32` は `<< 0`、`long`値 `<< 65` は `<< 1` と等価）。
+C言語のような未定義動作にはせず、全バックエンド（native/jit/js/wasm）・全最適化レベルで同一結果を保証する（定数畳み込みとコード生成の両方が同じマスクを適用する）。
+
+## 10.2 混合数値二項演算の昇格（v0.17.0確定）
+
+算術（`+ - * / %`）・比較（`== != < > <= >=`）の二項演算で浮動小数と整数が混在する場合、整数オペランドは浮動小数側の型へ暗黙昇格する（`int × double → double`、`float × double → double`。C言語のusual arithmetic conversionsの浮動小数規則に準拠）。
+複合代入（`+= -= *= /= %=`）は宛先型（左辺）へ右辺を揃える（`double += int` はsitofp、`int += double` はfptosi切り詰め）。
+昇格Castの挿入は型検査（`infer_binary`）が唯一の判断点であり、MIR loweringは「二項演算のオペランドは同型」を前提に混合到達を診断で停止する。
+整数同士の幅混在（`int × long` 等）は従来どおりコード生成の幅合わせによる（結果型はより広い方）。
+floatオペランドと浮動小数リテラルの混合（`f / 2.0`）はdoubleへ昇格せず、リテラル側をfloatへ適合させて演算をfloat幅で行う（リテラルの型は文脈で決まる）。
+
+## 10.3 数値変換の暗黙/明示の境界（v0.17.0確定・段階導入）
+
+代入的文脈（let初期化・代入・複合代入・return）の数値変換は、次の分類表で扱いを決める（型検査`classify_numeric_conversion`が唯一の定義点）。
+
+| 分類 | 例 | 扱い |
+|---|---|---|
+| 拡大（値を保存） | `int→long`・`short→int`・`uint→long`・`int→float/double`・`float→double` | 暗黙可・無診断 |
+| 縮小（情報を失いうる） | `long→int`・`int→short`・`double→float`・`double/float→int` | 受理するが警告（`as`の付与を提案）。`check/lint --strict`ではエラー |
+| 符号解釈の変化 | `int→uint`・`int→ulong` | 受理するが警告。`--strict`ではエラー |
+| 符号なし→符号付き整数 | `uint→int`・`usize→int` | 現段階は暗黙可・無診断（`len()`/`cap()`/`sizeof`等の読み出しイディオムを維持。2^31超の縮小リスクは--strictでの診断化を将来検討） |
+| 意味変化 | `int↔char`・`int↔bool`・`数値↔string` | `as`必須（従来どおり型エラー） |
+
+宛先に適合するリテラル（`short s = 5;`・`uint u = 7;`・`float f = 2.5;`・`ulong u = 0xFFFFFFFFFFFFFFFF;`）は縮小・符号変化に該当しても診断しない（明示的な負値リテラルの符号なし宛先は診断する）。
+受理された変換のうち浮動小数が絡むもの（整数→浮動小数・浮動小数幅違い・浮動小数→整数）は、MIR loweringの`coerce_numeric_context`がlet/代入/引数/デフォルト引数/return/構造体フィールドの各文脈で変換Cast（sitofp/fptrunc/fptosi相当）を挿入し、「受理したのに未変換」のビット再解釈を構造的に排除する。
+整数同士の幅違いは従来どおりコード生成の幅合わせ（2の補数ラップ）による。
+
+## 10.4 文字列APIの添字単位（v0.17.0確定）
+
+文字列APIは「コードポイント系」と「バイト系」の2系統に分離し、系統内で長さと添字の単位を一致させる（混用が非ASCII文字列の走査を壊すため）。
+
+| 系統 | 長さ | 要素アクセス | 部分列・検索 |
+|---|---|---|---|
+| コードポイント系 | `len()`（コードポイント数） | `codepoint_at(i)`（uintスカラ・範囲外0）・`charAt(i)`/`at(i)`（char・ASCIIのみ値を返し非ASCIIコードポイントと範囲外は`'\0'`）・`chars()`（uint[]実体化） | `substring(a,b)`/`slice(a,b)`・`indexOf(t)`（いずれもコードポイント添字） |
+| バイト系 | `byte_len()`（UTF-8バイト数） | `byte_at(i)`（int・生バイト0..255・範囲外0） | （バイト添字の部分列APIは未提供。バイト列が必要な場合は`std::strings::from_bytes`と組で扱う） |
+
+`charAt`/`at`の戻り型`char`は1バイトでありASCII範囲のコードポイントのみ忠実に表現できるため、非ASCIIの値取得には`codepoint_at`を使う。生バイト走査（プロトコル解析等）は`byte_len()`+`byte_at()`を対で使う。全バックエンド（native/jit/wasm/js/ts）で同一の値を返す（jsはUTF-16内部表現だがAPI境界でUTF-8バイト/コードポイントへ変換して揃える）。
 
 ## 優先順位
 

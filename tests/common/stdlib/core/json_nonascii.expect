@@ -1,0 +1,8 @@
+r1=true val=日本語
+r3=日本😀
+r5=改行
+と"引用"と日本語
+name=Cm言語
+tags=2 t0=日本語 t1=emoji😀
+rt={"名前":"Cm言語","tags":["日本語","emoji😀"],"ok":true}
+rt2=Cm言語

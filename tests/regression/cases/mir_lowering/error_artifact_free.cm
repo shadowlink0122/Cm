@@ -1,0 +1,34 @@
+// __error__シンボル不在検査の代表プログラム（diagnostics-engine-unification 第3段）
+// 過去に未解決型がMIRへ漏れた経路（ジェネリック構造体のメソッドチェーン・補間内呼び出し・スライス組み込み）を網羅する
+
+struct Box<T> {
+    T value;
+}
+
+impl Box<T> {
+    T get() {
+        return self.value;
+    }
+    void set(T v) {
+        self.value = v;
+    }
+}
+
+struct Leaf {
+    int v;
+}
+
+int main() {
+    Box<int> b;
+    b.set(42);
+    int got = b.get();
+
+    Leaf[] leaves = [];
+    leaves.push(Leaf{v: 7});
+    Leaf first = leaves[0];
+
+    string msg = "got: {got}, leaf: {first.v}, len: {leaves.len()}";
+    println(msg);
+    println("box: {b.get()}");
+    return 0;
+}

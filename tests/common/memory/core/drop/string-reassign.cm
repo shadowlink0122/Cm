@@ -1,0 +1,36 @@
+import std::io::println;
+
+// C12回帰: 文字列再代入時の旧バッファ解放パス（O1以上のStringReassignFree）の検証。
+// 全定義がfresh（concat結果）で他所へエイリアスされないローカルの再代入では旧バッファが解放され、
+// リテラル初期化が混ざるアキュムレータやエイリアスされた変数は保守的に解放されないことを、
+// 出力一致と値の健全性（use-after-freeが起きないこと）で確認する。
+
+int main() {
+    string base = "hello";
+
+    // fresh初期化+fresh再代入: 旧バッファは各再代入で解放される（O1+）
+    string s = base + "!";
+    int i = 0;
+    while (i < 3) {
+        s = base + "-" + i;
+        i++;
+    }
+    println(s);
+
+    // リテラル初期化のアキュムレータ: 到達定義にリテラルが混ざるため解放されない（従来どおり動作）
+    string acc = "";
+    int j = 0;
+    while (j < 3) {
+        acc = acc + "x";
+        j++;
+    }
+    println(acc);
+
+    // エイリアスされた変数: tがsの旧バッファを参照し続けるため解放されない
+    string a = base + "A";
+    string t = a;
+    a = base + "B";
+    println(t);
+    println(a);
+    return 0;
+}

@@ -1,0 +1,7 @@
+// R13: 添字演算子[]のオーバーロードは未対応（従来は[]がスライス型サフィックスに消費されExpected operator symbolの誤誘導エラーだった）
+interface Indexable {
+    operator int [](int i);
+}
+int main() {
+    return 0;
+}

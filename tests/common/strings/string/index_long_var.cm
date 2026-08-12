@@ -1,0 +1,11 @@
+// 回帰(N8): 文字列添字にlong型変数を使うとjsでcharCodeAt(BigInt)のTypeErrorになるバグの検証
+import std::io::println;
+int main() {
+    string s = "hello";
+    println(s[1]);
+    println(s.charAt(0));
+    for (long i = 0; i < 3; i++) {
+        println(s[i]);
+    }
+    return 0;
+}

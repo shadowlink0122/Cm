@@ -1,0 +1,15 @@
+// i18n E2Eテスト用: const集約のフィールド・要素へ代入するプログラム（M3警告の検証）
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    const Point p = Point{x: 1, y: 2};
+    p.x = 99;
+    const int[3] a = [10, 20, 30];
+    a[0] = 5;
+    Point q = Point{x: 3, y: 4};
+    q.x = 7;
+    return 0;
+}

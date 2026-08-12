@@ -1,0 +1,18 @@
+// jsのuintビット演算正規化回帰: |&^はToInt32で符号付き32ビットになり、
+// (0xFE<<24)を含むOR結果が負値になってnative（4277009103）と分裂していた（>>>0で符号なし化）
+import std::io::println;
+
+uint b0() { return 0xCF as uint; }
+uint b1() { return 0xFA as uint; }
+uint b2() { return 0xED as uint; }
+uint b3() { return 0xFE as uint; }
+
+int main() {
+    uint v = b0() | (b1() << 8) | (b2() << 16) | (b3() << 24);
+    println(v);
+    println(v == 0xFEEDFACF as uint);
+    println(v & 0xFF000000);
+    println(v ^ 0xFFFFFFFF as uint);
+    println((v >> 24) & 0xFF);
+    return 0;
+}

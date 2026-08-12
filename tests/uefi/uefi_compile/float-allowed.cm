@@ -1,0 +1,9 @@
+// 回帰(R18): UEFI（x86_64 ABIはSSE有効）では浮動小数点が使用できる（baremetal-x86との仕様非対称の固定）
+double compute(double a, double b) {
+    return a * b + 1.5;
+}
+
+int main() {
+    double r = compute(2.0, 3.0);
+    return r as int;
+}

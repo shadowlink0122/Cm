@@ -1,0 +1,9 @@
+// L6回帰: assert_eqが失敗時に期待値・実測値を表示して非ゼロ終了することを検証する
+import std::io::println;
+import std::debug::assert_eq;
+
+int main() {
+    assert_eq(2 + 2, 5);
+    println("unreachable");
+    return 0;
+}

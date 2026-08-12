@@ -1,0 +1,48 @@
+//! platform: !wasm|js|sv
+import std::mem::{alloc, dealloc, set_allocator_fns, reset_allocator};
+import std::io::println;
+
+// M14回帰: set_allocator_fnsでグローバルアロケータをCm関数へ差し替えると、
+// std::mem::alloc/deallocが登録したアロケータを経由すること、reset_allocatorで既定へ戻ることを検証する。
+// 対応はJIT/Nativeのみ（wasmは独自フリーリスト固定でno-op、js/tsはGC管理のため対象外）
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+    void* realloc(void* ptr, int size);
+}
+
+int alloc_count = 0;
+
+void* counting_alloc(long size) {
+    alloc_count = alloc_count + 1;
+    return malloc(size as int);
+}
+
+void counting_dealloc(void* ptr) {
+    free(ptr);
+}
+
+void* counting_realloc(void* ptr, long new_size) {
+    return realloc(ptr, new_size as int);
+}
+
+int main() {
+    set_allocator_fns(
+        counting_alloc as void*,
+        counting_dealloc as void*,
+        counting_realloc as void*
+    );
+    void* a = alloc(64);
+    void* b = alloc(128);
+    dealloc(a);
+    dealloc(b);
+    println(alloc_count >= 2);
+
+    reset_allocator();
+    int before = alloc_count;
+    void* c = alloc(32);
+    dealloc(c);
+    println(alloc_count == before);
+    return 0;
+}

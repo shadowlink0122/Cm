@@ -53,6 +53,8 @@ struct Options {
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数
     // サニタイザ（--sanitize=address,bounds。native/wasmのLLVMバックエンド専用）
     std::vector<std::string> sanitizers;
+    // cm run <file> -- <args...> でスクリプトへ渡す引数（std::env::args()。argv[0]は入力ファイル）
+    std::vector<std::string> program_args;
     // エラー処理
     bool has_error = false;     // パースエラーフラグ
     std::string error_message;  // エラーメッセージ

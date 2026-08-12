@@ -1,0 +1,23 @@
+// M8回帰: double出力が全バックエンドで最短round-trip表現に統一されることを検証する
+// （従来はjit/native=有効6桁で123456789.5→123457000と桁化け、wasm=小数5桁固定、js=round-tripと3分裂していた）
+import std::io::println;
+
+int main() {
+    double d = 123456789.5;
+    println(d);
+    double small = 0.1;
+    println(small);
+    double third = 1.0 / 3.0;
+    println(third);
+    double big = 1e20;
+    println(big);
+    double tiny_frac = 0.000001;
+    println(tiny_frac);
+    double neg = -2.5;
+    println(neg);
+    double whole = 42.0;
+    println(whole);
+    double boundary = 1e15;
+    println(boundary);
+    return 0;
+}

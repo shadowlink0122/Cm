@@ -1,0 +1,23 @@
+//! platform: ts
+// 構造体: export interface 出力とフィールド型注釈。ネスト構造体はリテラルでまとめて初期化する
+struct Point {
+    int x;
+    int y;
+}
+struct Line {
+    Point start;
+    Point end;
+}
+int manhattan(Line l) {
+    int dx = l.end.x - l.start.x;
+    int dy = l.end.y - l.start.y;
+    return dx + dy;
+}
+int main() {
+    Line l = {
+        start: { x: 1, y: 2 },
+        end: { x: 4, y: 6 }
+    };
+    println("d={manhattan(l)}");
+    return 0;
+}

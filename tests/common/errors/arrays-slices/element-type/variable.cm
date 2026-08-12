@@ -1,0 +1,7 @@
+// 配列要素に異なる型の変数を混在させるとエラーになる（Req1）
+int main() {
+    string s = "x";
+    int n = 5;
+    int[2] a = [n, s];
+    return 0;
+}

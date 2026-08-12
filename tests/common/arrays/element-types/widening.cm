@@ -1,0 +1,9 @@
+import std::io::println;
+// 配列要素への小さい型(tiny/short)の代入は拡大変換として許可される（Req2）
+int main() {
+    tiny t = 1;
+    short s = 2;
+    int[3] a = [t, s, 3];
+    println("{a[0]} {a[1]} {a[2]}");
+    return 0;
+}

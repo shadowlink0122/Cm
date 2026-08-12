@@ -48,6 +48,54 @@ wide = replicate(nibble, 3); // → {3{nibble}}
 
 ---
 
+## packed性の制御と型名キャスト（v0.17.0）
+
+Cmの `struct` は既定で `typedef struct packed` として出力されます（ビットベクタとして扱える）。配列レイアウトやツール制約でunpackedが必要な場合は `#[sv::unpacked]` を付与します:
+
+```cm
+#[sv::unpacked]
+struct Cfg { bit[8] a; bit[8] b; }   // → typedef struct { ... } Cfg;
+struct Pk  { bit[4] x; bit[4] y; }   // → typedef struct packed { ... } Pk;（既定）
+```
+
+生ビットからpacked structへの `as` キャストは、SVの型名キャストとして出力されます（ビット再解釈の明示）:
+
+```cm
+Pair p = raw as Pair;   // → p = Pair'(raw);
+```
+
+packed structの上位フィールドがMSB側に対応します（`Pair { hi; lo; }` に16'hABCDを入れると hi=0xAB・lo=0xCD）。実行系バックエンドのstructレイアウトとはビット順の解釈が異なるため、ビット再解釈キャストはSV専用の書き方として使ってください。
+
+## packed union（ビット再解釈の複数ビュー・v0.17.0）
+
+`#[sv::packed_union]` を付けたstructは `typedef union packed` として出力され、同一ビット領域を複数のビュー（生ビット・packed structのフィールド分解）で再解釈できます。レジスタマップやプロトコルヘッダのRTL頻出パターンです:
+
+```cm
+struct Fields {
+    bit[8] opcode;
+    bit[8] dst;
+    bit[16] imm;
+}
+
+#[sv::packed_union]
+struct Word {
+    bit[32] raw;      // ビュー1: 生32ビット
+    Fields fields;    // ビュー2: フィールド分解（合計32ビット）
+}
+
+Word w;
+// w.raw = in_word; の後に w.fields.opcode で上位8ビットを読める
+```
+
+```systemverilog
+typedef union packed {
+    logic [31:0] raw;
+    Fields fields;
+} Word;
+```
+
+全メンバのビット幅は一致している必要があり、不一致はコンパイル時エラー（SV009）になります。メンバに使えるのはビットベクタ・整数型・packed structです。ビット再解釈（あるビューへの書き込みを別ビューで読む）はSVターゲット専用の意味論で、実行系バックエンドではフィールドは独立したストレージになります。
+
 ## 列挙型 (FSM)
 
 Cmの `enum` はSVの `typedef enum logic` に変換されます。ビット幅は**最大タグ値**から自動計算されます（明示的なタグ値に対応）:
@@ -117,7 +165,7 @@ utiny ch = TITLE[i] as utiny;
 
 ### 制限
 
-- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください（[v0.16.0ロードマップ](../../../../design/v0.16.0/roadmap.html)で長さの型化を検討中）。
+- **非const の string 変数・関数引数・戻り値は `logic [23:0]`（3文字分）固定**です。3文字を超える文字列を渡すと切り詰められます。const 定数以外での string 使用は避けてください（[v0.16.0ロードマップ](../../../../archive/v0.16.0/roadmap.html)で長さの型化を検討中）。
 
 ## ビットスライス（v0.16.0）
 
@@ -126,21 +174,61 @@ utiny ch = TITLE[i] as utiny;
 ```cm
 bit[16] word = 0xABCD;
 bit[8] hi = word[15:8];      // 0xAB（定数範囲）
-word[11:4] = 0xFF;           // 部分代入（read-modify-write）
+word[11:4] = 0xFF;           // 部分代入
 
 uint i = 1;
 bit[4] nib = word[i*4 +: 4]; // 可変基点+定数幅（インデックスドパートセレクト）
+bit[4] dn = word[7 -: 4];    // 下降方向（bits 7..4。v0.17.0）
 ```
 
-- 範囲・幅は**整数リテラル**で指定します（v0.16.0時点の制限）。基点（`+:` の左）は任意の整数式が使えます
-- 全バックエンド共通のシフト+マスクに脱糖されるため、実行系（JIT/native/WASM/JS）でも同じ結果になります
+- 範囲・幅は**整数リテラル**で指定します。基点（`+:`/`-:` の左）は任意の整数式・`bit[N]` 値が使えます
+- `x[base -: w]` は基点から下位方向へ `[base : base-w+1]` を選択します（v0.17.0）
+- 実行系バックエンド（JIT/native/WASM/JS）ではシフト+マスクに脱糖され、全バックエンドで同じ結果になります
 - 幅は最大64ビット、結果型は `bit[w]`（整数との相互代入可）
 
+### native part-select出力（v0.17.0）
 
----
+SVターゲットでは、ビットスライスの読み書きがshift+maskでなく**SVのnative part-select構文**で出力されます:
 
-<!-- nav -->
-← 前: [SVバックエンド - 制御構文とループ](control-flow.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) →
+| Cm | 生成SV |
+|----|--------|
+| `hi = din[15:8];` | `hi <= din[15:8];` |
+| `nib = word[i +: 4];` | `nib <= word[i +: 4];` |
+| `dn = word[7 -: 4];` | `dn <= word[7 -: 4];` |
+| `word[7:4] = v;` | `word[7:4] <= v;`（左辺part-select） |
+
+- 部分代入のブロッキング/ノンブロッキングは通常の代入と同じ規則（always_ff/posedge関数のグローバル信号は `<=`）で選ばれます
+- `#[test]` 関数・initialブロック内は従来どおりshift+mask式のままです（テストベンチ生成の互換）
+
+## リダクション演算子（v0.17.0）
+
+ベクタの全ビットを1ビット（`bool`）へ畳み込むリダクション演算を組み込み関数として提供します。SVでは native なリダクション演算子（`&x`・`|x`・`^x`・`~&x`・`~|x`・`~^x`）を出力します:
+
+```cm
+#[input]  bit[8] flags = 0;
+#[output] bool all_set = false;
+#[output] bool parity = false;
+
+void check() {
+    all_set = reduce_and(flags);  // → all_set = &(flags);   全ビットAND
+    parity  = reduce_xor(flags);  // → parity  = ^(flags);   パリティ
+}
+```
+
+| 組み込み関数 | 意味 | SV出力 |
+|--------------|------|--------|
+| `reduce_and(x)` | 全ビットAND（全ビット1で真） | `&x` |
+| `reduce_or(x)` | 全ビットOR（1ビットでも1で真） | `\|x` |
+| `reduce_xor(x)` | 全ビットXOR（1の個数が奇数で真＝パリティ） | `^x` |
+| `reduce_nand(x)` | NAND（`reduce_and` の否定） | `~&x` |
+| `reduce_nor(x)` | NOR（`reduce_or` の否定） | `~\|x` |
+| `reduce_xnor(x)` | XNOR（`reduce_xor` の否定） | `~^x` |
+
+- 被演算子は整数型または `bit[N]` 型（非整数はコンパイルエラー）。畳み込み幅は被演算子の型幅で決まります（`bit[8]`=8ビット・`uint`=32ビット）
+- 戻り値は `bool`（1ビット）。SV出力ポートへ束ねる場合は `bool` ポートを使います
+- 非SVバックエンド（JIT/native/WASM/JS）ではマスク比較・パリティ算術へ脱糖され、全バックエンドで同じ結果になります
+- `reduce_xor`/`reduce_xnor` は被演算子を幅ぶん評価するため、副作用のある式（関数呼び出し等）ではなく変数・フィールドを渡してください
+
 
 ---
 
@@ -178,3 +266,8 @@ void compute() {
 - `self` のフィールドへ書き込むメソッドは未対応（`error[SV010]`。値渡しでは呼び出し元へ反映されないため）
 - interface型変数経由の動的ディスパッチは未対応（`error[SV011]`。呼び出し先が静的に決まる具体型経由の呼び出しを使う）
 - `self` のポインタ値をメソッド呼び出し以外へ持ち出す使い方は未対応（`error[SV012]`）
+
+---
+
+<!-- nav -->
+← 前: [SVバックエンド - 制御構文とループ](control-flow.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) →

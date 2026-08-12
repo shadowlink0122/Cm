@@ -1,0 +1,31 @@
+// 回帰: 補間プレースホルダ内の変数添字（{arr[i]}）が定数0へフォールバックして常に先頭要素を表示するバグの検証
+// 数値添字・変数添字・ネスト添字・フィールド経由添字を全て確認する
+import std::io::println;
+
+struct Holder {
+    int[] values;
+}
+
+int main() {
+    string[] names = [];
+    names.push("alpha");
+    names.push("beta");
+    names.push("gamma");
+    for (long i = 0; i < 3; i++) {
+        println("name[{i}] = {names[i]}");
+    }
+    println("head = {names[0]}");
+
+    int[3] fixed = [10, 20, 30];
+    for (int j = 0; j < 3; j++) {
+        println("fixed[{j}] = {fixed[j]}");
+    }
+
+    Holder h = Holder{values: []};
+    h.values.push(7);
+    h.values.push(8);
+    for (int k = 0; k < 2; k++) {
+        println("held[{k}] = {h.values[k]}");
+    }
+    return 0;
+}

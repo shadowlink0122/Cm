@@ -1,0 +1,44 @@
+import std::io::println;
+// Q2回帰: ジェネリック特殊化を型引数として持つ構造体のフィールド読み（従来はPair<Box<int>, Box<string>>のstring側読みでrc=0のまま無言終了していた）
+// 真因は2系統: (1) struct_symbol_keyのsimple高速パスが曖昧フラット名Pair__Box__int__Box__stringを生成し逆算器が誤分割、(2) 内側リテラルの型注釈がフィールド宣言型のジェネリックパラメータ名で上書きされ裸のBoxのままlowerされていた
+
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+struct Triple<A, B, C> { A a; B b; C c; }
+
+Pair<Box<int>, Box<string>> make_nested() {
+    return Pair { first: Box { v: 100 }, second: Box { v: "made" } };
+}
+
+int main() {
+    // 基本形: string側が第2引数
+    Pair<Box<int>, Box<string>> nested = Pair { first: Box { v: 42 }, second: Box { v: "deep" } };
+    Box<string> bs = nested.second;
+    string s = bs.v;
+    println("fwd: {nested.first.v} {s}");
+
+    // 逆順: string側が第1引数
+    Pair<Box<string>, Box<int>> rev = Pair { first: Box { v: "head" }, second: Box { v: 7 } };
+    println("rev: {rev.first.v} {rev.second.v}");
+
+    // 混在: 特殊化とプリミティブの混合
+    Pair<Box<string>, int> mixed = Pair { first: Box { v: "mix" }, second: 9 };
+    println("mixed: {mixed.first.v} {mixed.second}");
+
+    // 3型引数: 中央にstring特殊化
+    Triple<Box<int>, Box<string>,
+    Box<int>> tri = Triple { a: Box { v: 1 }, b: Box { v: "mid" }, c: Box { v: 3 } };
+    println("tri: {tri.a.v} {tri.b.v} {tri.c.v}");
+
+    // 逆ネスト: ジェネリックの型引数がさらに複数引数ジェネリック
+    Box<Pair<int, string>> outer = Box { v: Pair { first: 5, second: "inner" } };
+    println("outer: {outer.v.first} {outer.v.second}");
+
+    // 関数戻り値経由（ローカル直接構築と別経路）
+    Pair<Box<int>, Box<string>> made = make_nested();
+    println("made: {made.first.v} {made.second.v}");
+
+    // チェーン読み（一時変数への退避なし）
+    println("chain: {nested.second.v}");
+    return 0;
+}

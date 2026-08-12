@@ -10,7 +10,7 @@
 // - checking/stmt.cpp       : 文のチェック
 // - checking/expr.cpp       : 式の型推論
 // - checking/call.cpp       : 関数/メソッド呼び出し
-// - checking/generic.cpp    : ジェネリクス処理
+// - checking/generic/       : ジェネリクス処理
 // - checking/auto_impl.cpp  : 自動実装
 // - checking/utils.cpp      : ユーティリティ
 // ============================================================

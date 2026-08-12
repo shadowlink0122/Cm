@@ -24,7 +24,8 @@ Cm言語コンパイラ v{version}
   --force-check, --strict コンパイル時に厳格な型チェック/警告を強制実行
                         check/lint: 宣言の命名規則チェック（L001）を有効化
 コンパイル時オプション:
-  --target=<target>     コンパイルターゲット
+  --target=<target>     コンパイルターゲット（native, wasm, js, ts, web, sv, uefi ...）
+                        ts = TypeScript出力（型注釈付き。node実行はJSツイン経由）
                         native:        ネイティブ実行ファイル（デフォルト）
                         wasm:          WebAssembly
                         js:            JavaScript (Node.js向け)

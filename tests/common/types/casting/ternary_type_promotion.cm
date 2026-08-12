@@ -1,0 +1,38 @@
+// 三項演算子の腕型昇格回帰: 結果型がthen腕固定で `false ? 0 : uint値` がint扱いになり、
+// 4000000000が-294967296と表示されていた（jsは正でバックエンド分裂）
+// 腕が整数同士なら幅の広い方（同幅は符号なし優先）へ昇格し、MIRの結果一時も式全体の型を使う
+// あわせて幅広ローカルへの代入の拡大変換もソース型符号基準（ushort→zext）へ修正
+import std::io::println;
+
+uint big_u() {
+    return 4000000000 as uint;
+}
+
+ushort big_us() {
+    return 60000 as ushort;
+}
+
+int neg() {
+    return -7;
+}
+
+int main() {
+    // int リテラル腕 × uint腕 → uint昇格
+    println(false ? 0 : big_u());
+    println(true ? big_u() : 0);
+
+    // ushort腕 × intリテラル腕 → int昇格 + 代入時zext（旧実装は-5536）
+    println(true ? big_us() : 0);
+    int widened = 0;
+    widened = big_us() as int;
+    println(widened);
+
+    // 符号付き負値の昇格はsext維持（negative check: zext化すると大値になる）
+    println(true ? neg() : 0 as long);
+    println(false ? 0 as long : neg());
+
+    // float × double腕はdouble優先
+    float f = 1.5;
+    println(true ? f : 2.5);
+    return 0;
+}

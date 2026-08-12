@@ -1,0 +1,58 @@
+import std::io::println;
+// monomorphization-typed-instantiation回帰: T以外の型パラメータ名（Elem/Key/Val）でも
+// 特殊化の同定・呼び出し書き換えが型駆動で行われることを検証する
+// （従来のrewrite経路は型パラメータ名をT/U/V/Wと仮定して総称名を再構築しており、別名では照合に失敗していた）
+
+struct Wrap<Elem> {
+    Elem value;
+}
+
+impl Wrap<Elem> {
+    Elem take() {
+        return self.value;
+    }
+    void put(Elem v) {
+        self.value = v;
+    }
+}
+
+struct Duo<Key, Val> {
+    Key key;
+    Val val;
+}
+
+impl Duo<Key, Val> {
+    Key first() {
+        return self.key;
+    }
+    Val second() {
+        return self.val;
+    }
+}
+
+<Item> Item pick_first(Item[] xs) {
+    return xs[0];
+}
+
+int main() {
+    Wrap<int> w;
+    w.put(42);
+    println(w.take());
+
+    Wrap<string> s;
+    s.put("hello");
+    println(s.take());
+
+    Duo<int, string> d;
+    d.key = 7;
+    d.val = "seven";
+    println(d.first());
+    println(d.second());
+
+    int[] nums;
+    nums.push(10);
+    nums.push(20);
+    println(pick_first(nums));
+
+    return 0;
+}

@@ -1,0 +1,49 @@
+import std::io::println;
+
+// H3回帰: 構造体の関数引数が全バックエンドで値渡しになることを検証する。
+// 従来js/tsは実引数をクローンせず参照が渡り、呼び出し先での変更が呼び出し元へ漏れて
+// LLVM系（値渡しで隔離）と意味論が分裂していた。
+// implメソッドのself（変更が伝搬すべきケース）が非退行であることも対で確認する。
+
+struct Point {
+    int x;
+    int y;
+}
+
+void mutate(Point p) {
+    println(p.x);
+    p.x = 999;
+}
+
+struct Counter {
+    int n;
+}
+
+impl Counter {
+    void inc() {
+        self.n = self.n + 1;
+    }
+}
+
+void bump(Counter c) {
+    c.n = 100;
+}
+
+int main() {
+    // 値渡し: 同じ変数を2回渡しても呼び出し先の変更は漏れない
+    Point pt = Point{x: 1, y: 2};
+    mutate(pt);
+    mutate(pt);
+    println(pt.x);
+
+    // implメソッドのself変更は伝搬する（非退行）
+    Counter c = Counter{n: 0};
+    c.inc();
+    c.inc();
+    println(c.n);
+
+    // 値渡し関数はselfメソッドの後でも隔離される
+    bump(c);
+    println(c.n);
+    return 0;
+}

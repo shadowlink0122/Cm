@@ -3,7 +3,11 @@
 # エラーメッセージ・i18nのE2Eテスト
 # ============================================================
 # cmバイナリの実際の出力メッセージを英語（デフォルト）と日本語の両方で検証する。
-# 言語の決定順序（--lang > CM_LANG > .cmconfig.yml language:）も確認する。
+# 言語の決定順序（--lang > CM_LANG > .cmconfig.yml language:)も確認する。
+#
+# 期待値は <ケース名>.expect（入力と同じ tests/i18n/ 直下・別置きフォルダは廃止） に1行1条件で記述する:
+#   通常行   = 出力に含まれるべき部分文字列
+#   ! 接頭辞 = 出力に含まれてはならない部分文字列
 # ============================================================
 set -u
 cd "$(dirname "$0")/../.."
@@ -13,83 +17,154 @@ DIR=tests/i18n
 PASS=0
 FAIL=0
 
-# check <名前> <出力に含むべき文字列> <コマンド...>
-check() {
-    local name="$1" needle="$2"
-    shift 2
-    local out
-    out=$("$@" 2>&1)
-    if echo "$out" | grep -qF "$needle"; then
-        echo "[PASS] $name"
-        PASS=$((PASS + 1))
-    else
-        echo "[FAIL] $name (expected: $needle)"
-        echo "$out" | sed 's/^/    /' | head -6
+# run_case <ケース名> <コマンド...>
+# コマンドの出力を expects/<ケース名>.expect の各行と突き合わせる
+run_case() {
+    local name="$1"
+    shift
+    local expect_file="$DIR/$name.expect"
+    if [ ! -f "$expect_file" ]; then
+        echo "[FAIL] $name (expect file not found: $expect_file)"
         FAIL=$((FAIL + 1))
+        return
     fi
-}
-
-# check_absent <名前> <出力に含まれてはならない文字列> <コマンド...>
-check_absent() {
-    local name="$1" needle="$2"
-    shift 2
     local out
     out=$("$@" 2>&1)
-    if echo "$out" | grep -qF "$needle"; then
-        echo "[FAIL] $name (unexpected: $needle)"
-        echo "$out" | sed 's/^/    /' | head -6
-        FAIL=$((FAIL + 1))
-    else
+    local ok=1 detail=""
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        case "$line" in
+            '!'*)
+                if echo "$out" | grep -qF -- "${line#!}"; then
+                    ok=0
+                    detail="unexpected: ${line#!}"
+                fi
+                ;;
+            *)
+                if ! echo "$out" | grep -qF -- "$line"; then
+                    ok=0
+                    detail="expected: $line"
+                fi
+                ;;
+        esac
+    done < "$expect_file"
+    if [ $ok -eq 1 ]; then
         echo "[PASS] $name"
         PASS=$((PASS + 1))
+    else
+        echo "[FAIL] $name ($detail)"
+        echo "$out" | sed 's/^/    /' | head -6
+        FAIL=$((FAIL + 1))
     fi
 }
 
 # ---------- CLIメッセージ（コマンドエラー） ----------
-check "en: unknown command"        "error: invalid command form"          "$CM" nosuchcmd
-check "ja: unknown command (flag)" "エラー: 不正なコマンド形式です"        "$CM" nosuchcmd --lang=ja
-check "en: unknown option"         "unknown option: --nope"               "$CM" check --nope
-check "ja: unknown option"         "不明なオプション: --nope"              "$CM" check --nope --lang=ja
-check "en: invalid lang value"     "invalid --lang value"                 "$CM" check --lang=xx "$DIR/ok.cm"
-check "en: missing input"          "error: no input file"                 "$CM" compile
+run_case cli-unknown-command-en "$CM" nosuchcmd
+run_case cli-unknown-command-ja "$CM" nosuchcmd --lang=ja
+run_case cli-unknown-option-en  "$CM" check --nope
+run_case cli-unknown-option-ja  "$CM" check --nope --lang=ja
+run_case cli-invalid-lang       "$CM" check --lang=xx "$DIR/ok.cm"
+run_case cli-missing-input      "$CM" compile
 
 # ---------- help（言語別・プレースホルダ置換） ----------
-check "en: help header"            "Cm language compiler v"               "$CM" help
-check "ja: help header"            "Cm言語コンパイラ v"                    "$CM" help --lang=ja
-check_absent "help: version placeholder resolved" "{version}"            "$CM" help
-check_absent "help: program placeholder resolved" "{program}"            "$CM" help
+run_case help-en "$CM" help
+run_case help-ja "$CM" help --lang=ja
 
 # ---------- checkサマリー（言語別） ----------
-check "en: check summary"          "=== Check complete ==="               "$CM" check "$DIR/bad_var.cm"
-check "en: check errors label"     "errors: 1"                            "$CM" check "$DIR/bad_var.cm"
-check "ja: check summary"          "=== チェック完了 ==="                  "$CM" check --lang=ja "$DIR/bad_var.cm"
-check "ja: check errors label"     "エラー: 1"                             "$CM" check --lang=ja "$DIR/bad_var.cm"
+run_case check-summary-en "$CM" check "$DIR/bad_var.cm"
+run_case check-summary-ja "$CM" check --lang=ja "$DIR/bad_var.cm"
 
 # ---------- 命名規則（L001・プレースホルダ埋め込み） ----------
-check "en: naming violation"       "variable name 'badCamelName' does not follow the snake_case naming convention [L001]" \
-    "$CM" check --strict "$DIR/bad_naming.cm"
-check "ja: naming violation"       "変数名 'badCamelName' は snake_case 命名規則に従っていません [L001]" \
-    "$CM" check --strict --lang=ja "$DIR/bad_naming.cm"
+run_case naming-l001-en "$CM" check --strict "$DIR/bad_naming.cm"
+run_case naming-l001-ja "$CM" check --strict --lang=ja "$DIR/bad_naming.cm"
+
+# ---------- const集約への代入警告（M3・checkモード限定の段階導入） ----------
+run_case const-aggregate-en "$CM" check "$DIR/const_aggregate_assign.cm"
+run_case const-aggregate-ja "$CM" check --lang=ja "$DIR/const_aggregate_assign.cm"
+
+# ---------- const値への非constポインタ取得警告（M3段階3） ----------
+run_case const-addr-of-en "$CM" check "$DIR/const_addr_of.cm"
+run_case const-addr-of-ja "$CM" check --lang=ja "$DIR/const_addr_of.cm"
+
+# ---------- 非exportヘルパーの非修飾公開の抑止（H7段階4） ----------
+run_case non-export-helper-hidden "$CM" check "$DIR/non_export_helper/main.cm"
+run_case non-export-helper-ok     "$CM" check "$DIR/non_export_helper/main_ok.cm"
+
+# ---------- 確定代入・return網羅の--strictエラー昇格（H6段階3） ----------
+run_case h6-check-warn-en   "$CM" check "$DIR/h6_strict_promotion.cm"
+run_case h6-strict-error-en "$CM" check --strict "$DIR/h6_strict_promotion.cm"
+run_case h6-strict-error-ja "$CM" check --strict --lang=ja "$DIR/h6_strict_promotion.cm"
+
+# ---------- 縮小/符号変化の暗黙変換診断と--strictエラー昇格（Z5） ----------
+run_case z5-check-warn-en   "$CM" check "$DIR/z5_narrowing.cm"
+run_case z5-strict-error-en "$CM" check --strict "$DIR/z5_narrowing.cm"
+run_case z5-strict-error-ja "$CM" check --strict --lang=ja "$DIR/z5_narrowing.cm"
+
+# ---------- for-inイテレータプロトコル検査（Q1） ----------
+run_case q1-forin-iter-en "$CM" check "$DIR/q1_forin_iterator.cm"
+run_case q1-forin-iter-ja "$CM" check --lang=ja "$DIR/q1_forin_iterator.cm"
+
+# ---------- 未宣言インターフェースへのimpl診断（Q4） ----------
+run_case q4-undeclared-iface-en "$CM" check "$DIR/q4_undeclared_interface.cm"
+run_case q4-undeclared-iface-ja "$CM" check --lang=ja "$DIR/q4_undeclared_interface.cm"
+
+# ---------- プリプロセッサの閉じ忘れ診断（R6） ----------
+run_case r6-unclosed-en "$CM" check "$DIR/r6_unclosed_ifdef.cm"
+run_case r6-unclosed-ja "$CM" check --lang=ja "$DIR/r6_unclosed_ifdef.cm"
+
+# ---------- 文字列エスケープ診断（R5） ----------
+run_case r5-invalid-escape-en "$CM" check "$DIR/r5_invalid_escape.cm"
+run_case r5-invalid-escape-ja "$CM" check --lang=ja "$DIR/r5_invalid_escape.cm"
+
+# ---------- クロージャのキャプチャ変数書き込み診断（R4） ----------
+run_case r4-capture-assign-en "$CM" check "$DIR/r4_closure_capture_assign.cm"
+run_case r4-capture-assign-ja "$CM" check --lang=ja "$DIR/r4_closure_capture_assign.cm"
+
+# ---------- デフォルト引数の前パラメータ参照診断（R8） ----------
+run_case r8-default-arg-en "$CM" check "$DIR/r8_default_arg_param.cm"
+run_case r8-default-arg-ja "$CM" check --lang=ja "$DIR/r8_default_arg_param.cm"
+
+# ---------- 属性の検証レジストリ（R7） ----------
+run_case r7-attr-typo-en "$CM" check "$DIR/r7_attr_typo.cm"
+run_case r7-attr-typo-ja "$CM" check --lang=ja "$DIR/r7_attr_typo.cm"
+run_case r7-deprecated-en "$CM" check "$DIR/r7_deprecated.cm"
+run_case r7-deprecated-ja "$CM" check --lang=ja "$DIR/r7_deprecated.cm"
+run_case r7-inline-parses "$CM" run "$DIR/r7_inline_attr.cm"
+
+# ---------- 同名シンボルの多重import診断（M2） ----------
+run_case dup-import-en "$CM" check "$DIR/dup_import/main.cm"
+run_case dup-import-ja "$CM" check --lang=ja "$DIR/dup_import/main.cm"
+
+# ---------- 非export関数の選択importエラー（構造化importで警告から昇格） ----------
+run_case non-export-import-en "$CM" check "$DIR/non_export_import/main.cm"
+run_case non-export-import-ja "$CM" check --lang=ja "$DIR/non_export_import/main.cm"
 
 # ---------- no_stdチェッカー（B001・複数プレースホルダ） ----------
-check "en: nostd exit"             "error: function 'main' uses 'exit'; process control is not available in bare-metal environments" \
-    "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null
-check "ja: nostd exit"             "エラー: 関数 'main' 内で 'exit' を使用しています。プロセス制御 はベアメタル環境では使用できません" \
-    "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null --lang=ja
+run_case nostd-exit-en "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null
+run_case nostd-exit-ja "$CM" compile --target=bm "$DIR/bad_nostd.cm" -o /dev/null --lang=ja
+
+# ---------- 構文エラーの位置情報とラベル（R14） ----------
+run_case r14-syntax-en "$CM" check "$DIR/r14_syntax_error.cm"
+run_case r14-syntax-ja "$CM" check --lang=ja "$DIR/r14_syntax_error.cm"
+
+# ---------- //! platform: タイポの専用診断（R14） ----------
+run_case r14-platform-typo "$CM" run "$DIR/r14_platform_typo.cm"
+
+# ---------- SV構文のnative流入への専用診断（R14） ----------
+run_case r14-sv-construct-en "$CM" check "$DIR/r14_sv_construct.cm"
+run_case r14-sv-construct-ja "$CM" check --lang=ja "$DIR/r14_sv_construct.cm"
 
 # ---------- 言語の決定順序 ----------
-check "env: CM_LANG=ja"            "エラー: 不正なコマンド形式です"        env CM_LANG=ja "$CM" nosuchcmd
-check "cli wins over env"          "error: invalid command form"          env CM_LANG=ja "$CM" nosuchcmd --lang=en
+run_case lang-env-ja       env CM_LANG=ja "$CM" nosuchcmd
+run_case lang-cli-over-env env CM_LANG=ja "$CM" nosuchcmd --lang=en
 
 # .cmconfig.yml の language: ja（一時ディレクトリで検証）
 TMPDIR_I18N=$(mktemp -d)
 cp "$DIR/bad_var.cm" "$TMPDIR_I18N/"
 printf 'language: ja\n' > "$TMPDIR_I18N/.cmconfig.yml"
 CM_ABS=$(cd "$(dirname "$CM")" && pwd)/$(basename "$CM")
-check "config: language ja"        "=== チェック完了 ===" \
-    env -C "$TMPDIR_I18N" "$CM_ABS" check bad_var.cm
-check "cli wins over config"       "=== Check complete ===" \
-    env -C "$TMPDIR_I18N" "$CM_ABS" check bad_var.cm --lang=en
+run_case lang-config-ja       env -C "$TMPDIR_I18N" "$CM_ABS" check bad_var.cm
+run_case lang-cli-over-config env -C "$TMPDIR_I18N" "$CM_ABS" check bad_var.cm --lang=en
 rm -rf "$TMPDIR_I18N"
 
 echo ""

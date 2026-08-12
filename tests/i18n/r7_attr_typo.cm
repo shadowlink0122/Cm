@@ -1,0 +1,4 @@
+// R7: 未知属性（タイポ）診断の表示
+#[tset]
+void my_test() { }
+int main() { return 0; }

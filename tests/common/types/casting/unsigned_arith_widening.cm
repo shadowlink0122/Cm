@@ -1,0 +1,35 @@
+// 混合幅算術の拡張回帰: Add/Sub等のビット幅揃えが結果型の符号基準で、
+// ushort(60000)+int(1)がsext負値化して-5535になっていた（jsは60001で分裂）
+// 拡張は拡張されるオペランド自身の符号で選ぶ（unsigned→zext、signed→sext維持）
+import std::io::println;
+
+ushort big_us() {
+    return 60000 as ushort;
+}
+
+short neg_s() {
+    return -5 as short;
+}
+
+utiny big_ut() {
+    return 200 as utiny;
+}
+
+int main() {
+    // 符号なし小整数の昇格（旧実装はsextで負値化）
+    println(big_us() + 1);
+    println(big_us() * 2);
+    println(big_ut() + 100);
+    println(big_us() - 1);
+
+    // 符号付き小整数のsext維持のnegative check（zext化すると65531+10になる）
+    println(neg_s() + 10);
+    println(neg_s() * 2);
+
+    // 順序比較・シフトも同じ拡張規則
+    println(big_us() > 30000);
+    println(neg_s() < 0 as long);
+    println(big_us() >> 4);
+    println(big_ut() << 1);
+    return 0;
+}

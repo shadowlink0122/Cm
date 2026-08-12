@@ -77,7 +77,7 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
     } else if (!is_sv_port && !(is_sv_platform_ && check(TokenKind::Semicolon))) {
         // 非SVポートでは初期化子を必須とする
         // ただしSVプラットフォームでは初期値なし宣言を許可（extern struct インスタンス等）
-        error("Expected '=' for global variable initializer");
+        error(i18n::msg(i18n::MsgId::PsExpectedGlobalVariableInitializer));
     }
 
     expect(TokenKind::Semicolon);
@@ -111,7 +111,8 @@ ast::DeclPtr Parser::parse_constexpr() {
 
         auto func = std::make_unique<ast::FunctionDecl>(std::move(name), std::move(params),
                                                         std::move(type), std::move(body));
-        // TODO: constexprフラグを設定
+        // R11: コンパイル時評価は未実装のため、フラグを立てて通常関数として受理しcheckerが警告を出す
+        func->is_constexpr = true;
 
         return std::make_unique<ast::Decl>(std::move(func));
     } else {
@@ -120,8 +121,11 @@ ast::DeclPtr Parser::parse_constexpr() {
         auto init = parse_expr();
         expect(TokenKind::Semicolon);
 
-        // TODO: ConstExprDeclノードを作成
-        return nullptr;
+        // R11: constexpr変数は未実装。従来はnullptrを返して後続が無関係な構文エラーに化けていたため、専用診断を出しつつconst宣言として回復する
+        error(i18n::msg(i18n::MsgId::PsConstexprVarUnsupported));
+        auto global_var = std::make_unique<ast::GlobalVarDecl>(std::move(name), std::move(type),
+                                                               std::move(init), true);
+        return std::make_unique<ast::Decl>(std::move(global_var));
     }
 }
 
@@ -267,7 +271,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     // #[derive] は enum 未対応（将来拡張の余地として明示エラー）
     for (const auto& attr : attributes) {
         if (attr.name == "derive") {
-            error("#[derive] is not supported on enums yet");
+            error(i18n::msg(i18n::MsgId::PsDeriveNotSupportedEnumsYet));
         }
     }
 
@@ -451,6 +455,22 @@ ast::TypePtr Parser::parse_extern_type() {
         base_type = ast::make_pointer(std::move(base_type));
     }
 
+    // 後置配列型: T[]（スライス）/ T[N]（固定長）。FFI宣言で構造体配列等を受け渡すため
+    while (check(TokenKind::LBracket)) {
+        advance();  // consume [
+        if (check(TokenKind::IntLiteral)) {
+            uint32_t size = static_cast<uint32_t>(current().get_int());
+            advance();
+            base_type = ast::make_array(std::move(base_type), size);
+        } else {
+            // 要素数なし → 動的配列（スライス）
+            base_type = ast::make_array(std::move(base_type));
+        }
+        if (!consume_if(TokenKind::RBracket)) {
+            break;
+        }
+    }
+
     return base_type;
 }
 
@@ -485,11 +505,13 @@ std::vector<ast::Param> Parser::parse_extern_params() {
 
 // extern宣言の個別解析（DeclPtr版）
 ast::DeclPtr Parser::parse_extern_decl(std::vector<ast::AttributeNode> attributes) {
+    // 呼び出し元（parse_extern）でexternキーワードは消費済み。宣言全体のSpanは現在位置から張る
+    uint32_t start_pos = current().start;
     auto func = parse_extern_func_decl();
     if (func) {
         func->attributes = std::move(attributes);
     }
-    return std::make_unique<ast::Decl>(std::move(func));
+    return std::make_unique<ast::Decl>(std::move(func), Span{start_pos, previous().end});
 }
 
 // ============================================================

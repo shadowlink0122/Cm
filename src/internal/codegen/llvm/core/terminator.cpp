@@ -11,7 +11,6 @@
 namespace cm::codegen::llvm_backend {
 
 void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
-    // // debug_msg("MIR2LLVM", "convertTerminator");
     switch (term.kind) {
         case mir::MirTerminator::Goto: {
             auto& gotoData = std::get<mir::MirTerminator::GotoData>(term.data);
@@ -34,6 +33,22 @@ void MIRToLLVM::convertTerminator(const mir::MirTerminator& term) {
         }
         case mir::MirTerminator::Return: {
             // NOTE: ベアメタル対応 - スタック配列は関数終了時に自動解放
+
+            // sret関数はretval allocaの内容を先頭引数の呼び出し元バッファへmemcpyしてret voidする（C14 Phase 4。
+            // 第一級集約returnを排し、SROAの全要素展開によるO2二次爆発を防ぐ）
+            if (currentMIRFunction && needsSretReturn(*currentMIRFunction)) {
+                auto retVal = locals[currentMIRFunction->return_local];
+                auto sretPtr = currentFunction->getArg(0);
+                if (retVal && llvm::isa<llvm::AllocaInst>(retVal)) {
+                    auto allocaInst = llvm::cast<llvm::AllocaInst>(retVal);
+                    auto dataLayout = module->getDataLayout();
+                    auto allocSize = dataLayout.getTypeAllocSize(allocaInst->getAllocatedType());
+                    builder->CreateMemCpy(sretPtr, llvm::MaybeAlign(), retVal, llvm::MaybeAlign(),
+                                          allocSize);
+                }
+                builder->CreateRetVoid();
+                break;
+            }
 
             if (currentMIRFunction->name == "main") {
                 // main関数は常にi32を返す

@@ -1,0 +1,19 @@
+// 浮動小数の特殊値表記の回帰: jsバックエンドがInfinity/-Infinity/NaN/-0を出力し
+// native（inf/-inf/nan/0）と分裂していた。__cm_fmt_doubleで全バックエンド統一
+import std::io::println;
+
+double zero() {
+    return 0.0;
+}
+
+int main() {
+    println(1.0 / zero());
+    println(-1.0 / zero());
+    println(zero() / zero());
+    println(-0.0);
+    double pinf = 1.0 / zero();
+    double ninf = -1.0 / zero();
+    println("{pinf} {ninf}");
+    println("v=" + pinf);
+    return 0;
+}

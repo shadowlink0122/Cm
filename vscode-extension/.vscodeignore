@@ -6,9 +6,7 @@
 node_modules/**
 scripts/**
 src/**
-out/scripts/**
-out/src/grammar/**
-out/src/test/**
+out/**
 pnpm-lock.yaml
 tsconfig.json
 eslint.config.mjs

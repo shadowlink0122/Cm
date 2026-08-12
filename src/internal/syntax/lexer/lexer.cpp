@@ -2,7 +2,9 @@
 #include "lexer.hpp"
 
 #include "internal/base/debug/lex.hpp"
+#include "internal/base/i18n.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +20,12 @@ std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
     while (!is_at_end()) {
         Token tok = next_token();
+
+        // 文字列/文字リテラルのスキャン中に検出した字句エラー（不正エスケープ等）を先に流し込む
+        for (auto& err_tok : pending_error_tokens_) {
+            tokens.push_back(std::move(err_tok));
+        }
+        pending_error_tokens_.clear();
 
         // デバッグモード時のみ高コストなログ出力を実行（get_line_number/get_column_number は O(n) 線形スキャンのため、非デバッグ時は引数評価自体をスキップする）
         if (::cm::debug::debug_mode() && ::cm::debug::Level::Trace >= ::cm::debug::debug_level()) {
@@ -73,6 +81,8 @@ void Lexer::init_keywords() {
         {"as", TokenKind::KwAs},
         {"async", TokenKind::KwAsync},
         {"auto", TokenKind::KwAuto},
+        // varはautoの別名（L3: 他言語からの移行者向け。従来は未解決型名エラーになっていた）
+        {"var", TokenKind::KwAuto},
         {"await", TokenKind::KwAwait},
         {"break", TokenKind::KwBreak},
         {"case", TokenKind::KwCase},
@@ -272,13 +282,24 @@ Token Lexer::scan_number(uint32_t start) {
         debug::lex::log(debug::lex::Id::ScanStart, "number", debug::Level::Trace);
     bool is_float = false;
 
+    // 桁区切りアンダースコア（1_000等）を数値テキストから除去するヘルパ（B7: 文法書の[0-9_]*を実装）
+    auto strip_separators = [](std::string s) {
+        s.erase(std::remove(s.begin(), s.end(), '_'), s.end());
+        return s;
+    };
+    // 直後に基数の有効数字が続く場合のみ '_' を桁区切りとして消費する（末尾 '_' は識別子等として残す）
+    auto is_sep = [&](auto&& digit_pred) {
+        return peek() == '_' && !is_at_end() && digit_pred(peek_next());
+    };
+
     // 16進数チェック
     if (source_[start] == '0' && (peek() == 'x' || peek() == 'X')) {
         advance();
-        while (!is_at_end() && is_hex_digit(peek())) {
+        while (!is_at_end() &&
+               (is_hex_digit(peek()) || is_sep([](char c) { return is_hex_digit(c); }))) {
             advance();
         }
-        std::string text(source_.substr(start, pos_ - start));
+        std::string text = strip_separators(std::string(source_.substr(start, pos_ - start)));
         // stoullで符号なし64bit全域をパース後、ビットキャスト（Bug3: 0x8000000000000000以上対応）
         uint64_t uval = std::stoull(text, nullptr, 16);
         int64_t val = static_cast<int64_t>(uval);
@@ -293,10 +314,12 @@ Token Lexer::scan_number(uint32_t start) {
     // 8進数チェック (0o/0Oプレフィックス)
     if (source_[start] == '0' && (peek() == 'o' || peek() == 'O')) {
         advance();
-        while (!is_at_end() && is_octal_digit(peek())) {
+        while (!is_at_end() &&
+               (is_octal_digit(peek()) || is_sep([](char c) { return is_octal_digit(c); }))) {
             advance();
         }
-        std::string text(source_.substr(start + 2, pos_ - start - 2));
+        std::string text =
+            strip_separators(std::string(source_.substr(start + 2, pos_ - start - 2)));
         uint64_t uval = std::stoull(text, nullptr, 8);
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
@@ -310,13 +333,15 @@ Token Lexer::scan_number(uint32_t start) {
     if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
         advance();
         bool has_dontcare = false;
-        while (!is_at_end() && (peek() == '0' || peek() == '1' || peek() == '?')) {
+        while (!is_at_end() && (peek() == '0' || peek() == '1' || peek() == '?' ||
+                                is_sep([](char c) { return c == '0' || c == '1' || c == '?'; }))) {
             if (peek() == '?') {
                 has_dontcare = true;
             }
             advance();
         }
-        std::string text(source_.substr(start + 2, pos_ - start - 2));
+        std::string text =
+            strip_separators(std::string(source_.substr(start + 2, pos_ - start - 2)));
         if (has_dontcare) {
             // ビット列テキストをそのまま保持し、パーサ側で値/マスクに変換する
             return Token(TokenKind::MaskedBinLiteral, start, pos_, text);
@@ -330,8 +355,8 @@ Token Lexer::scan_number(uint32_t start) {
         return Token(TokenKind::IntLiteral, start, pos_, val, is_unsigned);
     }
 
-    // 10進数の整数部分
-    while (!is_at_end() && is_digit(peek())) {
+    // 10進数の整数部分（'_' 桁区切り可）
+    while (!is_at_end() && (is_digit(peek()) || is_sep([](char c) { return is_digit(c); }))) {
         advance();
     }
 
@@ -402,6 +427,12 @@ Token Lexer::scan_number(uint32_t start) {
             return Token(TokenKind::Error, start, pos_);
         }
 
+        // 幅付きリテラルの桁あふれ検査（R16: 4'd99等はiverilogが黙って切り詰めるためCm側で診断する）
+        if (bit_width > 0 && bit_width < 64 && uval > ((1ULL << bit_width) - 1ULL)) {
+            escape_error(start, i18n::msgf(i18n::MsgId::PsSvLiteralOverflowsWidth,
+                                           width_str + "'" + norm_base + value_str));
+        }
+
         int64_t val = static_cast<int64_t>(uval);
         bool is_unsigned = uval > static_cast<uint64_t>(INT32_MAX);
         if (::cm::debug::debug_mode())
@@ -412,11 +443,11 @@ Token Lexer::scan_number(uint32_t start) {
                      value_str);
     } while (false);
 
-    // 小数点チェック
+    // 小数点チェック（小数部も '_' 桁区切り可）
     if (!is_at_end() && peek() == '.' && is_digit(peek_next())) {
         is_float = true;
         advance();
-        while (!is_at_end() && is_digit(peek())) {
+        while (!is_at_end() && (is_digit(peek()) || is_sep([](char c) { return is_digit(c); }))) {
             advance();
         }
     }
@@ -433,7 +464,7 @@ Token Lexer::scan_number(uint32_t start) {
         }
     }
 
-    std::string text(source_.substr(start, pos_ - start));
+    std::string text = strip_separators(std::string(source_.substr(start, pos_ - start)));
 
     if (is_float) {
         double val = std::stod(text);
@@ -472,9 +503,45 @@ Token Lexer::scan_string(uint32_t start) {
                 value += "}}";
                 continue;
             }
+            if (peek_next() == '$') {
+                // \$: リテラルの$。直後が{...}なら補間グループ全体をリテラル化する（波括弧は二重化で補間対象外に）
+                advance();
+                advance();
+                value += "$";
+                if (peek() == '{') {
+                    advance();
+                    value += "{{";
+                    int depth = 1;
+                    while (!is_at_end() && depth > 0 && peek() != '\n') {
+                        char ch = peek();
+                        if (ch == '{') {
+                            depth++;
+                            value += "{{";
+                            advance();
+                        } else if (ch == '}') {
+                            depth--;
+                            value += "}}";
+                            advance();
+                        } else {
+                            value += advance();
+                        }
+                    }
+                }
+                continue;
+            }
             advance();
-            if (!is_at_end())
-                value += scan_escape_char();
+            if (!is_at_end()) {
+                // デコード結果に波括弧が含まれる場合（\x7B等）は補間対象にならないよう二重化する
+                for (char decoded : scan_escape_sequence()) {
+                    if (decoded == '{') {
+                        value += "{{";
+                    } else if (decoded == '}') {
+                        value += "}}";
+                    } else {
+                        value += decoded;
+                    }
+                }
+            }
         } else {
             value += advance();
         }
@@ -486,22 +553,25 @@ Token Lexer::scan_string(uint32_t start) {
 }
 
 // raw文字列リテラルスキャン
+// raw文字列（バッククォート）はエスケープを解釈せず、バックスラッシュをリテラルとして保持する（R5）。
+// 唯一の例外はデリミタのエスケープ \`（バッククォート自体を埋め込む手段）。
+// 補間は ${...} のみ有効で、波括弧単体は二重化により常にリテラル扱いになる
 Token Lexer::scan_raw_string(uint32_t start) {
     std::string value;
     while (!is_at_end() && peek() != '`') {
+        if (peek() == '\\' && peek_next() == '`') {
+            advance();
+            advance();
+            value += '`';
+            continue;
+        }
         if (peek() == '$' && peek_next() == '{') {
-            // raw文字列でも ${...} は補間用として保持する
+            // raw文字列でも ${...} は補間用として保持する（プレースホルダ内のコードもそのまま保持し、式の解釈は後段に委ねる）
             advance();
             advance();
             value += "${";
             while (!is_at_end() && peek() != '}') {
-                if (peek() == '\\') {
-                    advance();
-                    if (!is_at_end())
-                        value += scan_escape_char();
-                } else {
-                    value += advance();
-                }
+                value += advance();
             }
             if (!is_at_end()) {
                 advance();
@@ -509,23 +579,7 @@ Token Lexer::scan_raw_string(uint32_t start) {
             }
             continue;
         }
-        if (peek() == '\\') {
-            if (peek_next() == '{') {
-                advance();
-                advance();
-                value += "{{";
-                continue;
-            }
-            if (peek_next() == '}') {
-                advance();
-                advance();
-                value += "}}";
-                continue;
-            }
-            advance();
-            if (!is_at_end())
-                value += scan_escape_char();
-        } else if (peek() == '{') {
+        if (peek() == '{') {
             advance();
             value += "{{";
         } else if (peek() == '}') {
@@ -537,44 +591,134 @@ Token Lexer::scan_raw_string(uint32_t start) {
     }
     if (!is_at_end())
         advance();
-    value = normalize_raw_indent(std::move(value));
+    value = normalize_raw_indent(std::move(value), raw_indent_at(start));
     debug::lex::log(debug::lex::Id::String, "`...`", debug::Level::Trace);
     return Token(TokenKind::StringLiteral, start, pos_, std::move(value));
 }
 
 // 文字リテラルスキャン
 Token Lexer::scan_char(uint32_t start) {
-    char value = 0;
+    std::string value;
     if (!is_at_end()) {
-        value = (peek() == '\\') ? (advance(), scan_escape_char()) : advance();
+        if (peek() == '\\') {
+            advance();
+            size_t errors_before = pending_error_tokens_.size();
+            uint32_t esc_start = pos_ - 1;
+            value = scan_escape_sequence();
+            // 複数バイトへデコードされるエスケープ（\uHHHH等）は1バイトのcharに収まらない
+            // （scan_escape_sequenceが既に診断済みのフォールバック文字列は二重診断にしない）
+            if (value.size() != 1 && pending_error_tokens_.size() == errors_before) {
+                escape_error(esc_start,
+                             i18n::msgf(i18n::MsgId::ParseCharEscapeNotSingleByte,
+                                        std::string(source_.substr(esc_start, pos_ - esc_start))));
+            }
+        } else {
+            value = std::string(1, advance());
+        }
+    }
+    if (value.empty()) {
+        value = std::string(1, '\0');
     }
     if (!is_at_end() && peek() == '\'')
         advance();
     else
         debug::lex::log(debug::lex::Id::Error, "unterminated char", debug::Level::Error);
-    return Token(TokenKind::CharLiteral, start, pos_, std::string(1, value));
+    return Token(TokenKind::CharLiteral, start, pos_, value.substr(0, 1));
 }
 
-// エスケープ文字処理
-char Lexer::scan_escape_char() {
+// エスケープ診断の登録（Errorトークンとしてトークン列へ挿入され、パーサが診断へ変換する）
+void Lexer::escape_error(uint32_t esc_start, const std::string& message) {
+    pending_error_tokens_.push_back(Token(TokenKind::Error, esc_start, pos_, message));
+}
+
+// コードポイントのUTF-8エンコード
+std::string Lexer::encode_utf8(uint32_t cp) {
+    std::string out;
+    if (cp <= 0x7F) {
+        out += static_cast<char>(cp);
+    } else if (cp <= 0x7FF) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp <= 0xFFFF) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+    return out;
+}
+
+// エスケープシーケンス処理（バックスラッシュ消費後に呼ぶ）
+// 従来は未知エスケープでバックスラッシュだけが黙って脱落していた（"\x41"が"x41"になる無診断のデータ破壊。R5）。
+// \xHH/\uHHHH/\UHHHHHHHHをデコードし、未知・不正なシーケンスは診断を積んで従来互換の文字列で継続する
+std::string Lexer::scan_escape_sequence() {
+    uint32_t esc_start = pos_ - 1;
     char c = advance();
     switch (c) {
         case 'n':
-            return '\n';
+            return "\n";
         case 't':
-            return '\t';
+            return "\t";
         case 'r':
-            return '\r';
+            return "\r";
+        case 'b':
+            return "\b";
+        case 'f':
+            return "\f";
+        case 'v':
+            return "\v";
+        case 'a':
+            return "\a";
         case '\\':
-            return '\\';
+            return "\\";
         case '"':
-            return '"';
+            return "\"";
         case '\'':
-            return '\'';
+            return "'";
         case '0':
-            return '\0';
+            return std::string(1, '\0');
+        // 補間エスケープ（\{ \} \$ は通常scan_string側で先取りされるが、charリテラル等の直接呼び出しでも受理する）
+        case '{':
+            return "{";
+        case '}':
+            return "}";
+        case '$':
+            return "$";
+        case 'x':
+        case 'u':
+        case 'U': {
+            const int ndigits = (c == 'x') ? 2 : (c == 'u') ? 4 : 8;
+            std::string digits;
+            while (static_cast<int>(digits.size()) < ndigits && !is_at_end() &&
+                   is_hex_digit(peek())) {
+                digits += advance();
+            }
+            std::string seq_text(source_.substr(esc_start, pos_ - esc_start));
+            if (static_cast<int>(digits.size()) != ndigits) {
+                escape_error(esc_start,
+                             i18n::msgf(i18n::MsgId::ParseInvalidEscapeSequence, seq_text));
+                return std::string(1, c) + digits;
+            }
+            uint32_t cp = static_cast<uint32_t>(std::stoul(digits, nullptr, 16));
+            if (c == 'x') {
+                return std::string(1, static_cast<char>(cp));
+            }
+            // Unicodeスカラ値の範囲検証（サロゲート・上限超えは不正）
+            if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+                escape_error(esc_start,
+                             i18n::msgf(i18n::MsgId::ParseInvalidEscapeSequence, seq_text));
+                return std::string(1, c) + digits;
+            }
+            return encode_utf8(cp);
+        }
         default:
-            return c;
+            escape_error(esc_start, i18n::msgf(i18n::MsgId::ParseInvalidEscapeSequence,
+                                               std::string("\\") + c));
+            return std::string(1, c);
     }
 }
 
@@ -629,6 +773,7 @@ Token Lexer::scan_operator(uint32_t start, char c) {
             return match('>')   ? make(TokenKind::ThinArrow)
                    : match('-') ? make(TokenKind::MinusMinus)
                    : match('=') ? make(TokenKind::MinusEq)
+                   : match(':') ? make(TokenKind::MinusColon)
                                 : make(TokenKind::Minus);
         case '*':
             return match('=') ? make(TokenKind::StarEq) : make(TokenKind::Star);
@@ -698,35 +843,15 @@ bool Lexer::match(char expected) {
     return true;
 }
 
-// raw文字列のインデント正規化
-std::string Lexer::normalize_raw_indent(std::string value) {
+// raw文字列のインデント正規化（dedent）。
+// リテラル開始行のインデント幅を各継続行から剥がす（Pythonのdedentと同様に、コード位置の
+// 字下げが文字列内容へ漏れない）。開始行より深いインデントは相対的に保持され、
+// 開始行より浅い行は行頭空白ぶんだけ剥がす（クランプ）。
+// 従来の「継続行の最小インデント」基準は、全継続行へ一様に付けた意図的な先頭空白まで
+// 剥がしてしまい、コード字下げと文字列内容の字下げを区別できなかった
+std::string Lexer::normalize_raw_indent(std::string value, size_t indent) {
     size_t first_newline = value.find('\n');
-    if (first_newline == std::string::npos) {
-        return value;
-    }
-
-    size_t min_indent = std::string::npos;
-    size_t pos = first_newline + 1;
-    while (pos < value.size()) {
-        size_t line_end = value.find('\n', pos);
-        size_t line_start = pos;
-        size_t idx = line_start;
-        while (idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
-            idx++;
-        }
-        if (idx < value.size() && value[idx] != '\n' && value[idx] != '\r') {
-            size_t indent = idx - line_start;
-            if (min_indent == std::string::npos || indent < min_indent) {
-                min_indent = indent;
-            }
-        }
-        if (line_end == std::string::npos) {
-            break;
-        }
-        pos = line_end + 1;
-    }
-
-    if (min_indent == std::string::npos || min_indent == 0) {
+    if (first_newline == std::string::npos || indent == 0) {
         return value;
     }
 
@@ -734,12 +859,11 @@ std::string Lexer::normalize_raw_indent(std::string value) {
     result.reserve(value.size());
     result.append(value.substr(0, first_newline + 1));
 
-    pos = first_newline + 1;
+    size_t pos = first_newline + 1;
     while (pos < value.size()) {
         size_t line_end = value.find('\n', pos);
-        size_t line_start = pos;
-        size_t idx = line_start;
-        size_t drop = min_indent;
+        size_t idx = pos;
+        size_t drop = indent;
         while (drop > 0 && idx < value.size() && (value[idx] == ' ' || value[idx] == '\t')) {
             idx++;
             drop--;
@@ -752,8 +876,21 @@ std::string Lexer::normalize_raw_indent(std::string value) {
         result.push_back('\n');
         pos = line_end + 1;
     }
-
     return result;
+}
+
+// リテラル開始行のインデント幅（行頭の空白文字数）
+size_t Lexer::raw_indent_at(uint32_t token_start) const {
+    size_t line_start = token_start;
+    while (line_start > 0 && source_[line_start - 1] != '\n') {
+        --line_start;
+    }
+    size_t indent = 0;
+    while (line_start + indent < source_.size() &&
+           (source_[line_start + indent] == ' ' || source_[line_start + indent] == '\t')) {
+        ++indent;
+    }
+    return indent;
 }
 
 }  // namespace cm

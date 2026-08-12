@@ -1,0 +1,5 @@
+S { c: 5, n: 9 }
+(5, 9)
+eq_ab=true
+eq_ad=false
+heq=true

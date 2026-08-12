@@ -107,8 +107,19 @@ ast::ExprPtr Parser::parse_match_expr(uint32_t start_pos) {
         // => (arrow)
         expect(TokenKind::Arrow);
 
-        // アームの本体: { で始まればブロック形式、それ以外は式形式
-        if (check(TokenKind::LBrace)) {
+        // アームの本体: { で始まればブロック形式、それ以外は式形式。
+        // ただし { ident : は無名構造体リテラル式として式形式へ回す（局所処理調査C4。従来は無条件でブロック化され、値アームの構造体リテラルがvoidブロックへ化けていた）。判定はprimaryの暗黙構造体リテラルと同じ先読み
+        bool brace_is_struct_literal = false;
+        if (!is_sv_platform_ && check(TokenKind::LBrace)) {
+            auto saved_pos = pos_;
+            advance();
+            if (check(TokenKind::Ident)) {
+                advance();
+                brace_is_struct_literal = check(TokenKind::Colon);
+            }
+            pos_ = saved_pos;
+        }
+        if (check(TokenKind::LBrace) && !brace_is_struct_literal) {
             // ブロック形式
             auto body = parse_block();
             arms.emplace_back(std::move(pattern), std::move(guard), std::move(body));
@@ -176,14 +187,39 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
     }
 
     // リテラルパターン (数値、文字列、真偽値)
+    // R12: 単項マイナス付き数値リテラル（-1 や -5...-1）もリテラルパターンとして受理する。
+    // 下流（網羅性検査のLiteralExpr直読み・HIR lowering）が負値をそのまま扱えるよう、UnaryExprでなく値を符号反転したLiteralExprに畳み込む
+    auto is_negative_literal_start = [&]() {
+        return check(TokenKind::Minus) &&
+               (peek_kind() == TokenKind::IntLiteral || peek_kind() == TokenKind::FloatLiteral);
+    };
+    auto parse_literal_pattern_operand = [&]() -> ast::ExprPtr {
+        bool negated = false;
+        if (is_negative_literal_start()) {
+            advance();
+            negated = true;
+        }
+        auto lit_expr = parse_primary();
+        if (negated && lit_expr) {
+            if (auto* lit = lit_expr->as<ast::LiteralExpr>()) {
+                if (lit->is_int()) {
+                    lit->value = -std::get<int64_t>(lit->value);
+                } else if (lit->is_float()) {
+                    lit->value = -std::get<double>(lit->value);
+                }
+            }
+        }
+        return lit_expr;
+    };
     if (check(TokenKind::IntLiteral) || check(TokenKind::FloatLiteral) ||
         check(TokenKind::StringLiteral) || check(TokenKind::CharLiteral) ||
-        check(TokenKind::KwTrue) || check(TokenKind::KwFalse) || check(TokenKind::KwNull)) {
-        auto lit_expr = parse_primary();
+        check(TokenKind::KwTrue) || check(TokenKind::KwFalse) || check(TokenKind::KwNull) ||
+        is_negative_literal_start()) {
+        auto lit_expr = parse_literal_pattern_operand();
 
         // 範囲パターンチェック: val...val
         if (consume_if(TokenKind::Ellipsis)) {
-            auto end_expr = parse_primary();
+            auto end_expr = parse_literal_pattern_operand();
             debug::par::log(debug::par::Id::PrimaryExpr, "Match pattern: range",
                             debug::Level::Debug);
             return ast::MatchPattern::make_range(std::move(lit_expr), std::move(end_expr));
@@ -214,7 +250,7 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
                     binding_name = std::string(current().get_string());
                     advance();
                 } else {
-                    error("Expected binding variable name in pattern");
+                    error(i18n::msg(i18n::MsgId::PsExpectedBindingVariableNamePattern));
                     binding_name = "_";
                 }
                 expect(TokenKind::RParen);
@@ -253,7 +289,7 @@ std::unique_ptr<ast::MatchPattern> Parser::parse_match_pattern_element() {
         return ast::MatchPattern::make_variable(name);
     }
 
-    error("Expected match pattern");
+    error(i18n::msg(i18n::MsgId::PsExpectedMatchPattern));
     return ast::MatchPattern::make_wildcard();
 }
 

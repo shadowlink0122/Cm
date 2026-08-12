@@ -31,8 +31,6 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
         }
         case mir::MirRvalue::BinaryOp: {
             auto& binop = std::get<mir::MirRvalue::BinaryOpData>(rvalue.data);
-            // std::cerr << "[MIR2LLVM]         Converting BinaryOp, op=" << static_cast<int>(binop.op)
-            // << "\n";
 
             auto lhs = convertOperand(*binop.lhs);
             if (!lhs) {
@@ -70,6 +68,11 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
             auto& castData = std::get<mir::MirRvalue::CastData>(rvalue.data);
             if (!castData.operand) {
                 return nullptr;
+            }
+
+            // インターフェースupcast（fat pointer構築）はMIRの構築物として一意に処理する（coercion第2段）
+            if (!castData.iface_concrete.empty()) {
+                return convertInterfaceUpcast(castData);
             }
 
             auto value = convertOperand(*castData.operand);
@@ -115,12 +118,37 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                 return builder->CreateFPTrunc(value, targetType, "fptrunc");
             }
 
-            // int <-> float/double 変換
+            // int <-> float/double 変換。符号なしソースはuitofp
+            // （sitofp固定だとuint 4000000000 as doubleが-294967296になる）
             if (sourceType->isIntegerTy() && targetType->isFloatingPointTy()) {
+                bool src_unsigned = false;
+                if (auto src_hir = getOperandType(*castData.operand)) {
+                    auto k = src_hir->kind;
+                    src_unsigned = k == hir::TypeKind::UTiny || k == hir::TypeKind::UShort ||
+                                   k == hir::TypeKind::UInt || k == hir::TypeKind::ULong ||
+                                   k == hir::TypeKind::USize || k == hir::TypeKind::Bool ||
+                                   k == hir::TypeKind::Char;
+                }
+                if (src_unsigned) {
+                    return builder->CreateUIToFP(value, targetType, "uitofp");
+                }
                 return builder->CreateSIToFP(value, targetType, "sitofp");
             }
             if (sourceType->isFloatingPointTy() && targetType->isIntegerTy()) {
-                return builder->CreateFPToSI(value, targetType, "fptosi");
+                // M9: 生のfptosiは範囲外がpoison（ターゲット依存でINT_MIN/トラップに分裂）のため、
+                // 飽和intrinsicへ統一する（範囲外は型の最大/最小へclamp、NaNは0。全ターゲット共通）
+                bool target_unsigned = false;
+                if (castData.target_type) {
+                    auto k = castData.target_type->kind;
+                    target_unsigned = (k == hir::TypeKind::UTiny || k == hir::TypeKind::UShort ||
+                                       k == hir::TypeKind::UInt || k == hir::TypeKind::ULong ||
+                                       k == hir::TypeKind::USize || k == hir::TypeKind::Bool ||
+                                       k == hir::TypeKind::Char);
+                }
+                llvm::Intrinsic::ID sat_id =
+                    target_unsigned ? llvm::Intrinsic::fptoui_sat : llvm::Intrinsic::fptosi_sat;
+                return builder->CreateIntrinsic(sat_id, {targetType, sourceType}, {value}, nullptr,
+                                                "fptoint_sat");
             }
 
             // int サイズ変換
@@ -197,11 +225,16 @@ llvm::Value* MIRToLLVM::convertRvalue(const mir::MirRvalue& rvalue) {
                         if (!variantTypes.empty()) {
                             // まずHIR型（kind + 構造体名）で照合する
                             if (sourceHirType) {
+                                // nullリテラルはcheckerでvoid型が付くため、Null変種との照合ではNull扱いにする
+                                const auto srcKindForMatch =
+                                    sourceHirType->kind == hir::TypeKind::Void
+                                        ? hir::TypeKind::Null
+                                        : sourceHirType->kind;
                                 for (size_t vi = 0; vi < variantTypes.size(); ++vi) {
                                     auto& varType = variantTypes[vi];
                                     if (!varType)
                                         continue;
-                                    if (varType->kind == sourceHirType->kind &&
+                                    if (varType->kind == srcKindForMatch &&
                                         (varType->kind != hir::TypeKind::Struct ||
                                          varType->name == sourceHirType->name)) {
                                         tagValue = static_cast<int32_t>(vi);

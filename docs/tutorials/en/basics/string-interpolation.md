@@ -43,6 +43,18 @@ int main() {
 }
 ```
 
+Any expression works in a placeholder (v0.17.0). Expressions starting with a numeric, array, or string literal, as well as ternary operators, are parsed with the same grammar as ordinary expressions.
+
+```cm
+int main() {
+    bool ok = true;
+    println("{2 + 3}");            // → 5 (expression starting with a number)
+    println("{[1, 2, 3].len()}");  // → 3 (starting with an array literal)
+    println("{ok ? 1 : 0}");       // → 1 (ternary; the : is not mistaken for a format specifier)
+    return 0;
+}
+```
+
 ## Embedding Function Calls (fixed and extended in v0.15.1)
 
 Functions can be called inside interpolations. **Variable arguments, multiple arguments, and negative literals** are supported.
@@ -94,6 +106,26 @@ int main() {
 }
 ```
 
+## Formattable types (v0.17.0)
+
+Placeholders and direct print/println arguments accept types that format as a single value (numerics, bool, char, string, enum values, unions). Passing an aggregate (array, slice, struct) directly is a compile error (previously each backend improvised: empty output, garbage bytes, or `[object Object]`):
+
+```cm
+#[derive(Debug)]
+struct P { int x; int y; }
+
+int main() {
+    int[3] a = [1, 2, 3];
+    // println("{a}");        // error: cannot format a value of type 'int[3]' ...
+    println("{a[0]}, len={a.len()}");   // OK: elements and scalars format fine
+
+    P p = P{x: 1, y: 2};
+    // println(p);            // error
+    println("{p.debug()}");   // OK: P { x: 1, y: 2 } (derive(Debug) stringification)
+    return 0;
+}
+```
+
 ## Format Specifiers
 
 The `{variable:specifier}` form lets you specify a radix and more.
@@ -111,14 +143,89 @@ int main() {
 }
 ```
 
-## Escaping Braces
-
-To output literal `{` `}`, write `{{` `}}`.
+Width, alignment, zero-padding, and scientific notation are also supported (output unified across all backends in v0.17.0; the semantics follow C/printf):
 
 ```cm
-println("JSON: {{\"key\": {value}}}");
-// when value=42 → JSON: {"key": 42}
+int main() {
+    int n = 255;
+    double pi = 3.14159265;
+    println("[{n:6}]");      // → [   255] (width 6; numbers right-align by default)
+    println("[{n:<6}]");     // → [255   ] (left)
+    println("[{n:^6}]");     // → [ 255  ] (center)
+    println("[{n:06}]");     // → [000255] (zero pad; negatives keep the sign first: -00042)
+    println("[{n:*>6}]");    // → [***255] (custom fill)
+    println("[{n:8x}]");     // → [      ff] (width + radix combined)
+    println("{pi:.2e}");     // → 3.14e+00 (scientific, 2-digit precision, 2-digit exponent)
+    println("{pi:e}");       // → 3.141593e+00 (default precision is 6)
+    return 0;
+}
 ```
+
+## Escaping Braces and Combining with Interpolation
+
+To output literal `{` `}`, write `{{` `}}`.
+A placeholder that is not a valid expression (a typo like `{x +}`) is printed literally and produces a compile-time warning (an error with `--strict`); added in v0.17.0 — previously an uninitialized value was printed with no diagnostic.
+**As of v0.17.0, escaping and interpolation can be combined in every form**: you can embed placeholders inside escaped braces, as in `{{ ... {value} ... }}`.
+
+```cm
+import std::io::println;
+
+int main() {
+    int val = 42;
+    string name = "cm";
+
+    // placeholders inside escaped braces
+    println("{{text {val} ...}}");   // → {text 42 ...}
+    println("{{{val}}}");            // → {42}  ({{ + {val} + }})
+
+    // JSON template
+    println("json: {{\"key\": {val}, \"name\": \"{name}\"}}");
+    // → json: {"key": 42, "name": "cm"}
+
+    // CSS template (plain string literals interpolate the same way)
+    string css = "css {{ width: {val}px; }}";
+    println(css);                    // → css { width: 42px; }
+    return 0;
+}
+```
+
+**Interpolation works in every string literal (v0.17.0)**: placeholders are evaluated not only in `println` arguments but also in ordinary string literals such as `string s = "sum: {x + 1}";`.
+Whenever you need literal braces, escape them with `{{` `}}` regardless of context (`string braces = "{{x}}";` yields the string `{x}`). `\{` `\}` are equivalent escapes.
+To emit a `${x}`-style placeholder literally, escape the leading `$` with `\$` (`"\${x}"` yields the string `${x}`).
+
+**Known limitation**: if an interpolated value itself contains `{` or `}`, later placeholders in the same string may be mis-detected (for example, embedding a variable whose content is `{x}` can break the placeholders that follow).
+When embedding values that contain braces, build the string with `+` concatenation instead.
+
+## Raw strings (backticks) and multiline text
+
+Raw strings delimited by backticks `` ` `` do not interpret escape sequences (`\n` is a backslash followed by `n`) and may span multiple lines verbatim. The only exception is embedding the delimiter itself with ``\` ``. Braces `{}` are always literal; only `${expr}` interpolates:
+
+```cm
+int twice(int x) { return x * 2; }
+
+int main() {
+    int v = 21;
+    const string s = `result=${twice(v)}
+        indented line
+    literal braces: {v}  quote: "q"  backslash: \n`;
+    println(s);
+    return 0;
+}
+```
+
+For multiline raw strings, **the indentation of the line where the literal starts is stripped from every continuation line** (like Python's dedent — the code-position indentation does not leak into the string content). Indentation deeper than the opening line is preserved relative to it, so intentional uniform leading whitespace survives:
+
+```cm
+int main() {
+    const string items = `items:
+      - a
+      - b`;
+    // → "items:\n  - a\n  - b" (the 4-space code indent is stripped; the intended 2 spaces remain)
+    return 0;
+}
+```
+
+The formatter (`cm fmt`) never modifies lines inside backticks (leading whitespace is part of the string content).
 
 ## Interpolation on the SV Backend
 

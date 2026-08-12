@@ -14,6 +14,9 @@ namespace cm::mir::opt {
 struct MirOptimizationOptions {
     bool unroll_loops = false;  // --funroll-loops: 定数トリップカウントループの静的展開
     int unroll_max_trips = 64;  // --funroll-loops=N: 展開する最大イテレーション数
+    // js/tsターゲット: 集約（構造体・スライス）コピーの伝播を抑止する。
+    // jsは構造体コピーを深いクローンで表現するため、コピー元での置換は別実体の変異になり不健全
+    bool no_aggregate_copy_prop = false;
 };
 
 // 標準的な最適化パスを作成する関数

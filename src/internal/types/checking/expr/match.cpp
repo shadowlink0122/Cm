@@ -2,8 +2,8 @@
 // TypeChecker 実装 - match式の型推論・網羅性検査・パターン検査
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>
@@ -23,7 +23,7 @@ namespace cm {
 ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     auto scrutinee_type = infer_type(*match.scrutinee);
     if (!scrutinee_type) {
-        error(current_span_, "Cannot infer type of match scrutinee");
+        error(current_span_, i18n::msg(i18n::MsgId::TcCannotInferTypeMatchScrutinee));
         return ast::make_error();
     }
 
@@ -58,7 +58,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
         if (arm.guard) {
             auto guard_type = infer_type(*arm.guard);
             if (!guard_type || guard_type->kind != ast::TypeKind::Bool) {
-                error(current_span_, "Match guard must be a boolean expression");
+                error(current_span_, i18n::msg(i18n::MsgId::TcMatchGuardMustBooleanExpression));
             }
         }
 
@@ -136,10 +136,10 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
                     if (!result_type) {
                         result_type = arm_type;
                     } else if (!types_compatible(result_type, arm_type)) {
-                        error(current_span_, "Match arm " + std::to_string(arm_index + 1) +
-                                                 " has incompatible type (expected '" +
-                                                 ast::type_to_string(*result_type) + "', got '" +
-                                                 ast::type_to_string(*arm_type) + "')");
+                        error(current_span_, i18n::msgf(i18n::MsgId::TcMatchArmHasIncompatibleType,
+                                                        std::to_string(arm_index + 1),
+                                                        ast::type_to_string(*result_type),
+                                                        ast::type_to_string(*arm_type)));
                     }
                 }
             }
@@ -151,7 +151,7 @@ ast::TypePtr TypeChecker::infer_match(ast::MatchExpr& match) {
     }
 
     if (match.arms.empty()) {
-        error(current_span_, "Match statement has no arms");
+        error(current_span_, i18n::msg(i18n::MsgId::TcMatchStatementHasNoArms));
         return ast::make_error();
     }
 
@@ -242,14 +242,16 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
         }
     }
     if (has_wildcard || has_variable_binding) {
+        // R12: return網羅解析（stmt_terminates）が網羅済みmatchを終端と認識できるよう記録する
+        match.known_exhaustive = true;
         return;
     }
 
     if (scrutinee_type->kind == ast::TypeKind::Bool) {
         if (!covered_values.count("true") || !covered_values.count("false")) {
-            error(current_span_,
-                  "Non-exhaustive match: missing 'true' or 'false' pattern (or add '_' "
-                  "wildcard)");
+            error(current_span_, i18n::msg(i18n::MsgId::TcNonExhaustiveMatchMissingTrue));
+        } else {
+            match.known_exhaustive = true;
         }
         return;
     }
@@ -264,11 +266,12 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {
-                error(current_span_, "Non-exhaustive match: missing pattern for '" + variant +
-                                         "' (or add '_' wildcard)");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcNonExhaustiveMatchMissingPattern, variant));
                 return;
             }
         }
+        match.known_exhaustive = true;
         return;
     }
 
@@ -283,17 +286,17 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {
-                error(current_span_, "Non-exhaustive match: missing pattern for '" + variant +
-                                         "' (or add '_' wildcard)");
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcNonExhaustiveMatchMissingPattern, variant));
                 return;
             }
         }
+        match.known_exhaustive = true;
         return;
     }
 
     if (scrutinee_type->is_integer()) {
-        error(current_span_,
-              "Non-exhaustive match: integer patterns require a '_' wildcard pattern");
+        error(current_span_, i18n::msg(i18n::MsgId::TcNonExhaustiveMatchIntegerPatterns));
     }
 }
 
@@ -306,7 +309,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             if (pattern->value) {
                 auto lit_type = infer_type(*pattern->value);
                 if (!types_compatible(lit_type, expected_type)) {
-                    error(current_span_, "Pattern type does not match scrutinee type");
+                    error(current_span_, i18n::msg(i18n::MsgId::TcPatternTypeDoesNotMatch));
                 }
             }
             break;
@@ -338,7 +341,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
                 // フォールバック: 通常のtype互換性チェック
                 auto enum_type = infer_type(*pattern->value);
                 if (!types_compatible(enum_type, expected_type)) {
-                    error(current_span_, "Enum pattern type does not match scrutinee type");
+                    error(current_span_, i18n::msg(i18n::MsgId::TcEnumPatternTypeDoesNot));
                 }
             }
             break;
@@ -364,7 +367,7 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
                     auto enum_ident = ast::make_ident(pattern->enum_variant, {});
                     auto enum_type = infer_type(*enum_ident);
                     if (!types_compatible(enum_type, expected_type)) {
-                        error(current_span_, "Enum pattern type does not match scrutinee type");
+                        error(current_span_, i18n::msg(i18n::MsgId::TcEnumPatternTypeDoesNot));
                     }
                 }
 
@@ -386,13 +389,13 @@ void TypeChecker::check_match_pattern(ast::MatchPattern* pattern, ast::TypePtr e
             if (pattern->range_start) {
                 auto start_type = infer_type(*pattern->range_start);
                 if (!types_compatible(start_type, expected_type)) {
-                    error(current_span_, "Range start type does not match scrutinee type");
+                    error(current_span_, i18n::msg(i18n::MsgId::TcRangeStartTypeDoesNot));
                 }
             }
             if (pattern->range_end) {
                 auto end_type = infer_type(*pattern->range_end);
                 if (!types_compatible(end_type, expected_type)) {
-                    error(current_span_, "Range end type does not match scrutinee type");
+                    error(current_span_, i18n::msg(i18n::MsgId::TcRangeEndTypeDoesNot));
                 }
             }
             break;

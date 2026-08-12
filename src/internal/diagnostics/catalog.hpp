@@ -4,8 +4,8 @@
 // 診断カタログ - 全診断を一元管理
 // ============================================================
 
-#include "internal/base/messages/message_ids.hpp"
-#include "internal/base/span.hpp"
+#include "internal/base/messages/ids.hpp"
+#include "internal/base/source/span.hpp"
 #include "levels.hpp"
 
 #include <functional>

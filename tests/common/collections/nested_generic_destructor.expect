@@ -1,0 +1,6 @@
+start
+outer.len() = 1
+scope end:
+~item 1
+~item 2
+done

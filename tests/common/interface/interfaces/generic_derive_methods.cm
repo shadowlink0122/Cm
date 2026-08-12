@@ -1,0 +1,35 @@
+// 回帰(R21): ジェネリック構造体のderiveメソッド（Clone/Hash/Debug/Display）が特殊化レシーバから解決・実行できる
+// （従来はEq/Ordのみ動作し、他トレイトは宣言受理のままUnknown methodになる無言no-opだった）
+// stringフィールドはHash非対応（非ジェネリックと同一規則で特殊化時に検証される）ため、string型引数はHashなしの構造体で検証する
+import std::io::println;
+
+struct Inner with Eq, Clone, Hash, Debug, Display {
+    int a;
+}
+
+struct G<T> with Eq, Clone, Hash, Debug, Display {
+    T v;
+}
+
+struct GS<T> with Eq, Clone, Debug, Display {
+    T v;
+}
+
+int main() {
+    G<int> gi = { v: 7 };
+    println(gi.debug());
+    println(gi.toString());
+    println("gi_clone={gi.clone().v}");
+    println("gi_heq={gi.hash() == gi.clone().hash()}");
+
+    GS<string> gs = { v: "hi" };
+    println(gs.debug());
+    println("gs_clone={gs.clone().v}");
+    println("gs_eq={gs == gs.clone()}");
+
+    G<Inner> gn = { v: { a: 3 } };
+    println(gn.debug());
+    println("gn_clone={gn.clone().v.a}");
+    println("gn_eq={gn == gn.clone()}");
+    return 0;
+}

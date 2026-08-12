@@ -1,0 +1,51 @@
+import std::io::println;
+// R3回帰: ポインタ型引数T*からの型パラメータ束縛（従来はT*の内側Tがunifyされず型未解決のままcodegenへ落ちて全経路SIGSEGV）
+// 真因は2系統: (1)checkerのinfer_generic_callがT*/T[]/T**を推論できず「T」「Box<T>」「Node<T>*」の3ケースのみ対応、(2)LLVM codegenのselfコピー最適化が特殊化名（deref__int）のT*引数をプリミティブimplメソッドのselfと誤認し要素型で確保していた
+
+<T> void swap(T* a, T* b) {
+    T t = *a;
+    *a = *b;
+    *b = t;
+}
+<T> T deref(T* a) { return *a; }
+<T> T first(T[] xs) { return xs[0]; }
+<T> T deref2(T** pp) { return **pp; }
+
+struct Box<U> { U v; }
+<U> U unbox(Box<U> b) { return b.v; }
+
+int main() {
+    // T*: int/double/string の値スワップ
+    int a = 3;
+    int b = 7;
+    swap(&a, &b);
+    println("swap_int: {a} {b}");
+
+    double da = 1.5;
+    double db = 4.5;
+    swap(&da, &db);
+    println("swap_double: {da} {db}");
+
+    string sa = "hi";
+    string sb = "yo";
+    swap(&sa, &sb);
+    println("swap_string: {sa} {sb}");
+
+    // T*: 推論deref
+    int x = 42;
+    println("deref: {deref(&x)}");
+
+    // T[]: 配列引数からのT束縛
+    int[] xs = [10, 20, 30];
+    println("first: {first(xs)}");
+
+    // T**: 多段ポインタ
+    int z = 99;
+    int* pz = &z;
+    println("deref2: {deref2(&pz)}");
+
+    // ジェネリック構造体（既存経路の非回帰）
+    Box<int> bx = Box { v: 55 };
+    println("unbox: {unbox(bx)}");
+    return 0;
+}

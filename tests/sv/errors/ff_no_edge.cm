@@ -1,0 +1,8 @@
+//! platform: sv
+// 回帰(R16): エッジパラメータ無しのalways_ffは診断で拒否（従来は黙ってalways_combへ変換され順序回路の意図が失われた）
+#[input] int d = 0;
+#[output] int q = 0;
+
+always_ff void f() {
+    q = d;
+}

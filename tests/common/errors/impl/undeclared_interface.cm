@@ -1,0 +1,6 @@
+// 回帰(Q4): 未宣言インターフェースへのimplは内部エラーでなく通常診断
+struct T1 { int v; }
+impl T1 for Nope {
+    int get() { return self.v; }
+}
+int main() { return 0; }

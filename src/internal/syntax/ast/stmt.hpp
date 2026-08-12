@@ -171,6 +171,8 @@ struct SwitchCase {
 struct SwitchStmt {
     ExprPtr expr;
     std::vector<SwitchCase> cases;
+    // SVのcase修飾（#[sv::priority]/#[sv::unique0] を文の直前に付与。0=既定(unique)・1=priority・2=unique0。非SVターゲットでは無視される）
+    uint8_t sv_case_modifier = 0;
 
     SwitchStmt(ExprPtr e, std::vector<SwitchCase> c) : expr(std::move(e)), cases(std::move(c)) {}
 };

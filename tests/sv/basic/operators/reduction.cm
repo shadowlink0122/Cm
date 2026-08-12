@@ -1,0 +1,23 @@
+//! platform: sv
+//! test: v=255 -> r_and=1, r_or=1, r_xor=0, r_nand=0, r_nor=0, r_xnor=1
+//! test: v=7 -> r_and=0, r_or=1, r_xor=1, r_nand=1, r_nor=0, r_xnor=0
+
+// リダクション演算子（SV-N2）: ベクタ全ビットを1ビットへ畳み込む単項演算。
+// SVでは native リダクション演算子（&v / |v / ^v / ~&v / ~|v / ~^v）を出力する。
+
+#[input]  bit[8] v = 0;
+#[output] bool r_and = false;
+#[output] bool r_or = false;
+#[output] bool r_xor = false;
+#[output] bool r_nand = false;
+#[output] bool r_nor = false;
+#[output] bool r_xnor = false;
+
+void redux() {
+    r_and = reduce_and(v);    // 全ビットAND
+    r_or = reduce_or(v);      // 全ビットOR
+    r_xor = reduce_xor(v);    // パリティ
+    r_nand = reduce_nand(v);  // NANDリダクション
+    r_nor = reduce_nor(v);    // NORリダクション
+    r_xnor = reduce_xnor(v);  // XNORリダクション
+}

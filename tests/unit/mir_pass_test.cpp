@@ -11,6 +11,8 @@
 #include "../../src/internal/mir/passes/cleanup/dse.hpp"
 #include "../../src/internal/mir/passes/cleanup/program_dce.hpp"
 #include "../../src/internal/mir/passes/cleanup/simplify_cfg.hpp"
+#include "../../src/internal/mir/passes/cleanup/string_reassign_free.hpp"
+#include "../../src/internal/mir/passes/core/effects.hpp"
 #include "../../src/internal/mir/passes/instrumentation/undefined.hpp"
 #include "../../src/internal/mir/passes/interprocedural/inlining.hpp"
 #include "../../src/internal/mir/passes/interprocedural/tail_call_elimination.hpp"
@@ -359,6 +361,131 @@ TEST(MirPassTest, CopyPropagation_PropagatesThroughChain) {
     const auto& bin = std::get<MirRvalue::BinaryOpData>(data.rvalue->data);
     const auto& place = std::get<MirPlace>(bin.lhs->data);
     EXPECT_EQ(place.local, a);
+}
+
+TEST(MirPassTest, CopyPropagation_FoldsAggregateCopyChain) {
+    // 構造体の一時変数経由コピー（コピー元→一時→最終先）が単一コピーへ畳み込まれる（M12）。
+    // _b = copy(_a); _c = copy(_b); → _cのコピー元が_aになり、一時_bの二重コピーが省かれる
+    // （関数引数はコピー伝播の対象外のため、_aは通常ローカルとして初期化する）
+    auto f = make_function();
+    auto struct_type = hir::make_named("P");
+    LocalId a = f->add_local("a", struct_type);
+    LocalId b = f->add_local("b", struct_type);
+    LocalId c = f->add_local("c", struct_type);
+    emit(*f, 0, a, rv_use(cint(0)));
+    emit(*f, 0, b, rv_use(use_of(a, struct_type)));
+    emit(*f, 0, c, rv_use(use_of(b, struct_type)));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    opt::CopyPropagation cp;
+    EXPECT_TRUE(cp.run(*f));
+
+    const auto& stmt = f->basic_blocks[0]->statements[2];
+    const auto& data = std::get<MirStatement::AssignData>(stmt->data);
+    const auto& use = std::get<MirRvalue::UseData>(data.rvalue->data);
+    const auto& place = std::get<MirPlace>(use.operand->data);
+    EXPECT_EQ(place.local, a);
+}
+
+// ============================================================
+// StringReassignFree（文字列再代入の旧バッファ解放・C12）
+// ============================================================
+
+namespace {
+
+// 到達定義が全てfreshなループ再代入を構築する共通ヘルパー。
+// bb0: T1 = concat(...) → bb1: X = copy(T1) → bb2(ループ頭): T2 = concat(...) → bb3: X = copy(T2) → bb2 …
+MirFunctionPtr make_fresh_reassign_loop(LocalId& x_out) {
+    auto f = make_function();
+    LocalId t1 = f->add_local("t1", hir::make_string());
+    LocalId x = f->add_local("x", hir::make_string());
+    LocalId t2 = f->add_local("t2", hir::make_string());
+    BlockId b1 = f->add_block();
+    BlockId b2 = f->add_block();
+    BlockId b3 = f->add_block();
+    f->basic_blocks[0]->set_terminator(call_terminator("cm_string_concat", b1, MirPlace{t1}));
+    emit(*f, b1, x, rv_use(use_of(t1, hir::make_string())));
+    f->basic_blocks[b1]->set_terminator(MirTerminator::goto_block(b2));
+    f->basic_blocks[b2]->set_terminator(call_terminator("cm_string_concat", b3, MirPlace{t2}));
+    emit(*f, b3, x, rv_use(use_of(t2, hir::make_string())));
+    f->basic_blocks[b3]->set_terminator(MirTerminator::goto_block(b2));
+    x_out = x;
+    return f;
+}
+
+// cm_string_freeのCall終端の数を数える
+int count_string_free_calls(const MirFunction& func) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call) {
+            continue;
+        }
+        const auto& call = std::get<MirTerminator::CallData>(block->terminator->data);
+        if (call.func && call.func->kind == MirOperand::FunctionRef &&
+            std::get<std::string>(call.func->data) == "cm_string_free") {
+            count++;
+        }
+    }
+    return count;
+}
+
+}  // namespace
+
+TEST(MirPassTest, StringReassignFree_FreesOldBufferOnFreshReassign) {
+    // 全定義fresh・非エイリアスのループ再代入では、再代入直前へ旧値のcm_string_freeが挿入される
+    LocalId x = 0;
+    auto f = make_fresh_reassign_loop(x);
+
+    opt::StringReassignFree pass;
+    EXPECT_TRUE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 1);
+}
+
+TEST(MirPassTest, StringReassignFree_SkipsLiteralInitializedLocal) {
+    // リテラル初期化が到達定義に混ざるローカル（string acc = ""; ループで加算）は解放しない
+    auto f = make_function();
+    LocalId x = f->add_local("x", hir::make_string());
+    LocalId t2 = f->add_local("t2", hir::make_string());
+    BlockId b1 = f->add_block();
+    BlockId b2 = f->add_block();
+    MirConstant lit;
+    lit.type = hir::make_string();
+    lit.value = std::string("");
+    emit(*f, 0, x, rv_use(MirOperand::constant(std::move(lit))));
+    f->basic_blocks[0]->set_terminator(MirTerminator::goto_block(b1));
+    f->basic_blocks[b1]->set_terminator(call_terminator("cm_string_concat", b2, MirPlace{t2}));
+    emit(*f, b2, x, rv_use(use_of(t2, hir::make_string())));
+    f->basic_blocks[b2]->set_terminator(MirTerminator::goto_block(b1));
+
+    opt::StringReassignFree pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 0);
+}
+
+TEST(MirPassTest, StringReassignFree_SkipsAliasedLocal) {
+    // 他ローカルへコピーされた（エイリアスされた）ローカルは解放しない（コピー先が保持呼び出しへ渡る）
+    LocalId x = 0;
+    auto f = make_fresh_reassign_loop(x);
+    LocalId alias = f->add_local("alias", hir::make_string());
+    BlockId b_last = static_cast<BlockId>(f->basic_blocks.size() - 1);
+    emit(*f, b_last, alias, rv_use(use_of(x, hir::make_string())));
+    // aliasを保持しうるユーザー関数へ渡す（透明なコピー先ではなくなる）
+    BlockId b_after = f->add_block();
+    auto term = std::make_unique<MirTerminator>();
+    term->kind = MirTerminator::Call;
+    MirTerminator::CallData data;
+    data.func = MirOperand::function_ref("user_fn");
+    std::vector<MirOperandPtr> args;
+    args.push_back(MirOperand::copy(MirPlace{alias}, hir::make_string()));
+    data.args = std::move(args);
+    data.success = b_after;
+    term->data = std::move(data);
+    f->basic_blocks[b_last]->set_terminator(std::move(term));
+    f->basic_blocks[b_after]->set_terminator(MirTerminator::return_value());
+
+    opt::StringReassignFree pass;
+    EXPECT_FALSE(pass.run(*f));
+    EXPECT_EQ(count_string_free_calls(*f), 0);
 }
 
 // ============================================================
@@ -784,4 +911,111 @@ TEST(MirPassTest, UndefinedCheck_IsIdempotentPerRunOnCleanFunction) {
     opt::UndefinedCheckInstrumentation pass;
     EXPECT_FALSE(pass.run(*f));
     EXPECT_EQ(f->basic_blocks.size(), 1u);
+}
+
+// ============================================================
+// 効果モデル（core/effects.hpp）
+// 文種別×属性（must/ASM/Deref/グローバル）の行列を固定し、全パスが消費する意味論を1箇所で検証する
+// ============================================================
+
+TEST(MirPassTest, Effects_SimpleAssignIsDirectWrite) {
+    auto stmt = MirStatement::assign(MirPlace{5}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.writes.size(), 1u);
+    EXPECT_EQ(e.writes[0], 5u);
+    EXPECT_TRUE(e.direct_write);
+    EXPECT_FALSE(e.deref_clobber);
+    EXPECT_FALSE(e.no_opt);
+    EXPECT_TRUE(e.asm_outputs.empty());
+}
+
+TEST(MirPassTest, Effects_ProjectedAssignWritesBaseWithoutDirectWrite) {
+    // フィールド・添字代入でもベースローカルの無効化が必要（B3）
+    auto stmt = MirStatement::assign(MirPlace{7, {PlaceProjection::field(0)}}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.writes.size(), 1u);
+    EXPECT_EQ(e.writes[0], 7u);
+    EXPECT_FALSE(e.direct_write);
+    EXPECT_FALSE(e.deref_clobber);
+}
+
+TEST(MirPassTest, Effects_DerefAssignClobbersEverything) {
+    auto stmt = MirStatement::assign(MirPlace{7, {PlaceProjection::deref()}}, rv_use(cint(1)));
+    const auto e = opt::effects_of(*stmt);
+    EXPECT_TRUE(e.deref_clobber);
+    EXPECT_FALSE(e.direct_write);
+}
+
+TEST(MirPassTest, Effects_NoOptFlagIsPropagated) {
+    auto stmt = MirStatement::assign(MirPlace{5}, rv_use(cint(1)));
+    stmt->no_opt = true;
+    EXPECT_TRUE(opt::effects_of(*stmt).no_opt);
+}
+
+TEST(MirPassTest, Effects_AsmOutputsAreOutputConstraintsOnly) {
+    auto stmt = std::make_unique<MirStatement>();
+    stmt->kind = MirStatement::Asm;
+    MirStatement::AsmData ad;
+    ad.code = "nop";
+    ad.is_must = false;
+    ad.operands.emplace_back("=r", LocalId{3});
+    ad.operands.emplace_back("+r", LocalId{4});
+    ad.operands.emplace_back("r", LocalId{5});  // 入力のみは出力ではない
+    ad.operands.emplace_back("=r", int64_t{42});  // 定数オペランドはlocal_id無効のため除外
+    stmt->data = std::move(ad);
+    const auto e = opt::effects_of(*stmt);
+    ASSERT_EQ(e.asm_outputs.size(), 2u);
+    EXPECT_EQ(e.asm_outputs[0], 3u);
+    EXPECT_EQ(e.asm_outputs[1], 4u);
+    EXPECT_TRUE(e.writes.empty());
+}
+
+TEST(MirPassTest, Effects_DetectMultiAssignedCountsDirectAndAsmWrites) {
+    auto f = make_function();
+    LocalId once = f->add_local("once", hir::make_int());
+    LocalId twice = f->add_local("twice", hir::make_int());
+    LocalId proj = f->add_local("proj", hir::make_int());
+    LocalId asm_out = f->add_local("asm_out", hir::make_int());
+    emit(*f, 0, once, rv_use(cint(1)));
+    emit(*f, 0, twice, rv_use(cint(1)));
+    emit(*f, 0, twice, rv_use(cint(2)));
+    // 投影付き代入は直接書き込みではないため複数回代入としてカウントしない（従来実装と同一）
+    f->basic_blocks[0]->add_statement(
+        MirStatement::assign(MirPlace{proj, {PlaceProjection::field(0)}}, rv_use(cint(1))));
+    f->basic_blocks[0]->add_statement(
+        MirStatement::assign(MirPlace{proj, {PlaceProjection::field(1)}}, rv_use(cint(2))));
+    // ASM出力も代入としてカウント（Bug1）: 直接代入1回+ASM出力1回で複数回になる
+    emit(*f, 0, asm_out, rv_use(cint(0)));
+    auto asm_stmt = std::make_unique<MirStatement>();
+    asm_stmt->kind = MirStatement::Asm;
+    MirStatement::AsmData ad;
+    ad.code = "nop";
+    ad.is_must = false;
+    ad.operands.emplace_back("+r", asm_out);
+    asm_stmt->data = std::move(ad);
+    f->basic_blocks[0]->add_statement(std::move(asm_stmt));
+    f->basic_blocks[0]->set_terminator(MirTerminator::return_value());
+
+    const auto multi = opt::detect_multi_assigned(*f);
+    EXPECT_EQ(multi.count(once), 0u);
+    EXPECT_EQ(multi.count(twice), 1u);
+    EXPECT_EQ(multi.count(proj), 0u);
+    EXPECT_EQ(multi.count(asm_out), 1u);
+}
+
+TEST(MirPassTest, Effects_CallClobberedAndExternallyVisibleAreGlobalsAndStatics) {
+    auto f = make_function();
+    LocalId plain = f->add_local("plain", hir::make_int());
+    LocalId g = f->add_local("g", hir::make_int());
+    LocalId s = f->add_local("s", hir::make_int());
+    f->locals[g].is_global = true;
+    f->locals[s].is_static = true;
+    EXPECT_FALSE(opt::is_call_clobbered(*f, plain));
+    EXPECT_TRUE(opt::is_call_clobbered(*f, g));
+    EXPECT_TRUE(opt::is_call_clobbered(*f, s));
+    // 範囲外ローカルは保守的にfalse（呼び出し側の境界検査に依存しない）
+    EXPECT_FALSE(opt::is_call_clobbered(*f, static_cast<LocalId>(f->locals.size())));
+    EXPECT_TRUE(opt::is_externally_visible(*f, g));
+    EXPECT_TRUE(opt::is_externally_visible(*f, s));
+    EXPECT_FALSE(opt::is_externally_visible(*f, plain));
 }

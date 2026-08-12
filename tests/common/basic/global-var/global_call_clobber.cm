@@ -1,0 +1,15 @@
+// 回帰(W4): 呼び出しがグローバルを書き換えるループでO1以上の読みが初期値へ固定されるバグの検証
+import std::io::println;
+int g = 0;
+void tick() {
+    g = g + 2;
+}
+int main() {
+    int acc = 0;
+    for (int i = 0; i < 4; i++) {
+        tick();
+        acc = acc + g;
+    }
+    println("acc={acc}");
+    return 0;
+}

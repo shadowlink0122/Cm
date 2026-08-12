@@ -1,0 +1,21 @@
+// 回帰(X2の許可側): impl内からのprivateフィールドアクセスは従来どおり動作する
+import std::io::println;
+struct S {
+    int open;
+    private int secret;
+}
+impl S {
+    void set_secret(int v) {
+        self.secret = v;
+    }
+    int get_secret() {
+        return self.secret;
+    }
+}
+int main() {
+    S s;
+    s.open = 1;
+    s.set_secret(42);
+    println("{s.open} {s.get_secret()}");
+    return 0;
+}

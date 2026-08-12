@@ -186,6 +186,41 @@ else
     skip "bounds/wasm: wasmtime not installed"
 fi
 
+# ---------- bounds: スライス境界（M1。全実行系で同一メッセージのトラップ） ----------
+if $CM compile --sanitize=bounds -O0 "$CASES/oob/slice_read.cm" -o "$WORK/slice_oob" >/dev/null 2>&1; then
+    expect_msg "bounds/native: slice out-of-bounds read traps with message" "index out of bounds" "$WORK/slice_oob"
+else
+    fail "bounds/native: compile oob/slice_read.cm"
+fi
+if $CM compile --sanitize=bounds -O0 "$CASES/oob/slice_write.cm" -o "$WORK/slice_oob_w" >/dev/null 2>&1; then
+    expect_msg "bounds/native: slice out-of-bounds write traps with message" "index out of bounds" "$WORK/slice_oob_w"
+else
+    fail "bounds/native: compile oob/slice_write.cm"
+fi
+expect_msg "bounds/jit: slice out-of-bounds read traps with message" "index out of bounds" \
+    "$CM" run --sanitize=bounds -O0 "$CASES/oob/slice_read.cm"
+if command -v wasmtime >/dev/null 2>&1; then
+    if $CM compile --target=wasm --sanitize=bounds -O0 "$CASES/oob/slice_read.cm" -o "$WORK/slice_oob.wasm" >/dev/null 2>&1; then
+        expect_msg "bounds/wasm: slice out-of-bounds read traps with message" "index out of bounds" wasmtime "$WORK/slice_oob.wasm"
+    else
+        fail "bounds/wasm: compile oob/slice_read.cm"
+    fi
+else
+    skip "bounds/wasm: wasmtime not installed"
+fi
+if command -v node >/dev/null 2>&1; then
+    if $CM compile --target=js --sanitize=bounds -O0 "$CASES/oob/slice_read.cm" -o "$WORK/slice_oob.js" >/dev/null 2>&1; then
+        expect_msg "bounds/js: slice out-of-bounds read traps with message" "index out of bounds" node "$WORK/slice_oob.js"
+    else
+        fail "bounds/js: compile oob/slice_read.cm"
+    fi
+else
+    skip "bounds/js: node not installed"
+fi
+# サニタイズ無効時はスライス読みが従来どおり通る（既定の挙動は不変）
+run_expect "bounds: slice read without sanitize keeps legacy behavior" zero \
+    "$CM" run -O0 "$CASES/oob/slice_read.cm"
+
 # ---------- address: 計装検証（シンボルレベル。全環境で実施） ----------
 if $CM compile --sanitize=address -O0 "$CASES/oob/write.cm" -o "$WORK/oob_asan" >/dev/null 2>&1; then
     if nm "$WORK/oob_asan" 2>/dev/null | grep -q '__asan_init'; then
@@ -274,7 +309,8 @@ if command -v node >/dev/null 2>&1; then
         "$CM" run --target=js --sanitize=undefined -O0 "$CASES/null/deref.cm"
     run_expect "undefined/js: in-bounds program runs normally" zero \
         "$CM" run --target=js --sanitize=undefined -O0 "$CASES/valid/ok.cm"
-    expect_msg "cli: bounds is rejected on js" "not supported on target 'js'" \
+    # boundsはMIRレベル計装になりjsでも動作する（M1で対応。従来は拒否していた）
+    run_expect "cli: bounds is accepted on js (in-bounds runs normally)" zero \
         "$CM" run --target=js --sanitize=bounds "$CASES/valid/ok.cm"
 else
     skip "undefined/js: node not installed"

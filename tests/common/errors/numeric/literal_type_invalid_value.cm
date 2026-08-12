@@ -1,0 +1,6 @@
+// 回帰(エラーパターン): リテラル型の許容外の値
+typedef Method = "GET" | "POST";
+int main() {
+    Method m = "PATCH";
+    return 0;
+}

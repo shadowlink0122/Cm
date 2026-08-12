@@ -1,0 +1,20 @@
+// 回帰(R19): long/ulongフィールドへの整数リテラル代入がTSでbigintリテラル（5n）として生成される
+// （従来はnumberリテラルのまま出てtscのTS2322「number is not assignable to bigint」になっていた。実行値は全バックエンド一致）
+import std::io::println;
+
+struct Big {
+    ulong v;
+    long w;
+}
+
+int main() {
+    Big b = { v: 5, w: 7 };
+    println("{b.v} {b.w}");
+    b.v = 9;
+    b.w = -3;
+    println("{b.v} {b.w}");
+    long[3] arr = [1, 2, 3];
+    arr[1] = 42;
+    println("{arr[1]}");
+    return 0;
+}

@@ -1,0 +1,7 @@
+// R13: デフォルト型引数<T = int>は未対応（従来はExpected '>'の誤誘導エラーだった）
+struct Box<T = int> {
+    T v;
+}
+int main() {
+    return 0;
+}

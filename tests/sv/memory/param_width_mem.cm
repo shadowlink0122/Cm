@@ -1,0 +1,20 @@
+//! platform: sv
+//! test: din=170, waddr=0, cycles=2 -> dout=170
+
+// パラメータ幅メモリ配列テスト: bit[WIDTH][DEPTH]がlogic [WIDTH-1:0] mem [0:DEPTH-1]として
+// 出力され、添字読み書きがスライスランタイムでなく直接インデックスになる
+
+#[sv::parameter] const uint WIDTH = 8;
+#[sv::parameter] const uint DEPTH = 4;
+
+#[input] posedge clk;
+#[input] bit[WIDTH] din;
+#[input] uint waddr;
+#[output] bit[WIDTH] dout = 0;
+
+bit[WIDTH][DEPTH] mem;
+
+async void update(posedge clk) {
+    mem[waddr] = din;
+    dout = mem[0];
+}

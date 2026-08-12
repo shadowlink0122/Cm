@@ -1,0 +1,15 @@
+// 回帰(Q1穴1): next欠如は診断
+struct Counter { int cur; int max; }
+struct CI { int cur; int max; }
+impl Counter {
+    CI iter() { return CI { cur: self.cur, max: self.max }; }
+}
+impl CI {
+    bool has_next() { return self.cur < self.max; }
+}
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    int sum = 0;
+    for (v in c) { sum = sum + v; }
+    return sum;
+}

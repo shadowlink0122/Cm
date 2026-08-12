@@ -12,6 +12,28 @@ title: Atomic
 
 ---
 
+## 構造体API: AtomicInt / AtomicLong / AtomicBool（v0.17.0で利用可能に）
+
+関数APIに加えて、値を保持する構造体APIも使えます:
+
+```cm
+import native::sync::{AtomicInt, AtomicBool};
+
+AtomicInt a = AtomicInt::new(5);
+a.fetch_add(3);
+println("{a.load()}");   // 8
+
+AtomicBool flag = AtomicBool::new(true);
+flag.store(false);
+```
+
+| API | 説明 |
+|------|------|
+| `AtomicInt::new(v)` / `AtomicLong::new(v)` / `AtomicBool::new(v)` | 生成 |
+| `.load()` / `.store(v)` | 読み取り・書き込み |
+| `.fetch_add(v)` / `.fetch_sub(v)` | 加減算（旧値を返す。Int/Longのみ） |
+| `.compare_exchange(expected, desired)` | CAS（Int/Longのみ） |
+
 ## 基本的な使い方
 
 ```cm

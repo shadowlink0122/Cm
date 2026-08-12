@@ -1,0 +1,37 @@
+import std::io::println;
+
+// M10回帰: レイアウト同一のジェネリック特殊化がICF（O2以上のMergeFunctions）で折り畳まれても意味論が壊れないことを検証する。
+// pickはT非依存の同一本体（int/uintで折り畳み候補）、lt/to_longは符号性でLLVM命令が異なる本体（slt/ult・sext/zext、誤って折り畳むと結果が変わる）。
+
+<T> T pick(T a, T b, bool first) {
+    if (first) {
+        return a;
+    }
+    return b;
+}
+
+<T: Ord> bool lt(T a, T b) {
+    return a < b;
+}
+
+<T> long to_long(T v) {
+    return v as long;
+}
+
+int main() {
+    // 同一本体の特殊化: 折り畳まれても各型で正しい値を返すこと
+    int a = pick(1, 2, true);
+    uint b = pick(3 as uint, 4 as uint, false);
+    long c = pick(5 as long, 6 as long, true);
+    short d = pick(7 as short, 8 as short, false);
+    println("{a} {b} {c} {d}");
+
+    // 符号付き/無し比較: 同一シグネチャでもslt/ultで結果が異なる（誤折り畳み検出）
+    int neg = -1;
+    uint big = neg as uint;
+    println("{lt(neg, 1)} {lt(big, 1 as uint)}");
+
+    // 拡張の差: sext/zext（int版は-1、uint版は4294967295）
+    println("{to_long(neg)} {to_long(big)}");
+    return 0;
+}

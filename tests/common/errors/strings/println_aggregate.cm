@@ -1,0 +1,12 @@
+// 集約型（構造体）のprintln直接引数は診断エラー（局所処理調査G3）。
+// 従来はnative/jitがLLVM検証失敗でクラッシュし、JSだけ[object Object]を出力していた
+struct P {
+    int x;
+    int y;
+}
+
+int main() {
+    P p = P{x: 1, y: 2};
+    println(p);
+    return 0;
+}

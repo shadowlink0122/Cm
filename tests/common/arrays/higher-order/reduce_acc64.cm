@@ -1,0 +1,20 @@
+// 回帰(N4): long acc×int要素のreduceがwasmでcall_indirectシグネチャ不一致トラップになるバグの検証
+import std::io::println;
+int main() {
+    int a = 100;
+    int[] xs = [];
+    xs.push(1);
+    xs.push(2);
+    xs.push(3);
+    int[] m = xs.filter((int x) => { return x > 1; }).map((int x) => { return x * a; });
+    long total = m.reduce((long acc, int x) => { return acc + x; }, 0);
+    println(total);
+    long plain = xs.reduce((long acc, int x) => { return acc + x; }, 1000);
+    println(plain);
+    int[] same = [];
+    same.push(4);
+    same.push(6);
+    int small = same.reduce((int acc, int x) => { return acc + x; }, 0);
+    println(small);
+    return 0;
+}

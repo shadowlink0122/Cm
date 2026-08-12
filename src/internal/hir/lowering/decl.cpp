@@ -1,5 +1,6 @@
 // lowering_decl.cpp - 宣言のlowering
 #include "fwd.hpp"
+#include "internal/base/mangle.hpp"
 
 #include <memory>
 #include <string>
@@ -62,11 +63,15 @@ HirDeclPtr HirLowering::lower_extern_block(ast::ExternBlockDecl& extern_block) {
 // SV initial ブロック
 HirDeclPtr HirLowering::lower_initial_block(ast::InitialBlockDecl& initial_block) {
     auto hir_initial = std::make_unique<HirInitialBlock>();
+    // initialブロックはSVコード生成がHIR文を直接消費するため、SV専用ビルトインへの脱糖を抑止する（SV-N1）
+    const bool saved_retained = hir_retained_context_;
+    hir_retained_context_ = true;
     for (const auto& stmt : initial_block.body) {
         if (auto hir_stmt = lower_stmt(*stmt)) {
             hir_initial->body.push_back(std::move(hir_stmt));
         }
     }
+    hir_retained_context_ = saved_retained;
     for (const auto& attr : initial_block.attributes) {
         hir_initial->attributes.push_back(attr.name);
     }
@@ -83,6 +88,7 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
     hir_func->return_type = func.return_type;
     hir_func->is_export = func.visibility == ast::Visibility::Export;
     hir_func->is_extern = func.is_extern;  // externフラグを伝播
+    hir_func->is_inline = func.is_inline;  // R11: inlineフラグを伝播（従来はASTで消えていた）
     hir_func->is_async = func.is_async;    // asyncフラグを伝播
     hir_func->is_always = func.is_always;  // alwaysフラグを伝播
     // always_kind を伝搬（AST→HIR: enum値をintでキャスト）
@@ -122,11 +128,24 @@ HirDeclPtr HirLowering::lower_function(ast::FunctionDecl& func) {
 
     debug::hir::log(debug::hir::Id::FunctionBody, "statements=" + std::to_string(func.body.size()),
                     debug::Level::Trace);
+    // #[test]関数はSVテストベンチ生成がHIR文を直接消費するため、SV専用ビルトインへの脱糖を抑止する（SV-N1）
+    bool is_test_fn = false;
+    for (const auto& attr : func.attributes) {
+        if (attr.name == "test") {
+            is_test_fn = true;
+            break;
+        }
+    }
+    const bool saved_retained = hir_retained_context_;
+    if (is_test_fn) {
+        hir_retained_context_ = true;
+    }
     for (auto& stmt : func.body) {
         if (auto hir_stmt = lower_stmt(*stmt)) {
             hir_func->body.push_back(std::move(hir_stmt));
         }
     }
+    hir_retained_context_ = saved_retained;
 
     return std::make_unique<HirDecl>(std::move(hir_func));
 }
@@ -140,6 +159,10 @@ HirDeclPtr HirLowering::lower_struct(ast::StructDecl& st) {
     hir_st->is_export = st.visibility == ast::Visibility::Export;
     hir_st->is_extern = st.is_extern;
     hir_st->auto_impls = st.auto_impls;
+    // 構造体属性を伝播（sv::packed/sv::unpacked 等、SV用）
+    for (const auto& attr : st.attributes) {
+        hir_st->attributes.push_back(attr.name);
+    }
     for (const auto& iface_name : st.auto_impls) {
         if (iface_name == "Css") {
             hir_st->is_css = true;
@@ -273,10 +296,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
     if (impl.is_ctor_impl) {
         for (auto& ctor : impl.constructors) {
             auto hir_func = std::make_unique<HirFunction>();
-            std::string mangled_name = hir_impl->target_type + "__ctor";
-            if (!ctor->params.empty()) {
-                mangled_name += "_" + std::to_string(ctor->params.size());
-            }
+            std::string mangled_name = mangle::ctor_name(
+                hir_impl->target_type, !ctor->params.empty(), ctor->params.size());
             hir_func->name = mangled_name;
             hir_func->return_type = ast::make_void();
             hir_func->is_constructor = true;
@@ -301,7 +322,7 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         // デストラクタをlower
         if (impl.destructor) {
             auto hir_func = std::make_unique<HirFunction>();
-            hir_func->name = hir_impl->target_type + "__dtor";
+            hir_func->name = mangle::dtor_name(hir_impl->target_type);
             hir_func->return_type = ast::make_void();
             hir_func->is_destructor = true;
 
@@ -335,10 +356,8 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         bool is_ctor = (method->name == target_base_name);
         if (is_ctor) {
             // コンストラクタとして__ctor_N形式にマングリング
-            std::string mangled_name = hir_impl->target_type + "__ctor";
-            if (!method->params.empty()) {
-                mangled_name += "_" + std::to_string(method->params.size());
-            }
+            std::string mangled_name = mangle::ctor_name(
+                hir_impl->target_type, !method->params.empty(), method->params.size());
             hir_func->name = mangled_name;
             hir_func->is_constructor = true;
         } else {
@@ -355,7 +374,19 @@ HirDeclPtr HirLowering::lower_impl(ast::ImplDecl& impl) {
         // staticメソッドではselfパラメータを追加しない
         if (impl.target_type && !method->is_static) {
             // selfはポインタ型として定義（MIRで暗黙的にポインタとして扱う）
-            hir_func->params.push_back({"self", ast::make_pointer(impl.target_type), nullptr});
+            // Q5: 値enum（ペイロードなし）のselfは素の値渡しにする。実体はintで呼び出し側も値を渡すため、ポインタ形だとjs等のバックエンドで表現が割れる（LLVMはself特別処理で偶然整合していた）。メソッド内のself再代入はコピーに閉じる（enumは値意味論）
+            bool value_enum_self = false;
+            if (impl.target_type->kind == ast::TypeKind::Struct &&
+                !impl.target_type->name.empty()) {
+                auto en_it = enum_defs_.find(impl.target_type->name);
+                if (en_it != enum_defs_.end() && en_it->second &&
+                    !en_it->second->is_tagged_union()) {
+                    value_enum_self = true;
+                }
+            }
+            hir_func->params.push_back(
+                {"self", value_enum_self ? impl.target_type : ast::make_pointer(impl.target_type),
+                 nullptr});
         }
 
         for (const auto& param : method->params) {

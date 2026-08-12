@@ -3,7 +3,6 @@
 // ============================================================
 
 #include "import.hpp"
-#include "import_internal.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -47,17 +46,6 @@ std::filesystem::path ImportPreprocessor::find_module_file(
     }
 
     return {};  // 見つからない
-}
-
-std::string ImportPreprocessor::load_module_file(const std::filesystem::path& module_path) {
-    std::ifstream file(module_path);
-    if (!file) {
-        throw std::runtime_error("Failed to open module file: " + module_path.string());
-    }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
 }
 
 std::filesystem::path ImportPreprocessor::find_project_root(
@@ -430,39 +418,6 @@ std::filesystem::path ImportPreprocessor::find_module_entry_point(
     }
 
     return {};  // エントリーポイントが見つからない
-}
-
-std::string ImportPreprocessor::format_circular_dependency_error(
-    const std::vector<std::string>& stack, const std::string& module) {
-    std::stringstream error;
-    error << "Circular dependency detected:\n";
-    for (size_t i = 0; i < stack.size(); ++i) {
-        error << "  " << (i + 1) << ". " << stack[i] << "\n";
-    }
-    error << "  " << (stack.size() + 1) << ". " << module << " (circular reference)\n";
-    return error.str();
-}
-
-std::vector<std::filesystem::path> ImportPreprocessor::find_all_modules_recursive(
-    const std::filesystem::path& directory) {
-    std::vector<std::filesystem::path> modules;
-
-    if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
-        return modules;
-    }
-
-    // 再帰的にディレクトリを探索
-    // .cmファイルはすべてモジュールとして扱う
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".cm") {
-            modules.push_back(entry.path());
-        }
-    }
-
-    // ソートして一貫した順序を保証
-    std::sort(modules.begin(), modules.end());
-
-    return modules;
 }
 
 }  // namespace cm::preprocessor

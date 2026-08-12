@@ -1,0 +1,659 @@
+// std::json - 純粋なCmで書いたJSONパーサ／シリアライザ
+//
+// 再帰的なJSONツリーを、動的なアリーナ（パラレルなノードスライス＋インデックス）で表現する。
+// 再帰的なデータ型やポインタを使わないため、全バックエンド（jit/native/wasm/js/ts）で同じ動作をする。
+// パーサ本体は再帰下降だが、状態はモジュールグローバルに置く（1度に1つのパースを扱う）。
+//
+// 使用例:
+//   import std::json::*;
+//   int root = json_parse("{\"name\":\"Cm\",\"nums\":[1,2,3],\"ok\":true}");
+//   int name = json_object_get(root, "name");
+//   println(json_string(name));            // Cm
+//   int nums = json_object_get(root, "nums");
+//   println(json_array_len(nums));         // 3
+//   println(json_stringify(root));
+
+module std.json;
+
+import std::strings::from_bytes;
+
+// JSON値の種別。
+export enum JsonKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object
+}
+
+// アリーナ上の1ノードの論理形（公開APIはintのindexでノードを参照する）。
+// 子は first_child → next_sibling の連結リストで辿る。
+export struct JsonNode {
+    JsonKind kind;
+    bool bool_val;     // Boolのとき有効
+    double num_val;    // Numberのとき有効
+    string str_val;    // Stringのとき有効
+    string key;        // 親がObjectのとき、このノードのキー
+    int first_child;   // 最初の子ノードのindex（-1で無し）
+    int next_sibling;  // 次の兄弟ノードのindex（-1で無し）
+}
+
+// アリーナ本体。ノードはパラレルな動的スライスで表しindexで参照する（TreeMapと同方式）。
+// 容量はpushで自動拡張されるためノード数の上限は無い（R1: 従来の固定1024は超過時にalloc_nodeが同一indexを返し続け、append_childが自己サイクルを作って兄弟リスト走査が無限ループしていた）。
+// json_parseごとにnode_countを0へ戻し、確保済みスロットは再利用する。
+int[] nd_kind = [];
+bool[] nd_bool = [];
+double[] nd_num = [];
+string[] nd_str = [];
+string[] nd_key = [];
+int[] nd_first_child = [];
+int[] nd_next_sibling = [];
+int node_count = 0;
+
+// パーサ状態（モジュールグローバル）。
+// R2: 走査はコードポイント単位に統一する。posはコードポイント添字で、len()/substring()と同単位。
+// cpsはjson_parseで一度だけ実体化するコードポイント列（peekのO(1)化。len()の毎回呼び出しはO(n)走査になるため長さもキャッシュする）
+string src = "";
+uint[] cps = [];
+int src_cp_len = 0;
+int pos = 0;
+bool had_error = false;
+
+// ---- アリーナ操作 ----
+
+// 新しいノードを確保して index を返す。スロットは再利用し、足りなければpushで自動拡張する。
+int alloc_node(JsonKind k) {
+    int idx = node_count;
+    if (idx < nd_kind.len() as int) {
+        nd_kind[idx] = k;
+        nd_bool[idx] = false;
+        nd_num[idx] = 0.0;
+        nd_str[idx] = "";
+        nd_key[idx] = "";
+        nd_first_child[idx] = -1;
+        nd_next_sibling[idx] = -1;
+    } else {
+        nd_kind.push(k);
+        nd_bool.push(false);
+        nd_num.push(0.0);
+        nd_str.push("");
+        nd_key.push("");
+        nd_first_child.push(-1);
+        nd_next_sibling.push(-1);
+    }
+    node_count = node_count + 1;
+    return idx;
+}
+
+// parent の子リスト末尾に child を追加する。
+void append_child(int parent, int child) {
+    if (nd_first_child[parent] < 0) {
+        nd_first_child[parent] = child;
+        return;
+    }
+    int cur = nd_first_child[parent];
+    while (nd_next_sibling[cur] >= 0) {
+        cur = nd_next_sibling[cur];
+    }
+    nd_next_sibling[cur] = child;
+}
+
+// ---- 字句操作 ----
+
+// 現在位置の文字を返す（終端では '\0'）。
+// R2: 非ASCIIコードポイントはJSONの構造文字と衝突しない番兵0x80を返す（内容の取り出しはrun切り出しのsubstringが担うため、peekは構造判定にのみ使う）
+char peek() {
+    if (pos >= src_cp_len) {
+        return '\0';
+    }
+    const int cp = cps[pos] as int;
+    if (cp <= 0x7F) {
+        return cp as char;
+    }
+    return 0x80 as char;
+}
+
+// 1文字進める。
+void advance() {
+    pos = pos + 1;
+}
+
+// 空白（スペース・タブ・改行・復帰）を読み飛ばす。
+void skip_ws() {
+    while (pos < src_cp_len) {
+        char c = peek();
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            advance();
+        } else {
+            return;
+        }
+    }
+}
+
+// ---- パース本体（再帰下降。関数は定義順に依存せず相互参照できる） ----
+
+// 16進1桁の値を返す（不正なら-1）。
+int hex_val(char c) {
+    if (c >= '0' && c <= '9') {
+        return (c as int) - ('0' as int);
+    }
+    if (c >= 'a' && c <= 'f') {
+        return (c as int) - ('a' as int) + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return (c as int) - ('A' as int) + 10;
+    }
+    return -1;
+}
+
+// 現在位置から16進4桁を読んでコード単位の値を返す（不正なら-1。エラー時の消費位置は不定で良い——呼び出し元がhad_errorで打ち切る）。
+int read_hex4() {
+    int value = 0;
+    int i = 0;
+    while (i < 4) {
+        int h = hex_val(peek());
+        if (h < 0) {
+            return -1;
+        }
+        value = value * 16 + h;
+        advance();
+        i = i + 1;
+    }
+    return value;
+}
+
+// コードポイント1つを文字列へ変換する。
+// R2: UTF-8バイト列を組み立ててfrom_bytesで復号する（バイトをcharとして連結する方式はjs/tsバックエンドでUTF-16文字扱いになり文字化けするため、全バックエンドで同じ復号経路を通す）
+string cp_to_string(int cp) {
+    utiny[] b = [];
+    if (cp < 0x80) {
+        b.push(cp as utiny);
+    } else if (cp < 0x800) {
+        b.push((0xC0 | (cp / 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
+    } else if (cp < 0x10000) {
+        b.push((0xE0 | (cp / 4096)) as utiny);
+        b.push((0x80 | ((cp / 64) % 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
+    } else {
+        b.push((0xF0 | (cp / 262144)) as utiny);
+        b.push((0x80 | ((cp / 4096) % 64)) as utiny);
+        b.push((0x80 | ((cp / 64) % 64)) as utiny);
+        b.push((0x80 | (cp % 64)) as utiny);
+    }
+    return from_bytes(b);
+}
+
+// バックスラッシュ直後の1文字エスケープを対応する文字列へ変換する（\u以外）。未知のエスケープはエラー。
+string decode_escape(char e) {
+    if (e == '"') {
+        return "\"";
+    }
+    if (e == '\\') {
+        return "\\";
+    }
+    if (e == '/') {
+        return "/";
+    }
+    if (e == 'n') {
+        return "\n";
+    }
+    if (e == 't') {
+        return "\t";
+    }
+    if (e == 'r') {
+        return "\r";
+    }
+    if (e == 'b') {
+        return "\b";
+    }
+    if (e == 'f') {
+        return "\f";
+    }
+    // R1: 未知のエスケープ（\x等）は黙って素通しせず診断する
+    had_error = true;
+    return "";
+}
+
+// 文字列リテラルを読み、内容（エスケープ解決済み）を返す。開始の " 位置にいる前提。
+// R2: 通常文字はrun切り出し（コードポイント添字のsubstring）でまとめて取り出す（非ASCIIをchar経由で1文字ずつ運ぶとバックエンド間で表現が割れるため）
+string parse_string_raw() {
+    string out = "";
+    advance();  // 開始の " を消費
+    int run_start = pos;
+    while (pos < src_cp_len) {
+        char c = peek();
+        if (c == '"') {
+            out = out + src.substring(run_start, pos);
+            advance();
+            return out;
+        }
+        if (c == '\\') {
+            out = out + src.substring(run_start, pos);
+            advance();
+            char e = peek();
+            if (e == 'u') {
+                // R1: \uXXXXを実デコードしてUTF-8で格納する（従来は文字uと生の4桁に化けるデータ破壊だった）
+                advance();  // u
+                int cp = read_hex4();
+                if (cp < 0) {
+                    had_error = true;
+                    return out;
+                }
+                if (cp >= 0xD800 && cp <= 0xDBFF) {
+                    // 上位サロゲート: 直後に \uDC00〜\uDFFF が必要
+                    if (peek() != '\\') {
+                        had_error = true;
+                        return out;
+                    }
+                    advance();
+                    if (peek() != 'u') {
+                        had_error = true;
+                        return out;
+                    }
+                    advance();
+                    int lo = read_hex4();
+                    if (lo < 0xDC00 || lo > 0xDFFF) {
+                        had_error = true;
+                        return out;
+                    }
+                    cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00);
+                } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                    // 下位サロゲート単独は不正
+                    had_error = true;
+                    return out;
+                }
+                out = out + cp_to_string(cp);
+            } else {
+                out = out + decode_escape(e);
+                if (had_error) {
+                    return out;
+                }
+                advance();
+            }
+            run_start = pos;
+        } else {
+            advance();
+        }
+    }
+    had_error = true;
+    return out;
+}
+
+// 数値リテラルを読み double を返す。整数部の数字は必須（"-"単独等はエラー）。
+double parse_number_raw() {
+    bool neg = false;
+    if (peek() == '-') {
+        neg = true;
+        advance();
+    }
+
+    double int_part = 0.0;
+    bool has_digit = false;
+    while (pos < src_cp_len) {
+        char c = peek();
+        if (c >= '0' && c <= '9') {
+            int digit = (c as int) - ('0' as int);
+            int_part = int_part * 10.0 + digit;
+            has_digit = true;
+            advance();
+        } else {
+            break;
+        }
+    }
+    // R1: 数字なし（"-"単独・"-x"等）は0へ化けずエラーにする
+    if (!has_digit) {
+        had_error = true;
+        return 0.0;
+    }
+
+    double frac = 0.0;
+    if (peek() == '.') {
+        advance();
+        double scale = 0.1;
+        while (pos < src_cp_len) {
+            char c = peek();
+            if (c >= '0' && c <= '9') {
+                int digit = (c as int) - ('0' as int);
+                frac = frac + digit * scale;
+                scale = scale * 0.1;
+                advance();
+            } else {
+                break;
+            }
+        }
+    }
+
+    double value = int_part + frac;
+
+    // 指数部 e/E
+    if (peek() == 'e' || peek() == 'E') {
+        advance();
+        bool exp_neg = false;
+        if (peek() == '+') {
+            advance();
+        } else if (peek() == '-') {
+            exp_neg = true;
+            advance();
+        }
+        int exp = 0;
+        while (pos < src_cp_len) {
+            char c = peek();
+            if (c >= '0' && c <= '9') {
+                exp = exp * 10 + ((c as int) - ('0' as int));
+                advance();
+            } else {
+                break;
+            }
+        }
+        int e = 0;
+        while (e < exp) {
+            if (exp_neg) {
+                value = value / 10.0;
+            } else {
+                value = value * 10.0;
+            }
+            e = e + 1;
+        }
+    }
+
+    if (neg) {
+        value = -value;
+    }
+    return value;
+}
+
+// 指定文字列にマッチすれば消費して true。
+bool match_literal(string lit) {
+    int n = lit.len() as int;
+    if (pos + n > src_cp_len) {
+        return false;
+    }
+    string sub = src.substring(pos, pos + n);
+    if (sub == lit) {
+        pos = pos + n;
+        return true;
+    }
+    return false;
+}
+
+// 配列をパースして index を返す。開始の [ 位置にいる前提。
+int parse_array() {
+    int node = alloc_node(JsonKind::Array);
+    advance();  // [
+    skip_ws();
+    if (peek() == ']') {
+        advance();
+        return node;
+    }
+    while (pos < src_cp_len) {
+        skip_ws();
+        int child = parse_value();
+        append_child(node, child);
+        skip_ws();
+        char c = peek();
+        if (c == ',') {
+            advance();
+        } else if (c == ']') {
+            advance();
+            return node;
+        } else {
+            had_error = true;
+            return node;
+        }
+    }
+    had_error = true;
+    return node;
+}
+
+// オブジェクトをパースして index を返す。開始の { 位置にいる前提。
+int parse_object() {
+    int node = alloc_node(JsonKind::Object);
+    advance();  // {
+    skip_ws();
+    if (peek() == '}') {
+        advance();
+        return node;
+    }
+    while (pos < src_cp_len) {
+        skip_ws();
+        if (peek() != '"') {
+            had_error = true;
+            return node;
+        }
+        string k = parse_string_raw();
+        skip_ws();
+        if (peek() != ':') {
+            had_error = true;
+            return node;
+        }
+        advance();  // :
+        skip_ws();
+        int child = parse_value();
+        nd_key[child] = k;
+        append_child(node, child);
+        skip_ws();
+        char c = peek();
+        if (c == ',') {
+            advance();
+        } else if (c == '}') {
+            advance();
+            return node;
+        } else {
+            had_error = true;
+            return node;
+        }
+    }
+    had_error = true;
+    return node;
+}
+
+// 1つのJSON値をパースして index を返す。
+int parse_value() {
+    skip_ws();
+    char c = peek();
+    if (c == '{') {
+        return parse_object();
+    }
+    if (c == '[') {
+        return parse_array();
+    }
+    if (c == '"') {
+        int node = alloc_node(JsonKind::String);
+        nd_str[node] = parse_string_raw();
+        return node;
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) {
+        int node = alloc_node(JsonKind::Number);
+        nd_num[node] = parse_number_raw();
+        return node;
+    }
+    if (match_literal("true")) {
+        int node = alloc_node(JsonKind::Bool);
+        nd_bool[node] = true;
+        return node;
+    }
+    if (match_literal("false")) {
+        int node = alloc_node(JsonKind::Bool);
+        nd_bool[node] = false;
+        return node;
+    }
+    if (match_literal("null")) {
+        return alloc_node(JsonKind::Null);
+    }
+    had_error = true;
+    return alloc_node(JsonKind::Null);
+}
+
+// ---- 公開API ----
+
+// JSON文字列をパースする。成功時ルートノードのindex、失敗時 -1 を返す。
+export int json_parse(string text) {
+    node_count = 0;
+    src = text;
+    cps = text.chars();
+    src_cp_len = cps.len() as int;
+    pos = 0;
+    had_error = false;
+    int root = parse_value();
+    skip_ws();
+    // R1: 末尾ゴミ（{"a":1}xyz）・複数値（1 2）は受理しない
+    if (pos < src_cp_len) {
+        had_error = true;
+    }
+    if (had_error) {
+        return -1;
+    }
+    return root;
+}
+
+// ノードの種別を返す。
+export JsonKind json_kind(int node) {
+    return nd_kind[node];
+}
+
+export bool json_is_null(int node) {
+    return nd_kind[node] == JsonKind::Null;
+}
+
+// Bool値を返す。
+export bool json_bool(int node) {
+    return nd_bool[node];
+}
+
+// Number値をdoubleで返す。
+export double json_number(int node) {
+    return nd_num[node];
+}
+
+// Number値をintで返す。
+export int json_int(int node) {
+    return nd_num[node] as int;
+}
+
+// String値を返す。
+export string json_string(int node) {
+    return nd_str[node];
+}
+
+// 配列の要素数を返す。
+export int json_array_len(int node) {
+    int n = 0;
+    int cur = nd_first_child[node];
+    while (cur >= 0) {
+        n = n + 1;
+        cur = nd_next_sibling[cur];
+    }
+    return n;
+}
+
+// 配列のi番目の要素ノードindexを返す（範囲外は -1）。
+export int json_array_get(int node, int i) {
+    int cur = nd_first_child[node];
+    int k = 0;
+    while (cur >= 0) {
+        if (k == i) {
+            return cur;
+        }
+        k = k + 1;
+        cur = nd_next_sibling[cur];
+    }
+    return -1;
+}
+
+// オブジェクトから key に対応する値ノードindexを返す（無ければ -1）。
+export int json_object_get(int node, string key) {
+    int cur = nd_first_child[node];
+    while (cur >= 0) {
+        if (nd_key[cur] == key) {
+            return cur;
+        }
+        cur = nd_next_sibling[cur];
+    }
+    return -1;
+}
+
+// オブジェクトが key を持つか。
+export bool json_object_has(int node, string key) {
+    return json_object_get(node, key) >= 0;
+}
+
+// 文字列をJSONエスケープする。
+// R2: コードポイント添字で走査し、エスケープ対象（全てASCII）以外はrun切り出しのsubstringでまとめて通す（非ASCII安全）
+string escape_json(string s) {
+    uint[] k = s.chars();
+    int n = k.len() as int;
+    string out = "";
+    int i = 0;
+    int run_start = 0;
+    while (i < n) {
+        const int c = k[i] as int;
+        string esc = "";
+        if (c == '"' as int) {
+            esc = "\\\"";
+        } else if (c == '\\' as int) {
+            esc = "\\\\";
+        } else if (c == '\n' as int) {
+            esc = "\\n";
+        } else if (c == '\t' as int) {
+            esc = "\\t";
+        } else if (c == '\r' as int) {
+            esc = "\\r";
+        }
+        if (esc != "") {
+            out = out + s.substring(run_start, i) + esc;
+            run_start = i + 1;
+        }
+        i = i + 1;
+    }
+    return out + s.substring(run_start, n);
+}
+
+// ノードをJSON文字列へ直列化する（コンパクト表現）。
+export string json_stringify(int node) {
+    JsonKind k = nd_kind[node];
+    if (k == JsonKind::Null) {
+        return "null";
+    }
+    if (k == JsonKind::Bool) {
+        if (nd_bool[node]) {
+            return "true";
+        }
+        return "false";
+    }
+    if (k == JsonKind::Number) {
+        return "" + nd_num[node];
+    }
+    if (k == JsonKind::String) {
+        return "\"" + escape_json(nd_str[node]) + "\"";
+    }
+    if (k == JsonKind::Array) {
+        string arr_out = "[";
+        int arr_cur = nd_first_child[node];
+        bool arr_first = true;
+        while (arr_cur >= 0) {
+            if (!arr_first) {
+                arr_out = arr_out + ",";
+            }
+            arr_out = arr_out + json_stringify(arr_cur);
+            arr_first = false;
+            arr_cur = nd_next_sibling[arr_cur];
+        }
+        return arr_out + "]";
+    }
+    // Object
+    string obj_out = "{";
+    int obj_cur = nd_first_child[node];
+    bool obj_first = true;
+    while (obj_cur >= 0) {
+        if (!obj_first) {
+            obj_out = obj_out + ",";
+        }
+        obj_out = obj_out + "\"" + escape_json(nd_key[obj_cur]) + "\":" +
+            json_stringify(obj_cur);
+        obj_first = false;
+        obj_cur = nd_next_sibling[obj_cur];
+    }
+    return obj_out + "}";
+}

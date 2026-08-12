@@ -1,0 +1,23 @@
+// 括弧付き型の宣言（局所処理調査A1）: (int) k・(int | string) u・(int)* p が文頭の宣言として認識される。
+// 従来は is_type_start が '(' を型開始と認識せず「Expected expression」の構文エラーだった
+// （const (int) k は const が宣言経路を起動するため通る、という位置依存の不整合）
+import std::io::println;
+
+int main() {
+    (int) k = 5;
+    println(k);
+
+    (int | string) u = 42;
+    println(u as int);
+
+    (int)* p = &k;
+    println(*p);
+
+    // 式文の誤宣言化がないこと（(a) = 7 は代入・(a + 2) * 3 は式）
+    int a = 1;
+    int b = (a + 2) * 3;
+    println(b);
+    (a) = 7;
+    println(a);
+    return 0;
+}

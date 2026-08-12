@@ -1,0 +1,7 @@
+swap_int: 7 3
+swap_double: 4.5 1.5
+swap_string: yo hi
+deref: 42
+first: 10
+deref2: 99
+unbox: 55

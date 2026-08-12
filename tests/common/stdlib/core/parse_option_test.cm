@@ -1,0 +1,21 @@
+// M17回帰: std::ioのパース関数がOption返しになり、失敗を0で握り潰さないことを検証する
+// （空文字列・非数字先頭はNone、有効入力はSome。チェーン形unwrap_orのレシーバ退避も検証）
+import std::io::println;
+import std::io::console::input::*;
+
+int main() {
+    println(parse_int("123").unwrap_or(-1));
+    println(parse_int("-45").unwrap_or(-1));
+    Option<int> bad = parse_int("abc");
+    println(bad.is_none());
+    Option<int> empty = parse_int("");
+    println(empty.is_none());
+    println(parse_long("10000000000").unwrap_or(0 as long));
+    println(parse_double("3.5").unwrap_or(0.0));
+    Option<double> dbad = parse_double("x");
+    println(dbad.is_none());
+    println(parse_bool("yes").unwrap_or(false));
+    Option<bool> bbad = parse_bool("maybe");
+    println(bbad.is_none());
+    return 0;
+}

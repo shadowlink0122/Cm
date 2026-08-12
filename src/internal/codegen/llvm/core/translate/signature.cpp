@@ -253,6 +253,12 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 
     // パラメータ型
     std::vector<llvm::Type*> paramTypes;
+    // ホストOS環境のmainはargc/argvを受け取る（Cm言語仕様のmainは無引数のまま、
+    // プロローグでcm_args_initへ保存しstd::env::args()から取得する。セルフホスト準備 第3段）
+    if (func.name == "main" && isHostedTarget) {
+        paramTypes.push_back(ctx.getI32Type());
+        paramTypes.push_back(ctx.getPtrType());
+    }
     for (const auto& arg_local : func.arg_locals) {
         // 引数の型を適切に変換
         if (arg_local < func.locals.size()) {
@@ -288,9 +294,15 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
 
     // 戻り値型
     // main関数は常にi32を返す（C標準準拠）
+    // 16バイト超構造体の戻り値はsret（先頭の隠し出力ポインタ）へ変換する（C14 Phase 4。
+    // 第一級集約returnのSROA全展開によるO2二次爆発を防ぐ）
+    bool useSret = needsSretReturn(func);
     llvm::Type* returnType;
     if (func.name == "main") {
         returnType = ctx.getI32Type();
+    } else if (useSret) {
+        returnType = ctx.getVoidType();
+        paramTypes.insert(paramTypes.begin(), ctx.getPtrType());
     } else {
         returnType = ctx.getVoidType();
         if (func.return_local < func.locals.size()) {
@@ -327,6 +339,19 @@ llvm::Function* MIRToLLVM::convertFunctionSignature(const mir::MirFunction& func
     }
     auto llvmFunc =
         llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
+
+    // sretパラメータへ属性を付与（最適化に呼び出し元バッファへの直接書き込みであることを伝える）
+    if (useSret && func.return_local < func.locals.size()) {
+        auto retLlvmType = convertType(func.locals[func.return_local].type);
+        llvmFunc->addParamAttr(
+            0, llvm::Attribute::get(ctx.getContext(), llvm::Attribute::StructRet, retLlvmType));
+        llvmFunc->addParamAttr(0, llvm::Attribute::get(ctx.getContext(), llvm::Attribute::NoAlias));
+    }
+
+    // R11: inline修飾子をinlinehint属性へ伝搬する（従来はパースのみで黙殺されIRに現れなかった）
+    if (func.is_inline) {
+        llvmFunc->addFnAttr(llvm::Attribute::InlineHint);
+    }
 
     // アロケータ関数にはnoinline属性を追加
     // LLVMが積極的にインライン化してから削除するのを防ぐ

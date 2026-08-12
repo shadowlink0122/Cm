@@ -2,14 +2,14 @@
 
 // メッセージi18n基盤（設計04: docs/design/v0.16.2/04_message_i18n.md）
 // 全メッセージは enum MsgId × enum Lang の2次元テーブルでC++側に集約管理する:
-//   - src/internal/base/messages/message_ids.hpp — メッセージID・言語の列挙
+//   - src/internal/base/messages/ids.hpp — メッセージID・言語の列挙
 //   - src/internal/base/messages/messages.cpp — 本文テーブル table[メッセージ][言語]（英語=原文、訳なしは英語へフォールバック）
 // テンプレートは {0} {1} ... のプレースホルダで動的値を受け取り、言語ごとの語順の違いに対応する。
 // IDはenumなのでタイプミスはコンパイルエラーになる。
 // ヘルプ本文は src/cli/help_<lang>.txt（ビルド時埋め込み）で管理する。
 // アクセサ（msg/msgf）はヘッダ内のインライン実装だが、本文テーブルの実体を持つ messages.cpp のリンクが必要
 
-#include "internal/base/messages/message_ids.hpp"
+#include "internal/base/messages/ids.hpp"
 #include "internal/base/messages/messages.hpp"
 #include "internal/base/text_data.hpp"
 

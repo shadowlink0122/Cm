@@ -6,6 +6,7 @@
 # Build artifacts
 build/
 /build-*/
+!docs/architecture/build/
 cmake-build-*/
 target/
 *.o
@@ -35,6 +36,9 @@ Thumbs.db
 deps/
 cm_modules/
 node_modules/
+# JS FFIテストのフィクスチャパッケージはコミット対象（tests/runnerがNODE_PATHで解決する）
+!tests/js/ffi/node_modules/
+!tests/ts/node_modules/
 
 # Test artifacts
 *.log

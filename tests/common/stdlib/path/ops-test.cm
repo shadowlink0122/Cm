@@ -1,0 +1,36 @@
+// std::path（純Cm実装・区切り/固定・全バックエンド共通）の回帰
+import std::io::println;
+import std::path::{join, dirname, basename, extension, with_extension};
+
+int main() {
+    // join
+    println(join("src", "main.cm"));
+    println(join("src/", "main.cm"));
+    println(join("", "main.cm"));
+    println(join("src", ""));
+
+    // dirname
+    println(dirname("src/main.cm"));
+    println(dirname("main.cm"));
+    println(dirname("/main.cm"));
+    println(dirname("a/b/c.txt"));
+
+    // basename
+    println(basename("src/main.cm"));
+    println(basename("main.cm"));
+    println(basename("a/b/c.txt"));
+
+    // extension（ドットファイルは拡張子なし）
+    println(extension("main.cm"));
+    println(extension("archive.tar.gz"));
+    println(extension("noext").len());
+    println(extension(".bashrc").len());
+    println(extension("dir.d/noext").len());
+
+    // with_extension
+    println(with_extension("main.cm", "o"));
+    println(with_extension("src/main.cm", "o"));
+    println(with_extension("noext", "txt"));
+    println(with_extension("a.b/c", "txt"));
+    return 0;
+}

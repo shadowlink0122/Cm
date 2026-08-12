@@ -1,0 +1,18 @@
+import std::io::println;
+// narrowing_literal.cm - 整数の縮小キャストの切り捨て値が全バックエンドで一致することの回帰
+// (M4: 範囲外の整数リテラルの縮小キャストには型検査で警告を出す。ここでは警告出力がテスト出力に
+//  混ざらないよう変数経由でキャストする。実行時の切り捨て挙動は全バックエンドで一致する)
+
+int main() {
+    int x300 = 300;
+    int x70000 = 70000;
+    int x100 = 100;
+    const tiny a = x300 as tiny;
+    const short b = x70000 as short;
+    const tiny ok = x100 as tiny;
+    const int a_i = a as int;
+    const int b_i = b as int;
+    const int ok_i = ok as int;
+    println("a={a_i} b={b_i} ok={ok_i}");
+    return 0;
+}

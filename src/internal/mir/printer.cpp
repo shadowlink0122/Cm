@@ -15,6 +15,13 @@ std::string MirPrinter::to_string(const MirProgram& program) {
     return ss.str();
 }
 
+// 単一関数のシリアライズ（モジュールキャッシュキーの内容ハッシュ用）
+std::string MirPrinter::to_string(const MirFunction& func) {
+    std::stringstream ss;
+    print_function(func, ss);
+    return ss.str();
+}
+
 // MIRプログラムを出力
 void MirPrinter::print(const MirProgram& program, std::ostream& out) {
     std::stringstream ss;

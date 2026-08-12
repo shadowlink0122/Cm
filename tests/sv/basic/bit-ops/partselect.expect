@@ -1,0 +1,9 @@
+SIM_OK
+TEST 1: hi_out=171
+TEST 1: nib=12
+TEST 1: dn=12
+TEST 1: low_out=13
+TEST 2: hi_out=18
+TEST 2: nib=2
+TEST 2: dn=3
+TEST 2: low_out=4

@@ -1,0 +1,38 @@
+// 型サイズ一本化の回帰: ジェネリック特殊化のsizeofが実レイアウト（自然アライメント・パディング込み）で解決される
+// 従来はフィールド数×8の見積もりでsizeof(Pair<char,int>)=16（正8）・sizeof(Nested<char>)=24（正3）の誤値をユーザーへ返していた
+import std::io::println;
+
+struct Pair<A, B> {
+    A a;
+    B b;
+}
+
+struct Nested<T> {
+    Pair<T, T> p;
+    char tail;
+}
+
+struct WithArr<T> {
+    T[4] xs;
+    char t;
+}
+
+struct PtrField<T> {
+    T* p;
+    char c;
+}
+
+int main() {
+    // 非正方ケース: char+int（1+pad3+4=8）・char,char+char（2+1=3）
+    println("pair_ci={sizeof(Pair<char, int>)}");
+    println("pair_ll={sizeof(Pair<long, long>)}");
+    println("pair_cc={sizeof(Pair<char, char>)}");
+    println("nested_c={sizeof(Nested<char>)}");
+    println("nested_l={sizeof(Nested<long>)}");
+    // 固定長配列フィールドの特殊化: int[4]=16 +char +pad3=20 / char[4]=4+1=5
+    println("arr_i={sizeof(WithArr<int>)}");
+    println("arr_c={sizeof(WithArr<char>)}");
+    // ポインタフィールド（wasm32では4バイト）
+    println("ptr_c={sizeof(PtrField<char>)}");
+    return 0;
+}

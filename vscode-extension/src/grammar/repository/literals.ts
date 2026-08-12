@@ -3,7 +3,13 @@
 // ============================================================
 
 import { TmRepositoryEntry } from '../tmTypes';
-import { BOOLEAN_CONSTANTS, ESCAPE_RULE, NULL_CONSTANTS, words } from '../terms';
+import {
+  BOOLEAN_CONSTANTS,
+  ESCAPE_RULE,
+  NULL_CONSTANTS,
+  PRELUDE_VALUE_VARIANTS,
+  words,
+} from '../terms';
 
 export const comments: TmRepositoryEntry = {
   patterns: [
@@ -40,8 +46,9 @@ export const strings: TmRepositoryEntry = {
         },
         {
           comment:
-            '補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト',
-          match: '(\\{)([^{}"]*)(\\})',
+            '補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト。式内のエスケープ文字（\\"等）と構造体リテラルの波括弧2段までを許容する（{x.f(\\"s\\")}や{Point{x: 1}}が対象。文字列リテラル内の裸の"は文字列終端なので式に現れない）',
+          match:
+            '(\\{)((?:[^{}"\\\\]|\\\\.|\\{(?:[^{}"\\\\]|\\\\.|\\{(?:[^{}"\\\\]|\\\\.)*\\})*\\})*)(\\})',
           captures: {
             '1': { name: 'punctuation.definition.template-expression.begin.cm' },
             '2': { patterns: [{ include: '#interpolation-expression' }] },
@@ -51,8 +58,9 @@ export const strings: TmRepositoryEntry = {
       ],
     },
     {
+      // charリテラル: \xHH等の複数文字エスケープにも対応（R5でcharと文字列のエスケープ表を共用化）
       name: 'string.quoted.single.cm',
-      match: "'(\\\\.|[^'\\\\])'",
+      match: "'(\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)|[^'\\\\])'",
     },
   ],
 };
@@ -66,23 +74,23 @@ export const numbers: TmRepositoryEntry = {
     },
     {
       name: 'constant.numeric.hex.cm',
-      match: '\\b0[xX][0-9a-fA-F]+\\b',
+      match: '\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\\b',
     },
     {
       name: 'constant.numeric.binary.cm',
-      match: '\\b0[bB][01?]+\\b',
+      match: '\\b0[bB][01?][01?_]*\\b',
     },
     {
       name: 'constant.numeric.octal.cm',
-      match: '\\b0[oO][0-7]+\\b',
+      match: '\\b0[oO][0-7][0-7_]*\\b',
     },
     {
       name: 'constant.numeric.float.cm',
-      match: '\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b',
+      match: '\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b',
     },
     {
       name: 'constant.numeric.integer.cm',
-      match: '\\b[0-9]+\\b',
+      match: '\\b[0-9][0-9_]*\\b',
     },
   ],
 };
@@ -96,6 +104,11 @@ export const constants: TmRepositoryEntry = {
     {
       name: 'constant.language.null.cm',
       match: words(NULL_CONSTANTS),
+    },
+    {
+      comment: 'OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする',
+      name: 'storage.type.primitive.cm',
+      match: words(PRELUDE_VALUE_VARIANTS),
     },
     {
       name: 'constant.numeric.cm',

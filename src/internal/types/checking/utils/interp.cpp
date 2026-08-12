@@ -54,23 +54,68 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
             pos++;
             continue;
         }
-        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する
+        // 対応する } を探しつつ、フォーマット指定子のコロン位置を判定する。
+        // L2: ネストした波括弧（構造体リテラル）と文字列リテラル内の } { : は式の一部として
+        // 扱い、深度0・引用符外の } のみを終端とする（MIRのexpr_interpと同一規則）
         size_t end = pos + 1;
         size_t colon_pos = std::string::npos;
         int depth = 0;
-        while (end < format_str.length() && format_str[end] != '}') {
+        int brace_depth = 0;
+        int ternary_pending = 0;
+        bool in_quotes = false;
+        while (end < format_str.length()) {
             char c = format_str[end];
+            if (in_quotes) {
+                if (c == '\\' && end + 1 < format_str.length()) {
+                    end += 2;
+                    continue;
+                }
+                if (c == '"') {
+                    in_quotes = false;
+                }
+                end++;
+                continue;
+            }
+            if (c == '"') {
+                in_quotes = true;
+                end++;
+                continue;
+            }
+            if (c == '{') {
+                brace_depth++;
+                end++;
+                continue;
+            }
+            if (c == '}') {
+                if (brace_depth == 0) {
+                    break;  // プレースホルダの終端
+                }
+                brace_depth--;
+                end++;
+                continue;
+            }
             if (c == '[' || c == '(') {
                 depth++;
             }
             if (c == ']' || c == ')') {
                 depth--;
             }
+            // 三項演算子の '?'。対応する ':' はフォーマット指定子ではない（局所処理調査D2。MIRのexpr_interpと同一規則）
+            if (c == '?' && depth == 0 && brace_depth == 0) {
+                ternary_pending++;
+                end++;
+                continue;
+            }
             if (c == ':' && end + 1 < format_str.length() && format_str[end + 1] == ':') {
                 end += 2;  // ::はパス区切りとしてスキップ
                 continue;
             }
-            if (c == ':' && depth == 0 && colon_pos == std::string::npos) {
+            if (c == ':' && depth == 0 && brace_depth == 0 && colon_pos == std::string::npos) {
+                if (ternary_pending > 0) {
+                    ternary_pending--;  // 三項のコロン
+                    end++;
+                    continue;
+                }
                 colon_pos = end;
             }
             end++;
@@ -88,158 +133,155 @@ std::vector<std::string> extract_placeholder_exprs(const std::string& format_str
     return contents;
 }
 
-// 式ツリー内の識別子参照を収集する（メンバ名・enumパスは対象外）
-void collect_ident_refs(const ast::Expr& e, std::vector<std::string>& out) {
-    if (const auto* id = e.as<ast::IdentExpr>()) {
-        out.push_back(id->name);
-        return;
-    }
-    if (const auto* mem = e.as<ast::MemberExpr>()) {
+}  // namespace
+
+namespace {
+
+// パースした部分式ツリーへリテラル位置のSpanを再帰的に刻印する。
+// プレースホルダは合成ラッパー関数として再パースされるため、素のSpanは合成ソース上の座標になり診断位置が壊れる
+void stamp_spans(ast::Expr& e, const Span& span) {
+    e.span = span;
+    if (auto* mem = e.as<ast::MemberExpr>()) {
         if (mem->object) {
-            collect_ident_refs(*mem->object, out);
+            stamp_spans(*mem->object, span);
         }
-        for (const auto& arg : mem->args) {
+        for (auto& arg : mem->args) {
             if (arg) {
-                collect_ident_refs(*arg, out);
+                stamp_spans(*arg, span);
             }
         }
-        return;
-    }
-    if (const auto* bin = e.as<ast::BinaryExpr>()) {
+    } else if (auto* bin = e.as<ast::BinaryExpr>()) {
         if (bin->left) {
-            collect_ident_refs(*bin->left, out);
+            stamp_spans(*bin->left, span);
         }
         if (bin->right) {
-            collect_ident_refs(*bin->right, out);
+            stamp_spans(*bin->right, span);
         }
-        return;
-    }
-    if (const auto* un = e.as<ast::UnaryExpr>()) {
+    } else if (auto* un = e.as<ast::UnaryExpr>()) {
         if (un->operand) {
-            collect_ident_refs(*un->operand, out);
+            stamp_spans(*un->operand, span);
         }
-        return;
-    }
-    if (const auto* call = e.as<ast::CallExpr>()) {
+    } else if (auto* call = e.as<ast::CallExpr>()) {
         if (call->callee) {
-            collect_ident_refs(*call->callee, out);
+            stamp_spans(*call->callee, span);
         }
-        for (const auto& arg : call->args) {
+        for (auto& arg : call->args) {
             if (arg) {
-                collect_ident_refs(*arg, out);
+                stamp_spans(*arg, span);
             }
         }
-        return;
-    }
-    if (const auto* idx = e.as<ast::IndexExpr>()) {
+    } else if (auto* idx = e.as<ast::IndexExpr>()) {
         if (idx->object) {
-            collect_ident_refs(*idx->object, out);
+            stamp_spans(*idx->object, span);
         }
         if (idx->index) {
-            collect_ident_refs(*idx->index, out);
+            stamp_spans(*idx->index, span);
         }
-        return;
-    }
-    if (const auto* sl = e.as<ast::SliceExpr>()) {
+    } else if (auto* sl = e.as<ast::SliceExpr>()) {
         if (sl->object) {
-            collect_ident_refs(*sl->object, out);
+            stamp_spans(*sl->object, span);
         }
-        // ビットスライスの範囲は定数式なので対象外
-        return;
-    }
-    if (const auto* cast = e.as<ast::CastExpr>()) {
+    } else if (auto* cast = e.as<ast::CastExpr>()) {
         if (cast->operand) {
-            collect_ident_refs(*cast->operand, out);
+            stamp_spans(*cast->operand, span);
         }
-        return;
-    }
-    if (const auto* tern = e.as<ast::TernaryExpr>()) {
+    } else if (auto* tern = e.as<ast::TernaryExpr>()) {
         if (tern->condition) {
-            collect_ident_refs(*tern->condition, out);
+            stamp_spans(*tern->condition, span);
         }
         if (tern->then_expr) {
-            collect_ident_refs(*tern->then_expr, out);
+            stamp_spans(*tern->then_expr, span);
         }
         if (tern->else_expr) {
-            collect_ident_refs(*tern->else_expr, out);
+            stamp_spans(*tern->else_expr, span);
         }
-        return;
     }
+}
+
+// プレースホルダ内容を式としてパースする（合成ラッパー方式）。パース不能ならnullptr
+ast::ExprPtr parse_interp_content(const std::string& content) {
+    std::string src = "int __interp_part__() { return (" + content + "); }";
+    Lexer lex(src);
+    auto tokens = lex.tokenize();
+    Parser parser(std::move(tokens));
+    auto program = parser.parse();
+    if (parser.has_errors()) {
+        return nullptr;
+    }
+    for (auto& decl : program.declarations) {
+        auto* func = decl->as<ast::FunctionDecl>();
+        if (!func || func->name != "__interp_part__" || func->body.empty()) {
+            continue;
+        }
+        auto* ret = func->body[0]->as<ast::ReturnStmt>();
+        if (!ret || !ret->value) {
+            continue;
+        }
+        return std::move(ret->value);
+    }
+    return nullptr;
 }
 
 }  // namespace
 
-void TypeChecker::check_interpolation_scope(const std::string& format_str) {
-    for (const auto& content : extract_placeholder_exprs(format_str)) {
-        // プレースホルダ内容を式としてパースする（MIRの補間ミニパイプラインと同じ手法）
-        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
-        Lexer lex(src);
-        auto tokens = lex.tokenize();
-        Parser parser(std::move(tokens));
-        auto program = parser.parse();
-        if (parser.has_errors()) {
-            continue;  // パース不能な内容はMIR側の処理に委ねる
+// 文字列リテラルの補間プレースホルダを一度だけ実ASTへ脱糖する（type-resolution-simplification 領域1第4段b）。
+// 従来はチェッカーの検査用パース・MIRのミニパイプライン・影の型チェッカーが同じテキストを個別に再パースしていたが、脱糖後は本物の推論・loweringが部分式をそのまま消費する。
+// match/enumメソッドのscrutinee退避プリパス（match_hoist）が型検査前に部分式を走査できるよう自由関数として公開する
+void desugar_string_interpolation(ast::LiteralExpr& lit, const Span& span) {
+    if (lit.interp_scanned || !lit.is_string()) {
+        return;
+    }
+    lit.interp_scanned = true;
+    for (const auto& content : extract_placeholder_exprs(std::get<std::string>(lit.value))) {
+        auto expr = parse_interp_content(content);
+        if (!expr) {
+            // パース不能な内容はリテラル文字として出力される（MIR側フォールバック）。リテラルへ記録しcheckerのdesugar_interpolation_partsが警告する（従来は無診断でエラー型ローカルの未初期化値が出力されていた）
+            lit.interp_parse_failures.push_back(content);
+            continue;
         }
-        for (auto& decl : program.declarations) {
-            const auto* func = decl->as<ast::FunctionDecl>();
-            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
-                continue;
-            }
-            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
-            if (!ret || !ret->value) {
-                continue;
-            }
-            std::vector<std::string> names;
-            collect_ident_refs(*ret->value, names);
-            for (const auto& name : names) {
-                if (name.find("::") != std::string::npos || name == "null" || name == "true" ||
-                    name == "false") {
-                    continue;
-                }
-                if (scopes_.current().lookup(name)) {
-                    // 補間内の参照は変数の使用としてマークする（W001誤検出防止）
-                    scopes_.current().mark_used(name);
-                    continue;
-                }
-                if (enum_names_.count(name) || struct_defs_.count(name) ||
-                    typedef_defs_.count(name) || generic_functions_.count(name) ||
-                    interface_names_.count(name)) {
-                    continue;
-                }
-                error(current_span_, "Undefined variable '" + name +
-                                         "' in interpolation placeholder '{" + content + "}'");
-            }
-        }
+        stamp_spans(*expr, span);
+        lit.interp_parts.emplace_back(content, std::shared_ptr<ast::Expr>(std::move(expr)));
     }
 }
 
-// 文字列リテラル内の補間プレースホルダが参照する変数を使用としてマークする（check_interpolation_scopeと違いエラーは出さない。あらゆるstringリテラルで呼ばれる）
-void TypeChecker::mark_interpolation_uses(const std::string& format_str) {
-    for (const auto& content : extract_placeholder_exprs(format_str)) {
-        std::string src = "int __interp_scope_check__() { return (" + content + "); }";
-        Lexer lex(src);
-        auto tokens = lex.tokenize();
-        Parser parser(std::move(tokens));
-        auto program = parser.parse();
-        if (parser.has_errors()) {
-            continue;
-        }
-        for (auto& decl : program.declarations) {
-            const auto* func = decl->as<ast::FunctionDecl>();
-            if (!func || func->name != "__interp_scope_check__" || func->body.empty()) {
-                continue;
-            }
-            const auto* ret = func->body[0]->as<ast::ReturnStmt>();
-            if (!ret || !ret->value) {
-                continue;
-            }
-            std::vector<std::string> names;
-            collect_ident_refs(*ret->value, names);
-            for (const auto& name : names) {
-                if (scopes_.current().lookup(name)) {
-                    scopes_.current().mark_used(name);
-                    mark_variable_initialized(name);
-                }
+// 集約型のprint/補間直接整形の診断（局所処理調査G3）。
+// 従来は共有規則が無く各バックエンドが即興整形しており、配列/スライスの補間はinterp/nativeが空・ゴミバイト、JSが"1,2,3"、
+// 構造体はinterp/nativeが空、JSが"[object Object]"、直接引数println(arr)はnative/jitがLLVM検証失敗でクラッシュと分裂していた。
+// 要素の個別出力またはdebug()等のstringを返すメソッドへ誘導する。
+// 対象は非bit配列/スライスと登録済み構造体のみ: bitベクタは整数として、ユニオンはタグで実バリアントを整形する対応済み機能（v0.16.0）のため対象外。
+// 未登録名の構造体型（ジェネリック型パラメータT等）はモノモーフ化前の見かけの型のため対象外とする
+void TypeChecker::check_print_aggregate(const ast::TypePtr& type, const Span& span) {
+    if (!type) {
+        return;
+    }
+    auto resolved = resolve_typedef(type);
+    if (!resolved) {
+        return;
+    }
+    const bool is_bits_vector = resolved->kind == ast::TypeKind::Array && resolved->element_type &&
+                                resolved->element_type->kind == ast::TypeKind::Bit;
+    const bool is_plain_array = resolved->kind == ast::TypeKind::Array && !is_bits_vector;
+    const bool is_known_struct =
+        resolved->kind == ast::TypeKind::Struct && get_struct(resolved->name) != nullptr;
+    if (is_plain_array || is_known_struct) {
+        error(span,
+              i18n::msgf(i18n::MsgId::TcPrintAggregateUnsupported, type_to_string(*resolved)));
+    }
+}
+
+void TypeChecker::desugar_interpolation_parts(ast::LiteralExpr& lit) {
+    desugar_string_interpolation(lit, current_span_);
+    // 脱糖はプリパス（match_hoist）が先行することがあるため、記録済みの失敗をここで一度だけ報告する
+    if (!lit.interp_failures_reported && !lit.interp_parse_failures.empty()) {
+        lit.interp_failures_reported = true;
+        for (const auto& content : lit.interp_parse_failures) {
+            const std::string msg =
+                i18n::msgf(i18n::MsgId::TcInterpPlaceholderNotExpression, content);
+            // Z5と同じ運用: 通常は警告、--strictではエラーへ昇格する
+            if (enable_naming_check_) {
+                error(current_span_, msg);
+            } else {
+                warning(current_span_, msg);
             }
         }
     }

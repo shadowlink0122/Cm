@@ -40,40 +40,40 @@ impl Stdout {
     /// バッファからデータを書き込む
     IoResult<int> write_bytes(utiny[] buf) {
         if (buf.len() == 0) {
-            return IoResult.Ok(0);
+            return IoResult::Ok(0);
         }
 
-        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
+        const long n = write(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
-            return IoResult.Err(IoError.other("write failed"));
+            return IoResult::Err(IoError::other("write failed"));
         }
 
-        return IoResult.Ok(n as int);
+        return IoResult::Ok(n as int);
     }
 
     /// 文字列を書き込む
     IoResult<int> write_str(string s) {
         if (s.len() == 0) {
-            return IoResult.Ok(0);
+            return IoResult::Ok(0);
         }
 
-        long n = write(self._fd, s as void*, s.len() as long);
+        const long n = write(self._fd, s as void*, s.len() as long);
 
         if (n < 0) {
-            return IoResult.Err(IoError.other("write failed"));
+            return IoResult::Err(IoError::other("write failed"));
         }
 
-        return IoResult.Ok(n as int);
+        return IoResult::Ok(n as int);
     }
 
     /// フラッシュ
     IoResult<int> flush() {
-        int ret = fsync(self._fd);
+        const int ret = fsync(self._fd);
         if (ret < 0) {
-            return IoResult.Err(IoError.other("fsync failed"));
+            return IoResult::Err(IoError::other("fsync failed"));
         }
-        return IoResult.Ok(0);
+        return IoResult::Ok(0);
     }
 }
 
@@ -97,40 +97,40 @@ impl Stderr {
     /// バッファからデータを書き込む
     IoResult<int> write_bytes(utiny[] buf) {
         if (buf.len() == 0) {
-            return IoResult.Ok(0);
+            return IoResult::Ok(0);
         }
 
-        long n = write(self._fd, &buf[0] as void*, buf.len() as long);
+        const long n = write(self._fd, &buf[0] as void*, buf.len() as long);
 
         if (n < 0) {
-            return IoResult.Err(IoError.other("write failed"));
+            return IoResult::Err(IoError::other("write failed"));
         }
 
-        return IoResult.Ok(n as int);
+        return IoResult::Ok(n as int);
     }
 
     /// 文字列を書き込む
     IoResult<int> write_str(string s) {
         if (s.len() == 0) {
-            return IoResult.Ok(0);
+            return IoResult::Ok(0);
         }
 
-        long n = write(self._fd, s as void*, s.len() as long);
+        const long n = write(self._fd, s as void*, s.len() as long);
 
         if (n < 0) {
-            return IoResult.Err(IoError.other("write failed"));
+            return IoResult::Err(IoError::other("write failed"));
         }
 
-        return IoResult.Ok(n as int);
+        return IoResult::Ok(n as int);
     }
 
     /// フラッシュ
     IoResult<int> flush() {
-        int ret = fsync(self._fd);
+        const int ret = fsync(self._fd);
         if (ret < 0) {
-            return IoResult.Err(IoError.other("fsync failed"));
+            return IoResult::Err(IoError::other("fsync failed"));
         }
-        return IoResult.Ok(0);
+        return IoResult::Ok(0);
     }
 }
 

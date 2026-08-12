@@ -1,0 +1,21 @@
+//! platform: ts
+// 任意の構造体の配列をFFI境界で渡す（固定長・スライス両方）
+
+struct Row {
+    string label;
+    int value;
+}
+
+use "react" {
+    string renderList(Row[3] rows);
+}
+
+int main() {
+    Row[3] rows = [
+        { label: "x", value: 10 },
+        { label: "y", value: 20 },
+        { label: "z", value: 30 }
+    ];
+    println("{renderList(rows)}");
+    return 0;
+}

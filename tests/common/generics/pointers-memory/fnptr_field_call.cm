@@ -1,0 +1,26 @@
+// ジェネリック構造体の関数ポインタフィールドをメソッド構文で直接呼べる（局所処理調査「その他」）:
+// Box<int*(int,int)> の v: T が型引数で置換され、b.v(2,3) が間接呼び出しになる。
+// 旧: フィールド型が未置換の T のままで「Unknown method 'v'」になっていた（フィールドアクセス b.v は動いていた）。
+import std::io::println;
+
+struct Box<T> {
+    T v;
+}
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int mul(int a, int b) {
+    return a * b;
+}
+
+int main() {
+    Box<int*(int, int)> ba = Box{v: add};
+    println(ba.v(2, 3));
+
+    Box<int*(int, int)> bm = Box{v: mul};
+    println(bm.v(2, 3));
+
+    return 0;
+}

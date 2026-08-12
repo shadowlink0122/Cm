@@ -1,0 +1,49 @@
+//! platform: js
+// 構造体スライスに対する高階メソッド・検索・pop・構造体メンバスライスの検証（js/ts向け）。
+// これらはJS配列に対応するため、要素が構造体でも自然に動く。
+
+struct Task {
+    int id;
+    string title;
+    int priority;
+}
+
+// 構造体をメンバにスライスを持つ（構造体メンバスライス）
+struct Board {
+    string name;
+    Task[] tasks;
+}
+
+bool high(Task t) { return t.priority >= 2; }
+int prio(Task t) { return t.priority; }
+
+int main() {
+    Task[] tasks = [];
+    int i = 0;
+    while (i < 4) {
+        Task t = { id: i, title: "t", priority: i };
+        tasks.push(t);
+        i = i + 1;
+    }
+
+    // filter（構造体スライス）
+    Task[] hi = tasks.filter(high);
+    println("filter len=" + hi.len());
+
+    // map（構造体 → int）
+    int[] prios = tasks.map(prio);
+    println("map [1]=" + prios[1] + " [3]=" + prios[3]);
+
+    // indexOf / includes は構造体要素では未対応として診断される（Z1: jsのみ参照同一性で動きnative/jitはゴミ値になるバックエンド分裂のため、Eqベースの対応までコンパイルエラー）
+
+    // pop
+    Task last = tasks.pop();
+    println("pop id=" + last.id + " newlen=" + tasks.len());
+
+    // 構造体メンバスライス（Board.tasks へ push・読み出し）
+    Board b = { name: "main", tasks: [] };
+    b.tasks.push(tasks[0]);
+    b.tasks.push(tasks[1]);
+    println("board tasks=" + b.tasks.len() + " first=" + b.tasks[0].id);
+    return 0;
+}

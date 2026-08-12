@@ -1,0 +1,31 @@
+// 回帰(W5): 補間内の多段チェーン（メンバ・添字・メソッド・アロー・ジェネリック）の検証
+import std::io::println;
+struct Leaf { int v; }
+struct Bag { Leaf[] leaves; }
+struct Pos { int x; int y; }
+struct E2 { Pos pos; }
+impl E2 {
+    E2 shifted(int d) {
+        return E2{pos: Pos{x: self.pos.x + d, y: self.pos.y}};
+    }
+}
+struct Data { int v; }
+struct Node { Node* next; Data data; }
+struct Box<T> { T v; }
+int main() {
+    Bag b = Bag{leaves: []};
+    b.leaves.push(Leaf { v: 10 });
+    b.leaves.push(Leaf { v: 20 });
+    println("{b.leaves[1].v}");
+    E2[] world = [];
+    world.push(E2{pos: Pos{x: 5, y: 6}});
+    println("{world[0].shifted(100).pos.x}");
+    Node n2 = Node{next: null, data: Data{v: 2}};
+    Node n1 = Node{next: &n2, data: Data{v: 1}};
+    Node* p = &n1;
+    println("{p->next->data.v}");
+    Box<string> inner = Box{v: "hi"};
+    Box<Box<string>> s2 = {v: inner};
+    println("{s2.v.v.len()}");
+    return 0;
+}

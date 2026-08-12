@@ -1,0 +1,27 @@
+//! platform: !sv
+// typeof(式) を宣言型として使える（局所処理調査B系）: 被演算式の具体型・幅へ解決される。
+// 旧: typeof(j) k = ...; は文ディスパッチが宣言と認識せずパースエラー、asキャストの結果型も <inferred> のままだった
+import std::io::println;
+
+int main() {
+    int i = 42;
+    long base = 1;
+
+    // 宣言型として typeof を使う（i の型 int に解決）
+    typeof(i) k = 7;
+    println(k);
+
+    // 幅も解決される（base の型 long。9000000000 は 32bit に切り詰められない）
+    typeof(base) big = 9000000000;
+    println(big);
+
+    // as typeof の結果型が解決され auto へ伝わる（int 幅へ切り詰め）
+    auto trunc = base as typeof(i);
+    println(trunc as long + base);
+
+    // sizeof(typeof(式)) が被演算式の型幅で解決される
+    println(sizeof(typeof(base)));
+    println(sizeof(typeof(i)));
+
+    return 0;
+}

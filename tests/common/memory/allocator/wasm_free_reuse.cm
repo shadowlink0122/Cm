@@ -1,0 +1,44 @@
+// H11回帰: 確保・解放・拡張を繰り返してもフリーリスト再利用でデータ破壊が起きないことを検証する
+// （wasmは従来解放不可能な単調バンプで、論理解放しても実メモリが返らなかった。
+// 本テストはループごとにVectorを生成・破棄し、再利用されたブロックの内容健全性を確認する）
+import std::io::println;
+import std::collections::vector::*;
+
+int main() {
+    int total = 0;
+    int i = 0;
+    while (i < 50) {
+        // 各周期でVectorを生成し、C13のループ本体RAIIで周期末に解放される
+        Vector<int> v();
+        int j = 0;
+        while (j < 32) {
+            v.push(i * 100 + j);
+            j = j + 1;
+        }
+        // 拡張（cap 4→8→16→32）で旧ブロックの解放と再確保も発生する
+        const int first = *v.get(0);
+        const int last = *v.get(31);
+        total = total + (last - first);
+        i = i + 1;
+    }
+    // 各周期: last - first = 31。50周期で1550
+    println(total);
+
+    // 文字列スライスの確保・解放の混在（サイズクラスの異なる割り当て）
+    int k = 0;
+    int checksum = 0;
+    while (k < 20) {
+        Vector<long> big();
+        int m = 0;
+        while (m < 100) {
+            big.push(k * 1000 + m as long);
+            m = m + 1;
+        }
+        checksum = checksum + (*big.get(99) - *big.get(0)) as int;
+        k = k + 1;
+    }
+    // 各周期: 99。20周期で1980
+    println(checksum);
+    println("done");
+    return 0;
+}

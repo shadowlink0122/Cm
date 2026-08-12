@@ -1,7 +1,7 @@
 #include "codegen.hpp"
 
-#include "builtins.hpp"
-#include "runtime.hpp"
+#include "internal/codegen/js/emit/builtins.hpp"
+#include "internal/codegen/js/emit/runtime.hpp"
 #include "types.hpp"
 
 #include <algorithm>
@@ -22,6 +22,12 @@ using ast::TypeKind;
 JSCodeGen::JSCodeGen(const JSCodeGenOptions& options)
     : options_(options), emitter_(options.indentSpaces) {}
 
+// グローバル変数の一意なJS識別子（L1: sanitizeIdentifierの多対一縮退による衝突を宣言順の連番で防ぐ）
+std::string JSCodeGen::globalVarName(const std::string& name) {
+    auto [it, inserted] = global_name_ids_.emplace(name, global_name_ids_.size());
+    return "__global_" + sanitizeIdentifier(name) + "_g" + std::to_string(it->second);
+}
+
 void JSCodeGen::compile(const mir::MirProgram& program) {
     // 出力クリア
     emitter_.clear();
@@ -41,6 +47,9 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
             struct_map_[st->name] = st.get();
         }
     }
+
+    // typedefマップ（ユニオンtypedef名→実体の解決用。変種が引けない名前のままではタグ計算が失敗する）
+    typedef_map_ = program.typedef_defs;
 
     // インターフェース名を収集
     for (const auto& iface : program.interfaces) {
@@ -70,6 +79,15 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
 
     // グローバル変数をモジュールレベルで宣言（関数間で共有）
     emitGlobalVars(program);
+
+    // TypeScript出力: struct interface宣言（コンストラクタ関数より前に出力し、以降の型注釈から参照できるようにする）
+    if (options_.emitTypeScript) {
+        for (const auto& st : program.structs) {
+            if (st) {
+                emitStructInterface(*st);
+            }
+        }
+    }
 
     // 構造体コンストラクタ
     for (const auto& st : program.structs) {
@@ -159,6 +177,15 @@ void JSCodeGen::compile(const mir::MirProgram& program) {
 void JSCodeGen::emitPreamble() {
     if (options_.useStrictMode) {
         emitter_.emitLine("\"use strict\";");
+        emitter_.emitLine();
+    }
+    // TypeScript出力: @types/nodeへ依存せず型検査を通すため、ランタイムが使うNodeグローバルをambient宣言する
+    // （require/process/module は生成コードとランタイムヘルパーが参照する。tscのlibはes2017以降を想定）
+    if (options_.emitTypeScript) {
+        emitter_.emitLine("declare function require(name: string): any;");
+        emitter_.emitLine("declare const process: any;");
+        emitter_.emitLine("declare const module: any;");
+        emitter_.emitLine("declare const console: any;");
         emitter_.emitLine();
     }
 }
@@ -375,7 +402,7 @@ void JSCodeGen::emitGlobalVars(const mir::MirProgram& program) {
             emitter_.emitLine("// Global variables");
             emitted_any = true;
         }
-        emitter_.emitLine("let __global_" + sanitizeIdentifier(gv->name) + " = " + initVal + ";");
+        emitter_.emitLine("let " + globalVarName(gv->name) + " = " + initVal + ";");
     }
     if (emitted_any) {
         emitter_.emitLine();

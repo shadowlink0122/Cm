@@ -1,0 +1,5 @@
+// リダクション演算子（SV-N2）の被演算子は整数型・bit[N]型のみ。文字列は診断で停止する。
+void main() {
+    string s = "hello";
+    println("{reduce_and(s)}");
+}

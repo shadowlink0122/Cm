@@ -22,9 +22,17 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
             using T = std::decay_t<decltype(stmt_ptr)>;
 
             if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirLet>>) {
+                // 文単位一時のdropパス（C12）: 単純文の前後でトラッキングし、
+                // エスケープしなかったコンパイラ生成文字列一時を文末で解放する
+                bool was_active = ctx.stmt_temp_scope.active;
+                begin_stmt_temp_scope(ctx);
                 lower_let(*stmt_ptr, ctx);
+                end_stmt_temp_scope(ctx, was_active);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAssign>>) {
+                bool was_active = ctx.stmt_temp_scope.active;
+                begin_stmt_temp_scope(ctx);
                 lower_assign(*stmt_ptr, ctx);
+                end_stmt_temp_scope(ctx, was_active);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirReturn>>) {
                 lower_return(*stmt_ptr, ctx);
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirIf>>) {
@@ -47,6 +55,8 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
                     for (const auto* defer_stmt : defers) {
                         lower_statement(*defer_stmt, ctx);
                     }
+                    // ループボディスコープのデストラクタを実行してから脱出する（C13）
+                    emit_scope_destructors(ctx);
                     auto term = MirTerminator::goto_block(loop->exit);
                     ctx.set_terminator(std::move(term));
                     ctx.switch_to_block(ctx.new_block());
@@ -59,6 +69,8 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
                     for (const auto* defer_stmt : defers) {
                         lower_statement(*defer_stmt, ctx);
                     }
+                    // ループボディスコープのデストラクタを実行してから次の周期へ進む（C13）
+                    emit_scope_destructors(ctx);
                     // forループの場合は更新ブロックへ、whileループの場合はヘッダーへ
                     auto term = MirTerminator::goto_block(loop->update);
                     ctx.set_terminator(std::move(term));
@@ -69,7 +81,10 @@ void StmtLowering::lower_statement(const hir::HirStmt& stmt, LoweringContext& ct
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirExprStmt>>) {
                 // 式文
                 if (stmt_ptr->expr) {
+                    bool was_active = ctx.stmt_temp_scope.active;
+                    begin_stmt_temp_scope(ctx);
                     expr_lowering->lower_expression(*stmt_ptr->expr, ctx);
+                    end_stmt_temp_scope(ctx, was_active);
                 }
             } else if constexpr (std::is_same_v<T, std::unique_ptr<hir::HirAsm>>) {
                 // インラインアセンブリ

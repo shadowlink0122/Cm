@@ -125,8 +125,104 @@ shifter::ShifterIo sh0 = shifter::ShifterIo { WIDTH: 16, clk: clk, din: data_in,
 // → shifter #(.WIDTH(16)) sh0 (...);
 ```
 
-> Parameter-dependent constant-loop unrolling and parameter-width memories (`bit[WIDTH][DEPTH]`) are not yet supported (roadmap A5/A6).
+Loops bounded by a parameter (`for (uint i = 0; i < N; i = i + 1)` with `N` declared `#[sv::parameter]`) are emitted as synthesizable SV for statements (v0.17.0; while loops are rejected by synthesis tools, so counted loops are reconstructed into for form):
 
+```cm
+#[sv::parameter] const uint N = 4;
+
+async void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < N; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    out = acc;
+}
+// → for (i = 32'sd0; i < N; i = i + 32'sd1) begin ... end
+```
+
+Parameter-width memories (`bit[WIDTH][DEPTH]`) are emitted as `logic [WIDTH-1:0] mem [0:DEPTH-1];` and can be indexed directly (v0.17.0):
+
+```cm
+#[sv::parameter] const uint WIDTH = 8;
+#[sv::parameter] const uint DEPTH = 4;
+
+bit[WIDTH][DEPTH] mem;
+
+async void update(posedge clk) {
+    mem[waddr] = din;
+    dout = mem[0];
+}
+```
+
+
+## Module instance arrays (#[sv::instance_array], v0.17.0)
+
+To replicate a submodule N times (PE arrays, parallel lanes, multi-channel), annotate the instance declaration with `#[sv::instance_array(N)]`. The instances are emitted as a generate-for; connections to array signals are distributed per lane, and scalar signals are broadcast to all lanes:
+
+```cm
+import ./pe_xor;
+
+uint[2] pa;
+uint[2] pb;
+uint[2] pr;
+
+#[sv::instance_array(2)]
+pe_xor::PeXorIo lanes = pe_xor::PeXorIo { a: pa, b: pb, r: pr };
+```
+
+```systemverilog
+genvar __gi_lanes;
+generate
+    for (__gi_lanes = 0; __gi_lanes < 2; __gi_lanes = __gi_lanes + 1) begin : lanes_gen
+        pe_xor lanes (
+            .a(pa[__gi_lanes]),
+            .b(pb[__gi_lanes]),
+            .r(pr[__gi_lanes])
+        );
+    end
+endgenerate
+```
+
+N can also be a `#[sv::parameter]` name.
+
+## Module-form imports and flattening (hardened in v0.17.0)
+
+Relative imports whose target has no exported IO struct (`import ./name;`) are still flattened into the single module. v0.17.0 hardened the following:
+
+- **Namespace references are expanded**: global references and function calls through a module-form import (`statemod::tick()`, `statemod::ready`) are emitted as plain identifiers (`tick()`, `ready`) in the generated SV (previously the qualified names leaked into the output and Verilator/iverilog rejected them with "Package/class for '::' reference not found")
+- **Imported files are parsed with the SV dialect**: when compiling with `--target=sv`, imported modules are lexed as SV even without a `//! platform: sv` directive of their own. Module-scope declarations without an initializer (`uint scratch;`) are accepted (assign before use to avoid x propagation)
+- **Multi-level parent references**: imports such as `import ../../modules/x` work (see [Modules](../../basics/modules.html))
+
+```cm
+// statemod.cm (no //! platform: directive needed)
+module statemod;
+
+uint scratch;                  // declaration without initializer
+uint count = 0;
+export bool ready = false;
+
+export uint tick() {
+    count = (count + 1) as uint;
+    if (count >= 3) { ready = true; }
+    return count;
+}
+```
+
+```cm
+// top.cm
+import ./statemod;
+
+#[input] posedge clk;
+#[output] uint out = 0;
+#[output] bool flag = false;
+
+async void t(posedge clk) {
+    out = statemod::tick();    // emitted as a plain identifier in the generated SV
+    flag = statemod::ready;
+}
+```
+
+Regression test: `tests/sv/basic/modules/import_state`
 
 ---
 

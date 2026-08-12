@@ -1,0 +1,39 @@
+// リダクション演算子（SV-N2）の非SVバックエンド移植性テスト。
+// reduce_and/or/xor/nand/nor/xnor はベクタ全ビットを1ビット（bool）へ畳み込む。
+// 幅は被演算子の型で決まる（utiny=8ビット・uint=32ビット）。全バックエンド一致を検証する。
+
+void main() {
+    // 8ビット全ビット1: and=T or=T xor=F(偶数) nand=F nor=F xnor=T
+    utiny full = 0xFF as utiny;
+    println("{reduce_and(full)}");
+    println("{reduce_or(full)}");
+    println("{reduce_xor(full)}");
+    println("{reduce_nand(full)}");
+    println("{reduce_nor(full)}");
+    println("{reduce_xnor(full)}");
+
+    // 8ビット下位3ビットのみ1（0b00000111）: and=F or=T xor=T(奇数) nand=T nor=F xnor=F
+    utiny three = 0x07 as utiny;
+    println("{reduce_and(three)}");
+    println("{reduce_or(three)}");
+    println("{reduce_xor(three)}");
+    println("{reduce_nand(three)}");
+    println("{reduce_nor(three)}");
+    println("{reduce_xnor(three)}");
+
+    // 8ビット全ビット0: and=F or=F xor=F nand=T nor=T xnor=T
+    utiny zero = 0x00 as utiny;
+    println("{reduce_and(zero)}");
+    println("{reduce_or(zero)}");
+    println("{reduce_xnor(zero)}");
+
+    // 幅の効き: 32ビット中の下位8ビットのみ1 → 全32ビットANDはF・ORはT
+    uint low8 = 0xFF;
+    println("{reduce_and(low8)}");
+    println("{reduce_or(low8)}");
+
+    // 32ビット全ビット1: and=T xor=F(32個=偶数)
+    uint all32 = 0xFFFFFFFF;
+    println("{reduce_and(all32)}");
+    println("{reduce_xor(all32)}");
+}

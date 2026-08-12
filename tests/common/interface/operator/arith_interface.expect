@@ -1,0 +1,5 @@
+add: 12 24
+sub+assign: 21 42
+muldiv: 60 2 2
+bits: 4 13 9
+shift: 48 3

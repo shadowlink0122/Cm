@@ -1,0 +1,24 @@
+//! platform: sv
+//! description: エラーテスト - packed unionのメンバ幅不一致（SV009）
+
+// 24ビットのフィールドビューと32ビットのrawビューは幅不一致で合成不能
+
+struct Narrow {
+    bit[8] a;
+    bit[16] b;
+}
+
+#[sv::packed_union]
+struct Word {
+    bit[32] raw;
+    Narrow fields;
+}
+
+#[input]  bool clk = false;
+#[output] bit[8] out_v = 0;
+
+Word w;
+
+async void tick(posedge clk) {
+    out_v = w.fields.a;
+}

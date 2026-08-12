@@ -1,0 +1,19 @@
+//! platform: sv
+//! test: sel=0, cycles=2 -> r=10
+//! test: sel=1, cycles=2 -> r=11
+//! test: sel=3, cycles=2 -> r=0
+
+// #[sv::priority] 属性（SV-N3）: switch文の直前に付与すると unique case でなく priority case を出力する
+
+#[input] posedge clk;
+#[input] bit[2] sel;
+#[output] uint r = 0;
+
+async void pick(posedge clk) {
+    #[sv::priority]
+    switch (sel) {
+        case(0) { r = 10; }
+        case(1) { r = 11; }
+        else { r = 0; }
+    }
+}

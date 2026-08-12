@@ -159,6 +159,8 @@ string[] names = people
 // ["Alice", "Carol"]
 ```
 
+> Backend note: higher-order methods on scalar elements (tiny/short/int/long/float/double and their unsigned variants) work on all backends. Higher-order methods on struct slices (filter/map/...) and mutation of global or struct-member slices are js/ts-only (they map to JS arrays); on native/jit/wasm they are a compile error (they used to misbehave without any diagnostic). On native/jit struct slices support the basic operations (push/len/indexing/for-in/passing as argument or return value/updating an element field/first/last). Use `--target=ts` for growable struct data such as web development.
+
 ---
 
 ## Slices of Union Types
@@ -184,6 +186,27 @@ int main() {
 ```
 
 ---
+
+## Passing Fixed-Size Arrays to Slice Parameters
+
+Fixed-size arrays can be passed directly to slice-typed (`T[]`) parameters. The array contents are copied into a heap slice at the call site, so `push` or element assignments in the callee do not affect the caller's array.
+
+```cm
+int sum(int[] xs) {
+    int s = 0;
+    for (int i = 0; i < xs.len(); i++) {
+        s = s + xs[i];
+    }
+    return s;
+}
+
+int main() {
+    int[3] fixed = [1, 2, 3];
+    println("{sum(fixed)}");
+    // 6 (a copy is passed; mutations inside sum do not change fixed)
+    return 0;
+}
+```
 
 ## Next Steps
 

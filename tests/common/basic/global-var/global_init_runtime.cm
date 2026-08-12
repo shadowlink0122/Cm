@@ -1,0 +1,49 @@
+// グローバル変数の非定数初期化子の回帰: 関数呼び出し・構造体リテラル等の
+// 定数評価できない初期化子がコード生成で黙って捨てられゼロ値になっていた
+// （mainエントリで一度だけ評価して格納する。構造体代入で一時のアドレスが
+// 書き込まれるassignのポインタstoreバグも同時に修正）
+import std::io::println;
+
+struct Counter {
+    int count;
+    string label;
+    int[] history;
+}
+
+int base_value() {
+    return 40 + 2;
+}
+
+int g_computed = base_value();
+Counter g_c = Counter{count: 5, label: "start", history: []};
+int[3] g_fixed = [10, 20, 30];
+
+void bump() {
+    g_c.count = g_c.count + 1;
+    g_c.history.push(g_c.count);
+}
+
+int main() {
+    // 関数呼び出しの初期化子
+    println(g_computed);
+
+    // 構造体リテラルの初期化子（スカラ・文字列・スライスフィールド）
+    println(g_c.count);
+    println(g_c.label);
+    println(g_c.history.len());
+
+    // 関数越しのフィールド変異（スライスフィールド含む）
+    bump();
+    bump();
+    println(g_c.count);
+    println(g_c.history.len());
+    println(g_c.history[0]);
+    println(g_c.history[1]);
+
+    // 固定長配列グローバルの初期化と変異
+    println(g_fixed[0]);
+    println(g_fixed[2]);
+    g_fixed[1] = 99;
+    println(g_fixed[1]);
+    return 0;
+}

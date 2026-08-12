@@ -1,0 +1,46 @@
+import std::io::println;
+// slice_sort_types.cm - C5回帰: sort()が要素型ごとに正しく比較すること
+// 以前はelem_size==4のときだけ実ソートし、long/double/short等はゴミ値を返していた
+
+int main() {
+    // long（8バイト）: 以前は破損値
+    long[] ls = [];
+    ls.push(30000000000);
+    ls.push(10000000000);
+    ls.push(20000000000);
+    long[] sl = ls.sort();
+    println("long={sl[0]},{sl[1]},{sl[2]}");
+
+    // double（8バイト）
+    double[] ds = [];
+    ds.push(3.5);
+    ds.push(1.25);
+    ds.push(2.75);
+    double[] sd = ds.sort();
+    println("double={sd[0]},{sd[1]},{sd[2]}");
+
+    // short（2バイト・負値を含む符号付き比較）
+    short[] ss = [];
+    ss.push(5 as short);
+    ss.push(-3 as short);
+    ss.push(0 as short);
+    short[] ss2 = ss.sort();
+    println("short={ss2[0]},{ss2[1]},{ss2[2]}");
+
+    // int（4バイト・従来から動作）
+    int[] iv = [];
+    iv.push(42);
+    iv.push(7);
+    iv.push(19);
+    int[] siv = iv.sort();
+    println("int={siv[0]},{siv[1]},{siv[2]}");
+
+    // string（辞書順）
+    string[] strs = [];
+    strs.push("cherry");
+    strs.push("apple");
+    strs.push("banana");
+    string[] sstr = strs.sort();
+    println("string={sstr[0]},{sstr[1]},{sstr[2]}");
+    return 0;
+}

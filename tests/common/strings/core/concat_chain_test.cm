@@ -1,0 +1,30 @@
+// H9第5段回帰: 文字列連結チェーン（a+b+c...）の平坦化（cm_string_concat3/4）
+// 3要素で2回→1回、4要素で3回→1回の確保になる。値の同一性を全バックエンドで検証
+import std::io::println;
+
+string p(string s) {
+    return s;
+}
+
+int main() {
+    string a = p("aa");
+    string b = p("bb");
+    string c = p("cc");
+    string d = p("dd");
+    string e = p("ee");
+
+    println(a + b + c);
+    println(a + b + c + d);
+    println(a + b + c + d + e);
+    println(a + b + c + d + e + p("ff") + p("gg"));
+
+    // 数値変換の混在と括弧による右結合
+    println("n=" + 1 + " m=" + 2);
+    println(a + (b + c) + d);
+    int x = 42;
+    println("x=" + x + "!");
+
+    // マルチバイトの混在
+    println("こん" + "にち" + "は");
+    return 0;
+}

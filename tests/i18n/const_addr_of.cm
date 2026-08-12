@@ -1,0 +1,8 @@
+// i18n E2Eテスト用: const値への非constポインタ取得の警告（M3段階3）
+int main() {
+    const int c = 7;
+    int* bad = &c;
+    const int* ok = &c;
+    *bad = 8;
+    return *ok;
+}

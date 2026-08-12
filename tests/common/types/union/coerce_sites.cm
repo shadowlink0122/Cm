@@ -1,0 +1,58 @@
+// 変換統一ドライバ第1段の回帰: 全値消費サイト（let/単純代入/メンバ代入/return/構造体フィールド/push/引数/デフォルト引数）の
+// ユニオン構築がcoerce_to_expected 1系統で挿入され、タグ+ペイロードが全経路で一致する
+// is（check_only）とasのGVN混同ミスコンパイル修正後は、is/as併用のreturnペイロード・数値変種正規化・isスライス変種も全経路一致を検証する
+import std::io::println;
+
+typedef IntOrStr = int | string;
+typedef DblOrStr = double | string;
+typedef IntSlice = int[];
+typedef SliceOrStr = int[] | string;
+
+struct Holder {
+    IntOrStr v;
+}
+
+IntOrStr ret_union(int x) {
+    return x;
+}
+
+void take_union(IntOrStr u, IntOrStr d = 77) {
+    println("arg={u is int} def={d is int} defv={d as int}");
+}
+
+int main() {
+    // return（isとasの併用がGVNで混同されない）
+    const IntOrStr r = ret_union(5);
+    println("ret={r is int} v={r as int}");
+    // 引数・デフォルト引数（変種リテラルの直接渡し。従来はArgument type mismatchで誤拒否されas付きが必要だった）
+    take_union(9);
+    // let初期化
+    IntOrStr a = 42;
+    println("let={a is int} v={a as int}");
+    // 単純代入
+    a = "hello";
+    println("assign={a is string} v={a as string}");
+    // 構造体リテラルフィールド・メンバ代入
+    Holder h = Holder{v: 1};
+    println("field={h.v is int}");
+    h.v = "world";
+    println("member={h.v is string} v={h.v as string}");
+    h.v = 7;
+    println("member2={h.v is int} v={h.v as int}");
+    // push（ユニオン要素スライス）
+    IntOrStr[] xs = [];
+    xs.push(10);
+    xs.push("s");
+    println("push0={xs[0] is int} push1={xs[1] is string}");
+    // 唯一の数値変種への正規化（int→double変種。coerce_to_expectedの再帰ディスパッチ）
+    DblOrStr d = 1;
+    println("dbl={d is double} v={d as double}");
+    // スライス変種のis検査（is/asの型右辺のスライスサフィックス対応）とtypedef別名経由のas（従来はnot a variantで誤拒否）
+    int[] dyn = [];
+    dyn.push(5);
+    SliceOrStr s = dyn;
+    println("slice_is={s is int[]} str_is={s is string}");
+    const IntSlice sl = s as IntSlice;
+    println("via_alias={sl[0]}");
+    return 0;
+}

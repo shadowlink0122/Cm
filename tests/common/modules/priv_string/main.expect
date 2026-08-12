@@ -1,0 +1,6 @@
+42
+call hidden_calc for doubling
+doubled=10
+usage: call hidden_calc with "an int"
+second line mentions hidden_calc too
+raw=14

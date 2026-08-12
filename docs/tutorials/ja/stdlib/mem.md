@@ -64,6 +64,57 @@ da.dealloc(ptr);
 
 ---
 
+## グローバルアロケータの差し替え
+
+`set_allocator_fns` にCm関数ポインタ3本（alloc / dealloc / realloc）を渡すと、以降の `std::mem` 経由の確保がそのアロケータを経由します。
+`std::collections` のVector/HashMap/Queueの内部確保も `std::mem` 経由のため、登録したアロケータを通ります（v0.17.0で生malloc直呼びの素通しを解消）。
+`reset_allocator()` で既定のアロケータへ戻ります。
+
+> **対応バックエンド:** JIT / Native のみ（WASMは独自フリーリストアロケータ固定のためno-op、JS/TSはGC管理のため対象外）
+
+```cm
+import std::mem::{alloc, dealloc, set_allocator_fns, reset_allocator};
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+    void* realloc(void* ptr, int size);
+}
+
+int alloc_count = 0;
+
+// カウンタ付きアロケータ: 確保回数を記録してmallocへ委譲する
+void* counting_alloc(long size) {
+    alloc_count = alloc_count + 1;
+    return malloc(size as int);
+}
+
+void counting_dealloc(void* ptr) {
+    free(ptr);
+}
+
+void* counting_realloc(void* ptr, long new_size) {
+    return realloc(ptr, new_size as int);
+}
+
+int main() {
+    set_allocator_fns(counting_alloc as void*, counting_dealloc as void*, counting_realloc as void*);
+    void* p = alloc(64);     // counting_alloc を経由（alloc_count == 1）
+    dealloc(p);
+    reset_allocator();       // 以降は既定のアロケータへ戻る
+    return 0;
+}
+```
+
+| 関数 | 説明 |
+|------|------|
+| `set_allocator_fns(alloc_fn, dealloc_fn, realloc_fn)` | グローバルアロケータをCm関数ポインタ3本で差し替え |
+| `reset_allocator()` | 既定のアロケータへ戻す |
+
+登録する関数のシグネチャは `void*(long)` / `void(void*)` / `void*(void*, long)` です。
+
+---
+
 ## libc FFI
 
 内部的に使用可能なlibc関数:

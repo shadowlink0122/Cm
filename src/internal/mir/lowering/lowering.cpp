@@ -4,6 +4,8 @@
 #include "lowering.hpp"
 
 #include "internal/base/debug.hpp"
+#include "internal/base/i18n.hpp"
+#include "internal/base/mangle.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -11,9 +13,40 @@
 #include <numeric>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace cm::mir {
+
+// MIRに__error__シンボル（未解決型のマングリング成果物）が残っていないか検査する。
+// 関数名・呼び出し先FunctionRefの両方を走査し、検出時はエラー診断として報告する（codegen前停止はドライバが行う）
+void MirLowering::check_error_artifacts(const MirProgram& mir_program) {
+    constexpr const char* kErrorPrefix = "__error__";
+    for (const auto& func : mir_program.functions) {
+        if (!func) {
+            continue;
+        }
+        if (func->name.rfind(kErrorPrefix, 0) == 0) {
+            report_error(Span{}, i18n::msgf(i18n::MsgId::MirErrorSymbol, func->name, func->name));
+            continue;
+        }
+        for (const auto& block : func->basic_blocks) {
+            if (!block || !block->terminator || block->terminator->kind != MirTerminator::Call) {
+                continue;
+            }
+            const auto& call = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call.func || call.func->kind != MirOperand::FunctionRef) {
+                continue;
+            }
+            if (const auto* name = std::get_if<std::string>(&call.func->data)) {
+                if (name->rfind(kErrorPrefix, 0) == 0) {
+                    report_error(Span{},
+                                 i18n::msgf(i18n::MsgId::MirErrorSymbol, *name, func->name));
+                }
+            }
+        }
+    }
+}
 
 MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
     if (cm::debug::debug_mode())
@@ -43,13 +76,14 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
 
     if (cm::debug::debug_mode())
         std::cerr << "[MIR] Pass 4: perform_monomorphization" << std::endl;
+    // typedef定義をMirProgramへコピーしてからモノモーフ化する
+    // （特殊化キーのユニオンtypedef同一視がnormalize_spec_arg_tree経由で参照する。従来はlower末尾のコピーのみでmono時は空だった）
+    mir_program.typedef_defs = typedef_defs;
     // Pass 4: モノモーフィゼーション（インターフェース特殊化）
     perform_monomorphization();
 
-    if (cm::debug::debug_mode())
-        std::cerr << "[MIR] Pass 5: generate_monomorphized_auto_impls" << std::endl;
-    // Pass 5: モノモーフィゼーション後のジェネリック構造体に対する自動実装を生成
-    generate_monomorphized_auto_impls();
+    // 旧Pass 5（モノモーフィゼーション後のジェネリック構造体への手組みMIR自動実装）は
+    // 総称implのソース合成（macro/derive.cpp）への一本化により廃止した（auto-impl第3段）
 
     if (cm::debug::debug_mode())
         std::cerr << "[MIR] Pass 6: rewrite_struct_comparison_operators" << std::endl;
@@ -135,6 +169,11 @@ MirProgram MirLowering::lower(const hir::HirProgram& hir_program) {
     // typedef定義をMirProgramにコピー（LLVM backendでTypeAlias解決に使用）
     mir_program.typedef_defs = typedef_defs;
 
+    // エラー型成果物の検査（diagnostics-engine-unification 第3段）:
+    // 型検査のエラー回復で漏れた未解決型はマングリングで__error__*シンボルになりリンク不能・誤コンパイルとして顕在化する（B6/B7/W5(d)/N2族）。
+    // HIR→MIR境界の最終検査としてMIRに__error__シンボルが存在しないことを保証し、検出時はcodegen前に停止させる
+    check_error_artifacts(mir_program);
+
     return std::move(mir_program);
 }
 
@@ -168,24 +207,65 @@ void MirLowering::rewrite_hof_calls_for_closures() {
             if (func_name.find("_closure") != std::string::npos)
                 continue;
 
-            // 対象の高階関数かチェック
-            bool is_map =
-                (func_name == "__builtin_array_map" || func_name == "__builtin_array_map_i64");
-            bool is_filter = (func_name == "__builtin_array_filter" ||
-                              func_name == "__builtin_array_filter_i64");
-
-            if (!is_map && !is_filter)
+            // 対象の高階関数かチェック（コールバックは第3引数 args[2]。
+            // reduceは第4引数に初期値を持つためargs.back()ではなくインデックスで特定する）
+            static const std::unordered_set<std::string> hof_with_closure_support = {
+                "__builtin_array_map",
+                "__builtin_array_map_i8",
+                "__builtin_array_map_i16",
+                "__builtin_array_map_i64",
+                "__builtin_array_map_f32",
+                "__builtin_array_map_f64",
+                "__builtin_array_filter",
+                "__builtin_array_filter_i8",
+                "__builtin_array_filter_i16",
+                "__builtin_array_filter_i64",
+                "__builtin_array_filter_f32",
+                "__builtin_array_filter_f64",
+                "__builtin_array_reduce_i8",
+                "__builtin_array_reduce_i16",
+                "__builtin_array_reduce_i32",
+                "__builtin_array_reduce_i64",
+                "__builtin_array_reduce_f32",
+                "__builtin_array_reduce_f64",
+                "__builtin_array_reduce_i32_acc64",
+                "__builtin_array_forEach_i8",
+                "__builtin_array_forEach_i16",
+                "__builtin_array_forEach_i32",
+                "__builtin_array_forEach_i64",
+                "__builtin_array_forEach_f32",
+                "__builtin_array_forEach_f64",
+                "__builtin_array_some_i8",
+                "__builtin_array_some_i16",
+                "__builtin_array_some_i32",
+                "__builtin_array_some_i64",
+                "__builtin_array_some_f32",
+                "__builtin_array_some_f64",
+                "__builtin_array_every_i8",
+                "__builtin_array_every_i16",
+                "__builtin_array_every_i32",
+                "__builtin_array_every_i64",
+                "__builtin_array_every_f32",
+                "__builtin_array_every_f64",
+                "__builtin_array_findIndex_i8",
+                "__builtin_array_findIndex_i16",
+                "__builtin_array_findIndex_i32",
+                "__builtin_array_findIndex_i64",
+                "__builtin_array_findIndex_f32",
+                "__builtin_array_findIndex_f64",
+            };
+            if (hof_with_closure_support.count(func_name) == 0)
                 continue;
 
-            // 最後の引数がクロージャかチェック
+            // コールバック引数（args[2]）がクロージャかチェック
             if (call_data.args.size() < 3)
                 continue;
 
-            auto& last_arg = call_data.args.back();
-            if (last_arg->kind != MirOperand::Copy && last_arg->kind != MirOperand::Move)
+            auto& fn_arg = call_data.args[2];
+            if (!fn_arg || (fn_arg->kind != MirOperand::Copy && fn_arg->kind != MirOperand::Move))
                 continue;
 
-            auto& place = std::get<MirPlace>(last_arg->data);
+            auto& place = std::get<MirPlace>(fn_arg->data);
             if (place.local >= func->locals.size())
                 continue;
 
@@ -197,9 +277,9 @@ void MirLowering::rewrite_hof_calls_for_closures() {
             call_data.func = MirOperand::function_ref(func_name + "_closure");
 
             // コールバックを関数参照に置き換え
-            call_data.args.back() = MirOperand::function_ref(local_decl.closure_func_name);
+            call_data.args[2] = MirOperand::function_ref(local_decl.closure_func_name);
 
-            // キャプチャ値を引数として追加
+            // キャプチャ値を末尾引数として追加（reduceは初期値の後ろに並ぶ）
             for (LocalId cap_local : local_decl.captured_locals) {
                 call_data.args.push_back(MirOperand::copy(MirPlace{cap_local}));
             }
@@ -378,6 +458,10 @@ void MirLowering::register_interface(const hir::HirInterface& iface) {
             mir_method.param_types.push_back(param.type);
         }
         mir_iface->methods.push_back(std::move(mir_method));
+
+        // 補間ミニパイプラインの戻り値型解決用にインターフェイス宣言のシグネチャを記録する（B7）
+        interface_method_returns_[mangle::method_name(iface.name, method.name)] =
+            method.return_type;
     }
 
     // 演算子シグネチャを登録

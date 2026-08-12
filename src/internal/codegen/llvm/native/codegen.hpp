@@ -108,8 +108,10 @@ class LLVMCodeGen {
         const std::filesystem::path& output_dir);
 
     /// 複数オブジェクトファイルからリンク
+    /// program非nullptr時はMIRの呼び出し関数名からランタイムライブラリ（net/sync/thread/GPU/HTTP）の要否を判定する
+    /// （モジュール分割経路ではthis->contextが空のリンク用モジュールになり、LLVM宣言ベースの判定が機能しないため）
     void linkObjects(const std::vector<std::filesystem::path>& objects,
-                     const std::string& output_file);
+                     const std::string& output_file, const mir::MirProgram* program = nullptr);
 
     /// LLVM IR を文字列として取得（デバッグ用）
     std::string getIRString() const;

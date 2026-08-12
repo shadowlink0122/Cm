@@ -1,0 +1,10 @@
+int add1(int x) {
+    return x + 1;
+}
+int main() {
+    int[3] xs = [1, 2, 3];
+    println(xs.map(add1).len());
+    int[] kept = xs.map(add1);
+    println(kept.len());
+    return 0;
+}

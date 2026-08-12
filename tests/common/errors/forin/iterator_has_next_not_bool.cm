@@ -1,0 +1,16 @@
+// 回帰(Q1穴1): has_nextの戻り値がboolでない場合は診断
+struct Counter { int cur; int max; }
+struct CI { int cur; int max; }
+impl Counter {
+    CI iter() { return CI { cur: self.cur, max: self.max }; }
+}
+impl CI {
+    int has_next() { return self.max - self.cur; }
+    int next() { self.cur = self.cur + 1; return self.cur; }
+}
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    int sum = 0;
+    for (v in c) { sum = sum + v; }
+    return sum;
+}

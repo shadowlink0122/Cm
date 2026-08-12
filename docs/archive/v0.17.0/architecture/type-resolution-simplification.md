@@ -1,0 +1,103 @@
+---
+title: 型解決とチェーンloweringの単純化（重複実装の統合）
+parent: v0.17.0 Design
+---
+
+# 型解決とチェーンloweringの単純化（重複実装の統合）
+
+## 概要
+
+B/N/V/W/X系の修正履歴を横断すると、バグの大半が「同じ概念の並行実装が複数あり、片方だけ直して他方が残る」構造から発生している。
+本文書は型推論・チェーン型解決まわりの複雑化した4領域を特定し、単一機構への統合方針を示す。
+個別バグは修正済みのため動作上の緊急性はないが、現構造のままでは同族バグの再発が構造的に避けられない（実際にN1修正の読み経路に対しW2が書き経路で再発した）。
+
+## 領域1: 文字列補間のミニパイプライン（最重症）
+
+### 現状
+
+補間プレースホルダは生テキストのままMIR loweringまで到達し、そこで3つの独立機構が処理している。
+
+1. `expr_println.cpp`（2,341行・if文219個）: `name`・`name.field`・`name[idx]`等をテキストパターン照合で手書き場所化する旧経路。
+2. `expr_interp.cpp` の `lower_interp_expression`: プレースホルダを `int __interp_expr__() { return (...); }` に包んで再字句解析・再パース・再HIR lowering する第2のコンパイルパイプライン。enum定義・構造体フィールド・変数型を手動コピーで種付けする。
+3. `expr_interp.cpp` の `annotate_interp_expr_types`（W5で追加）: ミニパイプラインが型チェッカーを通らないため、ジェネリックフィールド置換・特殊化名（`Box__Box__string`）の名前パースによる型復元・ポインタ自動デリファレンス・メソッド戻り値型解決を再実装した影の型チェッカー。
+
+さらに型検査側の `check_interpolation_scope`（utils/interp.cpp）も同じテキストを第3回目としてパースしており、同一のプレースホルダが最大3回パースされる。
+B7・N1・V1〜V4・W5と繰り返しこのサブシステムからバグが出たのは、補間の脱糖が遅すぎるという単一の設計判断に起因する。
+
+### 統合方針
+
+パース時（またはHIR lowering時）に補間文字列を「リテラル断片＋実AST部分式」の列へ脱糖し、部分式を通常の式として型検査・loweringに乗せる。
+これにより上記3機構（テキストパターン照合・ミニパイプライン・影の型チェッカー）と `check_interpolation_scope` の再パースをすべて削除できる。
+影響ファイルの純減見込みは2,500行以上で、フォーマット指定子（`{x:x}`等）は脱糖時にフォーマット引数へ変換する。
+補間からのバグ再発は「式が正しく動けば補間も正しい」に還元される。
+
+## 領域2: 左辺値・レシーバ場所解決の並行実装
+
+### 現状
+
+「HIR式からMirPlaceを構築する」実装が4系統ある。
+
+1. `expr/access.cpp` の `resolve_receiver_place`: メソッドレシーバ用（H10）。スライスヘッダ降下（get_subslice_ref/get_element_ptr）を実装済み。
+2. `stmt/assign.cpp` の `build_projections`: 代入左辺値用。W2はここが生index投影のままでスライス降下を持たなかったことが原因（読み経路のN1修正が届かなかった）。
+3. `expr_call.cpp` の `get_member_place`: 間接呼び出し先の場所化用。
+4. `expr_println.cpp` のテキストベース場所構築（領域1の一部として削除予定）。
+
+同じ「スライスofスライスはヘッダ降下が必要」という知識を各実装が個別に持つ必要があり、1箇所の修正が他へ伝播しない。
+
+### 統合方針
+
+`lower_place(const HirExpr&, LoweringContext&) -> std::optional<MirPlace>` を唯一の場所化APIとして `expr/access.cpp` に定義し、読み・書き・レシーバ・参照取得（&）・間接呼び出し先のすべてから使う。
+スライス降下・typedef解決・ジェネリックフィールド型置換はこの1箇所にのみ存在させる。
+assign.cppのbuild_projectionsとexpr_call.cppのget_member_placeは薄いラッパへ縮退させ、投影構築ロジックを持たない状態にする。
+
+## 領域3: 期待型伝播のアドホックなパッチ分布
+
+### 現状
+
+無名リテラル（`{...}`・`[...]`）の型は文脈の期待型から決まるが、期待型を渡す仕組みが統一APIでなく、消費サイトごとの個別パッチになっている。
+W1（構造体リテラル内配列の要素）・X3（push引数の配列リテラル）・X4（push引数の無名構造体リテラル）は、すべて「期待型が届かないサイトがもう1つあった」という同一原因の3連発である。
+現在も期待型はconstruct.cpp・push loweringなどに局所変数として散在し、insert等の未監査サイトが残っている可能性がある。
+
+### 統合方針
+
+型検査とHIR loweringの式評価APIに期待型パラメータを正式に追加し（`check_expr(expr, TypePtr expected = nullptr)`）、無名リテラルは期待型必須・決定不能なら診断エラーという規約を型検査の1箇所で強制する。
+呼び出し側（let初期化・代入右辺・関数引数・return・push/insert引数・構造体リテラルフィールド・配列要素・match腕・三項演算子腕）は期待型を渡すだけにし、リテラル構築時の型推測ロジックを消費サイトから排除する。
+これにより「新しい値消費サイトを追加すると無名リテラルが壊れる」というクラスのバグ（W1/X3/X4族）が構造的に消える。
+
+## 領域4: スライスビルトインの要素型ディスパッチ重複
+
+### 現状
+
+`slice_dispatch.hpp` がスカラ幅情報を一元化した（C4）一方、push/pop/get/set/delete/insert各ビルトインのloweringは「スカラ→幅サフィックス、Array→slice系、Struct/Union→blob系、Pointer/String→ptr系」という同じ選択ロジックと呼び出し形態（blob時のアドレス渡し・deref格納）を手書きで繰り返しており、ランタイム関数名の登場箇所は46ある。
+W3はpopだけがblob要素の受け取り規約（要素ポインタ経由）を持っていなかったことが原因で、getには実装済みだった。
+
+### 統合方針
+
+`slice_dispatch.hpp` を「要素kind → {ランタイム関数サフィックス、引数規約（値渡し/アドレス渡し）、戻り規約（値/要素ポインタ+deref）}」の表に拡張し、各ビルトインのloweringは表引き＋共通のCall構築ヘルパだけにする。
+新スカラ型・新ビルトイン追加時の変更箇所を表1行に限定し、W3型の「あるビルトインだけ規約が抜ける」バグを構造的に防ぐ。
+
+## 付随する小規模の見直し
+
+- `current_impl_target_type_`（checker.hpp）: 可視性文脈が単一の可変文字列で、コンストラクタ検査で未設定になる漏れがX2修正直後に発生した。impl検査の入口で一括設定するRAIIガードへ変更し、設定漏れをコンパイル時に防ぐ。
+- `decode_specialized_type_name`: 特殊化名（`Box__int`）を文字列パースして型引数を復元する処理が4箇所にある。型情報はHIR型ノードで運搬し、マングル名からの逆算は診断表示以外で禁止する（領域1の解消で主要な利用箇所は消える）。
+
+## 段階分割と進捗
+
+1. 第1段（領域2）: `lower_place` 統合。**実装済み**。ExprLowering::lower_placeを唯一の場所化APIとし、resolve_receiver_placeは委譲・assign.cppのbuild_lvalue_placeは1行ラッパへ縮退（約550行の重複削除）。
+2. 第2段（領域4）: スライスディスパッチ表化。**実装済み**。slice_elem_dispatch（Scalar/Ptr/InnerSlice/Blobの格納クラスとサフィックス）とemit_call等の共通ヘルパでexpr_slice.cppを表引き構成へ書き換え。内側スライス要素のpopがランタイム未実装で従来既定i32へ落ちる挙動は既知の未対応としてコメントに固定。
+3. 第3段（領域3）: 期待型パラメータの正式化。**実装済み**。infer_type_expecting(expr, expected)を正式APIとし、let初期化・代入右辺・return・関数引数（通常/可変長/関数ポインタ）・push引数・構造体リテラルフィールド・配列要素の全消費サイトを接続。副次効果としてreturn文・関数引数への無名構造体リテラルが許容されるようになった（回帰: tests/common/structs/anon_literal_all_sites）。
+4. 第4段a（領域1・解決経路の一本化）: **実装済み**。expr_println.cppの約2,000行のテキストパターン照合（メンバ・添字・アロー・enum・否定・アドレス等の個別分岐）を全廃し、全プレースホルダをresolve_interp_placeholder（識別子直接参照＋式パイプライン）の単一経路へ委譲した（2,341行→296行）。旧分類器interp_content_is_*と旧添字ヘルパーも撤去。自動実装メソッド（Point__debug等）の戻り値型解決をType__プレフィックス除去で補完し、旧経路で壊れていた`{t[1]}`（空出力）・`{t.len()} {t[1]}`（SIGSEGV）も修正された（回帰: tests/common/basic/interp_string_index）。あわせて第1段lower_placeのwasm回帰（構造体blob要素スライスへの生Index投影書き込みが未対応で変異消失）をcm_slice_get_element_ptr降下へ統一して修正した。
+5. 第4段b（領域1・パース時脱糖）: **実装済み**。文字列リテラルの補間プレースホルダを型検査時に一度だけ実ASTへ脱糖し（TypeChecker::desugar_interpolation_parts→LiteralExpr.interp_parts）、通常の推論でスコープ・move・未定義変数・型を検査、HIR（HirLiteral.interp_parts）を経てMIRのprintln/format loweringが型検査済み部分式をそのまま消費する。check_interpolation_scope・mark_interpolation_uses・collect_ident_refsの検査用テキストパースは削除し、未定義変数・move後使用は本物の診断（Undefined variable / used after move）で報告される。一般文字列コンテキスト（cm_format_string経路）に残っていたテキストパターン照合も撤去し、`string s = "{x + 1}"` のゴミ値も解消（回帰: tests/common/basic/interp_expr_in_string・tests/common/errors/interp_undefined_var）。
+6. 第4段c（領域1・ミニパイプライン完全削除）: **実装済み**。監視として全数計装（フォールバック到達内容のファイル記録）を入れてjit 612件・sv 125件・regression 110件・cm-test・libsを掃引し、到達0件を確認のうえlower_interp_expression（再字句解析・再パース・再HIR loweringの第2パイプライン）・annotate_interp_expr_types（影の型チェッカー）・decode_specialized_type_name/make_named_or_primitive/substitute_generic_field（特殊化名の文字列パース復元）・interp_specialized_struct_name（interp_internal.hpp）・HirLoweringのseed_variable_types/seed_struct_fields/seed_enum_values（ミニパイプラインの種付けAPI）とHIR側の参照分岐を削除した（expr_interp.cpp 761行→316行）。resolve_interp_placeholderは「脱糖済み部分式が無い場合の識別子直接参照」だけの防衛経路として残る（デバッグログ付き・全スイート掃引で到達0件）。補間の型解決はパース時脱糖+通常の型検査の単一機構になり、領域1の3機構+検査用再パースは全廃が完了した。
+
+各段でmake test全スイートを完走させ、削除した経路のテスト（interp_chain・push_array_literal等）が新経路で通ることを確認する（第1〜3段・第4段aは全12スイート完走済み。第1〜3段時点でwasmスイートが未実行だった反省から、第4段a以降はllvm-wasmを必須スイートに含める）。
+
+## テスト計画
+
+- 既存のB/N/V/W/X回帰テスト群を統合後の経路で全通過させる（機能等価の証明）。
+- regression: `lower_place` の単体入力（変数・メンバ・添字・多次元スライス・アロー・混合チェーン）ごとの投影列検証を追加する。
+- 補間脱糖後は、補間式と直接式のMIRが一致することをスナップショットで検証する。
+
+## 検出経緯
+
+W/X修正後の設計レビュー（型推論・チェーン型解決の単純性評価）として、修正履歴の原因分析とソース計測（expr_println.cpp 2,341行・場所解決4系統・ランタイム関数名46箇所・プレースホルダ3重パース）に基づき作成。

@@ -1,0 +1,29 @@
+// 非exportヘルパー（プライベート改名の対象）と、その名前を含む文字列を返すexport関数
+int hidden_calc(int x) {
+    return x * 2;
+}
+
+export int use_calc(int x) {
+    return hidden_calc(x);
+}
+
+export string describe() {
+    // 文字列リテラルの内容は改名対象外（従来の正規表現置換はここを書き換えて内容を破壊していた）
+    return "call hidden_calc for doubling";
+}
+
+export string interp_note(int x) {
+    // 補間プレースホルダ内部の識別子は改名対象（改名後のヘルパーが解決される）
+    return "doubled={hidden_calc(x)}";
+}
+
+export string raw_doc() {
+    // raw文字列（バッククォート）の内容も改名対象外（"や複数行を含む）
+    return `usage: call hidden_calc with "an int"
+    second line mentions hidden_calc too`;
+}
+
+export string raw_note(int x) {
+    // raw文字列の補間 ${...} 内部の識別子は改名対象（改名後のヘルパーが解決される）
+    return `raw=${hidden_calc(x)}`;
+}

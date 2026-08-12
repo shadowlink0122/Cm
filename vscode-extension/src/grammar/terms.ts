@@ -63,6 +63,7 @@ export const MODIFIER_KEYWORDS = [
   'from',
   'where',
   'auto',
+  'var',
 ] as const;
 export const SIZEOF_KEYWORDS = ['sizeof', 'typeof', 'typename'] as const;
 export const INTRINSIC_KEYWORDS = [
@@ -109,6 +110,8 @@ export const PRIMITIVE_TYPES = [
 ] as const;
 export const BOOLEAN_CONSTANTS = ['true', 'false'] as const;
 export const NULL_CONSTANTS = ['nullptr', 'null'] as const;
+// Optionの値なしバリアント。bareのNoneは型名（PascalCase→entity.name.type）でなくプリミティブ型と同色で着色する
+export const PRELUDE_VALUE_VARIANTS = ['None'] as const;
 export const BUILTIN_FUNCTIONS = [
   'print',
   'println',
@@ -119,6 +122,24 @@ export const BUILTIN_FUNCTIONS = [
   'exit',
   'eprintln',
   'eprint',
+  'reduce_and',
+  'reduce_or',
+  'reduce_xor',
+  'reduce_nand',
+  'reduce_nor',
+  'reduce_xnor',
+] as const;
+// SVA（並行アサーション・SV-N7）の組み込み関数。sv_assert_propertyと時相演算子（$rose等へ写像）。
+// after/past等は一般的な語のため、コンパイラと同じく呼び出し位置（直後が'('）のみ組み込みとして着色する
+export const SVA_FUNCTIONS = [
+  'sv_assert_property',
+  'implies',
+  'implies_next',
+  'after',
+  'rose',
+  'fell',
+  'stable',
+  'past',
 ] as const;
 export const PREPROCESSOR_BUILTINS = [
   'FILE',
@@ -133,10 +154,20 @@ export const PREPROCESSOR_BUILTINS = [
 export const ASM_CONSTRAINT_KEYWORDS = ['in', 'out', 'inout', 'clobber'] as const;
 
 // ---- 共有ルール断片 ----
-// 文字列内のエスケープシーケンス（"..." / asmブロック内文字列 / use文の文字列で共用）
+// 文字列内のエスケープシーケンス（"..." / asmブロック内文字列 / use文の文字列で共用）。
+// 対応エスケープ（\n \t \r \b \f \v \a \0 \\ \" \' \$ \{ \} \xHH \uHHHH \UHHHHHHHH）は
+// エスケープ色、それ以外の \. はコンパイラ診断（R5）と整合する不正エスケープ色にする
 export const ESCAPE_RULE: TmRule = {
-  name: 'constant.character.escape.cm',
-  match: '\\\\.',
+  patterns: [
+    {
+      name: 'constant.character.escape.cm',
+      match: '\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\"\'$\\{\\}])',
+    },
+    {
+      name: 'invalid.illegal.escape.cm',
+      match: '\\\\.',
+    },
+  ],
 };
 
 // モジュール名（module/import/use文で共用）

@@ -1,0 +1,4 @@
+pop=40 len=3
+after delete: len=2 i0=10 i1=30
+tag_pop=200 tag_len=1
+after clear: len=0

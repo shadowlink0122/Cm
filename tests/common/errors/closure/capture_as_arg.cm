@@ -1,0 +1,13 @@
+// 回帰(V5): キャプチャ付きクロージャの関数引数渡しは環境喪失のため診断付き拒否
+import std::io::println;
+int apply(const int*(int) f, int v) {
+    return f(v);
+}
+int main() {
+    int base = 7;
+    const int*(int) add = (int x) => { return x + base; };
+    int direct = add(1);
+    int via = apply(add, 1);
+    println("direct={direct} via={via}");
+    return 0;
+}

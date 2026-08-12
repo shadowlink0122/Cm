@@ -1,0 +1,49 @@
+import std::io::println;
+// 構造体スライス（可変長 T[]）の基本操作: push / len / 添字 / for-in / 引数 / 戻り値 / 要素フィールド更新。
+// 全バックエンド共通で動く範囲を検証する（高階メソッドや構造体の等価比較はjs/ts向け）。
+
+struct Item {
+    int id;
+    string name;
+    bool done;
+}
+
+// スライスを引数に取り集計する
+int total_ids(Item[] items) {
+    int sum = 0;
+    for (Item it in items) {
+        sum = sum + it.id;
+    }
+    return sum;
+}
+
+// スライスを構築して返す
+Item[] make_items(int n) {
+    Item[] r = [];
+    int i = 0;
+    while (i < n) {
+        Item x = { id: i + 1, name: "item", done: false };
+        r.push(x);
+        i = i + 1;
+    }
+    return r;
+}
+
+int main() {
+    Item[] items = make_items(3);
+    println("len={items.len()}");
+    println("total_ids={total_ids(items)}");
+    println("first={items[0].id} last={items[2].id}");
+
+    // 要素フィールドの更新（添字経由）
+    items[1].done = true;
+    for (Item it in items) {
+        println("{it.id}:{it.name}:{it.done}");
+    }
+
+    // さらにpushして伸長
+    Item extra = { id: 99, name: "extra", done: true };
+    items.push(extra);
+    println("after push len={items.len()} last={items[3].id}");
+    return 0;
+}

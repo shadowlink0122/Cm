@@ -29,6 +29,17 @@ struct LiteralExpr {
     bool is_unsigned_literal = false;  // hex/binary/octalリテラルで32bit超の場合true
     std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
 
+    // 補間プレースホルダの脱糖結果（文字列リテラルのみ。type-resolution-simplification 領域1第4段b）。
+    // 型検査時に一度だけプレースホルダ内容を実ASTへパース・推論し、HIR/MIRはテキスト再パースせずこの式を消費する。
+    // 要素は（プレースホルダ内容文字列, パース済み式）。パース不能な内容は登録されず従来のリテラル扱いに落ちる
+    std::vector<std::pair<std::string, std::shared_ptr<Expr>>> interp_parts;
+    bool interp_scanned = false;  // 脱糖を一度だけ行うためのフラグ
+    // 式として解釈できなかったプレースホルダ内容（脱糖はプリパス（match_hoist）でも走るため、リテラルへ記録してcheckerが警告する）
+    std::vector<std::string> interp_parse_failures;
+    bool interp_failures_reported = false;
+    bool interp_inferred =
+        false;  // 補間部分式を型検査で推論済みか（脱糖と推論はパスが異なるため別フラグ）
+
     LiteralExpr() = default;
     explicit LiteralExpr(bool v) : value(v) {}
     explicit LiteralExpr(int64_t v) : value(v) {}
@@ -165,6 +176,26 @@ inline const char* binary_op_str(BinaryOp op) {
     return "?";
 }
 
+// 代入系演算子（単純代入・複合代入）かどうか
+inline bool is_assign_op(BinaryOp op) {
+    switch (op) {
+        case BinaryOp::Assign:
+        case BinaryOp::AddAssign:
+        case BinaryOp::SubAssign:
+        case BinaryOp::MulAssign:
+        case BinaryOp::DivAssign:
+        case BinaryOp::ModAssign:
+        case BinaryOp::BitAndAssign:
+        case BinaryOp::BitOrAssign:
+        case BinaryOp::BitXorAssign:
+        case BinaryOp::ShlAssign:
+        case BinaryOp::ShrAssign:
+            return true;
+        default:
+            return false;
+    }
+}
+
 struct BinaryExpr {
     BinaryOp op;
     ExprPtr left;
@@ -258,6 +289,8 @@ struct SliceExpr {
     ExprPtr step;   // nullならstep=1
     // x[base +: width] 形式（SVのインデックスドパートセレクト）
     bool is_part_select = false;
+    // x[base -: width] 形式（下降方向。is_part_selectと併用。選択範囲は [base : base-width+1]）
+    bool part_select_down = false;
 
     SliceExpr(ExprPtr o, ExprPtr s, ExprPtr e, ExprPtr st = nullptr)
         : object(std::move(o)), start(std::move(s)), end(std::move(e)), step(std::move(st)) {}
@@ -531,6 +564,10 @@ struct MatchArm {
 struct MatchExpr {
     ExprPtr scrutinee;           // マッチ対象の式
     std::vector<MatchArm> arms;  // マッチアームのリスト
+    // R12: 網羅性検査が「全ケース被覆」と確定した場合にセットする（return網羅解析がワイルドカード無しの全variant被覆matchも終端と認識できるようにする）
+    bool known_exhaustive = false;
+    // SVのcase修飾（#[sv::priority]/#[sv::unique0] を文の直前に付与。0=既定・1=priority・2=unique0。非SVターゲットでは無視される）
+    uint8_t sv_case_modifier = 0;
 
     MatchExpr(ExprPtr s, std::vector<MatchArm> a) : scrutinee(std::move(s)), arms(std::move(a)) {}
 };

@@ -148,6 +148,28 @@ int main() {
 }
 ```
 
+### 5. Binary Operator Spacing (v0.17.0)
+
+Missing spaces are added around unambiguous binary operators (`=`, compound assignments, `==` `!=` `<=` `>=` `&&` `||` `=>` `<<=` `>>=`).
+Existing spaces are never removed, so intentional column alignment is preserved.
+
+```cm
+// Before
+int a=1;
+if (a==3&&a<=5) {
+    a+=2;
+}
+
+// After
+int a = 1;
+if (a == 3 && a <= 5) {
+    a += 2;
+}
+```
+
+Standalone `+ - * / % < > & ^` are excluded because they are ambiguous with unary operators, generics (`<T>`), and exponent notation (`1e+5`).
+`operator` declaration lines keep the declaration style (`operator bool ==(T other)`).
+
 ## Usage Example
 
 ### Before

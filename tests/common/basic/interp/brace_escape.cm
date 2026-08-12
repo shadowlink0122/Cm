@@ -1,0 +1,12 @@
+// 波括弧エスケープと補間の併用回帰（エスケープ復元は置換後に行う）
+// 従来はunescapeが置換より先に走り、リテラル{a}が最初のプレースホルダと誤認されて挿入位置がずれていた
+int main() {
+    int x = 5;
+    println("a {{b}} c");
+    println("v={x} and {{lit}}");
+    println("p {{ q: {x} }}");
+    println("{{a}} {x} {{b}}");
+    string s = "pre {{ mid {x} post }}";
+    println(s);
+    return 0;
+}

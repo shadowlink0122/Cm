@@ -1,0 +1,6 @@
+int main() {
+    string a = "aa";
+    string s = a + "!";
+    println(s);
+    return 0;
+}

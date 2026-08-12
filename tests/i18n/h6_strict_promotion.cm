@@ -1,0 +1,16 @@
+// i18n E2Eテスト用: H6段階3の--strictエラー昇格を検証するプログラム
+// checkでは警告のまま、check --strictではエラーになる
+int bad_return(int x) {
+    if (x > 0) {
+        return 1;
+    }
+}
+
+int use_uninit() {
+    int y;
+    return y + 1;
+}
+
+int main() {
+    return bad_return(1) + use_uninit();
+}

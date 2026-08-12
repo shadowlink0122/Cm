@@ -1,0 +1,31 @@
+// 型文法の汎用合成（局所処理調査A4/A5/A6）:
+// 括弧付きunion (int | string) のtypedef・ジェネリック型引数 Box<int | string>・変数への__alignof__ が
+// 正準の型パーサ経路で受理されることを検査する。
+// 旧: (int | string) はparse_type再帰でunion非対応・Foo<int | string> は型引数がparse_typeのため失敗・__alignof__(var) は未解決名の既定アライン8を無診断で返していた
+import std::io::println;
+
+struct Box<T> {
+    T v;
+    int tag;
+}
+
+typedef IorS = (int | string);
+
+int main() {
+    // A4: 括弧付きunionのtypedef
+    IorS a = 5;
+    IorS b = "hi";
+    println("{a is int} {b is string}");
+
+    // A5: ジェネリック型引数のunion（型注釈がパース・型検査を通ること）
+    Box<int | string> bx = Box{v: 7, tag: 99};
+    println(bx.tag);
+
+    // A6: 変数への__alignof__（静的型のアラインを返す）
+    int x = 5;
+    double d = 1.0;
+    tiny t = 3;
+    println("{__alignof__(x)} {__alignof__(d)} {__alignof__(t)}");
+
+    return 0;
+}

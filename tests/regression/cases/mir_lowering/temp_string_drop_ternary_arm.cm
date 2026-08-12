@@ -1,0 +1,7 @@
+int main() {
+    string a = "aa";
+    bool flag = true;
+    string t = flag ? a + "x" : a + "y";
+    println(t);
+    return 0;
+}

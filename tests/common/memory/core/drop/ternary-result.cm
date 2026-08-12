@@ -1,0 +1,41 @@
+import std::io::println;
+
+// C12回帰: 三項結果一時のdropパスの検証。
+// 両腕がともにfresh一時（concat結果）の所有権を結果へ移す場合のみ、結果一時は消費後に解放される。
+// 片腕でも借用値（変数コピー）なら所有権が条件依存になるため解放されず、値の健全性が保たれる。
+
+string wrap(string s) {
+    return "[" + s + "]";
+}
+
+int main() {
+    string a = "he";
+    string b = "wo";
+
+    // 両腕fresh: 結果一時は読み取り消費後に解放される
+    int i = 0;
+    while (i < 4) {
+        int n = ((i % 2 == 0) ? (a + "llo") : (b + "rld!")).len();
+        println(n);
+        i++;
+    }
+
+    // 片腕借用: 借用元が生き続ける
+    string s1 = a + "!!";
+    string r = (a.len() > 1) ? s1 : (b + "??");
+    println(r);
+    println(s1);
+
+    // 結果がletへエスケープ: 変数が所有し健全
+    string kept = (a.len() > 0) ? (a + "AA") : (b + "BB");
+    println(kept);
+
+    // 結果がユーザー関数（保持しうる）へ渡る: エスケープ扱いで解放されない
+    string w = wrap((a.len() > 1) ? (a + "1") : (b + "2"));
+    println(w);
+
+    // ネスト三項の両腕fresh
+    int deep = ((a.len() == 2) ? ((b.len() == 2) ? (a + b) : (a + "x")) : (b + "y")).len();
+    println(deep);
+    return 0;
+}

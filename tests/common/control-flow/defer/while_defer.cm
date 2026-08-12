@@ -1,0 +1,13 @@
+import std::io::println;
+// while_defer.cm - M16回帰: whileループのdeferが毎周期実行されること（forと対称）
+// 以前はwhileのdeferが関数終了時に1回だけ実行されていた
+int main() {
+    int i = 0;
+    while (i < 3) {
+        defer println("defer {i}");
+        println("body {i}");
+        i = i + 1;
+    }
+    println("done");
+    return 0;
+}

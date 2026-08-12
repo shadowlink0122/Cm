@@ -1,0 +1,2 @@
+warning: non-void function 'bad_return'
+warning: Variable 'y' may be used before initialization

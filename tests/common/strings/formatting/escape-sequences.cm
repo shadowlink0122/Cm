@@ -1,0 +1,25 @@
+// 回帰(R5): \xHH/\uHHHH/\UHHHHHHHHのデコード・\b\f\vの受理・charリテラル共用・raw文字列の非エスケープ・\$の補間エスケープ
+// （従来は未知エスケープでバックスラッシュだけが黙って脱落し、"\x41"が"x41"になる無診断のデータ破壊だった）
+import std::io::println;
+
+int main() {
+    string hex = "\x41\x42";
+    println("hex={hex} len={hex.len()}");
+    string uni = "\u00e9";
+    println("uni={uni} len={uni.len()} blen={uni.byte_len()}");
+    string emoji = "\U0001F600";
+    println("emoji={emoji} len={emoji.len()} blen={emoji.byte_len()}");
+    string ctrl = "\b\f\v";
+    println("ctrl_blen={ctrl.byte_len()}");
+    char c = '\x41';
+    println("char={c}");
+    string braces = "\x7Bliteral\x7D";
+    println("braces={braces}");
+    string raw = `C:\path\n`;
+    println("raw={raw} len={raw.len()}");
+    string tick = `a\`b`;
+        println("tick={tick} len={tick.len()}");
+        int x = 42;
+        println("interp=${x} lit=\${x}");
+        return 0;
+        }

@@ -35,6 +35,12 @@ utiny ut = 255;       // 8bit: 0 to 255
 ushort us = 65535;    // 16bit: 0 to 65535
 uint ui = 100;        // 32bit: 0 to 2^32-1
 ulong ul = 2000000;   // 64bit: 0 to 2^64-1
+
+// Digit separator underscores (v0.17.0): usable in every base and fraction part
+int million = 1_000_000;
+int mask = 0b1010_1010;
+long color = 0xFF_FF_FF as long;
+double pi_ish = 3.141_592;
 ```
 
 ### Floating Point Types
@@ -47,6 +53,8 @@ double d = 3.14159;   // 64bit double precision
 ufloat uf = 2.5;      // 32bit non-negative
 udouble ud = 10.0;    // 64bit non-negative
 ```
+
+Assigning a negative literal to `ufloat`/`udouble` produces a warning (an error with `--strict`). Operations that become negative at runtime are not checked, so validate values where a non-negative guarantee is required.
 
 ### Other Types
 
@@ -76,7 +84,13 @@ int y = 2;
 int z = 3;
 ```
 
-**Note:** Cm does not support type inference (e.g., `var` keyword). Types must always be explicitly specified.
+**Type inference (auto / var):** Use `auto` (or its alias `var`) to infer the type from the initializer. Explicit type annotations remain fully supported.
+
+```cm
+auto x = 42;        // inferred as int
+var name = "Cm";    // inferred as string (var is an alias of auto)
+auto pi = 3.14;     // inferred as double
+```
 
 ---
 
@@ -142,15 +156,26 @@ int main() {
 
 ### Implicit Conversion
 
+Value-preserving widening conversions (`int→long`, `short→int`, `int→double`, `float→double`, ...) happen implicitly.
+
 ```cm
 int i = 10;
-double d = i;    // int -> double (OK)
+double d = i;    // int -> double (OK: widening)
+long l = i;      // int -> long (OK: widening)
+```
 
+Narrowing conversions that may lose information (`double→int`, `long→int`, `int→short`, ...) and sign-changing conversions (`int→uint`, ...) produce a warning (an error under `check/lint --strict`).
+The diagnostic applies uniformly to variable declarations, assignments, and returns, as well as function arguments, array literal elements, and struct field initializers.
+Literals that fit the declared type (`short s = 5;`, `float f = 2.5;`) and `uint`/`usize`→`int` (for the `len()`/`sizeof` result idiom) are exempt.
+
+```cm
 double pi = 3.14;
-// int x = pi;   // double -> int (Precision loss)
+// int x = pi;   // double -> int: narrowing warning (suggests adding 'as')
 ```
 
 ### Explicit Conversion (Cast)
+
+Use `as` to state the narrowing intent explicitly.
 
 ```cm
 double pi = 3.14159;

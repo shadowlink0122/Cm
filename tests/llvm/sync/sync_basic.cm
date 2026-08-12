@@ -17,9 +17,11 @@ struct RawMutex {
     long[8] _opaque;
 }
 
-// RawRwLock = long[8] (pthread_rwlock_tを格納するバッファ)
+// RawRwLock = pthread_rwlock_t を格納するバッファ
+// pthread_rwlock_t は macOS で200バイト（Linuxは56バイト）。long[8]=64バイトでは
+// rwlock_init/lock がバッファ外へ書き込みstackを破壊しSIGILLになるため256バイト確保する。
 struct RawRwLock {
-    long[8] _opaque;
+    long[32] _opaque;
 }
 
 int main() {

@@ -49,6 +49,23 @@ int main() {
 
 ---
 
+## Relative-Path Imports
+
+Local modules are imported by a path relative to the current file. `./` refers to the same directory, `../` to the parent directory, and multi-level parent references such as `../../` also work (v0.17.0; previously only a single `../` was accepted and deeper paths were a syntax error):
+
+```cm
+import ./utils;              // utils.cm in the same directory
+import ../shared/helper;     // shared/helper.cm under the parent directory
+import ../../lib/consts;     // lib/consts.cm two levels up (v0.17.0)
+
+int main() {
+    int r = twice(MAGIC);    // exported function/const from ../../lib/consts.cm
+    return 0;
+}
+```
+
+---
+
 ## Wildcard Imports
 
 Import everything from a module using `*`.
@@ -204,6 +221,26 @@ import std::io::println;
 ```cm
 // Error: internal_helper is not exported
 import ./utils::internal_helper;
+// → function 'internal_helper' selected by import is not exported from './utils.cm'
+```
+
+**Since v0.17.0, selectively importing a non-exported function is a compile error** (previously it was only a warning).
+Add `export` to the definition of functions you want to expose, or list them in an export list (`export { fn1, fn2 };`).
+Type definitions (struct / enum / const / typedef) remain transparently accessible.
+
+### ❌ Importing the Same Symbol from Multiple Modules
+
+Importing the same symbol name from different modules is ambiguous and is rejected (since v0.17.0; previously the first import silently won).
+
+```cm
+// Error: 'compute' comes from two modules
+import ./a::{compute};
+import ./b::{compute};
+// → symbol 'compute' is imported from both './a.cm' and './b.cm' and is ambiguous
+
+// Correct: disambiguate with an item alias
+import ./a::{compute};
+import ./b::{compute as compute_b};
 ```
 
 ---

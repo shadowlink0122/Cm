@@ -109,6 +109,7 @@ Note that **constructor overloading** IS supported via the `overload self(...)` 
 ## Default Arguments
 
 You can set default values for parameters. If omitted during the call, the default value is used.
+A default value expression can be a literal, a function call, or a global variable, but it cannot reference other parameters of the same function (default arguments are evaluated at the call site before parameters are bound, so `int f(int a, int b = a)` is a compile error; v0.17.0).
 
 ```cm
 void log(string message, int level = 1) {
@@ -153,22 +154,18 @@ Details are explained in [Structs](../types/structs.html) and [Interfaces](../ty
 
 ## Common Mistakes
 
-### ❌ Forgetting overload Keyword
+### ❌ Defining free functions with the same name
+
+Since free-function overloading is not supported, defining multiple functions with the same name is a compile error.
 
 ```cm
-int foo(int x) { ... }
-// int foo(double x) { ... } // Error: overload keyword required
-overload int foo(double x) { ... } // OK
+int foo(int x) { return x; }
+// double foo(double x) { return x; }
+// error: function 'foo' is already defined with a different signature
+//        (free-function overloading is not supported; use a different name)
 ```
 
-### ❌ Overloading only on Return Type
-
-Overloading must be distinguished by parameters.
-
-```cm
-int bar(int x) { ... }
-// overload double bar(int x) { ... } // Error: Same parameters
-```
+Use distinct names per type (e.g. `foo_int` / `foo_double`). Constructors can be overloaded with `overload self(...)` (see [Structs](../types/structs.html)).
 
 ---
 
@@ -200,7 +197,7 @@ int main() {
 ## Next Steps
 
 ✅ Can define and call functions  
-✅ Understand how to use overloading  
+✅ Understand that free-function overloading is not supported  
 ✅ Can use default arguments  
 ⏭️ Next, learn about [Arrays](arrays.html)
 

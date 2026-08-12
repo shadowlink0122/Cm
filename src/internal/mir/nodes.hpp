@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/span.hpp"
+#include "internal/base/source/span.hpp"
 #include "internal/hir/nodes.hpp"
 #include "internal/hir/types.hpp"
 #include "internal/syntax/lexer/token.hpp"
@@ -226,6 +226,15 @@ struct MirRvalue {
         hir::TypePtr target_type;
         // ユニオン型の実行時型判別 (expr is Type)。trueならタグ比較のboolを返す
         bool check_only = false;
+        // インターフェースupcast（具象→interfaceのfat pointer構築）。
+        // 非空なら具象構造体名で、target_typeのinterfaceへvtableを引いてfat pointerを組む。
+        // バックエンドのassign/引数認識ヒューリスティックを廃し、MIRの構築物として一意に表現する（coercion第2段）
+        std::string iface_concrete;
+        // operandが具象構造体へのポインタ（Shape* p = &sq 経路）。falseは値upcast
+        bool iface_from_pointer = false;
+        // 値upcastのペイロードをヒープへ実体化（boxing）してから包む（Q3: 戻り値経由のダングリング防止）。
+        // malloc不能なベアメタルnoStdターゲットではバックエンドがスキップしてよい
+        bool iface_boxed = false;
     };
 
     struct FormatConvertData {
@@ -246,6 +255,10 @@ struct MirRvalue {
     static MirRvaluePtr ref(MirPlace place, bool is_mutable);
     static MirRvaluePtr cast(MirOperandPtr operand, hir::TypePtr target_type,
                              bool check_only = false);
+    // インターフェースupcast構築（fat pointer）。値upcastはboxed指定可・ポインタupcastはfrom_pointer=true
+    static MirRvaluePtr iface_upcast(MirOperandPtr operand, hir::TypePtr iface_type,
+                                     const std::string& concrete_name, bool from_pointer,
+                                     bool boxed);
 };
 
 // ============================================================
@@ -343,6 +356,11 @@ struct MirTerminator {
         MirOperandPtr discriminant;
         std::vector<std::pair<int64_t, BlockId>> targets;
         BlockId otherwise;
+        // SVターゲット専用（SV-N3）: don't-careビットマスク（targetsと同順。空なら全件が完全一致・-1は完全一致）。
+        // 判定は先頭から順に (discriminant & mask) == value（matchの先勝ち意味論）。定数評価するパスはこの規則で判定すること
+        std::vector<int64_t> target_masks;
+        // SVターゲット専用（SV-N3）: case修飾（0=既定(unique)・1=priority・2=unique0。#[sv::priority]/#[sv::unique0]由来）
+        uint8_t sv_case_modifier = 0;
     };
 
     struct CallData {
@@ -440,6 +458,7 @@ struct MirFunction {
     bool is_export = false;    // エクスポートされているか
     bool is_extern = false;    // extern "C" 関数か
     bool is_variadic = false;  // 可変長引数（FFI用）
+    bool is_inline = false;    // inline修飾子（LLVMのinlinehint属性へ伝搬する）
     bool is_async = false;     // async関数（JSバックエンド用）
     bool is_always = false;  // always修飾子（SVバックエンド用: always_ff/always_comb）
     // SVバックエンド: always ブロックの種別
@@ -476,9 +495,11 @@ struct MirFunction {
 struct MirStructField {
     std::string name;
     hir::TypePtr type;
-    uint32_t offset;                      // バイトオフセット（将来の最適化用）
     std::vector<std::string> attributes;  // フィールド属性（sv::param, output 等）
     std::string default_value_str;        // デフォルト値の文字列表現（SV用）
+    // 注: バイトオフセットは保持しない。レイアウト（サイズ・アライメント・オフセット）は
+    // LoweringContext::layout_size/layout_align とLLVMのDataLayoutが唯一の情報源であり、
+    // ここへ複製すると二重管理で食い違う（M13）
 };
 
 struct MirStruct {
@@ -487,10 +508,10 @@ struct MirStruct {
     std::string source_file;  // 元ソースファイルパス（モジュール分割用）
     bool is_export = false;   // エクスポートされているか
     std::vector<MirStructField> fields;
-    uint32_t size;   // 構造体全体のサイズ
-    uint32_t align;  // アライメント要求
+    // 注: 構造体全体のサイズ・アライメントは保持しない（MirStructFieldのoffsetと同じ理由。M13）
     bool is_css = false;
-    bool is_extern = false;  // extern struct（外部HWモジュール）
+    bool is_extern = false;               // extern struct（外部HWモジュール）
+    std::vector<std::string> attributes;  // 構造体属性（sv::packed/sv::unpacked 等）
 
     // インターフェース実装情報
     std::vector<std::string> implemented_interfaces;

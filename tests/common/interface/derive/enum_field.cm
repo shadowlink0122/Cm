@@ -1,0 +1,25 @@
+// 回帰(R21): 値enumフィールドを持つ構造体のderive（Eq/Hash/Debug/Display）はenumをint値として扱い動作する
+// （従来はDebug/Hashが生成コードで.debug()/.hash()を呼びUnknown method for type 'int'で失敗していた）
+import std::io::println;
+
+enum Color {
+    Red,
+    Green = 5,
+}
+
+struct S with Eq, Hash, Debug, Display {
+    Color c;
+    int n;
+}
+
+int main() {
+    S a = { c: Color::Green, n: 9 };
+    S b = { c: Color::Green, n: 9 };
+    S d = { c: Color::Red, n: 9 };
+    println(a.debug());
+    println(a.toString());
+    println("eq_ab={a == b}");
+    println("eq_ad={a == d}");
+    println("heq={a.hash() == b.hash()}");
+    return 0;
+}

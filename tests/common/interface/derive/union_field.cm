@@ -1,0 +1,16 @@
+import std::io::println;
+
+// 宣言フィールドのユニオンEq: HIRのユニオン等値脱糖（タグ+ペイロード比較）が効き正常動作する。
+// ユニオンを「型引数」に渡す特殊化（Box<IU>）は診断で拒否される（errors/derive/generic_union_arg）
+typedef IU = int | string;
+struct Holder with Eq {
+    IU v;
+}
+int main() {
+    Holder a = { v: 1 };
+    Holder b = { v: 1 };
+    Holder c = { v: 2 };
+    println("{a == b}");
+    println("{a == c}");
+    return 0;
+}

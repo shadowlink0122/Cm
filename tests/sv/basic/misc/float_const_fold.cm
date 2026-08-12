@@ -1,0 +1,19 @@
+//! platform: sv
+//! test: cycles=2 -> scaled=50, offset=35, big=5250000
+
+// 関数本体内の定数floatチェーン畳み込み: const宣言と同じ「整数定数×浮動小数リテラル」の式を
+// 関数本体に書いてもSV004にならず整数定数へ畳まれること（実行時値が絡むfloatは従来どおりSV004）
+#[input] posedge clk;
+#[output] uint scaled = 0;
+#[output] uint offset = 0;
+#[output] uint big = 0;
+
+const uint LIMIT = 100;
+const uint CLK_FREQ = 210000000 / 4;
+
+async void t(posedge clk) {
+    uint s = LIMIT * 0.5;
+    scaled = s;
+    offset = LIMIT * 0.25 + 10;
+    big = CLK_FREQ * 0.1;
+}

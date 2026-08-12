@@ -1,0 +1,51 @@
+// std::env - 環境変数・コマンドライン引数・実行パス（native/JITバックエンド）
+// JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
+module std.env;
+
+use libc {
+    void* getenv(string name);
+    int setenv(string name, string value, int overwrite);
+    void* cm_current_exe();
+    int cm_arg_count();
+    void* cm_arg_get(int i);
+}
+
+/// 環境変数を取得する。未設定ならNone
+export Option<string> get(string name) {
+    void* p = getenv(name);
+    if (p == 0 as void*) {
+        return Option::None;
+    }
+    // getenvの戻りは環境領域への借用ポインタのため、連結で所有コピーを作って返す
+    const string borrowed = (p as char*) as string;
+    return Option::Some("" + borrowed);
+}
+
+/// 環境変数を設定する（既存値は上書き）。成功したらtrue
+export bool set(string name, string value) {
+    return setenv(name, value, 1) == 0;
+}
+
+/// 実行ファイル自身の絶対パスを返す（取得できなければ空文字列）
+export string current_exe() {
+    void* p = cm_current_exe();
+    if (p == 0 as void*) {
+        return "";
+    }
+    // ランタイムの静的バッファへの借用ポインタなので所有コピーを作って返す
+    return "" + ((p as char*) as string);
+}
+
+/// コマンドライン引数を返す（先頭は実行ファイル名/スクリプトパス）。未初期化なら空
+export string[] args() {
+    string[] result = [];
+    const int n = cm_arg_count();
+    for (int i = 0; i < n; i++) {
+        void* p = cm_arg_get(i);
+        if (p == 0 as void*) {
+            break;
+        }
+        result.push("" + ((p as char*) as string));
+    }
+    return result;
+}

@@ -49,6 +49,23 @@ int main() {
 
 ---
 
+## 相対パスのインポート
+
+自作モジュールはファイル位置からの相対パスでインポートします。`./` は同じディレクトリ、`../` は親ディレクトリを参照し、`../../` 以上の多段の親ディレクトリ参照も書けます（v0.17.0。従来は一段の `../` までで、多段は構文エラーでした）:
+
+```cm
+import ./utils;              // 同じディレクトリの utils.cm
+import ../shared/helper;     // 親ディレクトリ配下の shared/helper.cm
+import ../../lib/consts;     // 2段上の lib/consts.cm（v0.17.0）
+
+int main() {
+    int r = twice(MAGIC);    // ../../lib/consts.cm のexport関数・定数
+    return 0;
+}
+```
+
+---
+
 ## ワイルドカードインポート
 
 モジュール内のすべてをインポートできます：
@@ -214,9 +231,29 @@ import std::io::println;
 ```cm
 // ❌ エラー: internal_helper は export されていない
 import ./utils::internal_helper;
+// → function 'internal_helper' selected by import is not exported from './utils.cm'
 
 // ✅ 正しい: export されたシンボルのみ使用可能
 import ./utils::add;
+```
+
+**v0.17.0から非export関数の選択importはコンパイルエラーになりました**（従来は警告のみ）。
+公開したい関数には定義に `export` を付けるか、exportリスト（`export { fn1, fn2 };`）へ追加してください。
+struct / enum / const / typedef などの型定義は従来どおり透過的に参照できます。
+
+### 3. 同名シンボルの多重import
+
+異なるモジュールから同名シンボルを取り込むと曖昧なためエラーになります（v0.17.0から。従来は先勝ちで黙って解決されていました）。
+
+```cm
+// ❌ エラー: 'compute' が2つのモジュールから来て曖昧
+import ./a::{compute};
+import ./b::{compute};
+// → symbol 'compute' is imported from both './a.cm' and './b.cm' and is ambiguous
+
+// ✅ 正しい: エイリアスで公開名を分ける
+import ./a::{compute};
+import ./b::{compute as compute_b};
 ```
 
 ---
@@ -226,6 +263,7 @@ import ./utils::add;
 | 構文 | 用途 |
 |------|------|
 | `import mod::func;` | 単一シンボル |
+| `import ../../lib/mod;` | 相対パス（多段の親参照可） |
 | `import mod::*;` | 全シンボル |
 | `import mod as alias;` | エイリアス |
 | `import mod::{a, b};` | 選択的 |

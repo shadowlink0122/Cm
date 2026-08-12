@@ -1,0 +1,15 @@
+// native part-select（SV-N1）: 読み書きがshift+maskでなくSVのpart-select構文で出力される
+#[input] bool clk = false;
+#[input] bit[16] din;
+#[input] uint i;
+#[output] bit[8] hi_out = 0;
+#[output] bit[4] nib = 0;
+#[output] bit[4] dn = 0;
+#[output] bit[16] word = 0;
+
+void split(posedge clk) {
+    hi_out = din[15:8];
+    nib = word[i +: 4];
+    dn = word[7 -: 4];
+    word[7:4] = din[3:0];
+}

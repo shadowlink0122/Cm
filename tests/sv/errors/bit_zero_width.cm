@@ -1,0 +1,7 @@
+//! platform: sv
+// 回帰(R16): bit[0]（幅0）は不正SV（0'd0）を生成するため診断で拒否
+#[output] bit[0] z = 0;
+
+void f() {
+    z = 0;
+}

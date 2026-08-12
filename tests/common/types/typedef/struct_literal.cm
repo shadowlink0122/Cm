@@ -1,0 +1,33 @@
+import std::io::println;
+// typedef別名での構造体リテラル構築（B8）
+struct Point {
+    int x;
+    int y;
+}
+
+struct Outer {
+    Point p;
+    int w;
+}
+
+typedef P = Point;
+typedef O = Outer;
+
+int main() {
+    // 単純な別名リテラル
+    P a = P { x: 1, y: 2 };
+    println("{a.x}");
+    println("{a.y}");
+
+    // ネスト構造体を別名リテラルで構築
+    O o = O { p: P { x: 10, y: 20 }, w: 30 };
+    println("{o.p.x}");
+    println("{o.p.y}");
+    println("{o.w}");
+
+    // 別名注釈と基底名リテラルの併用（従来動作の回帰確認）
+    P b = Point { x: 5, y: 6 };
+    println("{b.x}");
+    println("{b.y}");
+    return 0;
+}

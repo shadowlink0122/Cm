@@ -1,0 +1,13 @@
+//! platform: ts
+// undefined相互運用: JS関数が返すundefinedをCm側で受ける（省略可能な値の表現）
+
+use "react" {
+    string maybeValue(bool flag);
+}
+
+int main() {
+    string present = maybeValue(true);
+    string absent = maybeValue(false);
+    println("present={present} absent={absent}");
+    return 0;
+}

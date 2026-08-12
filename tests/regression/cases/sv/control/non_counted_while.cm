@@ -1,0 +1,12 @@
+#[input] bool clk = false;
+#[output] uint sum = 0;
+
+void accumulate(posedge clk) {
+    uint total = 0;
+    uint i = 1;
+    while (i < 100) {
+        total = total + i;
+        i = i * 2;
+    }
+    sum = total;
+}

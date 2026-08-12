@@ -1,0 +1,11 @@
+// ドメインモデル: ストア層・ビュー・ルータで共有する型。
+// 静的型付けのCm structが全層を貫く型になり、--target=ts 出力では export interface Task になる。
+// FFIも外部ファイルも使わない純粋なCmなので、どのバックエンドでも同じ型として利用できる。
+
+module models;
+
+export struct Task {
+    int id;
+    string title;
+    bool done;
+}

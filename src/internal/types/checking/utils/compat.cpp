@@ -3,6 +3,7 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/syntax/ast/convkind.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <algorithm>
@@ -50,7 +51,10 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     }
                 }
                 if (!is_tagged_union) {
-                    return ast::make_int();
+                    // Q5: int解決でも元のenum名をnameへ保持する（表示・互換判定・codegenはkind駆動で不変。メソッド解決がenum名でtype_methods_を引けるようになる）
+                    auto int_type = ast::make_int();
+                    int_type->name = type->name;
+                    return int_type;
                 }
             } else {
                 // type_argsなし: ペイロード付きバリアントを持つenum（IntResult等）はTagged Unionとして保持し、値enum（従来型）のみintへ解決する（一律int化すると関数返却・match束縛でペイロードが失われる）
@@ -65,7 +69,10 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
                     }
                 }
                 if (!is_tagged_union) {
-                    return ast::make_int();
+                    // Q5: 同上（値enumのint解決でenum名を保持）
+                    auto int_type = ast::make_int();
+                    int_type->name = type->name;
+                    return int_type;
                 }
             }
         }
@@ -77,6 +84,37 @@ ast::TypePtr TypeChecker::resolve_typedef(ast::TypePtr type) {
         }
     }
 
+    return type;
+}
+
+ast::TypePtr TypeChecker::resolve_typeof(const ast::TypePtr& type) {
+    if (!type) {
+        return type;
+    }
+    // typeof(式)型（__typeof__ スタブ）: 被演算式を型検査し具体型を返す（従来は未解決の Inferred のままだった）
+    if (type->kind == ast::TypeKind::Inferred && type->name == "__typeof__" &&
+        type->typeof_operand) {
+        // メタ情報取得のため未初期化チェックの対象外（sizeof/typeofと同様に使用マークのみ）
+        if (auto* id = type->typeof_operand->as<ast::IdentExpr>()) {
+            mark_variable_initialized(id->name);
+        }
+        auto inferred = infer_type(*type->typeof_operand);
+        if (inferred && inferred->kind != ast::TypeKind::Error) {
+            return inferred;
+        }
+        return type;  // 解決不能なら従来どおりスタブのまま（後段で expected 型不一致として顕在化する）
+    }
+    // ポインタ/参照/配列の要素側 typeof（(typeof(x))* 等）も再帰解決する。原型は破壊せずコピーへ差し替える
+    if ((type->kind == ast::TypeKind::Pointer || type->kind == ast::TypeKind::Reference ||
+         type->kind == ast::TypeKind::Array) &&
+        type->element_type) {
+        auto resolved_elem = resolve_typeof(type->element_type);
+        if (resolved_elem != type->element_type) {
+            auto copy = std::make_shared<ast::Type>(*type);
+            copy->element_type = resolved_elem;
+            return copy;
+        }
+    }
     return type;
 }
 
@@ -98,10 +136,30 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     if (a->kind == ast::TypeKind::Error || b->kind == ast::TypeKind::Error)
         return true;
 
-    // ユニオン型への代入互換性チェック
+    // typedefエイリアスは実体で比較する（従来はlet等の呼び出し側が個別にresolve_typedefしており、
+    // 引数検査など未解決のまま渡すサイトで typedef IntOrStr = int | string 型パラメータへの変種渡しが誤拒否されていた）
+    {
+        auto ra = resolve_typedef(a);
+        if (ra) {
+            a = ra;
+        }
+        auto rb = resolve_typedef(b);
+        if (rb) {
+            b = rb;
+        }
+    }
+
+    // 変換種のディスパッチは挿入側（MIR loweringのcoerce_to_expected）と同じ分類表から導く
+    // （受理と挿入の同表化。新しい変換種の追加はconvkind::classifyの1箇所で受理・挿入の両方へ届く）
+    ast::convkind::Env conv_env;
+    conv_env.resolve = [this](const ast::TypePtr& t) { return resolve_typedef(t); };
+    conv_env.is_interface = [this](const std::string& n) { return interface_names_.count(n) > 0; };
+    const auto conv_kind = ast::convkind::classify(a, b, conv_env);
+
+    // ユニオン型への代入互換性チェック（受理規則: いずれかの変種と互換）
     // 例: int | null x = null; → a=Union{int,null}, b=Void
     // 例: int | null x = 42;   → a=Union{int,null}, b=Int
-    if (a->kind == ast::TypeKind::Union) {
+    if (conv_kind == ast::convkind::Kind::UnionWrap || a->kind == ast::TypeKind::Union) {
         auto* union_type = static_cast<const ast::UnionType*>(a.get());
         if (union_type) {
             // nullリテラル（Void型）の代入: Nullバリアントがあれば許可
@@ -173,15 +231,11 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
     a = resolve_typedef(a);
     b = resolve_typedef(b);
 
-    // インターフェース互換性チェック
-    if (a->kind == ast::TypeKind::Struct && interface_names_.count(a->name)) {
-        if (b->kind == ast::TypeKind::Struct && !interface_names_.count(b->name)) {
-            auto it = impl_interfaces_.find(b->name);
-            if (it != impl_interfaces_.end()) {
-                if (it->second.count(a->name)) {
-                    return true;
-                }
-            }
+    // インターフェースupcast（受理規則: 具象構造体がinterfaceを実装していること）
+    if (conv_kind == ast::convkind::Kind::IfaceValueUpcast) {
+        auto it = impl_interfaces_.find(b->name);
+        if (it != impl_interfaces_.end() && it->second.count(a->name)) {
+            return true;
         }
     }
 
@@ -234,6 +288,17 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
             // 要素型の互換性をチェック
             return types_compatible(a->element_type, b->element_type);
         }
+        // 固定長配列同士の要素数不一致を拒否する（多次元配列の行コピー int[3] b = a[1]（実体int[2]）が
+        // 無診断でゴミ値になっていたため）。空リテラル（要素数0）による初期化と、
+        // 固定長↔スライス（どちらかが未サイズ）の変換経路は従来どおり許容する。
+        // 要素型の厳格比較はジェネリック互換（T[]等）への影響が大きいため従来のまま
+        if (a->kind == ast::TypeKind::Array) {
+            if (a->array_size.has_value() && b->array_size.has_value() && *b->array_size != 0 &&
+                *a->array_size != *b->array_size) {
+                return false;
+            }
+            return true;
+        }
         // 関数ポインタ型の互換性チェック
         if (a->kind == ast::TypeKind::Function) {
             if (!types_compatible(a->return_type, b->return_type)) {
@@ -252,8 +317,8 @@ bool TypeChecker::types_compatible(ast::TypePtr a, ast::TypePtr b) {
         return true;
     }
 
-    // 数値型間の暗黙変換
-    if (a->is_numeric() && b->is_numeric()) {
+    // 数値型間の暗黙変換（受理の可否はZ5の数値ポリシー表が別途診断する。同kindは上の同型判定で受理済み）
+    if (conv_kind == ast::convkind::Kind::NumericImplicit) {
         return true;
     }
 
@@ -431,8 +496,8 @@ bool TypeChecker::check_literal_assignment(ast::TypePtr target_type, ast::Expr* 
             allowed_list += allowed_values[i];
         }
 
-        error(span, "Invalid literal value " + actual_value +
-                        " for literal type. Allowed values: " + allowed_list);
+        error(span, i18n::msgf(i18n::MsgId::TcInvalidLiteralValueLiteralType, actual_value,
+                               allowed_list));
         return false;
     }
 
@@ -564,6 +629,30 @@ bool TypeChecker::is_valid_type(ast::TypePtr type) {
             if (struct_defs_.count(type->name) > 0 || interface_names_.count(type->name) > 0 ||
                 enum_names_.count(type->name) > 0 || typedef_defs_.count(type->name) > 0 ||
                 generic_context_.has_type_param(type->name)) {
+                // ジェネリック型引数の個数を検証する（H15）。
+                // 型引数が明示されているのに定義のジェネリックパラメータ数と食い違う場合は診断を出す。
+                // （型引数なしの使用は推論の余地があるため対象外にして誤検出を避ける）
+                auto sd_it = struct_defs_.find(type->name);
+                if (sd_it != struct_defs_.end() && sd_it->second && !type->type_args.empty() &&
+                    type->type_args.size() != sd_it->second->generic_params.size()) {
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TypeGenericArgumentCountMismatch, type->name,
+                                     std::to_string(sd_it->second->generic_params.size()),
+                                     std::to_string(type->type_args.size())));
+                }
+                // H15: 各型引数の存在を再帰検証する（Pair<int, Nope> の Nope 等を検出）
+                for (const auto& arg : type->type_args) {
+                    if (arg && !is_valid_type(arg)) {
+                        error(current_span_, i18n::msgf(i18n::MsgId::TypeUnknownTypeArgument,
+                                                        ast::type_to_string(*arg), type->name));
+                    }
+                }
+                // R21: derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
+                // （宣言時はTのため検査不能。従来はスライス型引数のEqが生バイナリ比較の無言誤値、ユニオン型引数がリンク失敗へ落ちていた）
+                if (sd_it != struct_defs_.end() && sd_it->second && !type->type_args.empty() &&
+                    type->type_args.size() == sd_it->second->generic_params.size()) {
+                    validate_derive_instantiation(*sd_it->second, type);
+                }
                 return true;
             }
             // 名前空間内では非修飾名を「現在の名前空間::名前」として解決する（外側の名前空間へ向かって順に探索）。解決できた場合は型名を修飾名へ書き換え、HIR/MIR/コード生成が一貫した名前を見るようにする

@@ -19,6 +19,7 @@ For the growable slice type `T[]`, see [Slices](../advanced/slices.html).
 - [Higher-Order Methods](#higher-order-methods)
 - [Sorting and First/Last](#sorting-and-firstlast)
 - [Arrays of Structs](#arrays-of-structs)
+- [Element Type Checking](#element-type-checking)
 - [Pointer Decay](#pointer-decay)
 - [for-in Loops](#for-in-loops)
 - [Multidimensional Arrays](#multidimensional-arrays)
@@ -35,6 +36,18 @@ int[3] values = [1, 2, 3];
 // Partial initialization (rest are 0)
 int[5] partial = [1, 2];  // [1, 2, 0, 0, 0]
 ```
+
+Array sizes may also be compile-time constant integer expressions (folded at compile time), including expressions with const names and `sizeof`.
+
+```cm
+const int N = 2;
+int[2 + 1] a = [1, 2, 3];        // same as int[3]
+int[(1 + 2) * 2] b;              // int[6]
+int[N + 1] c;                    // int[3] (arithmetic with const names)
+int[sizeof(int)] d;              // int[4] (sizeof of primitives, pointers, and fixed arrays of them)
+```
+
+Values only known at runtime (such as non-const variables) are a compile error.
 
 ## Element Access
 
@@ -124,6 +137,9 @@ int main() {
 
 Method calls with function arguments can also be used directly inside string interpolation (e.g. `println("{numbers.some(is_even)}")`).
 
+Higher-order methods work for all scalar element widths (tiny/short/int/long/float/double and their unsigned variants), and the result type of `reduce` follows the callback's accumulator type (a `double` sum can be received as `double`).
+Higher-order methods on struct or string elements are js/ts-only (their lowering does not depend on the element type); on native/jit/wasm they are a compile error (they used to return wrong values without any diagnostic).
+
 ## Sorting and First/Last
 
 ```cm
@@ -161,6 +177,75 @@ int main() {
         Point { x: 1, y: 2 },
         Point { x: 3, y: 4 }
     ];
+    return 0;
+}
+```
+
+## Element Type Checking
+
+Every element of an array literal must be compatible with the declared element type. The same rules as variable declarations apply.
+
+```cm
+int main() {
+    // OK: widening from smaller integer types (tiny/short) to int is allowed
+    tiny t = 1;
+    short s = 2;
+    int[3] a = [t, s, 3];
+
+    // OK: an unnamed struct literal is allowed when it matches the element type
+    Point[2] pts = [{ x: 1, y: 2 }, { x: 3, y: 4 }];
+
+    // Error: mixing an incompatible type is a compile error
+    // int[3] bad = [1, "hello", 3];   // cannot assign 'string' to 'int'
+    return 0;
+}
+```
+
+Numeric narrowing (such as `int[] = [3.14]`) is warned about just like in variable declarations, and an explicit `as` cast is recommended.
+
+Multi-dimensional arrays (`int[2][2] = [[...], [...]]`) are checked recursively down to the inner elements.
+
+```cm
+int main() {
+    // OK: matches the element type at every level
+    int[2][2] m = [[1, 2], [3, 4]];
+
+    // Error: an inner element type mismatch is caught too
+    // int[2][2] bad = [[1, 2], ["a", 4]];   // cannot assign 'string' to 'int'
+    return 0;
+}
+```
+
+### void* Arrays for Anything
+
+An array of the generic pointer type `void*` is an escape hatch that is exempt from element type checking. It can hold any pointer; retrieve elements with `auto` and determine the stored type with `typeof`.
+
+```cm
+int main() {
+    int n = 42;
+    string s = "hi";
+    Point p = Point { x: 1, y: 2 };
+
+    // heterogeneous pointers can be stored together
+    void*[3] arr = [&n, &s, &p];
+
+    // retrieve with auto, inspect with typeof, then cast to the proper type
+    auto e0 = arr[0];
+    const string ty = typeof(e0);        // "*void"
+    const int back = *(arr[0] as int*);  // 42
+    return 0;
+}
+```
+
+Function pointers can also be stored in a `void*` array; retrieve one and `as`-cast it back to the function pointer type to call it.
+
+```cm
+int add(int a, int b) { return a + b; }
+
+int main() {
+    void*[1] fns = [&add];
+    int*(int, int) op = fns[0] as int*(int, int);
+    const int r = op(3, 2);  // 5
     return 0;
 }
 ```
@@ -204,14 +289,17 @@ int main() {
 
 ## Multidimensional Arrays
 
+Array suffixes stack from the left: `int[4][3]` means "3 elements of `int[4]`", i.e. a 3-row × 4-column 2D array.
+
 ```cm
 int main() {
-    // 2D array
-    int[3][4] matrix;
+    // 2D array (3 rows of int[4])
+    int[4][3] matrix;
 
     matrix[0][0] = 1;
     matrix[0][1] = 2;
 
+    // outer index selects the row, inner index the column
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 4; j++) {
             matrix[i][j] = i * 4 + j;
@@ -222,6 +310,52 @@ int main() {
     return 0;
 }
 ```
+
+### Extracting Lower-Dimensional Subarrays (v0.17.0+)
+
+Indexing a multidimensional array with fewer indices extracts a subarray as a copy.
+This works with `auto` inference, function parameters / return values, any element type (`double`, `string`, structs, ...), and slices.
+
+```cm
+import std::io::println;
+
+int main() {
+    int[3][3][3] cube;
+    cube[2][1][0] = 7;
+
+    int[3] row = cube[2][1];   // copy out the innermost dimension
+    auto plane = cube[2];      // inferred as int[3][3]
+    println(row[0]);           // 7
+
+    row[0] = 99;               // it is a copy, so cube is unaffected
+    println(cube[2][1][0]);    // 7
+
+    // extracting with a mismatched element count is a type error
+    // int[2] bad = cube[2][1];  // error: expected 'int[2]', got 'int[3]'
+    return 0;
+}
+```
+
+### Element Operations on Multidimensional Slices (v0.17.0+)
+
+You can call methods directly on elements (inner slices) of a variable-length slice via an index receiver.
+
+```cm
+int main() {
+    int[][] rows = [];
+    int[] r0 = [1];
+    rows.push(r0);
+
+    rows[0].push(42);          // push directly to the element slice
+    println(rows[0].len());    // 2
+    println(rows[0][1]);       // 42 (direct multi-index read)
+
+    rows[0].pop();             // pop/delete/clear/len/cap work the same way
+    return 0;
+}
+```
+
+Mixed chains through struct fields (`grid.cells[i].push(v)`) are resolved as well.
 
 ### Performance (since v0.11.0)
 
@@ -244,7 +378,7 @@ Multidimensional arrays are automatically flattened internally for cache localit
 
 ---
 
-**Last Updated:** 2026-07-12
+**Last Updated:** 2026-08-08
 
 ---
 

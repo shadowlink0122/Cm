@@ -1,0 +1,48 @@
+// std::collections::TreeMap<K, V> テスト（平衡二分探索木・全バックエンド共通）。
+import std::io::println;
+import std::collections::treemap::*;
+
+// 構造体キー（with Ord, Eq で順序・等価が自動導出される）
+struct Version with Ord, Eq {
+    int major;
+    int minor;
+}
+
+int main() {
+    // 1. 基本: put/get/contains/size/更新
+    TreeMap<string, int> m();
+    m.put("banana", 2);
+    m.put("apple", 1);
+    m.put("cherry", 3);
+    println("size=" + m.size());
+    println("apple=" + m.get_or("apple", 0));
+    println("cherry=" + m.get_or("cherry", 0));
+    println("has(apple)=" + m.contains("apple"));
+    println("has(x)=" + m.contains("x"));
+    m.put("apple", 100);
+    println("apple_updated=" + m.get_or("apple", 0));
+
+    // 2. 平衡性: ソート済みキーを大量挿入しても高さが対数に収まる（AVL回転）
+    TreeMap<int, int> t();
+    int i = 0;
+    while (i < 100) {
+        t.put(i, i * 2);
+        i = i + 1;
+    }
+    println("t_size=" + t.size());
+    println("t_get50=" + t.get_or(50, 0));
+    println("t_get99=" + t.get_or(99, 0));
+
+    // 3. 構造体キー
+    TreeMap<Version, string> v();
+    Version a = { major: 1, minor: 5 };
+    Version b = { major: 1, minor: 2 };
+    Version c = { major: 2, minor: 0 };
+    v.put(a, "a");
+    v.put(b, "b");
+    v.put(c, "c");
+    Version q = { major: 2, minor: 0 };
+    println("version=" + v.get_or(q, "?"));
+    println("has_b=" + v.contains(b));
+    return 0;
+}

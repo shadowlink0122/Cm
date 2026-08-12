@@ -1,0 +1,19 @@
+//! platform: js
+// 式が生む関数ポインタの直接呼び出し（局所処理調査G4）:
+// fs[0](args)（関数ポインタ配列要素）や getf()(args)（返り値の関数ポインタ）を、一旦変数へ束ねずに直接呼べる。
+// js/ts（構造的lowering）で対応。native/jit/wasm は変数束ねが必要で診断される（indirect_call_expr_native_reject を参照）。
+import std::io::println;
+
+int add(int a, int b) { return a + b; }
+int sub(int a, int b) { return a - b; }
+int*(int, int) getop() { return add; }
+
+int main() {
+    // 関数ポインタ配列要素の直接呼び出し
+    int*(int, int)[] fs = [add, sub];
+    println(fs[0](10, 3));
+    println(fs[1](10, 3));
+    // 返り値の関数ポインタの直接呼び出し
+    println(getop()(4, 5));
+    return 0;
+}

@@ -112,6 +112,11 @@ inline std::string jsTypeName(const hir::Type& type) {
 // JS型のデフォルト値を取得
 inline std::string jsDefaultValue(const hir::Type& type) {
     if (type.is_integer()) {
+        // 64ビット整数はBigInt表現（H5）
+        if (type.kind == TypeKind::Long || type.kind == TypeKind::ULong ||
+            type.kind == TypeKind::ISize || type.kind == TypeKind::USize) {
+            return "0n";
+        }
         return "0";
     }
     if (type.is_floating()) {
@@ -121,6 +126,8 @@ inline std::string jsDefaultValue(const hir::Type& type) {
         case TypeKind::Bool:
             return "false";
         case TypeKind::Char:
+            // charはランタイム上は数値（文字コード）表現。既定値も数値0にする（TS注釈のnumberと一致させる）
+            return "0";
         case TypeKind::String:
         case TypeKind::CString:
             return "\"\"";
@@ -136,8 +143,10 @@ inline std::string jsDefaultValue(const hir::Type& type) {
                 if (type.element_type->kind == TypeKind::Struct ||
                     type.element_type->kind == TypeKind::Array) {
                     // 構造体・配列（多次元）の要素：要素ごとに新しいインスタンスを生成（fillは同一参照を共有するため多次元で全行がエイリアスになる）
-                    return "Array.from({length: " + std::to_string(*type.array_size) + "}, () => " +
-                           elemDefault + ")";
+                    // 要素は必ず括弧で包む: () => {} はアロー本体の空ブロックと解釈されundefinedを返すため、
+                    // 構造体配列の各要素がundefinedになりフィールド代入(nodes[i].x=...)が落ちる
+                    return "Array.from({length: " + std::to_string(*type.array_size) +
+                           "}, () => (" + elemDefault + "))";
                 } else {
                     // プリミティブ型の配列：fillで初期化
                     return "Array(" + std::to_string(*type.array_size) + ").fill(" + elemDefault +

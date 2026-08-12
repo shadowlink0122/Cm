@@ -71,6 +71,12 @@ inline int64_t normalize_int(int64_t value, const hir::TypePtr& type) {
     return static_cast<int64_t>(v);
 }
 
+// シフト量マスク用のビット幅を返す（型不明は従来挙動の64とする。V8のmod幅シフト意味論）
+inline uint64_t type_bit_width(const hir::TypePtr& type) {
+    int width = integer_bit_width(type);
+    return width > 0 ? static_cast<uint64_t>(width) : 64;
+}
+
 // 比較・除算・剰余・右シフトを符号なしで実行すべきか（どちらかのオペランドが符号なし型なら符号なし演算）
 inline bool use_unsigned_op(const hir::TypePtr& lhs_type, const hir::TypePtr& rhs_type) {
     return is_unsigned_type(lhs_type) || is_unsigned_type(rhs_type);

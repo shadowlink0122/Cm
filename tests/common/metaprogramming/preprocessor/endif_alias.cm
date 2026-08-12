@@ -1,0 +1,30 @@
+import std::io::println;
+// R6回帰: #endifを#endの別名として認識する（従来は非認識で、偽条件ブロックが閉じないままEOFまで後続コードを無診断で飲み込んでいた）
+
+#ifdef __NEVER_DEFINED__
+    int hidden() { return 999; }
+#endif
+
+#ifdef __CM__
+    int visible() { return 1; }
+#endif
+
+#ifndef __NEVER_DEFINED__
+    int also_visible() { return 2; }
+#else
+    int not_this() { return 3; }
+#endif
+
+// ネスト: 外側#endif・内側#end の混在
+#ifdef __CM__
+    #ifdef __NEVER_DEFINED__
+        int nested_hidden() { return 4; }
+    #end
+    int nested_visible() { return 5; }
+#endif
+
+int main() {
+    println("{visible()} {also_visible()} {nested_visible()}");
+    println("after");
+    return 0;
+}

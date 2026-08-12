@@ -127,6 +127,35 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 > （v0.16.0で対応。[モジュール階層](hierarchy.html)参照）。
 > 通常の `const` は従来どおり `localparam` になります。
 
+### 派生定数式とfloat式の`$rtoi`変換（v0.17.0）
+
+const宣言の右辺には他のconstを参照する算術式を書けます（`H_TOTAL = H_ACTIVE + H_FP + H_SYNC + H_BP` 等）。整数宣言へのfloat式（`CLK_FREQ * 0.02` 等）は `$rtoi()` で明示変換して出力され、ゼロ方向切り捨て（Cmの縮小変換と同じ意味論）になります（従来は生のreal式のままでVerilatorのREALCVT警告が出ていました）:
+
+```cm
+const uint CLK_FREQ = 210000000 / 4;
+const uint DEBOUNCE_LIMIT = CLK_FREQ * 0.02;
+```
+
+```systemverilog
+localparam logic [31:0] CLK_FREQ = 32'd52500000;
+localparam logic [31:0] DEBOUNCE_LIMIT = $rtoi((CLK_FREQ * 0.020000));
+```
+
+### 関数本体の定数float式の整数畳み込み（v0.17.0）
+
+同じ「整数定数×浮動小数リテラル」の式を関数本体に書いた場合は、値が全て定数のfloat演算チェーンがコンパイル時に整数定数へ畳まれ、SV004にはなりません（従来はconst宣言でだけ展開でき、関数本体では拒否される非対称がありました）:
+
+```cm
+const uint LIMIT = 100;
+
+async void t(posedge clk) {
+    uint s = LIMIT * 0.5;   // → scaled <= 32'd50; に畳まれる
+    scaled = s;
+}
+```
+
+実行時値が絡むfloat式は従来どおり `error[SV004]` で拒否されます。double→uintの暗黙縮小警告が出るため、警告を消すには `(LIMIT * 0.5) as uint` と明示します。
+
 ---
 
 ## SV属性

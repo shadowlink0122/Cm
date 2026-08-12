@@ -1,8 +1,8 @@
 #pragma once
 
 #include "context.hpp"
-#include "internal/mir/mir_splitter.hpp"
 #include "internal/mir/nodes.hpp"
+#include "internal/mir/splitter.hpp"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
@@ -42,8 +42,21 @@ class MIRToLLVM {
     std::unordered_map<std::string, llvm::GlobalVariable*> globals;
     std::unordered_map<std::string, llvm::Function*> functions;
 
+    // 長さヘッダ付き文字列リテラルを発行し、データ先頭（+16）ポインタを返す（H9第4段）。
+    // {u32 magic, u32 len, u32 magic2, u32 reserved, [N+1 x i8]} のグローバル定数として配置し、
+    // ランタイムのcm_string_byte_lenがリテラルでもO(1)で長さを取得できるようにする
+    llvm::Constant* createHeaderedStringLiteral(const std::string& str);
+
     // グローバル変数マッピング（MirGlobalVar名 -> LLVM GlobalVariable）
     std::unordered_map<std::string, llvm::GlobalVariable*> globalVariables;
+
+    // 初期化子をinitializerへ定数畳み込み済みのconstグローバル名（B1修正）。
+    // mainエントリのMIRに残る初期化storeはrodataへの書き込みになるため、convertAssignStatementでこの集合を参照してスキップする
+    std::unordered_set<std::string> constFoldedGlobals;
+
+    // constグローバルの初期化式（HIR）をLLVM定数へ畳み込む（B1修正、translate/program.cpp）。
+    // リテラル・単項マイナス・配列リテラル・構造体リテラルの入れ子を型主導で評価し、畳み込めない場合はnullptrを返す
+    llvm::Constant* foldConstInitExpr(const hir::HirExpr& expr, const hir::TypePtr& type);
 
     // static変数マッピング（関数名_変数名 -> グローバル変数）
     std::unordered_map<std::string, llvm::GlobalVariable*> staticVariables;
@@ -72,6 +85,7 @@ class MIRToLLVM {
     // ターゲット情報キャッシュ
     bool isWasmTarget = false;  // WASMターゲットかどうか（境界チェックで使用）
     bool isUefiTarget = false;  // UEFIターゲットかどうか（Win64 ABI適用に使用）
+    bool isHostedTarget = false;  // OSホスト上のnative/jitか（mainのargc/argv受け取りに使用）
 
    public:
     /// コンストラクタ
@@ -131,6 +145,12 @@ class MIRToLLVM {
     void generateRegularCall(const mir::MirTerminator::CallData& callData,
                              const std::string& funcName, bool isIndirectCall,
                              llvm::Value* funcPtrValue, std::vector<llvm::Value*>& args);
+
+    /// 高階クロージャ呼び出しの環境化（C6、terminator/invoke.cpp）:
+    /// __builtin_array_map/filter*_closureの可変個キャプチャ引数をスタック上のi64環境配列へ格納し、
+    /// 環境からキャプチャを復元してラムダを呼ぶサンクを合成して args = [arr, size, サンク, env] へ正規化する
+    void normalizeHofClosureArgs(const mir::MirTerminator::CallData& callData,
+                                 const std::string& funcName, std::vector<llvm::Value*>& args);
 
     /// 右辺値変換
     llvm::Value* convertRvalue(const mir::MirRvalue& rvalue);
@@ -192,7 +212,18 @@ class MIRToLLVM {
 
     /// 構造体がABI上「小さい」かどうかをチェック（値渡し可能かどうか）
     /// System V ABI: 16バイト以下の構造体はレジスタで値渡し
-    bool isSmallStruct(const hir::TypePtr& type) const;
+    bool isSmallStruct(const hir::TypePtr& type);
+
+    // 戻り値をsret（隠し出力ポインタ）で返すべき関数か（C14 Phase 4）。
+    // 非extern・非main・戻り値が16バイト超の構造体・アドレス未取得（間接呼び出しされない）の場合true
+    bool needsSretReturn(const mir::MirFunction& func);
+
+    // アドレス取得された関数名（FunctionRefが呼び出し先以外のオペランドに現れる関数。
+    // 関数ポインタ・vtable経由の間接呼び出しはsretのシグネチャ変換を追跡できないため除外する）
+    std::unordered_set<std::string> addressTakenFunctions;
+
+    // プログラム全体からアドレス取得された関数を収集する（convertの冒頭で呼ぶ）
+    void collectAddressTakenFunctions(const std::vector<mir::MirFunctionPtr>& functions);
     // TypeAlias（typedef）を基底型に再帰的に解決するヘルパー
     hir::TypePtr resolveTypeAlias(const hir::TypePtr& type) const;
 
@@ -200,6 +231,8 @@ class MIRToLLVM {
     llvm::StructType* getInterfaceFatPtrType(const std::string& interfaceName);
     llvm::Value* createInterfaceFatPtr(llvm::Value* dataPtr, const std::string& concreteTypeName,
                                        const std::string& interfaceName);
+    /// インターフェースupcast（MIRのiface_upcast Cast構築物）をfat pointer値へ変換
+    llvm::Value* convertInterfaceUpcast(const mir::MirRvalue::CastData& castData);
 
     /// vtableを生成
     void generateVTables(const mir::MirProgram& program);

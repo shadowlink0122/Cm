@@ -121,8 +121,8 @@ if [ -z "$CATEGORIES" ]; then
         for dir in "$base_dir"/*/; do
             if [ -d "$dir" ]; then
                 dirname="$(basename "$dir")"
-                # .cmファイルがあるディレクトリのみ追加
-                if ls "$dir"/*.cm 1> /dev/null 2>&1; then
+                # .cmファイルが直下またはサブフォルダ（階層問わず）に1つでもあれば追加
+                if [ -n "$(find "$dir" -type f -name '*.cm' -print -quit 2>/dev/null)" ]; then
                     # プラットフォーム:カテゴリ の形式で保持
                     CATEGORIES="$CATEGORIES ${platform_dir}:${dirname}"
                 fi

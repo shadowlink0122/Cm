@@ -23,15 +23,22 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
         switch (type->kind) {
             case hir::TypeKind::Int:
             case hir::TypeKind::Short:
-            case hir::TypeKind::Long:
             case hir::TypeKind::Tiny:
                 conv_func = "cm_int_to_string";
                 break;
+            case hir::TypeKind::Long:
+            case hir::TypeKind::ISize:
+                // 64ビット値はi32関数へ渡すとtruncで壊れるため専用関数を使う
+                conv_func = "cm_long_to_string";
+                break;
             case hir::TypeKind::UInt:
             case hir::TypeKind::UShort:
-            case hir::TypeKind::ULong:
             case hir::TypeKind::UTiny:
                 conv_func = "cm_uint_to_string";
+                break;
+            case hir::TypeKind::ULong:
+            case hir::TypeKind::USize:
+                conv_func = "cm_ulong_to_string";
                 break;
             case hir::TypeKind::Float:
             case hir::TypeKind::Double:
@@ -74,6 +81,9 @@ LocalId ExprLowering::convert_to_string(LocalId value, const hir::TypePtr& type,
     ctx.set_terminator(std::move(conv_call_term));
     ctx.switch_to_block(conv_success);
 
+    // 変換結果は新規確保された無名一時。文末のdropパス対象として登録する（C12）
+    ctx.note_string_temp(str_result);
+
     return str_result;
 }
 
@@ -98,6 +108,14 @@ LocalId ExprLowering::lower_cast(const hir::HirCast& cast, LoweringContext& ctx)
             MirPlace{result}, MirRvalue::cast(MirOperand::copy(MirPlace{operand}), target_type,
                                               /*check_only=*/true)));
         return result;
+    }
+
+    // ユニオンへのasキャストは暗黙変換の統一ドライバへ委譲する（let/代入経路と同一化）。
+    // 固定長配列→スライス変種の実体化（cm_array_to_slice）・数値変種の正規化を経てからwrapされる。
+    // 従来は生のCastを発行し、固定長配列のペイロードが生データのままbitcast格納されて
+    // スライス変種の抽出（u as int[]）がゴミ値のスライスヘッダになっていた
+    if (target_type && target_type->kind == hir::TypeKind::Union) {
+        return ctx.coerce_to_expected(operand, target_type);
     }
 
     // 配列→ポインタ型キャストの場合、array-to-pointer decay（暗黙的Ref）を挿入

@@ -56,6 +56,22 @@ int main() {
 }
 ```
 
+### Calling a Function Pointer Produced by an Expression
+
+When a function pointer comes from an expression such as a return value, the portable pattern is to assign it to a variable first, then call it.
+
+```cm
+int*(int, int) getop() {
+    return max;
+}
+
+// Portable: bind to a variable, then call
+int*(int, int) f = getop();
+int r = f(10, 5);
+```
+
+Calling it directly without binding, as in `getop()(10, 5)` or `fs[0](10, 5)` (a function-pointer array element), works on the js/ts targets (on native/jit/wasm it is not yet supported and a diagnostic tells you to bind to a variable first).
+
 ## Void Return Type
 
 ```cm

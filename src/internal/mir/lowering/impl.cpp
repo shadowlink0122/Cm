@@ -1,5 +1,9 @@
 #include "context.hpp"
 #include "internal/base/debug.hpp"
+#include "internal/base/mangle.hpp"
+#include "internal/base/target.hpp"
+#include "internal/hir/slice_dispatch.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "lowering.hpp"
 
 #include <memory>
@@ -69,10 +73,10 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     }
 
     debug::log(debug::Stage::Mir, debug::Level::Info,
-               "Lowering operator: " + type_name + "__" + op_name);
+               "Lowering operator: " + mangle::method_name(type_name, op_name));
 
     auto mir_func = std::make_unique<MirFunction>();
-    mir_func->name = type_name + "__" + op_name;
+    mir_func->name = mangle::method_name(type_name, op_name);
 
     // 戻り値用のローカル変数
     mir_func->return_local = 0;
@@ -90,11 +94,19 @@ std::unique_ptr<MirFunction> MirLowering::lower_operator(const hir::HirOperatorI
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
     ctx.hir_func_defs = &hir_functions;
+    ctx.interface_method_returns = &interface_method_returns_;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
 
-    // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）
-    auto self_type = hir::make_named(type_name);
+    // selfパラメータを登録（値型として - 呼び出し側が参照を渡す）。
+    // ジェネリックimpl（type_name="Wrap<T>"等）は基底名で型付けする。型引数付きの名前のままだと
+    // struct_defs（基底名キー）のフィールド解決に失敗し、self.xの代入文が<error>型で黙って欠落していた
+    // （otherパラメータはHIR解決済みで基底名になっており、selfだけが非対称だった）
+    std::string self_type_name = type_name;
+    if (auto lt = self_type_name.find('<'); lt != std::string::npos) {
+        self_type_name = self_type_name.substr(0, lt);
+    }
+    auto self_type = hir::make_named(self_type_name);
     LocalId self_id = ctx.new_local("self", self_type, false);
     mir_func->arg_locals.push_back(self_id);
     ctx.register_variable("self", self_id);
@@ -161,6 +173,7 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     mir_func->is_export = func.is_export;         // エクスポートフラグを設定
     mir_func->is_extern = func.is_extern;         // externフラグを設定
     mir_func->is_variadic = func.is_variadic;     // 可変長引数フラグを設定
+    mir_func->is_inline = func.is_inline;         // R11: inlineフラグを設定
     mir_func->is_async = func.is_async;           // asyncフラグを設定
     mir_func->is_always = func.is_always;         // alwaysフラグを設定
     // always_kind を伝搬（HIR→MIR: enum値をintでキャスト）
@@ -209,24 +222,18 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     ctx.struct_defs = &struct_defs;
     ctx.interface_names = &interface_names;
     ctx.hir_func_defs = &hir_functions;
+    ctx.interface_method_returns = &interface_method_returns_;
     ctx.tagged_union_names = &tagged_union_names;
     ctx.global_const_values = &global_const_values;
-
-    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）
-    for (const auto& gv : mir_program.global_vars) {
-        if (!gv)
-            continue;
-        // グローバル変数をローカル変数として登録（is_global=true）
-        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
-        ctx.register_variable(gv->name, gv_id);
-    }
 
     // デストラクタを持つ型の情報をコンテキストに渡す
     for (const auto& type_name : types_with_destructor) {
         ctx.register_type_with_destructor(type_name);
     }
 
-    // 関数パラメータをローカル変数として登録（typedefを解決）
+    // 関数パラメータをローカル変数として登録（typedefを解決）。
+    // グローバル変数より先に登録し「パラメータ=ローカル1..N」の規約を保つ
+    // （LLVM側のself判定・一時変数割り付けはこの番号付けを前提とする）
     for (const auto& param : func.params) {
         auto resolved_param_type = resolve_typedef(param.type);
 
@@ -239,6 +246,89 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
             "Registered parameter '" + param.name + "' as local " + std::to_string(param_id));
     }
 
+    // グローバル変数をスコープに登録（is_global=trueのLocalDeclとして）。
+    // パラメータ登録後に行い、同名はパラメータ側を優先する
+    for (const auto& gv : mir_program.global_vars) {
+        if (!gv)
+            continue;
+        if (ctx.resolve_variable(gv->name)) {
+            continue;
+        }
+        LocalId gv_id = ctx.new_local(gv->name, gv->type, !gv->is_const, true, false, true);
+        ctx.register_variable(gv->name, gv_id);
+    }
+
+    // mainのエントリでグローバル変数の非定数初期化子を評価する。
+    // 定数評価できない初期化子（関数呼び出し・構造体リテラル・スライスリテラル等）は
+    // 従来コード生成で黙って捨てられ、グローバルがゼロ値のままになっていた
+    // R1: #[test]関数はテストモードでmainを経由せず直接JITエントリになる（関数ごとに独立JITで状態隔離）ため、同じ初期化列を各テスト関数のエントリにも注入する（従来はスライス等の非定数グローバルがnullのままでテストのみSIGSEGVしていた）
+    bool inject_global_inits = (func.name == "main");
+    if (!inject_global_inits) {
+        for (const auto& fn_attr : func.attributes) {
+            if (fn_attr == "test") {
+                inject_global_inits = true;
+                break;
+            }
+        }
+    }
+    if (inject_global_inits) {
+        for (const auto& gv : mir_program.global_vars) {
+            if (!gv || !gv->type) {
+                continue;
+            }
+            auto gtype = resolve_typedef(gv->type);
+            auto gid_opt = ctx.resolve_variable(gv->name);
+            if (!gid_opt) {
+                continue;
+            }
+            const LocalId gid = *gid_opt;
+            if (!gv->init_expr) {
+                continue;
+            }
+            // 型名なしの構造体リテラル（JsonArena arena = { count: 0 }; 等）は
+            // 無名構造体一時の型解決ができずコード生成が壊れるため、フィールド単位の代入へ分解する
+            if (gtype && gtype->kind == hir::TypeKind::Struct) {
+                if (auto* lit_ptr =
+                        std::get_if<std::unique_ptr<hir::HirStructLiteral>>(&gv->init_expr->kind)) {
+                    if (*lit_ptr && (*lit_ptr)->type_name.empty()) {
+                        for (const auto& field : (*lit_ptr)->fields) {
+                            if (!field.value) {
+                                continue;
+                            }
+                            auto fidx = ctx.get_field_index(gtype->name, field.name);
+                            if (!fidx) {
+                                continue;
+                            }
+                            LocalId fval = expr_lowering.lower_expression(*field.value, ctx);
+                            MirPlace fplace{gid};
+                            fplace.projections.push_back(PlaceProjection::field(*fidx));
+                            ctx.push_statement(MirStatement::assign(
+                                fplace, MirRvalue::use(MirOperand::copy(MirPlace{fval}))));
+                        }
+                        continue;
+                    }
+                }
+            }
+            LocalId init_val = expr_lowering.lower_expression(*gv->init_expr, ctx);
+            hir::TypePtr vt =
+                (init_val < ctx.func->locals.size()) ? ctx.func->locals[init_val].type : nullptr;
+            if (vt) {
+                vt = ctx.resolve_typedef(vt);
+            }
+            const bool gtype_is_slice =
+                gtype && gtype->kind == hir::TypeKind::Array && !gtype->array_size.has_value();
+            if (gtype_is_slice && vt && vt->kind == hir::TypeKind::Array &&
+                vt->array_size.has_value()) {
+                // スライス型グローバルへ固定長配列で実体化された初期化子は
+                // cm_array_to_sliceでヒープスライスへ変換して格納（正準ヘルパへ委譲）
+                ctx.materialize_array_to_slice(MirPlace{init_val}, vt, gtype, MirPlace{gid});
+            } else {
+                ctx.push_statement(MirStatement::assign(
+                    MirPlace{gid}, MirRvalue::use(MirOperand::copy(MirPlace{init_val}))));
+            }
+        }
+    }
+
     // 文を処理（モジュラーコンポーネントを使用）
     for (const auto& stmt : func.body) {
         if (stmt) {
@@ -249,7 +339,13 @@ std::unique_ptr<MirFunction> MirLowering::lower_function(const hir::HirFunction&
     // デフォルト値で戻る（return文がない場合）
     auto* current = ctx.get_current_block();
     if (current && !current->terminator) {
-        // デストラクタを呼び出す
+        // 暗黙の関数終端でも明示returnと同一のdefer展開（逆順）を通す（B9）
+        auto end_defers = ctx.get_defer_stmts();
+        for (const auto* defer_stmt : end_defers) {
+            stmt_lowering.lower_statement(*defer_stmt, ctx);
+        }
+
+        // デストラクタを呼び出す（defer逆順→dtor逆順の規約を維持）
         emit_destructors(ctx);
 
         // 構造体、void、配列（動的スライス含む）型はデフォルト値代入をスキップ
@@ -359,8 +455,8 @@ void MirLowering::lower_impl(const hir::HirImpl& impl) {
             if (method->is_constructor || method->is_destructor) {
                 mir_func->name = method->name;
             } else {
-                // 通常のメソッドは type__method_name 形式にする
-                mir_func->name = type_name + "__" + method->name;
+                // 通常のメソッドは type__method_name 形式にする（規則はmangle.hppへ集約）
+                mir_func->name = mangle::method_name(type_name, method->name);
             }
 
             // hir_functionsへ登録する（ジェネリックはモノモーフィゼーション用、非ジェネリックも補間ミニパイプラインの戻り型解決が参照するため必要。

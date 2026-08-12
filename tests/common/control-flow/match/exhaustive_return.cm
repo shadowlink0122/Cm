@@ -1,0 +1,26 @@
+// R12: 全armがreturnする網羅的match（ワイルドカードあり/enum全variant被覆）がreturn網羅解析で終端と認識される（従来はfalls off誤検知で--strictがビルドを阻害していた）
+import std::io::println;
+
+enum Color { Red, Green, Blue }
+
+string wildcard_ret(int x) {
+    match (x) {
+        1 => { return "one"; }
+        _ => { return "other"; }
+    }
+}
+
+string enum_ret(Color c) {
+    match (c) {
+        Color::Red => { return "red"; }
+        Color::Green => { return "green"; }
+        Color::Blue => { return "blue"; }
+    }
+}
+
+int main() {
+    println(wildcard_ret(1));
+    println(wildcard_ret(9));
+    println(enum_ret(Color::Blue));
+    return 0;
+}

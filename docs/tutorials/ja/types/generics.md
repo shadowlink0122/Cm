@@ -78,6 +78,33 @@ int main() {
 }
 ```
 
+## ポインタ・配列引数からの型推論
+
+型パラメータが引数のポインタ（`T*`）・配列（`T[]`）の内側に現れる場合も、実引数の対応する部分型から`T`が推論されます。
+
+```cm
+<T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+<T> T first(T[] xs) {
+    return xs[0];
+}
+
+int main() {
+    int a = 1;
+    int b = 2;
+    swap(&a, &b);           // T=int（&a・&bのint*からintを推論）
+    println("{a} {b}");     // 2 1
+
+    int[] xs = [10, 20, 30];
+    println("{first(xs)}"); // 10
+    return 0;
+}
+```
+
 ## ジェネリックコレクションのRAII
 
 ジェネリックコレクション（`Vector<T>`など）は、`self()`コンストラクタと`~self()`デストラクタを持ちます。
@@ -126,3 +153,34 @@ int main() {
 
 <!-- nav -->
 ← 前: [型システム編 - typedef型エイリアス](typedef.html) ｜ [目次](index.html) ｜ 次: [型システム編 - インターフェース](interfaces.html) →
+
+## ジェネリック構造体のリテラル構築
+
+宣言型から型引数が推論されるため、リテラルの型名には型引数を書かずに構築できます（v0.17.0）。
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Box<int> b = Box{v: 7};                            // 裸名リテラル（推論）
+Pair<int, string> p = {first: 7, second: "seven"}; // 無名リテラル（推論）
+
+Box<int> b2 = Box<int>{v: 7};                       // 明示型引数付きリテラル
+```
+
+明示型引数付きリテラル（`Box<int>{v: 7}`）も書けます（v0.17.0）。実際の型引数はフィールド値からの推論で決まります。フィールド個別代入（`Box<int> b; b.v = 7;`）も従来どおり使えます。
+
+## ネストした特殊化を型引数に持つ構造体
+
+ジェネリック特殊化を別のジェネリックの型引数として渡せます。内側リテラルの型も宣言型から推論されます。
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Pair<Box<int>, Box<string>> nested = Pair { first: Box { v: 42 }, second: Box { v: "deep" } };
+println("{nested.first.v} {nested.second.v}");  // 42 deep
+
+Box<Pair<int, string>> outer = Box { v: Pair { first: 5, second: "inner" } };
+println("{outer.v.first} {outer.v.second}");    // 5 inner
+```

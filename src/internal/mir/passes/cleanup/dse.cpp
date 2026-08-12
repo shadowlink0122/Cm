@@ -1,5 +1,7 @@
 #include "dse.hpp"
 
+#include "../core/effects.hpp"
+
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -32,13 +34,20 @@ bool DeadStoreElimination::process_block(BasicBlock& block, const MirFunction& f
         // no_optフラグがtrueの場合は最適化スキップ
         // mustブロック内の文はデッドストア削除の対象外
         if (stmt->no_opt) {
-            // ただし、mustブロック内の代入による使用はマークする
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    // 前の定義を「生きている」としてマーク（削除しない）
-                    last_def.erase(assign_data.place.local);
+            // mustブロック内の読み出しも使用として収集し、直前の定義がデッドストア扱いされて削除されるのを防ぐ
+            std::unordered_set<LocalId> must_used;
+            bool must_uses_deref = false;
+            collect_uses(*stmt, must_used, must_uses_deref);
+            if (must_uses_deref) {
+                last_def.clear();
+            } else {
+                for (LocalId use : must_used) {
+                    last_def.erase(use);
                 }
+            }
+            // mustブロック内の代入はフィールド・配列要素代入も含めて追跡から外し、前の定義を「生きている」として保持する（書き込み効果は効果モデルから取得）
+            for (LocalId written : effects_of(*stmt).writes) {
+                last_def.erase(written);
             }
             continue;
         }

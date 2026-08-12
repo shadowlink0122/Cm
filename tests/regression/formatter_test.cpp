@@ -167,6 +167,16 @@ TEST_F(FormatterIntegrationTest, BareBlockNotJoined) {
     expect_stable_case("style/bare_block");
 }
 
+// 二項演算子（= 複合代入 == != <= >= && || =>）の前後に不足空白を追加する（L5）
+TEST_F(FormatterIntegrationTest, BinaryOperatorSpacing) {
+    expect_format_case("style/operator_spacing");
+}
+
+// operator宣言（operator bool ==(T other)）は宣言スタイルを保持し、単独の + - * / < > & は単項・ジェネリクス・指数表記と曖昧なため正規化しない
+TEST_F(FormatterIntegrationTest, OperatorDeclAndAmbiguousOpsStable) {
+    expect_stable_case("style/operator_decl_stable");
+}
+
 // ============================================================
 // SV幅付きリテラル（N'dVALUE等）と文字リテラルの区別
 // ============================================================

@@ -1,10 +1,14 @@
-// lowering_stmt.cpp - 文のlowering
-#include "fwd.hpp"
-#include "internal/base/text_utils.hpp"
+// stmt.cpp - 文のlowering
+#include "internal/base/format/text.hpp"
+#include "internal/base/mangle.hpp"
+#include "internal/hir/lowering/expr/internal.hpp"
+#include "internal/hir/lowering/fwd.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cm::hir {
@@ -198,11 +202,14 @@ HirStmtPtr HirLowering::lower_let(ast::LetStmt& let) {
     }
 
     if (should_call_ctor && let.type) {
-        std::string type_name = type_to_string(*let.type);
-        std::string ctor_name = type_name + "__ctor";
-        if (!let.ctor_args.empty()) {
-            ctor_name += "_" + std::to_string(let.ctor_args.size());
-        }
+        // ジェネリック型は関数名ドメインの正準接頭辞で組む（Vector<Vector<int>> ->
+        // Vector__Vector$1$3$int。移行計画①: 表示形Base<args>__ctorの産生を廃止）
+        std::string type_name = let.type->type_args.empty()
+                                    ? type_to_string(*let.type)
+                                    : ast::typekey::fn_prefix_from_tree(*let.type);
+        // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。checker側と同一規則を共有する）
+        std::string ctor_name =
+            mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());
 
         debug::hir::log(debug::hir::Id::LetInit, "Adding constructor call: " + ctor_name,
                         debug::Level::Debug);
@@ -322,6 +329,9 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         iter_call->func_name = type_name + "__iter";
         iter_call->args.push_back(lower_expr(*for_in.iterable));
         iter_let->init = std::make_unique<HirExpr>(std::move(iter_call), iter_let->type);
+        // 合成ノードへ付与するイテレータ型（moveされる前に捕捉する）
+        const auto iter_struct_type =
+            iter_let->type ? iter_let->type : ast::make_named(for_in.iterator_type_name);
 
         hir_block->stmts.push_back(std::make_unique<HirStmt>(std::move(iter_let)));
 
@@ -331,13 +341,15 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         // 条件: __iter.has_next()
         auto has_next_call = std::make_unique<HirCall>();
         has_next_call->func_name = for_in.iterator_type_name + "__has_next";
-        // イテレータのアドレスを渡す（selfはポインタとして受け取る）
+        // イテレータのアドレスを渡す（selfはポインタとして受け取る）。
+        // 合成ノードにも実型を付与する（typed-hir-single-source 第2段）
         auto iter_ref = std::make_unique<HirVarRef>();
         iter_ref->name = iter_name;
         auto iter_addr = std::make_unique<HirUnary>();
         iter_addr->op = HirUnaryOp::AddrOf;
-        iter_addr->operand = std::make_unique<HirExpr>(std::move(iter_ref), nullptr);
-        has_next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr), nullptr));
+        iter_addr->operand = std::make_unique<HirExpr>(std::move(iter_ref), iter_struct_type);
+        has_next_call->args.push_back(
+            std::make_unique<HirExpr>(std::move(iter_addr), ast::make_pointer(iter_struct_type)));
         hir_while->cond = std::make_unique<HirExpr>(std::move(has_next_call), ast::make_bool());
 
         // ループ本体
@@ -353,8 +365,9 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         iter_ref2->name = iter_name;
         auto iter_addr2 = std::make_unique<HirUnary>();
         iter_addr2->op = HirUnaryOp::AddrOf;
-        iter_addr2->operand = std::make_unique<HirExpr>(std::move(iter_ref2), nullptr);
-        next_call->args.push_back(std::make_unique<HirExpr>(std::move(iter_addr2), nullptr));
+        iter_addr2->operand = std::make_unique<HirExpr>(std::move(iter_ref2), iter_struct_type);
+        next_call->args.push_back(
+            std::make_unique<HirExpr>(std::move(iter_addr2), ast::make_pointer(iter_struct_type)));
         elem_let->init = std::make_unique<HirExpr>(std::move(next_call), for_in.var_type);
 
         hir_while->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
@@ -379,6 +392,7 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
                           iterable_type->array_size.has_value();
     bool is_slice = iterable_type && iterable_type->kind == ast::TypeKind::Array &&
                     !iterable_type->array_size.has_value();
+    bool is_string = iterable_type && iterable_type->kind == ast::TypeKind::String;
 
     std::string idx_name = "__for_in_idx_" + for_in.var_name;
 
@@ -409,6 +423,12 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
         len_call->func_name = "__builtin_slice_len";
         len_call->args.push_back(lower_expr(*for_in.iterable));
         cond_binary->rhs = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
+    } else if (is_string) {
+        // 文字列の場合: バイト長で反復する（添字 s[i] がバイト単位のため、コードポイント数ではなくバイト長を境界にする）
+        auto len_call = std::make_unique<HirCall>();
+        len_call->func_name = "__builtin_string_len";
+        len_call->args.push_back(lower_expr(*for_in.iterable));
+        cond_binary->rhs = std::make_unique<HirExpr>(std::move(len_call), ast::make_int());
     } else {
         // その他（エラーケース）: 0回ループ
         auto zero = std::make_unique<HirLiteral>();
@@ -417,32 +437,45 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
     }
     hir_for->cond = std::make_unique<HirExpr>(std::move(cond_binary), ast::make_bool());
 
-    // update: __i = __i + 1
-    auto ast_idx_ref_left = std::make_unique<ast::IdentExpr>(idx_name);
-    auto ast_idx_ref_right = std::make_unique<ast::IdentExpr>(idx_name);
-    auto ast_one = std::make_unique<ast::LiteralExpr>(int64_t{1});
-    auto ast_add = std::make_unique<ast::BinaryExpr>(
-        ast::BinaryOp::Add, std::make_unique<ast::Expr>(std::move(ast_idx_ref_right)),
-        std::make_unique<ast::Expr>(std::move(ast_one)));
-    auto ast_assign = std::make_unique<ast::BinaryExpr>(
-        ast::BinaryOp::Assign, std::make_unique<ast::Expr>(std::move(ast_idx_ref_left)),
-        std::make_unique<ast::Expr>(std::move(ast_add)));
-    ast::Expr update_expr(std::move(ast_assign));
-    update_expr.type = ast::make_int();
-    hir_for->update = lower_expr(update_expr);
+    // update: __i = __i + 1（合成ASTのlower_expr経由では部分式が型注釈を持たずerror型になるため、
+    // 型付きHIRを直接構築する。typed-hir-single-source 第2段）
+    auto upd_lhs_ref = std::make_unique<HirVarRef>();
+    upd_lhs_ref->name = idx_name;
+    auto upd_rhs_ref = std::make_unique<HirVarRef>();
+    upd_rhs_ref->name = idx_name;
+    auto upd_one = std::make_unique<HirLiteral>();
+    upd_one->value = int64_t{1};
+    auto upd_add = std::make_unique<HirBinary>();
+    upd_add->op = HirBinaryOp::Add;
+    upd_add->lhs = std::make_unique<HirExpr>(std::move(upd_rhs_ref), ast::make_int());
+    upd_add->rhs = std::make_unique<HirExpr>(std::move(upd_one), ast::make_int());
+    auto upd_assign = std::make_unique<HirBinary>();
+    upd_assign->op = HirBinaryOp::Assign;
+    upd_assign->lhs = std::make_unique<HirExpr>(std::move(upd_lhs_ref), ast::make_int());
+    upd_assign->rhs = std::make_unique<HirExpr>(std::move(upd_add), ast::make_int());
+    hir_for->update = std::make_unique<HirExpr>(std::move(upd_assign), ast::make_int());
 
     // ループ変数の初期化
     auto elem_let = std::make_unique<HirLet>();
     elem_let->name = for_in.var_name;
     elem_let->type = for_in.var_type;
 
-    auto arr_expr = lower_expr(*for_in.iterable);
     auto idx_ref3 = std::make_unique<HirVarRef>();
     idx_ref3->name = idx_name;
-    auto index_expr = std::make_unique<HirIndex>();
-    index_expr->object = std::move(arr_expr);
-    index_expr->index = std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int());
-    elem_let->init = std::make_unique<HirExpr>(std::move(index_expr), for_in.var_type);
+    if (is_string) {
+        // 文字列は __builtin_string_charAt(s, __i) でバイトを読む（s[i] の正準lowering。HirIndexは配列専用のため）
+        auto char_at = std::make_unique<HirCall>();
+        char_at->func_name = "__builtin_string_charAt";
+        char_at->args.push_back(lower_expr(*for_in.iterable));
+        char_at->args.push_back(std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int()));
+        elem_let->init = std::make_unique<HirExpr>(std::move(char_at), ast::make_char());
+    } else {
+        auto arr_expr = lower_expr(*for_in.iterable);
+        auto index_expr = std::make_unique<HirIndex>();
+        index_expr->object = std::move(arr_expr);
+        index_expr->index = std::make_unique<HirExpr>(std::move(idx_ref3), ast::make_int());
+        elem_let->init = std::make_unique<HirExpr>(std::move(index_expr), for_in.var_type);
+    }
 
     hir_for->body.push_back(std::make_unique<HirStmt>(std::move(elem_let)));
 
@@ -459,6 +492,8 @@ HirStmtPtr HirLowering::lower_for_in(ast::ForInStmt& for_in) {
 HirStmtPtr HirLowering::lower_switch(ast::SwitchStmt& switch_stmt) {
     auto hir_switch = std::make_unique<HirSwitch>();
     hir_switch->expr = lower_expr(*switch_stmt.expr);
+    // SVのcase修飾（#[sv::priority]/#[sv::unique0]）を引き継ぐ（SV-N3）
+    hir_switch->sv_case_modifier = switch_stmt.sv_case_modifier;
 
     for (auto& case_ : switch_stmt.cases) {
         HirSwitchCase hir_case;
@@ -631,8 +666,128 @@ HirStmtPtr HirLowering::lower_expr_stmt(ast::ExprStmt& expr_stmt) {
 
 // v0.13.0: match式を文として処理（if-elseチェーンに変換）
 // 式形式とブロック形式の両方をサポート
+// SVターゲット: don't-careビットパターン（0b1?00等）を含む整数matchをHirSwitchへ脱糖する（SV-N3）。
+// if-elseチェーンでなくMIRのSwitchIntへ落とすことで、SVコード生成がnative casezを出力できるようにする。
+// 変換対象はガード・束縛の無い Masked/整数リテラル/末尾ワイルドカード/それらのOr のみで、他はnullptrを返し従来のif-elseチェーンへフォールバックする
+HirStmtPtr HirLowering::try_lower_match_as_masked_switch(ast::MatchExpr& match) {
+    // scrutineeが整数系であること（checker非経由で型注釈が無い場合はパターン形のみで判定する）
+    if (match.scrutinee && match.scrutinee->type && !is_bits_type(match.scrutinee->type)) {
+        return nullptr;
+    }
+
+    // 整数リテラルパターンか判定するヘルパー
+    auto is_int_literal = [](const ast::MatchPattern& p) -> bool {
+        if (p.kind != ast::MatchPatternKind::Literal || !p.value) {
+            return false;
+        }
+        auto* lit = p.value->as<ast::LiteralExpr>();
+        return lit && std::holds_alternative<int64_t>(lit->value);
+    };
+
+    // 全アームの適格性検査（Maskedを1つ以上含み、他はリテラル・末尾ワイルドカード・そのOrのみ）
+    bool has_masked = false;
+    for (size_t i = 0; i < match.arms.size(); ++i) {
+        const auto& arm = match.arms[i];
+        if (!arm.pattern || arm.guard) {
+            return nullptr;
+        }
+        switch (arm.pattern->kind) {
+            case ast::MatchPatternKind::Masked:
+                has_masked = true;
+                break;
+            case ast::MatchPatternKind::Literal:
+                if (!is_int_literal(*arm.pattern)) {
+                    return nullptr;
+                }
+                break;
+            case ast::MatchPatternKind::Wildcard:
+                // 途中のワイルドカードは以降のアームを隠すため末尾のみ許可（matchの先勝ち意味論を保存）
+                if (i + 1 != match.arms.size()) {
+                    return nullptr;
+                }
+                break;
+            case ast::MatchPatternKind::Or:
+                for (const auto& sub : arm.pattern->or_patterns) {
+                    if (!sub) {
+                        return nullptr;
+                    }
+                    if (sub->kind == ast::MatchPatternKind::Masked) {
+                        has_masked = true;
+                    } else if (!is_int_literal(*sub)) {
+                        return nullptr;
+                    }
+                }
+                break;
+            default:
+                return nullptr;
+        }
+    }
+    if (!has_masked) {
+        return nullptr;
+    }
+
+    // HirSwitchを構築（アーム順を保存。SVコード生成が順序保存のcasezへ出力する）
+    auto hir_switch = std::make_unique<HirSwitch>();
+    hir_switch->expr = lower_expr(*match.scrutinee);
+    hir_switch->sv_case_modifier = match.sv_case_modifier;
+
+    auto make_hir_pattern = [&](const ast::MatchPattern& p) -> std::unique_ptr<HirSwitchPattern> {
+        auto hp = std::make_unique<HirSwitchPattern>();
+        if (p.kind == ast::MatchPatternKind::Masked) {
+            hp->kind = HirSwitchPattern::Masked;
+            hp->masked_value = p.masked_value;
+            hp->masked_mask = p.masked_mask;
+        } else {
+            hp->kind = HirSwitchPattern::SingleValue;
+            hp->value = lower_expr(*p.value);
+        }
+        return hp;
+    };
+
+    for (auto& arm : match.arms) {
+        HirSwitchCase hir_case;
+        if (arm.pattern->kind == ast::MatchPatternKind::Wildcard) {
+            // ワイルドカードはdefaultケース（pattern=nullptr）
+        } else if (arm.pattern->kind == ast::MatchPatternKind::Or) {
+            auto or_pat = std::make_unique<HirSwitchPattern>();
+            or_pat->kind = HirSwitchPattern::Or;
+            for (const auto& sub : arm.pattern->or_patterns) {
+                or_pat->or_patterns.push_back(make_hir_pattern(*sub));
+            }
+            hir_case.pattern = std::move(or_pat);
+        } else {
+            hir_case.pattern = make_hir_pattern(*arm.pattern);
+        }
+
+        // アーム本体（ブロック形式・式形式）
+        if (arm.is_block_form) {
+            for (auto& stmt : arm.block_body) {
+                if (auto hir_stmt = lower_stmt(*stmt)) {
+                    hir_case.stmts.push_back(std::move(hir_stmt));
+                }
+            }
+        } else if (arm.expr_body) {
+            auto expr = lower_expr(*arm.expr_body);
+            auto expr_stmt = std::make_unique<HirExprStmt>();
+            expr_stmt->expr = std::move(expr);
+            hir_case.stmts.push_back(std::make_unique<HirStmt>(std::move(expr_stmt)));
+        }
+
+        hir_switch->cases.push_back(std::move(hir_case));
+    }
+
+    return std::make_unique<HirStmt>(std::move(hir_switch));
+}
+
 HirStmtPtr HirLowering::lower_match_as_stmt(ast::MatchExpr& match) {
     debug::hir::log(debug::hir::Id::StmtLower, "Lowering match as statement", debug::Level::Debug);
+
+    // SVターゲットではdon't-careビットパターンのmatchをswitchへ脱糖し、native casez出力を可能にする（SV-N3）
+    if (sv_target_) {
+        if (auto masked_switch = try_lower_match_as_masked_switch(match)) {
+            return masked_switch;
+        }
+    }
 
     // AST段階の元の型名を保存（enum_defs_検索用）
     std::string original_enum_name;

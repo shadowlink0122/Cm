@@ -1,0 +1,18 @@
+// 補間プレースホルダの先頭アンダースコア識別子と、戻り値文字列内のR20演算子プレースホルダの受理回帰
+// （従来は受理リストに'_'が無く文字列全体が未変換素通り、検出側リストは!~-(のR20追従も漏れていた）
+import std::io::println;
+
+int __helper() {
+    return 3;
+}
+
+string neg_str(int a) {
+    return "neg={-a} not={!false}";
+}
+
+int main() {
+    int _count = 5;
+    println("a={_count} b={__helper()}");
+    println(neg_str(7));
+    return 0;
+}

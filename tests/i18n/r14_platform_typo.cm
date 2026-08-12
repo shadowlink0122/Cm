@@ -1,0 +1,2 @@
+//! platform: svv
+int main() { return 0; }

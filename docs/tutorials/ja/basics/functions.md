@@ -109,12 +109,16 @@ double process(double x) { return x; }
 ## デフォルト引数
 
 パラメータにデフォルト値を設定できます。呼び出し時に省略された場合、その値が使われます。
+デフォルト値の式にはリテラル・関数呼び出し・グローバル変数を書けますが、同じ関数の他のパラメータは参照できません（デフォルト引数はパラメータ束縛前に呼び出し側で評価されるため。`int f(int a, int b = a)` はコンパイルエラーになります。v0.17.0）。
 
 ```cm
 void log(string message, int level = 1) {
     println("[Level {level}] {message}");
 }
 
+int main() {
+    log("System started");   // level は既定値の 1
+    log("Debug info", 3);    // level を明示指定
     return 0;
 }
 ```
@@ -123,18 +127,24 @@ void log(string message, int level = 1) {
 
 ## メソッド呼び出し
 
-構造体に関連付けられた関数（メソッド）は、`.` 演算子で呼び出します。内部的には第1引数として `self` ポインタを受け取ります。
+構造体に関連付けられた関数（メソッド）は `impl` ブロックで定義し、`.` 演算子で呼び出します。内部的には第1引数として `self` ポインタを受け取ります。
 
 ```cm
+struct Counter {
+    int value;
 }
 
+impl Counter {
     void increment() {
+        self.value++;  // self.value は (*self).value と同等（自動デリファレンス）
     }
 }
 
+int main() {
     Counter c;
     c.value = 0;
     c.increment();  // メソッド形式で呼び出し
+    println("{c.value}");  // 1
     return 0;
 }
 ```
@@ -145,20 +155,18 @@ void log(string message, int level = 1) {
 
 ## よくある間違い
 
-### ❌ overload キーワードの忘れ
+### ❌ 自由関数を同名で多重定義する
+
+自由関数のオーバーロードは未対応のため、同じ名前の関数を複数定義するとコンパイルエラーになります。
 
 ```cm
-// int foo(double x) { ... } // エラー: overloadキーワードが必要
-overload int foo(double x) { ... } // OK
+int foo(int x) { return x; }
+// double foo(double x) { return x; }
+// エラー: function 'foo' is already defined with a different signature
+//        (free-function overloading is not supported; use a different name)
 ```
 
-### ❌ 戻り値の型のみが異なるオーバーロード
-
-オーバーロードはパラメータで区別する必要があります。
-
-```cm
-// overload double bar(int x) { ... } // エラー: パラメータが同じ
-```
+型ごとに別名を付けてください（例: `foo_int` / `foo_double`）。コンストラクタは `overload self(...)` で多重定義できます（[構造体](../types/structs.html) 参照）。
 
 ---
 
@@ -171,11 +179,14 @@ overload int foo(double x) { ... } // OK
 <summary>解答例</summary>
 
 ```cm
+int factorial(int n) {
+    if (n <= 1) {
         return 1;
     }
     return n * factorial(n - 1);
 }
 
+int main() {
     println("5! = {factorial(5)}");
     return 0;
 }
@@ -187,7 +198,7 @@ overload int foo(double x) { ... } // OK
 ## 次のステップ
 
 ✅ 関数の定義と呼び出しができる  
-✅ オーバーロードの使い方がわかった  
+✅ 自由関数のオーバーロードが未対応であることを理解した  
 ✅ デフォルト引数が使える  
 ⏭️ 次は [配列](arrays.html) を学びましょう
 

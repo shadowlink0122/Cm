@@ -1,0 +1,28 @@
+// ジェネリック構造体を明示型引数付きで構築できる（局所処理調査「その他」）: Box<int>{v: 7}。
+// 実際の型引数はフィールド値からの推論で決まる（Box{v: 7} と同じ）。旧: <> が比較演算子に解釈され Expected expression だった。
+import std::io::println;
+
+struct Box<T> {
+    T v;
+}
+
+struct Pair<A, B> {
+    A first;
+    B second;
+}
+
+int main() {
+    Box<int> b = Box<int>{v: 7};
+    println(b.v);
+
+    Pair<int, string> p = Pair<int, string>{first: 42, second: "hi"};
+    println(p.first);
+    println(p.second);
+
+    // 比較式は従来どおり（曖昧性なし）
+    int x = 1;
+    int y = 2;
+    println(x < y);
+
+    return 0;
+}

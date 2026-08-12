@@ -9,7 +9,7 @@
 #include "internal/syntax/ast/decl.hpp"
 #include "internal/syntax/ast/module.hpp"
 #include "internal/syntax/parser/parser.hpp"
-#include "internal/types/generic_context.hpp"
+#include "internal/types/checking/generic/context.hpp"
 #include "internal/types/scope.hpp"
 
 #include <cstdint>

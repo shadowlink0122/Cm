@@ -123,6 +123,7 @@ struct FunctionDecl {
     Visibility visibility = Visibility::Private;
     bool is_static = false;
     bool is_inline = false;
+    bool is_constexpr = false;  // R11: 受理はするがコンパイル時評価は未実装（checkerが警告を出す）
 
     // コンストラクタ/デストラクタ
     bool is_constructor = false;  // self() コンストラクタ
@@ -416,11 +417,6 @@ inline DeclPtr make_struct(std::string name, std::vector<Field> fields, Span s =
     return std::make_unique<Decl>(std::make_unique<StructDecl>(std::move(name), std::move(fields)),
                                   s);
 }
-
-// TODO: パーサー更新時に修正
-// inline DeclPtr make_import(std::vector<std::string> path, std::string alias = "", Span s = {}) {
-//     return std::make_unique<Decl>(std::make_unique<ImportDecl>(std::move(path), std::move(alias)), s);
-// }
 
 }  // namespace cm::ast
 

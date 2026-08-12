@@ -40,6 +40,20 @@ initial $readmemh("font.hex", font_rom);
 - 初期値なし配列にも使用可能（hexファイルは合成/シミュレーション環境で用意）
 - 配列リテラル初期値と併用した場合は `$readmemh` が優先されます
 
+### 2進メモリファイル（`radix: bin`・v0.17.0）
+
+`radix: bin` を指定すると `$readmemb`（2進形式）で読み込みます。ビットパターン表・LEDフォント等、2進表記の方が管理しやすいデータ向けです:
+
+```cm
+#[sv::memfile("pattern.bin", radix: bin)]
+utiny[16] pattern_rom;
+```
+
+```systemverilog
+logic [7:0] pattern_rom [0:15];
+initial $readmemb("pattern.bin", pattern_rom);
+```
+
 ## 3. `--emit-memfile` オプション
 
 配列リテラル初期値を `.hex` ファイルとしてコンパイル時に書き出します（出力先は生成SVと同じディレクトリ）:
@@ -63,8 +77,9 @@ ff
 ```
 
 Cmソースで初期値を管理しつつ、生成SVは `$readmemh` 参照になるため、大規模ROMでもSVファイルが肥大化しません。
+`radix: bin` 指定の配列は要素幅ぶんの2進数字（例: `10101010`）で書き出され、`$readmemb` 参照になります。
 
-回帰テスト: `tests/sv/memory/array_init`、`tests/sv/memory/readmemh`
+回帰テスト: `tests/sv/memory/array_init`、`tests/sv/memory/readmemh`、`tests/sv/memory/readmemb`
 
 ---
 

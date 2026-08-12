@@ -22,39 +22,20 @@ class HirLowering {
     // メインエントリポイント
     HirProgram lower(ast::Program& program);
 
-    // 外部で解決済みの変数型を引き継ぐ（文字列補間式のミニパイプライン用）。
-    // 型チェッカを通らないミニHIRでも、ビットスライス等の型依存脱糖を可能にする
-    void seed_variable_types(std::unordered_map<std::string, TypePtr> types) {
-        seeded_var_types_ = std::move(types);
-    }
-
-    // 外部で解決済みの構造体フィールド定義を引き継ぐ（文字列補間ミニパイプライン用）。
-    // 型チェッカーを通らない経路でメンバアクセスの型を補完するために使用する
-    void seed_struct_fields(
-        std::unordered_map<std::string, std::vector<std::pair<std::string, TypePtr>>> defs) {
-        seeded_struct_fields_ = std::move(defs);
-    }
-
-    // 外部で解決済みのenum定義を引き継ぐ（文字列補間式のミニパイプライン用）。
-    // "Enum::Variant" → タグ値 の形式で enum_values_ に登録する
-    void seed_enum_values(
-        const std::unordered_map<std::string, std::unordered_map<std::string, int64_t>>& defs) {
-        for (const auto& [enum_name, variants] : defs) {
-            for (const auto& [variant_name, value] : variants) {
-                enum_values_[enum_name + "::" + variant_name] = value;
-            }
-        }
-    }
+    // SVターゲットか否かを設定する（リダクション演算子を native 出力用にビルトイン呼び出しへ残すか、
+    // 非SV向けに算術へ脱糖するかを切り替える。build.cpp が --target から設定する）
+    void set_sv_target(bool enabled) { sv_target_ = enabled; }
 
    private:
+    // SVターゲットフラグ（リダクション脱糖の分岐に使用）
+    bool sv_target_ = false;
+    // HIRを直接消費する文脈（#[test]関数・initialブロック。テストベンチ生成がHIR式を直接読むため、
+    // SV専用ビルトインへの脱糖（part-select等）を抑止し従来のshift+mask式を維持する）
+    bool hir_retained_context_ = false;
     // キャッシュ
     std::unordered_map<std::string, const ast::StructDecl*> struct_defs_;
     std::unordered_map<std::string, const ast::FunctionDecl*> func_defs_;
     std::unordered_map<std::string, int64_t> enum_values_;
-    std::unordered_map<std::string, TypePtr> seeded_var_types_;  // 補間ミニパイプライン用
-    // 補間ミニパイプライン用: 構造体名 → {フィールド名, 型} の一覧
-    std::unordered_map<std::string, std::vector<std::pair<std::string, TypePtr>>>
-        seeded_struct_fields_;
     std::unordered_map<std::string, const ast::EnumDecl*> enum_defs_;  // v0.13.0: Tagged Union
     std::unordered_map<std::string, int64_t> macro_values_;  // v0.13.0: int型定数マクロ
     std::unordered_map<std::string, std::string> macro_string_values_;  // v0.13.0: string型マクロ
@@ -101,6 +82,8 @@ class HirLowering {
     HirStmtPtr lower_defer(ast::DeferStmt& defer);
     HirStmtPtr lower_must_block(ast::MustBlockStmt& must);
     HirStmtPtr lower_match_as_stmt(ast::MatchExpr& match);  // v0.13.0: match文対応
+    // SVターゲット: don't-careビットパターンを含む整数matchをswitchへ脱糖する（SV-N3。native casez出力用）。変換できない形はnullptrを返しif-elseチェーンへフォールバックする
+    HirStmtPtr try_lower_match_as_masked_switch(ast::MatchExpr& match);
     std::unique_ptr<HirSwitchPattern> lower_pattern(ast::Pattern& pattern);
 
     // 式のlowering
@@ -109,9 +92,29 @@ class HirLowering {
     HirExprPtr lower_binary(ast::BinaryExpr& binary, TypePtr type);
     HirExprPtr lower_unary(ast::UnaryExpr& unary, TypePtr type);
     HirExprPtr lower_call(ast::CallExpr& call, TypePtr type);
+    // リダクション演算子（reduce_and/or/xor/nand/nor/xnor）の lowering（SV-N2）
+    HirExprPtr lower_reduction(ast::CallExpr& call, const std::string& name);
     HirExprPtr lower_index(ast::IndexExpr& idx, TypePtr type);
     HirExprPtr lower_slice(ast::SliceExpr& slice, TypePtr type);
     HirExprPtr lower_member(ast::MemberExpr& mem, TypePtr type);
+    // lower_memberの腕抽出ヘルパー: 組み込みResult/Optionメソッドの脱糖（非該当ならnullptr）
+    HirExprPtr lower_member_sum_type(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                     const HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: 配列ビルトインメソッド（非該当ならnullptrを返しobj_hirは消費しない）
+    HirExprPtr lower_member_array_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: 動的配列（スライス）ビルトインメソッド（非該当ならnullptr）
+    HirExprPtr lower_member_slice_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir, const TypePtr& type);
+    // lower_memberの腕抽出ヘルパー: 文字列ビルトインメソッド（非該当ならnullptr）
+    HirExprPtr lower_member_string_builtin(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                           HirExprPtr& obj_hir);
+    // lower_memberの腕抽出ヘルパー: メソッド解決用型名の正規化（固定長配列→スライスimpl変換の要否をout引数で返す）
+    std::string resolve_method_type_name(const TypePtr& obj_type, const std::string& type_name,
+                                         bool& needs_array_to_slice);
+    // lower_memberの腕抽出ヘルパー: 関数型フィールドの呼び出し（非該当ならnullptr）
+    HirExprPtr lower_member_field_fn_call(ast::MemberExpr& mem, const TypePtr& obj_type,
+                                          HirExprPtr& obj_hir);
     HirExprPtr lower_ternary(ast::TernaryExpr& tern, TypePtr type);
     HirExprPtr lower_match(ast::MatchExpr& match, TypePtr type);
     HirExprPtr lower_struct_literal(ast::StructLiteralExpr& lit, TypePtr expected_type);

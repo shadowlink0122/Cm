@@ -1,0 +1,192 @@
+// std::collections::treemap - ジェネリックな平衡二分探索木マップ（AVL木）
+//
+// キーの順序（<）で要素を平衡木に保持し、探索・挿入を O(log n) で行う（線形探索の連想配列より効率的）。
+// 木は「動的配列（スライス）アリーナ＋インデックス」で表現し、ノード参照はポインタでなくindexで持つため
+// 全バックエンド（jit/native/wasm/js/ts）で同じ動作をする。挿入ごとにAVL回転で高さを平衡に保つ。
+//
+// 容量はスライスにより自動拡張される（push時にGoと同様、容量が2倍ずつ伸びる）ため、要素数の上限は無い。
+// 固定サイズ配列を使わないので native の AOT 最適化コンパイル時間も要素数に依存しない。
+//
+// 制約:
+//   - キー型 K は順序比較が必要（< と ==）。int/string等は組み込み、構造体は `with Ord, Eq` を付ける。
+//     順序を持たない型はキーにできない（その用途はハッシュマップ向き）。値型 V は任意。
+//
+// 使用例:
+//   import std::collections::treemap::*;
+//   TreeMap<string, int> m();
+//   m.put("apple", 1); m.put("banana", 2);
+//   if (m.contains("apple")) { println(m.get("apple")); }  // 1
+
+module std.collections.treemap;
+
+// ジェネリック平衡二分探索木マップ。
+// ノードはパラレルな動的配列（keys/vals/left/right/height）＋indexで表す。容量はpushで自動拡張される。
+export struct TreeMap<K, V> {
+    K[] keys;      // ノードのキー
+    V[] vals;      // ノードの値
+    int[] left;    // 左の子のindex（-1で無し）
+    int[] right;   // 右の子のindex（-1で無し）
+    int[] height;  // 部分木の高さ（AVL平衡用）
+    int count;     // 確保済みノード数
+    int root;      // 根のindex（-1で空）
+}
+
+export impl<K, V> TreeMap<K, V> {
+    // 空のマップを作る。
+    self() {
+        self.keys = [];
+        self.vals = [];
+        self.left = [];
+        self.right = [];
+        self.height = [];
+        self.count = 0;
+        self.root = -1;
+    }
+
+    // ---- 内部ヘルパ ----
+
+    // ノードの高さ（無しは0）。
+    int node_height(int node) {
+        if (node < 0) {
+            return 0;
+        }
+        return self.height[node];
+    }
+
+    // ノードの高さを子から再計算する。
+    void update_height(int node) {
+        int hl = self.node_height(self.left[node]);
+        int hr = self.node_height(self.right[node]);
+        int m = hl;
+        if (hr > hl) {
+            m = hr;
+        }
+        self.height[node] = m + 1;
+    }
+
+    // 平衡係数（左の高さ - 右の高さ）。
+    int balance_factor(int node) {
+        return self.node_height(self.left[node]) - self.node_height(self.right[node]);
+    }
+
+    // 右回転して新しい部分木の根indexを返す。
+    int rotate_right(int y) {
+        int x = self.left[y];
+        self.left[y] = self.right[x];
+        self.right[x] = y;
+        self.update_height(y);
+        self.update_height(x);
+        return x;
+    }
+
+    // 左回転して新しい部分木の根indexを返す。
+    int rotate_left(int x) {
+        int y = self.right[x];
+        self.right[x] = self.left[y];
+        self.left[y] = x;
+        self.update_height(x);
+        self.update_height(y);
+        return y;
+    }
+
+    // 新しいノードを確保してindexを返す。スライスへpushするので容量は自動拡張される。
+    int alloc_node(K k, V v) {
+        int idx = self.count;
+        self.keys.push(k);
+        self.vals.push(v);
+        self.left.push(-1);
+        self.right.push(-1);
+        self.height.push(1);
+        self.count = self.count + 1;
+        return idx;
+    }
+
+    // node を根とする部分木へ (k, v) を挿入し、平衡化後の新しい根indexを返す。
+    int insert_at(int node, K k, V v) {
+        if (node < 0) {
+            return self.alloc_node(k, v);
+        }
+        if (k < self.keys[node]) {
+            self.left[node] = self.insert_at(self.left[node], k, v);
+        } else if (self.keys[node] < k) {
+            self.right[node] = self.insert_at(self.right[node], k, v);
+        } else {
+            // 既存キーは値を更新
+            self.vals[node] = v;
+            return node;
+        }
+
+        self.update_height(node);
+        int b = self.balance_factor(node);
+
+        // 左に偏り（Left-Left / Left-Right）
+        if (b > 1) {
+            if (k < self.keys[self.left[node]]) {
+                return self.rotate_right(node);
+            }
+            self.left[node] = self.rotate_left(self.left[node]);
+            return self.rotate_right(node);
+        }
+        // 右に偏り（Right-Right / Right-Left）
+        if (b < -1) {
+            if (self.keys[self.right[node]] < k) {
+                return self.rotate_left(node);
+            }
+            self.right[node] = self.rotate_right(self.right[node]);
+            return self.rotate_left(node);
+        }
+        return node;
+    }
+
+    // キーに対応するノードindexを返す（無ければ -1）。O(log n)。
+    int find_index(K k) {
+        int cur = self.root;
+        while (cur >= 0) {
+            if (k == self.keys[cur]) {
+                return cur;
+            }
+            if (k < self.keys[cur]) {
+                cur = self.left[cur];
+            } else {
+                cur = self.right[cur];
+            }
+        }
+        return -1;
+    }
+
+    // ---- 公開API ----
+
+    // (key, val) を挿入する。既存キーなら値を更新。容量はスライスが自動拡張するので上限は無い。O(log n)。
+    void put(K key, V val) {
+        self.root = self.insert_at(self.root, key, val);
+    }
+
+    // キーが存在するか。O(log n)。
+    bool contains(K key) {
+        return self.find_index(key) >= 0;
+    }
+
+    // キーに対応する値を返す（H8: 不在を型で表現するOption返しAPI）。O(log n)。
+    // 旧実装は不在時にidxを0へ丸めて根ノードの値を返す危険な契約だった
+    Option<V> get(K key) {
+        const int idx = self.find_index(key);
+        if (idx < 0) {
+            return Option::None;
+        }
+        return Option::Some(self.vals[idx]);
+    }
+
+    // キーに対応する値、不在時はdefault_valを返す（デフォルト値を明示する非Option版）。O(log n)。
+    V get_or(K key, V default_val) {
+        const int idx = self.find_index(key);
+        if (idx < 0) {
+            return default_val;
+        }
+        return self.vals[idx];
+    }
+
+    // 保持している要素数。
+    int size() {
+        return self.count;
+    }
+}

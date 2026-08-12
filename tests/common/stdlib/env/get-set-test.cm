@@ -1,0 +1,27 @@
+//! platform: !wasm|js
+// std::env（libc getenv/setenv、native/JITのみ）の回帰
+import std::io::println;
+import std::env::{get as env_get, set as env_set};
+
+int main() {
+    // 未設定はNone
+    Option<string> unset = env_get("CM_TEST_ENV_UNSET_XYZ123");
+    println(unset.is_none());
+
+    // set→getの往復
+    println(env_set("CM_TEST_ENV_VAR", "hello"));
+    Option<string> v = env_get("CM_TEST_ENV_VAR");
+    println(v.is_some());
+    println(v.unwrap());
+
+    // 上書き
+    env_set("CM_TEST_ENV_VAR", "world");
+    println(env_get("CM_TEST_ENV_VAR").unwrap());
+
+    // 空文字列の値
+    env_set("CM_TEST_ENV_EMPTY", "");
+    Option<string> e = env_get("CM_TEST_ENV_EMPTY");
+    println(e.is_some());
+    println(e.unwrap().len());
+    return 0;
+}

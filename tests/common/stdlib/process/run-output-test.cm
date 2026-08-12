@@ -1,0 +1,31 @@
+//! platform: !wasm|js
+// std::process（libc system/popen、native/JITのみ）の回帰
+import std::io::println;
+import std::io::print;
+import std::process::{run, output};
+
+int main() {
+    // 終了コード
+    println(run("true"));
+    println(run("false"));
+    println(run("exit 7"));
+
+    // 標準出力の収集
+    match (output("echo hi")) {
+        Result::Ok(text) => print(text),
+        Result::Err(e) => println("err: {e}"),
+    }
+
+    // 複数行出力
+    match (output("printf 'a\\nb\\n'")) {
+        Result::Ok(text) => print(text),
+        Result::Err(e) => println("err: {e}"),
+    }
+
+    // 出力なしコマンドは空文字列
+    match (output("true")) {
+        Result::Ok(text) => println(text.len()),
+        Result::Err(e) => println("err: {e}"),
+    }
+    return 0;
+}

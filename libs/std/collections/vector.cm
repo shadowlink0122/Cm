@@ -2,9 +2,10 @@
 // Vector<T> - 任意の型Tを格納できる動的配列
 module std.collections.vector;
 
+// 確保はstd::mem経由にして、set_allocator_fnsで登録したカスタムアロケータを通す（R9。従来は生malloc直呼びで素通しだった）
+import std::mem::{alloc, dealloc};
+
 use libc {
-    void* malloc(int size);
-    void free(void* ptr);
     void* memcpy(void* dest, void* src, int n);
 }
 
@@ -34,19 +35,19 @@ export impl<T> Vector<T> {
             // __sizeof__(T)で型サイズを動的取得
             const long elem_size = __sizeof__(T) as long;
             const long alloc_size = (new_cap as long) * elem_size;
-            void* raw_ptr = malloc(alloc_size);
+            void* raw_ptr = alloc(alloc_size as int);
             T* new_data = raw_ptr as T*;
             // 既存データをコピー（memcpyで高速コピー）
             if (self.size > 0) {
                 void* src = self.data as void*;
                 void* dst = new_data as void*;
                 const long copy_size = (self.size as long) * elem_size;
-                memcpy(dst, src, copy_size);
+                memcpy(dst, src, copy_size as int);
             }
             void* old_ptr = self.data as void*;
             void* null_ptr = 0 as void*;
             if (old_ptr != null_ptr) {
-                free(old_ptr);
+                dealloc(old_ptr);
             }
             self.data = new_data;
             self.cap = new_cap;
@@ -113,7 +114,7 @@ export impl<T> Vector<T> {
         void* ptr = self.data as void*;
         void* null_ptr = 0 as void*;
         if (ptr != null_ptr) {
-            free(ptr);
+            dealloc(ptr);
         }
         self.data = null_ptr as T*;
         self.size = 0;

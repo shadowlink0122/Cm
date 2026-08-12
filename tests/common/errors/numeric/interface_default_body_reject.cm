@@ -1,0 +1,7 @@
+// R13: インターフェースメソッドのデフォルト実装（本体付き宣言）は未対応
+interface Greeter {
+    int greet() { return 42; }
+}
+int main() {
+    return 0;
+}

@@ -15,4 +15,14 @@ done < <(find examples -name '*.cm' -not -path 'examples/uefi/util/*' -not -path
 if [ "$fail" -eq 0 ]; then
     echo "✅ examples check passed"
 fi
+
+# セルフホスト素振り（セルフホスト準備 第4段）: OS連携API（args/read_bytes/split/bytes/write_bytes/process）の通し実行を
+# jit（cm run -- 引数渡し）とnative（コンパイル済みバイナリへの直接引数渡し）の両方で検証し、成果物の一致まで確認する
+DRILL=examples/07_selfhost_drill
+./cm run "$DRILL/main.cm" -- "$DRILL/sample_input.cm" -o /tmp/drill_jit.bin
+./cm compile "$DRILL/main.cm" -o /tmp/drill_bin
+/tmp/drill_bin "$DRILL/sample_input.cm" -o /tmp/drill_native.bin
+cmp /tmp/drill_jit.bin /tmp/drill_native.bin
+echo "✅ selfhost drill passed (jit/native artifacts identical)"
+
 exit "$fail"

@@ -1,0 +1,17 @@
+//! platform: js
+// npmパッケージへのコールバック渡し: 関数ポインタとラムダの両方
+
+use "cmtestpkg" {
+    int applyTwice(int*(int) fn, int v);
+}
+
+int triple(int x) {
+    return x * 3;
+}
+
+int main() {
+    println("fn: {applyTwice(triple, 7)}");
+    int*(int) dbl = (int x) => x * 2;
+    println("lambda: {applyTwice(dbl, 5)}");
+    return 0;
+}

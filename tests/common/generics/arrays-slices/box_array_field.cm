@@ -1,0 +1,43 @@
+// C9回帰: Box<T>のT[N]配列フィールドがshort/long/double要素で正しいstrideを持つことを検証する
+// （かつては未置換のT[]が8バイトblob扱いになり、隣接フィールドを破壊していた）
+import std::io::println;
+
+struct ArrBox<T> {
+    T[4] items;
+    int sentinel;
+}
+
+int main() {
+    ArrBox<short> bs;
+    bs.sentinel = 999;
+    bs.items[0] = 1 as short;
+    bs.items[1] = 2 as short;
+    bs.items[2] = 3 as short;
+    bs.items[3] = 4 as short;
+    const int s0 = bs.items[0] as int;
+    const int s1 = bs.items[1] as int;
+    const int s2 = bs.items[2] as int;
+    const int s3 = bs.items[3] as int;
+    const int ssent = bs.sentinel;
+    println("{s0} {s1} {s2} {s3} {ssent}");
+
+    ArrBox<long> bl;
+    bl.sentinel = 777;
+    bl.items[0] = 10000000000 as long;
+    bl.items[3] = 40000000000 as long;
+    const long l0 = bl.items[0];
+    const long l3 = bl.items[3];
+    const int lsent = bl.sentinel;
+    println("{l0} {l3} {lsent}");
+
+    ArrBox<double> bd;
+    bd.sentinel = 555;
+    bd.items[0] = 1.5;
+    bd.items[3] = 4.5;
+    const double d0 = bd.items[0];
+    const double d3 = bd.items[3];
+    const int dsent = bd.sentinel;
+    println("{d0} {d3} {dsent}");
+
+    return 0;
+}

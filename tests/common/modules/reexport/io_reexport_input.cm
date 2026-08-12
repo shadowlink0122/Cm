@@ -1,0 +1,14 @@
+//! platform: !wasm|js|sv
+// 回帰(R9): std::ioファサードの選択的再export（export import std.io.console.input::{...}）経由で入力APIが解決される
+// （従来は選択的再export辺が一律素通しで 'input_int' is not a function になっていた。実行は対話入力のため到達しない分岐で解決のみ検証する）
+import std::io::{println, input_int, input};
+
+int main() {
+    if (1 == 2) {
+        const int v = input_int();
+        const string s = input();
+        println("{v}{s}");
+    }
+    println("resolved");
+    return 0;
+}

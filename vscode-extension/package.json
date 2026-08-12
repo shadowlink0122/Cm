@@ -2,10 +2,10 @@
   "name": "cm-language",
   "displayName": "Cm Language Support",
   "description": "Syntax highlighting and language support for the Cm programming language",
-  "version": "0.16.2",
+  "version": "0.17.0",
   "publisher": "cm-lang",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Programming Languages"
@@ -26,10 +26,11 @@
     "compile": "tsc -p ./",
     "build:grammar": "tsc -p ./ && node out/src/grammar/build.js",
     "verify:grammar": "tsc -p ./ && node out/src/grammar/build.js --check",
-    "test": "tsc -p ./ && node --test out/src/test/*.test.js",
+    "build:bundle": "esbuild src/extension.ts src/server/main.ts --bundle --outdir=dist --outbase=src --external:vscode --platform=node --format=cjs --log-level=warning",
+    "test": "tsc -p ./ && npm run build:bundle && node --test out/src/test/*.test.js",
     "update-version": "tsc -p ./ && node out/scripts/update-version.js",
     "verify-version": "tsc -p ./ && node out/scripts/verify-version.js",
-    "prepackage": "npm run verify-version && npm run verify:grammar",
+    "prepackage": "npm run verify-version && npm run verify:grammar && npm run build:bundle",
     "package": "pnpm exec vsce package --allow-missing-repository --skip-license",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -88,17 +89,24 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.2",
+    "@types/vscode": "^1.125.0",
     "@vscode/vsce": "^3.9.2",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^10.0.0",
-    "prettier": "^3.9.5",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.64.0",
-    "@eslint/js": "^9.39.5",
-    "@types/vscode": "^1.125.0"
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.66.0",
+    "vscode-jsonrpc": "^9.0.1",
+    "vscode-languageclient": "^10.1.0",
+    "vscode-languageserver": "^10.1.0",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
-  "main": "./out/src/extension.js",
+  "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:cm"
   ]

@@ -79,6 +79,8 @@ void bitops() {
 ```
 
 各 `//! test:` 行が1つのテストケースになり、入力を設定して出力を検証します。
+期待値はテストベンチ内で `!==` 比較としてアサートされ、不一致のときは `FAIL: TEST k: name=実測 expected=期待値` を表示して `$fatal` で非0終了します（`cm test` が失敗を検出します）。
+`!==` は4値比較のため、出力が未駆動で `x`（不定）の場合も不一致としてFAILします。
 
 ### 順序回路のテスト（cycles指定）
 
@@ -123,8 +125,6 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 ```
 
 ---
-
-← [データ構造](data.html) | [意味論保証](semantics.html) →
 
 ## アサーション（std::debug::assert）
 
@@ -190,7 +190,7 @@ cm test logic.cm      # platform指定なし → 各#[test]関数をJITで直接
 din = 5;
 repeat (1) @(posedge clk);
 #1; // NBA確定待ち
-if (!((dout == 5))) begin
+if (((dout == 5)) !== 1'b1) begin
     $display("FAIL: first value latched");
     $fatal(1);
 end else begin
@@ -199,7 +199,7 @@ end
 ```
 
 - **`step(n)`**: nクロック待機（`#[test]` 関数・SVプラットフォーム専用の組み込み）
-- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`（シミュレーションが非0終了するためテストランナーが失敗を検出）
+- **`assert(cond, msg)`**: 成立でPASS表示、不成立でFAIL表示+`$fatal`（シミュレーションが非0終了するためテストランナーが失敗を検出）。比較は `!== 1'b1` の4値判定で、対象信号が `x`（不定）のときも成立扱いにならずFAILします
 - **`println("...")`**: `$display`（文字列リテラルのみ）
 - 代入はブロッキング代入としてDUT入力を駆動します
 - クロックポートが `clk` 以外の名前（`pixel_clk` 等）でも、プロセスのクロックに使われている入力ポートを自動検出します
@@ -232,6 +232,31 @@ cm compile --target=sv design.cm -o design.sv  # 合成用（テストコード�
 
 `-D SIM` など任意の名前のユーザー定義も従来通り併用できます。
 
+
+## 並行アサーション（SVA・v0.17.0）
+
+即時アサーションは「その瞬間の値」しか検査できませんが、`sv_assert_property`は「reqの2サイクル後に必ずackが立つ」といった時相的性質をSVの並行アサーション（`assert property`）として監視できます。`#[test]`関数内に書くと、テストベンチのモジュールスコープへ巻き上げられ、シミュレーション全体で監視されます:
+
+```cm
+#[test]
+void check_req_ack() {
+    // reqが立ったら2サイクル後にackが立つ
+    sv_assert_property(clk, implies(req, after(ack, 2)));
+    // reqの立ち上がりの同一サイクルでack
+    sv_assert_property(clk, implies(rose(req), ack));
+    req = true;
+    step(4);
+}
+```
+
+```systemverilog
+assert property (@(posedge clk) $past(req, 2) |-> ack) else $fatal(1, "SVA_FAIL");
+assert property (@(posedge clk) $rose(req) |-> ack) else $fatal(1, "SVA_FAIL");
+```
+
+時相演算子は `implies(a, b)`（`a |-> b`）・`implies_next(a, b)`（1サイクル後の含意）・`after(b, n)`（impliesの結論としてのみ・nサイクル後）・`rose(x)`/`fell(x)`/`stable(x)`/`past(x, n)`（`$rose`等へ写像）が使えます。
+
+> 遅延付き含意はオープンソースツール（verilator/iverilog）が`##N`結論のimplicationを受理しないため、等価な`$past`シフト形（`$past(req, 2) |-> ack`）で出力されます。iverilogは並行アサーション自体を未対応のため、SVAを含むテストベンチの検証にはverilatorを使用してください。
 
 ---
 

@@ -46,7 +46,7 @@ export string input() {
     }
 
     // ヒープにバッファを確保してコピー
-    void* heap_buf = malloc(total + 1);
+    void* heap_buf = malloc((total + 1) as int);
     char* result = heap_buf as char*;
 
     // データをコピー
@@ -60,32 +60,28 @@ export string input() {
     return result as string;
 }
 
-/// 標準入力から整数を読み取り
+/// 標準入力から整数を読み取り（パース失敗時は0。失敗を区別する場合はparse_intを使用）
 export int input_int() {
     string line = input();
-    return parse_int(line);
+    return parse_int(line).unwrap_or(0);
 }
 
-/// 標準入力からlong読み取り
+/// 標準入力からlong読み取り（パース失敗時は0。失敗を区別する場合はparse_longを使用）
 export long input_long() {
     string line = input();
-    return parse_long(line);
+    return parse_long(line).unwrap_or(0 as long);
 }
 
-/// 標準入力からdouble読み取り
+/// 標準入力からdouble読み取り（パース失敗時は0.0。失敗を区別する場合はparse_doubleを使用）
 export double input_double() {
     string line = input();
-    return parse_double(line);
+    return parse_double(line).unwrap_or(0.0);
 }
 
-/// 標準入力からbool読み取り
-/// "true", "1", "yes" -> true, その他 -> false
+/// 標準入力からbool読み取り（未知の入力はfalse。失敗を区別する場合はparse_boolを使用）
 export bool input_bool() {
     string line = input();
-    if (line == "true" || line == "1" || line == "yes") {
-        return true;
-    }
-    return false;
+    return parse_bool(line).unwrap_or(false);
 }
 
 /// 標準入力から文字列を読み取り（inputのエイリアス）
@@ -97,15 +93,16 @@ export string input_string() {
 // 文字列パース関数（純粋Cm実装）
 // ============================================================
 
-/// 文字列を整数に変換
-int parse_int(string s) {
+/// 文字列を整数に変換（M17: 失敗を0で握り潰さずOptionで返す。
+/// 空文字列・符号のみ・非数字先頭はNone、先頭の数値部分をパースしてSome）
+export Option<int> parse_int(string s) {
     int result = 0;
     bool negative = false;
     int i = 0;
     int len = s.len();
 
     if (len == 0) {
-        return 0;
+        return Option::None;
     }
 
     // 符号チェック
@@ -114,6 +111,11 @@ int parse_int(string s) {
         i = 1;
     } else if (s[0] == '+') {
         i = 1;
+    }
+
+    // 先頭が数字でなければ失敗
+    if (i >= len || (s[i] as int) < 48 || (s[i] as int) > 57) {
+        return Option::None;
     }
 
     // 数字を処理
@@ -132,18 +134,29 @@ int parse_int(string s) {
         result = -result;
     }
 
-    return result;
+    return Option::Some(result);
 }
 
-/// 文字列をlongに変換
-long parse_long(string s) {
+/// 文字列をboolに変換（"true"/"1"/"yes"はtrue、"false"/"0"/"no"はfalse、それ以外はNone）
+export Option<bool> parse_bool(string s) {
+    if (s == "true" || s == "1" || s == "yes") {
+        return Option::Some(true);
+    }
+    if (s == "false" || s == "0" || s == "no") {
+        return Option::Some(false);
+    }
+    return Option::None;
+}
+
+/// 文字列をlongに変換（M17: 失敗はNone）
+export Option<long> parse_long(string s) {
     long result = 0;
     bool negative = false;
     int i = 0;
     int len = s.len();
 
     if (len == 0) {
-        return 0;
+        return Option::None;
     }
 
     // 符号チェック
@@ -154,11 +167,16 @@ long parse_long(string s) {
         i = 1;
     }
 
+    // 先頭が数字でなければ失敗
+    if (i >= len || (s[i] as int) < 48 || (s[i] as int) > 57) {
+        return Option::None;
+    }
+
     // 数字を処理
     while (i < len) {
         int c = s[i] as int;
         if (c >= 48 && c <= 57) {
-            result = result * 10 + (c - 48) as long;
+            result = result * 10 + (c - 48);
         } else {
             break;
         }
@@ -169,11 +187,11 @@ long parse_long(string s) {
         result = -result;
     }
 
-    return result;
+    return Option::Some(result);
 }
 
-/// 文字列をdoubleに変換（簡易実装）
-double parse_double(string s) {
+/// 文字列をdoubleに変換（簡易実装。M17: 失敗はNone）
+export Option<double> parse_double(string s) {
     // 整数部と小数部を分離
     double result = 0.0;
     bool negative = false;
@@ -181,7 +199,7 @@ double parse_double(string s) {
     int len = s.len();
 
     if (len == 0) {
-        return 0.0;
+        return Option::None;
     }
 
     // 符号チェック
@@ -190,6 +208,11 @@ double parse_double(string s) {
         i = 1;
     } else if (s[0] == '+') {
         i = 1;
+    }
+
+    // 先頭が数字か小数点でなければ失敗
+    if (i >= len || (((s[i] as int) < 48 || (s[i] as int) > 57) && (s[i] as int) != 46)) {
+        return Option::None;
     }
 
     // 整数部
@@ -211,7 +234,7 @@ double parse_double(string s) {
     while (i < len) {
         int c = s[i] as int;
         if (c >= 48 && c <= 57) {
-            result = result + (c - 48) as double * fraction;
+            result = result + ((c - 48) as double) * fraction;
             fraction = fraction * 0.1;
         } else {
             break;
@@ -223,5 +246,5 @@ double parse_double(string s) {
         result = -result;
     }
 
-    return result;
+    return Option::Some(result);
 }

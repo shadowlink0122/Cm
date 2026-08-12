@@ -17,7 +17,7 @@ int main() {
     string str = "Hello, World!";
 
     int len = str.len();
-    char first = str.charAt(0);
+    char first = str.charAt(0)  // codepoint index (ASCII only; use byte_at for raw bytes);
     string sub1 = str.substring(0, 5);
     int pos = str.indexOf("World");
     string upper = str.toUpperCase();
@@ -46,6 +46,32 @@ int main() {
     string last3 = s[-3:];
     return 0;
 }
+```
+
+## Escape Sequences and Raw Strings
+
+String and char literals support the following escape sequences (v0.17.0 implements `\x`/`\u`/`\U` decoding; unknown escapes are now compile errors instead of silently dropping the backslash):
+
+| Escape | Meaning |
+|---|---|
+| `\n` `\t` `\r` `\b` `\f` `\v` `\a` `\0` | control characters |
+| `\\` `\"` `\'` | backslash and quotes |
+| `\{` `\}` `\$` | interpolation escapes (literal `{` `}` `$`) |
+| `\xHH` | one byte (two hex digits) |
+| `\uHHHH` / `\UHHHHHHHH` | Unicode code point encoded as UTF-8 |
+
+```cm
+string a = "\x41";        // "A" (len=1)
+string e = "\u00e9";      // "é" (len=1, byte_len=2)
+string g = "\U0001F600";  // "😀"
+char c = '\x41';          // 'A' (char literals share the same escape table)
+```
+
+Raw strings (backticks) do not interpret escapes: backslashes are kept as-is (handy for Windows paths and regexes). The only exception is the delimiter escape `` \` ``, and interpolation is available via `${expr}` only.
+
+```cm
+string path = `C:\path\n`;   // a 9-character literal (\n is not a newline)
+string tick = `a\`b`;         // "a`b"
 ```
 
 ---

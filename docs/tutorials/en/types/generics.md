@@ -78,6 +78,33 @@ int main() {
 }
 ```
 
+## Type Inference from Pointer and Array Arguments
+
+When a type parameter appears inside a pointer (`T*`) or array (`T[]`) argument, `T` is inferred from the corresponding part of the actual argument type.
+
+```cm
+<T> void swap(T* a, T* b) {
+    T tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+<T> T first(T[] xs) {
+    return xs[0];
+}
+
+int main() {
+    int a = 1;
+    int b = 2;
+    swap(&a, &b);           // T=int (inferred from the int* of &a/&b)
+    println("{a} {b}");     // 2 1
+
+    int[] xs = [10, 20, 30];
+    println("{first(xs)}"); // 10
+    return 0;
+}
+```
+
 ## Generic Collections and RAII
 
 Generic collections (like `Vector<T>`) have `self()` constructors and `~self()` destructors.
@@ -125,3 +152,34 @@ int main() {
 
 <!-- nav -->
 ← Prev: [Types - typedef](typedef.html) | [Contents](index.html) | Next: [Types - Interfaces](interfaces.html) →
+
+## Constructing Generic Structs with Literals
+
+Type arguments are inferred from the declared type, so struct literals can be written without them (v0.17.0).
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Box<int> b = Box{v: 7};                            // bare-name literal (inferred)
+Pair<int, string> p = {first: 7, second: "seven"}; // anonymous literal (inferred)
+
+Box<int> b2 = Box<int>{v: 7};                       // explicit type arguments
+```
+
+Explicit type arguments in literals (`Box<int>{v: 7}`) are also allowed (v0.17.0); the actual type arguments are still determined by inference from the field values. Field-by-field assignment (`Box<int> b; b.v = 7;`) also keeps working.
+
+## Structs with Nested Specializations as Type Arguments
+
+A generic specialization can be passed as a type argument of another generic. Inner literal types are also inferred from the declared type.
+
+```cm
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+
+Pair<Box<int>, Box<string>> nested = Pair { first: Box { v: 42 }, second: Box { v: "deep" } };
+println("{nested.first.v} {nested.second.v}");  // 42 deep
+
+Box<Pair<int, string>> outer = Box { v: Pair { first: 5, second: "inner" } };
+println("{outer.v.first} {outer.v.second}");    // 5 inner
+```

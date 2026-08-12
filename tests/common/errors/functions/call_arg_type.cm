@@ -1,0 +1,8 @@
+// 回帰(エラーパターン): 引数型の不一致
+int f(int a) {
+    return a;
+}
+int main() {
+    int v = f("s");
+    return 0;
+}

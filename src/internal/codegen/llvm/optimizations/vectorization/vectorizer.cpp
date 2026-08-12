@@ -197,7 +197,6 @@ void Vectorizer::generateVectorBody(llvm::Loop* loop, const VectorizationInfo& i
 
     // ベクトル化の主ループ
     // TODO: ベクトル化された値を適切に処理する実装が必要
-    // llvm::Value* vectorValue = nullptr;
 
     // 元のループから命令を収集してベクトル化
     for (auto* BB : loop->blocks()) {

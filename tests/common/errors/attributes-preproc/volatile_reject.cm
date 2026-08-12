@@ -1,0 +1,5 @@
+// R11: volatileは字句予約のみで意味論が未実装のため専用診断で拒否される（従来はExpected type等の無関係な構文エラーに化けていた）
+int main() {
+    volatile int x = 0;
+    return x;
+}

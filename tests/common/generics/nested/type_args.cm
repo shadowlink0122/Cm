@@ -1,0 +1,28 @@
+// C7回帰: ネストした型引数（Box<Pair<int,string>>・Box<Box<int>>・Pair<Box<int>, Box<string>>）が
+// フラットな__マングリングで縮退せず、全バックエンドでフィールド読み書きが一致することを検証する
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+struct Box<T> {
+    T value;
+}
+
+int main() {
+    Box<Pair<int, string>> b;
+    b.value.first = 42;
+    b.value.second = "hi";
+    println("{b.value.first} {b.value.second}");
+
+    Box<Box<int>> bb;
+    bb.value.value = 7;
+    println(bb.value.value);
+
+    Pair<Box<int>, Box<string>> p;
+    p.first.value = 123;
+    p.second.value = "nested";
+    println("{p.first.value} {p.second.value}");
+
+    return 0;
+}

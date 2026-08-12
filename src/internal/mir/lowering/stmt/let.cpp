@@ -1,8 +1,12 @@
 // MIR lowering - let文（定数畳み込みヘルパーと配列/スライス初期化を含む変数宣言の展開）
 
 #include "internal/base/debug.hpp"
+#include "internal/base/target.hpp"
+#include "internal/hir/slice_dispatch.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 
 #include <cinttypes>
 #include <functional>
@@ -176,7 +180,9 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     hir::TypePtr actual_type = let.type;
 
     if (let.type && !let.type->name.empty() && ctx.enum_defs &&
-        ctx.enum_defs->count(let.type->name)) {
+        ctx.enum_defs->count(let.type->name) &&
+        (!ctx.tagged_union_names || ctx.tagged_union_names->count(let.type->name) > 0)) {
+        // Q5: 他サイト（context.cpp/base.cpp）と同様にペイロード付きenumのみを__TaggedUnion_構造体へ変換する。値enum（checkerのint解決がenum名をnameへ保持するようになった）を無条件変換すると16バイト構造体ローカルになり値が壊れる
         auto tagged_union_type = std::make_shared<hir::Type>(hir::TypeKind::Struct);
         tagged_union_type->name = "__TaggedUnion_" + let.type->name;
         // 元の型引数を保持（補間ミニパイプラインでのペイロード型復元に使用）
@@ -205,79 +211,43 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
         }
     }
 
-    // static変数の場合、初期化コードは生成しない
-    // LLVMバックエンドでグローバル変数としてゼロ初期化で生成される
-    // インタプリタでは初回呼び出し時にのみ初期化される
+    // static変数: 格納はゼロ初期化のグローバル（バックエンド側でfunc名_変数名の永続領域）とし、
+    // 初期化子は初回到達時に1回だけ実行するガード付き代入として発行する（X1。
+    // 従来は初期化コード自体を生成せず、非ゼロ初期値が全スコープで無視されていた）
     if (let.is_static) {
-        // 初期化代入は生成しない
-        // 注: 現在はゼロ初期化のみサポート。非ゼロ初期値は将来実装
+        if (let.init) {
+            // ガード用のstatic bool（ゼロ初期化=未初期化）
+            LocalId guard =
+                ctx.new_local(let.name + "__static_guard", hir::make_bool(), true, false, true);
+            LocalId guard_val = ctx.new_temp(hir::make_bool());
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{guard_val}, MirRvalue::use(MirOperand::copy(MirPlace{guard}))));
+
+            BlockId init_block = ctx.new_block();
+            BlockId after_block = ctx.new_block();
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{guard_val}),
+                                                         {{0, init_block}}, after_block));
+
+            ctx.switch_to_block(init_block);
+            MirConstant true_const;
+            true_const.value = true;
+            true_const.type = hir::make_bool();
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{guard}, MirRvalue::use(MirOperand::constant(true_const))));
+            LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
+            ctx.set_terminator(MirTerminator::goto_block(after_block));
+
+            ctx.switch_to_block(after_block);
+        }
         return;
     }
 
-    // スライス型の変数で初期値がない場合、空のスライスを作成
+    // スライス型の変数で初期値がない場合、空のスライスを作成（容量0の確保。正準ヘルパへ委譲）
     if (!let.init && let.type && let.type->kind == hir::TypeKind::Array &&
         !let.type->array_size.has_value()) {
-        // 動的配列（スライス）の初期化
-        // typedefエイリアス（例: Value = int | string）を解決してから要素サイズを決める
-        hir::TypePtr elem_type =
-            ctx.resolve_typedef(let.type->element_type ? let.type->element_type : hir::make_int());
-
-        // 要素サイズを取得
-        int64_t elem_size = 4;  // デフォルトはint
-        auto elem_kind = elem_type->kind;
-        if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-            elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-            elem_size = 1;
-        } else if (elem_kind == hir::TypeKind::Short || elem_kind == hir::TypeKind::UShort) {
-            elem_size = 2;
-        } else if (elem_kind == hir::TypeKind::Long || elem_kind == hir::TypeKind::ULong ||
-                   elem_kind == hir::TypeKind::Double) {
-            elem_size = 8;
-        } else if (elem_kind == hir::TypeKind::Pointer || elem_kind == hir::TypeKind::String) {
-            elem_size = 8;
-        } else if (elem_kind == hir::TypeKind::Struct || elem_kind == hir::TypeKind::Union) {
-            // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-            elem_size = ctx.layout_size(elem_type);
-        } else if (elem_kind == hir::TypeKind::Array) {
-            // 多次元配列の場合、内側の配列サイズを計算
-            // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
-            elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
-        }
-
-        // cm_slice_new(elem_size, initial_capacity) を呼び出し
-        LocalId elem_size_local = ctx.new_temp(hir::make_long());
-        MirConstant elem_size_const;
-        elem_size_const.value = static_cast<int64_t>(elem_size);
-        elem_size_const.type = hir::make_long();
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{elem_size_local}, MirRvalue::use(MirOperand::constant(elem_size_const))));
-
-        LocalId init_cap_local = ctx.new_temp(hir::make_long());
-        MirConstant init_cap_const;
-        init_cap_const.value = int64_t(0);  // 初期容量0
-        init_cap_const.type = hir::make_long();
-        ctx.push_statement(MirStatement::assign(
-            MirPlace{init_cap_local}, MirRvalue::use(MirOperand::constant(init_cap_const))));
-
-        // cm_slice_new呼び出し
-        BlockId new_block = ctx.new_block();
-        std::vector<MirOperandPtr> new_args;
-        new_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
-        new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
-
-        auto new_term = std::make_unique<MirTerminator>();
-        new_term->kind = MirTerminator::Call;
-        new_term->data = MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
-                                                 std::move(new_args),
-                                                 MirPlace{local},
-                                                 new_block,
-                                                 std::nullopt,
-                                                 "",
-                                                 "",
-                                                 false};
-        ctx.set_terminator(std::move(new_term));
-        ctx.switch_to_block(new_block);
-
+        expr_lowering->materialize_slice_literal({}, let.type, ctx, MirPlace{local});
         return;
     }
 
@@ -337,303 +307,16 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
             }
 
             if (is_slice_init_from_array) {
-                // 配列リテラルからスライスへの初期化まず空のスライスを作成してから、各要素をpushで追加
                 if (auto* arr_lit =
                         std::get_if<std::unique_ptr<hir::HirArrayLiteral>>(&let.init->kind)) {
-                    const auto& elements = (*arr_lit)->elements;
-                    // typedefエイリアスを解決してから要素サイズ・push関数を決める
-                    hir::TypePtr elem_type = ctx.resolve_typedef(
-                        let.type->element_type ? let.type->element_type : hir::make_int());
-
-                    // 要素サイズを取得
-                    int64_t elem_size = 4;  // デフォルトはint
-                    auto elem_kind = elem_type->kind;
-                    if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                        elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                        elem_size = 1;
-                    } else if (elem_kind == hir::TypeKind::Short ||
-                               elem_kind == hir::TypeKind::UShort) {
-                        elem_size = 2;
-                    } else if (elem_kind == hir::TypeKind::Long ||
-                               elem_kind == hir::TypeKind::ULong ||
-                               elem_kind == hir::TypeKind::Double) {
-                        elem_size = 8;
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        elem_size = 8;
-                    } else if (elem_kind == hir::TypeKind::Struct ||
-                               elem_kind == hir::TypeKind::Union) {
-                        // 構造体・ユニオンはblob（値のインラインコピー）として格納する
-                        elem_size = ctx.layout_size(elem_type);
-                    } else if (elem_kind == hir::TypeKind::Array) {
-                        // 多次元配列の場合、内側の配列サイズを計算
-                        // CmSlice構造体: data(8) + len(8) + cap(8) + elem_size(8) = 32バイト
-                        elem_size = sizeof(void*) * 4;  // CmSlice構造体のサイズ
-                    }
-
-                    // cm_slice_new(elem_size, initial_capacity) を呼び出し
-                    LocalId elem_size_local_new = ctx.new_temp(hir::make_long());
-                    MirConstant elem_size_const_new;
-                    elem_size_const_new.value = static_cast<int64_t>(elem_size);
-                    elem_size_const_new.type = hir::make_long();
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{elem_size_local_new},
-                        MirRvalue::use(MirOperand::constant(elem_size_const_new))));
-
-                    LocalId init_cap_local = ctx.new_temp(hir::make_long());
-                    MirConstant init_cap_const;
-                    init_cap_const.value = static_cast<int64_t>(elements.size());  // 要素数で初期化
-                    init_cap_const.type = hir::make_long();
-                    ctx.push_statement(
-                        MirStatement::assign(MirPlace{init_cap_local},
-                                             MirRvalue::use(MirOperand::constant(init_cap_const))));
-
-                    // cm_slice_new呼び出し
-                    BlockId new_block = ctx.new_block();
-                    std::vector<MirOperandPtr> new_args;
-                    new_args.push_back(MirOperand::copy(MirPlace{elem_size_local_new}));
-                    new_args.push_back(MirOperand::copy(MirPlace{init_cap_local}));
-
-                    auto new_term = std::make_unique<MirTerminator>();
-                    new_term->kind = MirTerminator::Call;
-                    new_term->data =
-                        MirTerminator::CallData{MirOperand::function_ref("cm_slice_new"),
-                                                std::move(new_args),
-                                                MirPlace{local},
-                                                new_block,
-                                                std::nullopt,
-                                                "",
-                                                "",
-                                                false};
-                    ctx.set_terminator(std::move(new_term));
-                    ctx.switch_to_block(new_block);
-
-                    // push関数名を決定
-                    std::string push_func = "cm_slice_push_i32";
-                    if (elem_kind == hir::TypeKind::Char || elem_kind == hir::TypeKind::Bool ||
-                        elem_kind == hir::TypeKind::Tiny || elem_kind == hir::TypeKind::UTiny) {
-                        push_func = "cm_slice_push_i8";
-                    } else if (elem_kind == hir::TypeKind::Long ||
-                               elem_kind == hir::TypeKind::ULong) {
-                        push_func = "cm_slice_push_i64";
-                    } else if (elem_kind == hir::TypeKind::Double) {
-                        push_func = "cm_slice_push_f64";
-                    } else if (elem_kind == hir::TypeKind::Float) {
-                        push_func = "cm_slice_push_f32";
-                    } else if (elem_kind == hir::TypeKind::Pointer ||
-                               elem_kind == hir::TypeKind::String) {
-                        push_func = "cm_slice_push_ptr";
-                    } else if (elem_kind == hir::TypeKind::Union ||
-                               elem_kind == hir::TypeKind::Struct) {
-                        // ユニオン・構造体要素はblobとしてメモリコピー（push側と統一）
-                        push_func = "cm_slice_push_blob";
-                    } else if (elem_kind == hir::TypeKind::Array) {
-                        // 配列要素（多次元スライス）はスライス構造体をコピー
-                        push_func = "cm_slice_push_slice";
-                    }
-
-                    // 各要素をpushで追加
-                    for (const auto& elem : elements) {
-                        LocalId elem_value;
-
-                        // 要素が配列の場合、スライスに変換
-                        if (elem_kind == hir::TypeKind::Array && elem->type &&
-                            elem->type->array_size.has_value()) {
-                            // 配列リテラルをスライスに変換
-                            LocalId arr_value = expr_lowering->lower_expression(*elem, ctx);
-
-                            // 内側の配列のサイズと要素サイズを取得
-                            int64_t inner_size = elem->type->array_size.value_or(0);
-                            int64_t inner_elem_size = 4;  // デフォルトはint
-                            if (elem->type->element_type) {
-                                auto inner_elem_kind = elem->type->element_type->kind;
-                                if (inner_elem_kind == hir::TypeKind::Long ||
-                                    inner_elem_kind == hir::TypeKind::ULong ||
-                                    inner_elem_kind == hir::TypeKind::Double) {
-                                    inner_elem_size = 8;
-                                } else if (inner_elem_kind == hir::TypeKind::Char ||
-                                           inner_elem_kind == hir::TypeKind::Bool ||
-                                           inner_elem_kind == hir::TypeKind::Tiny ||
-                                           inner_elem_kind == hir::TypeKind::UTiny) {
-                                    inner_elem_size = 1;
-                                } else if (inner_elem_kind == hir::TypeKind::Short ||
-                                           inner_elem_kind == hir::TypeKind::UShort) {
-                                    inner_elem_size = 2;
-                                } else if (inner_elem_kind == hir::TypeKind::Pointer ||
-                                           inner_elem_kind == hir::TypeKind::String) {
-                                    inner_elem_size = 8;
-                                }
-                            }
-
-                            // 配列のアドレスを取得
-                            LocalId addr_local =
-                                ctx.new_temp(hir::make_pointer(elem->type->element_type));
-                            ctx.push_statement(MirStatement::assign(
-                                MirPlace{addr_local}, MirRvalue::ref(MirPlace{arr_value}, false)));
-
-                            // サイズ引数を作成
-                            LocalId size_local = ctx.new_temp(hir::make_long());
-                            MirConstant size_const;
-                            size_const.value = static_cast<int64_t>(inner_size);
-                            size_const.type = hir::make_long();
-                            ctx.push_statement(MirStatement::assign(
-                                MirPlace{size_local},
-                                MirRvalue::use(MirOperand::constant(size_const))));
-
-                            LocalId elem_size_local = ctx.new_temp(hir::make_long());
-                            MirConstant elem_size_const;
-                            elem_size_const.value = static_cast<int64_t>(inner_elem_size);
-                            elem_size_const.type = hir::make_long();
-                            ctx.push_statement(MirStatement::assign(
-                                MirPlace{elem_size_local},
-                                MirRvalue::use(MirOperand::constant(elem_size_const))));
-
-                            // cm_array_to_slice呼び出し
-                            LocalId slice_local = ctx.new_local("inner_slice", elem_type);
-                            BlockId conv_block = ctx.new_block();
-
-                            std::vector<MirOperandPtr> conv_args;
-                            conv_args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                            conv_args.push_back(MirOperand::copy(MirPlace{size_local}));
-                            conv_args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
-
-                            auto conv_term = std::make_unique<MirTerminator>();
-                            conv_term->kind = MirTerminator::Call;
-                            conv_term->data = MirTerminator::CallData{
-                                MirOperand::function_ref("cm_array_to_slice"),
-                                std::move(conv_args),
-                                MirPlace{slice_local},
-                                conv_block,
-                                std::nullopt,
-                                "",
-                                "",
-                                false};
-                            ctx.set_terminator(std::move(conv_term));
-                            ctx.switch_to_block(conv_block);
-
-                            elem_value = slice_local;
-                        } else {
-                            elem_value = expr_lowering->lower_expression(*elem, ctx);
-
-                            // floatスライスへのdouble要素の場合、floatにキャスト
-                            // 浮動小数点リテラルはデフォルトでdoubleとして解析される
-                            if (elem_kind == hir::TypeKind::Float) {
-                                hir::TypePtr actual_elem_type = nullptr;
-                                if (elem_value < ctx.func->locals.size()) {
-                                    actual_elem_type = ctx.func->locals[elem_value].type;
-                                }
-                                if (actual_elem_type &&
-                                    actual_elem_type->kind == hir::TypeKind::Double) {
-                                    LocalId casted = ctx.new_temp(hir::make_float());
-                                    ctx.push_statement(MirStatement::assign(
-                                        MirPlace{casted},
-                                        MirRvalue::cast(MirOperand::copy(MirPlace{elem_value}),
-                                                        hir::make_float())));
-                                    elem_value = casted;
-                                }
-                            }
-                        }
-
-                        BlockId success_block = ctx.new_block();
-                        std::vector<MirOperandPtr> args;
-                        args.push_back(MirOperand::copy(MirPlace{local}));
-                        if (push_func == "cm_slice_push_blob") {
-                            // blob pushはデータ先頭へのポインタを受け取る
-                            hir::TypePtr value_type = nullptr;
-                            if (elem_value < ctx.func->locals.size()) {
-                                value_type = ctx.func->locals[elem_value].type;
-                            }
-                            LocalId addr_local = ctx.new_temp(
-                                hir::make_pointer(value_type ? value_type : hir::make_int()));
-                            ctx.push_statement(MirStatement::assign(
-                                MirPlace{addr_local}, MirRvalue::ref(MirPlace{elem_value}, false)));
-                            args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                        } else {
-                            args.push_back(MirOperand::copy(MirPlace{elem_value}));
-                        }
-
-                        auto call_term = std::make_unique<MirTerminator>();
-                        call_term->kind = MirTerminator::Call;
-                        call_term->data =
-                            MirTerminator::CallData{MirOperand::function_ref(push_func),
-                                                    std::move(args),
-                                                    std::nullopt,
-                                                    success_block,
-                                                    std::nullopt,
-                                                    "",
-                                                    "",
-                                                    false};
-                        ctx.set_terminator(std::move(call_term));
-                        ctx.switch_to_block(success_block);
-                    }
+                    // 配列リテラルからスライスへの初期化（cm_slice_new+要素push。正準ヘルパへ委譲）
+                    expr_lowering->materialize_slice_literal((*arr_lit)->elements, let.type, ctx,
+                                                             MirPlace{local});
                 } else {
-                    // 配列リテラルでない場合（変数参照など）
-                    // cm_array_to_slice を呼び出して変換
+                    // 配列リテラルでない場合（変数参照など）はcm_array_to_sliceでヒープスライスへ変換して格納
                     LocalId init_value = expr_lowering->lower_expression(*let.init, ctx);
-
-                    // 配列のサイズと要素サイズを取得
-                    int64_t array_size = let.init->type->array_size.value_or(0);
-                    int64_t elem_size = 4;  // デフォルトはint32
-                    if (let.init->type->element_type) {
-                        auto resolved_ek = ctx.resolve_typedef(let.init->type->element_type);
-                        auto ek =
-                            resolved_ek ? resolved_ek->kind : let.init->type->element_type->kind;
-                        if (ek == hir::TypeKind::Char || ek == hir::TypeKind::Bool ||
-                            ek == hir::TypeKind::Tiny || ek == hir::TypeKind::UTiny) {
-                            elem_size = 1;
-                        } else if (ek == hir::TypeKind::Long || ek == hir::TypeKind::ULong ||
-                                   ek == hir::TypeKind::Double) {
-                            elem_size = 8;
-                        } else if (ek == hir::TypeKind::Pointer || ek == hir::TypeKind::String) {
-                            elem_size = 8;
-                        } else if (ek == hir::TypeKind::Struct || ek == hir::TypeKind::Union) {
-                            // 構造体・ユニオンはblob要素としてインラインコピーされる
-                            elem_size = ctx.layout_size(let.init->type->element_type);
-                        }
-                    }
-
-                    // 配列のアドレスを取得
-                    LocalId addr_local =
-                        ctx.new_temp(hir::make_pointer(let.init->type->element_type));
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{addr_local}, MirRvalue::ref(MirPlace{init_value}, false)));
-
-                    // サイズ引数を作成
-                    LocalId size_local = ctx.new_temp(hir::make_long());
-                    MirConstant size_const;
-                    size_const.value = static_cast<int64_t>(array_size);
-                    size_const.type = hir::make_long();
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{size_local}, MirRvalue::use(MirOperand::constant(size_const))));
-
-                    LocalId elem_size_local = ctx.new_temp(hir::make_long());
-                    MirConstant elem_size_const;
-                    elem_size_const.value = static_cast<int64_t>(elem_size);
-                    elem_size_const.type = hir::make_long();
-                    ctx.push_statement(MirStatement::assign(
-                        MirPlace{elem_size_local},
-                        MirRvalue::use(MirOperand::constant(elem_size_const))));
-
-                    // cm_array_to_slice を呼び出す
-                    BlockId success_block = ctx.new_block();
-                    std::vector<MirOperandPtr> args;
-                    args.push_back(MirOperand::copy(MirPlace{addr_local}));
-                    args.push_back(MirOperand::copy(MirPlace{size_local}));
-                    args.push_back(MirOperand::copy(MirPlace{elem_size_local}));
-
-                    auto call_term = std::make_unique<MirTerminator>();
-                    call_term->kind = MirTerminator::Call;
-                    call_term->data =
-                        MirTerminator::CallData{MirOperand::function_ref("cm_array_to_slice"),
-                                                std::move(args),
-                                                MirPlace{local},
-                                                success_block,
-                                                std::nullopt,
-                                                "",
-                                                "",
-                                                false};
-                    ctx.set_terminator(std::move(call_term));
-                    ctx.switch_to_block(success_block);
+                    ctx.materialize_array_to_slice(MirPlace{init_value}, let.init->type, let.type,
+                                                   MirPlace{local});
                 }
             } else {
                 // 通常の初期化
@@ -695,22 +378,11 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
                                           std::to_string(block->statements.size()) + " statements");
                         }
                     }
-                    // ユニオン型変数を変種の値で初期化する場合はCast（ユニオン構築）を経由してタグ+ペイロードを書き込む（直接storeするとタグ未設定になり、O0での `as` タグ検査パニックや `is` の誤判定になる）
+                    // 変換統一ドライバ第1段: numeric/ユニオン構築（タグ+ペイロード。直接storeするとタグ未設定でasパニック・is誤判定）/固定長配列→スライスをcoerce_to_expected 1系統で挿入する
                     hir::TypePtr resolved_let_type = ctx.resolve_typedef(let.type);
-                    hir::TypePtr init_type =
-                        (init_value < ctx.func->locals.size())
-                            ? ctx.resolve_typedef(ctx.func->locals[init_value].type)
-                            : nullptr;
-                    if (resolved_let_type && resolved_let_type->kind == hir::TypeKind::Union &&
-                        (!init_type || init_type->kind != hir::TypeKind::Union)) {
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{local}, MirRvalue::cast(MirOperand::copy(MirPlace{init_value}),
-                                                             resolved_let_type)));
-                    } else {
-                        ctx.push_statement(MirStatement::assign(
-                            MirPlace{local},
-                            MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
-                    }
+                    init_value = ctx.coerce_to_expected(init_value, resolved_let_type);
+                    ctx.push_statement(MirStatement::assign(
+                        MirPlace{local}, MirRvalue::use(MirOperand::copy(MirPlace{init_value}))));
                     if (let.name == "result") {
                         auto* block = ctx.get_current_block();
                         if (block) {
@@ -775,42 +447,10 @@ void StmtLowering::lower_let(const hir::HirLet& let, LoweringContext& ctx) {
     if (let.type && let.type->kind == hir::TypeKind::Struct) {
         std::string type_name = let.type->name;
 
-        // ジェネリック型の場合、マングル済み名を構築（Vector<TrackedObject> ->
-        // Vector__TrackedObject）
+        // ジェネリック型は関数名ドメインの正準接頭辞で登録する（Vector<Vector<int>> ->
+        // Vector__Vector$1$3$int。移行計画①: 手組み再帰マングルの曖昧フラット名を廃止）
         if (!let.type->type_args.empty()) {
-            std::string mangled_name = type_name;
-
-            // 再帰的にネストしたジェネリック型引数をマングリングするラムダ
-            std::function<std::string(const hir::TypePtr&)> mangle_type_arg =
-                [&](const hir::TypePtr& arg) -> std::string {
-                if (!arg)
-                    return "";
-
-                std::string result;
-
-                // 基本型名を取得
-                if (!arg->name.empty()) {
-                    result = arg->name;
-                } else {
-                    // プリミティブ型などは型を文字列化
-                    result = hir::type_to_string(*arg);
-                }
-
-                // ネストしたtype_argsがある場合は再帰的に処理
-                if (!arg->type_args.empty()) {
-                    for (const auto& nested_arg : arg->type_args) {
-                        result += "__" + mangle_type_arg(nested_arg);
-                    }
-                }
-
-                return result;
-            };
-
-            for (const auto& arg : let.type->type_args) {
-                mangled_name += "__" + mangle_type_arg(arg);
-            }
-
-            type_name = mangled_name;
+            type_name = ast::typekey::fn_prefix_from_tree(*let.type);
         }
 
         if (ctx.has_destructor(type_name)) {

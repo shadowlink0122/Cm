@@ -186,9 +186,44 @@ match (op) {
 }
 ```
 
-- `(op & マスク) == 値` のif-elseチェーンに脱糖され、全バックエンドで同一意味論です
+- 非SVバックエンドでは `(op & マスク) == 値` のif-elseチェーンに脱糖され、全バックエンドで同一意味論です
 - `?` 付きリテラルはmatchパターン専用です（式の中では使えません）
 - 通常のmatch/switchのSV出力は `unique case` になり、シミュレーション時の重複ヒット検出が働きます（合成では従来どおり）
+
+## native casez出力とcase修飾（v0.17.0）
+
+SVターゲットでは、don't careビットパターンのmatchはmask比較のif-elseチェーンでなく**native `casez`**として出力されます。パターンはスクルーチニの型幅の2進リテラル（`?`=ワイルドカードビット）になるため、`bit[4]` のような明示幅の型を使うと最も読みやすい出力になります:
+
+```systemverilog
+// 上のmatch（#[input] bit[4] op）から生成されるSV
+unique casez (op)
+    4'b1?00: begin kind <= 32'sd1; end
+    4'b0?1?: begin kind <= 32'sd2; end
+    default: begin kind <= 32'sd0; end
+endcase
+```
+
+- パターンが**互いに素**（同時に成立しない）の場合は `unique casez` を出力し、シミュレーション時の重複ヒット検出が働きます
+- パターンに**重なりがある**場合は、matchの先勝ち意味論（先に書いたアームが優先）を表明する `priority casez` を自動選択します
+- ガード・変数束縛・enumパターンを含むmatchは従来どおりif-elseチェーンへ脱糖されます（意味論は同一）
+
+### case修飾の明示指定（#[sv::priority] / #[sv::unique0]）
+
+switch/match文の直前に属性を付与すると、出力するcase修飾を明示的に選べます:
+
+```cm
+#[sv::priority]
+switch (sel) {
+    case(0) { r = 10; }
+    case(1) { r = 11; }
+    else { r = 0; }
+}
+// → priority case (sel) ... endcase
+```
+
+- `#[sv::priority]`: 順序優先（先に書いたcaseが優先）を表明する `priority case` を出力します
+- `#[sv::unique0]`: どのcaseにも該当しないことを許容する `unique0 case` を出力します
+- 属性は自動選択より優先されます。非SVターゲットでは無視され、実行意味論は変わりません
 
 
 ---

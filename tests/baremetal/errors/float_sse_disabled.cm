@@ -1,0 +1,10 @@
+// 回帰(R18): baremetal-x86（SSE無効）での浮動小数点使用は専用診断で拒否
+// （従来はLLVM内部エラー「SSE register return with SSE disabled」が行番号なしで露出していた。UEFIでは使用可能）
+double compute(double a, double b) {
+    return a * b + 1.5;
+}
+
+int main() {
+    double r = compute(2.0, 3.0);
+    return r as int;
+}

@@ -1,0 +1,1 @@
+error: function 'main' uses 'exit'; process control is not available in bare-metal environments

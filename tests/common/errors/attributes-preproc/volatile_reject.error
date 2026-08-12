@@ -1,0 +1,1 @@
+'volatile' is not supported yet; for cross-thread shared variables use native::sync atomics

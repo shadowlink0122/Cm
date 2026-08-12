@@ -1,0 +1,1351 @@
+// ============================================================
+// Cmランタイム スライス操作の共通コア（runtime-builtin-registry 第4段）
+// native/wasmの二重実装を一本化した共有ソース。プラットフォーム差は以下のフックで注入する:
+//   CM_RT_ALLOC(size)              確保（native=cm_alloc / wasm=wasm_alloc）
+//   CM_RT_FREE(ptr)                解放（native=cm_dealloc / wasm=cm_free）
+//   CM_RT_MEMCPY(dst,src,n)        メモリコピー
+//   CM_RT_MEMMOVE(dst,src,n)       重なり許容の移動
+//   CM_RT_GROW(old,old_bytes,new_bytes)  拡張（native=realloc / wasm=alloc+copy+free）
+// ポインタ・文字列要素のスロットはターゲット幅に依らずuint64_t（elem_size=8のランタイム規約）で読み書きする。
+// スライス関数の追加・変更は本ファイルで行い、プラットフォーム側への個別実装は禁止する
+// ============================================================
+
+#ifndef CM_SLICE_DEFINED
+#define CM_SLICE_DEFINED
+// スライス構造体
+typedef struct {
+    void* data;         // データポインタ
+    int64_t len;        // 現在の要素数
+    int64_t cap;        // 容量
+    int64_t elem_size;  // 要素サイズ
+} CmSlice;
+#endif
+
+// ソート用比較関数（sort_withで使用。定義はプラットフォーム/フォーマットランタイム側）
+void cm_qsort(void* base, size_t nmemb, size_t size, int (*compar)(const void*, const void*));
+
+// HOFコールバックの関数ポインタ型（map/filter系の要素幅別・クロージャ変種）
+typedef int32_t (*MapFnI32)(int32_t);
+typedef int64_t (*MapFnI64)(int64_t);
+typedef int8_t (*FilterFnI32)(int32_t);
+typedef int8_t (*FilterFnI64)(int64_t);
+typedef int32_t (*MapFnI32Closure)(void*, int32_t);
+typedef int64_t (*MapFnI64Closure)(void*, int64_t);
+typedef int8_t (*FilterFnI32Closure)(void*, int32_t);
+typedef int8_t (*FilterFnI64Closure)(void*, int64_t);
+// スカラ全幅対応（局所処理調査E系）: i8/i16/f32/f64のmap/filterコールバック型
+typedef int8_t (*MapFnI8)(int8_t);
+typedef int16_t (*MapFnI16)(int16_t);
+typedef float (*MapFnF32)(float);
+typedef double (*MapFnF64)(double);
+typedef int8_t (*MapFnI8Closure)(void*, int8_t);
+typedef int16_t (*MapFnI16Closure)(void*, int16_t);
+typedef float (*MapFnF32Closure)(void*, float);
+typedef double (*MapFnF64Closure)(void*, double);
+typedef int8_t (*FilterFnI8)(int8_t);
+typedef int8_t (*FilterFnI16)(int16_t);
+typedef int8_t (*FilterFnF32)(float);
+typedef int8_t (*FilterFnF64)(double);
+typedef int8_t (*FilterFnI8Closure)(void*, int8_t);
+typedef int8_t (*FilterFnI16Closure)(void*, int16_t);
+typedef int8_t (*FilterFnF32Closure)(void*, float);
+typedef int8_t (*FilterFnF64Closure)(void*, double);
+
+
+// スライスを作成
+void* cm_slice_new(int64_t elem_size, int64_t initial_cap) {
+    CmSlice* slice = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!slice)
+        return NULL;
+
+    slice->elem_size = elem_size;
+    slice->len = 0;
+    slice->cap = initial_cap > 0 ? initial_cap : 4;
+    slice->data = CM_RT_ALLOC(slice->cap * elem_size);
+
+    return slice;
+}
+
+// スライスを解放
+void cm_slice_free(void* slice_ptr) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->data) {
+        CM_RT_FREE(slice->data);
+    }
+    CM_RT_FREE(slice);
+}
+
+// 文字列のコードポイント列をuint(i32)スライスで返す（H9のchars()。for-in列挙用の実体化スライス）
+void* __builtin_string_chars(const char* str) {
+    // コードポイント数を数える（継続バイト0b10xxxxxxを除外）
+    int64_t n = 0;
+    if (str) {
+        for (const unsigned char* p = (const unsigned char*)str; *p; p++) {
+            if ((*p & 0xC0) != 0x80) {
+                n++;
+            }
+        }
+    }
+    CmSlice* slice = (CmSlice*)cm_slice_new(sizeof(int32_t), n > 0 ? n : 1);
+    if (!slice) {
+        return NULL;
+    }
+    int32_t* out = (int32_t*)slice->data;
+    int64_t idx = 0;
+    if (str) {
+        const unsigned char* p = (const unsigned char*)str;
+        while (*p && idx < n) {
+            unsigned char b0 = *p;
+            uint32_t cp = 0;
+            int adv = 1;
+            if (b0 < 0x80) {
+                cp = b0;
+            } else if ((b0 & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x1F) << 6) | (uint32_t)(p[1] & 0x3F);
+                adv = 2;
+            } else if ((b0 & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x0F) << 12) | ((uint32_t)(p[1] & 0x3F) << 6) |
+                     (uint32_t)(p[2] & 0x3F);
+                adv = 3;
+            } else if ((b0 & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+                       (p[3] & 0xC0) == 0x80) {
+                cp = ((uint32_t)(b0 & 0x07) << 18) | ((uint32_t)(p[1] & 0x3F) << 12) |
+                     ((uint32_t)(p[2] & 0x3F) << 6) | (uint32_t)(p[3] & 0x3F);
+                adv = 4;
+            }
+            out[idx++] = (int32_t)cp;
+            p += adv;
+        }
+    }
+    slice->len = idx;
+    return slice;
+}
+
+// 長さを取得
+int64_t cm_slice_len(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    return slice->len;
+}
+
+// 容量を取得
+int64_t cm_slice_cap(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    return slice->cap;
+}
+
+// 容量を拡張する（成長戦略は共通、確保・移動はプラットフォームフックCM_RT_GROWに委譲する）
+static void cm_slice_grow(CmSlice* slice) {
+    int64_t new_cap = slice->cap * 2;
+    if (new_cap < 4)
+        new_cap = 4;
+
+    // 旧データの有効バイト数はlen*elem_size（cap分の未使用領域は移動不要）
+    void* new_data = CM_RT_GROW(slice->data, slice->len * slice->elem_size,
+                                new_cap * slice->elem_size);
+    if (new_data) {
+        slice->data = new_data;
+        slice->cap = new_cap;
+    }
+}
+
+// i8要素をpush（char/bool用）
+void cm_slice_push_i8(void* slice_ptr, int8_t value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    int8_t* data = (int8_t*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// i16要素をpush（short/ushort用）
+void cm_slice_push_i16(void* slice_ptr, int16_t value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    int16_t* data = (int16_t*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// i32要素をpush
+void cm_slice_push_i32(void* slice_ptr, int32_t value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    int32_t* data = (int32_t*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// i64要素をpush
+void cm_slice_push_i64(void* slice_ptr, int64_t value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    int64_t* data = (int64_t*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// f32要素をpush（float用）
+void cm_slice_push_f32(void* slice_ptr, float value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    float* data = (float*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// f64要素をpush
+void cm_slice_push_f64(void* slice_ptr, double value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    double* data = (double*)slice->data;
+    data[slice->len] = value;
+    slice->len++;
+}
+
+// ポインタ要素をpush
+// wasmではポインタは4バイトだがスライスのelem_sizeは8。sort/reverse/subslice/delete/equalなど
+// elem_size駆動の処理とstrideを一致させるため、8バイトスロットへゼロ拡張して格納する。
+void cm_slice_push_ptr(void* slice_ptr, void* value) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    unsigned char* slot = (unsigned char*)slice->data + slice->len * slice->elem_size;
+    *(uint64_t*)slot = (uint64_t)(uintptr_t)value;
+    slice->len++;
+}
+
+// スライス要素をpush（スライス構造体をコピー）
+void cm_slice_push_slice(void* slice_ptr, void* inner_slice_ptr) {
+    if (!slice_ptr || !inner_slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    CmSlice* inner = (CmSlice*)inner_slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    // 内部スライス構造体をコピー
+    CmSlice* data = (CmSlice*)slice->data;
+    data[slice->len] = *inner;  // 構造体をコピー
+    slice->len++;
+}
+
+// blob（可変サイズデータ）をpush（ユニオン型/構造体用）
+// スライスのelem_sizeに従ってデータをコピー
+void cm_slice_push_blob(void* slice_ptr, void* data_ptr) {
+    if (!slice_ptr || !data_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len >= slice->cap) {
+        cm_slice_grow(slice);
+    }
+
+    // elem_sizeを使用してデータをコピー
+    char* dest = (char*)slice->data + (slice->len * slice->elem_size);
+    CM_RT_MEMCPY(dest, data_ptr, slice->elem_size);
+    slice->len++;
+}
+
+// i8要素をpop（char/bool用）
+int8_t cm_slice_pop_i8(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0;
+
+    slice->len--;
+    int8_t* data = (int8_t*)slice->data;
+    return data[slice->len];
+}
+
+// i16要素をpop（short/ushort用）
+int16_t cm_slice_pop_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0;
+
+    slice->len--;
+    int16_t* data = (int16_t*)slice->data;
+    return data[slice->len];
+}
+
+// i32要素をpop
+// blob（構造体/union）要素のpop用: 値の取り出しは呼び出し側がcm_slice_get_element_ptr経由で行い、
+// ここではlen減算のみ行う（ポインタ幅で読むcm_slice_pop_ptrをblobへ流用すると
+// 構造体宛先への型不整合storeで不正メモリアクセスになる。W3）
+void cm_slice_pop_blob(void* slice_ptr) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len == 0)
+        return;
+    slice->len--;
+}
+
+int32_t cm_slice_pop_i32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0;
+
+    slice->len--;
+    int32_t* data = (int32_t*)slice->data;
+    return data[slice->len];
+}
+
+// i64要素をpop
+int64_t cm_slice_pop_i64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0;
+
+    slice->len--;
+    int64_t* data = (int64_t*)slice->data;
+    return data[slice->len];
+}
+
+// f32要素をpop（float用）
+float cm_slice_pop_f32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0.0f;
+
+    slice->len--;
+    float* data = (float*)slice->data;
+    return data[slice->len];
+}
+
+// f64要素をpop
+double cm_slice_pop_f64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return 0.0;
+
+    slice->len--;
+    double* data = (double*)slice->data;
+    return data[slice->len];
+}
+
+// ポインタ要素をpop
+void* cm_slice_pop_ptr(void* slice_ptr) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (slice->len == 0)
+        return NULL;
+
+    slice->len--;
+    unsigned char* slot = (unsigned char*)slice->data + slice->len * slice->elem_size;
+    return (void*)(uintptr_t) * (uint64_t*)slot;
+}
+
+// i8要素を取得（char/bool用）
+int8_t cm_slice_get_i8(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0;
+
+    int8_t* data = (int8_t*)slice->data;
+    return data[index];
+}
+
+// i16要素を取得（short/ushort用）
+int16_t cm_slice_get_i16(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0;
+
+    int16_t* data = (int16_t*)slice->data;
+    return data[index];
+}
+
+// i32要素を取得
+int32_t cm_slice_get_i32(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0;
+
+    int32_t* data = (int32_t*)slice->data;
+    return data[index];
+}
+
+// i64要素を取得
+int64_t cm_slice_get_i64(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0;
+
+    int64_t* data = (int64_t*)slice->data;
+    return data[index];
+}
+
+// f32要素を取得（float用）
+float cm_slice_get_f32(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0.0f;
+
+    float* data = (float*)slice->data;
+    return data[index];
+}
+
+// f64要素を取得
+double cm_slice_get_f64(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return 0.0;
+
+    double* data = (double*)slice->data;
+    return data[index];
+}
+
+// ポインタ要素を取得
+void* cm_slice_get_ptr(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return NULL;
+
+    unsigned char* slot = (unsigned char*)slice->data + index * slice->elem_size;
+    return (void*)(uintptr_t) * (uint64_t*)slot;
+}
+
+// 要素を削除
+void cm_slice_delete(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    if (index < 0 || index >= slice->len)
+        return;
+
+    // index以降の要素を前にシフト
+    char* data = (char*)slice->data;
+    CM_RT_MEMMOVE(data + index * slice->elem_size, data + (index + 1) * slice->elem_size,
+            (slice->len - index - 1) * slice->elem_size);
+
+    slice->len--;
+}
+
+// 全要素をクリア
+void cm_slice_clear(void* slice_ptr) {
+    if (!slice_ptr)
+        return;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    slice->len = 0;
+}
+
+// map: i32配列に関数を適用し、新しいスライスを返す
+void* __builtin_array_map(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    MapFnI32 fn = (MapFnI32)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+
+    // 新しいスライスを作成
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result)
+        return NULL;
+
+    // 各要素に関数を適用
+    int32_t* result_data = (int32_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(arr[i]);
+    }
+    result->len = size;
+
+    return result;
+}
+
+// map (クロージャ版): キャプチャ値付きで関数を適用
+void* __builtin_array_map_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    MapFnI32Closure fn = (MapFnI32Closure)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result)
+        return NULL;
+
+    int32_t* result_data = (int32_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(env, arr[i]);
+    }
+    result->len = size;
+
+    return result;
+}
+
+// map: i64配列に関数を適用
+void* __builtin_array_map_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    MapFnI64 fn = (MapFnI64)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result)
+        return NULL;
+
+    int64_t* result_data = (int64_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(arr[i]);
+    }
+    result->len = size;
+
+    return result;
+}
+
+// map_i64 (クロージャ版)
+void* __builtin_array_map_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    MapFnI64Closure fn = (MapFnI64Closure)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result)
+        return NULL;
+
+    int64_t* result_data = (int64_t*)result->data;
+    for (int64_t i = 0; i < size; i++) {
+        result_data[i] = fn(env, arr[i]);
+    }
+    result->len = size;
+
+    return result;
+}
+
+// スカラ全幅対応（局所処理調査E系）: mapのi8/i16/f32/f64変種（要素サイズはsizeof(T)、cm_slice_newで確保）
+#define CM_DEFINE_ARRAY_MAP(suffix, ctype, fn_type, closure_fn_type)                          \
+    void* __builtin_array_map_##suffix(void* arr_ptr, int64_t size, void* fn_ptr) {           \
+        if (size < 0) {                                                                       \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                              \
+            arr_ptr = __cm_s->data;                                                           \
+            size = __cm_s->len;                                                               \
+        }                                                                                     \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                 \
+            return NULL;                                                                      \
+        fn_type fn = (fn_type)fn_ptr;                                                         \
+        ctype* arr = (ctype*)arr_ptr;                                                         \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                        \
+        if (!result)                                                                          \
+            return NULL;                                                                      \
+        ctype* result_data = (ctype*)result->data;                                            \
+        for (int64_t i = 0; i < size; i++) {                                                  \
+            result_data[i] = fn(arr[i]);                                                      \
+        }                                                                                     \
+        result->len = size;                                                                   \
+        return result;                                                                        \
+    }                                                                                         \
+    void* __builtin_array_map_##suffix##_closure(void* arr_ptr, int64_t size, void* fn_ptr,   \
+                                                 void* env) {                                 \
+        if (size < 0) {                                                                       \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                              \
+            arr_ptr = __cm_s->data;                                                           \
+            size = __cm_s->len;                                                               \
+        }                                                                                     \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                 \
+            return NULL;                                                                      \
+        closure_fn_type fn = (closure_fn_type)fn_ptr;                                         \
+        ctype* arr = (ctype*)arr_ptr;                                                         \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                        \
+        if (!result)                                                                          \
+            return NULL;                                                                      \
+        ctype* result_data = (ctype*)result->data;                                            \
+        for (int64_t i = 0; i < size; i++) {                                                  \
+            result_data[i] = fn(env, arr[i]);                                                 \
+        }                                                                                     \
+        result->len = size;                                                                   \
+        return result;                                                                        \
+    }
+
+CM_DEFINE_ARRAY_MAP(i8, int8_t, MapFnI8, MapFnI8Closure)
+CM_DEFINE_ARRAY_MAP(i16, int16_t, MapFnI16, MapFnI16Closure)
+CM_DEFINE_ARRAY_MAP(f32, float, MapFnF32, MapFnF32Closure)
+CM_DEFINE_ARRAY_MAP(f64, double, MapFnF64, MapFnF64Closure)
+#undef CM_DEFINE_ARRAY_MAP
+
+// filter: i32配列から条件を満たす要素を抽出
+void* __builtin_array_filter(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    FilterFnI32 fn = (FilterFnI32)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+
+    // 新しいスライスを作成（最大でsize個の要素）
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result)
+        return NULL;
+
+    // 条件を満たす要素のみをコピー
+    int32_t* result_data = (int32_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+
+    return result;
+}
+
+// filter (クロージャ版)
+void* __builtin_array_filter_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    FilterFnI32Closure fn = (FilterFnI32Closure)fn_ptr;
+    int32_t* arr = (int32_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int32_t), size);
+    if (!result)
+        return NULL;
+
+    int32_t* result_data = (int32_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(env, arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+
+    return result;
+}
+
+// filter: i64配列から条件を満たす要素を抽出
+void* __builtin_array_filter_i64(void* arr_ptr, int64_t size, void* fn_ptr) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    FilterFnI64 fn = (FilterFnI64)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result)
+        return NULL;
+
+    int64_t* result_data = (int64_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+
+    return result;
+}
+
+// filter_i64 (クロージャ版)
+void* __builtin_array_filter_i64_closure(void* arr_ptr, int64_t size, void* fn_ptr, void* env) {
+    if (size < 0) {
+        CmSlice* __cm_s = (CmSlice*)arr_ptr;
+        arr_ptr = __cm_s->data;
+        size = __cm_s->len;
+    }
+    if (!arr_ptr || !fn_ptr || size <= 0)
+        return NULL;
+
+    FilterFnI64Closure fn = (FilterFnI64Closure)fn_ptr;
+    int64_t* arr = (int64_t*)arr_ptr;
+
+    CmSlice* result = (CmSlice*)cm_slice_new(sizeof(int64_t), size);
+    if (!result)
+        return NULL;
+
+    int64_t* result_data = (int64_t*)result->data;
+    int64_t count = 0;
+    for (int64_t i = 0; i < size; i++) {
+        if (fn(env, arr[i])) {
+            result_data[count++] = arr[i];
+        }
+    }
+    result->len = count;
+
+    return result;
+}
+
+// スカラ全幅対応（局所処理調査E系）: filterのi8/i16/f32/f64変種（要素サイズはsizeof(T)、cm_slice_newで確保）
+#define CM_DEFINE_ARRAY_FILTER(suffix, ctype, fn_type, closure_fn_type)                        \
+    void* __builtin_array_filter_##suffix(void* arr_ptr, int64_t size, void* fn_ptr) {         \
+        if (size < 0) {                                                                        \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                               \
+            arr_ptr = __cm_s->data;                                                            \
+            size = __cm_s->len;                                                                \
+        }                                                                                      \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                  \
+            return NULL;                                                                       \
+        fn_type fn = (fn_type)fn_ptr;                                                          \
+        ctype* arr = (ctype*)arr_ptr;                                                          \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                         \
+        if (!result)                                                                           \
+            return NULL;                                                                       \
+        ctype* result_data = (ctype*)result->data;                                             \
+        int64_t count = 0;                                                                     \
+        for (int64_t i = 0; i < size; i++) {                                                   \
+            if (fn(arr[i])) {                                                                  \
+                result_data[count++] = arr[i];                                                 \
+            }                                                                                  \
+        }                                                                                      \
+        result->len = count;                                                                   \
+        return result;                                                                         \
+    }                                                                                          \
+    void* __builtin_array_filter_##suffix##_closure(void* arr_ptr, int64_t size, void* fn_ptr, \
+                                                    void* env) {                               \
+        if (size < 0) {                                                                        \
+            CmSlice* __cm_s = (CmSlice*)arr_ptr;                                               \
+            arr_ptr = __cm_s->data;                                                            \
+            size = __cm_s->len;                                                                \
+        }                                                                                      \
+        if (!arr_ptr || !fn_ptr || size <= 0)                                                  \
+            return NULL;                                                                       \
+        closure_fn_type fn = (closure_fn_type)fn_ptr;                                          \
+        ctype* arr = (ctype*)arr_ptr;                                                          \
+        CmSlice* result = (CmSlice*)cm_slice_new(sizeof(ctype), size);                         \
+        if (!result)                                                                           \
+            return NULL;                                                                       \
+        ctype* result_data = (ctype*)result->data;                                             \
+        int64_t count = 0;                                                                     \
+        for (int64_t i = 0; i < size; i++) {                                                   \
+            if (fn(env, arr[i])) {                                                             \
+                result_data[count++] = arr[i];                                                 \
+            }                                                                                  \
+        }                                                                                      \
+        result->len = count;                                                                   \
+        return result;                                                                         \
+    }
+
+CM_DEFINE_ARRAY_FILTER(i8, int8_t, FilterFnI8, FilterFnI8Closure)
+CM_DEFINE_ARRAY_FILTER(i16, int16_t, FilterFnI16, FilterFnI16Closure)
+CM_DEFINE_ARRAY_FILTER(f32, float, FilterFnF32, FilterFnF32Closure)
+CM_DEFINE_ARRAY_FILTER(f64, double, FilterFnF64, FilterFnF64Closure)
+#undef CM_DEFINE_ARRAY_FILTER
+
+// スライスの最初の要素を取得
+int32_t cm_slice_first_i32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int32_t* data = (int32_t*)slice->data;
+    return data[0];
+}
+
+int64_t cm_slice_first_i64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int64_t* data = (int64_t*)slice->data;
+    return data[0];
+}
+
+// スライスの最後の要素を取得
+int32_t cm_slice_last_i32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int32_t* data = (int32_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+int64_t cm_slice_last_i64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int64_t* data = (int64_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+// スカラ全幅対応（局所処理調査E系）: first/lastのi8/i16/f32/f64変種
+int8_t cm_slice_first_i8(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int8_t* data = (int8_t*)slice->data;
+    return data[0];
+}
+
+int16_t cm_slice_first_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int16_t* data = (int16_t*)slice->data;
+    return data[0];
+}
+
+float cm_slice_first_f32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0f;
+    float* data = (float*)slice->data;
+    return data[0];
+}
+
+double cm_slice_first_f64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0;
+    double* data = (double*)slice->data;
+    return data[0];
+}
+
+int8_t cm_slice_last_i8(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int8_t* data = (int8_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+int16_t cm_slice_last_i16(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0;
+    int16_t* data = (int16_t*)slice->data;
+    return data[slice->len - 1];
+}
+
+float cm_slice_last_f32(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0f;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0f;
+    float* data = (float*)slice->data;
+    return data[slice->len - 1];
+}
+
+double cm_slice_last_f64(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0.0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return 0.0;
+    double* data = (double*)slice->data;
+    return data[slice->len - 1];
+}
+
+// 汎用的な要素へのポインタを取得（elem_sizeを使用）
+void* cm_slice_get_element_ptr(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (index < 0 || index >= slice->len || !slice->data)
+        return NULL;
+
+    // elem_sizeを使用して正しいオフセットを計算
+    return (char*)slice->data + (index * slice->elem_size);
+}
+
+// 多次元スライスの内側の配列をラップするスライスを作成
+// 内側の配列がCmSlice*の場合、それを返す
+// そうでない場合（固定配列）、一時的なラッパーを作成
+// 内側スライスヘッダへの参照を返す（コピーしない）。
+// 添字レシーバ（rows[0].push(x)等）の変異を格納中のヘッダへ反映するために使う（H10第3段）。
+// 返したポインタは外側スライスのdataバッファ内を指すため、外側のpush/growで無効化される。
+// 取得直後のメソッド呼び出しにのみ使用し、保持しないこと
+void* cm_slice_get_subslice_ref(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (index < 0 || index >= slice->len || !slice->data)
+        return NULL;
+    CmSlice* slice_array = (CmSlice*)slice->data;
+    return &slice_array[index];
+}
+
+void* cm_slice_get_subslice(void* slice_ptr, int64_t index) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (index < 0 || index >= slice->len || !slice->data)
+        return NULL;
+
+    // 要素へのポインタを取得
+    // 多次元スライスでは、要素はCmSlice構造体（値）として格納されている
+    // elem_size は sizeof(CmSlice) であり、data は CmSlice の配列へのポインタ
+    CmSlice* slice_array = (CmSlice*)slice->data;
+    CmSlice* elem_ptr = &slice_array[index];
+
+    // 内側のスライスのコピーを作成
+    // これにより、元のスライスが破壊されても安全
+    CmSlice* new_slice = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!new_slice)
+        return NULL;
+
+    new_slice->data = elem_ptr->data;
+    new_slice->len = elem_ptr->len;
+    new_slice->cap = elem_ptr->cap;
+    new_slice->elem_size = elem_ptr->elem_size;
+
+    return new_slice;
+}
+
+// 汎用的な最初の要素へのポインタを取得
+void* cm_slice_first_ptr(void* slice_ptr) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return NULL;
+    return slice->data;
+}
+
+// 汎用的な最後の要素へのポインタを取得
+void* cm_slice_last_ptr(void* slice_ptr) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    if (slice->len <= 0 || !slice->data)
+        return NULL;
+
+    return (char*)slice->data + ((slice->len - 1) * slice->elem_size);
+}
+
+// 要素サイズを取得
+int64_t cm_slice_elem_size(void* slice_ptr) {
+    if (!slice_ptr)
+        return 0;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    return slice->elem_size;
+}
+
+// スライスを逆順にしたコピーを返す
+void* cm_slice_reverse(void* slice_ptr) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    CmSlice* result = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!result)
+        return NULL;
+
+    if (slice->len <= 0 || !slice->data) {
+        result->data = NULL;
+        result->len = 0;
+        result->cap = 0;
+        result->elem_size = slice->elem_size;
+        return result;
+    }
+
+    result->data = CM_RT_ALLOC(slice->len * slice->elem_size);
+    if (!result->data) {
+        CM_RT_FREE(result);
+        return NULL;
+    }
+
+    // 逆順にコピー
+    for (int64_t i = 0; i < slice->len; i++) {
+        char* src = (char*)slice->data + ((slice->len - 1 - i) * slice->elem_size);
+        char* dst = (char*)result->data + (i * slice->elem_size);
+        CM_RT_MEMCPY(dst, src, slice->elem_size);
+    }
+
+    result->len = slice->len;
+    result->cap = slice->len;
+    result->elem_size = slice->elem_size;
+    return result;
+}
+
+// 要素型ごとの比較関数（符号・浮動小数・文字列を正しく区別する）
+#define CM_DEFINE_CMP(suffix, ctype)                                 \
+    static int cm_slice_cmp_##suffix(const void* a, const void* b) { \
+        ctype x = *(const ctype*)a;                                  \
+        ctype y = *(const ctype*)b;                                  \
+        return (x > y) - (x < y);                                    \
+    }
+
+CM_DEFINE_CMP(i8, int8_t)
+CM_DEFINE_CMP(u8, uint8_t)
+CM_DEFINE_CMP(i16, int16_t)
+CM_DEFINE_CMP(u16, uint16_t)
+CM_DEFINE_CMP(i32, int32_t)
+CM_DEFINE_CMP(u32, uint32_t)
+CM_DEFINE_CMP(i64, int64_t)
+CM_DEFINE_CMP(u64, uint64_t)
+CM_DEFINE_CMP(f32, float)
+CM_DEFINE_CMP(f64, double)
+#undef CM_DEFINE_CMP
+
+// 文字列（char*）要素の比較（cm_strcmpに依存せず自前でバイト比較する）
+static int cm_slice_cmp_str(const void* a, const void* b) {
+    const char* sa = *(const char* const*)a;
+    const char* sb = *(const char* const*)b;
+    if (sa == sb)
+        return 0;
+    if (!sa)
+        return -1;
+    if (!sb)
+        return 1;
+    while (*sa && (*sa == *sb)) {
+        sa++;
+        sb++;
+    }
+    return (int)(unsigned char)*sa - (int)(unsigned char)*sb;
+}
+
+// 与えられた比較関数でソートしたコピーを返す共通処理
+static void* cm_slice_sort_with(void* slice_ptr, int (*cmp)(const void*, const void*)) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    CmSlice* result = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!result)
+        return NULL;
+
+    if (slice->len <= 0 || !slice->data) {
+        result->data = NULL;
+        result->len = 0;
+        result->cap = 0;
+        result->elem_size = slice->elem_size;
+        return result;
+    }
+
+    result->data = CM_RT_ALLOC(slice->len * slice->elem_size);
+    if (!result->data) {
+        CM_RT_FREE(result);
+        return NULL;
+    }
+
+    // データをコピーしてからソート（要素サイズは実際のelem_sizeに従う）
+    CM_RT_MEMCPY(result->data, slice->data, slice->len * slice->elem_size);
+    cm_qsort(result->data, slice->len, slice->elem_size, cmp);
+
+    result->len = slice->len;
+    result->cap = slice->len;
+    result->elem_size = slice->elem_size;
+    return result;
+}
+
+// 要素型別のソートラッパー（呼び出し側が要素型サフィックスで選択）
+#define CM_DEFINE_SORT(suffix)                                       \
+    void* cm_slice_sort_##suffix(void* slice_ptr) {                  \
+        return cm_slice_sort_with(slice_ptr, cm_slice_cmp_##suffix); \
+    }
+
+CM_DEFINE_SORT(i8)
+CM_DEFINE_SORT(u8)
+CM_DEFINE_SORT(i16)
+CM_DEFINE_SORT(u16)
+CM_DEFINE_SORT(i32)
+CM_DEFINE_SORT(u32)
+CM_DEFINE_SORT(i64)
+CM_DEFINE_SORT(u64)
+CM_DEFINE_SORT(f32)
+CM_DEFINE_SORT(f64)
+CM_DEFINE_SORT(str)
+#undef CM_DEFINE_SORT
+
+// 後方互換: 型情報なしのcm_slice_sortはint32として扱う
+void* cm_slice_sort(void* slice_ptr) {
+    return cm_slice_sort_with(slice_ptr, cm_slice_cmp_i32);
+}
+
+char* cm_string_from_byte_slice(void* slice_ptr) {
+    if (!slice_ptr)
+        return cm_string_from_bytes("", 0);
+    CmSlice* slice = (CmSlice*)slice_ptr;
+    return cm_string_from_bytes(slice->data, slice->len);
+}
+
+// 固定サイズ配列からスライスを作成
+void* cm_array_to_slice(void* array_ptr, int64_t len, int64_t elem_size) {
+    CmSlice* result = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!result)
+        return NULL;
+
+    if (!array_ptr || len <= 0) {
+        result->data = NULL;
+        result->len = 0;
+        result->cap = 0;
+        result->elem_size = elem_size;
+        return result;
+    }
+
+    result->data = CM_RT_ALLOC(len * elem_size);
+    if (!result->data) {
+        CM_RT_FREE(result);
+        return NULL;
+    }
+
+    CM_RT_MEMCPY(result->data, array_ptr, len * elem_size);
+    result->len = len;
+    result->cap = len;
+    result->elem_size = elem_size;
+    return result;
+}
+
+// 2次元配列→2次元スライスに変換
+// outer_len: 外側の配列長（行数）
+// inner_len: 内側の配列長（列数）
+// inner_elem_size: 内側要素のサイズ
+void* cm_array2d_to_slice2d(void* array_ptr, int64_t outer_len, int64_t inner_len,
+                            int64_t inner_elem_size) {
+    CmSlice* result = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!result)
+        return NULL;
+
+    if (!array_ptr || outer_len <= 0) {
+        result->data = NULL;
+        result->len = 0;
+        result->cap = 0;
+        result->elem_size = sizeof(CmSlice);
+        return result;
+    }
+
+    // 各行をスライスに変換して格納
+    CmSlice* inner_slices = (CmSlice*)CM_RT_ALLOC(outer_len * sizeof(CmSlice));
+    if (!inner_slices) {
+        CM_RT_FREE(result);
+        return NULL;
+    }
+
+    int64_t row_size = inner_len * inner_elem_size;
+    char* src = (char*)array_ptr;
+
+    for (int64_t i = 0; i < outer_len; i++) {
+        inner_slices[i].data = CM_RT_ALLOC(row_size);
+        if (!inner_slices[i].data) {
+            // ロールバック
+            for (int64_t j = 0; j < i; j++) {
+                CM_RT_FREE(inner_slices[j].data);
+            }
+            CM_RT_FREE(inner_slices);
+            CM_RT_FREE(result);
+            return NULL;
+        }
+        CM_RT_MEMCPY(inner_slices[i].data, src + (i * row_size), row_size);
+        inner_slices[i].len = inner_len;
+        inner_slices[i].cap = inner_len;
+        inner_slices[i].elem_size = inner_elem_size;
+    }
+
+    result->data = inner_slices;
+    result->len = outer_len;
+    result->cap = outer_len;
+    result->elem_size = sizeof(CmSlice);
+    return result;
+}
+
+// スライスのサブスライスを作成
+void* cm_slice_subslice(void* slice_ptr, int64_t start, int64_t end) {
+    if (!slice_ptr)
+        return NULL;
+    CmSlice* slice = (CmSlice*)slice_ptr;
+
+    CmSlice* result = (CmSlice*)CM_RT_ALLOC(sizeof(CmSlice));
+    if (!result)
+        return NULL;
+
+    int64_t len = slice->len;
+
+    // 負のインデックスの処理
+    if (start < 0)
+        start = len + start;
+    if (start < 0)
+        start = 0;
+
+    // endが-1なら最後まで
+    if (end < 0)
+        end = len + end + 1;
+    if (end > len)
+        end = len;
+
+    if (start >= end || start >= len) {
+        result->data = NULL;
+        result->len = 0;
+        result->cap = 0;
+        result->elem_size = slice->elem_size;
+        return result;
+    }
+
+    int64_t new_len = end - start;
+    result->data = CM_RT_ALLOC(new_len * slice->elem_size);
+    if (!result->data) {
+        CM_RT_FREE(result);
+        return NULL;
+    }
+
+    CM_RT_MEMCPY(result->data, (char*)slice->data + start * slice->elem_size, new_len * slice->elem_size);
+    result->len = new_len;
+    result->cap = new_len;
+    result->elem_size = slice->elem_size;
+    return result;
+}
+
+// 固定配列の等値比較
+bool cm_array_equal(void* lhs, void* rhs, int64_t lhs_len, int64_t rhs_len, int64_t elem_size) {
+    if (lhs_len != rhs_len)
+        return false;
+    if (!lhs || !rhs)
+        return lhs == rhs;
+    return memcmp(lhs, rhs, lhs_len * elem_size) == 0;
+}
+
+// 動的スライスの等値比較
+bool cm_slice_equal(void* lhs_ptr, void* rhs_ptr) {
+    if (!lhs_ptr || !rhs_ptr)
+        return lhs_ptr == rhs_ptr;
+
+    CmSlice* lhs = (CmSlice*)lhs_ptr;
+    CmSlice* rhs = (CmSlice*)rhs_ptr;
+
+    if (lhs->len != rhs->len)
+        return false;
+    if (lhs->elem_size != rhs->elem_size)
+        return false;
+    if (!lhs->data || !rhs->data)
+        return lhs->data == rhs->data;
+
+    return memcmp(lhs->data, rhs->data, lhs->len * lhs->elem_size) == 0;
+}

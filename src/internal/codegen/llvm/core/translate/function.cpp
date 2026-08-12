@@ -4,6 +4,7 @@
 #include "internal/base/debug/codegen.hpp"
 #include "internal/codegen/llvm/core/mir_to_llvm.hpp"
 #include "internal/codegen/llvm/monitoring/compilation_guard.hpp"
+#include "internal/mir/lowering/layout.hpp"
 
 #include <iostream>
 #include <llvm/IR/InlineAsm.h>
@@ -45,6 +46,7 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         // これらはランタイムライブラリで実装されている
         if (func.name.find("cm_print") == 0 || func.name.find("cm_println") == 0 ||
             func.name.find("cm_int_to_string") == 0 || func.name.find("cm_uint_to_string") == 0 ||
+            func.name.find("cm_long_to_string") == 0 || func.name.find("cm_ulong_to_string") == 0 ||
             func.name.find("cm_double_to_string") == 0 ||
             func.name.find("cm_float_to_string") == 0 || func.name.find("cm_bool_to_string") == 0 ||
             func.name.find("cm_char_to_string") == 0 || func.name.find("cm_string_concat") == 0 ||
@@ -60,8 +62,6 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
         cm::debug::codegen::log(cm::debug::codegen::Id::LLVMFunction, func.name,
                                 cm::debug::Level::Debug);
-
-        // std::cout << "[CODEGEN] Processing function: " << func.name << "\n" << std::flush;
 
         auto funcId = generateFunctionId(func);
         currentFunction = functions[funcId];
@@ -253,13 +253,74 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
             }
         }
 
+        // プリミティブimplメソッドのself複製先一時変数を事前走査する。
+        // 「self（arg_locals[0]）のcopy/moveを直接代入される*prim型一時変数」を推移的に集め、
+        // プリミティブ値のallocaとして割り付ける（ローカル番号のずれに依存しない）
+        std::unordered_set<unsigned int> selfCopyTargets;
+        // R3: 第0引数がプリミティブimplメソッドのself（名前が"self"）である場合のみシードする。
+        // 従来は「関数名に__を含む」だけで判定していたため、特殊化されたジェネリック関数（deref__int等）の
+        // `T* a`引数がselfと誤認され、そのコピー先一時変数が要素型（int）で確保されてポインタ値を値として読み、
+        // ユーザーのデリファレンスで壊れたアドレスを辿ってSIGSEGVしていた
+        bool firstArgIsSelf = !func.arg_locals.empty() && func.arg_locals[0] < func.locals.size() &&
+                              func.locals[func.arg_locals[0]].name == "self";
+        if (func.name.find("__") != std::string::npos && firstArgIsSelf) {
+            selfCopyTargets.insert(static_cast<unsigned int>(func.arg_locals[0]));
+            bool changed = true;
+            while (changed) {
+                changed = false;
+                for (const auto& bb : func.basic_blocks) {
+                    if (!bb) {
+                        continue;
+                    }
+                    for (const auto& stmt : bb->statements) {
+                        if (stmt->kind != mir::MirStatement::Assign) {
+                            continue;
+                        }
+                        auto& ad = std::get<mir::MirStatement::AssignData>(stmt->data);
+                        if (!ad.place.projections.empty() || !ad.rvalue ||
+                            ad.rvalue->kind != mir::MirRvalue::Use) {
+                            continue;
+                        }
+                        auto& use = std::get<mir::MirRvalue::UseData>(ad.rvalue->data);
+                        if (!use.operand || (use.operand->kind != mir::MirOperand::Copy &&
+                                             use.operand->kind != mir::MirOperand::Move)) {
+                            continue;
+                        }
+                        auto* src = std::get_if<mir::MirPlace>(&use.operand->data);
+                        if (!src || !src->projections.empty()) {
+                            continue;
+                        }
+                        if (selfCopyTargets.count(static_cast<unsigned int>(src->local)) &&
+                            selfCopyTargets.insert(static_cast<unsigned int>(ad.place.local))
+                                .second) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
         // エントリーブロック作成
         auto entryBB = llvm::BasicBlock::Create(ctx.getContext(), "entry", currentFunction);
         builder->SetInsertPoint(entryBB);
 
+        // mainのargc/argvをランタイムへ保存する（std::env::args()。ホストOS環境のみ）
+        if (func.name == "main" && isHostedTarget && currentFunction->arg_size() >= 2) {
+            auto argsInitFunc = declareExternalFunction("cm_args_init");
+            builder->CreateCall(argsInitFunc,
+                                {currentFunction->getArg(0), currentFunction->getArg(1)});
+        }
+
         // パラメータをローカル変数にマップ
+        // sret関数は先頭のLLVM引数が隠し出力ポインタのため、MIR引数の対応をずらす（C14 Phase 4）
+        bool useSret = needsSretReturn(func);
         size_t argIdx = 0;
+        bool skipped_sret = false;
         for (auto& arg : currentFunction->args()) {
+            if (useSret && !skipped_sret) {
+                skipped_sret = true;
+                continue;
+            }
             if (argIdx < func.arg_locals.size()) {
                 auto localIdx = func.arg_locals[argIdx];
                 // 構造体の値渡しパラメータの場合、allocaに格納してポインタとして使用（C ABIで16バイト以下の構造体はレジスタ渡しされる）
@@ -270,6 +331,26 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     builder->CreateStore(&arg, alloca);
                     locals[localIdx] = alloca;
                     allocatedLocals.insert(localIdx);  // allocaを追跡
+                } else if (arg.getType()->isPointerTy() && localIdx < func.locals.size() &&
+                           func.locals[localIdx].type &&
+                           func.locals[localIdx].type->kind == hir::TypeKind::Struct &&
+                           !isInterfaceType(func.locals[localIdx].type->name)) {
+                    // ABIでポインタ渡しされた16バイト超の値渡し構造体パラメータ（C14 byval相当）。
+                    // 従来はポインタを直接使っていたため、呼び出し先での変更が呼び出し元の値へ波及していた
+                    // （selfはMIR型がPointerなのでこの分岐に来ず、従来どおり参照渡し）。
+                    // エントリでローカルコピーを作り値セマンティクスを保つ
+                    auto structType = convertType(func.locals[localIdx].type);
+                    if (structType && structType->isSized()) {
+                        auto alloca = builder->CreateAlloca(structType, nullptr,
+                                                            "byval_copy_" + std::to_string(argIdx));
+                        auto copySize = module->getDataLayout().getTypeAllocSize(structType);
+                        builder->CreateMemCpy(alloca, llvm::MaybeAlign(), &arg, llvm::MaybeAlign(),
+                                              copySize);
+                        locals[localIdx] = alloca;
+                        allocatedLocals.insert(localIdx);
+                    } else {
+                        locals[localIdx] = &arg;
+                    }
                 } else if (arg.getType()->isPointerTy() && argIdx == 0 &&
                            localIdx < func.locals.size()) {
                     // プリミティブ型implメソッドのself引数: i8*で渡されるがローカルはプリミティブ型
@@ -350,41 +431,29 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // 動的配列（スライス）の場合
                     if (local.type->kind == hir::TypeKind::Array &&
                         !local.type->array_size.has_value()) {
+                        // グローバルスライス変数は関数ごとに作り直さずLLVMグローバルへ写像する
+                        // （従来は毎関数cm_slice_newで別実体になり、関数間の変異が失われていた。
+                        // 実体の初期化はmainエントリのMIRで一度だけ行う）
+                        if (local.is_global) {
+                            auto git = globalVariables.find(local.name);
+                            if (git != globalVariables.end()) {
+                                locals[i] = git->second;
+                                allocatedLocals.insert(i);
+                                continue;
+                            }
+                        }
                         // スライスポインタを格納するallocaを作成
                         auto alloca = builder->CreateAlloca(ctx.getPtrType(), nullptr,
                                                             "slice_" + std::to_string(i));
 
-                        // 要素サイズを計算
-                        int64_t elemSize = 4;
-                        if (local.type->element_type) {
-                            auto elemKind = local.type->element_type->kind;
-                            if (elemKind == hir::TypeKind::Array) {
-                                // 多次元スライス: 要素はCmSlice構造体（32バイト）
-                                elemSize = 32;
-                            } else if (elemKind == hir::TypeKind::Long ||
-                                       elemKind == hir::TypeKind::ULong ||
-                                       elemKind == hir::TypeKind::Double ||
-                                       elemKind == hir::TypeKind::Pointer ||
-                                       elemKind == hir::TypeKind::String) {
-                                elemSize = 8;
-                            } else if (elemKind == hir::TypeKind::Char ||
-                                       elemKind == hir::TypeKind::Bool) {
-                                elemSize = 1;
-                            } else if (elemKind == hir::TypeKind::Short ||
-                                       elemKind == hir::TypeKind::UShort) {
-                                elemSize = 2;
-                            } else if (elemKind == hir::TypeKind::Union ||
-                                       elemKind == hir::TypeKind::Struct) {
-                                // ユニオン・構造体: blob格納のため実サイズをDataLayoutから取得（MIR側の計算と一致させる）
-                                auto* elemTy = convertType(local.type->element_type);
-                                elemSize = static_cast<int64_t>(
-                                    module->getDataLayout().getTypeAllocSize(elemTy));
-                            }
-                        }
+                        // 要素サイズを計算（MIR側と同一のレイアウトAPIで一致させる。集約はDataLayoutの実サイズ）
+                        const int64_t elemSize = mir::layout::slice_elem_stride_of(
+                            local.type->element_type, [&](const hir::TypePtr& t) {
+                                return static_cast<int64_t>(
+                                    module->getDataLayout().getTypeAllocSize(convertType(t)));
+                            });
 
                         // cm_slice_new呼び出しでスライスを初期化
-                        // std::cerr << "[MIR2LLVM]     Local " << i
-                        //           << " is slice, calling cm_slice_new\n";
                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");
                         auto elemSizeVal = llvm::ConstantInt::get(ctx.getI64Type(), elemSize);
                         auto initialCap = llvm::ConstantInt::get(ctx.getI64Type(), 4);
@@ -407,9 +476,8 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                     // 名前が_tで始まる場合は一時変数
                     bool isTempVar =
                         (local.name.size() >= 2 && local.name[0] == '_' && local.name[1] == 't');
-                    // さらに、最初の数個のローカル変数（selfのコピー先として使われる）のみに適用
-                    // local_0はself引数、local_1/local_2が最初の一時変数として使われることが多い
-                    bool isSelfCopyTarget = (i <= 2);
+                    // selfのcopy/moveを直接代入される一時変数のみに適用（事前走査の推移的集合）
+                    bool isSelfCopyTarget = selfCopyTargets.count(static_cast<unsigned int>(i)) > 0;
                     if (isPrimitiveImplMethod && isTempVar && isSelfCopyTarget &&
                         local.type->kind == hir::TypeKind::Pointer && local.type->element_type) {
                         auto elemKind = local.type->element_type->kind;
@@ -454,9 +522,22 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                         locals[i] = alloca;
                         allocatedLocals.insert(i);  // allocaされた変数を記録
 
-                        // Tagged Union型のallocaをゼロ初期化
-                        // ペイロードフィールド(i8[N])の未使用バイトにゴミが残るのを防止
-                        if (local.type && local.type->name.find("__TaggedUnion_") == 0) {
+                        // 集約型（構造体・ユニオン・固定長配列）のallocaをゼロ初期化する（H4）。
+                        // 未初期化フィールド/要素がnative/jitでスタックゴミを返し、wasm/js（ゼロ初期化）と
+                        // 挙動が分裂していたのを、全バックエンドでゼロ初期化に統一する。
+                        // 後続で個別に初期化されるフィールド（スライスメンバのcm_slice_new等）は
+                        // このmemsetの後に上書きされるため順序上の問題はない。
+                        bool zeroInitAggregate = false;
+                        if (local.type) {
+                            if (local.type->kind == hir::TypeKind::Struct ||
+                                local.type->kind == hir::TypeKind::Union) {
+                                zeroInitAggregate = true;
+                            } else if (local.type->kind == hir::TypeKind::Array &&
+                                       local.type->array_size.has_value()) {
+                                zeroInitAggregate = true;
+                            }
+                        }
+                        if (zeroInitAggregate) {
                             auto dataLayout = module->getDataLayout();
                             auto allocSize = dataLayout.getTypeAllocSize(llvmType);
                             builder->CreateMemSet(alloca,
@@ -483,32 +564,13 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
                                             structLLVMType, alloca, fieldIdx,
                                             "slice_field_" + field.name);
 
-                                        // 要素サイズを計算
-                                        int64_t elemSize = 4;
-                                        if (field.type->element_type) {
-                                            auto elemKind = field.type->element_type->kind;
-                                            if (elemKind == hir::TypeKind::Long ||
-                                                elemKind == hir::TypeKind::ULong ||
-                                                elemKind == hir::TypeKind::Double ||
-                                                elemKind == hir::TypeKind::Pointer ||
-                                                elemKind == hir::TypeKind::String) {
-                                                elemSize = 8;
-                                            } else if (elemKind == hir::TypeKind::Char ||
-                                                       elemKind == hir::TypeKind::Bool) {
-                                                elemSize = 1;
-                                            } else if (elemKind == hir::TypeKind::Short ||
-                                                       elemKind == hir::TypeKind::UShort) {
-                                                elemSize = 2;
-                                            } else if (elemKind == hir::TypeKind::Struct ||
-                                                       elemKind == hir::TypeKind::Union) {
-                                                // 構造体・ユニオン: blob格納のため実サイズを使用
-                                                auto* elemTy =
-                                                    convertType(field.type->element_type);
-                                                elemSize = static_cast<int64_t>(
+                                        // 要素サイズを計算（内側スライス32・tiny系1の欠落もレイアウトAPIで補完）
+                                        const int64_t elemSize = mir::layout::slice_elem_stride_of(
+                                            field.type->element_type, [&](const hir::TypePtr& t) {
+                                                return static_cast<int64_t>(
                                                     module->getDataLayout().getTypeAllocSize(
-                                                        elemTy));
-                                            }
-                                        }
+                                                        convertType(t)));
+                                            });
 
                                         // cm_slice_new呼び出しでスライスを初期化
                                         auto sliceNewFunc = declareExternalFunction("cm_slice_new");
@@ -639,23 +701,16 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
         }
 
         // 各ブロックを変換（CompilationGuardによる監視）
-        // std::cerr << "[MIR2LLVM] Function " << func.name << " has " << func.basic_blocks.size()
-        //           << " blocks\n";
         for (size_t i = 0; i < func.basic_blocks.size(); ++i) {
             // DCEで削除されたブロック / 到達不能ブロックはスキップ
             if (!func.basic_blocks[i] || reachableBlocks.count(i) == 0) {
                 continue;
             }
 
-            // std::cerr << "[MIR2LLVM]   Converting block " << i << "/" << func.basic_blocks.size()
-            //           << "\n";
-
             // プログレス表示
             guard.show_progress("Function", i + 1, func.basic_blocks.size());
 
             convertBasicBlock(*func.basic_blocks[i]);
-
-            // std::cerr << "[MIR2LLVM]   Block " << i << " converted successfully\n";
         }
     } catch (const std::runtime_error& e) {
         // 無限ループエラーのハンドリング
@@ -666,22 +721,15 @@ void MIRToLLVM::convertFunction(const mir::MirFunction& func) {
 
 // 基本ブロック変換
 void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
-    // std::cerr << "[MIR2LLVM]     Entering convertBasicBlock for block " << block.id << "\n";
-    // std::cerr << "[MIR2LLVM]       Block has " << block.statements.size() << " statements\n";
     if (block.terminator) {
-        // std::cerr << "[MIR2LLVM]       Block has terminator type "
-        // << static_cast<int>(block.terminator->kind) << "\n";
     } else {
     }
 
     // blocksはunordered_mapなので、countで存在確認
-    // std::cerr << "[MIR2LLVM]       Checking if block " << block.id << " is in blocks map...\n";
     if (blocks.count(block.id) > 0) {
-        // std::cerr << "[MIR2LLVM]       Setting insert point for block " << block.id << "\n";
         builder->SetInsertPoint(blocks[block.id]);
     } else {
         // ブロックがblocks mapに存在しない（DCEで削除された可能性）
-        // std::cerr << "[MIR2LLVM]       Block " << block.id << " not in blocks map, skipping\n";
         if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",
                       "Warning: BB " + std::to_string(block.id) + " not in blocks map, skipping");
@@ -710,27 +758,14 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
         }
     }
 
-    // std::cerr << "[MIR2LLVM]       Starting statement loop, total statements: "
-    //           << block.statements.size() << "\n";
-
     for (size_t stmt_idx = 0; stmt_idx < block.statements.size(); ++stmt_idx) {
         const auto& stmt = block.statements[stmt_idx];
-
-        // ステートメント処理開始のログ
-        // std::cerr << "[MIR2LLVM]       Processing statement " << stmt_idx << "/"
-        //           << block.statements.size() << " (kind=" << static_cast<int>(stmt->kind) <<
-        //           ")\n";
 
         // 問題のある12個目のステートメントの詳細ログ
         if (currentMIRFunction && currentMIRFunction->name == "main" && stmt_idx == 11) {
             if (stmt->kind == mir::MirStatement::Assign) {
                 auto& assign = std::get<mir::MirStatement::AssignData>(stmt->data);
-                // std::cerr << "[MIR2LLVM]       Assign to local " << assign.place.local <<
-                // "\n";
-                if (assign.rvalue) {
-                    // std::cerr << "[MIR2LLVM]       Rvalue kind: "
-                    //           << static_cast<int>(assign.rvalue->kind) << "\n";
-                }
+                if (assign.rvalue) {}
             }
         }
 
@@ -748,21 +783,12 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
 
         convertStatement(*stmt);
 
-        // std::cerr << "[MIR2LLVM]       Statement " << stmt_idx << " processed successfully\n"; std::cerr << "[MIR2LLVM]       About to increment stmt_idx from " << stmt_idx << " to "
-        // << (stmt_idx + 1) << "\n";
         // ループの最後の反復かチェック
-        if (stmt_idx == block.statements.size() - 1) {
-            // std::cerr << "[MIR2LLVM]       Exiting for loop iteration " << stmt_idx << "\n";
-        }
-        // std::cerr << "[MIR2LLVM]       End of for loop body for stmt_idx=" << stmt_idx <<
-        // "\n";
+        if (stmt_idx == block.statements.size() - 1) {}
     }
 
     // ターミネータ処理
     if (block.terminator) {
-        // std::cerr << "[MIR2LLVM]       Terminator exists, processing terminator (kind="
-        //           << static_cast<int>(block.terminator->kind) << ")\n";
-
         // ターミネータの生成を記録（より詳細な情報を含める）
         std::ostringstream term_str;
         term_str << "term_kind_" << static_cast<int>(block.terminator->kind);
@@ -772,26 +798,19 @@ void MIRToLLVM::convertBasicBlock(const mir::BasicBlock& block) {
             auto& callData = std::get<mir::MirTerminator::CallData>(block.terminator->data);
             if (callData.func) {
                 if (callData.func->kind == mir::MirOperand::FunctionRef) {
-                    // std::cerr << "[MIR2LLVM]       Call target: "
-                    //           << std::get<std::string>(callData.func->data) << "\n";
                     term_str << "_" << std::get<std::string>(callData.func->data);
                 } else if (callData.func->kind == mir::MirOperand::Constant) {
                     auto& constant = std::get<mir::MirConstant>(callData.func->data);
                     if (auto* name = std::get_if<std::string>(&constant.value)) {
-                        // std::cerr << "[MIR2LLVM]       Call target (const): " << *name <<
-                        // "\n";
                         term_str << "_" << *name;
                     }
                 }
             }
-            // std::cerr << "[MIR2LLVM]       Args count: " << callData.args.size() << "\n";
         }
 
         guard.add_instruction(term_str.str());
 
-        // std::cerr << "[MIR2LLVM]       Calling convertTerminator()...\n";
         convertTerminator(*block.terminator);
-        // std::cerr << "[MIR2LLVM]       convertTerminator() done!\n";
     } else {
         if (cm::debug::debug_mode()) {
             debug_msg("CODEGEN",

@@ -1,0 +1,6 @@
+// Q4: 未宣言インターフェースへのimplの診断表示
+struct T1 { int v; }
+impl T1 for Nope {
+    int get() { return self.v; }
+}
+int main() { return 0; }

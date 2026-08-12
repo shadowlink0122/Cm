@@ -28,6 +28,15 @@
 - **integrationテストはリリースビルドされたcmバイナリに対する機能テスト**（`tests/common` 等を unified_test_runner.sh で実行するバックエンドスイート。`make test-interpreter/-llvm/-llvm-wasm/-js/-sv` 系）
 - 実行: `make test-unit` / `make test-regression`（ctestラベル `unit` / `regression` で分離）/ バックエンドスイート各種
 
+### integrationテストのファイル配置規約
+
+- **カテゴリ内はサブフォルダで自由に細分化してよい**（階層の深さは問わない）。unified_test_runnerはカテゴリ配下を再帰探索するため、`tests/common/<category>/<subcat>/.../foo.cm` のように何段ネストしても実行される
+- **テスト本体は伴走ファイル（`.cm`と同basenameの `.expect`/`.error`/`.skip`/`.timeout`/`.expect.<backend>` 等）を持つ`.cm`**。期待値は必ず`.cm`と同じ場所にセットで置く（別置きの`expects/`フォルダ等は作らない）
+- **importされるヘルパーモジュール**（他テストから`import`される`.cm`）は伴走ファイルを持たせない。ランナーは伴走ファイルの無い`.cm`をテストとして実行しない（ヘルパーと本体をこの規約で区別する）
+- **ファイル名にはサブフォルダ名を重複させない**（フォルダでカテゴリ分けする前提。例: `enum/field.cm`であって`enum/enum_field.cm`にしない）
+- 相対importでローカルのフィクスチャ`.cm`に依存するテスト（`modules`・`uefi/uefi_compile/uefi_cross_module_call`等）は、本体とフィクスチャの相対位置が変わらないよう、安易にサブフォルダへ移動しない
+- **SVバックエンド（`tests/sv`）のテストはファイル名がそのままSVモジュール識別子になる**ため、ファイル名の単語区切りはハイフンではなくアンダースコアを使う（`nested-if.cm`は`module nested-if`という不正な識別子を生成する。`nested_if.cm`とする）。SV予約語（`priority`等）を単独名にしない
+
 ## バージョン運用
 
 - ブランチ名 `feature/vX.Y.Z` と `VERSION` ファイルは一致させる（CIが検証）

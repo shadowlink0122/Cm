@@ -1,0 +1,19 @@
+//! platform: js
+// JSオブジェクトのメソッド呼び出し: 関数型フィールドをメソッド構文で起動し、this束縛が保持されることを検証
+
+struct Greeter {
+    string name;
+    string*(string) greet;
+}
+
+use "cmtestpkg" {
+    Greeter makeGreeter(string name);
+}
+
+int main() {
+    Greeter g = makeGreeter("Cm");
+    string s = g.greet("Hello");
+    println("{s}");
+    println("name={g.name}");
+    return 0;
+}

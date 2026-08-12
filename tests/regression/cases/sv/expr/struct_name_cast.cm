@@ -1,0 +1,14 @@
+// 型名キャスト type'(expr)（SV-N8）: packed structへのasキャストはSVの型名キャストで出力される
+#[input] bool clk = false;
+#[input] bit[16] raw;
+#[output] bit[8] h = 0;
+
+struct Pair {
+    bit[8] hi;
+    bit[8] lo;
+}
+
+void unpack(posedge clk) {
+    Pair p = raw as Pair;
+    h = p.hi;
+}

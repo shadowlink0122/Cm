@@ -2,6 +2,14 @@
 # unified_test_runner.sh から source される実行ドライバモジュール。
 # 順次実行（run_tests_sequential）・並列実行（run_tests_parallel）・並列ワーカー（run_parallel_test）を提供する。
 
+# テスト本体か判定する。期待値/エラー/スキップ等の伴走ファイル（.cmと同basename）を持つ.cmのみをテスト対象とし、
+# import用ヘルパーモジュール（サブフォルダ内で伴走ファイルを持たない.cm）はテストとして実行しない。
+is_test_entry() {
+    local base="${1%.cm}"
+    [ -f "$base.expect" ] || [ -f "$base.error" ] || [ -f "$base.skip" ] || \
+    [ -f "$base.timeout" ] || ls "$base".expect.* >/dev/null 2>&1 || ls "$base".error.* >/dev/null 2>&1
+}
+
 # 順次実行モード
 run_tests_sequential() {
     for entry in $CATEGORIES; do
@@ -23,12 +31,13 @@ run_tests_sequential() {
         log "Testing category: $platform_dir/$category"
         log "----------------------------------------"
 
-        for test_file in "$category_dir"/*.cm; do
-            if [ -f "$test_file" ]; then
+        # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）。ヘルパーモジュールは除外
+        while IFS= read -r test_file; do
+            if [ -f "$test_file" ] && is_test_entry "$test_file"; then
                 ((TOTAL++))
                 run_single_test "$test_file"
             fi
-        done
+        done < <(find "$category_dir" -type f -name '*.cm' | sort)
 
         log ""
     done
@@ -51,11 +60,12 @@ run_tests_parallel() {
             category_dir="$PROGRAMS_DIR/$platform_dir/$category"
         fi
         if [ -d "$category_dir" ]; then
-            for test_file in "$category_dir"/*.cm; do
-                if [ -f "$test_file" ]; then
+            # カテゴリ配下を再帰的に走査（サブフォルダの階層は問わない）。ヘルパーモジュールは除外
+            while IFS= read -r test_file; do
+                if [ -f "$test_file" ] && is_test_entry "$test_file"; then
                     test_files+=("$test_file")
                 fi
-            done
+            done < <(find "$category_dir" -type f -name '*.cm' | sort)
         fi
     done
     
@@ -378,7 +388,8 @@ PY
             fi
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 if command -v node >/dev/null 2>&1; then
-                    run_with_timeout_silent node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    # NODE_PATH: テストディレクトリ同梱のnode_modules（FFIフィクスチャ）を解決させる（直列実行側と同一の挙動）
+                    run_with_timeout_silent env NODE_PATH="$test_dir/node_modules" node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                     # nodeプロセスがゾンビ化する場合に備えてクリーンアップ
                     kill %% 2>/dev/null || true
                 else
@@ -409,6 +420,10 @@ PY
             local test_dir="$(dirname "$test_file")"
             local test_basename="$(basename "$test_file")"
             (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            # x86成功時はarmでもコンパイル検証する（armのみの起動コード生成経路がx86ゲートでは露見しないため。エラーテストはx86失敗時点で判定される）
+            if [ $exit_code -eq 0 ]; then
+                (cd "$test_dir" && run_with_timeout_silent "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-arm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            fi
             if [ $exit_code -eq 0 ]; then
                 if grep -q "COMPILE_OK" "$expect_file" 2>/dev/null; then
                     echo "COMPILE_OK" > "$output_file"
@@ -447,7 +462,8 @@ PY
                         local sim_output="$TEMP_DIR/sim_${test_name}_${BASHPID}_${RANDOM}.log"
                         iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
                         if [ $? -eq 0 ]; then
-                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            # テストベンチの $dumpfile は相対名のため、波形(.vcd)がリポジトリルートへ漏れないようTEMP_DIRをCWDにして実行する
+                            (cd "$TEMP_DIR" && vvp "$sim_binary") > "$sim_output" 2>&1
                             local sim_exit=$?
                             if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
                                 # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）

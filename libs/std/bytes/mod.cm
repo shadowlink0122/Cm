@@ -1,0 +1,85 @@
+// std::bytes - エンディアン指定のバイト詰め（純Cm実装・全バックエンド共通）
+// オブジェクトファイル生成等のバイナリ組み立てに使う。シフトとマスクのみでFFI不使用
+module std.bytes;
+
+/// 16ビット値をリトルエンディアンで末尾へ追記する
+export void push_u16_le(utiny[] buf, uint v) {
+    buf.push((v & 0xFF) as utiny);
+    buf.push(((v >> 8) & 0xFF) as utiny);
+}
+
+/// 32ビット値をリトルエンディアンで末尾へ追記する
+export void push_u32_le(utiny[] buf, uint v) {
+    buf.push((v & 0xFF) as utiny);
+    buf.push(((v >> 8) & 0xFF) as utiny);
+    buf.push(((v >> 16) & 0xFF) as utiny);
+    buf.push(((v >> 24) & 0xFF) as utiny);
+}
+
+/// 64ビット値をリトルエンディアンで末尾へ追記する
+export void push_u64_le(utiny[] buf, ulong v) {
+    for (int i = 0; i < 8; i++) {
+        buf.push(((v >> (i * 8)) & 0xFF) as utiny);
+    }
+}
+
+/// 16ビット値をビッグエンディアンで末尾へ追記する
+export void push_u16_be(utiny[] buf, uint v) {
+    buf.push(((v >> 8) & 0xFF) as utiny);
+    buf.push((v & 0xFF) as utiny);
+}
+
+/// 32ビット値をビッグエンディアンで末尾へ追記する
+export void push_u32_be(utiny[] buf, uint v) {
+    buf.push(((v >> 24) & 0xFF) as utiny);
+    buf.push(((v >> 16) & 0xFF) as utiny);
+    buf.push(((v >> 8) & 0xFF) as utiny);
+    buf.push((v & 0xFF) as utiny);
+}
+
+/// 64ビット値をビッグエンディアンで末尾へ追記する
+export void push_u64_be(utiny[] buf, ulong v) {
+    for (int i = 7; i >= 0; i--) {
+        buf.push(((v >> (i * 8)) & 0xFF) as utiny);
+    }
+}
+
+/// offsetから16ビット値をリトルエンディアンで読む
+export uint read_u16_le(utiny[] buf, int offset) {
+    return (buf[offset] as uint) | ((buf[offset + 1] as uint) << 8);
+}
+
+/// offsetから32ビット値をリトルエンディアンで読む
+export uint read_u32_le(utiny[] buf, int offset) {
+    return (buf[offset] as uint) | ((buf[offset + 1] as uint) << 8) |
+        ((buf[offset + 2] as uint) << 16) | ((buf[offset + 3] as uint) << 24);
+}
+
+/// offsetから64ビット値をリトルエンディアンで読む
+export ulong read_u64_le(utiny[] buf, int offset) {
+    ulong v = 0;
+    for (int i = 7; i >= 0; i--) {
+        v = (v << 8) | (buf[offset + i] as ulong);
+    }
+    return v;
+}
+
+/// offsetから16ビット値をビッグエンディアンで読む
+export uint read_u16_be(utiny[] buf, int offset) {
+    return ((buf[offset] as uint) << 8) | (buf[offset + 1] as uint);
+}
+
+/// offsetから32ビット値をビッグエンディアンで読む
+export uint read_u32_be(utiny[] buf, int offset) {
+    return ((buf[offset] as uint) << 24) | ((buf[offset + 1] as uint) << 16) |
+        ((buf[offset + 2] as uint) << 8) | (buf[offset + 3] as uint);
+}
+
+/// offsetから64ビット値をビッグエンディアンで読む
+export ulong read_u64_be(utiny[] buf, int offset) {
+    ulong v = 0;
+    for (int i = 0; i < 8; i++) {
+        v = (v << 8) | (buf[offset + i] as ulong);
+    }
+    return v;
+}

@@ -1,0 +1,4 @@
+// R6: プリプロセッサの閉じ忘れ診断の表示
+#ifdef __NEVER_DEFINED__
+int hidden() { return 1; }
+int main() { return 0; }

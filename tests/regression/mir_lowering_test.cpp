@@ -2,6 +2,7 @@
 #include "../../src/internal/mir/lowering/lowering.hpp"
 #include "../../src/internal/syntax/lexer/lexer.hpp"
 #include "../../src/internal/syntax/parser/parser.hpp"
+#include "../../src/internal/types/checking/checker.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -41,8 +42,31 @@ class MirLoweringTest : public ::testing::Test {
         return std::make_unique<mir::MirProgram>(std::move(mir));
     }
 
+    // 型検査を通してからloweringする（式の型情報に依存するケース用。実コンパイルと同じ順序）
+    std::unique_ptr<mir::MirProgram> check_and_lower(const std::string& code) {
+        Lexer lex(code);
+        std::vector<Token> tokens = lex.tokenize();
+        Parser p(tokens);
+        auto ast = p.parse();
+
+        TypeChecker checker;
+        EXPECT_TRUE(checker.check(ast));
+
+        hir::HirLowering hir_lowering;
+        auto hir = hir_lowering.lower(ast);
+
+        mir::MirLowering mir_lowering;
+        auto mir = mir_lowering.lower(hir);
+
+        return std::make_unique<mir::MirProgram>(std::move(mir));
+    }
+
     std::unique_ptr<mir::MirProgram> lower_case(const std::string& name) {
         return parse_and_lower(load_case(name));
+    }
+
+    std::unique_ptr<mir::MirProgram> check_and_lower_case(const std::string& name) {
+        return check_and_lower(load_case(name));
     }
 
     // 基本ブロックの数をカウント
@@ -225,6 +249,63 @@ TEST_F(MirLoweringTest, LocalVariableScope) {
 }
 
 // ============================================================
+// 文単位一時文字列のdropパス（C12）
+// ============================================================
+namespace {
+// 関数のMIR全体から指定関数の呼び出し回数を数える
+int count_calls(const mir::MirFunction& func, const std::string& callee) {
+    int count = 0;
+    for (const auto& block : func.basic_blocks) {
+        if (!block->terminator || block->terminator->kind != mir::MirTerminator::Call) {
+            continue;
+        }
+        const auto& call = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+        if (call.func && call.func->kind == mir::MirOperand::FunctionRef &&
+            std::get<std::string>(call.func->data) == callee) {
+            count++;
+        }
+    }
+    return count;
+}
+}  // namespace
+
+TEST_F(MirLoweringTest, TempStringDropExprStmt) {
+    // println(a + " " + b) の式文: 連結チェーンはcm_string_concat3へ平坦化され（H9第5段）、
+    // 単一の結果一時がprintln後に解放される
+    auto mir = check_and_lower_case("temp_string_drop_expr_stmt");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 0);
+    EXPECT_EQ(count_calls(func, "cm_string_concat3"), 1);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 1);
+}
+
+TEST_F(MirLoweringTest, TempStringDropLetEscape) {
+    // let束縛へエスケープした一時は解放されない（println(s)のsは名前付き変数）
+    auto mir = check_and_lower_case("temp_string_drop_let_escape");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 1);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 0);
+}
+
+TEST_F(MirLoweringTest, TempSliceDropExprStmt) {
+    // map結果の無名スライスは読み出し後に解放され、let束縛へエスケープしたものは解放されない
+    auto mir = check_and_lower_case("temp_slice_drop_expr_stmt");
+    const auto& func = *mir->functions[1];  // [0]=add1, [1]=main
+    EXPECT_EQ(func.name, "main");
+    // 式文のmap結果1個だけが解放される（let束縛のkeptは解放されない）
+    EXPECT_EQ(count_calls(func, "cm_slice_free"), 1);
+}
+
+TEST_F(MirLoweringTest, TempStringDropTernaryArm) {
+    // 三項演算子の腕で確保された一時は条件付き実行のため解放対象にしない
+    // （文末で未初期化ポインタをfreeする危険を避ける）
+    auto mir = check_and_lower_case("temp_string_drop_ternary_arm");
+    const auto& func = *mir->functions[0];
+    EXPECT_EQ(count_calls(func, "cm_string_concat"), 2);
+    EXPECT_EQ(count_calls(func, "cm_string_free"), 0);
+}
+
+// ============================================================
 // 複数の関数のテスト
 // ============================================================
 TEST_F(MirLoweringTest, MultipleFunctions) {
@@ -236,4 +317,66 @@ TEST_F(MirLoweringTest, MultipleFunctions) {
         EXPECT_FALSE(func->name.empty());
         EXPECT_GE(func->basic_blocks.size(), 1u);
     }
+}
+
+// ============================================================
+// エラー型成果物の不在検査（diagnostics-engine-unification 第3段）
+// ============================================================
+
+namespace {
+
+// MIR全体から__error__プレフィックスのシンボル（関数名・呼び出し先）を収集する
+std::vector<std::string> collect_error_symbols(const mir::MirProgram& program) {
+    std::vector<std::string> found;
+    for (const auto& func : program.functions) {
+        if (!func) {
+            continue;
+        }
+        if (func->name.rfind("__error__", 0) == 0) {
+            found.push_back(func->name);
+        }
+        for (const auto& block : func->basic_blocks) {
+            if (!block || !block->terminator ||
+                block->terminator->kind != mir::MirTerminator::Call) {
+                continue;
+            }
+            const auto& call = std::get<mir::MirTerminator::CallData>(block->terminator->data);
+            if (!call.func || call.func->kind != mir::MirOperand::FunctionRef) {
+                continue;
+            }
+            if (const auto* name = std::get_if<std::string>(&call.func->data)) {
+                if (name->rfind("__error__", 0) == 0) {
+                    found.push_back(*name);
+                }
+            }
+        }
+    }
+    return found;
+}
+
+}  // namespace
+
+TEST_F(MirLoweringTest, NoErrorArtifactSymbolsInRepresentativeProgram) {
+    // ジェネリックメソッドチェーン・補間内呼び出し・スライス組み込みを含む代表プログラムで、
+    // 未解決型のマングリング成果物（__error__*）がMIRに存在しないこと、MIR診断が空であることを固定する
+    auto code = load_case("error_artifact_free");
+    Lexer lex(code);
+    std::vector<Token> tokens = lex.tokenize();
+    Parser p(tokens);
+    auto ast = p.parse();
+    ASSERT_FALSE(p.has_errors());
+
+    TypeChecker checker;
+    ASSERT_TRUE(checker.check(ast));
+
+    hir::HirLowering hir_lowering;
+    auto hir = hir_lowering.lower(ast);
+
+    mir::MirLowering mir_lowering;
+    auto mir = mir_lowering.lower(hir);
+
+    const auto errors = collect_error_symbols(mir);
+    EXPECT_TRUE(errors.empty()) << "__error__シンボルがMIRに残っています: " << errors.front();
+    EXPECT_TRUE(mir_lowering.mir_diagnostics().empty())
+        << "MIR診断が発生: " << mir_lowering.mir_diagnostics().front().message;
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/diagnostics.hpp"
+#include "internal/base/diag/diagnostics.hpp"
 #include "internal/syntax/ast/decl.hpp"
 #include "internal/syntax/lexer/token.hpp"
 
@@ -30,7 +30,7 @@ class Parser {
           max_parse_depth_(0),
           is_sv_platform_(is_sv_platform) {}
 
-    // プログラム全体を解析（parser_decl.cppで実装）
+    // プログラム全体を解析（decl.cppで実装）
     ast::Program parse();
 
     const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
@@ -44,7 +44,7 @@ class Parser {
 
    private:
     // ============================================================
-    // 宣言パース（parser_decl.cppで実装）
+    // 宣言パース（decl.cppで実装）
     // ============================================================
     ast::DeclPtr parse_top_level();
     bool is_global_var_start();
@@ -57,7 +57,8 @@ class Parser {
     std::optional<ast::OperatorKind> parse_operator_kind();
     ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {});
-    ast::DeclPtr parse_impl_ctor(ast::TypePtr target, std::vector<ast::AttributeNode> attributes,
+    ast::DeclPtr parse_impl_ctor(uint32_t start_pos, ast::TypePtr target,
+                                 std::vector<ast::AttributeNode> attributes,
                                  std::vector<std::string> generic_params = {},
                                  std::vector<ast::GenericParam> generic_params_v2 = {});
     std::vector<ast::StmtPtr> parse_block();
@@ -69,7 +70,7 @@ class Parser {
                                        std::vector<ast::AttributeNode> attributes = {});
 
     // ============================================================
-    // 文パース（parser_stmt.cppで実装）
+    // 文パース（stmt.cppで実装）
     // ============================================================
     ast::StmtPtr parse_stmt();
 
@@ -103,7 +104,7 @@ class Parser {
     std::unique_ptr<ast::MatchPattern> parse_match_pattern_element();
 
     // ============================================================
-    // 型解析（parser_type.cppで実装）
+    // 型解析（type.cppで実装）
     // ============================================================
     std::pair<std::vector<std::string>, std::vector<ast::GenericParam>> parse_generic_params_v2();
     std::vector<std::string> parse_generic_params();
@@ -114,6 +115,10 @@ class Parser {
     std::string expect_ident();
     std::string current_text() const;
     bool is_type_start();
+    // sizeof/__sizeof__ の被演算子を型/式のいずれとして解析するか判定し対応ノードを返す（両組込で共通化。局所処理調査A2）
+    ast::ExprPtr parse_sizeof_operand(uint32_t start_pos);
+    // sizeof被演算子が識別子始まりのとき、型パス（名前・ジェネリック引数・ポインタ/配列サフィックス）が閉じ括弧に達すれば型、途中に式演算子（. ( 二項演算子 等）が現れれば式と非破壊で判定する
+    bool sizeof_operand_ident_is_type() const;
 
     // ============================================================
     // モジュール関連パーサ（module/ 配下で実装）

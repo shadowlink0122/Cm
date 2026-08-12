@@ -16,15 +16,15 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | ドキュメント | 内容 |
 |---|---|
 | [v1.0.0ロードマップ](roadmap_v1.0.0.html) | v1.0.0までのマイルストーン別計画 |
-| [v0.16.0 SVバックエンド拡充](v0.16.0/roadmap.html) | 現行開発版のロードマップ（Verilogギャップ分析・tcl/cst統合検討） |
+| [v0.16.0 SVバックエンド拡充（アーカイブ）](../archive/v0.16.0/roadmap.html) | v0.16.0開発時のロードマップ（Verilogギャップ分析・tcl/cst統合検討） |
 
-## v0.16.0 実装設計（未完了・前方検討）
+## v0.17.0 設計（全件完遂・アーカイブ済み）
 
 | ドキュメント | 内容 |
 |---|---|
-| [05 SV回路検証フレームワーク](v0.16.0/05_sv_verification.html) | サイクル精度テストベンチ（Layer 1実装済み。Layer 2のJITゴールデン照合は設計のみ） |
-| [11 ユーザー定義derive可能interface](v0.16.0/11_user_defined_derive.html) | フィールドイントロスペクション・可変長引数・#[derivable]の前方検討（実装対象外。前提のユニオン実行時型判別は設計12で実装済み） |
+| [v0.17.0 調査・設計索引](../archive/v0.17.0/design-README.html) | 大規模開発ボトルネック監査への対応と各調査系列の設計文書一覧（全件処置完了） |
+| [v0.17.0 リファクタリング提案索引](../archive/v0.17.0/refactoring-README.html) | 提案4件（スライス実体化一本化・特殊化後正準化・エラー境界集約・大規模ソース分割）の索引（全件完遂） |
 
 ## アーカイブ
 
-実装済み: [archive/v0.16.0/](../archive/v0.16.0/)（モジュールパラメータ・物理制約生成・トライステート/CDC・ビットスライス/don't careマッチ・#[test]属性・ツーリングUX・SVコード生成監査・バックエンドギャップ解消・#[derive]属性・ユニオン実行時型判別・Rust準拠Result/Option）、[archive/v0.15.1/](../archive/v0.15.1/)（SVバックエンド式ツリー化・interface動的ディスパッチ・最適化オプション等）、[archive/v0.15.0/](../archive/v0.15.0/)（SVバックエンド初期設計）ほか各バージョン。未実装・破棄提案: [archive/unimplemented/](../archive/unimplemented/)
+実装済み: [archive/v0.16.0/](../archive/v0.16.0/)（モジュールパラメータ・物理制約生成・トライステート/CDC・ビットスライス/don't careマッチ・SV回路検証フレームワーク・#[test]属性・ツーリングUX・SVコード生成監査・バックエンドギャップ解消・#[derive]属性・ユーザー定義derive前方検討・ユニオン実行時型判別・Rust準拠Result/Option・v0.16.0ロードマップ）、[archive/v0.17.0/](../archive/v0.17.0/)（JS/npm相互運用・未初期化構造体フィールドのゼロ初期化）、[archive/v0.15.1/](../archive/v0.15.1/)（SVバックエンド式ツリー化・interface動的ディスパッチ・最適化オプション等）、[archive/v0.15.0/](../archive/v0.15.0/)（SVバックエンド初期設計）ほか各バージョン。未実装・破棄提案: [archive/unimplemented/](../archive/unimplemented/)

@@ -1,0 +1,34 @@
+// std::strings::split - 文字列分割（純Cm実装・全バックエンド共通）
+// 添字はビルトインsubstring/indexOfと同じUTF-8コードポイント単位
+module std.strings.split;
+
+/// 文字列をセパレータで分割する。空要素は保持する（"a,,b" → ["a", "", "b"]）
+/// セパレータが空文字列の場合はコードポイント1文字ずつに分割する
+export string[] split(string s, string sep) {
+    string[] parts = [];
+    if (sep.len() == 0) {
+        for (long i = 0; i < s.len(); i++) {
+            parts.push(s.substring(i, i + 1));
+        }
+        return parts;
+    }
+    // セパレータが見つかる間はその手前を切り出し、残りを狭めていく
+    string rest = s;
+    int idx = rest.indexOf(sep);
+    while (idx >= 0) {
+        parts.push(rest.substring(0, idx));
+        rest = rest.substring(idx + sep.len(), rest.len());
+        idx = rest.indexOf(sep);
+    }
+    parts.push(rest);
+    return parts;
+}
+
+/// 文字列を行に分割する。\r\nは\nへ正規化し、末尾の空要素（終端改行の後ろ）は落とす
+export string[] lines(string s) {
+    string[] parts = split(s.replace("\r\n", "\n"), "\n");
+    if (parts.len() > 0 && parts[parts.len() - 1].len() == 0) {
+        parts.pop();
+    }
+    return parts;
+}

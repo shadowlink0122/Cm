@@ -1,0 +1,16 @@
+struct Num {
+    int v;
+}
+
+impl Num {
+    operator bool ==(Num other) {
+        return self.v == other.v;
+    }
+}
+
+int main() {
+    int matrix = -1;
+    long e = 1;
+    bool aligned = false;
+    return 0;
+}

@@ -1,0 +1,8 @@
+// 回帰(R18): 文字列連結はヒープ確保（cm_string_concat→malloc）を伴うためフリースタンディングでは診断拒否
+// （従来はブロックリスト漏れで無診断コンパイルされ実行時クラッシュの温床だった）
+int main() {
+    string a = "foo";
+    string b = "bar";
+    string c = a + b;
+    return c.len() as int;
+}

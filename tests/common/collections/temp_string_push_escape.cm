@@ -1,0 +1,24 @@
+import std::io::println;
+import std::collections::vector::*;
+
+// C12回帰: コンテナへ格納した一時文字列はエスケープ扱いで解放されないことを検証する。
+// push後にdropパスが誤って解放するとダングリングポインタとなり内容比較が壊れる。
+
+int main() {
+    string a = "aa";
+    string b = "bb";
+
+    Vector<string> v();
+    v.push(a + "1");
+    v.push(b + "2");
+
+    string s0 = *v.get(0);
+    string s1 = *v.get(1);
+    if (s0 == "aa1" && s1 == "bb2") {
+        println("push ok");
+    } else {
+        println("push NG");
+    }
+    println(v.len());
+    return 0;
+}

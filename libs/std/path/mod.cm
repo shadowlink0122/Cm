@@ -1,0 +1,71 @@
+// std::path - パス操作（純Cm実装・全バックエンド共通）
+// 区切りは/固定（対応プラットフォームはmacOS/Linux、Windowsは対象外）
+module std.path;
+
+// 最後に出現するneedleのコードポイント添字を返す（無ければ-1）。末尾から前方一致で走査する
+int last_index_of(string s, string needle) {
+    const long n = needle.len();
+    for (long i = s.len() - n; i >= 0; i--) {
+        if (s.substring(i, i + n) == needle) {
+            return i as int;
+        }
+    }
+    return -1;
+}
+
+/// 2つのパス要素を/で連結する。片方が空ならもう片方をそのまま返す
+export string join(string a, string b) {
+    if (a.len() == 0) {
+        return b;
+    }
+    if (b.len() == 0) {
+        return a;
+    }
+    if (a.endsWith("/")) {
+        return a + b;
+    }
+    return a + "/" + b;
+}
+
+/// 最後の/より前を返す。/が無ければ"."、ルート直下は"/"
+export string dirname(string p) {
+    const int idx = last_index_of(p, "/");
+    if (idx < 0) {
+        return ".";
+    }
+    if (idx == 0) {
+        return "/";
+    }
+    return p.substring(0, idx);
+}
+
+/// 最後の/より後ろを返す。/が無ければ全体を返す
+export string basename(string p) {
+    const int idx = last_index_of(p, "/");
+    if (idx < 0) {
+        return p;
+    }
+    return p.substring(idx + 1, p.len());
+}
+
+/// 拡張子（最後の.より後ろ、.は含まない）を返す。無ければ空文字列。ドットファイル（.bashrc等）は拡張子なし扱い
+export string extension(string p) {
+    const string b = basename(p);
+    const int dot = last_index_of(b, ".");
+    if (dot <= 0) {
+        return "";
+    }
+    return b.substring(dot + 1, b.len());
+}
+
+/// 拡張子を置き換えたパスを返す。拡張子が無ければ末尾に追加する
+export string with_extension(string p, string ext) {
+    const string b = basename(p);
+    const int dot = last_index_of(b, ".");
+    if (dot <= 0) {
+        return p + "." + ext;
+    }
+    // basename内の拡張子開始位置をパス全体の添字へ換算する
+    const int base_start = p.len() as int - b.len() as int;
+    return p.substring(0, base_start + dot) + "." + ext;
+}

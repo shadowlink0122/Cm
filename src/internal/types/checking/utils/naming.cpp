@@ -2,8 +2,10 @@
 // TypeChecker 実装 - 命名規則チェック（L001 naming-convention。check/lint --strict時のみ）
 // ============================================================
 
+#include "internal/types/checking/naming.hpp"
+
 #include "internal/base/i18n.hpp"
-#include "internal/types/naming_rules.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <algorithm>
@@ -18,7 +20,7 @@ namespace cm {
 
 // ============================================================
 // 命名規則チェック (L001 naming-convention。check/lint --strict時のみ)
-// 判定ロジックは frontend/types/naming_rules.hpp に分離
+// 判定ロジックは internal/types/checking/naming.hpp に分離
 // ============================================================
 
 bool TypeChecker::is_snake_case(const std::string& name) {
@@ -284,6 +286,36 @@ void TypeChecker::check_naming_conventions(ast::Program& program) {
             check_naming_decl(*decl, /*top_level=*/true);
         }
     }
+}
+
+// メソッド表キーの正準計算: ジェネリック定義キー（G<T, U>形。implブロック登録のtype_to_string形と同形）。
+// 従来はmethod.cpp・function.cpp・auto_impl.cppがバイト一致必須の文字列組み立てを別々に持っていた
+std::string TypeChecker::generic_def_method_key(const std::string& base_name) const {
+    auto it = generic_structs_.find(base_name);
+    if (it == generic_structs_.end()) {
+        return base_name;
+    }
+    std::string key = base_name + "<";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) {
+            key += ", ";
+        }
+        key += it->second[i];
+    }
+    key += ">";
+    return key;
+}
+
+// 特殊化サフィックスの除去（Result<int, string>・Result__int__string → Result）
+std::string TypeChecker::strip_spec_suffix(const std::string& name) {
+    // 表示形（Name<...>）を基底へ切ってから、特殊化名（$エンコード/フラット）の基底抽出は
+    // typekeyの正準関数へ委譲する（HIR側の同じ剥ぎと単一実装を共有。checker-to-hir-resolution-handoff）
+    std::string base = name;
+    auto lt = base.find('<');
+    if (lt != std::string::npos) {
+        base = base.substr(0, lt);
+    }
+    return ast::typekey::spec_base_name(base);
 }
 
 }  // namespace cm

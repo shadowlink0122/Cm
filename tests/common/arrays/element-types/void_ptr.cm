@@ -1,0 +1,15 @@
+//! platform: !js|sv
+import std::io::println;
+// 汎用 void* 配列には任意のポインタを格納でき、取得は auto、型判定は typeof で行う（Req4）
+struct Point { int x; int y; }
+int main() {
+    int n = 42;
+    string s = "hi";
+    Point p = Point{x: 1, y: 2};
+    void*[3] arr = [&n, &s, &p];
+    auto e0 = arr[0];
+    const string t0 = typeof(e0);
+    const int back = *(arr[0] as int*);
+    println("{t0} {back}");
+    return 0;
+}

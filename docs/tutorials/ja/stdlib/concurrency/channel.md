@@ -12,6 +12,22 @@ Go風のバウンデッドチャネルによるスレッド間メッセージパ
 
 ---
 
+## 構造体API: Channel（v0.17.0で利用可能に）
+
+関数APIに加えて、ハンドルを保持する構造体APIも使えます:
+
+```cm
+import native::sync::Channel;
+
+Channel ch = Channel::new(4);   // 容量4のバウンデッドチャネル
+ch.send(42);
+println("{ch.len()} {ch.recv()}");  // 1 42
+ch.close();
+ch.destroy();
+```
+
+`send/recv/try_send/try_recv/len/is_closed/close/destroy`が関数APIと同じ意味で使えます。
+
 ## 基本的な使い方
 
 ```cm

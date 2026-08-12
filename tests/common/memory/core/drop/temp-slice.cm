@@ -1,0 +1,40 @@
+import std::io::println;
+
+// C12回帰（スライス一時）: map/filter結果の無名スライスが文の評価完了後に解放されることを検証する。
+// 解放対象の一時を使った値の健全性と、let束縛・チェーン中間・ループ内一時の挙動を全バックエンドで確認する。
+
+int add1(int x) {
+    return x + 1;
+}
+
+bool pos(int x) {
+    return x > 0;
+}
+
+int main() {
+    int[3] xs = [1, 2, 3];
+
+    // 式文・let初期化の読み出しで消費された中間スライスは解放される
+    println(xs.map(add1).len());
+    println(xs.filter(pos).len());
+    int n = xs.map(add1)[1];
+    println(n);
+
+    // let束縛へエスケープしたスライスは解放されず値が生きている
+    int[] kept = xs.map(add1);
+    println(kept[0] + kept[2]);
+
+    // チェーン: 中間mapの結果はfilterへ読まれた後に解放される
+    int m = xs.map(add1).filter(pos).len();
+    println(m);
+
+    // ループ内の一時は毎周期解放されても出力が安定している
+    long total = 0;
+    int i = 0;
+    while (i < 3) {
+        total = total + xs.map(add1)[0];
+        i++;
+    }
+    println(total);
+    return 0;
+}

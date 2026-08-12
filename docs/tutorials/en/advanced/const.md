@@ -81,7 +81,8 @@ Current implementation has the following limitations:
 
 - Only global scope `const` variables are supported
 - Function calls cannot be included in constant expressions
-- `constexpr` functions planned for future versions
+- `constexpr` variables are rejected with a dedicated diagnostic (use `const`)
+- `constexpr` functions are accepted as regular functions with a warning (compile-time evaluation is not implemented)
 
 ## Related Topics
 

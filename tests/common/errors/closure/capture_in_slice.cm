@@ -1,0 +1,9 @@
+// 回帰(V7): キャプチャ付きクロージャのスライス格納は環境喪失・未解決シンボルのため診断付き拒否
+import std::io::println;
+int main() {
+    int base = 3;
+    const int*(int)[] fs;
+    fs.push((int x) => { return x + base; });
+    println(fs[0](1));
+    return 0;
+}

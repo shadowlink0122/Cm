@@ -1,0 +1,20 @@
+import std::io::println;
+// 補間プレースホルダ内のOption/Resultメソッドチェーン（呼び出しレシーバ）の回帰。
+// scrutinee退避プリパスが補間の脱糖済み部分式を走査しなかった時期に、
+// {make().unwrap_or(0)} のレシーバが多重評価扱いで型解決に失敗し誤って0を返していた
+
+Option<int> make() {
+    return Option::Some(7);
+}
+
+Option<int> none_of() {
+    return Option::None;
+}
+
+int main() {
+    println("some: {make().unwrap_or(0)}");
+    println("none: {none_of().unwrap_or(-1)}");
+    println("is_some: {make().is_some()}");
+    println("mixed: {make().unwrap_or(0) + 10}");
+    return 0;
+}

@@ -91,144 +91,11 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         rhs_value = expr_lowering->lower_expression(*assign.value, ctx);
     }
 
-    // 左辺値のMirPlaceを構築するヘルパー関数
-    // 複雑な左辺値（c.values[0], points[0].x など）を再帰的に処理
+    // 左辺値の場所化は唯一のAPI lower_place へ委譲する（type-resolution-simplification 領域2）。
+    // 従来ここに並行実装されていたbuild_projectionsは、スライス降下の修正が読み経路と共有されずW2の再発源になっていた
     auto build_lvalue_place = [&](const hir::HirExpr* expr, MirPlace& place,
                                   hir::TypePtr& current_type) -> bool {
-        // 再帰的にプロジェクションを構築
-        std::function<bool(const hir::HirExpr*,
-                           std::vector<std::function<void(MirPlace&, LoweringContext&)>>&,
-                           hir::TypePtr&)>
-            build_projections;
-        build_projections =
-            [&](const hir::HirExpr* e,
-                std::vector<std::function<void(MirPlace&, LoweringContext&)>>& projections,
-                hir::TypePtr& typ) -> bool {
-            if (auto* var_ref = std::get_if<std::unique_ptr<hir::HirVarRef>>(&e->kind)) {
-                // ベース変数
-                auto var_id = ctx.resolve_variable((*var_ref)->name);
-                if (var_id) {
-                    place.local = *var_id;
-                    if (*var_id < ctx.func->locals.size()) {
-                        typ = ctx.func->locals[*var_id].type;
-                    }
-                    return true;
-                }
-                return false;
-            } else if (auto* member = std::get_if<std::unique_ptr<hir::HirMember>>(&e->kind)) {
-                // メンバーアクセス: object.member
-                hir::TypePtr inner_type;
-                if (!build_projections((*member)->object.get(), projections, inner_type)) {
-                    return false;
-                }
-
-                // ポインタ型の場合、デリファレンスを追加
-                if (inner_type && inner_type->kind == hir::TypeKind::Pointer) {
-                    projections.push_back([](MirPlace& p, LoweringContext&) {
-                        p.projections.push_back(PlaceProjection::deref());
-                    });
-                    inner_type = inner_type->element_type;
-                }
-
-                // フィールドプロジェクションを追加
-                std::string field_name = (*member)->member;
-                hir::TypePtr captured_inner_type = inner_type;
-                projections.push_back([field_name, captured_inner_type, &ctx](MirPlace& p,
-                                                                              LoweringContext&) {
-                    if (captured_inner_type && captured_inner_type->kind == hir::TypeKind::Struct) {
-                        auto field_idx = ctx.get_field_index(captured_inner_type->name, field_name);
-                        if (field_idx) {
-                            p.projections.push_back(PlaceProjection::field(*field_idx));
-                        }
-                    }
-                });
-
-                // 次の型を取得
-                if (inner_type && inner_type->kind == hir::TypeKind::Struct) {
-                    auto field_idx = ctx.get_field_index(inner_type->name, field_name);
-                    if (field_idx && ctx.struct_defs && ctx.struct_defs->count(inner_type->name)) {
-                        const auto* struct_def = ctx.struct_defs->at(inner_type->name);
-                        if (*field_idx < struct_def->fields.size()) {
-                            typ = struct_def->fields[*field_idx].type;
-                        }
-                    }
-                }
-                return true;
-            } else if (auto* index = std::get_if<std::unique_ptr<hir::HirIndex>>(&e->kind)) {
-                // インデックスアクセス: object[index] または object[i][j][k]...（多次元）
-                hir::TypePtr inner_type;
-                if (!build_projections((*index)->object.get(), projections, inner_type)) {
-                    return false;
-                }
-
-                // 多次元配列最適化: indices が設定されている場合、全インデックスを処理
-                if (!(*index)->indices.empty()) {
-                    // 多次元: 全インデックスをプロジェクションとして追加
-                    for (const auto& idx_expr : (*index)->indices) {
-                        LocalId idx = expr_lowering->lower_expression(*idx_expr, ctx);
-                        projections.push_back([idx](MirPlace& p, LoweringContext&) {
-                            p.projections.push_back(PlaceProjection::index(idx));
-                        });
-                        // 型を更新（配列またはポインタの要素型）
-                        if (inner_type && inner_type->element_type) {
-                            if (inner_type->kind == hir::TypeKind::Array ||
-                                inner_type->kind == hir::TypeKind::Pointer) {
-                                inner_type = inner_type->element_type;
-                            }
-                        }
-                    }
-                    typ = inner_type;
-                } else {
-                    // 単一インデックス（後方互換性）
-                    LocalId idx = expr_lowering->lower_expression(*(*index)->index, ctx);
-                    projections.push_back([idx](MirPlace& p, LoweringContext&) {
-                        p.projections.push_back(PlaceProjection::index(idx));
-                    });
-                    // 次の型を取得（配列またはポインタの要素型）
-                    if (inner_type && inner_type->element_type) {
-                        if (inner_type->kind == hir::TypeKind::Array ||
-                            inner_type->kind == hir::TypeKind::Pointer) {
-                            typ = inner_type->element_type;
-                        }
-                    }
-                }
-                return true;
-            } else if (auto* unary = std::get_if<std::unique_ptr<hir::HirUnary>>(&e->kind)) {
-                // デリファレンス: *ptr
-                if ((*unary)->op == hir::HirUnaryOp::Deref) {
-                    hir::TypePtr inner_type;
-                    if (!build_projections((*unary)->operand.get(), projections, inner_type)) {
-                        return false;
-                    }
-
-                    // デリファレンスプロジェクションを追加
-                    projections.push_back([](MirPlace& p, LoweringContext&) {
-                        p.projections.push_back(PlaceProjection::deref());
-                    });
-
-                    // 次の型を取得（ポインタの要素型）
-                    if (inner_type && inner_type->kind == hir::TypeKind::Pointer &&
-                        inner_type->element_type) {
-                        typ = inner_type->element_type;
-                    }
-                    return true;
-                }
-                return false;
-            }
-            return false;
-        };
-
-        std::vector<std::function<void(MirPlace&, LoweringContext&)>> projections;
-        if (!build_projections(expr, projections, current_type)) {
-            return false;
-        }
-
-        // プロジェクションを適用
-        for (auto& proj : projections) {
-            proj(place, ctx);
-        }
-
-        return true;
+        return expr_lowering->lower_place(expr, ctx, place, current_type);
     };
 
     // 左辺値の種類に応じて処理
@@ -251,15 +118,11 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
                           " rhs kind=" +
                           (rhs_type ? std::to_string(static_cast<int>(rhs_type->kind))
                                     : std::string("null")));
-            if (lhs_type && lhs_type->kind == hir::TypeKind::Union &&
-                (!rhs_type || rhs_type->kind != hir::TypeKind::Union)) {
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{*lhs_opt},
-                    MirRvalue::cast(MirOperand::copy(MirPlace{rhs_value}), lhs_type)));
-            } else {
-                ctx.push_statement(MirStatement::assign(
-                    MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
-            }
+            // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する
+            (void)rhs_type;
+            rhs_value = ctx.coerce_to_expected(rhs_value, lhs_type);
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{*lhs_opt}, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }
     } else if (std::get_if<std::unique_ptr<hir::HirMember>>(&assign.target->kind) ||
                std::get_if<std::unique_ptr<hir::HirIndex>>(&assign.target->kind) ||
@@ -270,6 +133,8 @@ void StmtLowering::lower_assign(const hir::HirAssign& assign, LoweringContext& c
         hir::TypePtr current_type;
 
         if (build_lvalue_place(assign.target.get(), place, current_type)) {
+            // 変換統一ドライバ第1段: メンバ/添字/deref代入もcoerce_to_expected 1系統へ（従来はnumericのみでユニオンフィールドへの変種代入がタグ未構築だった）
+            rhs_value = ctx.coerce_to_expected(rhs_value, current_type);
             ctx.push_statement(
                 MirStatement::assign(place, MirRvalue::use(MirOperand::copy(MirPlace{rhs_value}))));
         }

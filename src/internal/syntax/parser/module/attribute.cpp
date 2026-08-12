@@ -97,9 +97,16 @@ ast::DeclPtr Parser::parse_macro(bool is_exported) {
 // ============================================================
 ast::AttributeNode Parser::parse_directive() {
     expect(TokenKind::Hash);
+    const uint32_t attr_start = previous().start;
 
-    // ディレクティブ名
-    std::string directive_name = expect_ident();
+    // ディレクティブ名（R7: inlineは予約語のため属性名として特例受理する）
+    std::string directive_name;
+    if (check(TokenKind::KwInline)) {
+        directive_name = "inline";
+        advance();
+    } else {
+        directive_name = expect_ident();
+    }
     std::vector<std::string> args;
 
     // 引数がある場合
@@ -139,11 +146,11 @@ ast::AttributeNode Parser::parse_directive() {
         expect(TokenKind::RParen);
     }
 
-    if (args.empty()) {
-        return ast::AttributeNode(std::move(directive_name));
-    } else {
-        return ast::AttributeNode(std::move(directive_name), std::move(args));
-    }
+    ast::AttributeNode node = args.empty()
+                                  ? ast::AttributeNode(std::move(directive_name))
+                                  : ast::AttributeNode(std::move(directive_name), std::move(args));
+    node.span = Span{attr_start, previous().end};
+    return node;
 }
 
 // ============================================================
@@ -155,12 +162,19 @@ ast::AttributeNode Parser::parse_attribute() {
     } else if (consume_if(TokenKind::Hash)) {
         // #[...] 形式
     } else {
-        error("Expected attribute start '@' or '#'");
+        error(i18n::msg(i18n::MsgId::PsExpectedAttributeStart));
     }
+    const uint32_t attr_start = previous().start;
     expect(TokenKind::LBracket);
 
-    // アトリビュート名(名前空間付き: sv::pin等)
-    std::string attr_name = expect_ident();
+    // アトリビュート名(名前空間付き: sv::pin等)（R7: inlineは予約語のため属性名として特例受理する）
+    std::string attr_name;
+    if (check(TokenKind::KwInline)) {
+        attr_name = "inline";
+        advance();
+    } else {
+        attr_name = expect_ident();
+    }
     while (consume_if(TokenKind::ColonColon)) {
         attr_name += "::" + expect_ident();
     }
@@ -175,6 +189,11 @@ ast::AttributeNode Parser::parse_attribute() {
                 args.push_back(std::string(current().get_string()));
                 advance();
             } else if (check(TokenKind::IntLiteral)) {
+                // #[sv::pin(12345)]のような非文字列のピン指定は診断する（R16: 従来は無検証で
+                // 制約ファイルへ流れていた。ピン名は文字列リテラル "38" 等で指定する）
+                if ((attr_name == "sv::pin" || attr_name == "verilog::pin") && args.empty()) {
+                    error(i18n::msgf(i18n::MsgId::PsSvPinRequiresStringArgument, attr_name));
+                }
                 args.push_back(std::to_string(current().get_int()));
                 advance();
             } else {
@@ -229,11 +248,11 @@ ast::AttributeNode Parser::parse_attribute() {
 
     expect(TokenKind::RBracket);
 
-    if (args.empty()) {
-        return ast::AttributeNode(std::move(attr_name));
-    } else {
-        return ast::AttributeNode(std::move(attr_name), std::move(args));
-    }
+    ast::AttributeNode node = args.empty()
+                                  ? ast::AttributeNode(std::move(attr_name))
+                                  : ast::AttributeNode(std::move(attr_name), std::move(args));
+    node.span = Span{attr_start, previous().end};
+    return node;
 }
 
 }  // namespace cm

@@ -1,0 +1,25 @@
+//! platform: sv
+import std::debug::assert;
+// 並行アサーションテスト: reqが立ったら2サイクル後にackが立つ性質をassert propertyで監視する。
+// DUTはreqを2段シフトしてackへ届けるため性質は満たされる。
+// 検証はコンパイル+verilator lint（iverilogはSVA未対応のためシミュレーション段は実行しない。
+// 翻訳形の検証は回帰gtest SVCodegenTest.SvaAssertProperty が行う）
+
+#[input] posedge clk;
+#[input] bool req;
+#[output] bool ack = false;
+
+bool s1 = false;
+
+async void pipeline(posedge clk) {
+    ack = s1;
+    s1 = req;
+}
+
+#[test]
+void check_req_ack() {
+    sv_assert_property(clk, implies(req, after(ack, 2)));
+    req = true;
+    step(4);
+    assert(ack, "ack should rise 2 cycles after req");
+}

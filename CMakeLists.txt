@@ -243,13 +243,44 @@ set(CM_LEXER_SOURCES
 # AST型ノード（型ヘルパー・型文字列化の実装）
 set(CM_AST_SOURCES
     src/internal/syntax/ast/types.cpp
+    src/internal/syntax/ast/typekey.cpp
+    src/internal/syntax/ast/convkind.cpp
 )
 # メッセージi18nカタログ本文テーブル（i18n::msg/msgf を使うターゲットは必ずリンクする）
+# 型検査（cm本体と回帰テストターゲットで共有。型情報に依存するMIR loweringの検証に必要）
+set(CM_TYPECHECK_SOURCES
+    src/internal/types/scope.cpp
+    src/internal/types/checking/generic/context.cpp
+    src/internal/types/checking/decl/driver.cpp
+    src/internal/types/checking/decl/namespace.cpp
+    src/internal/types/checking/decl/dispatch.cpp
+    src/internal/types/checking/decl/attributes.cpp
+    src/internal/types/checking/decl/impl.cpp
+    src/internal/types/checking/decl/typedecl.cpp
+    src/internal/types/checking/decl/function.cpp
+    src/internal/types/checking/stmt.cpp
+    src/internal/types/checking/expr/primary.cpp
+    src/internal/types/checking/expr/operator.cpp
+    src/internal/types/checking/expr/match.cpp
+    src/internal/types/checking/expr/lambda.cpp
+    src/internal/types/checking/call/function.cpp
+    src/internal/types/checking/call/method.cpp
+    src/internal/types/checking/generic/infer.cpp
+    src/internal/types/checking/generic/bounds.cpp
+    src/internal/types/checking/auto_impl.cpp
+    src/internal/types/checking/utils/compat.cpp
+    src/internal/types/checking/utils/conversion.cpp
+    src/internal/types/checking/utils/interp.cpp
+    src/internal/types/checking/utils/diagnostics.cpp
+    src/internal/types/checking/utils/naming.cpp
+    src/internal/types/checking/utils/eval.cpp
+    src/internal/types/checking/match_hoist.cpp
+)
 set(CM_I18N_SOURCES
     src/internal/base/messages/messages.cpp
 )
 set(CM_PARSER_SOURCES
-    src/internal/syntax/parser/parser_stmt.cpp
+    src/internal/syntax/parser/stmt.cpp
     src/internal/syntax/parser/expr/binary.cpp
     src/internal/syntax/parser/expr/postfix.cpp
     src/internal/syntax/parser/expr/primary.cpp
@@ -257,69 +288,79 @@ set(CM_PARSER_SOURCES
     src/internal/syntax/parser/module/decl.cpp
     src/internal/syntax/parser/module/attribute.cpp
     src/internal/syntax/parser/module/toplevel.cpp
-    src/internal/syntax/parser/parser_decl.cpp
-    src/internal/syntax/parser/parser_type.cpp
+    src/internal/syntax/parser/decl.cpp
+    src/internal/syntax/parser/type.cpp
 )
 set(CM_HIR_LOWERING_SOURCES
     src/internal/hir/lowering/impl.cpp
     src/internal/hir/lowering/decl.cpp
     src/internal/hir/lowering/stmt.cpp
-    src/internal/hir/lowering/expr.cpp
-    src/internal/hir/lowering/expr_member.cpp
-    src/internal/hir/lowering/expr_match.cpp
+    src/internal/hir/lowering/expr/dispatch.cpp
+    src/internal/hir/lowering/expr/operators.cpp
+    src/internal/hir/lowering/expr/call.cpp
+    src/internal/hir/lowering/expr/access.cpp
+    src/internal/hir/lowering/expr/literal.cpp
+    src/internal/hir/lowering/expr/member.cpp
+    src/internal/hir/lowering/expr/match.cpp
 )
 # MIRコア（lowering + 最適化パス + 解析）
 set(CM_MIR_SOURCES
     src/internal/mir/nodes.cpp
-    src/internal/mir/optimizations/optimization_pipeline.cpp
+    src/internal/mir/optimizations/pipeline.cpp
     src/internal/mir/lowering/context.cpp
     src/internal/mir/lowering/base.cpp
     src/internal/mir/lowering/lowering.cpp
-    src/internal/mir/lowering/auto_impl.cpp
-    src/internal/mir/lowering/auto_impl_compare.cpp
-    src/internal/mir/lowering/auto_impl_css.cpp
-    src/internal/mir/lowering/auto_impl_debug.cpp
+    src/internal/mir/lowering/auto_impl/driver.cpp
+    src/internal/mir/lowering/auto_impl/compare.cpp
+    src/internal/mir/lowering/auto_impl/css.cpp
+    src/internal/mir/lowering/auto_impl/debug.cpp
     src/internal/mir/lowering/impl.cpp
     src/internal/mir/lowering/mono/scan.cpp
     src/internal/mir/lowering/mono/specialize.cpp
+    src/internal/mir/lowering/mono/canonicalize.cpp
     src/internal/mir/lowering/mono/rewrite.cpp
     src/internal/mir/lowering/mono/driver.cpp
     src/internal/mir/lowering/mono/typeinfo.cpp
-    src/internal/mir/lowering/mono_internal.cpp
-    src/internal/mir/lowering/mono_structs.cpp
-    src/internal/mir/lowering/monomorphization_utils.cpp
+    src/internal/mir/lowering/mono/internal.cpp
+    src/internal/mir/lowering/mono/structs.cpp
+    src/internal/mir/lowering/mono/utils.cpp
     # src/internal/mir/lowering/monomorphization_stub.cpp   # Temporary stub until monomorphization is fixed
     src/internal/mir/lowering/stmt/lower.cpp
     src/internal/mir/lowering/stmt/let.cpp
     src/internal/mir/lowering/stmt/assign.cpp
     src/internal/mir/lowering/stmt/control.cpp
     src/internal/mir/lowering/stmt/scope.cpp
+    src/internal/mir/lowering/stmt/temp_drop.cpp
     src/internal/mir/lowering/stmt/asm.cpp
     src/internal/mir/lowering/expr.cpp
     src/internal/mir/lowering/expr/basic.cpp
     src/internal/mir/lowering/expr/access.cpp
     src/internal/mir/lowering/expr/construct.cpp
+    src/internal/mir/lowering/expr/materialize.cpp
     src/internal/mir/lowering/expr/cast.cpp
     src/internal/mir/lowering/expr/binary.cpp
     src/internal/mir/lowering/expr/unary.cpp
-    src/internal/mir/lowering/expr_call.cpp
-    src/internal/mir/lowering/expr_interp.cpp
-    src/internal/mir/lowering/expr_println.cpp
-    src/internal/mir/lowering/expr_slice.cpp
+    src/internal/mir/lowering/expr/call.cpp
+    src/internal/mir/lowering/expr/interp.cpp
+    src/internal/mir/lowering/expr/println.cpp
+    src/internal/mir/lowering/expr/slice.cpp
     # MIR passes (最適化パス実装)
     src/internal/mir/passes/instrumentation/undefined.cpp
+    src/internal/mir/passes/instrumentation/bounds.cpp
     src/internal/mir/passes/scalar/sccp.cpp
     src/internal/mir/passes/scalar/folding.cpp
     src/internal/mir/passes/scalar/propagation.cpp
     src/internal/mir/passes/scalar/array_base_extraction.cpp
     src/internal/mir/passes/cleanup/dce.cpp
     src/internal/mir/passes/cleanup/dse.cpp
+    src/internal/mir/passes/cleanup/string_reassign_free.cpp
     src/internal/mir/passes/cleanup/simplify_cfg.cpp
     src/internal/mir/passes/cleanup/program_dce.cpp
     src/internal/mir/passes/interprocedural/inlining.cpp
     src/internal/mir/passes/interprocedural/tail_call_elimination.cpp
     src/internal/mir/passes/loop/licm.cpp
     src/internal/mir/passes/loop/const_unroll.cpp
+    src/internal/mir/passes/sv/floatfold.cpp
     src/internal/mir/passes/redundancy/gvn.cpp
     src/internal/mir/passes/core/base.cpp
     src/internal/mir/passes/core/manager.cpp
@@ -328,7 +369,7 @@ set(CM_MIR_SOURCES
     src/internal/mir/passes/validation/no_std_checker.cpp
     # MIR analysis (解析モジュール)
     src/internal/mir/analysis/dominators.cpp
-    src/internal/mir/analysis/loop_analysis.cpp
+    src/internal/mir/analysis/loop.cpp
 )
 
 # Main executable
@@ -336,6 +377,8 @@ set(CM_SOURCES
     src/cmd/cm/main.cpp
     src/cmd/cm/util.cpp
     src/cmd/cm/check.cpp
+    src/cmd/cm/frontend.cpp
+    src/internal/macro/derive.cpp
     src/cmd/cm/fmt.cpp
     src/cmd/cm/build.cpp
     src/cmd/cm/backend/run.cpp
@@ -348,32 +391,13 @@ set(CM_SOURCES
     ${CM_I18N_SOURCES}
     # Type checking (分割済み)
     src/cmd/cm/options.cpp
-    src/internal/types/scope.cpp
-    src/internal/types/generic_context.cpp
-    src/internal/types/checking/decl.cpp
-    src/internal/types/checking/stmt.cpp
-    src/internal/types/checking/expr/primary.cpp
-    src/internal/types/checking/expr/operator.cpp
-    src/internal/types/checking/expr/match.cpp
-    src/internal/types/checking/expr/lambda.cpp
-    src/internal/types/checking/call/function.cpp
-    src/internal/types/checking/call/method.cpp
-    src/internal/types/checking/generic.cpp
-    src/internal/types/checking/auto_impl.cpp
-    src/internal/types/checking/utils/compat.cpp
-    src/internal/types/checking/utils/interp.cpp
-    src/internal/types/checking/utils/diagnostics.cpp
-    src/internal/types/checking/utils/naming.cpp
-    src/internal/types/checking/utils/eval.cpp
-    src/internal/types/checking/match_hoist.cpp
+    ${CM_TYPECHECK_SOURCES}
     src/internal/preprocessor/import/setup.cpp
-    src/internal/preprocessor/import/expand.cpp
-    src/internal/preprocessor/import/parse.cpp
-    src/internal/preprocessor/export/extract.cpp
-    src/internal/preprocessor/export/rewrite.cpp
     src/internal/preprocessor/module_resolve.cpp
     src/internal/preprocessor/conditional.cpp
     src/internal/module/resolver.cpp
+    src/internal/module/graph.cpp
+    src/internal/hir/type_audit.cpp
     # Lint configuration
     src/internal/lint/config.cpp
     # HIR lowering (AST -> HIR)
@@ -382,18 +406,19 @@ set(CM_SOURCES
     ${CM_MIR_SOURCES}
     src/internal/mir/printer.cpp
     # auto_impl (トレイト別自動実装)
-    src/internal/mir/lowering/auto_impl/generator.cpp
-    src/internal/mir/lowering/auto_impl/eq.cpp
-    src/internal/mir/lowering/auto_impl/ord.cpp
-    src/internal/mir/lowering/auto_impl/clone_hash.cpp
-    src/internal/mir/lowering/auto_impl/debug_display_css.cpp
     # MIR分割ユーティリティ（モジュール別分離コンパイル用）
-    src/internal/mir/mir_splitter.cpp
+    src/internal/mir/splitter.cpp
     # 共通ライブラリ (HPP/CPP分離 Phase5)
     src/internal/fmt/formatter.cpp
-    src/internal/base/format_string.cpp
-    src/internal/base/source_location.cpp
-    src/internal/base/diagnostics.cpp
+    src/internal/fmt/formatter/whitespace.cpp
+    src/internal/fmt/formatter/braces.cpp
+    src/internal/fmt/formatter/indent.cpp
+    src/internal/fmt/formatter/spacing.cpp
+    src/internal/fmt/formatter/wrap.cpp
+    src/internal/base/format/string.cpp
+    src/internal/base/source/location.cpp
+    src/internal/base/diag/diagnostics.cpp
+    src/internal/base/diag/emitter.cpp
     src/internal/hir/string_interpolation.cpp
     src/internal/diagnostics/engine.cpp
     src/internal/diagnostics/catalog.cpp
@@ -401,34 +426,44 @@ set(CM_SOURCES
 
 # JavaScript backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
-    src/internal/codegen/buffered_codegen.cpp
+    src/internal/codegen/buffered.cpp
     src/internal/codegen/llvm/monitoring/block_monitor.cpp
     src/internal/codegen/llvm/monitoring/codegen_monitor.cpp
     src/internal/codegen/llvm/monitoring/output_monitor.cpp
     src/internal/codegen/llvm/monitoring/compilation_guard.cpp
     src/internal/codegen/js/codegen.cpp
     src/internal/codegen/js/utilities.cpp
-    src/internal/codegen/js/emit_function.cpp
-    src/internal/codegen/js/analysis.cpp
-    src/internal/codegen/js/css_optimization.cpp
-    src/internal/codegen/js/structured_flow.cpp
-    src/internal/codegen/js/control_flow.cpp
-    src/internal/codegen/js/emit_statements.cpp
-    src/internal/codegen/js/emit_expressions.cpp
+    src/internal/codegen/js/emit/function.cpp
+    src/internal/codegen/js/flow/analysis.cpp
+    src/internal/codegen/js/optimizations/css.cpp
+    src/internal/codegen/js/flow/structured.cpp
+    src/internal/codegen/js/flow/control.cpp
+    src/internal/codegen/js/emit/statements.cpp
+    src/internal/codegen/js/emit/expressions.cpp
     src/internal/codegen/js/validation.cpp
-    src/internal/codegen/js/builtins.cpp
-    src/internal/codegen/js/runtime.cpp
+    src/internal/codegen/js/emit/builtins.cpp
+    src/internal/codegen/js/emit/runtime.cpp
 )
 
 # SystemVerilog backend (LLVMに依存しない)
 list(APPEND CM_SOURCES
     src/internal/codegen/sv/codegen.cpp
+    src/internal/codegen/sv/codegen/types.cpp
+    src/internal/codegen/sv/codegen/emitter.cpp
+    src/internal/codegen/sv/codegen/module.cpp
+    src/internal/codegen/sv/codegen/expr.cpp
+    src/internal/codegen/sv/codegen/stmt.cpp
+    src/internal/codegen/sv/codegen/control.cpp
     src/internal/codegen/sv/analyze.cpp
-    src/internal/codegen/sv/self_param.cpp
-    src/internal/codegen/sv/emit_control.cpp
+    src/internal/codegen/sv/analyze/globals.cpp
+    src/internal/codegen/sv/analyze/ports.cpp
+    src/internal/codegen/sv/analyze/clock.cpp
+    src/internal/codegen/sv/analyze/declarations.cpp
+    src/internal/codegen/sv/analyze/function.cpp
+    src/internal/codegen/sv/analyze/self.cpp
     src/internal/codegen/sv/validation.cpp
     src/internal/codegen/sv/testbench.cpp
-    src/internal/codegen/sv/expr_tree.cpp
+    src/internal/codegen/sv/codegen/tree.cpp
     src/internal/codegen/sv/hierarchy.cpp
     src/internal/codegen/sv/constraints.cpp
 )
@@ -438,7 +473,7 @@ if(CM_USE_LLVM)
     list(APPEND CM_SOURCES
         # Common codegen
         src/internal/codegen/common/type_converter.cpp
-        src/internal/codegen/common/runtime_functions.cpp
+        src/internal/codegen/common/runtime/functions.cpp
         # LLVM core (shared between native and wasm)
         src/internal/codegen/llvm/core/context.cpp
         src/internal/codegen/llvm/core/mir_to_llvm.cpp
@@ -469,7 +504,10 @@ if(CM_USE_LLVM)
         src/internal/codegen/llvm/optimizations/vectorization/vectorizer.cpp
         src/internal/codegen/llvm/optimizations/loop_unrolling/loop_unroller.cpp
         # LLVM native backend
-        src/internal/codegen/llvm/native/codegen.cpp
+        src/internal/codegen/llvm/native/codegen/driver.cpp
+        src/internal/codegen/llvm/native/codegen/optimize.cpp
+        src/internal/codegen/llvm/native/codegen/emit.cpp
+        src/internal/codegen/llvm/native/codegen/link.cpp
         src/internal/codegen/llvm/native/target.cpp
         src/internal/codegen/llvm/native/loop_detector.cpp
         # JIT backend
@@ -594,7 +632,7 @@ if(CM_USE_LLVM)
         
         # コアランタイムのビルド（JITシンボル解決に必須）
         # cm_runtime.oはcm実行ファイルにリンクされるためCMakeで管理
-        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime.c)
+        set(CM_RUNTIME_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/core.c)
         set(CM_RUNTIME_OUTPUT ${CMAKE_BINARY_DIR}/lib/cm_runtime.o)
 
         add_custom_command(
@@ -602,14 +640,17 @@ if(CM_USE_LLVM)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
             COMMAND ${CM_RUNTIME_CLANG} -c ${CM_RUNTIME_SOURCE} -o ${CM_RUNTIME_OUTPUT} -O2 -ffunction-sections -fdata-sections ${CM_RUNTIME_ARCH_FLAG}
             DEPENDS ${CM_RUNTIME_SOURCE}
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_alloc.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime_file.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_asm.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_format.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_io.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_platform.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_print.c
-                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime_slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/alloc.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/file.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/asm.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/format.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/io.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/time.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/platform.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/print.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/native/runtime/slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/slice_core.inc
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/hof_core.inc
             COMMENT "Building Cm core runtime library (${LLVM_HOST_TARGET})"
         )
 
@@ -625,7 +666,7 @@ if(CM_USE_LLVM)
             NO_DEFAULT_PATH
         )
         if(CM_WASM_CLANG)
-            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_wasm.c)
+            set(CM_RUNTIME_WASM_SOURCE ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/core.c)
             add_custom_command(
                 OUTPUT ${CM_RUNTIME_WASM_OUTPUT}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib
@@ -634,9 +675,12 @@ if(CM_USE_LLVM)
                     -nostdlib -D__wasi__
                     -I${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm
                 DEPENDS ${CM_RUNTIME_WASM_SOURCE}
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_format.c
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_print.c
-                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime_slice.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/format.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/math.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/print.c
+                    ${CMAKE_SOURCE_DIR}/src/internal/codegen/llvm/wasm/runtime/slice.c
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/slice_core.inc
+                ${CMAKE_SOURCE_DIR}/src/internal/codegen/common/runtime/hof_core.inc
                 COMMENT "Building Cm WASM runtime library (wasm32-wasi)"
             )
             add_custom_target(cm_runtime_wasm ALL DEPENDS ${CM_RUNTIME_WASM_OUTPUT})
@@ -716,11 +760,19 @@ if(BUILD_TESTING)
     set(GTEST_INCLUDE_DIR "${GTEST_SRC_DIR}/googletest/include")
     
     include(GoogleTest)
-        
+
+    # テスト一覧の検出をビルド時（POST_BUILD）ではなくctest実行時（PRE_TEST）に行う。
+    # POST_BUILDだと並列makeの最中に各テストバイナリを実行してJSONを生成するため、CI高負荷時に
+    # 出力の取りこぼしで "string(JSON ...) failed parsing" （空/不正JSON）が散発する。
+    # PRE_TESTなら検出はctest時に移り、ビルド自体はバイナリを実行しないので安定する。
+    set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+
         # Unit tests - Lexer
+        # （エスケープ診断がi18nメッセージ本文を参照するためCM_I18N_SOURCESも必要）
         add_executable(lexer_test
             tests/unit/lexer_test.cpp
             ${CM_LEXER_SOURCES}
+            ${CM_I18N_SOURCES}
         )
         set_target_properties(lexer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         target_include_directories(lexer_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
@@ -744,6 +796,39 @@ if(BUILD_TESTING)
         target_link_libraries(hir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "regression")
 
+        # Integration tests - HIR型不変条件の監査（typed-hir-single-source）
+        add_executable(hir_type_audit_test
+            tests/regression/hir_type_audit_test.cpp
+            src/internal/hir/type_audit.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
+            ${CM_HIR_LOWERING_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(hir_type_audit_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(hir_type_audit_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(hir_type_audit_test gtest_main cm_frontend)
+        gtest_discover_tests(hir_type_audit_test PROPERTIES LABELS "regression")
+
+        # Integration tests - 数値縮小診断の文脈網羅（局所処理調査F系）
+        # （Cmプログラムを tests/regression/cases/narrowing_diag/ から読み込む）
+        add_executable(narrowing_diag_test
+            tests/regression/narrowing_diag_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(narrowing_diag_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(narrowing_diag_test PRIVATE
+            CM_NARROWING_DIAG_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/narrowing_diag")
+        target_include_directories(narrowing_diag_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(narrowing_diag_test gtest_main cm_frontend)
+        gtest_discover_tests(narrowing_diag_test PROPERTIES LABELS "regression")
+
         # Integration tests - MIR Lowering
         # （Cmプログラムを tests/regression/cases/mir_lowering/ から読み込む）
         add_executable(mir_lowering_test
@@ -751,6 +836,7 @@ if(BUILD_TESTING)
             ${CM_LEXER_SOURCES}
             ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             ${CM_I18N_SOURCES}
@@ -786,18 +872,29 @@ if(BUILD_TESTING)
             ${CM_LEXER_SOURCES}
             ${CM_AST_SOURCES}
             ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
             ${CM_HIR_LOWERING_SOURCES}
             ${CM_MIR_SOURCES}
             ${CM_I18N_SOURCES}
-            src/internal/codegen/buffered_codegen.cpp
+            src/internal/codegen/buffered.cpp
             src/internal/codegen/sv/codegen.cpp
+            src/internal/codegen/sv/codegen/types.cpp
+            src/internal/codegen/sv/codegen/emitter.cpp
+            src/internal/codegen/sv/codegen/module.cpp
+            src/internal/codegen/sv/codegen/expr.cpp
+            src/internal/codegen/sv/codegen/stmt.cpp
+            src/internal/codegen/sv/codegen/control.cpp
             src/internal/codegen/sv/analyze.cpp
-            src/internal/codegen/sv/self_param.cpp
-            src/internal/codegen/sv/emit_control.cpp
+            src/internal/codegen/sv/analyze/globals.cpp
+            src/internal/codegen/sv/analyze/ports.cpp
+            src/internal/codegen/sv/analyze/clock.cpp
+            src/internal/codegen/sv/analyze/declarations.cpp
+            src/internal/codegen/sv/analyze/function.cpp
+            src/internal/codegen/sv/analyze/self.cpp
             src/internal/codegen/sv/validation.cpp
             src/internal/codegen/sv/testbench.cpp
             src/internal/codegen/sv/constraints.cpp
-            src/internal/codegen/sv/expr_tree.cpp
+            src/internal/codegen/sv/codegen/tree.cpp
         )
         set_target_properties(sv_codegen_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
         # ゴールデンテスト入力のCmソース断片ディレクトリ
@@ -812,6 +909,11 @@ if(BUILD_TESTING)
         add_executable(formatter_test
             tests/regression/formatter_test.cpp
             src/internal/fmt/formatter.cpp
+            src/internal/fmt/formatter/whitespace.cpp
+            src/internal/fmt/formatter/braces.cpp
+            src/internal/fmt/formatter/indent.cpp
+            src/internal/fmt/formatter/spacing.cpp
+            src/internal/fmt/formatter/wrap.cpp
             ${CM_I18N_SOURCES}
         )
         set_target_properties(formatter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
@@ -850,6 +952,51 @@ if(BUILD_TESTING)
         target_link_libraries(naming_rules_test gtest_main)
         gtest_discover_tests(naming_rules_test PROPERTIES LABELS "unit")
 
+        # Unit tests - 型キー可逆エンコーディング（単相化の型同一性。C7/C8/C9）
+        add_executable(typekey_test
+            tests/unit/typekey_test.cpp
+            src/internal/syntax/ast/typekey.cpp
+        )
+        set_target_properties(typekey_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(typekey_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(typekey_test gtest_main)
+        gtest_discover_tests(typekey_test PROPERTIES LABELS "unit")
+
+        # Regression tests - derive/withソース展開（合成ソースのスナップショット検証）
+        add_executable(derive_expansion_test
+            tests/regression/derive_expansion_test.cpp
+            src/internal/macro/derive.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(derive_expansion_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(derive_expansion_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(derive_expansion_test gtest_main)
+        gtest_discover_tests(derive_expansion_test PROPERTIES LABELS "regression")
+
+        # Unit tests - レイアウト問い合わせAPI（layout-query-unification。スライス格納/配列実ストライドの2意味論）
+        add_executable(layout_test
+            tests/unit/layout_test.cpp
+        )
+        set_target_properties(layout_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(layout_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(layout_test gtest_main)
+        gtest_discover_tests(layout_test PROPERTIES LABELS "unit")
+
+        # Unit tests - MIRモジュール分割（H14。モジュール名正規化・グローバル所有権・型定義の全配布）
+        add_executable(mir_splitter_test
+            tests/unit/mir_splitter_test.cpp
+            src/internal/mir/splitter.cpp
+            src/internal/mir/nodes.cpp
+            ${CM_AST_SOURCES}
+        )
+        set_target_properties(mir_splitter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_include_directories(mir_splitter_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(mir_splitter_test gtest_main)
+        gtest_discover_tests(mir_splitter_test PROPERTIES LABELS "unit")
+
         # Unit tests - MIR最適化パス
         # （手組みMIRに対して各パスの.cppを単体で検証。
         # フロントエンド・lowering非依存のため、パス実装+ノード+解析のみをリンクする）
@@ -857,15 +1004,17 @@ if(BUILD_TESTING)
             src/internal/mir/nodes.cpp
             ${CM_AST_SOURCES}
             src/internal/mir/analysis/dominators.cpp
-            src/internal/mir/analysis/loop_analysis.cpp
+            src/internal/mir/analysis/loop.cpp
             src/internal/mir/passes/core/base.cpp
             src/internal/mir/passes/convergence/manager.cpp
             src/internal/mir/passes/instrumentation/undefined.cpp
+            src/internal/mir/passes/instrumentation/bounds.cpp
             src/internal/mir/passes/scalar/sccp.cpp
             src/internal/mir/passes/scalar/folding.cpp
             src/internal/mir/passes/scalar/propagation.cpp
             src/internal/mir/passes/cleanup/dce.cpp
             src/internal/mir/passes/cleanup/dse.cpp
+            src/internal/mir/passes/cleanup/string_reassign_free.cpp
             src/internal/mir/passes/cleanup/simplify_cfg.cpp
             src/internal/mir/passes/cleanup/program_dce.cpp
             src/internal/mir/passes/interprocedural/inlining.cpp
@@ -887,7 +1036,7 @@ if(BUILD_TESTING)
         # add_executable(mir_interpreter_test
         #     tests/regression/mir_interpreter_test.cpp
         #     src/internal/syntax/lexer/token.cpp
-        #     src/internal/syntax/parser/parser_stmt.cpp
+        #     src/internal/syntax/parser/stmt.cpp
         #     src/internal/syntax/parser/expr/*.cpp
         #     src/internal/syntax/parser/module/*.cpp
         # )

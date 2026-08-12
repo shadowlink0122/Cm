@@ -1,0 +1,38 @@
+import std::io::println;
+// Q4回帰: インターフェース指定付き演算子impl（impl T for Add等）の受理と動作
+// 従来はAdd/Sub/Mul/Div/Mod/BitAnd/BitOr/BitXor/Shl/Shrの組み込みインターフェース宣言が無く「internal error: 'Add' is not a declared interface」になっていた
+struct Vec2 { int x; int y; }
+impl Vec2 for Add {
+    operator Vec2 +(Vec2 other) { return Vec2 { x: self.x + other.x, y: self.y + other.y }; }
+}
+impl Vec2 for Sub {
+    operator Vec2 -(Vec2 other) { return Vec2 { x: self.x - other.x, y: self.y - other.y }; }
+}
+struct W { int v; }
+impl W for Mul { operator W *(W o) { return W { v: self.v * o.v }; } }
+impl W for Div { operator W /(W o) { return W { v: self.v / o.v }; } }
+impl W for Mod { operator W %(W o) { return W { v: self.v % o.v }; } }
+impl W for BitAnd { operator W &(W o) { return W { v: self.v & o.v }; } }
+impl W for BitOr { operator W | (W o) { return W { v: self.v | o.v }; } }
+impl W for BitXor { operator W ^(W o) { return W { v: self.v ^ o.v }; } }
+impl W for Shl { operator W <<(W o) { return W { v: self.v << o.v }; } }
+impl W for Shr { operator W >>(W o) { return W { v: self.v >> o.v }; } }
+int main() {
+    // 加減算: 連鎖と複合代入
+    Vec2 a = Vec2 { x: 1, y: 2 };
+    Vec2 b = Vec2 { x: 10, y: 20 };
+    Vec2 c = a + b + a;
+    println("add: {c.x} {c.y}");
+    Vec2 d = c - a;
+    d += b;
+    println("sub+assign: {d.x} {d.y}");
+
+    // 乗除・剰余・ビット・シフト
+    W p = W { v: 12 };
+    W q = W { v: 5 };
+    println("muldiv: {(p * q).v} {(p / q).v} {(p % q).v}");
+    println("bits: {(p & q).v} {(p | q).v} {(p ^ q).v}");
+    W s = W { v: 2 };
+    println("shift: {(p << s).v} {(p >> s).v}");
+    return 0;
+}

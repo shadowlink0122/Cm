@@ -1,12 +1,18 @@
 # Cm Language Support for VSCode
 
-Cm言語の構文ハイライトとファイルアイコンをVSCodeに追加する拡張機能です。
+Cm言語の構文ハイライト・コードナビゲーション・ファイルアイコンをVSCodeに追加する拡張機能です。
 
 ## 機能
 
 - **構文ハイライト**: Cm言語のキーワード、型、関数、文字列補間などのシンタックスハイライト
+- **ホバー表示**: 関数・構造体・enum・メソッド等にカーソルを合わせるとシグネチャとドキュメントコメントを表示
+- **組み込みメソッドのホバー**: 配列/スライスの`map`/`filter`/`reduce`、文字列の`substring`/`split`、`Option`/`Result`の`unwrap`等、コンパイラが提供するデフォルトメソッドのシグネチャと説明を表示（ソース定義を持たないためコードジャンプは対象外）
+- **定義ジャンプ**: F12/Cmd+クリック/右クリックメニューで定義箇所へ移動（アウトライン表示・ワークスペースシンボル検索にも対応）
 - **ファイルアイコン**: `.cm`ファイルにCmアイコンを表示
 - **言語設定**: ブラケットマッチング、折りたたみ、インデント支援
+- **非アクティブコードのトーンダウン**: 未定義シンボルの`#ifdef`等で無効なスコープを薄く表示
+
+ホバー・定義ジャンプ・シンボル一覧は同梱のLSPサーバ（`dist/server/main.js`）が提供します。サーバは正規表現ベースの軽量シンボルインデックスで動作し、ワークスペースの`.cm`ファイルを初回走査して以後は差分更新します（コンパイラ本体への依存なし）。
 
 ## 対応する構文
 
@@ -45,6 +51,8 @@ code --install-extension cm-language-*.vsix
 | 項目 | ツール |
 |------|--------|
 | 言語 | TypeScript (strict mode) |
+| LSP | vscode-languageclient / vscode-languageserver |
+| バンドル | esbuild（クライアント・サーバを自己完結バンドル化） |
 | Lint | ESLint v9+ (Flat Config) + typescript-eslint |
 | フォーマット | Prettier |
 | パッケージ | vsce |
@@ -56,7 +64,8 @@ pnpm install            # 依存関係インストール
 pnpm run compile        # TypeScriptコンパイル
 pnpm run build:grammar  # 文法ソース(src/grammar/)からsyntaxes/cm.tmLanguage.jsonを再生成
 pnpm run verify:grammar # 文法JSONがソースと一致しているか検証（CIと同じチェック）
-pnpm test               # ユニットテスト（文法の構造検証 + 非アクティブコード判定）
+pnpm run build:bundle   # esbuildでクライアント・LSPサーバをdist/へバンドル
+pnpm test               # ユニットテスト + LSPサーバE2E + パッケージング整合性検証
 pnpm run lint           # ESLintチェック
 pnpm run lint:fix       # ESLint自動修正
 pnpm run format         # Prettier自動フォーマット
@@ -101,8 +110,16 @@ vscode-extension/
 │   ├── update-version.ts    # バージョン同期
 │   └── verify-version.ts    # バージョン検証
 ├── src/
-│   ├── extension.ts         # 拡張本体（エディタ連携のみ）
+│   ├── extension.ts         # クライアント（LSPサーバ起動・非アクティブコード減光）
+│   ├── paths.ts             # バンドル配置定数（クライアントとテストで共有）
 │   ├── inactiveCode.ts      # 非アクティブコード判定（VSCode API非依存・テスト可能）
+│   ├── server/              # LSPサーバ
+│   │   ├── main.ts          # プロトコル橋渡し（hover/definition/documentSymbol/workspaceSymbol）
+│   │   ├── indexer.ts       # ワークスペース全.cmのシンボルインデックス
+│   │   └── words.ts         # カーソル位置の識別子抽出（VSCode API非依存・テスト可能）
+│   ├── navigation/          # コードナビゲーションの純ロジック
+│   │   ├── symbols.ts       # シンボル抽出（VSCode API非依存・テスト可能）
+│   │   └── builtins.ts      # コンパイラ組み込みメソッド/関数のレジストリ（ホバー用・テスト可能）
 │   ├── grammar/             # 文法の単一ソース（ここからtmLanguage.jsonを生成）
 │   │   ├── terms.ts         # キーワード・型・正規表現断片の一元定義
 │   │   ├── tmTypes.ts       # TextMate文法の型定義
@@ -110,6 +127,7 @@ vscode-extension/
 │   │   ├── build.ts         # 生成/検証CLI
 │   │   └── repository/      # repositoryを責務別に分割したモジュール群
 │   └── test/                # ユニットテスト (node:test)
+├── dist/                    # esbuildバンドル出力（extension.js / server/main.js。vsixにはこれのみ同梱）
 ├── syntaxes/
 │   └── cm.tmLanguage.json   # TextMate文法定義（src/grammar/から生成。手編集しない）
 ├── images/

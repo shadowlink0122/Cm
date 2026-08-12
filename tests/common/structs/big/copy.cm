@@ -1,0 +1,32 @@
+// C14回帰: 大きな固定長配列フィールドを持つ構造体の代入がmemcpy化されても
+// 内容が正しく保存されることを検証する（従来は第一級集約コピーでO2コンパイルが二次爆発した）
+// 注: 巨大構造体の値渡し引数はwasmの関数パラメータ制限に触れる既存の別問題があるため、
+// 本テストは代入（ローカル間コピー）の検証に限定する
+import std::io::println;
+
+struct Big {
+    int[1024] data;
+    int tag;
+}
+
+int main() {
+    Big a;
+    a.data[0] = 11;
+    a.data[511] = 22;
+    a.data[1023] = 33;
+    a.tag = 44;
+
+    Big b = a;
+    b.data[0] = 100;
+
+    const int sa = a.data[0] + a.data[511] + a.data[1023] + a.tag;
+    const int sb = b.data[0] + b.data[511] + b.data[1023] + b.tag;
+    println("{sa} {sb}");
+
+    Big c;
+    c = b;
+    const int sc = c.data[0] + c.data[511] + c.data[1023] + c.tag;
+    println(sc);
+
+    return 0;
+}

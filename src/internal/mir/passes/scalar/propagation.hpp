@@ -14,13 +14,18 @@ namespace cm::mir::opt {
 // ============================================================
 class CopyPropagation : public OptimizationPass {
    public:
+    CopyPropagation() = default;
+    explicit CopyPropagation(bool no_aggregate_prop) : no_aggregate_prop_(no_aggregate_prop) {}
+
     std::string name() const override { return "Copy Propagation"; }
 
     bool run(MirFunction& func) override;
 
+    // 集約（構造体・スライス・ユニオン）コピーの伝播を抑止する（js/tsの深いクローン意味論用）
+    bool no_aggregate_prop_ = false;
+
    private:
     // 複数回代入される変数を検出
-    std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func);
 
     // 型比較
     bool same_type(const hir::TypePtr& a, const hir::TypePtr& b) const;

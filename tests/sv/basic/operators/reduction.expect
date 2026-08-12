@@ -1,0 +1,13 @@
+SIM_OK
+TEST 1: r_and=1
+TEST 1: r_or=1
+TEST 1: r_xor=0
+TEST 1: r_nand=0
+TEST 1: r_nor=0
+TEST 1: r_xnor=1
+TEST 2: r_and=0
+TEST 2: r_or=1
+TEST 2: r_xor=1
+TEST 2: r_nand=1
+TEST 2: r_nor=0
+TEST 2: r_xnor=0

@@ -69,6 +69,32 @@ int main() {
 ```
 
 > **Note:** Use `as Value` to store a value into the union, and `as string` to extract it back to its original type. Extraction is tag-checked: extracting with a type that does not match the active variant panics at runtime.
+> Slice-variant checks and extraction (`v is int[]` / `v as int[]`) are also supported since v0.17.0 (previously `int[]` was a syntax error in this position).
+> Variant values can be passed directly to union-typed function parameters (`take_union(9)`; no `as` needed since v0.17.0), and as/is against a typedef alias (`v as IntSlice`) matches by the resolved type.
+> Unions with a `null` variant (`int | null`) are constructed with `null as NU` and tested with `n is null`. Storing a fixed-length array into a slice variant (`int[]`) automatically materializes it as a slice (both fixed in v0.17.0).
+
+### Union equality (fixed in v0.17.0)
+
+`==`/`!=` between unions, or between a union and a variant value, compares **tag equality plus the active variant's payload** (string variants compare contents):
+
+```cm
+typedef IU = int | string;
+
+IU a = 1 as IU;
+IU b = 1 as IU;
+IU c = 2 as IU;
+IU s = "hello" as IU;
+
+a == b    // true (same variant, same value)
+a == c    // false (same variant, different value)
+a == s    // false (different variants)
+a == 1    // true (direct comparison with a variant value)
+a != c    // true
+```
+
+> **Note for versions before v0.17.0:** comparisons fell through to raw-representation compares — native/JIT compared tags only (`1 == 2` was true) and JS compared references (`1 == 1` was false) — wrong on every backend.
+
+Unions can also be passed as type arguments of generic structs (`Box<IU>`). Specializations of generic structs with `#[derive(Eq)]` work since v0.17.0, and equality uses the same tag + payload comparison (see [Auto Implementation (with / #[derive])](../advanced/with-keyword.html)).
 
 ### Runtime Type Discrimination: the `is` Operator and Match Type Patterns (v0.16.0)
 

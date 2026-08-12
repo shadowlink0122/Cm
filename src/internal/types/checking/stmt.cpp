@@ -3,9 +3,13 @@
 // ============================================================
 
 #include "internal/base/i18n.hpp"
+#include "internal/base/mangle.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <functional>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace cm {
@@ -18,6 +22,132 @@ static std::string get_enum_base_name(const std::string& name) {
         return name.substr(0, pos);
     }
     return name;
+}
+
+// 文列が「その先へフォールスルーしない」ことを構造的に判定する（H6）。
+// for_function=trueは関数からの脱出（return/exit/無限ループ）のみを数え、
+// falseは分岐からの脱出（break/continueを含む）も数える
+bool cm_stmts_terminate(const std::vector<ast::StmtPtr>& stmts, bool for_function);
+
+namespace {
+
+// ループ本体に（ネストしたループへ降りずに）breakが含まれるか
+bool contains_loop_break(const std::vector<ast::StmtPtr>& stmts) {
+    for (const auto& s : stmts) {
+        if (!s)
+            continue;
+        if (s->as<ast::BreakStmt>())
+            return true;
+        if (auto* ifs = s->as<ast::IfStmt>()) {
+            if (contains_loop_break(ifs->then_block) || contains_loop_break(ifs->else_block))
+                return true;
+        } else if (auto* blk = s->as<ast::BlockStmt>()) {
+            if (contains_loop_break(blk->stmts))
+                return true;
+        } else if (auto* sw = s->as<ast::SwitchStmt>()) {
+            for (const auto& c : sw->cases) {
+                if (contains_loop_break(c.stmts))
+                    return true;
+            }
+        }
+        // While/For/ForIn配下のbreakはそのループを抜けるだけなので降りない
+    }
+    return false;
+}
+
+// 単一文の終端判定（cm_stmts_terminateの下請け）
+bool stmt_terminates(const ast::StmtPtr& s, bool for_function) {
+    if (!s)
+        return false;
+    if (s->as<ast::ReturnStmt>())
+        return true;
+    if (!for_function && (s->as<ast::BreakStmt>() || s->as<ast::ContinueStmt>()))
+        return true;
+    if (auto* es = s->as<ast::ExprStmt>()) {
+        // exit(code) はプロセスを終了する
+        if (es->expr) {
+            if (auto* call = es->expr->as<ast::CallExpr>()) {
+                if (call->callee) {
+                    if (auto* id = call->callee->as<ast::IdentExpr>()) {
+                        if (id->name == "exit")
+                            return true;
+                    }
+                }
+            }
+            // R12: 網羅的で全armが終端するmatch文は終端とみなす（従来は認識されず、--strictで正当なコードのビルドを阻害していた）
+            if (auto* me = es->expr->as<ast::MatchExpr>()) {
+                bool exhaustive = me->known_exhaustive;
+                if (!exhaustive) {
+                    // 網羅性検査前でも判定できるASTフォールバック: ガード無しのワイルドカード/変数束縛armがあれば網羅
+                    for (const auto& arm : me->arms) {
+                        if (arm.pattern && !arm.guard &&
+                            (arm.pattern->kind == ast::MatchPatternKind::Wildcard ||
+                             arm.pattern->kind == ast::MatchPatternKind::Variable)) {
+                            exhaustive = true;
+                            break;
+                        }
+                    }
+                }
+                if (exhaustive && !me->arms.empty()) {
+                    bool all_terminate = true;
+                    for (const auto& arm : me->arms) {
+                        if (!arm.is_block_form ||
+                            !cm_stmts_terminate(arm.block_body, for_function)) {
+                            all_terminate = false;
+                            break;
+                        }
+                    }
+                    if (all_terminate)
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+    if (auto* ifs = s->as<ast::IfStmt>()) {
+        return !ifs->else_block.empty() && cm_stmts_terminate(ifs->then_block, for_function) &&
+               cm_stmts_terminate(ifs->else_block, for_function);
+    }
+    if (auto* blk = s->as<ast::BlockStmt>()) {
+        return cm_stmts_terminate(blk->stmts, for_function);
+    }
+    if (auto* sw = s->as<ast::SwitchStmt>()) {
+        // else/defaultケースを持ち、全ケースが終端する場合のみ
+        bool has_default = false;
+        for (const auto& c : sw->cases) {
+            if (!c.pattern)
+                has_default = true;
+            if (!cm_stmts_terminate(c.stmts, for_function))
+                return false;
+        }
+        return has_default;
+    }
+    if (auto* ws = s->as<ast::WhileStmt>()) {
+        // while(true)でbreakを持たない無限ループは終端扱い（イベントループ等。H13と整合）
+        if (ws->condition) {
+            if (auto* lit = ws->condition->as<ast::LiteralExpr>()) {
+                if (auto* b = std::get_if<bool>(&lit->value)) {
+                    if (*b && !contains_loop_break(ws->body))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+    if (auto* mb = s->as<ast::MustBlockStmt>()) {
+        return cm_stmts_terminate(mb->body, for_function);
+    }
+    return false;
+}
+
+}  // namespace
+
+bool cm_stmts_terminate(const std::vector<ast::StmtPtr>& stmts, bool for_function) {
+    for (const auto& s : stmts) {
+        if (stmt_terminates(s, for_function))
+            return true;  // 以降の文は到達不能
+    }
+    return false;
 }
 
 void TypeChecker::check_statement(ast::Stmt& stmt) {
@@ -71,12 +201,41 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
         if (switch_stmt->expr) {
             infer_type(*switch_stmt->expr);
         }
+        // caseパターン値（単一値・範囲・ORパターン）にも型を注釈する（typed-hir-single-source 第2段）
+        std::function<void(ast::Pattern&)> infer_pattern = [&](ast::Pattern& p) {
+            if (p.value) {
+                infer_type(*p.value);
+            }
+            if (p.range_start) {
+                infer_type(*p.range_start);
+            }
+            if (p.range_end) {
+                infer_type(*p.range_end);
+            }
+            for (auto& op : p.or_patterns) {
+                if (op) {
+                    infer_pattern(*op);
+                }
+            }
+        };
         for (auto& c : switch_stmt->cases) {
+            if (c.pattern) {
+                infer_pattern(*c.pattern);
+            }
             scopes_.push();
             for (auto& s : c.stmts) {
                 check_statement(*s);
             }
             scopes_.pop();
+        }
+    } else if (stmt.as<ast::BreakStmt>()) {
+        // ループ外のbreakは黙って消えるため診断する（Z4穴3。switchは自動breakで明示breakはループ専用）
+        if (loop_depth_ == 0) {
+            error(current_span_, i18n::msg(i18n::MsgId::TcBreakOutsideLoop));
+        }
+    } else if (stmt.as<ast::ContinueStmt>()) {
+        if (loop_depth_ == 0) {
+            error(current_span_, i18n::msg(i18n::MsgId::TcContinueOutsideLoop));
         }
     } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
         if (defer_stmt->body) {
@@ -91,9 +250,103 @@ void TypeChecker::check_statement(ast::Stmt& stmt) {
     }
 }
 
+// M3段階3: 非constポインタ型の格納先へ、const基点の&式を束縛する場合に警告する
+// （const int* p = &c は正当なため、要素constのポインタ格納先は対象外）
+void TypeChecker::warn_addr_of_const_into_mutable_ptr(const ast::TypePtr& dest_type,
+                                                      const ast::Expr* init) {
+    if (!enable_lint_warnings_ || !dest_type || !init) {
+        return;
+    }
+    auto resolved = resolve_typedef(dest_type);
+    if (!resolved || resolved->kind != ast::TypeKind::Pointer) {
+        return;
+    }
+    if (resolved->element_type && resolved->element_type->qualifiers.is_const) {
+        return;
+    }
+    auto* unary = init->as<ast::UnaryExpr>();
+    if (!unary || unary->op != ast::UnaryOp::AddrOf || !unary->operand) {
+        return;
+    }
+    const ast::Expr* base = unary->operand.get();
+    while (base) {
+        if (auto* idx = base->as<ast::IndexExpr>()) {
+            base = idx->object.get();
+        } else if (auto* mem = base->as<ast::MemberExpr>()) {
+            base = mem->object.get();
+        } else {
+            break;
+        }
+    }
+    if (!base) {
+        return;
+    }
+    auto* base_ident = base->as<ast::IdentExpr>();
+    if (!base_ident) {
+        return;
+    }
+    auto base_sym = scopes_.current().lookup(base_ident->name);
+    if (base_sym && base_sym->is_const) {
+        Span warn_span = unary->operand->span;
+        if (warn_span.start == 0) {
+            warn_span = current_span_;
+        }
+        warning(warn_span, i18n::msgf(i18n::MsgId::TypeAddrOfConst, base_ident->name));
+    }
+}
+
 void TypeChecker::check_let(ast::LetStmt& let) {
     // エラー表示用に文のSpanを保存
     Span stmt_span = current_span_;
+
+    // ジェネリック型引数の個数を検証する（H15。ローカル変数宣言はis_valid_typeを通らないためここで検査）
+    if (let.type) {
+        // typeof(式) 宣言型を被演算式の具体型へ解決する（局所処理調査B系。__typeof__ のままだと is_valid_type/型不一致で失敗する）
+        let.type = resolve_typeof(let.type);
+        // R10: 宣言型そのものの存在を検証する（従来は型引数のみ検証され、未定義型の変数宣言が無診断で素通りしメソッド呼び出し時のUnknown methodまで顕在化しなかった）
+        if (!is_valid_type(let.type)) {
+            // R14: SystemVerilog構文のnative流入（assign x = 2;等はassignが型名扱いになる）は専用メッセージで誘導する
+            static const std::set<std::string> kSvConstructs = {"assign",    "initial", "genvar",
+                                                                "endmodule", "posedge", "negedge"};
+            if (kSvConstructs.count(let.type->name) > 0) {
+                error(current_span_,
+                      i18n::msgf(i18n::MsgId::TcSvConstructRequiresSvTarget, let.type->name));
+            } else {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedTypeVariable,
+                                                ast::type_to_string(*let.type), let.name));
+            }
+        }
+        auto rt = resolve_typedef(let.type);
+        const auto& ct = rt ? rt : let.type;
+        auto sd_it = struct_defs_.find(ct->name);
+        if (sd_it != struct_defs_.end() && sd_it->second && !ct->type_args.empty() &&
+            ct->type_args.size() != sd_it->second->generic_params.size()) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TypeGenericArgumentCountMismatch, ct->name,
+                                            std::to_string(sd_it->second->generic_params.size()),
+                                            std::to_string(ct->type_args.size())));
+        }
+        // H15: ジェネリック型を型引数なしで宣言に使うのはエラー（Pair p; 等。推論の材料が無い）
+        else if (sd_it != struct_defs_.end() && sd_it->second &&
+                 !sd_it->second->generic_params.empty() && ct->type_args.empty() &&
+                 ct->name.find("__") == std::string::npos) {
+            error(current_span_, i18n::msgf(i18n::MsgId::TypeGenericTypeRequiresArguments, ct->name,
+                                            std::to_string(sd_it->second->generic_params.size())));
+        }
+        // H15: 各型引数の存在を検証する（Pair<int, Nope> の Nope 等を検出）
+        if (sd_it != struct_defs_.end() && sd_it->second) {
+            for (const auto& arg : ct->type_args) {
+                if (arg && !is_valid_type(arg)) {
+                    error(current_span_, i18n::msgf(i18n::MsgId::TypeUnknownTypeArgument,
+                                                    ast::type_to_string(*arg), ct->name));
+                }
+            }
+            // derive付きジェネリック構造体の特殊化は置換後フィールド型でderive可否を検証する
+            // （derive合成で展開済みのトレイトはderived_generic_impls_側で判定するためauto_impls空でも呼ぶ）
+            if (!ct->type_args.empty()) {
+                validate_derive_instantiation(*sd_it->second, ct);
+            }
+        }
+    }
 
     // const変数の値を評価（配列サイズ等で使用）
     std::optional<int64_t> const_int_value = std::nullopt;
@@ -111,32 +364,43 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     if (let.init) {
         if (auto* array_lit = let.init->as<ast::ArrayLiteralExpr>()) {
             if (let.type && let.type->kind == ast::TypeKind::Array) {
+                // 宣言型を採用しつつ、要素（ネストした無名リテラル含む）へ要素型を期待型として伝播する
                 init_type = let.type;
                 let.init->type = let.type;
-                for (auto& elem : array_lit->elements) {
-                    infer_type(*elem);
-                }
+                check_array_literal_elements(*array_lit, let.type, let.name);
             } else {
                 init_type = infer_type(*let.init);
             }
-        } else if (auto* struct_lit = let.init->as<ast::StructLiteralExpr>()) {
-            if (let.type && let.type->kind == ast::TypeKind::Struct) {
-                if (struct_lit->type_name.empty()) {
-                    struct_lit->type_name = let.type->name;
-                }
-            }
-            init_type = infer_type(*let.init);
         } else {
-            init_type = infer_type(*let.init);
+            // 宣言型があれば期待型として渡す（無名構造体リテラルの型名補完はinfer_type_expectingへ一元化）
+            init_type = infer_type_expecting(*let.init, let.type);
+        }
+    }
+
+    // キャプチャ付きクロージャ変数の追跡（V5〜V7の診断用。infer後はlambda.capturesが確定している）
+    if (let.init) {
+        if (const auto* lam = let.init->as<ast::LambdaExpr>()) {
+            if (!lam->captures.empty()) {
+                closure_vars_.insert(let.name);
+            } else {
+                closure_vars_.erase(let.name);
+            }
+        } else if (is_capturing_closure_expr(*let.init)) {
+            // クロージャ変数のコピーもクロージャとして追跡する
+            closure_vars_.insert(let.name);
+        } else {
+            closure_vars_.erase(let.name);
         }
     }
 
     if (let.has_ctor_call && let.type) {
-        std::string type_name = ast::type_to_string(*let.type);
-        std::string ctor_name = type_name + "__ctor";
-        if (!let.ctor_args.empty()) {
-            ctor_name += "_" + std::to_string(let.ctor_args.size());
-        }
+        // ジェネリック型は関数名ドメインの正準接頭辞で組む（HIR側lower_letと同一規則＝移行計画①）
+        std::string type_name = let.type->type_args.empty()
+                                    ? ast::type_to_string(*let.type)
+                                    : ast::typekey::fn_prefix_from_tree(*let.type);
+        // ctorマングル名は正準ヘルパへ一本化（C16の規則集約。手組み複製はHIR側と規則が乖離する温床）
+        std::string ctor_name =
+            mangle::ctor_name(type_name, !let.ctor_args.empty(), let.ctor_args.size());
 
         for (auto& arg : let.ctor_args) {
             infer_type(*arg);
@@ -156,8 +420,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                            "auto " + let.name + " : " + ast::type_to_string(*init_type),
                            debug::Level::Trace);
         } else {
-            error(stmt_span,
-                  "Cannot infer type for 'auto' variable '" + let.name + "' without initializer");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcCannotInferTypeAutoVariable, let.name));
         }
     } else if (let.type) {
         auto resolved_type = resolve_typedef(let.type);
@@ -201,11 +464,27 @@ void TypeChecker::check_let(ast::LetStmt& let) {
                     }
                 }
             }
-            if (!is_enum_variant_coercion) {
-                error(stmt_span, "Type mismatch in variable declaration '" + let.name +
-                                     "': expected '" + ast::type_to_string(*resolved_type) +
-                                     "', got '" + ast::type_to_string(*init_type) + "'");
+            // ジェネリック構造体リテラルの期待型推論: Pair<int, string> p = Pair{...} / {...}
+            // リテラルの裸名（Pair）は特殊化を持たないため、宣言型が同基底の特殊化なら宣言型を採用する
+            bool is_generic_literal_coercion = false;
+            if (let.init && !resolved_type->type_args.empty()) {
+                if (auto* slit = let.init->as<ast::StructLiteralExpr>()) {
+                    if (slit->type_name.empty() || slit->type_name == resolved_type->name) {
+                        is_generic_literal_coercion = true;
+                        slit->type_name = resolved_type->name;
+                        let.init->type = resolved_type;
+                    }
+                }
             }
+            if (!is_enum_variant_coercion && !is_generic_literal_coercion) {
+                error(stmt_span, i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected,
+                                            let.name, ast::type_to_string(*resolved_type),
+                                            ast::type_to_string(*init_type)));
+            }
+        }
+        // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
+        if (init_type) {
+            check_numeric_conversion_policy(resolved_type, init_type, let.init.get(), stmt_span);
         }
         // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
         if (let.init) {
@@ -221,7 +500,7 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         debug::tc::log(debug::tc::Id::TypeInfer, let.name + " : " + ast::type_to_string(*init_type),
                        debug::Level::Trace);
     } else {
-        error(stmt_span, "Cannot infer type for '" + let.name + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcCannotInferType, let.name));
     }
 
     // 非const変数を追跡（const推奨警告用）。
@@ -257,6 +536,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
     // 初期化式がある場合は初期化済みとしてマーク
     if (let.init) {
         mark_variable_initialized(let.name);
+        // M3段階3: int* q = &const_値 の束縛を警告（const int*は対象外）
+        warn_addr_of_const_into_mutable_ptr(let.type, let.init.get());
     }
     // コンストラクタ呼び出し宣言はデストラクタ等の副作用のために存在し得るため、初期化済みかつ使用済みとして扱う（RAIIパターンのW001誤検出防止）
     if (let.has_ctor_call) {
@@ -264,9 +545,12 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         scopes_.current().mark_used(let.name);
     }
     if (!let.init && let.type) {
-        // 構造体型は既定構築（メンバ代入・メソッド呼び出しから使うのが通常）のため、未初期化使用の警告対象はスカラ・配列に限定する
+        // 構造体型は既定構築、固定長配列はH4のゼロ初期化、スライスは暗黙の空スライス構築が
+        // ランタイム保証されるため、未初期化使用の警告対象はスカラに限定する
+        // （utiny[4096] buf; の書き込みバッファや int[] s; return s; が偽陽性になっていた）
         auto resolved = resolve_typedef(let.type);
-        if (resolved && resolved->kind == ast::TypeKind::Struct) {
+        if (resolved &&
+            (resolved->kind == ast::TypeKind::Struct || resolved->kind == ast::TypeKind::Array)) {
             mark_variable_initialized(let.name);
         }
     }
@@ -280,7 +564,8 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
         return;
 
     if (ret.value) {
-        auto val_type = infer_type(*ret.value);
+        // 戻り値型を期待型として渡す（return {..}; / return [..]; の無名リテラルを許容）
+        auto val_type = infer_type_expecting(*ret.value, current_return_type_);
         if (!types_compatible(current_return_type_, val_type)) {
             // ジェネリクスenum variant型推論: return Option::None のようなケース
             bool is_enum_variant_coercion = false;
@@ -299,11 +584,14 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                 }
             }
             if (!is_enum_variant_coercion) {
-                error(stmt_span, "Return type mismatch: expected '" +
-                                     ast::type_to_string(*current_return_type_) + "', got '" +
-                                     (val_type ? ast::type_to_string(*val_type) : "unknown") + "'");
+                error(stmt_span,
+                      i18n::msgf(i18n::MsgId::TcReturnTypeMismatchExpected,
+                                 ast::type_to_string(*current_return_type_),
+                                 (val_type ? ast::type_to_string(*val_type) : "unknown")));
             }
         }
+        // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
+        check_numeric_conversion_policy(current_return_type_, val_type, ret.value.get(), stmt_span);
 
         // ライフタイムチェック: ローカル変数への参照を返すことを禁止
         // return &x の場合、xがローカル変数ならダングリングポインタになる
@@ -320,16 +608,16 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
                         // レベル1以上はローカル変数（0=グローバル）、ただしstaticは除外
                         if (var_level >= 1 && !is_static) {
                             error(stmt_span,
-                                  "Cannot return reference to local variable '" + ident->name +
-                                      "': variable will be dropped when function returns");
+                                  i18n::msgf(i18n::MsgId::TcCannotReturnReferenceLocalVariable,
+                                             ident->name));
                         }
                     }
                 }
             }
         }
     } else if (current_return_type_->kind != ast::TypeKind::Void) {
-        error(stmt_span, "Missing return value: expected '" +
-                             ast::type_to_string(*current_return_type_) + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcMissingReturnValueExpected,
+                                    ast::type_to_string(*current_return_type_)));
     }
 }
 
@@ -338,21 +626,49 @@ void TypeChecker::check_if(ast::IfStmt& if_stmt) {
     auto cond_type = infer_type(*if_stmt.condition);
     if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
         error(stmt_span,
-              "If condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+              i18n::msgf(i18n::MsgId::TcIfConditionMustBool, ast::type_to_string(*cond_type)));
     }
+
+    // H6: 確定代入のfork/join。分岐内の初期化は「生き残る全経路で初期化」された場合のみ
+    // 合流後へ伝える（従来はフラット集合で、片側分岐だけの初期化が合流後も初期化済みと誤認された）
+    auto before_init = initialized_variables_;
 
     scopes_.push();
     for (auto& s : if_stmt.then_block) {
         check_statement(*s);
     }
     scopes_.pop();
+    auto then_init = initialized_variables_;
+    bool then_terminates = cm_stmts_terminate(if_stmt.then_block, false);
+    initialized_variables_ = before_init;
 
+    bool else_terminates = false;
+    auto else_init = before_init;
     if (!if_stmt.else_block.empty()) {
         scopes_.push();
         for (auto& s : if_stmt.else_block) {
             check_statement(*s);
         }
         scopes_.pop();
+        else_init = initialized_variables_;
+        else_terminates = cm_stmts_terminate(if_stmt.else_block, false);
+        initialized_variables_ = before_init;
+    }
+
+    // 合流: return等で終端した分岐は合流に参加しない
+    if (then_terminates && else_terminates) {
+        initialized_variables_ = before_init;
+    } else if (then_terminates) {
+        initialized_variables_ = else_init;
+    } else if (else_terminates) {
+        initialized_variables_ = then_init;
+    } else {
+        initialized_variables_.clear();
+        for (const auto& name : then_init) {
+            if (else_init.count(name) > 0) {
+                initialized_variables_.insert(name);
+            }
+        }
     }
 }
 
@@ -361,13 +677,15 @@ void TypeChecker::check_while(ast::WhileStmt& while_stmt) {
     auto cond_type = infer_type(*while_stmt.condition);
     if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
         error(stmt_span,
-              "While condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+              i18n::msgf(i18n::MsgId::TcWhileConditionMustBool, ast::type_to_string(*cond_type)));
     }
 
     scopes_.push();
+    loop_depth_++;
     for (auto& s : while_stmt.body) {
         check_statement(*s);
     }
+    loop_depth_--;
     scopes_.pop();
 }
 
@@ -382,16 +700,18 @@ void TypeChecker::check_for(ast::ForStmt& for_stmt) {
         auto cond_type = infer_type(*for_stmt.condition);
         if (cond_type && cond_type->kind != ast::TypeKind::Bool) {
             error(stmt_span,
-                  "For condition must be bool, got '" + ast::type_to_string(*cond_type) + "'");
+                  i18n::msgf(i18n::MsgId::TcConditionMustBool, ast::type_to_string(*cond_type)));
         }
     }
     if (for_stmt.update) {
         infer_type(*for_stmt.update);
     }
 
+    loop_depth_++;
     for (auto& s : for_stmt.body) {
         check_statement(*s);
     }
+    loop_depth_--;
 
     scopes_.pop();
 }
@@ -402,7 +722,7 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
 
     auto iterable_type = infer_type(*for_in.iterable);
     if (!iterable_type) {
-        error(stmt_span, "Cannot infer type of iterable expression");
+        error(stmt_span, i18n::msg(i18n::MsgId::TcCannotInferTypeIterableExpression));
         scopes_.pop();
         return;
     }
@@ -413,49 +733,97 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     if (iterable_type->kind == ast::TypeKind::Struct) {
         std::string type_name = ast::type_to_string(*iterable_type);
 
-        // iter()メソッドを検索
-        auto it = type_methods_.find(type_name);
-        if (it != type_methods_.end()) {
-            auto method_it = it->second.find("iter");
-            if (method_it != it->second.end()) {
-                // iter()メソッドが存在 → イテレータベースで展開
-                for_in.use_iterator = true;
+        // iter()メソッドを統一解決API（resolve_method）で検索する。
+        // イテレータプロトコル検査（bool has_next() + 要素型を直接返すnext()）のメソッド検索も同一入口
+        if (auto iter_res = resolve_method(iterable_type, "iter")) {
+            // iter()メソッドが存在 → イテレータベースで展開
+            for_in.use_iterator = true;
 
-                // イテレータの戻り値型を取得
-                if (method_it->second.return_type) {
-                    for_in.iterator_type_name = ast::type_to_string(*method_it->second.return_type);
+            // イテレータの戻り値型を取得（ジェネリックレシーバは型引数を置換して具体化する）
+            auto iter_ret = iter_res->info->return_type;
+            if (iter_ret && !iter_res->generic_params.empty() && !iter_res->type_args.empty()) {
+                iter_ret = substitute_generic_type(iter_ret, iter_res->generic_params,
+                                                   iter_res->type_args);
+            }
+            if (iter_ret) {
+                for_in.iterator_type_name = ast::type_to_string(*iter_ret);
 
-                    // イテレータのnext()メソッドから要素型を推定
-                    auto iter_it = type_methods_.find(for_in.iterator_type_name);
-                    if (iter_it != type_methods_.end()) {
-                        auto next_it = iter_it->second.find("next");
-                        if (next_it != iter_it->second.end() && next_it->second.return_type) {
-                            element_type = next_it->second.return_type;
-                        }
-                    }
+                // イテレータプロトコル（bool has_next() + 要素型を直接返すnext()）の充足を検査する。従来はhas_next欠如がMIRの未解決シンボル（_CI__has_next）まで無診断、Option返しnextはループ変数がOption<T>のまま後続の的外れな型エラーになっていた
+                const MethodInfo* has_next_info = nullptr;
+                const MethodInfo* next_info = nullptr;
+                if (auto hn_res = resolve_method(iter_ret, "has_next")) {
+                    has_next_info = hn_res->info;
+                }
+                if (auto next_res = resolve_method(iter_ret, "next")) {
+                    next_info = next_res->info;
                 }
 
-                debug::tc::log(debug::tc::Id::TypeInfer,
-                               "for-in: using iterator pattern for " + type_name +
-                                   " (iterator: " + for_in.iterator_type_name + ")",
-                               debug::Level::Debug);
+                bool protocol_ok = true;
+                if (!has_next_info) {
+                    error(stmt_span, i18n::msgf(i18n::MsgId::TcIteratorMissingHasNext,
+                                                for_in.iterator_type_name));
+                    protocol_ok = false;
+                } else if (!has_next_info->return_type ||
+                           resolve_typedef(has_next_info->return_type)->kind !=
+                               ast::TypeKind::Bool) {
+                    error(stmt_span,
+                          i18n::msgf(i18n::MsgId::TcIteratorHasNextMustReturnBool,
+                                     for_in.iterator_type_name,
+                                     has_next_info->return_type
+                                         ? ast::type_to_string(*has_next_info->return_type)
+                                         : "void"));
+                    protocol_ok = false;
+                }
+                if (!next_info || !next_info->return_type ||
+                    next_info->return_type->kind == ast::TypeKind::Void) {
+                    error(stmt_span, i18n::msgf(i18n::MsgId::TcIteratorMissingNext,
+                                                for_in.iterator_type_name));
+                    protocol_ok = false;
+                } else {
+                    // Option<T>返しnextはプロトコル外（has_next + 非Option nextが正）と仕様決定。要素型の暗黙unwrapは行わない
+                    auto next_ret = resolve_typedef(next_info->return_type);
+                    std::string ret_base = next_ret ? next_ret->name : "";
+                    auto lt_pos = ret_base.find('<');
+                    if (lt_pos != std::string::npos) {
+                        ret_base = ret_base.substr(0, lt_pos);
+                    }
+                    if (ret_base == "Option") {
+                        error(stmt_span, i18n::msgf(i18n::MsgId::TcIteratorNextMustNotReturnOption,
+                                                    for_in.iterator_type_name,
+                                                    ast::type_to_string(*next_info->return_type)));
+                        protocol_ok = false;
+                    } else {
+                        element_type = next_info->return_type;
+                    }
+                }
+                if (!protocol_ok) {
+                    scopes_.pop();
+                    return;
+                }
             }
+
+            debug::tc::log(debug::tc::Id::TypeInfer,
+                           "for-in: using iterator pattern for " + type_name +
+                               " (iterator: " + for_in.iterator_type_name + ")",
+                           debug::Level::Debug);
         }
 
         // iter()メソッドがない場合はエラー
         if (!for_in.use_iterator) {
-            error(stmt_span,
-                  "For-in requires an iterable type (array or type with iter() method), got '" +
-                      ast::type_to_string(*iterable_type) + "'");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcRequiresIterableTypeArrayType,
+                                        ast::type_to_string(*iterable_type)));
             scopes_.pop();
             return;
         }
     } else if (iterable_type->kind == ast::TypeKind::Array) {
         // 配列型: 従来のインデックスベース展開
         element_type = iterable_type->element_type;
+    } else if (iterable_type->kind == ast::TypeKind::String) {
+        // 文字列: char をバイト単位で反復する（添字 s[i] と同じバイト意味論。局所処理調査「その他」の for-in string 非対応の解消）
+        element_type = ast::make_char();
     } else {
-        error(stmt_span, "For-in requires an iterable type (array), got '" +
-                             ast::type_to_string(*iterable_type) + "'");
+        error(stmt_span, i18n::msgf(i18n::MsgId::TcRequiresIterableTypeArray,
+                                    ast::type_to_string(*iterable_type)));
         scopes_.pop();
         return;
     }
@@ -466,9 +834,9 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
         if (resolved_type->kind == ast::TypeKind::Inferred) {
             for_in.var_type = element_type;
         } else if (!types_compatible(resolved_type, element_type)) {
-            error(stmt_span, "For-in variable type mismatch: expected '" +
-                                 ast::type_to_string(*element_type) + "', got '" +
-                                 ast::type_to_string(*resolved_type) + "'");
+            error(stmt_span, i18n::msgf(i18n::MsgId::TcVariableTypeMismatchExpected,
+                                        ast::type_to_string(*element_type),
+                                        ast::type_to_string(*resolved_type)));
         } else {
             for_in.var_type = resolved_type;
         }
@@ -480,11 +848,46 @@ void TypeChecker::check_for_in(ast::ForInStmt& for_in) {
     // ループ変数はイテレーションで毎回代入されるため初期化済みとして扱う
     mark_variable_initialized(for_in.var_name);
 
+    loop_depth_++;
     for (auto& s : for_in.body) {
         check_statement(*s);
     }
+    loop_depth_--;
 
     scopes_.pop();
+}
+
+void TypeChecker::check_array_literal_elements(ast::ArrayLiteralExpr& lit,
+                                               const ast::TypePtr& expected_array,
+                                               const std::string& var_name) {
+    // union typedef（typedef Val = int | string 等）の要素型はメンバ互換判定のため先に typedef を解決する（scalar 変数宣言と同じ経路）
+    const auto elem_expected = resolve_typedef(expected_array->element_type);
+    // 汎用格納の void* 要素配列は「何でも入る」エスケープハッチとして要素型検査を免除する（取得は auto、型判定は typeof を想定）
+    const bool elem_is_void_ptr = elem_expected && elem_expected->kind == ast::TypeKind::Pointer &&
+                                  elem_expected->element_type &&
+                                  elem_expected->element_type->kind == ast::TypeKind::Void;
+    for (auto& elem : lit.elements) {
+        auto elem_type = infer_type_expecting(*elem, elem_expected);
+        // 多次元配列: 要素が配列リテラルで宣言要素型も配列なら内側要素へ再帰検査する（従来は期待型伝播で内側の不一致が無診断になっていた）
+        if (elem_expected && elem_expected->kind == ast::TypeKind::Array) {
+            if (auto* inner = elem->as<ast::ArrayLiteralExpr>()) {
+                check_array_literal_elements(*inner, elem_expected, var_name);
+                continue;
+            }
+        }
+        // 配列リテラル要素の型検査: scalar 変数宣言と同じ規則で宣言要素型と非互換な要素を拒否する
+        // 拡大変換(tiny/short→int)・無名 struct リテラルのコアース・void* への任意ポインタ代入は types_compatible が許容する
+        if (!elem_is_void_ptr && elem_expected && elem && elem_type &&
+            !types_compatible(elem_expected, elem_type)) {
+            error(elem->span,
+                  i18n::msgf(i18n::MsgId::TcTypeMismatchVariableDeclarationExpected, var_name,
+                             ast::type_to_string(*elem_expected), ast::type_to_string(*elem_type)));
+        }
+        // 配列要素リテラルの縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+        if (!elem_is_void_ptr && elem_expected && elem && elem_type) {
+            check_numeric_conversion_policy(elem_expected, elem_type, elem.get(), elem->span);
+        }
+    }
 }
 
 }  // namespace cm

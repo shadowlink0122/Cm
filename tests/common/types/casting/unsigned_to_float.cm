@@ -1,0 +1,31 @@
+// 符号なし整数→浮動小数変換の回帰: sitofp固定でuint 4000000000 as doubleが
+// -294967296になっていた（uitofpへ修正、jsは元から正しくバックエンド分裂していた）
+// MIR定数畳み込みのInt→Float/Double経路もuint64解釈へ修正（Doubleターゲット欠落も解消）
+import std::io::println;
+
+uint big_u() {
+    return 4000000000 as uint;
+}
+
+ushort big_us() {
+    return 60000 as ushort;
+}
+
+int neg() {
+    return -7;
+}
+
+int main() {
+    // 実行時値の変換（旧実装はsitofpで負値化）
+    println(big_u() as double);
+    println(big_us() as double);
+    println(big_u() as float as double > 3.9e9);
+
+    // 符号付きのsitofp維持のnegative check
+    println(neg() as double);
+
+    // 定数畳み込み経路（リテラルから直接）
+    const uint cu = 4000000000;
+    println(cu as double);
+    return 0;
+}

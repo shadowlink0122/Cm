@@ -1,0 +1,58 @@
+import std::io::println;
+
+// C12回帰: 文単位の一時文字列dropパスの検証。
+// concat・型変換のコンパイラ生成一時は文の評価完了後に解放され、
+// let束縛・ユーザー関数への引き渡し等で所有権が移った一時は解放されないことを、
+// 解放後の値の健全性（use-after-freeが起きないこと）と出力一致で確認する。
+
+string wrap(string s) {
+    return "[" + s + "]";
+}
+
+int main() {
+    string a = "aa";
+    string b = "bb";
+
+    // 式文のconcat一時: println後に解放される（中間一時・最終一時とも）
+    println(a + " and " + b);
+
+    // let束縛へエスケープした一時: 解放されず変数の値が生きている
+    string s = a + "!";
+    println(s);
+
+    // 読み取り専用呼び出しへ渡った一時: len取得後に解放される
+    int n = (a + b).len();
+    println(n);
+
+    // 数値→文字列変換の一時もdrop対象（int + string連結）
+    int x = 7;
+    println("x=" + x);
+
+    // 三項演算子の腕のconcat: 条件付き実行のため追跡対象外（未初期化freeが起きないこと）
+    bool flag = a.len() == 2;
+    string t = flag ? a + b : a + "zz";
+    println(t);
+
+    // 短絡評価の右辺のconcat: 同上
+    if (flag && (a + b) == "aabb") {
+        println("sc ok");
+    }
+
+    // ユーザー関数へ渡した一時: エスケープ扱いで解放されず、戻り値も健全
+    string w = wrap(a + b);
+    println(w);
+
+    // 文字列補間: concat連鎖へ脱糖され、一時はprintln後に解放される
+    println("n={n} a={a}");
+
+    // ループ内のconcat式文: 毎周期解放されても出力が安定していること
+    int i = 0;
+    while (i < 3) {
+        println(a + " loop " + b);
+        i++;
+    }
+
+    // 元の変数はループ後も健全
+    println(a + "/" + b);
+    return 0;
+}

@@ -2,8 +2,8 @@
 // TypeChecker 実装 - ラムダ式の型推論とキャプチャ解析
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>
@@ -25,9 +25,8 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
 
     for (const auto& param : lambda.params) {
         if (!param.type || param.type->kind == ast::TypeKind::Error) {
-            error(current_span_, "Lambda parameter '" + param.name +
-                                     "' must have an explicit type. "
-                                     "Use: (Type param_name) => { ... }");
+            error(current_span_,
+                  i18n::msgf(i18n::MsgId::TcLambdaParameterMustHaveExplicit, param.name));
             return ast::make_error();
         }
         param_types.push_back(param.type);
@@ -53,14 +52,48 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
     std::unordered_set<std::string> used_identifiers;
     std::unordered_set<std::string> local_vars;  // ラムダ内で定義された変数
 
+    // 書き込み検出用：代入・複合代入・インクリメント/デクリメントの対象となる基底変数名（出現順）
+    std::vector<std::string> mutated_names;
+    std::unordered_set<std::string> mutated_seen;
+
+    // 左辺値式の基底となる識別子名を求める（メンバ・添字チェーンは剥がし、デリファレンス経由はポインタの指す先への書き込みで伝播するため対象外）
+    std::function<const ast::IdentExpr*(const ast::Expr&)> mutation_base =
+        [&](const ast::Expr& expr) -> const ast::IdentExpr* {
+        if (const auto* ident = expr.as<ast::IdentExpr>()) {
+            return ident;
+        }
+        if (const auto* member = expr.as<ast::MemberExpr>()) {
+            return mutation_base(*member->object);
+        }
+        if (const auto* index = expr.as<ast::IndexExpr>()) {
+            return mutation_base(*index->object);
+        }
+        return nullptr;
+    };
+
+    auto record_mutation = [&](const ast::Expr& target) {
+        if (const auto* base = mutation_base(target)) {
+            if (mutated_seen.insert(base->name).second) {
+                mutated_names.push_back(base->name);
+            }
+        }
+    };
+
     // 式からすべての識別子を収集するヘルパーラムダ
     std::function<void(ast::Expr&)> collect_identifiers = [&](ast::Expr& expr) {
         if (auto* ident = expr.as<ast::IdentExpr>()) {
             used_identifiers.insert(ident->name);
         } else if (auto* binary = expr.as<ast::BinaryExpr>()) {
+            if (ast::is_assign_op(binary->op)) {
+                record_mutation(*binary->left);
+            }
             collect_identifiers(*binary->left);
             collect_identifiers(*binary->right);
         } else if (auto* unary = expr.as<ast::UnaryExpr>()) {
+            if (unary->op == ast::UnaryOp::PreInc || unary->op == ast::UnaryOp::PreDec ||
+                unary->op == ast::UnaryOp::PostInc || unary->op == ast::UnaryOp::PostDec) {
+                record_mutation(*unary->operand);
+            }
             collect_identifiers(*unary->operand);
         } else if (auto* call = expr.as<ast::CallExpr>()) {
             collect_identifiers(*call->callee);
@@ -76,6 +109,21 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
             collect_identifiers(*ternary->condition);
             collect_identifiers(*ternary->then_expr);
             collect_identifiers(*ternary->else_expr);
+        } else if (auto* cast = expr.as<ast::CastExpr>()) {
+            // as/isキャストの被演算子（従来は走査されず、キャスト内でだけ参照される外側変数がキャプチャ漏れでゼロ値になっていた）
+            collect_identifiers(*cast->operand);
+        } else if (auto* slit = expr.as<ast::StructLiteralExpr>()) {
+            for (auto& field : slit->fields) {
+                if (field.value) {
+                    collect_identifiers(*field.value);
+                }
+            }
+        } else if (auto* alit = expr.as<ast::ArrayLiteralExpr>()) {
+            for (auto& el : alit->elements) {
+                if (el) {
+                    collect_identifiers(*el);
+                }
+            }
         }
         // その他の式タイプも必要に応じて追加
     };
@@ -114,6 +162,30 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
             if (for_stmt->update)
                 collect_identifiers(*for_stmt->update);
             for (auto& s : for_stmt->body) {
+                collect_from_stmt(*s);
+            }
+        } else if (auto* forin_stmt = stmt.as<ast::ForInStmt>()) {
+            local_vars.insert(forin_stmt->var_name);  // ループ変数はラムダ内ローカル
+            collect_identifiers(*forin_stmt->iterable);
+            for (auto& s : forin_stmt->body) {
+                collect_from_stmt(*s);
+            }
+        } else if (auto* block_stmt = stmt.as<ast::BlockStmt>()) {
+            for (auto& s : block_stmt->stmts) {
+                collect_from_stmt(*s);
+            }
+        } else if (auto* switch_stmt = stmt.as<ast::SwitchStmt>()) {
+            collect_identifiers(*switch_stmt->expr);
+            for (auto& sw_case : switch_stmt->cases) {
+                for (auto& s : sw_case.stmts) {
+                    collect_from_stmt(*s);
+                }
+            }
+        } else if (auto* defer_stmt = stmt.as<ast::DeferStmt>()) {
+            if (defer_stmt->body)
+                collect_from_stmt(*defer_stmt->body);
+        } else if (auto* must_stmt = stmt.as<ast::MustBlockStmt>()) {
+            for (auto& s : must_stmt->body) {
                 collect_from_stmt(*s);
             }
         }
@@ -180,12 +252,36 @@ ast::TypePtr TypeChecker::infer_lambda(ast::LambdaExpr& lambda) {
         // 見つからない場合は、グローバル変数や関数かもしれないので無視
     }
 
+    // 値キャプチャした変数への書き込みは元の変数に反映されないため診断で拒否する（キャプチャは読み取り専用。R4）
+    {
+        std::unordered_set<std::string> captured_names;
+        for (const auto& cap : lambda.captures) {
+            captured_names.insert(cap.name);
+        }
+        for (const auto& name : mutated_names) {
+            if (captured_names.count(name) > 0) {
+                error(current_span_, i18n::msgf(i18n::MsgId::TcCannotAssignCapturedVar, name));
+            }
+        }
+    }
+
     // 関数ポインタ型を構築: ReturnType*(ParamTypes...)
     auto func_type = std::make_shared<ast::Type>(ast::TypeKind::Function);
     func_type->return_type = return_type;
     func_type->param_types = std::move(param_types);
 
     return func_type;
+}
+
+// 式がキャプチャ付きクロージャ（ラムダ直書きまたはclosure_vars_の変数参照）か（V5〜V7）
+bool TypeChecker::is_capturing_closure_expr(const ast::Expr& expr) const {
+    if (const auto* lam = expr.as<ast::LambdaExpr>()) {
+        return !lam->captures.empty();
+    }
+    if (const auto* ident = expr.as<ast::IdentExpr>()) {
+        return closure_vars_.count(ident->name) > 0;
+    }
+    return false;
 }
 
 }  // namespace cm

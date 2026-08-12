@@ -1,5 +1,6 @@
 #include "folding.hpp"
 
+#include "../core/effects.hpp"
 #include "const_eval.hpp"
 
 #include <optional>
@@ -12,7 +13,7 @@ namespace cm::mir::opt {
 bool ConstantFolding::run(MirFunction& func) {
     bool changed = false;
 
-    // 複数回代入される変数を検出（ループ変数など）
+    // 複数回代入される変数を検出（ループ変数など。効果モデル共有実装）
     auto multiAssigned = detect_multi_assigned(func);
 
     // 関数引数は定数追跡から除外（呼び出し元から任意の値が渡される）
@@ -34,43 +35,6 @@ bool ConstantFolding::run(MirFunction& func) {
     return changed;
 }
 
-std::unordered_set<LocalId> ConstantFolding::detect_multi_assigned(const MirFunction& func) {
-    std::unordered_set<LocalId> assigned;
-    std::unordered_set<LocalId> multiAssigned;
-    for (const auto& block : func.basic_blocks) {
-        if (!block)
-            continue;
-        for (const auto& stmt : block->statements) {
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    LocalId target = assign_data.place.local;
-                    if (assigned.count(target) > 0) {
-                        multiAssigned.insert(target);
-                    } else {
-                        assigned.insert(target);
-                    }
-                }
-            }
-            // ASM出力制約（=r, +r等）も代入としてカウント（Bug1修正）
-            if (stmt->kind == MirStatement::Asm) {
-                const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                        if (assigned.count(operand.local_id) > 0) {
-                            multiAssigned.insert(operand.local_id);
-                        } else {
-                            assigned.insert(operand.local_id);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return multiAssigned;
-}
-
 bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
                                     std::unordered_map<LocalId, MirConstant>& constants,
                                     const std::unordered_set<LocalId>& multiAssigned) {
@@ -78,25 +42,25 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
 
     // 各文を処理
     for (auto& stmt : block.statements) {
-        // ASMステートメント: no_optフラグに関わらず、出力オペランドの変数は常に定数追跡から除外する必要がある（インラインアセンブリは実行時に変数を変更するため）
+        // 文の効果（書き込み・クロバー・no_opt・ASM出力）は効果モデルから取得する
+        const StmtEffects effects = effects_of(*stmt);
+
+        // ASM出力オペランドはno_optに関わらず常に定数追跡から除外（インラインアセンブリは実行時に変数を変更するため）
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    constants.erase(operand.local_id);
-                }
+            for (LocalId out : effects.asm_outputs) {
+                constants.erase(out);
             }
             continue;
         }
 
-        // no_optフラグがtrueの場合は最適化スキップ
-        if (stmt->no_opt) {
-            // mustブロック内の代入は定数追跡から除外
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-                if (assign_data.place.projections.empty()) {
-                    constants.erase(assign_data.place.local);
+        // no_opt文は値の置換対象外だが、書き込み効果は消費して定数情報を無効化する
+        // フィールド・配列要素代入でもベース変数を無効化しないと、ブロック外の読み出しが古い定数へ畳み込まれる誤コンパイルになる（Bug B3）
+        if (effects.no_opt) {
+            if (effects.deref_clobber) {
+                constants.clear();
+            } else {
+                for (LocalId written : effects.writes) {
+                    constants.erase(written);
                 }
             }
             continue;
@@ -105,31 +69,26 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
         if (stmt->kind == MirStatement::Assign) {
             auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
 
-            // デリファレンス書き込みチェック（_p.* = ... の形式）
-            // エイリアスの可能性があるため、全ての定数情報をクリアする
-            bool has_deref = false;
-            for (const auto& proj : assign_data.place.projections) {
-                if (proj.kind == ProjectionKind::Deref) {
-                    has_deref = true;
-                    break;
-                }
-            }
-            if (has_deref) {
-                // ポインタ経由の書き込みは任意のローカル変数に影響する可能性がある
-                // 保守的にすべての定数情報をクリア
+            // デリファレンス書き込み（_p.* = ... の形式）はエイリアスの可能性があるため全定数情報をクリア
+            if (effects.deref_clobber) {
                 constants.clear();
                 continue;
             }
 
-            // フィールドやインデックスへの代入の場合
-            // ベース変数に関する定数情報を無効化
-            if (!assign_data.place.projections.empty()) {
+            // フィールドやインデックスへの代入の場合、ベース変数に関する定数情報を無効化
+            if (!effects.direct_write) {
                 constants.erase(assign_data.place.local);
                 continue;
             }
 
             // 単純な代入（_x = _y）の場合
             LocalId target = assign_data.place.local;
+
+            // グローバル/静的変数は関数呼び出しが書き換えうるため定数追跡しない（W4。効果モデルの共有述語）
+            if (is_call_clobbered(func, target)) {
+                constants.erase(target);
+                continue;
+            }
 
             // 複数回代入される変数は定数追跡から除外
             if (multiAssigned.count(target) > 0) {
@@ -184,10 +143,13 @@ bool ConstantFolding::process_block(const MirFunction& func, BasicBlock& block,
                 if (auto* value = std::get_if<int64_t>(&constant->value)) {
                     BlockId target = switch_data.otherwise;
 
-                    // 一致するターゲットを探す
-                    for (const auto& [case_value, case_target] : switch_data.targets) {
-                        if (case_value == *value) {
-                            target = case_target;
+                    // 一致するターゲットを探す（マスク付きcase＝SVのdon't-careは (v & mask) == value で先頭から順に判定する。SV-N3）
+                    for (size_t ci = 0; ci < switch_data.targets.size(); ++ci) {
+                        const int64_t mask = ci < switch_data.target_masks.size()
+                                                 ? switch_data.target_masks[ci]
+                                                 : -1;
+                        if ((*value & mask) == switch_data.targets[ci].first) {
+                            target = switch_data.targets[ci].second;
                             break;
                         }
                     }
@@ -245,6 +207,11 @@ std::optional<MirConstant> ConstantFolding::evaluate_rvalue(
         case MirRvalue::Cast: {
             auto& cast_data = std::get<MirRvalue::CastData>(rvalue.data);
             if (!cast_data.operand || !cast_data.target_type) {
+                break;
+            }
+
+            // check_only（is検査）は値変換でなくタグ検査であり、定数畳み込みの対象にしない（GVNのキー同様、asの値変換と混同しない）
+            if (cast_data.check_only) {
                 break;
             }
 
@@ -351,16 +318,23 @@ std::optional<MirConstant> ConstantFolding::eval_binary_op(MirBinaryOp op, const
                 case MirBinaryOp::BitXor:
                     result.value = const_eval::normalize_int(lv ^ rv, result.type);
                     return result;
-                case MirBinaryOp::Shl:
+                case MirBinaryOp::Shl: {
+                    // シフト量は結果型の幅でマスクする（V8。&63固定だとintの32以上シフトが
+                    // 畳み込み経路のみ0になり、実行時のmod幅挙動と分裂していた）
+                    const uint64_t shl_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        static_cast<int64_t>(ulv << (urv & 63)), result.type);
+                        static_cast<int64_t>(ulv << (urv & shl_mask)), result.type);
                     return result;
-                case MirBinaryOp::Shr:
-                    // 符号なし型は論理シフト、符号付き型は算術シフト
+                }
+                case MirBinaryOp::Shr: {
+                    // 符号なし型は論理シフト、符号付き型は算術シフト（シフト量は結果型幅マスク。V8）
+                    const uint64_t shr_mask = const_eval::type_bit_width(result.type) - 1;
                     result.value = const_eval::normalize_int(
-                        uns ? static_cast<int64_t>(ulv >> (urv & 63)) : lv >> (rv & 63),
+                        uns ? static_cast<int64_t>(ulv >> (urv & shr_mask))
+                            : lv >> (rv & static_cast<int64_t>(shr_mask)),
                         result.type);
                     return result;
+                }
 
                 // 比較演算（bool結果）
                 case MirBinaryOp::Eq:
@@ -505,18 +479,33 @@ std::optional<MirConstant> ConstantFolding::eval_cast(const MirConstant& operand
         }
     }
 
-    // Int -> Double
-    if (target_type->kind == hir::TypeKind::Float) {
+    // Int -> Float/Double。符号なしソースはuint64として解釈する
+    // （int64解釈だとulong 18000000000000000000 as doubleが負値になる）
+    if (target_type->kind == hir::TypeKind::Float || target_type->kind == hir::TypeKind::Double ||
+        target_type->kind == hir::TypeKind::UFloat || target_type->kind == hir::TypeKind::UDouble) {
         if (auto* int_val = std::get_if<int64_t>(&operand.value)) {
-            result.value = static_cast<double>(*int_val);
+            result.value = const_eval::is_unsigned_type(operand.type)
+                               ? static_cast<double>(static_cast<uint64_t>(*int_val))
+                               : static_cast<double>(*int_val);
             return result;
         }
     }
 
-    // Double -> Int
+    // Double -> Int（M9: 範囲外はintの最大/最小へ飽和、NaNは0。実行時のfptosi.satと同一挙動）
     if (target_type->kind == hir::TypeKind::Int) {
         if (auto* double_val = std::get_if<double>(&operand.value)) {
-            result.value = static_cast<int64_t>(*double_val);
+            double d = *double_val;
+            int64_t v;
+            if (d != d) {
+                v = 0;
+            } else if (d >= 2147483647.0) {
+                v = 2147483647;
+            } else if (d <= -2147483648.0) {
+                v = -2147483648LL;
+            } else {
+                v = static_cast<int64_t>(d);
+            }
+            result.value = v;
             return result;
         }
     }

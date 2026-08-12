@@ -1,7 +1,7 @@
 #pragma once
 
-#include "control_flow.hpp"
 #include "emitter.hpp"
+#include "internal/codegen/js/flow/control.hpp"
 #include "internal/mir/nodes.hpp"
 
 #include <fstream>
@@ -22,7 +22,8 @@ struct JSCodeGenOptions {
     bool verbose = false;       // 詳細出力
     bool useStrictMode = true;  // "use strict" を追加
     bool esModule = false;      // ES モジュール形式で出力
-    int indentSpaces = 4;       // インデント幅
+    bool emitTypeScript = false;  // TypeScript出力（--target=ts）: 型注釈とstruct interfaceを付与
+    int indentSpaces = 4;  // インデント幅
 };
 
 // JavaScript コードジェネレータ
@@ -51,6 +52,12 @@ class JSCodeGen {
 
     // static変数: 関数名_変数名 -> 初期値
     std::unordered_map<std::string, std::string> static_vars_;
+
+    // グローバル変数の一意id（L1: sanitizeIdentifierの多対一縮退による衝突を宣言順の連番で防ぐ）
+    std::unordered_map<std::string, size_t> global_name_ids_;
+
+    // グローバル変数の一意なJS識別子を返す（宣言・参照の両方がこの命名を共有する）
+    std::string globalVarName(const std::string& name);
 
     // インターフェース名のセット（型のチェック用）
     std::unordered_set<std::string> interface_names_;
@@ -85,6 +92,13 @@ class JSCodeGen {
 
     // 構造体
     void emitStruct(const mir::MirStruct& st);
+
+    // TypeScript出力用: Cm型をTypeScriptの型注釈へ写像する（emitTypeScript有効時のみ使用）
+    std::string tsType(const hir::Type* type) const;
+    // ": <型>" を返す（型がnullや未対応なら空文字列。JS出力時は常に空）
+    std::string tsAnnotation(const hir::Type* type) const;
+    // struct → export interface 宣言を出力する（TypeScript出力時のみ）
+    void emitStructInterface(const mir::MirStruct& st);
 
     // 関数
     void emitFunction(const mir::MirFunction& func, const mir::MirProgram& program);
@@ -153,6 +167,13 @@ class JSCodeGen {
     hir::TypePtr getPlaceType(const mir::MirPlace& place, const mir::MirFunction& func);
     hir::TypePtr getOperandType(const mir::MirOperand& operand, const mir::MirFunction& func);
 
+    // 構造体の実引数を値渡しとしてクローンすべきか（H3: LLVM系との値セマンティクス統一）。
+    // implメソッドのself（__入り関数の第1引数）と仮想ディスパッチのレシーバは
+    // 参照渡しで変更を伝搬させるため対象外
+    bool structArgNeedsClone(const mir::MirOperand& arg, size_t argIndex,
+                             const std::string& funcName, bool isVirtual,
+                             const mir::MirFunction& func);
+
     // 演算子
     std::string emitBinaryOp(mir::MirBinaryOp op);
     std::string emitUnaryOp(mir::MirUnaryOp op);
@@ -168,6 +189,10 @@ class JSCodeGen {
 
     // ヘルパー: CSS構造体判定とフィールド名変換
     bool isCssStruct(const std::string& struct_name) const;
+    // 関数型フィールドを持つ構造体は外部JSオブジェクト（メソッド束縛）を表すため、
+    // 代入時の深いクローン（__cm_clone）を避けて参照コピーにする。
+    // クローンするとプロトタイプ上のメソッドが失われ this 束縛も壊れる（例: http.Server の listen）。
+    bool structIsForeignObject(const std::string& struct_name) const;
     std::string toKebabCase(const std::string& name) const;
     std::string formatStructFieldKey(const mir::MirStruct& st, const std::string& field_name) const;
     std::string mapExternJsName(const std::string& name) const;
@@ -175,6 +200,16 @@ class JSCodeGen {
 
     // 構造体のデフォルト値生成（ネストフィールド対応）
     std::string getStructDefaultValue(const hir::Type& type) const;
+
+    // 構造体型からMirStruct定義を解決する（名前直引き→ジェネリックは$正準キーで再検索）
+    const mir::MirStruct* findStructDef(const hir::Type& type) const;
+
+    // ユニオンtypedef名（IU等）を実体のユニオン型へ解決する（変種を引けない名前のままではタグ計算が-1になる）。
+    // 既に変種を持つ型・typedefでない型はそのまま返す
+    hir::TypePtr resolveUnionAlias(const hir::TypePtr& type) const;
+
+    // typedef定義（MirProgram::typedef_defsのコピー。resolveUnionAliasが参照する）
+    std::unordered_map<std::string, hir::TypePtr> typedef_map_;
 
     // アドレス取得されるローカル変数のセット（ボクシング必要）
     std::unordered_set<mir::LocalId> boxed_locals_;

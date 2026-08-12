@@ -1,6 +1,6 @@
 #pragma once
 
-#include "internal/base/span.hpp"
+#include "internal/base/source/span.hpp"
 #include "internal/syntax/lexer/token.hpp"
 #include "types.hpp"
 
@@ -32,6 +32,10 @@ using HirDeclPtr = std::unique_ptr<HirDecl>;
 struct HirLiteral {
     std::variant<std::monostate, bool, int64_t, double, char, std::string> value;
     std::optional<BitLiteralInfo> bit_info;  // SV幅付きリテラル情報（nullopt = 通常リテラル）
+
+    // 補間プレースホルダの脱糖済み部分式（文字列リテラルのみ。第4段b）。
+    // （プレースホルダ内容文字列, 型検査済みHIR式）。MIRのprintln/format loweringがテキスト再パースの代わりに消費する
+    std::vector<std::pair<std::string, std::shared_ptr<HirExpr>>> interp_parts;
 };
 
 // 変数参照
@@ -39,6 +43,9 @@ struct HirVarRef {
     std::string name;
     bool is_function_ref = false;  // 関数名への参照（関数ポインタ用）
     bool is_closure = false;       // クロージャ（キャプチャあり）か
+    // move式のオペランドとして所有権を手放した参照か。
+    // MIR loweringがデストラクタ登録を解除し、moved-out変数の二重解放を防ぐ
+    bool is_moved_from = false;
 
     // クロージャ用：キャプチャされた変数の情報
     struct CapturedVar {
@@ -105,6 +112,9 @@ struct HirCall {
     bool is_indirect = false;               // 関数ポインタ経由の呼び出し
     bool is_closure = false;                // クロージャ呼び出しか
     bool is_awaited = false;                // await式で呼び出されているか
+    // 関数型フィールドの呼び出し（obj.field(args)）: 関数値を評価する式。設定時はfunc_nameを使わずこの式の値を呼び出す
+    // （JSバックエンドではメンバPlaceのまま呼び出すことでthis束縛を保持する）
+    HirExprPtr indirect_callee;
 };
 
 // 配列アクセス
@@ -281,13 +291,16 @@ struct HirSwitchPattern {
     enum Kind {
         SingleValue,  // 単一値
         Range,        // 範囲
-        Or            // ORで結合された複数パターン
+        Or,           // ORで結合された複数パターン
+        Masked  // don't-careビット付きリテラル（0b1?00。SVターゲットのmatch脱糖用）
     } kind;
 
     HirExprPtr value;                                            // 単一値の場合
     HirExprPtr range_start;                                      // 範囲の開始値
     HirExprPtr range_end;                                        // 範囲の終了値
     std::vector<std::unique_ptr<HirSwitchPattern>> or_patterns;  // ORパターンのリスト
+    int64_t masked_value = 0;                                    // Masked用: 比較値（?は0）
+    int64_t masked_mask = -1;  // Masked用: 有効ビットマスク（?は0。-1は完全一致）
 };
 
 // switch文のケース
@@ -303,6 +316,8 @@ struct HirSwitchCase {
 struct HirSwitch {
     HirExprPtr expr;
     std::vector<HirSwitchCase> cases;
+    // SVのcase修飾（0=既定(unique)・1=priority・2=unique0。#[sv::priority]/#[sv::unique0]由来。非SVでは無視）
+    uint8_t sv_case_modifier = 0;
 };
 
 // asmオペランド（制約+変数名または定数値）
@@ -391,6 +406,7 @@ struct HirFunction {
     bool is_constructor = false;
     bool is_destructor = false;
     bool is_static = false;  // staticメソッド（selfパラメータなし）
+    bool is_inline = false;  // inline修飾子（LLVMのinlinehint属性へ伝搬する）
     bool is_async = false;   // async関数（JSバックエンド用）
     bool is_always = false;  // always修飾子（SVバックエンド用）
     enum class AlwaysKind { None, Auto, FF, Comb, Latch } always_kind = AlwaysKind::None;
@@ -423,7 +439,8 @@ struct HirStruct {
     bool is_export = false;
     bool has_explicit_constructor = false;
     bool is_css = false;
-    bool is_extern = false;  // extern struct（外部HWモジュール）
+    bool is_extern = false;               // extern struct（外部HWモジュール）
+    std::vector<std::string> attributes;  // 構造体属性（sv::packed/sv::unpacked 等）
 };
 
 // メソッドシグネチャ

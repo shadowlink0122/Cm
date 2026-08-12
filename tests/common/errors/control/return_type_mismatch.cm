@@ -1,0 +1,7 @@
+// 回帰(エラーパターン): 戻り値型の不一致
+int f() {
+    return "s";
+}
+int main() {
+    return 0;
+}

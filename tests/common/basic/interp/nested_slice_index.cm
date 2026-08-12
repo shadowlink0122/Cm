@@ -1,0 +1,18 @@
+// 回帰(N1): 補間内の多次元スライス添字が外側添字≠0でガベージ・誤要素になるバグの検証
+import std::io::println;
+int main() {
+    int[][] rows = [];
+    int[] r0 = [];
+    r0.push(1);
+    rows.push(r0);
+    rows[0].push(2);
+    int[] r1 = [];
+    r1.push(10);
+    rows.push(r1);
+    println("{rows[0][1]} {rows[1][0]}");
+    println("{rows.len()} {rows[0].len()}");
+    for (long i = 0; i < rows.len(); i++) {
+        println("row[{i}][0] = {rows[i][0]}");
+    }
+    return 0;
+}

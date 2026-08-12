@@ -31,13 +31,17 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
 
     // ========== --target指定時のディスパッチ ==========
     // 従来は--targetを無視して常にJIT実行していた（JS指定でもネイティブ意味論で実行され誤解を招くため、実際のバックエンドで実行するか明示エラーにする）
-    if (opts.target == "js" || opts.target == "web") {
-        // JS生成 → Node.jsで実行
+    if (opts.target == "js" || opts.target == "web" || opts.target == "ts") {
+        // JS生成 → Node.jsで実行（tsターゲットも実行は型注釈を除去したJSで行う。TSは同一コード生成結果へstripされる）
         cm::codegen::js::JSCodeGenOptions js_opts;
-        js_opts.outputFile =
-            opts.output_file.empty()
-                ? (std::filesystem::temp_directory_path() / "cm_run_output.js").string()
-                : opts.output_file;
+        std::string default_js_out;
+        if (opts.output_file.empty()) {
+            // 中間JSは他の中間生成物（.tmp/test・.tmp/module-cache等）と同じく.tmp配下へ置く（従来はシステムのtempディレクトリで固定名が全プロセス共有だった）
+            std::filesystem::create_directories(".tmp/run");
+            default_js_out =
+                ".tmp/run/" + std::filesystem::path(opts.input_file).stem().string() + ".js";
+        }
+        js_opts.outputFile = opts.output_file.empty() ? default_js_out : opts.output_file;
         js_opts.generateHTML = false;
         js_opts.verbose = opts.verbose || opts.debug;
         try {
@@ -140,7 +144,14 @@ int emit_jit_run(BuildContext& ctx, mir::MirProgram& mir) {
 
     const bool sanitize_bounds = std::find(opts.sanitizers.begin(), opts.sanitizers.end(),
                                            "bounds") != opts.sanitizers.end();
-    auto result = jit.execute(mir, "main", opts.optimization_level, sanitize_bounds);
+
+    // スクリプト引数（cm run file.cm -- args...）。argv[0]は入力ファイルパス
+    std::vector<std::string> program_args;
+    program_args.push_back(opts.input_file);
+    for (const auto& a : opts.program_args) {
+        program_args.push_back(a);
+    }
+    auto result = jit.execute(mir, "main", opts.optimization_level, sanitize_bounds, program_args);
 
     if (!result.success) {
         std::cerr << i18n::msgf(i18n::MsgId::CliJitExecutionError2, result.errorMessage);

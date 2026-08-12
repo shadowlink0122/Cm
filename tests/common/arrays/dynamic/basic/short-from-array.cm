@@ -1,0 +1,27 @@
+import std::io::println;
+// slice_short_from_array.cm - C4回帰: short固定長配列→スライス変換のelem_size整合
+// 配列→スライス変換のelem_sizeテーブルにShort/UShortが欠落しており、
+// elem_size=4で確保され2バイトアクセスとずれる潜在バグがあった（slice_dispatch一元化で解消）
+
+int main() {
+    short[6] arr = [10 as short, 20 as short, 30 as short, 40 as short, 50 as short, 60 as short];
+    short[] s = arr[0:6];
+    int i = 0;
+    bool ok = true;
+    while (i < 6) {
+        if ((s[i] as int) != (i + 1) * 10) {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    const int s5 = s[5] as int;
+    println("ok={ok} len={s.len()} s5={s5}");
+
+    // ushort配列でも同様
+    ushort[3] uarr = [40000 as ushort, 50000 as ushort, 60000 as ushort];
+    ushort[] us = uarr[0:3];
+    const int u0 = us[0] as int;
+    const int u2 = us[2] as int;
+    println("u0={u0} u2={u2}");
+    return 0;
+}

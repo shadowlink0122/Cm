@@ -1,0 +1,11 @@
+//! platform: wasm
+// 回帰(R23): native専用FFIモジュール（std::env等）をwasmターゲットでコンパイルすると
+// リンク段のundefined symbol検出で失敗する（従来は--allow-undefinedで黙って通り、実行時のunknown importで破綻していた）
+import std::env::{get};
+import std::io::println;
+
+int main() {
+    const string v = get("HOME").unwrap_or("");
+    println("{v.len() > 0}");
+    return 0;
+}

@@ -35,14 +35,8 @@ export Option<int> checked_mod(int a, int b) {
 }
 
 // 絶対値
-export int abs(int x) {
-    if (x < 0) {
-        return -x;
-    }
-    return x;
-}
-
-export long abs(long x) {
+// 絶対値（自由関数オーバーロードは未サポートのためジェネリック1本に統一。R9）
+export <T> T abs(T x) {
     if (x < 0) {
         return -x;
     }

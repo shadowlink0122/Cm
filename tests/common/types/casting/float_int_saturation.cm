@@ -1,0 +1,35 @@
+// M9回帰: 範囲外float→intキャストが全バックエンドで飽和（範囲外はclamp、NaNは0）に統一されることを検証する
+// （従来はnative/jit=INT_MIN、wasm=トラップ、js=範囲無制限と3分裂していた）
+import std::io::println;
+
+int main() {
+    double big = 1e20;
+    const int a = big as int;
+    println(a);
+
+    double neg = -1e20;
+    const int b = neg as int;
+    println(b);
+
+    double sm = 300.7;
+    const tiny t = sm as tiny;
+    println(t);
+
+    double nsm = -300.7;
+    const tiny u = nsm as tiny;
+    println(u);
+
+    double us = -5.5;
+    const utiny v = us as utiny;
+    println(v);
+
+    double sh = 70000.9;
+    const short w = sh as short;
+    println(w);
+
+    double normal = 42.9;
+    const int x = normal as int;
+    println(x);
+
+    return 0;
+}

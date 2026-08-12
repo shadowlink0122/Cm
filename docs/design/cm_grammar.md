@@ -75,8 +75,11 @@ trait_member ::= type identifier '(' param_list? ')' ';'
 impl_decl ::= 'impl' generic_params? trait_name 'for' type where_clause? '{' impl_member* '}'
             | 'impl' generic_params? type where_clause? '{' impl_member* '}'  # inherent impl
 
-impl_member ::= function_decl
+impl_member ::= method_modifier* function_decl
               | 'type' identifier '=' type ';'  # 関連型
+
+# メソッド修飾子。exportは既定可視性（公開）の明示（exportとprivateの併用はエラー）
+method_modifier ::= 'export' | 'private' | 'static'
 ```
 
 ### typedef・マクロ・Enum・演算子
@@ -101,8 +104,10 @@ operator_symbol ::= '+' | '-' | '*' | '/' | '%'
                   | '==' | '!=' | '<' | '>' | '<=' | '>='
                   | '&' | '|' | '^' | '~' | '!'
                   | '<<' | '>>'
-                  | '[]' | '()'
 ```
+
+添字演算子`[]`・呼び出し演算子`()`のオーバーロードは未対応（専用診断で拒否される）。
+
 
 ---
 
@@ -116,9 +121,9 @@ generic_param_list ::= generic_param (',' generic_param)*
 generic_param ::= type_param
                 | const_param
 
-type_param ::= identifier (':' type_constraint)? ('=' type)?
+type_param ::= identifier (':' type_constraint)?
 
-const_param ::= identifier ':' 'const' type ('=' const_expr)?
+const_param ::= identifier ':' 'const' type  # 未対応（宣言時に専用診断で拒否される）
 
 type_constraint ::= union_type       # int | double | float
                   | type_name         # Number (typedef or trait)
@@ -146,8 +151,6 @@ type ::= primitive_type
        | type_name '<' type_list '>'        # ジェネリクスインスタンス化
        | type '[' const_expr ']'            # 配列
        | type '*'                           # ポインタ
-       | type '&'                           # 参照
-       | '(' type_list ')'                  # タプル
        | union_type                         # int | double
        | 'typeof' '(' expression ')'        # 式の型
 
@@ -164,6 +167,11 @@ union_type ::= type ('|' type)+
 type_list ::= type (',' type)*
 
 type_name ::= identifier ('::' identifier)*
+```
+
+参照型`T&`とタプル型`(T1, T2)`は未対応（参照はポインタ`T*`で代替する。`T&`は専用診断で拒否される）。
+
+```bnf
 
 trait_name ::= identifier ('::' identifier)*
 ```
@@ -194,7 +202,10 @@ expression_statement ::= expression ';'
 
 if_statement ::= 'if' '(' expression ')' statement ('else' statement)?
 
-switch_statement ::= 'switch' '(' expression ')' '{' case_clause* '}'
+switch_statement ::= sv_case_attribute? 'switch' '(' expression ')' '{' case_clause* '}'
+
+# SVのcase修飾属性（v0.17.0）: switch/match文の直前にのみ前置できる（priority=順序優先のpriority case・unique0=該当なし許容のunique0 case。非SVターゲットでは無視される）
+sv_case_attribute ::= '#[' ('sv::priority' | 'sv::unique0') ']'
 
 case_clause ::= 'case' const_expr ':' statement*
               | 'default' ':' statement*
@@ -260,6 +271,8 @@ relational_expr ::= shift_expr
 shift_expr ::= additive_expr
               | shift_expr ('<<' | '>>') additive_expr
 
+(* シフト量の意味論: 左オペランドの型幅でmodを取る（int << 32 == int << 0、long << 65 == long << 1）。C言語のような未定義動作にはならず、全バックエンド・全最適化レベルで同一結果を保証する *)
+
 additive_expr ::= multiplicative_expr
                  | additive_expr ('+' | '-') multiplicative_expr
 
@@ -285,6 +298,9 @@ unary_operator ::= '&' | '*' | '+' | '-' | '~' | '!'
 ```bnf
 postfix_expr ::= primary_expr
                | postfix_expr '[' expression ']'         # 配列添字
+               | postfix_expr '[' expression ':' expression ']'    # スライス/ビットスライス（x[hi:lo]）
+               | postfix_expr '[' expression '+:' expression ']'   # インデックスドパートセレクト（上昇方向）
+               | postfix_expr '[' expression '-:' expression ']'   # インデックスドパートセレクト（下降方向。v0.17.0）
                | postfix_expr '(' argument_list? ')'     # 関数呼び出し
                | postfix_expr '.' identifier             # メンバアクセス
                | postfix_expr '->' identifier            # ポインタメンバアクセス
@@ -322,7 +338,8 @@ format_expr ::= '{' expression '}'
 param_list ::= parameter (',' parameter)*
 
 parameter ::= type identifier ('=' const_expr)?
-            | type '...' identifier              # 可変長引数
+
+# 可変長引数 `type '...'` はFFIのextern宣言専用（ユーザー定義関数では専用診断で拒否される）
 
 argument_list ::= expression (',' expression)*
 ```
@@ -347,7 +364,6 @@ integer_literal ::= decimal_literal
                   | octal_literal
 
 decimal_literal ::= [0-9] [0-9_]*
-                  | [1-9] [0-9_]* integer_suffix?
 
 hex_literal ::= '0x' [0-9a-fA-F] [0-9a-fA-F_]*
 
@@ -355,25 +371,24 @@ binary_literal ::= '0b' [01] [01_]*
 
 octal_literal ::= '0o' [0-7] [0-7_]*
 
-integer_suffix ::= 'u' | 'U' | 'l' | 'L' | 'ul' | 'UL'
+float_literal ::= [0-9]+ '.' [0-9]+ ([eE] [+-]? [0-9]+)?
+                | [0-9]+ [eE] [+-]? [0-9]+
 
-float_literal ::= [0-9]+ '.' [0-9]+ ([eE] [+-]? [0-9]+)? float_suffix?
-                | [0-9]+ [eE] [+-]? [0-9]+ float_suffix?
-
-float_suffix ::= 'f' | 'F' | 'd' | 'D'
+# 数値サフィックス（42u・3.14f等）は未対応。桁区切りアンダースコア（1_000・0xFF_FF等）は全基数・小数部で使用できる
 
 char_literal ::= "'" (escape_sequence | [^'\\\n]) "'"
 
 string_literal ::= '"' (escape_sequence | [^"\\\n])* '"'
                  | raw_string_literal
 
-raw_string_literal ::= 'r"' [^"]* '"'
-                     | 'r#"' .* '"#'  # Rust風のraw string
+# raw文字列はバッククォート区切り。エスケープは解釈されずバックスラッシュはリテラル
+# （唯一の例外はデリミタのエスケープ \`）。補間は ${expr} のみ有効
+raw_string_literal ::= '`' ( '\\`' | [^`] )* '`'
 
-escape_sequence ::= '\\' ['"\\nrtbfav]
-                  | '\\x' hex_digit hex_digit
-                  | '\\u' hex_digit{4}
-                  | '\\U' hex_digit{8}
+escape_sequence ::= '\\' ['"\\nrtbfav0$}{]
+                  | '\\x' hex_digit hex_digit    # 1バイト
+                  | '\\u' hex_digit{4}           # Unicodeコードポイント（UTF-8へエンコード）
+                  | '\\U' hex_digit{8}           # Unicodeコードポイント（UTF-8へエンコード）
 
 bool_literal ::= 'true' | 'false'
 
@@ -386,7 +401,6 @@ null_literal ::= 'null' | 'nullptr'
 
 ```bnf
 identifier ::= [a-zA-Z_] [a-zA-Z0-9_]*
-             | '`' [^`]+ '`'  # エスケープ識別子
 
 keyword ::= 'if' | 'else' | 'while' | 'for' | 'switch' | 'case' | 'default'
           | 'break' | 'continue' | 'return' | 'defer'
@@ -416,11 +430,11 @@ whitespace ::= [ \t\n\r]+
 ```bnf
 preprocessor ::= '#' preprocessor_directive
 
-preprocessor_directive ::= 'define' identifier replacement?
-                         | 'ifdef' identifier
+preprocessor_directive ::= 'ifdef' identifier
                          | 'ifndef' identifier
                          | 'else'
+                         | 'end'
                          | 'endif'
 ```
 
-> **注意:** `#include`、`#pragma`、`#if`/`#elif` は現在未実装です。
+> **注意:** `#end` と `#endif` は同義（別名）です。`#define` は未実装です——シンボル定義はCLIオプション `-D<名前>` と組み込みシンボル（`__macos__` 等）のみで、`#define` の使用は専用診断になります。`#include`、`#pragma`、`#if`/`#elif` も現在未実装です。閉じ忘れ・対応ブロックのない `#end`/`#endif`/`#else` はコンパイルエラーになります。

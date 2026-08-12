@@ -1,0 +1,6 @@
+// R10: 未定義型の変数宣言は宣言時に診断される（従来は無診断で実行まで通り、メソッド呼び出しで誤誘導のUnknown methodになっていた）
+int main() {
+    TotallyBogusType<int, int> m;
+    println("should not compile");
+    return 0;
+}

@@ -48,6 +48,14 @@ check "native step guard" nonzero "platform: sv" "$CM" test "$DIR/native_step_er
 # SVフロー: iverilog があればシミュレーションまで実行
 if command -v iverilog >/dev/null 2>&1 && command -v vvp >/dev/null 2>&1; then
     check "sv platform dispatch" 0 "PASS: value latched" "$CM" test "$DIR/sv_platform.cm"
+
+    # //! test: 期待値のアサート（R15: 一致=PASS・不一致/x=$fatalで非0終了。従来は$displayのみで常時PASSだった）
+    check "sv directive pass" 0 "TEST 1: result=8" "$CM" test "$DIR/sv_directive_pass.cm"
+    check "sv directive fail" nonzero "FAIL: TEST 1: result=8 expected=999" "$CM" test "$DIR/sv_directive_fail.cm"
+    check "sv directive x fail" nonzero "FAIL: TEST 1: result=x expected=8" "$CM" test "$DIR/sv_directive_x_fail.cm"
+
+    # #[test]+assertのx楽観性封止（R15: 対象信号がxでも!== 1'b1で正しくFAILする）
+    check "sv assert x fail" nonzero "FAIL: dout should be 12345" "$CM" test "$DIR/sv_assert_x_fail.cm"
 else
     echo "[SKIP] sv platform dispatch (iverilog/vvp not found)"
 fi

@@ -1,6 +1,9 @@
 // MIR lowering - 制御フロー文（return/if/while/for/loop/switch/block）
 
 #include "internal/base/debug.hpp"
+#include "internal/base/target.hpp"
+#include "internal/hir/slice_dispatch.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/stmt.hpp"
 #include "internal/mir/passes/scalar/const_eval.hpp"
 
@@ -20,10 +23,54 @@ void StmtLowering::lower_return(const hir::HirReturn& ret, LoweringContext& ctx)
         // 戻り値をlowering
         LocalId return_value = expr_lowering->lower_expression(*ret.value, ctx);
 
-        // 戻り値をreturn用ローカル変数に代入
-        ctx.push_statement(
-            MirStatement::assign(MirPlace{ctx.func->return_local},
-                                 MirRvalue::use(MirOperand::copy(MirPlace{return_value}))));
+        // return self のように、戻り値のローカルがポインタで戻り値型が非ポインタの集約型のとき、
+        // ポインタのビットをそのまま構造体値として返してしまう（C1）。
+        // pointeeが戻り値型と一致する場合はデリファレンスを挟んで値を返す。
+        MirPlace return_src{return_value};
+        if (return_value < ctx.func->locals.size() &&
+            ctx.func->return_local < ctx.func->locals.size()) {
+            const auto& rv_type = ctx.func->locals[return_value].type;
+            const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+            if (rv_type && rv_type->kind == hir::TypeKind::Pointer && rv_type->element_type &&
+                ret_type && ret_type->kind != hir::TypeKind::Pointer &&
+                (ret_type->kind == hir::TypeKind::Struct ||
+                 ret_type->kind == hir::TypeKind::Union)) {
+                const auto& pointee = rv_type->element_type;
+                if (pointee->kind == ret_type->kind && pointee->name == ret_type->name) {
+                    return_src.projections.push_back(PlaceProjection::deref(ret_type, pointee));
+                }
+            }
+        }
+
+        // 固定長配列をスライス戻り値型で返す場合、スタック上の配列ポインタが生のまま返り
+        // 呼び出し側がCmSlice*として解釈してクラッシュしていた。
+        // cm_array_to_slice（ヒープへ内容コピー）を挟んでスライスへ実体化してから返す
+        bool returned_as_slice = false;
+        if (ret.value->type && ctx.func->return_local < ctx.func->locals.size()) {
+            auto value_type = ctx.resolve_typedef(ret.value->type);
+            const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+            if (value_type && value_type->kind == hir::TypeKind::Array &&
+                value_type->array_size.has_value() && ret_type &&
+                ret_type->kind == hir::TypeKind::Array && !ret_type->array_size.has_value()) {
+                // 固定長配列の値をヒープスライスへ実体化してreturnローカルへ格納する（正準ヘルパへ委譲）
+                ctx.materialize_array_to_slice(return_src, value_type, ret_type,
+                                               MirPlace{ctx.func->return_local});
+                returned_as_slice = true;
+            }
+        }
+
+        if (!returned_as_slice) {
+            // 変換統一ドライバ第1段: numeric/ユニオン構築/固定長配列→スライスをcoerce_to_expected 1系統で挿入する（B2/Y2。直接returnの固定長配列は前段の専用経路が処理済み）
+            if (return_src.projections.empty() &&
+                ctx.func->return_local < ctx.func->locals.size()) {
+                const auto& ret_type = ctx.func->locals[ctx.func->return_local].type;
+                LocalId coerced = ctx.coerce_to_expected(return_src.local, ret_type);
+                return_src = MirPlace{coerced};
+            }
+            // 戻り値をreturn用ローカル変数に代入
+            ctx.push_statement(MirStatement::assign(MirPlace{ctx.func->return_local},
+                                                    MirRvalue::use(MirOperand::copy(return_src))));
+        }
     }
 
     // 現在のスコープのdefer文を実行（逆順）
@@ -144,9 +191,20 @@ void StmtLowering::lower_while(const hir::HirWhile& while_stmt, LoweringContext&
     // ループボディ
     ctx.switch_to_block(loop_body);
     ctx.push_loop(loop_header, loop_exit);
+    // ループボディ用のスコープを作成（各反復でdefer文を実行。forと対称にする。M16）
+    ctx.push_scope();
     for (const auto& stmt : while_stmt.body) {
         lower_statement(*stmt, ctx);
     }
+    // ループボディ終了時にdefer文を実行（逆順）
+    auto defers = ctx.get_defer_stmts();
+    for (const auto* defer_stmt : defers) {
+        lower_statement(*defer_stmt, ctx);
+    }
+    // ループボディスコープのデストラクタを毎周期実行する（C13: 明示ブロックと同一順序に揃える。
+    // これが無いとループ内のVector等が関数終了まで解放されず反復ごとにリークしていた）
+    emit_scope_destructors(ctx);
+    ctx.pop_scope();
     ctx.pop_loop();
     if (!ctx.get_current_block()->terminator) {
         ctx.set_terminator(MirTerminator::goto_block(loop_header));
@@ -211,6 +269,9 @@ void StmtLowering::lower_for(const hir::HirFor& for_stmt, LoweringContext& ctx) 
         lower_statement(*defer_stmt, ctx);
     }
 
+    // ループボディスコープのデストラクタを毎周期実行する（C13: whileと同一の順序規約）
+    emit_scope_destructors(ctx);
+
     ctx.pop_scope();
 
     // ボディの最後に更新式を追加（whileループと同じ構造）
@@ -269,6 +330,97 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
     // 判別式をlowering
     LocalId discriminant = expr_lowering->lower_expression(*switch_stmt.expr, ctx);
 
+    // 文字列スクルーチニはswitch命令（整数専用）へ落とせないため、
+    // 文字列Eq比較の逐次チェーンへ脱糖する（N3。従来はcase定数が整数として発行され
+    // LLVM検証エラー、jsはポインタ同一性比較で常にelse落ちしていた）
+    const bool is_string_switch = switch_stmt.expr && switch_stmt.expr->type &&
+                                  switch_stmt.expr->type->kind == hir::TypeKind::String;
+    if (is_string_switch) {
+        BlockId default_block = ctx.new_block();
+        BlockId exit_block = ctx.new_block();
+
+        // 各caseの文字列リテラル値と本体ブロックを収集し、比較チェーンを構築する
+        std::vector<BlockId> case_blocks;
+        for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
+            if (!switch_stmt.cases[i].pattern) {
+                case_blocks.push_back(0);  // else/defaultはプレースホルダー
+                continue;
+            }
+            BlockId case_block = ctx.new_block();
+            case_blocks.push_back(case_block);
+
+            // case文字列を抽出（SingleValueの文字列リテラルのみ許可）
+            std::string case_str;
+            bool have_str = false;
+            const auto& pat = *switch_stmt.cases[i].pattern;
+            const hir::HirExprPtr* value_expr = nullptr;
+            if (pat.kind == hir::HirSwitchPattern::SingleValue && pat.value) {
+                value_expr = &pat.value;
+            } else if (switch_stmt.cases[i].value) {
+                value_expr = &switch_stmt.cases[i].value;
+            }
+            if (value_expr) {
+                if (auto lit =
+                        std::get_if<std::unique_ptr<hir::HirLiteral>>(&(*value_expr)->kind)) {
+                    if (*lit && std::holds_alternative<std::string>((*lit)->value)) {
+                        case_str = std::get<std::string>((*lit)->value);
+                        have_str = true;
+                    }
+                }
+            }
+            if (!have_str) {
+                // 非リテラル/非文字列caseは一致しない扱い（型検査側の将来のエラー化対象）
+                continue;
+            }
+
+            LocalId cmp = ctx.new_temp(hir::make_bool());
+            MirConstant sc;
+            sc.type = hir::make_string();
+            sc.value = case_str;
+            ctx.push_statement(MirStatement::assign(
+                MirPlace{cmp},
+                MirRvalue::binary(MirBinaryOp::Eq, MirOperand::copy(MirPlace{discriminant}),
+                                  MirOperand::constant(sc), hir::make_bool())));
+            BlockId next_check = ctx.new_block();
+            ctx.set_terminator(MirTerminator::switch_int(MirOperand::copy(MirPlace{cmp}),
+                                                         {{1, case_block}}, next_check));
+            ctx.switch_to_block(next_check);
+        }
+        // どのcaseにも一致しなければdefaultへ
+        ctx.set_terminator(MirTerminator::goto_block(default_block));
+
+        // 各case本体をlowering
+        for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
+            if (!switch_stmt.cases[i].pattern) {
+                continue;
+            }
+            ctx.switch_to_block(case_blocks[i]);
+            for (const auto& stmt : switch_stmt.cases[i].stmts) {
+                lower_statement(*stmt, ctx);
+            }
+            if (!ctx.get_current_block()->terminator) {
+                ctx.set_terminator(MirTerminator::goto_block(exit_block));
+            }
+        }
+
+        // default本体（else句）をlowering
+        ctx.switch_to_block(default_block);
+        for (const auto& case_item : switch_stmt.cases) {
+            if (!case_item.pattern) {
+                for (const auto& stmt : case_item.stmts) {
+                    lower_statement(*stmt, ctx);
+                }
+                break;
+            }
+        }
+        if (!ctx.get_current_block()->terminator) {
+            ctx.set_terminator(MirTerminator::goto_block(exit_block));
+        }
+
+        ctx.switch_to_block(exit_block);
+        return;
+    }
+
     // ヘルパー: HirExprからcase値（int64_t）を抽出
     auto extract_case_value = [](const hir::HirExprPtr& expr) -> int64_t {
         if (!expr)
@@ -288,6 +440,8 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
 
     // 各caseのブロックを作成
     std::vector<std::pair<int64_t, BlockId>> cases;
+    // don't-careビットマスク（casesと同順。-1は完全一致。SVターゲットのmatch脱糖でのみ非-1になる。SV-N3）
+    std::vector<int64_t> case_masks;
     std::vector<BlockId> case_blocks;
     for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {
         // else/defaultケース（patternがnull）はスキップ
@@ -312,6 +466,12 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
                 case_value = extract_case_value(switch_stmt.cases[i].value);
             }
             cases.push_back({case_value, case_block});
+            case_masks.push_back(-1);
+
+        } else if (pat.kind == hir::HirSwitchPattern::Masked) {
+            // don't-careビットパターン: (discriminant & mask) == value で判定する（SV-N3）
+            cases.push_back({pat.masked_value, case_block});
+            case_masks.push_back(pat.masked_mask);
 
         } else if (pat.kind == hir::HirSwitchPattern::Or) {
             // Orパターン: 各サブパターンの値を同じブロックに分岐
@@ -320,12 +480,17 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
                     if (sub_pat->kind == hir::HirSwitchPattern::SingleValue) {
                         int64_t sub_value = extract_case_value(sub_pat->value);
                         cases.push_back({sub_value, case_block});
+                        case_masks.push_back(-1);
+                    } else if (sub_pat->kind == hir::HirSwitchPattern::Masked) {
+                        cases.push_back({sub_pat->masked_value, case_block});
+                        case_masks.push_back(sub_pat->masked_mask);
                     } else if (sub_pat->kind == hir::HirSwitchPattern::Range) {
                         int64_t range_start = extract_case_value(sub_pat->range_start);
                         int64_t range_end = extract_case_value(sub_pat->range_end);
                         if (range_end - range_start <= 256) {
                             for (int64_t v = range_start; v <= range_end; ++v) {
                                 cases.push_back({v, case_block});
+                                case_masks.push_back(-1);
                             }
                         }
                     }
@@ -340,6 +505,7 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
             if (range_end - range_start <= 256) {
                 for (int64_t v = range_start; v <= range_end; ++v) {
                     cases.push_back({v, case_block});
+                    case_masks.push_back(-1);
                 }
             }
         }
@@ -349,9 +515,24 @@ void StmtLowering::lower_switch(const hir::HirSwitch& switch_stmt, LoweringConte
     BlockId default_block = ctx.new_block();
     BlockId exit_block = ctx.new_block();
 
-    // switch終端命令
-    ctx.set_terminator(
-        MirTerminator::switch_int(MirOperand::copy(MirPlace{discriminant}), cases, default_block));
+    // switch終端命令（マスク付きcaseまたはSVのcase修飾がある場合のみ追加フィールドを設定する）
+    auto switch_term =
+        MirTerminator::switch_int(MirOperand::copy(MirPlace{discriminant}), cases, default_block);
+    {
+        bool has_mask = false;
+        for (int64_t m : case_masks) {
+            if (m != -1) {
+                has_mask = true;
+                break;
+            }
+        }
+        auto& sd = std::get<MirTerminator::SwitchIntData>(switch_term->data);
+        if (has_mask) {
+            sd.target_masks = case_masks;
+        }
+        sd.sv_case_modifier = switch_stmt.sv_case_modifier;
+    }
+    ctx.set_terminator(std::move(switch_term));
 
     // 各caseをlowering（else/default以外）
     for (size_t i = 0; i < switch_stmt.cases.size(); ++i) {

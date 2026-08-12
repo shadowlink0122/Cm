@@ -1,0 +1,6 @@
+// 回帰(エラーパターン): const変数への再代入は禁止
+int main() {
+    const int c = 1;
+    c = 2;
+    return 0;
+}

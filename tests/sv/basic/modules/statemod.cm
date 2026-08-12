@@ -1,0 +1,22 @@
+// モジュールimport回帰のフィクスチャ（伴走ファイルなし・//! platform: 指定なし）。
+// SVターゲットのimport先はSVレキサーで解析されるため、初期化子なしのモジュールスコープ宣言を受理できる
+module statemod;
+
+// 初期化子なし宣言の受理（値は使用前に代入するためx伝播しない）
+uint scratch;
+
+uint count = 0;
+export bool ready = false;
+
+export uint tick() {
+    count = (count + 1) as uint;
+    if (count >= 3) {
+        ready = true;
+    }
+    return count;
+}
+
+export uint calc(uint x) {
+    scratch = x * 2;
+    return scratch + 1;
+}

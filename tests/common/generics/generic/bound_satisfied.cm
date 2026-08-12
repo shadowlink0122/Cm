@@ -1,0 +1,21 @@
+// L8回帰保護: 境界を正しく宣言したジェネリック関数が従来どおり動作することを検証する
+import std::io::println;
+
+<T: Ord> T max_of(T a, T b) {
+    if (a < b) {
+        return b;
+    }
+    return a;
+}
+
+<T: Eq> bool same(T a, T b) {
+    return a == b;
+}
+
+int main() {
+    const int m = max_of(3, 9);
+    println(m);
+    const bool s = same(5, 5);
+    println(s);
+    return 0;
+}

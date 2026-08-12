@@ -40,23 +40,30 @@ println("Hello, {name}!");    // Hello, Cm!
 
 ## コンソール入力
 
-```cm
-import std::io::{input, input_int, input_double, input_bool};
+`std::io`ファサード経由で入力APIを選択importできます（再export解決に対応。プロンプトは`print`で別途表示します）:
 
-string name = input("名前: ");        // 文字列入力
-int age = input_int("年齢: ");        // 整数入力
-double height = input_double("身長: "); // 浮動小数点入力
-bool ok = input_bool("OK? ");          // 真偽値入力
+```cm
+import std::io::{print, input, input_int, input_double, input_bool};
+
+print("名前: ");
+string name = input();          // 文字列入力
+print("年齢: ");
+int age = input_int();          // 整数入力（不正入力は0）
+print("身長: ");
+double height = input_double(); // 浮動小数点入力
+print("OK? ");
+bool ok = input_bool();         // 真偽値入力
 ```
 
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
-| `input(prompt)` | `string` | 文字列入力 |
-| `input_int(prompt)` | `int` | 整数入力 |
-| `input_long(prompt)` | `long` | long入力 |
-| `input_double(prompt)` | `double` | 浮動小数点入力 |
-| `input_bool(prompt)` | `bool` | 真偽値入力 |
-| `input_string(prompt)` | `string` | 文字列入力 |
+| `input()` | `string` | 文字列入力 |
+| `input_int()` | `int` | 整数入力 |
+| `input_long()` | `long` | long入力 |
+| `input_double()` | `double` | 浮動小数点入力 |
+| `input_bool()` | `bool` | 真偽値入力 |
+| `input_string()` | `string` | 文字列入力 |
+| `parse_int(s)` / `parse_long(s)` / `parse_double(s)` / `parse_bool(s)` | `Option<T>` | 文字列のパース（失敗は`None`） |
 
 ---
 

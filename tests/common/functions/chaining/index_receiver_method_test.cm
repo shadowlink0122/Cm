@@ -1,0 +1,40 @@
+// H10第3段回帰: スライス要素の添字レシーバ（rows[0].push(x)等）と多重添字読み
+// 従来は内側ヘッダのコピーへの変異で黙って捨てられる、または固定長配列経路へ落ちて壊れていた。
+// cm_slice_get_subslice_refで格納中の内側ヘッダ参照を取得して変異を反映する
+import std::io::println;
+
+int main() {
+    int[][] rows = [];
+    int[] r0 = [1];
+    int[] r1 = [10, 20];
+    rows.push(r0);
+    rows.push(r1);
+
+    // 添字レシーバへのpush
+    rows[0].push(42);
+    println(rows[0].len());
+    println(rows[0][1]);
+
+    // 2番目の要素も独立に変異する
+    rows[1].push(30);
+    println(rows[1].len());
+    println(rows[1][2]);
+
+    // len/cap/pop/delete/clearの添字レシーバ
+    println(rows[0].pop());
+    println(rows[0].len());
+    rows[1].delete(0);
+    println(rows[1][0]);
+    rows[1].clear();
+    println(rows[1].len());
+
+    // リテラル初期化でも同様
+    int[][] lit = [[1], [2]];
+    lit[0].push(5);
+    println(lit[0].len());
+    println(lit[0][1]);
+
+    // 多重添字の直接読み（従来は壊れた値）
+    println(lit[1][0]);
+    return 0;
+}

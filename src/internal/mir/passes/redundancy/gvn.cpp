@@ -1,5 +1,7 @@
 #include "gvn.hpp"
 
+#include "../core/effects.hpp"
+
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -33,32 +35,27 @@ bool GVN::process_block(BasicBlock& block) {
         if (stmt->kind == MirStatement::Nop)
             continue;
 
+        // 文の効果（書き込み・クロバー・ASM出力）は効果モデルから取得する
+        const StmtEffects effects = effects_of(*stmt);
+
         // ASMステートメント: 出力オペランドの変数は変更されるため式を無効化
         if (stmt->kind == MirStatement::Asm) {
-            const auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-            for (const auto& operand : asm_data.operands) {
-                if (!operand.constraint.empty() &&
-                    (operand.constraint[0] == '+' || operand.constraint[0] == '=')) {
-                    invalidate_exprs_using(operand.local_id, available_exprs, var_to_exprs);
-                }
+            for (LocalId out : effects.asm_outputs) {
+                invalidate_exprs_using(out, available_exprs, var_to_exprs);
             }
             continue;
         }
 
         // 1. この文が変数を変更する場合、その変数に依存する式を無効化
         if (stmt->kind == MirStatement::Assign) {
-            auto& assign_data = std::get<MirStatement::AssignData>(stmt->data);
-
-            LocalId target_base = assign_data.place.local;
-            invalidate_exprs_using(target_base, available_exprs, var_to_exprs);
+            for (LocalId written : effects.writes) {
+                invalidate_exprs_using(written, available_exprs, var_to_exprs);
+            }
 
             // Deref代入の場合、全式を無効化（保守的）
-            for (const auto& proj : assign_data.place.projections) {
-                if (proj.kind == ProjectionKind::Deref) {
-                    available_exprs.clear();
-                    var_to_exprs.clear();
-                    break;
-                }
+            if (effects.deref_clobber) {
+                available_exprs.clear();
+                var_to_exprs.clear();
             }
         } else if (stmt->kind == MirStatement::StorageLive ||
                    stmt->kind == MirStatement::StorageDead) {
@@ -177,6 +174,18 @@ std::string GVN::stringify_rvalue(const MirRvalue& rvalue) {
         ss << ",";
         if (cast->target_type)
             ss << cm::hir::type_to_string(*cast->target_type);
+        // check_only（is検査。bool結果）と通常のas（抽出）は同一オペランド・同一宛先型でも別の値である。
+        // 従来はキーに含まれておらず、`r is int`のbool結果が後続の`r as int`へCSE再利用され、
+        // ペイロードが1（true）や5e-324（bit 1のdouble解釈）に化けるミスコンパイルの真因だった
+        if (cast->check_only)
+            ss << ",is";
+        // boxed upcastはmalloc副作用を持ち、CSE共有すると2つのfat pointerが同一ヒープを指して
+        // インターフェース経由の変更が相互に漏れるためCSE対象外（空キー）にする
+        if (!cast->iface_concrete.empty() && cast->iface_boxed)
+            return std::string();
+        // インターフェースupcastは通常Castと別値（fat pointer構築）
+        if (!cast->iface_concrete.empty())
+            ss << ",up:" << cast->iface_concrete << (cast->iface_from_pointer ? ",p" : "");
         ss << ")";
         return ss.str();
     }

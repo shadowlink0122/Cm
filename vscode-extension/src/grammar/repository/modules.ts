@@ -2,8 +2,17 @@
 // モジュール系: module / import / use 文
 // ============================================================
 
-import { TmRepositoryEntry } from '../tmTypes';
+import { TmRepositoryEntry, TmRule } from '../tmTypes';
 import { ESCAPE_RULE, FUNCTION_PROTOTYPE_MATCH, IDENT, MODULE_NAME_RULE } from '../terms';
+
+// import/export文中のキーワード（as/from）。
+// 通常コードのMODIFIER_KEYWORDSと同じ storage.type.primitive スコープにして、
+// モジュール名（entity.name.type.module=緑）と別色（プリミティブと同じ青）で着色する。
+// MODULE_NAME_RULE より前に置き、asやfromがモジュール名として緑に拾われるのを防ぐ。
+const IMPORT_KEYWORD_RULE: TmRule = {
+  name: 'storage.type.primitive.cm',
+  match: '\\b(as|from)\\b',
+};
 
 export const moduleStatement: TmRepositoryEntry = {
   patterns: [
@@ -49,6 +58,7 @@ export const importStatement: TmRepositoryEntry = {
             '0': { name: 'punctuation.definition.imports.end.cm' },
           },
           patterns: [
+            IMPORT_KEYWORD_RULE,
             {
               name: 'variable.other.readwrite.cm',
               match: IDENT,
@@ -59,6 +69,7 @@ export const importStatement: TmRepositoryEntry = {
             },
           ],
         },
+        IMPORT_KEYWORD_RULE,
         MODULE_NAME_RULE,
         {
           name: 'punctuation.accessor.cm',

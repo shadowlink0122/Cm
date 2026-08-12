@@ -101,14 +101,36 @@ process_async((int x) => {
 ### ソートのカスタム比較
 
 ```cm
-}
-
 Person[] people = [...];
 
 // 年齢でソート
 people.sort((Person a, Person b) => {
     return a.age - b.age;
 });
+```
+
+---
+
+## Closure captures are value copies (read-only)
+
+When a lambda refers to an outer variable, that variable is **captured by value (copied)**.
+Writing to the copy would never affect the original variable, so assignments, compound assignments, and increments/decrements targeting a captured variable are compile errors (writes to struct members or array elements of a captured variable are rejected as well).
+
+```cm
+int x = 1;
+const void*() f = () => {
+    x = 42;  // error: Cannot assign to captured variable 'x' inside a closure
+};
+```
+
+To mutate an outer variable, capture a pointer and write through it (the copied pointer still points at the original variable, so the write propagates).
+
+```cm
+int x = 1;
+int* px = &x;
+const void*() f = () => { *px = 42; };  // OK: writes through a pointer propagate
+f();
+println("{x}");  // 42
 ```
 
 ---

@@ -1,0 +1,23 @@
+//! platform: sv
+//! test: din=43981, i=4, cycles=2 -> hi_out=171, nib=12, dn=12, low_out=13
+//! test: din=4660, i=8, cycles=2 -> hi_out=18, nib=2, dn=3, low_out=4
+
+// native part-select（SV-N1）: 定数範囲読み[hi:lo]・可変基点[i +: w]・下降方向[7 -: w]・部分代入が
+// shift+maskでなくSVのnative part-select構文で出力され、シミュレーション値が従来と一致することを検証する
+
+#[input] posedge clk;
+#[input] bit[16] din;
+#[input] uint i;
+#[output] bit[8] hi_out = 0;
+#[output] bit[4] nib = 0;
+#[output] bit[4] dn = 0;
+#[output] bit[4] low_out = 0;
+#[output] bit[16] word = 0;
+
+async void split(posedge clk) {
+    hi_out = din[15:8];      // 定数範囲読み
+    nib = din[i +: 4];       // 可変基点の上昇方向
+    dn = din[7 -: 4];        // 下降方向（bits 7..4）
+    word[7:4] = din[3:0];    // 部分代入（native LHS part-select）
+    low_out = din[3:0];
+}

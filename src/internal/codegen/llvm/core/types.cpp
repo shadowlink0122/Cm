@@ -2,6 +2,7 @@
 /// @brief 型変換・定数変換処理
 
 #include "internal/syntax/ast/typedef.hpp"
+#include "internal/syntax/ast/typekey.hpp"
 #include "mir_to_llvm.hpp"
 
 #include <iostream>
@@ -167,185 +168,22 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 lookupName = normalized;
             }
 
-            // ジェネリック構造体の場合、型引数を考慮した名前を生成
-            // 例: Node<int> -> Node__int
-            // 既にマングリング済み(__含む)の場合はスキップ
-            // ただし、<>を含む場合はまだ変換が必要
-            bool needsMangling =
-                !type->type_args.empty() && (lookupName.find("__") == std::string::npos ||
-                                             lookupName.find('<') != std::string::npos ||
-                                             lookupName.find('>') != std::string::npos);
-            if (needsMangling) {
-                for (const auto& typeArg : type->type_args) {
-                    if (typeArg) {
-                        lookupName += "__";
-                        // 型名を正規化（Pointer<int>ならptr_int等）
-                        if (typeArg->kind == hir::TypeKind::Struct) {
-                            // ネストジェネリックの場合、再帰的にマングリング
-                            std::string nestedName = typeArg->name;
-                            // type_argsがある場合（例: Vector<int>）、再帰的に処理
-                            if (!typeArg->type_args.empty()) {
-                                for (const auto& nestedArg : typeArg->type_args) {
-                                    if (nestedArg) {
-                                        nestedName += "__";
-                                        switch (nestedArg->kind) {
-                                            case hir::TypeKind::Int:
-                                                nestedName += "int";
-                                                break;
-                                            case hir::TypeKind::UInt:
-                                                nestedName += "uint";
-                                                break;
-                                            case hir::TypeKind::Long:
-                                                nestedName += "long";
-                                                break;
-                                            case hir::TypeKind::ULong:
-                                                nestedName += "ulong";
-                                                break;
-                                            case hir::TypeKind::Float:
-                                                nestedName += "float";
-                                                break;
-                                            case hir::TypeKind::Double:
-                                                nestedName += "double";
-                                                break;
-                                            case hir::TypeKind::Bool:
-                                                nestedName += "bool";
-                                                break;
-                                            case hir::TypeKind::Char:
-                                                nestedName += "char";
-                                                break;
-                                            case hir::TypeKind::String:
-                                                nestedName += "string";
-                                                break;
-                                            case hir::TypeKind::Struct:
-                                                nestedName += nestedArg->name;
-                                                break;
-                                            default:
-                                                if (!nestedArg->name.empty()) {
-                                                    nestedName += nestedArg->name;
-                                                }
-                                                break;
-                                        }
-                                    }
-                                }
-                            }
-                            lookupName += nestedName;
-                        } else if (typeArg->kind == hir::TypeKind::Pointer) {
-                            // ポインタ型の場合：ptr_xxx 形式でマングリング
-                            lookupName += "ptr_";
-                            if (typeArg->element_type) {
-                                switch (typeArg->element_type->kind) {
-                                    case hir::TypeKind::Int:
-                                        lookupName += "int";
-                                        break;
-                                    case hir::TypeKind::Long:
-                                        lookupName += "long";
-                                        break;
-                                    case hir::TypeKind::Float:
-                                        lookupName += "float";
-                                        break;
-                                    case hir::TypeKind::Double:
-                                        lookupName += "double";
-                                        break;
-                                    case hir::TypeKind::Bool:
-                                        lookupName += "bool";
-                                        break;
-                                    case hir::TypeKind::Char:
-                                        lookupName += "char";
-                                        break;
-                                    case hir::TypeKind::Struct:
-                                        lookupName += typeArg->element_type->name;
-                                        break;
-                                    default:
-                                        lookupName += "void";
-                                        break;
-                                }
-                            } else {
-                                lookupName += "void";
-                            }
-                        } else {
-                            // プリミティブ型の場合
-                            switch (typeArg->kind) {
-                                case hir::TypeKind::Int:
-                                    lookupName += "int";
-                                    break;
-                                case hir::TypeKind::UInt:
-                                    lookupName += "uint";
-                                    break;
-                                case hir::TypeKind::Long:
-                                    lookupName += "long";
-                                    break;
-                                case hir::TypeKind::ULong:
-                                    lookupName += "ulong";
-                                    break;
-                                case hir::TypeKind::Float:
-                                    lookupName += "float";
-                                    break;
-                                case hir::TypeKind::Double:
-                                    lookupName += "double";
-                                    break;
-                                case hir::TypeKind::Bool:
-                                    lookupName += "bool";
-                                    break;
-                                case hir::TypeKind::Char:
-                                    lookupName += "char";
-                                    break;
-                                case hir::TypeKind::String:
-                                    lookupName += "string";
-                                    break;
-                                case hir::TypeKind::Pointer: {
-                                    // ポインタ型: ptr_xxx 形式で追加
-                                    lookupName += "ptr_";
-                                    if (typeArg->element_type) {
-                                        switch (typeArg->element_type->kind) {
-                                            case hir::TypeKind::Int:
-                                                lookupName += "int";
-                                                break;
-                                            case hir::TypeKind::UInt:
-                                                lookupName += "uint";
-                                                break;
-                                            case hir::TypeKind::Long:
-                                                lookupName += "long";
-                                                break;
-                                            case hir::TypeKind::ULong:
-                                                lookupName += "ulong";
-                                                break;
-                                            case hir::TypeKind::Float:
-                                                lookupName += "float";
-                                                break;
-                                            case hir::TypeKind::Double:
-                                                lookupName += "double";
-                                                break;
-                                            case hir::TypeKind::Bool:
-                                                lookupName += "bool";
-                                                break;
-                                            case hir::TypeKind::Char:
-                                                lookupName += "char";
-                                                break;
-                                            case hir::TypeKind::String:
-                                                lookupName += "string";
-                                                break;
-                                            case hir::TypeKind::Struct:
-                                                lookupName += typeArg->element_type->name;
-                                                break;
-                                            default:
-                                                lookupName += "void";
-                                                break;
-                                        }
-                                    } else {
-                                        lookupName += "void";
-                                    }
-                                    break;
-                                }
-                                default:
-                                    // その他の型は型名をそのまま使用
-                                    if (!typeArg->name.empty()) {
-                                        lookupName += typeArg->name;
-                                    }
-                                    break;
-                            }
-                        }
-                    }
+            // ジェネリック構造体の参照キーはモノモーフ化のキー産生と同じ正準関数で構築する（mono-flat-name-elimination②）。
+            // 従来はここで手組みのフラット連結（Node<int>→Node__int）を自作しており、$キーで登録された
+            // 特殊化structのlookupを外すとtypedef-unionの8バイトフォールバック形状へ落ちてレイアウトが壊れていた。
+            // enum特殊化はTagged Union経路（後段のenumDefs参照）のため対象外
+            bool needsMangling = !type->type_args.empty() &&
+                                 (lookupName.find("__") == std::string::npos ||
+                                  lookupName.find('<') != std::string::npos ||
+                                  lookupName.find('>') != std::string::npos) &&
+                                 lookupName.find('$') == std::string::npos;
+            if (needsMangling && enumDefs.count(lookupName) == 0) {
+                std::string base = lookupName;
+                auto lt = base.find('<');
+                if (lt != std::string::npos) {
+                    base = base.substr(0, lt);
                 }
+                lookupName = cm::ast::typekey::struct_key_from_tree(base, type->type_args);
             }
 
             auto it = structTypes.find(lookupName);
@@ -390,10 +228,8 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                 if (lt != std::string::npos) {
                     base = base.substr(0, lt);
                 }
-                auto us = base.find("__");
-                if (us != std::string::npos && us > 0) {
-                    base = base.substr(0, us);
-                }
+                // $エンコード名・フラット名の基底抽出は正準関数へ（mono-flat-name-elimination）
+                base = cm::ast::typekey::spec_base_name(base);
                 if (!base.empty() && base != lookupName && enumDefs.count(base) > 0) {
                     auto tagged = std::make_shared<hir::Type>(hir::TypeKind::Struct);
                     tagged->name = "__TaggedUnion_" + base;
@@ -416,8 +252,7 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                     uint32_t computedMax = 0;
                     for (const auto& member : enumIt->second->members) {
                         uint32_t memberSize = 0;
-                        // 一時的なLLVM
-                        // struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
+                        // 一時的なLLVM struct型を構築し、DataLayoutで正確なサイズ（パディング込み）を計算
                         std::vector<llvm::Type*> fieldLlvmTypes;
                         for (const auto& [fieldName, fieldType] : member.fields) {
                             if (!fieldType)
@@ -580,6 +415,17 @@ llvm::Type* MIRToLLVM::convertType(const hir::TypePtr& type) {
                                     static_cast<uint32_t>(dataLayout.getTypeAllocSize(llvmType));
                                 break;
                             }
+                            case hir::TypeKind::Array:
+                                // 動的スライスはポインタ表現（8バイト）、固定長配列は実サイズ
+                                if (!variantType->array_size.has_value()) {
+                                    variantSize = 8;
+                                } else {
+                                    auto* llvmType = convertType(variantType);
+                                    auto& dataLayout = module->getDataLayout();
+                                    variantSize = static_cast<uint32_t>(
+                                        dataLayout.getTypeAllocSize(llvmType));
+                                }
+                                break;
                             default:
                                 variantSize = 8;  // その他の型は8バイト仮定
                                 break;
@@ -666,6 +512,26 @@ llvm::Type* MIRToLLVM::getPointeeType(const hir::TypePtr& ptrType) {
 }
 
 // 定数変換
+
+llvm::Constant* MIRToLLVM::createHeaderedStringLiteral(const std::string& str) {
+    auto& llvm_ctx = ctx.getContext();
+    auto i32 = ctx.getI32Type();
+    auto bytes = llvm::ConstantDataArray::getString(llvm_ctx, str, true);
+    auto sty = llvm::StructType::get(llvm_ctx, {i32, i32, i32, i32, bytes->getType()},
+                                     /*isPacked=*/true);
+    auto init = llvm::ConstantStruct::get(
+        sty, {llvm::ConstantInt::get(i32, 0x434D5331u),
+              llvm::ConstantInt::get(i32, static_cast<uint32_t>(str.size())),
+              llvm::ConstantInt::get(i32, 0x53315243u), llvm::ConstantInt::get(i32, 0), bytes});
+    auto gv = new llvm::GlobalVariable(*module, sty, /*isConstant=*/true,
+                                       llvm::GlobalValue::PrivateLinkage, init, "strh");
+    gv->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    gv->setAlignment(llvm::Align(16));
+    auto i8 = ctx.getI8Type();
+    llvm::Constant* idx[] = {llvm::ConstantInt::get(ctx.getI64Type(), 16)};
+    return llvm::ConstantExpr::getInBoundsGetElementPtr(i8, gv, idx);
+}
+
 llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
     // std::variant を処理
     if (std::holds_alternative<bool>(constant.value)) {
@@ -721,9 +587,9 @@ llvm::Constant* MIRToLLVM::convertConstant(const mir::MirConstant& constant) {
         }
         return llvm::ConstantFP::get(ctx.getF64Type(), std::get<double>(constant.value));
     } else if (std::holds_alternative<std::string>(constant.value)) {
-        // 文字列リテラル
+        // 文字列リテラル（長さヘッダ付き。H9第4段）
         auto& str = std::get<std::string>(constant.value);
-        return builder->CreateGlobalStringPtr(str, "str");
+        return createHeaderedStringLiteral(str);
     } else {
         // nullまたは未知の型
         if (constant.type) {

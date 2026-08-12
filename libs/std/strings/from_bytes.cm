@@ -1,0 +1,13 @@
+// std::strings::from_bytes - バイト列から文字列を構築する（H9第4段）
+// 長さヘッダ付き文字列として構築されるため、埋め込みNUL（0x00）を含むバイト列も
+// byte_len()・substring()・連結で正しく保持される
+module std.strings.from_bytes;
+
+use libc {
+    string cm_string_from_byte_slice(utiny[] data);
+}
+
+/// バイト列をUTF-8文字列として構築する（埋め込みNULを保持）
+export string from_bytes(utiny[] data) {
+    return cm_string_from_byte_slice(data);
+}

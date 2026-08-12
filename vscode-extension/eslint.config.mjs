@@ -28,6 +28,6 @@ export default tseslint.config(
     },
     {
         // lint対象外
-        ignores: ['out/**', 'node_modules/**', '*.json', '*.yaml', '*.yml'],
+        ignores: ['out/**', 'dist/**', 'node_modules/**', '*.json', '*.yaml', '*.yml'],
     },
 );

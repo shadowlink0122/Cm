@@ -1,0 +1,55 @@
+//! platform: !wasm|js|sv
+// 回帰(R9): Vector/HashMap/Queueの確保がstd::mem経由になり、set_allocator_fnsで登録したカスタムアロケータを通ること
+// （従来は生malloc直呼びで差し替えを素通しし、カスタム確保カウンタのデルタが0だった）
+import std::io::println;
+import std::collections::{Vector, HashMap, Queue};
+import std::mem::{set_allocator_fns, reset_allocator};
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+    void* realloc(void* ptr, int size);
+}
+
+int g_allocs = 0;
+
+void* counting_alloc(long size) {
+    g_allocs = g_allocs + 1;
+    return malloc(size as int);
+}
+
+void counting_dealloc(void* p) {
+    free(p);
+}
+
+void* counting_realloc(void* p, long size) {
+    g_allocs = g_allocs + 1;
+    return realloc(p, size as int);
+}
+
+int main() {
+    set_allocator_fns(
+        &counting_alloc as void*,
+        &counting_dealloc as void*,
+        &counting_realloc as void*
+    );
+
+    Vector<int> v();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    const int after_vector = g_allocs;
+
+    HashMap<int, int> m();
+    m.insert(1, 10);
+    const int after_hashmap = g_allocs;
+
+    Queue<int> q();
+    q.enqueue(5);
+    const int after_queue = g_allocs;
+
+    reset_allocator();
+    println("vector={after_vector > 0} hashmap={after_hashmap > after_vector} queue={after_queue > after_hashmap}");
+    println("vlen={v.len()} mget={m.get_or(1, -1)} qfront={q.len()}");
+    return 0;
+}

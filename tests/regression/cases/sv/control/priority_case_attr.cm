@@ -1,0 +1,13 @@
+// #[sv::priority] 属性（SV-N3）: switch文の case修飾を unique から priority へ切り替える
+#[input] bool clk = false;
+#[input] bit[2] sel;
+#[output] uint r = 0;
+
+void pick(posedge clk) {
+    #[sv::priority]
+    switch (sel) {
+        case(0) { r = 10; }
+        case(1) { r = 11; }
+        else { r = 0; }
+    }
+}

@@ -1,0 +1,9 @@
+true
+len = 5
+roundtrip = true
+err = no such file: cm_bytes_test_missing.bin
+entry[0] = a.txt
+entry[1] = b.txt
+entry[2] = c.txt
+true
+0

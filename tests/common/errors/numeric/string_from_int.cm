@@ -1,0 +1,5 @@
+// 回帰(エラーパターン): string変数への整数初期化は型不一致
+int main() {
+    string s = 5;
+    return 0;
+}

@@ -1,0 +1,6 @@
+// 回帰(第4段b): 補間プレースホルダの未定義変数参照が実推論で診断されることの検証
+import std::io::println;
+int main() {
+    println("value: {undefined_xyz}");
+    return 0;
+}

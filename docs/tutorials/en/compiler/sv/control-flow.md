@@ -160,9 +160,44 @@ match (op) {
 }
 ```
 
-- Desugared to `(op & mask) == value` if-else chains, identical on all backends
+- On non-SV backends this desugars to `(op & mask) == value` if-else chains, identical on all backends
 - `?` literals are match-pattern only (not usable in expressions)
 - Plain match/switch now emits `unique case` in SV, enabling duplicate-hit detection in simulation
+
+## Native casez output and case modifiers (v0.17.0)
+
+On the SV target, a match over don't-care bit patterns emits a **native `casez`** instead of mask-compare if-else chains. Patterns are rendered as binary literals at the scrutinee's type width (`?` = wildcard bit), so an explicit-width type like `bit[4]` produces the most readable output:
+
+```systemverilog
+// SV generated from the match above (#[input] bit[4] op)
+unique casez (op)
+    4'b1?00: begin kind <= 32'sd1; end
+    4'b0?1?: begin kind <= 32'sd2; end
+    default: begin kind <= 32'sd0; end
+endcase
+```
+
+- When the patterns are **pairwise disjoint** (can never match simultaneously), `unique casez` is emitted, enabling duplicate-hit detection in simulation
+- When the patterns **overlap**, `priority casez` is chosen automatically, asserting match's first-match-wins semantics (earlier arms take precedence)
+- A match containing guards, variable bindings, or enum patterns still desugars to if-else chains as before (semantics are identical)
+
+### Explicit case modifiers (#[sv::priority] / #[sv::unique0])
+
+Placing an attribute immediately before a switch/match statement selects the emitted case modifier explicitly:
+
+```cm
+#[sv::priority]
+switch (sel) {
+    case(0) { r = 10; }
+    case(1) { r = 11; }
+    else { r = 0; }
+}
+// → priority case (sel) ... endcase
+```
+
+- `#[sv::priority]`: emits `priority case`, asserting order-dependent priority (earlier cases win)
+- `#[sv::unique0]`: emits `unique0 case`, permitting the no-case-matches situation
+- The attribute overrides the automatic selection. On non-SV targets it is ignored and execution semantics are unchanged
 
 
 ---

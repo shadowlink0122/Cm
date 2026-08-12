@@ -2,8 +2,8 @@
 // TypeChecker 実装 - 式型推論のディスパッチとリテラル・構造体リテラル・識別子の推論、move状態の追跡
 // ============================================================
 
+#include "internal/base/format/text.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/text_utils.hpp"
 #include "internal/types/type_checker.hpp"
 
 #include <functional>
@@ -55,6 +55,8 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
         // sizeof(型)の場合、型が有効かチェック
         // 無効な場合は変数として解釈を試みる
         if (sizeof_expr->target_type) {
+            // sizeof(typeof(x)): typeof 型を被演算式の具体型へ解決してからサイズを求める（局所処理調査B系）
+            sizeof_expr->target_type = resolve_typeof(sizeof_expr->target_type);
             auto& target_type = sizeof_expr->target_type;
             // 構造体型として解析されたが、実際には変数かもしれない
             if (target_type->kind == ast::TypeKind::Struct) {
@@ -77,6 +79,41 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                         sizeof_expr->target_type = nullptr;
                     }
                 }
+            } else if (target_type->kind == ast::TypeKind::Array) {
+                // A2: Ident[N] が「型の配列」ではなく「変数の添字」の場合の救済。
+                // sizeof(a[0]) は配列型 Array(Struct("a"),0) と解析されるが a が変数（配列/スライス）なら
+                // a[0] は要素であり要素型のサイズを返すべき（従来は要素数0の配列サイズ計算で無診断の0を返していた）。
+                // 最内の被要素名を辿り、その名が型でなく変数を指すなら添字段数だけ要素型を剥がす
+                int idx_depth = 0;
+                ast::Type* inner = target_type.get();
+                while (inner && inner->kind == ast::TypeKind::Array) {
+                    ++idx_depth;
+                    inner = inner->element_type.get();
+                }
+                if (inner && inner->kind == ast::TypeKind::Struct) {
+                    const std::string base = inner->name;
+                    const bool is_valid_type =
+                        typedef_defs_.count(base) > 0 || struct_defs_.count(base) > 0;
+                    if (!is_valid_type) {
+                        auto sym = scopes_.current().lookup(base);
+                        if (sym && sym->type) {
+                            ast::TypePtr elem = sym->type;
+                            bool ok = true;
+                            for (int d = 0; d < idx_depth && ok; ++d) {
+                                auto r = resolve_typedef(elem);
+                                if (r && r->kind == ast::TypeKind::Array && r->element_type) {
+                                    elem = r->element_type;
+                                } else {
+                                    ok = false;
+                                }
+                            }
+                            if (ok && elem && elem->kind != ast::TypeKind::Error) {
+                                mark_variable_initialized(base);
+                                sizeof_expr->target_type = elem;
+                            }
+                        }
+                    }
+                }
             }
         }
         // sizeof(式) の場合は式の型チェックを行う（コンパイル時のメタ情報取得であり値は読まないため、未初期化チェックの対象外）
@@ -87,6 +124,23 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             infer_type(*sizeof_expr->target_expr);
         }
         // sizeof は常に uint (符号なし整数) を返す
+        inferred_type = ast::make_uint();
+    } else if (auto* alignof_expr = expr.as<ast::AlignofExpr>()) {
+        // __alignof__(x) の変数救済（局所処理調査A6）: sizeofと同様、型として解析された名前が型でなければ変数として解決し、その静的型へ置き換える（アラインは型のみで決まるため式の保持は不要）。従来は未解決名の既定アライン8を無診断で返していた
+        if (alignof_expr->target_type && alignof_expr->target_type->kind == ast::TypeKind::Struct) {
+            const std::string name = alignof_expr->target_type->name;
+            const bool is_valid_type =
+                typedef_defs_.count(name) > 0 || struct_defs_.count(name) > 0;
+            if (!is_valid_type) {
+                // enum名・ジェネリックパラメータ名等の非変数はsizeofと同様そのまま残す（HIRが型として評価する）
+                auto sym = scopes_.current().lookup(name);
+                if (sym && sym->type && sym->type->kind != ast::TypeKind::Error) {
+                    mark_variable_initialized(name);
+                    alignof_expr->target_type = sym->type;
+                }
+            }
+        }
+        // alignof は常に uint を返す
         inferred_type = ast::make_uint();
     } else if (auto* typeof_expr = expr.as<ast::TypeofExpr>()) {
         // typeof(式) - 式の型を推論（メタ情報取得のため未初期化チェックの対象外）
@@ -125,10 +179,18 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
                                  (operand_type ? ast::type_to_string(*operand_type)
                                                : i18n::msg(i18n::MsgId::TypeLabelUnknown))));
             } else if (cast_expr->target_type) {
+                // typedef別名（IntSlice = int[] 等）の対象型・変種は実体解決してから照合する（従来は未解決名の文字列比較で誤拒否）
+                auto tgt_resolved = resolve_typedef(cast_expr->target_type);
+                const std::string target_key =
+                    ast::type_to_string(*(tgt_resolved ? tgt_resolved : cast_expr->target_type));
                 std::string target_name = ast::type_to_string(*cast_expr->target_type);
                 bool found = false;
                 for (const auto& v : variants) {
-                    if (v && ast::type_to_string(*v) == target_name) {
+                    if (!v) {
+                        continue;
+                    }
+                    auto vr = resolve_typedef(v);
+                    if (ast::type_to_string(*(vr ? vr : v)) == target_key) {
                         found = true;
                         break;
                     }
@@ -139,8 +201,136 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             }
             inferred_type = ast::make_bool();
         } else {
+            // as typeof(x): 対象型が typeof スタブなら被演算式の具体型へ解決する（局所処理調査B系。原型ノードを差し替えて後段のloweringも具体型を見る）
+            if (cast_expr->target_type) {
+                cast_expr->target_type = resolve_typeof(cast_expr->target_type);
+            }
             // ターゲット型を返す
             inferred_type = cast_expr->target_type;
+            // 配列型へのasキャストは未対応として診断する（局所処理調査A3の追補）。
+            // as int[N]が型として正しくパースされるようになった一方、キャスト実体（スカラ→配列・固定長→スライスのas形）はloweringに存在せず無診断のゴミ値になるため、暗黙変換（代入・呼び出しの固定長→スライス）へ誘導する。ユニオンからの変種取り出し（IS v; v as int[]等）は下のZ4検査が扱う
+            {
+                auto tgt_resolved0 = resolve_typedef(cast_expr->target_type);
+                auto op_resolved0 = resolve_typedef(operand_type);
+                if (tgt_resolved0 && tgt_resolved0->kind == ast::TypeKind::Array && op_resolved0 &&
+                    op_resolved0->kind != ast::TypeKind::Union &&
+                    op_resolved0->kind != ast::TypeKind::Error &&
+                    ast::type_to_string(*tgt_resolved0) != ast::type_to_string(*op_resolved0)) {
+                    error(expr.span, i18n::msgf(i18n::MsgId::TcCastToArrayUnsupported,
+                                                ast::type_to_string(*tgt_resolved0),
+                                                ast::type_to_string(*op_resolved0)));
+                }
+            }
+            // ユニオン値のasダウンキャストは変種のいずれかであること（Z4穴2）。
+            // isには同検査があるがasに無く、非変種型への`v as double`がペイロードのビット再解釈ゴミ値になっていた
+            {
+                auto op_resolved = resolve_typedef(operand_type);
+                if (op_resolved && op_resolved->kind == ast::TypeKind::Union &&
+                    cast_expr->target_type) {
+                    auto tgt_resolved = resolve_typedef(cast_expr->target_type);
+                    // 同一ユニオンへの恒等キャスト（typedef別名経由を含む）は許可する
+                    const bool same_union =
+                        tgt_resolved && tgt_resolved->kind == ast::TypeKind::Union &&
+                        ast::type_to_string(*tgt_resolved) == ast::type_to_string(*op_resolved);
+                    if (!same_union) {
+                        std::string target_name = ast::type_to_string(*cast_expr->target_type);
+                        // typedef別名の対象型・変種は実体解決してから照合する（従来は未解決名の文字列比較で誤拒否）
+                        const std::string target_key = ast::type_to_string(
+                            *(tgt_resolved ? tgt_resolved : cast_expr->target_type));
+                        bool found = false;
+                        for (const auto& v : ast::union_variant_types(op_resolved)) {
+                            if (!v) {
+                                continue;
+                            }
+                            auto vr = resolve_typedef(v);
+                            if (ast::type_to_string(*(vr ? vr : v)) == target_key) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            error(expr.span,
+                                  i18n::msgf(i18n::MsgId::TypeTheTargetTypeIsNot, target_name));
+                            inferred_type = ast::make_error();
+                        }
+                    }
+                }
+            }
+            // 不正な as キャストを拒否する（C10）。
+            // 数値スカラ → string はビット再解釈になりクラッシュ・空文字化の原因のため型検査で弾く。
+            // ユニオン downcast（union as variant）やポインタ/cstring → string は正当なので対象外。
+            auto rop = resolve_typedef(operand_type);
+            auto rtgt = resolve_typedef(cast_expr->target_type);
+            if (rop && rtgt &&
+                (rtgt->kind == ast::TypeKind::String || rtgt->kind == ast::TypeKind::CString)) {
+                bool operand_is_numeric = false;
+                switch (rop->kind) {
+                    case ast::TypeKind::Bool:
+                    case ast::TypeKind::Tiny:
+                    case ast::TypeKind::Short:
+                    case ast::TypeKind::Int:
+                    case ast::TypeKind::Long:
+                    case ast::TypeKind::UTiny:
+                    case ast::TypeKind::UShort:
+                    case ast::TypeKind::UInt:
+                    case ast::TypeKind::ULong:
+                    case ast::TypeKind::ISize:
+                    case ast::TypeKind::USize:
+                    case ast::TypeKind::Float:
+                    case ast::TypeKind::Double:
+                    case ast::TypeKind::UFloat:
+                    case ast::TypeKind::UDouble:
+                    case ast::TypeKind::Char:
+                        operand_is_numeric = true;
+                        break;
+                    default:
+                        break;
+                }
+                if (operand_is_numeric) {
+                    error(expr.span, i18n::msgf(i18n::MsgId::TypeCannotCastNumericToString,
+                                                ast::type_to_string(*rop)));
+                }
+            }
+            // 整数リテラルの縮小キャストで値が収まらない場合は警告する（M4）。
+            // 例: 300 as tiny は 44 に切り捨てられるが以前は無警告だった。
+            if (rtgt && cast_expr->operand) {
+                if (auto* lit = cast_expr->operand->as<ast::LiteralExpr>()) {
+                    if (std::holds_alternative<int64_t>(lit->value)) {
+                        int64_t v = std::get<int64_t>(lit->value);
+                        bool has_range = true;
+                        bool fits = true;
+                        switch (rtgt->kind) {
+                            case ast::TypeKind::Tiny:
+                                fits = (v >= -128 && v <= 127);
+                                break;
+                            case ast::TypeKind::UTiny:
+                            case ast::TypeKind::Char:
+                                fits = (v >= 0 && v <= 255);
+                                break;
+                            case ast::TypeKind::Short:
+                                fits = (v >= -32768 && v <= 32767);
+                                break;
+                            case ast::TypeKind::UShort:
+                                fits = (v >= 0 && v <= 65535);
+                                break;
+                            case ast::TypeKind::Int:
+                                fits = (v >= -2147483648LL && v <= 2147483647LL);
+                                break;
+                            case ast::TypeKind::UInt:
+                                fits = (v >= 0 && v <= 4294967295LL);
+                                break;
+                            default:
+                                has_range = false;
+                                break;
+                        }
+                        if (has_range && !fits) {
+                            warning(expr.span,
+                                    i18n::msgf(i18n::MsgId::TypeIntegerLiteralNarrowingTruncates,
+                                               std::to_string(v), ast::type_to_string(*rtgt)));
+                        }
+                    }
+                }
+            }
         }
     } else if (auto* move_expr = expr.as<ast::MoveExpr>()) {
         // move式: オペランドの型を推論し、変数をmoved状態にマーク
@@ -150,13 +340,41 @@ ast::TypePtr TypeChecker::infer_type(ast::Expr& expr) {
             if (auto* ident = move_expr->operand->as<ast::IdentExpr>()) {
                 // 借用中の変数はmove禁止（借用安全性）
                 if (scopes_.current().is_borrowed(ident->name)) {
-                    error(current_span_, "Cannot move '" + ident->name + "' while it is borrowed");
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TcCannotMoveWhileItBorrowed, ident->name));
                     return ast::make_error();
                 }
                 mark_variable_moved(ident->name);
                 debug::tc::log(debug::tc::Id::CheckExpr,
                                "Marked variable '" + ident->name + "' as moved",
                                debug::Level::Debug);
+            }
+            // フィールド経由のmove（move obj.field）は基底変数を移動済み扱いにする
+            // （H12: 従来はASTパターン不一致でマークされず、move後使用がすり抜けていた）
+            else if (auto* member = move_expr->operand->as<ast::MemberExpr>()) {
+                const ast::Expr* base = member->object.get();
+                while (base) {
+                    if (const auto* inner = base->as<ast::MemberExpr>()) {
+                        base = inner->object.get();
+                    } else {
+                        break;
+                    }
+                }
+                if (base) {
+                    if (const auto* base_ident = base->as<ast::IdentExpr>()) {
+                        if (scopes_.current().is_borrowed(base_ident->name)) {
+                            error(current_span_,
+                                  i18n::msgf(i18n::MsgId::TcCannotMoveWhileItBorrowed,
+                                             base_ident->name));
+                            return ast::make_error();
+                        }
+                        mark_variable_moved(base_ident->name);
+                        debug::tc::log(
+                            debug::tc::Id::CheckExpr,
+                            "Marked variable '" + base_ident->name + "' as moved (field move)",
+                            debug::Level::Debug);
+                    }
+                }
             }
         } else {
             inferred_type = ast::make_error();
@@ -231,8 +449,23 @@ ast::TypePtr TypeChecker::infer_literal(ast::LiteralExpr& lit) {
     if (lit.is_char())
         return ast::make_char();
     if (lit.is_string()) {
-        // 文字列リテラルはどこでも補間される（string s = "{x}" 等）ため、プレースホルダ内の変数参照を使用としてマークする（W001誤検出防止）
-        mark_interpolation_uses(std::get<std::string>(lit.value));
+        // 補間プレースホルダを一度だけ実ASTへ脱糖し、現在のスコープで通常の式として推論する（第4段b）。
+        // スコープ・move・未定義変数・型の検査が本物の検査器で行われ、HIR/MIRは脱糖済み式を消費する。
+        // 脱糖はscrutinee退避プリパス（match_hoist）が先に行う場合があるため、推論は別フラグで必ず実行する
+        desugar_interpolation_parts(lit);
+        if (!lit.interp_inferred) {
+            lit.interp_inferred = true;
+            Span lit_span = current_span_;
+            for (auto& [content, pexpr] : lit.interp_parts) {
+                if (pexpr) {
+                    auto ptype = infer_type(*pexpr);
+                    // 集約型（配列/スライス・構造体・ユニオン）のプレースホルダは診断で停止する（局所処理調査G3）。
+                    // 従来はバックエンドごとに即興整形され、interp/nativeが空・ゴミバイト、JSが1,2,3/[object Object]と分裂していた
+                    check_print_aggregate(ptype, pexpr->span.start != 0 ? pexpr->span : lit_span);
+                }
+            }
+            current_span_ = lit_span;
+        }
         return ast::make_string();
     }
     return ast::make_error();
@@ -252,6 +485,105 @@ ast::TypePtr TypeChecker::infer_array_literal(ast::ArrayLiteralExpr& lit) {
     return ast::make_array(first_type, lit.elements.size());
 }
 
+// 期待型つき式推論の正式API（type-resolution-simplification 領域3）。
+// 無名リテラルへの期待型伝播を消費サイトごとの個別パッチ（W1/X3/X4の3連発の原因）にせず、消費サイトはこのAPIへ期待型を渡すだけにする
+ast::TypePtr TypeChecker::infer_type_expecting(ast::Expr& expr, const ast::TypePtr& expected) {
+    if (expected) {
+        propagate_literal_expected_type(expr, expected);
+    }
+    return infer_type(expr);
+}
+
+// リテラル式へ期待型を再帰的に伝播する（W1/X3/X4）。
+// 「構造体リテラル > 配列リテラル > 無名構造体リテラル」等のネストで要素側の期待型が
+// 伝わらず、型不明のままゼロ/未初期化blobとしてlowerされてフィールド喪失・ゴミ値になっていた
+void TypeChecker::propagate_literal_expected_type(ast::Expr& expr, const ast::TypePtr& expected) {
+    if (!expected) {
+        return;
+    }
+    auto resolved = resolve_typedef(expected);
+    if (!resolved) {
+        return;
+    }
+    if (auto* slit = expr.as<ast::StructLiteralExpr>()) {
+        if (resolved->kind != ast::TypeKind::Struct) {
+            return;
+        }
+        // Q2: 構造体表にない名前（フィールド宣言型のジェネリックパラメータ名A等）は、外側リテラルからの伝播で設定済みのより具体的な注釈（Box<string>等）を上書きしない
+        const ast::StructDecl* sd = get_struct(resolved->name);
+        if (!sd) {
+            if (!expr.type) {
+                expr.type = resolved;
+            }
+            return;
+        }
+        if (slit->type_name.empty()) {
+            slit->type_name = resolved->name;
+        }
+        expr.type = resolved;
+        // フィールド値へ再帰伝播（フィールド型は構造体定義から引く）
+        {
+            for (auto& fv : slit->fields) {
+                for (const auto& sf : sd->fields) {
+                    if (sf.name == fv.name && fv.value) {
+                        // Q2: 期待型が特殊化型（type_args付き）のときはフィールド型中のジェネリックパラメータを実引数へ置換してから伝播する。Pair<Box<int>, Box<string>>の内側リテラルがBox<string>と型付けされ、モノモーフ化の特殊化・型書き換え対象になる（従来は裸のBoxのままレイアウトが壊れ、stringフィールド読みが無言死していた）
+                        ast::TypePtr field_expected = sf.type;
+                        if (!sd->generic_params.empty() &&
+                            resolved->type_args.size() == sd->generic_params.size()) {
+                            field_expected = substitute_generic_type(sf.type, sd->generic_params,
+                                                                     resolved->type_args);
+                        }
+                        debug::tc::log(debug::tc::Id::TypeInfer,
+                                       "propagate field " + fv.name + " expected " +
+                                           (field_expected ? ast::type_to_string(*field_expected)
+                                                           : std::string("null")),
+                                       debug::Level::Debug);
+                        propagate_literal_expected_type(*fv.value, field_expected);
+                        break;
+                    }
+                }
+            }
+        }
+        return;
+    }
+    if (auto* alit = expr.as<ast::ArrayLiteralExpr>()) {
+        if (resolved->kind != ast::TypeKind::Array) {
+            return;
+        }
+        expr.type = resolved;
+        if (resolved->element_type) {
+            for (auto& el : alit->elements) {
+                if (el) {
+                    propagate_literal_expected_type(*el, resolved->element_type);
+                }
+            }
+        }
+        return;
+    }
+    // 期待型に対して透過な合成ノードへ降りる（局所処理調査C系）。
+    // 三項の両枝とmatchの式形式アームは、その結果値がそのまま期待型の位置へ流れるため、無名リテラルの型名解決に期待型を引き継ぐ（従来はここで伝播が途切れ、無名リテラルが型不明のままゼロblob化していた）。
+    // 配列期待型は伝播しない: 枝の配列リテラルへ動的スライス型を強制すると三項loweringの固定長前提と食い違い無診断で壊れるため、従来どおり枝ごとの固定長型で検査する
+    if (resolved->kind == ast::TypeKind::Struct) {
+        if (auto* tern = expr.as<ast::TernaryExpr>()) {
+            if (tern->then_expr) {
+                propagate_literal_expected_type(*tern->then_expr, expected);
+            }
+            if (tern->else_expr) {
+                propagate_literal_expected_type(*tern->else_expr, expected);
+            }
+            return;
+        }
+        if (auto* match = expr.as<ast::MatchExpr>()) {
+            for (auto& arm : match->arms) {
+                if (!arm.is_block_form && arm.expr_body) {
+                    propagate_literal_expected_type(*arm.expr_body, expected);
+                }
+            }
+            return;
+        }
+    }
+}
+
 ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
     if (lit.type_name.empty()) {
         return ast::make_error();
@@ -265,13 +597,92 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
             struct_it = struct_defs_.find(lit.type_name);
         }
     }
+    // typedef別名（typedef P = Point; / typedef IntPair = Pair<int,int>;）は再帰的に基底名へ解決してから構造体表を引く（B8）
+    ast::TypePtr alias_target;
     if (struct_it == struct_defs_.end()) {
-        error(current_span_, "Unknown struct type: " + lit.type_name);
+        std::set<std::string> visited;
+        std::string base_name = lit.type_name;
+        while (struct_defs_.find(base_name) == struct_defs_.end() &&
+               visited.insert(base_name).second) {
+            auto td_it = typedef_defs_.find(base_name);
+            if (td_it == typedef_defs_.end() || !td_it->second)
+                break;
+            const auto& target = td_it->second;
+            // 別名の基底が名前付き構造体型でなければ構造体リテラルの対象外
+            if (target->kind != ast::TypeKind::Struct || target->name.empty())
+                break;
+            alias_target = target;
+            base_name = target->name;
+        }
+        auto base_it = struct_defs_.find(base_name);
+        if (base_it != struct_defs_.end()) {
+            // 基底名へ書き換えてHIR/コード生成へ伝播する（名前空間解決と同じ方式）
+            debug::tc::log(debug::tc::Id::TypeInfer,
+                           "Resolved struct literal alias: " + lit.type_name + " -> " + base_name,
+                           debug::Level::Debug);
+            lit.type_name = base_name;
+            struct_it = base_it;
+        } else {
+            debug::tc::log(
+                debug::tc::Id::TypeInfer,
+                "Struct literal alias unresolved: " + lit.type_name + " (base " + base_name + ")",
+                debug::Level::Debug);
+        }
+    }
+    // 明示型引数付きジェネリック構造体リテラル（Box<int>{...}）: 基底名で構造体を引く（局所処理調査「その他」）。
+    // 実際の型引数はフィールド値からの推論で決まる（Box{...} と同じ経路。従来は Box<int> が構造体表に無く「Unknown struct type」だった）
+    if (struct_it == struct_defs_.end()) {
+        auto angle = lit.type_name.find('<');
+        if (angle != std::string::npos) {
+            std::string base = lit.type_name.substr(0, angle);
+            auto base_it = struct_defs_.find(base);
+            if (base_it != struct_defs_.end()) {
+                lit.type_name =
+                    base;  // 基底名へ書き換えてHIR/コード生成へ伝播する（推論経路と一致させる）
+                struct_it = base_it;
+            }
+        }
+    }
+    if (struct_it == struct_defs_.end()) {
+        error(current_span_, i18n::msgf(i18n::MsgId::TcUnknownStructType2, lit.type_name));
         return ast::make_error();
     }
 
     for (auto& field : lit.fields) {
-        infer_type(*field.value);
+        // フィールド型を期待型として値へ渡す（W1。無名リテラルの型決定はinfer_type_expectingへ一元化）
+        {
+            ast::TypePtr field_expected = nullptr;
+            const ast::StructDecl* sd0 = struct_it->second;
+            for (const auto& sf : sd0->fields) {
+                if (sf.name == field.name && field.value) {
+                    field_expected = sf.type;
+                    break;
+                }
+            }
+            auto field_value_type = infer_type_expecting(*field.value, field_expected);
+            // フィールド初期化の縮小・符号変化もlet/代入/returnと同じ規則で診断する（局所処理調査F系: 従来はこの文脈だけ無診断で値が切り詰まっていた）
+            if (field_expected && field_value_type) {
+                check_numeric_conversion_policy(field_expected, field_value_type, field.value.get(),
+                                                field.value->span);
+            }
+        }
+        // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）
+        if (field.value && is_capturing_closure_expr(*field.value)) {
+            const ast::StructDecl* sd = struct_it->second;
+            for (const auto& sf : sd->fields) {
+                if (sf.name == field.name && sf.type && sf.type->kind == ast::TypeKind::Function) {
+                    error(current_span_,
+                          i18n::msgf(i18n::MsgId::TcCannotStoreCapturingClosureStruct, field.name,
+                                     lit.type_name));
+                    break;
+                }
+            }
+        }
+    }
+
+    // ジェネリック特殊化別名（typedef IntPair = Pair<int,int>;）は型引数付きの基底型をそのまま返す
+    if (alias_target && !alias_target->type_args.empty()) {
+        return alias_target;
     }
 
     auto type = std::make_shared<ast::Type>(ast::TypeKind::Struct);
@@ -321,7 +732,7 @@ ast::TypePtr TypeChecker::infer_ident(ast::IdentExpr& ident) {
     auto sym = lookup_var_ident(ident);
     if (!sym) {
         // 暗黙的selfは許可しない - 明示的にself.fieldを使用する必要がある
-        error(current_span_, "Undefined variable '" + ident.name + "'");
+        error(current_span_, i18n::msgf(i18n::MsgId::TcUndefinedVariable, ident.name));
         return ast::make_error();
     }
 
@@ -352,7 +763,7 @@ void TypeChecker::check_use_after_move(const std::string& name, Span span) {
     // Symbolのis_movedフラグをチェック
     auto sym = scopes_.current().lookup(name);
     if (sym && sym->is_moved) {
-        error(span, "Variable '" + name + "' used after move");
+        error(span, i18n::msgf(i18n::MsgId::TypeUseAfterMove, name));
     }
 }
 

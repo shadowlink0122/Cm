@@ -1,0 +1,10 @@
+// web::html を取り込むファサードモジュール。
+// これを選択的インポートしたとき、透過的に取り込んだ web::html の関数・impl・structが
+// 抽出漏れせず利用できることを検証する（filter_exportsの透過インポート素通し修正）。
+module widget;
+
+import web::html::*;
+
+export string card(string label) {
+    return div().class("card").add(h1().add(text(label))).render();
+}

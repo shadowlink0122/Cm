@@ -8,22 +8,22 @@ expand_suite() {
     local suite="$1"
     case "$suite" in
         core)
-            echo "basic types control_flow functions function_ptr loops literal auto const const_interpolation casting errors type_checking"
+            echo "basic types control-flow functions errors"
             ;;
         syntax)
-            echo "array arrays array_higher_order dynamic_array slice string formatting enum match structs impl interface lambda chaining result must defer pointer ownership generics iterator"
+            echo "arrays strings structs interface generics iterator memory result"
             ;;
         stdlib)
-            echo "collections io std allocator memory intrinsics preprocessor"
+            echo "collections stdlib metaprogramming"
             ;;
         modules)
-            echo "modules advanced_modules macro advanced"
+            echo "modules"
             ;;
         platform)
-            echo "gpu"
+            echo "advanced"
             ;;
         runtime)
-            echo "file_io fs net thread sync"
+            echo "stdlib"
             ;;
         all)
             echo ""

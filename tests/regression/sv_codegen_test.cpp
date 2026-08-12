@@ -6,13 +6,14 @@
 // を出力する回帰（優先順位括弧・符号付き定数・ループ構造化等）をコード生成器のレベルで検証する。
 
 #include "../../src/internal/codegen/sv/codegen.hpp"
-#include "../../src/internal/codegen/sv/expr_tree.hpp"
+#include "../../src/internal/codegen/sv/codegen/tree.hpp"
 #include "../../src/internal/hir/lowering/lowering.hpp"
 #include "../../src/internal/mir/lowering/lowering.hpp"
 #include "../../src/internal/mir/passes/loop/const_unroll.hpp"
 #include "../../src/internal/mir/passes/scalar/folding.hpp"
 #include "../../src/internal/syntax/lexer/lexer.hpp"
 #include "../../src/internal/syntax/parser/parser.hpp"
+#include "../../src/internal/types/type_checker.hpp"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -51,6 +52,8 @@ class SVCodegenTest : public ::testing::Test {
         std::string top_module = codegen::sv::extract_top_module_name(ast);
 
         hir::HirLowering hir_lowering;
+        // 本番のSVパイプラインと同じターゲット分岐（リダクションのビルトイン保持・don't-care matchのswitch脱糖）
+        hir_lowering.set_sv_target(true);
         auto hir = hir_lowering.lower(ast);
 
         mir::MirLowering mir_lowering;
@@ -76,6 +79,33 @@ class SVCodegenTest : public ::testing::Test {
         return gen.getGeneratedCode();
     }
 
+    // Cmソース → 生成SV文字列（型チェッカ経由）。
+    // native part-select等、HIR loweringがAST型注釈（bit[N]判定）を必要とするケース用
+    std::string compile_to_sv_checked(const std::string& code) {
+        Lexer lex(code, LexerPlatform::SV);
+        std::vector<Token> tokens = lex.tokenize();
+        Parser p(tokens);
+        auto ast = p.parse();
+        std::string top_module = codegen::sv::extract_top_module_name(ast);
+
+        TypeChecker checker;
+        checker.set_sv_platform(true);
+        checker.check(ast);
+
+        hir::HirLowering hir_lowering;
+        hir_lowering.set_sv_target(true);
+        auto hir = hir_lowering.lower(ast);
+        mir::MirLowering mir_lowering;
+        auto mir = mir_lowering.lower(hir);
+
+        codegen::sv::SVCodeGenOptions options;
+        options.outputFile = ::testing::TempDir() + "sv_codegen_test_out.sv";
+        options.topModule = top_module;
+        codegen::sv::SVCodeGen gen(options);
+        gen.compile(mir);
+        return gen.getGeneratedCode();
+    }
+
     // Cmソース → 生成テストベンチ文字列。
     // //! test: ディレクティブはケースファイル自体から読むため sourceFile を設定し、compile() が outputFile の隣へ書き出した <name>_tb.sv を読み戻す
     std::string compile_to_tb(const std::string& name) {
@@ -89,6 +119,8 @@ class SVCodegenTest : public ::testing::Test {
         std::string top_module = codegen::sv::extract_top_module_name(ast);
 
         hir::HirLowering hir_lowering;
+        // 本番のSVパイプラインと同じターゲット分岐
+        hir_lowering.set_sv_target(true);
         auto hir = hir_lowering.lower(ast);
         mir::MirLowering mir_lowering;
         auto mir = mir_lowering.lower(hir);
@@ -277,6 +309,11 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCombMultiCase) {
     expect_contains(tb, "a = 10;");
     expect_contains(tb, "b = 20;");
     expect_contains(tb, "TEST 2: sum=%0d");
+    // 期待値がアサートされ、不一致（xも!==で不一致扱い）は$fatalで終了コードに反映される（R15）
+    expect_contains(tb, "if (sum !== (8)) begin");
+    expect_contains(tb, "FAIL: TEST 1: sum=%0d expected=8");
+    expect_contains(tb, "if (sum !== (30)) begin");
+    expect_contains(tb, "$fatal(1);");
     // クロックポートが無いのでクロック生成は出力されない
     expect_not_contains(tb, "always #5");
 }
@@ -287,7 +324,19 @@ TEST_F(SVCodegenTest, TestbenchDirectiveCyclesWithInput) {
     expect_contains(tb, "en = 1;");
     expect_contains(tb, "repeat(3) @(posedge clk);");
     expect_contains(tb, "TEST 1: count=%0d");
+    expect_contains(tb, "if (count !== (");
     expect_contains(tb, "always #5 clk = ~clk;");
+}
+
+// #[test] 関数のassertはx安全な比較（!== 1'b1）で生成される（R15: if(!(x))=偽の誤PASS封止）
+TEST_F(SVCodegenTest, TestbenchAssertXSafeComparison) {
+    std::string tb = compile_to_tb("testbench/test_fn_assert");
+    expect_contains(tb, "!== 1'b1) begin");
+    expect_contains(tb, "$display(\"FAIL: value latched\");");
+    expect_contains(tb, "$fatal(1);");
+    expect_contains(tb, "$display(\"PASS: value latched\");");
+    // 旧形式 if(!(cond)) は生成されない（cond=xでif(x)=偽となり誤PASSする）
+    expect_not_contains(tb, "if (!(");
 }
 
 // 出力ポートの宣言初期値が電源投入時初期値として出力される（従来は欠落し、条件付き代入のみの出力ポートがシミュレーションでXのまま残った）
@@ -356,12 +405,23 @@ TEST_F(SVCodegenTest, AsyncInternalClockNoAutoPorts) {
     EXPECT_EQ(sv.find("logic clk", first + 1), std::string::npos) << sv;
 }
 
-// プロセス内ループはwhileループとして再構成され、ループ後のコードが到達可能な位置に出力される
+// プロセス内ループはループとして再構成され、ループ後のコードが到達可能な位置に出力される。
+// 単純カウントループ（var=定数 … var=var±定数）は合成ツールが受理するfor形で出力される
+// （always内whileは合成不能）。カウントパターン外のループは従来どおりwhile形
 TEST_F(SVCodegenTest, WhileLoopReconstruction) {
     const std::string code = load_case("control/while_loop_reconstruction");
     std::string sv = compile_to_sv(code);
-    expect_contains(sv, "while (");
+    expect_contains(sv, "for (");
+    expect_not_contains(sv, "while (");
     // 代入方式（ブロッキング/ノンブロッキング）は文脈依存のため "= total;" で両対応
+    expect_contains(sv, "= total;");
+}
+
+// カウントパターン外（増分が定数でない）のループはwhile形の再構成を維持する
+TEST_F(SVCodegenTest, NonCountedLoopKeepsWhile) {
+    const std::string code = load_case("control/non_counted_while");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "while (");
     expect_contains(sv, "= total;");
 }
 
@@ -394,6 +454,19 @@ TEST_F(SVCodegenTest, MemfileReadmemh) {
     expect_contains(sv, "initial $readmemh(\"font.hex\", rom);");
     // memfile指定時は要素代入のinitialブロックは出力されない
     expect_not_contains(sv, "rom[0] = 10;");
+}
+
+// 並行アサーション（SVA）: sv_assert_propertyがモジュールスコープのassert propertyへ巻き上げられ、
+// implies+afterは$pastシフト形（verilator/iverilogが##N結論のimplication未対応のため）で出力される
+TEST_F(SVCodegenTest, SvaAssertProperty) {
+    std::string tb = compile_to_tb("simulation/sva_builtins");
+    expect_contains(tb, "assert property (@(posedge clk) $past(req, 2) |-> ack)");
+    expect_contains(tb, "assert property (@(posedge clk) $rose(req) |-> ack)");
+    expect_contains(tb, "assert property (@(posedge clk) $past(req, 1) |-> $stable(ack))");
+    // 手続きコード（initialブロック）内には出力されない
+    const auto initial_pos = tb.find("initial begin");
+    ASSERT_NE(initial_pos, std::string::npos);
+    EXPECT_EQ(tb.find("assert property", initial_pos), std::string::npos) << tb;
 }
 
 // 初期値なしの #[sv::memfile] 配列（外部hex提供）でも $readmemh が出力される
@@ -552,4 +625,70 @@ TEST_F(SVCodegenTest, ConstantFoldingNotAppliedByDefault) {
     const std::string code = load_case("expr/const_fold");
     std::string sv = compile_to_sv(code);
     expect_contains(sv, "32'sd2 * 32'sd3 + 32'sd4");
+}
+
+// don't-careビットパターンのmatch（SV-N3）: mask三項チェーンでなく native casez を出力し、パターンはスクルーチニ幅の2進リテラル（?=don't-care）になる。互いに素なパターンは unique casez
+TEST_F(SVCodegenTest, CasezMaskedMatch) {
+    const std::string code = load_case("control/casez_masked_match");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "unique casez (op)");
+    expect_contains(sv, "4'b1?00");
+    expect_contains(sv, "4'b0?1?");
+    expect_contains(sv, "default:");
+    expect_not_contains(sv, "& 32'sd11");  // 旧mask比較チェーンが残らない
+}
+
+// 重なりのあるdon't-careパターン（SV-N3）: matchの先勝ち意味論を表明する priority casez を出力し、case項はアーム順を維持する
+TEST_F(SVCodegenTest, CasezPriorityOverlap) {
+    const std::string code = load_case("control/casez_priority_overlap");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "priority casez (op)");
+    // 先勝ち保存のためアーム順（1???が先）を維持する
+    EXPECT_LT(sv.find("4'b1???"), sv.find("4'b1?00"));
+}
+
+// #[sv::priority] 属性（SV-N3）: switch文の case修飾が unique から priority へ切り替わる
+TEST_F(SVCodegenTest, PriorityCaseAttribute) {
+    const std::string code = load_case("control/priority_case_attr");
+    std::string sv = compile_to_sv(code);
+    expect_contains(sv, "priority case (sel)");
+    expect_not_contains(sv, "unique case (sel)");
+}
+
+// native part-select（SV-N1）: ビット範囲の読みがshift+maskでなく x[hi:lo]・x[base +: w]・x[base -: w] で出力され、部分代入は左辺part-selectになる
+TEST_F(SVCodegenTest, NativePartSelect) {
+    const std::string code = load_case("expr/partselect_native");
+    std::string sv = compile_to_sv_checked(code);
+    expect_contains(sv, "din[15:8]");
+    expect_contains(sv, "word[i +: 4]");
+    expect_contains(sv, "word[7 -: 4]");
+    expect_contains(sv, "word[7:4] <= ");
+    expect_not_contains(sv, ">> 32'sd8 &");  // 旧shift+mask読みが残らない
+    expect_not_contains(sv, "din >> ");
+}
+
+// #[sv::unpacked] によるpacked性制御（SV-N8）: 属性付きstructはunpacked、既定はpackedで出力される
+TEST_F(SVCodegenTest, StructPackedControl) {
+    const std::string code = load_case("module/struct_packed_control");
+    std::string sv = compile_to_sv(code);
+    // Cfgはunpacked（"struct packed" でない "struct {"）、Pkは既定のpacked
+    size_t cfg_pos = sv.find("} Cfg;");
+    size_t pk_pos = sv.find("} Pk;");
+    EXPECT_NE(cfg_pos, std::string::npos) << sv;
+    EXPECT_NE(pk_pos, std::string::npos) << sv;
+    size_t cfg_def = sv.rfind("typedef struct", cfg_pos);
+    size_t pk_def = sv.rfind("typedef struct", pk_pos);
+    EXPECT_EQ(sv.compare(cfg_def, 16, "typedef struct {"), 0)
+        << "Cfgがunpackedで出力されていません:\n"
+        << sv;
+    EXPECT_EQ(sv.compare(pk_def, 22, "typedef struct packed "), 0)
+        << "Pkが既定のpackedで出力されていません:\n"
+        << sv;
+}
+
+// 型名キャスト type'(expr)（SV-N8）: packed structへのasキャストがSVの型名キャストで出力される
+TEST_F(SVCodegenTest, StructNameCast) {
+    const std::string code = load_case("expr/struct_name_cast");
+    std::string sv = compile_to_sv_checked(code);
+    expect_contains(sv, "Pair'(raw)");
 }

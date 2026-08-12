@@ -25,6 +25,39 @@ The Cm compiler provides a backend that converts Cm source code to JavaScript. G
 node output.js
 ```
 
+## TypeScript output (recommended)
+
+Because Cm is statically typed, **TypeScript output** (`--target=ts`) is recommended.
+`--target=ts` generates the same code as `--target=js` and additionally adds type annotations to function signatures, local variables, and structs, and emits each `struct` as an `export interface`.
+
+```bash
+# TypeScript output (output.ts)
+./cm compile --target=ts hello.cm -o app.ts
+
+# Type-check
+npx tsc --noEmit --lib es2018 app.ts
+
+# Run (executed as JS with type annotations stripped)
+./cm run --target=ts hello.cm
+```
+
+Example output for `struct Point { int x; int y; }`:
+
+```ts
+export interface Point {
+    x: number;
+    y: number;
+}
+
+function origin(): Point {
+    let p: Point = { x: 0, y: 0 };
+    return p;
+}
+```
+
+TS and JS have identical runtime behavior (stripping the TS annotations yields the generated JS). Use `--target=ts` to integrate into a TS project, or `--target=js` for plain Node/browser execution.
+
+
 ## Supported Features
 
 The Cm JS backend supports the following features:
@@ -158,7 +191,7 @@ make tjp
 node output.js
 ```
 
-### v0.16.2 Test Results
+### v0.17.0 Test Results
 
 | Item | Value |
 |------|-------|
@@ -198,4 +231,4 @@ Structs are converted to JavaScript objects, and enums to tagged objects.
 ---
 
 <!-- nav -->
-← Prev: [Compiler - WASM Backend](../wasm/index.html) | [Contents](../index.html) | Next: [Compiler - SystemVerilog Backend](../sv/index.html) →
+← Prev: [Compiler - WASM Backend](../wasm/index.html) | [Contents](../index.html) | Next: [npm Package Interop](npm-interop.html) →

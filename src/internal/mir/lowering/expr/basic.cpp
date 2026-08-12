@@ -74,8 +74,11 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypeP
                 if (end_pos != std::string::npos) {
                     // {と}の間に内容があるかチェック
                     std::string content = str_val.substr(pos + 1, end_pos - pos - 1);
+                    // 受理先頭文字はextract_named_placeholders側のホワイトリストと揃える（'_'は__cm_priv_*等のimportプライベート改名・R20の!~-(も追従）
                     if (!content.empty() &&
-                        (std::isalpha(content[0]) || content[0] == '*' || content[0] == '&')) {
+                        (std::isalpha(content[0]) || content[0] == '_' || content[0] == '*' ||
+                         content[0] == '&' || content[0] == '!' || content[0] == '~' ||
+                         content[0] == '-' || content[0] == '(')) {
                         has_placeholders = true;
                         break;
                     }
@@ -98,134 +101,9 @@ LocalId ExprLowering::lower_literal(const hir::HirLiteral& lit, const hir::TypeP
             str_const.value = converted_format;
             args.push_back(MirOperand::constant(str_const));
 
-            // 名前付き変数を解決して引数リストを作成
-            std::vector<LocalId> arg_locals;
-            for (const auto& var_name : var_names) {
-                // まずconst変数をチェック
-                auto const_value = ctx.get_const_value(var_name);
-                if (const_value) {
-                    // const変数の場合、その値を持つ一時変数を作成
-                    LocalId temp = ctx.new_temp(const_value->type);
-                    auto const_stmt = std::make_unique<MirStatement>();
-                    const_stmt->kind = MirStatement::Assign;
-                    const_stmt->data = MirStatement::AssignData{
-                        MirPlace{temp}, MirRvalue::use(MirOperand::constant(*const_value))};
-                    ctx.push_statement(std::move(const_stmt));
-                    arg_locals.push_back(temp);
-                } else {
-                    // メンバーアクセスかどうかをチェック（例: c.get() または self.x）
-                    size_t dot_pos = var_name.find('.');
-                    size_t paren_pos = var_name.find('(');
-
-                    if (dot_pos != std::string::npos && paren_pos != std::string::npos &&
-                        paren_pos > dot_pos) {
-                        // メソッド呼び出し: obj.method()
-                        std::string obj_name = var_name.substr(0, dot_pos);
-                        std::string method_part = var_name.substr(dot_pos + 1);
-                        std::string method_name = method_part.substr(0, method_part.find('('));
-
-                        auto obj_id = ctx.resolve_variable(obj_name);
-                        if (obj_id) {
-                            LocalId obj_local = *obj_id;
-                            hir::TypePtr obj_type = ctx.func->locals[obj_local].type;
-
-                            // ポインタ型の場合、デリファレンスして構造体型を取得
-                            if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
-                                obj_type = obj_type->element_type;
-                            }
-
-                            if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
-                                std::string struct_name = obj_type->name;
-                                std::string full_method_name = struct_name + "__" + method_name;
-
-                                // selfポインタを作成
-                                LocalId ref_temp = ctx.new_temp(hir::make_pointer(obj_type));
-                                ctx.push_statement(MirStatement::assign(
-                                    MirPlace{ref_temp},
-                                    MirRvalue::ref(MirPlace{obj_local}, false)));
-
-                                // メソッド呼び出し
-                                hir::TypePtr return_type = hir::make_int();
-                                LocalId result = ctx.new_temp(return_type);
-                                BlockId success_block = ctx.new_block();
-
-                                std::vector<MirOperandPtr> method_args;
-                                method_args.push_back(MirOperand::copy(MirPlace{ref_temp}));
-
-                                auto call_term = std::make_unique<MirTerminator>();
-                                call_term->kind = MirTerminator::Call;
-                                call_term->data = MirTerminator::CallData{
-                                    MirOperand::function_ref(full_method_name),
-                                    std::move(method_args),
-                                    MirPlace{result},
-                                    success_block,
-                                    std::nullopt,
-                                    "",
-                                    "",
-                                    false};
-                                ctx.set_terminator(std::move(call_term));
-                                ctx.switch_to_block(success_block);
-
-                                arg_locals.push_back(result);
-                            } else {
-                                arg_locals.push_back(ctx.new_temp(hir::make_error()));
-                            }
-                        } else {
-                            arg_locals.push_back(ctx.new_temp(hir::make_error()));
-                        }
-                    } else if (dot_pos != std::string::npos) {
-                        // フィールドアクセス: obj.field (例: self.x)
-                        std::string obj_name = var_name.substr(0, dot_pos);
-                        std::string field_name = var_name.substr(dot_pos + 1);
-
-                        auto obj_id = ctx.resolve_variable(obj_name);
-                        if (obj_id) {
-                            LocalId obj_local = *obj_id;
-                            hir::TypePtr obj_type = ctx.func->locals[obj_local].type;
-
-                            // ポインタ型の場合、デリファレンスして構造体型を取得
-                            bool needs_deref = false;
-                            if (obj_type && obj_type->kind == hir::TypeKind::Pointer) {
-                                needs_deref = true;
-                                obj_type = obj_type->element_type;
-                            }
-
-                            if (obj_type && obj_type->kind == hir::TypeKind::Struct) {
-                                auto field_idx = ctx.get_field_index(obj_type->name, field_name);
-                                if (field_idx) {
-                                    MirPlace place{obj_local};
-                                    if (needs_deref) {
-                                        place.projections.push_back(PlaceProjection::deref());
-                                    }
-                                    place.projections.push_back(PlaceProjection::field(*field_idx));
-
-                                    hir::TypePtr field_type = hir::make_int();
-                                    LocalId temp = ctx.new_temp(field_type);
-                                    ctx.push_statement(MirStatement::assign(
-                                        MirPlace{temp}, MirRvalue::use(MirOperand::copy(place))));
-                                    arg_locals.push_back(temp);
-                                } else {
-                                    arg_locals.push_back(ctx.new_temp(hir::make_error()));
-                                }
-                            } else {
-                                arg_locals.push_back(ctx.new_temp(hir::make_error()));
-                            }
-                        } else {
-                            arg_locals.push_back(ctx.new_temp(hir::make_error()));
-                        }
-                    } else {
-                        // 通常の変数を解決
-                        auto var_id = ctx.resolve_variable(var_name);
-                        if (var_id) {
-                            arg_locals.push_back(*var_id);
-                        } else {
-                            // 変数が見つからない場合、エラー用のダミー値
-                            auto err_type = hir::make_error();
-                            arg_locals.push_back(ctx.new_temp(err_type));
-                        }
-                    }
-                }
-            }
+            // 型検査で脱糖済みの補間部分式を優先して値へ降下し、無い内容のみテキスト解決へフォールバックする（第4段b）。
+            // 従来ここにあったテキストパターン照合（const値・メソッド・フィールド・変数の個別分岐）はprintln側と同じ再発源だったため撤去した
+            std::vector<LocalId> arg_locals = lower_interp_arg_values(lit, var_names, ctx);
 
             // 引数の数を追加
             MirConstant argc_const;
@@ -354,7 +232,12 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
     }
 
     // 関数参照の場合（関数ポインタ用）
-    if (var.is_function_ref) {
+    // ただし同名のローカル変数・引数があればそれを優先する（シャドーイング）。
+    // HIR lowering はローカルスコープを持たず func_defs_ の有無だけで is_function_ref を立てるため、
+    // 引数 title が import した title() 関数と同名だと関数参照とみなされてしまう。
+    // ここでスコープを先に引き、ローカルが見つかれば関数参照ではなく変数読み出しへ倒す
+    // （倒さないと native/jit で関数ポインタが値として渡り不正な結果になる。js/tsはJSのスコープで偶然正しくなる）
+    if (var.is_function_ref && !ctx.resolve_variable(var.name)) {
         // 式の型（関数ポインタ型）を使用
         hir::TypePtr func_ptr_type =
             expr_type ? expr_type : hir::make_function_ptr(hir::make_int(), {});
@@ -443,6 +326,12 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
 
     LocalId local = *local_opt;
 
+    // move式で所有権を手放した変数はデストラクタ登録を解除する
+    // （moved-out変数がスコープ終了時にも解放されると、移動先と二重解放になる）
+    if (var.is_moved_from) {
+        ctx.unregister_destructor_var(local);
+    }
+
     // 変数の型を取得
     hir::TypePtr var_type = hir::make_int();  // デフォルト
     if (local < ctx.func->locals.size()) {
@@ -458,7 +347,8 @@ LocalId ExprLowering::lower_var_ref(const hir::HirVarRef& var, const hir::TypePt
 }
 
 // 三項演算子のlowering
-LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringContext& ctx) {
+LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, const hir::TypePtr& expr_type,
+                                    LoweringContext& ctx) {
     // 条件をlowering
     LocalId cond = lower_expression(*ternary.condition, ctx);
 
@@ -467,30 +357,53 @@ LocalId ExprLowering::lower_ternary(const hir::HirTernary& ternary, LoweringCont
     BlockId else_block = ctx.new_block();
     BlockId merge_block = ctx.new_block();
 
-    // 結果用の変数（then_exprの型を使用）
-    hir::TypePtr result_type = ternary.then_expr ? ternary.then_expr->type : hir::make_int();
+    // 結果用の変数: 型チェッカーが決めた式全体の型（腕の昇格型）を優先する。
+    // then腕固定だと `false ? 0 : uint値` の結果がint扱いになり大値が負数表示になる
+    hir::TypePtr result_type = expr_type;
+    if (!result_type) {
+        result_type = ternary.then_expr ? ternary.then_expr->type : hir::make_int();
+    }
     LocalId result = ctx.new_temp(result_type);
 
     // 条件分岐
     ctx.set_terminator(
         MirTerminator::switch_int(MirOperand::copy(MirPlace{cond}), {{1, then_block}}, else_block));
 
+    // then/else部は条件付き実行のため、内側で確保される文字列一時は文末dropの対象外にする（C12）。
+    // 代わりに腕スコープでトラッキングし、腕内で完結した一時は腕ブロック内（merge分岐前）で解放する
+    ctx.conditional_expr_depth++;
+
     // then部
     ctx.switch_to_block(then_block);
+    bool then_arm = begin_arm_temp_scope(ctx);
     LocalId then_value = lower_expression(*ternary.then_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{then_value}))));
+    ArmValueOwnership then_owned = end_arm_temp_scope(ctx, then_arm, then_value, result);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
 
     // else部
     ctx.switch_to_block(else_block);
+    bool else_arm = begin_arm_temp_scope(ctx);
     LocalId else_value = lower_expression(*ternary.else_expr, ctx);
     ctx.push_statement(MirStatement::assign(
         MirPlace{result}, MirRvalue::use(MirOperand::copy(MirPlace{else_value}))));
+    ArmValueOwnership else_owned = end_arm_temp_scope(ctx, else_arm, else_value, result);
     ctx.set_terminator(MirTerminator::goto_block(merge_block));
+
+    ctx.conditional_expr_depth--;
 
     // マージポイント
     ctx.switch_to_block(merge_block);
+
+    // 三項結果一時の所有権登録（C12）: 両腕がともに「fresh一時の所有権を結果へ移した」場合のみ、
+    // 結果をどちらの経路でも所有バッファとして外側スコープ（文または外側の腕）へ登録する。
+    // 片腕でも借用値（変数コピー・リテラル）なら所有権が条件依存になるため登録しない
+    if (then_owned == ArmValueOwnership::String && else_owned == ArmValueOwnership::String) {
+        ctx.note_string_temp(result);
+    } else if (then_owned == ArmValueOwnership::Slice && else_owned == ArmValueOwnership::Slice) {
+        ctx.note_slice_temp(result);
+    }
 
     return result;
 }

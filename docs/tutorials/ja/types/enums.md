@@ -147,6 +147,48 @@ int main() {
 
 ---
 
+## Enumのメソッド（inherent impl）
+
+構造体と同様に `impl` ブロックでenumへメソッドを定義できます（v0.17.0）。値enum・関連データ付きenumのどちらにも使え、`match (self)` によるバリアント分岐が定番パターンです。
+
+```cm
+enum Color { Red, Green, Blue }
+
+impl Color {
+    string name() {
+        return match (self) {
+            Color::Red => "red",
+            Color::Green => "green",
+            Color::Blue => "blue",
+        };
+    }
+    bool is_warm() { return self == Color::Red; }
+}
+
+enum Shape { Circle(int), Square(int) }
+
+impl Shape {
+    int area10() {
+        return match (self) {
+            Shape::Circle(r) => r * r * 3,
+            Shape::Square(s) => s * s,
+        };
+    }
+}
+
+int main() {
+    Color c = Color::Green;
+    println("{c.name()} {c.is_warm()}");   // green false
+    Shape s = Shape::Square(4);
+    println("{s.area10()}");               // 16
+    return 0;
+}
+```
+
+値enumの `self` は値渡し（int表現）のため、メソッド内で `self` を再代入してもコピーに閉じ、呼び出し元へは伝わりません。
+
+---
+
 ## ユニオン型配列によるタプル風パターン
 
 Cmには `typedef` で定義するユニオン型があります。ユニオン型の配列を使うと、異なる型の値をまとめて返す「タプル」のような使い方ができます。

@@ -24,7 +24,6 @@ class ConstantFolding : public OptimizationPass {
 
    private:
     // 複数回代入される変数を検出
-    std::unordered_set<LocalId> detect_multi_assigned(const MirFunction& func);
 
     // ブロック処理
     bool process_block(const MirFunction& func, BasicBlock& block,

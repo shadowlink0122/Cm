@@ -4,10 +4,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace cm::ast {
+
+// typeof(式) 型が被演算式を保持するための前方宣言（型チェッカで具体型へ解決する）
+struct Expr;
 
 // ============================================================
 // 型の種類
@@ -116,6 +120,13 @@ struct Type {
     // 関数型用: 引数型と戻り値型
     std::vector<TypePtr> param_types;
     TypePtr return_type;
+
+    // typeof(式) 型（kind==Inferred・name=="__typeof__"）の被演算式。型チェッカで具体型へ解決する（従来は破棄していた）
+    std::shared_ptr<Expr> typeof_operand;
+
+    // 配列用: パース時にリテラルへ畳めなかった定数サイズ式（int[N+1]・int[N*2]等）。
+    // 型チェッカがevaluate_const_exprで畳んでarray_sizeへ確定する（const名を含む算術はスコープが要るため解決を後段化する）
+    std::shared_ptr<Expr> size_expr;
 
     // コンストラクタ
     explicit Type(TypeKind k) : kind(k) {}
@@ -278,6 +289,14 @@ inline TypePtr make_array_with_param(TypePtr elem, const std::string& param_name
     return t;
 }
 
+// パース時に畳めない定数サイズ式（int[N+1]等）による配列。型チェッカで具体サイズへ畳む
+inline TypePtr make_array_with_expr(TypePtr elem, std::shared_ptr<Expr> size_expr) {
+    auto t = std::make_shared<Type>(TypeKind::Array);
+    t->element_type = std::move(elem);
+    t->size_expr = std::move(size_expr);
+    return t;
+}
+
 inline TypePtr make_named(const std::string& name) {
     auto t = std::make_shared<Type>(TypeKind::Struct);
     t->name = name;
@@ -304,7 +323,13 @@ inline TypePtr make_function_ptr(TypePtr return_type, std::vector<TypePtr> param
 // ============================================================
 std::string type_to_string(const Type& t);
 
-// 型名のマングル化版（Container<int> → Container__int。実装は types.cpp）
-std::string type_to_mangled_name(const Type& t);
+// ============================================================
+// 型パラメータ置換（正準API）
+// ============================================================
+// 型ツリー内の型パラメータ名を実引数ツリーで置換する（名前の平坦化を行わず構造を保つ）。
+// element_type・type_argsを再帰置換し、"Box<T>"表記が名前に残る場合は基底名へ正規化する（type_argsが真実）。
+// モノモーフィゼーション・MIRローワの総称フィールド型判定が共有する（フィールド型・要素型の判定は必ず置換後の型で行う）
+TypePtr substitute_type_params(const TypePtr& type,
+                               const std::unordered_map<std::string, TypePtr>& subst);
 
 }  // namespace cm::ast

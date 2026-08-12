@@ -1,0 +1,13 @@
+// 回帰(N5): ジェネリック構造体リテラルが宣言型から推論されず構築不能だったバグの検証
+import std::io::println;
+struct Box<T> { T v; }
+struct Pair<A, B> { A first; B second; }
+int main() {
+    Box<int> b = Box{v: 7};
+    println(b.v);
+    Pair<int, string> p = Pair{first: 7, second: "seven"};
+    println("{p.first} {p.second}");
+    Pair<string, int> q = {first: "k", second: 9};
+    println("{q.first} {q.second}");
+    return 0;
+}

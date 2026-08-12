@@ -1,0 +1,8 @@
+import std::io::println;
+// 別モジュール経由でlib（web::html）を間接的に使う透過的インポートの回帰テスト。
+import ../transitive_lib_import/widget::{card};
+
+int main() {
+    println(card("Hi <b>"));
+    return 0;
+}

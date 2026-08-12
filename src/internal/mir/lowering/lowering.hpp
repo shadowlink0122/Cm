@@ -2,7 +2,7 @@
 
 #include "base.hpp"
 #include "expr.hpp"
-#include "monomorphization.hpp"
+#include "internal/mir/lowering/mono/monomorphization.hpp"
 #include "stmt.hpp"
 
 #include <algorithm>
@@ -26,9 +26,10 @@ class MirLowering : public MirLoweringBase {
 
     // インターフェース定義のキャッシュ
     std::unordered_map<std::string, const hir::HirInterface*> interface_defs_;
+    // HIR構造体の名前引き（演算子auto-implのネスト再帰生成用）
+    std::unordered_map<std::string, const hir::HirStruct*> hir_structs_by_name_;
 
     // ジェネリック構造体のauto_implsを保存
-    std::unordered_map<std::string, std::vector<std::string>> generic_struct_auto_impls_;
 
    public:
     MirLowering() {
@@ -37,6 +38,9 @@ class MirLowering : public MirLoweringBase {
         // impl_infoを共有
         expr_lowering.set_shared_impl_info(&impl_info);
         stmt_lowering.set_shared_impl_info(&impl_info);
+        // 診断ベクタを共有（expr/stmtの報告が親のmir_diagnostics()へ集まる）
+        expr_lowering.set_shared_diagnostics(&mir_diagnostics_);
+        stmt_lowering.set_shared_diagnostics(&mir_diagnostics_);
     }
 
     // HIRプログラムをMIRに変換
@@ -49,6 +53,9 @@ class MirLowering : public MirLoweringBase {
     void propagate_closure_info();
 
    private:
+    // MIRにエラー型成果物（__error__*シンボル）が残っていないことを検査する（第3段）
+    void check_error_artifacts(const MirProgram& mir_program);
+
     // 宣言の登録
     void register_declarations(const hir::HirProgram& hir_program);
 
@@ -68,29 +75,12 @@ class MirLowering : public MirLoweringBase {
     void generate_auto_impls(const hir::HirProgram& hir_program);
 
     // モノモーフィゼーション後のジェネリック構造体に対する自動実装を生成
-    void generate_monomorphized_auto_impls();
 
     // 組み込み演算子/メソッドの自動生成（非ジェネリック構造体用）
     void generate_builtin_eq_operator(const hir::HirStruct& st);
     void generate_builtin_lt_operator(const hir::HirStruct& st);
-    void generate_builtin_clone_method(const hir::HirStruct& st);
-    void generate_builtin_hash_method(const hir::HirStruct& st);
-    void generate_builtin_debug_method(const hir::HirStruct& st);
-    void generate_builtin_display_method(const hir::HirStruct& st);
-    void generate_builtin_css_method(const hir::HirStruct& st);
-    void generate_builtin_to_css_method(const hir::HirStruct& st);
-    void generate_builtin_is_css_method(const hir::HirStruct& st);
 
     // 組み込み演算子/メソッドの自動生成（モノモーフィゼーション版）
-    void generate_builtin_eq_operator_for_monomorphized(const MirStruct& st);
-    void generate_builtin_lt_operator_for_monomorphized(const MirStruct& st);
-    void generate_builtin_clone_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_hash_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_debug_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_display_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_css_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_to_css_method_for_monomorphized(const MirStruct& st);
-    void generate_builtin_is_css_method_for_monomorphized(const MirStruct& st);
 
     // 構造体の比較演算子を関数呼び出しに変換するパス
     void rewrite_struct_comparison_operators();

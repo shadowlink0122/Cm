@@ -1,5 +1,7 @@
 #include "licm.hpp"
 
+#include "../core/effects.hpp"
+
 #include <memory>
 #include <set>
 #include <utility>
@@ -9,6 +11,7 @@ namespace cm::mir::opt {
 
 bool LoopInvariantCodeMotion::run(MirFunction& func) {
     bool changed = false;
+    current_func_ = &func;
 
     // 1. Dominator Tree & Loop Analysis構築
     cm::mir::DominatorTree dom_tree(func);
@@ -45,23 +48,13 @@ bool LoopInvariantCodeMotion::process_loop(MirFunction& func, cm::mir::Loop* loo
     for (BlockId b : loop->blocks) {
         const auto& bb = *func.basic_blocks[b];
         for (const auto& stmt : bb.statements) {
-            if (stmt->kind == MirStatement::Assign) {
-                auto& assign = std::get<MirStatement::AssignData>(stmt->data);
-                modified_locals.insert(assign.place.local);
+            // 書き込みローカルとASM出力（=r/+r。ループ不変ではない）を効果モデルから収集する
+            const StmtEffects effects = effects_of(*stmt);
+            for (LocalId written : effects.writes) {
+                modified_locals.insert(written);
             }
-            // ASMステートメントの出力変数も変更対象に追加
-            // 出力制約 (=r, +r 等) のオペランドはループ不変ではない
-            if (stmt->kind == MirStatement::Asm) {
-                auto& asm_data = std::get<MirStatement::AsmData>(stmt->data);
-                for (const auto& operand : asm_data.operands) {
-                    if (operand.is_constant)
-                        continue;
-                    // 出力制約: '=' で始まる (=r, =m等) または '+' で始まる (+r等)
-                    if (!operand.constraint.empty() &&
-                        (operand.constraint[0] == '=' || operand.constraint[0] == '+')) {
-                        modified_locals.insert(operand.local_id);
-                    }
-                }
+            for (LocalId out : effects.asm_outputs) {
+                modified_locals.insert(out);
             }
         }
         if (bb.terminator && bb.terminator->kind == MirTerminator::Call) {
@@ -260,6 +253,13 @@ bool LoopInvariantCodeMotion::is_invariant(const MirOperand& operand,
         auto& place = std::get<MirPlace>(operand.data);
         if (!place.projections.empty())
             return false;
+
+        // グローバル/静的変数はループ内の関数呼び出しが書き換えうるため不変としない（W4）。
+        // 従来はループ本体内の代入文しか見ておらず、呼び出し先での書き込みが素通りして
+        // ループ内の読みがpre-headerへ巻き上がり初期値に固定されていた
+        if (current_func_ && is_call_clobbered(*current_func_, place.local)) {
+            return false;
+        }
 
         return modified_locals.find(place.local) == modified_locals.end();
     }

@@ -1,0 +1,32 @@
+// H8回帰: TreeMapのgetがOption返しになり、不在キーで根ノードの値が返る旧バグが再発しないことを検証する
+// （旧実装は不在時にindexを0へ丸め、空でないマップでは常に根の値を返していた）
+import std::io::println;
+import std::collections::treemap::*;
+
+int main() {
+    TreeMap<int, int> t();
+    t.put(50, 500);
+    t.put(30, 300);
+    t.put(70, 700);
+
+    // 存在キー: Some(値)
+    Option<int> v = t.get(30);
+    println(v.is_some());
+    println(v.unwrap());
+
+    // 不在キー: None（旧バグでは根ノードの値500が返っていた）
+    Option<int> missing = t.get(99);
+    println(missing.is_none());
+    println(missing.unwrap_or(-1));
+
+    // get_or
+    println(t.get_or(70, -1));
+    println(t.get_or(10, -1));
+
+    // 空マップ（チェーン形: get(k).is_none() のレシーバ退避も検証する）
+    TreeMap<int, int> empty();
+    println(empty.get(1).is_none());
+    println(empty.get_or(1, -7));
+
+    return 0;
+}

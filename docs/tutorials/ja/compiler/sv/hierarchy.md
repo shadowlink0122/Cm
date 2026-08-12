@@ -153,8 +153,104 @@ shifter::ShifterIo sh0 = shifter::ShifterIo { WIDTH: 16, clk: clk, din: data_in,
 // → shifter #(.WIDTH(16)) sh0 (.clk(clk), ...);
 ```
 
-> パラメータに依存する定数ループ展開や、パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は未対応です（v0.16.0ロードマップ A5/A6）。
+パラメータ境界のループ（`for (uint i = 0; i < N; i = i + 1)`でNが`#[sv::parameter]`）は、合成ツールが受理するSVのfor文として出力されます（v0.17.0。whileは合成不能のためfor形へ再構成されます）:
 
+```cm
+#[sv::parameter] const uint N = 4;
+
+async void update(posedge clk) {
+    uint acc = 0;
+    for (uint i = 0; i < N; i = i + 1) {
+        acc = acc ^ (din >> i);
+    }
+    out = acc;
+}
+// → for (i = 32'sd0; i < N; i = i + 32'sd1) begin ... end
+```
+
+パラメータ幅のメモリ配列（`bit[WIDTH][DEPTH]`）は`logic [WIDTH-1:0] mem [0:DEPTH-1];`として出力され、添字で読み書きできます（v0.17.0）:
+
+```cm
+#[sv::parameter] const uint WIDTH = 8;
+#[sv::parameter] const uint DEPTH = 4;
+
+bit[WIDTH][DEPTH] mem;
+
+async void update(posedge clk) {
+    mem[waddr] = din;
+    dout = mem[0];
+}
+```
+
+
+## モジュールインスタンス配列（#[sv::instance_array]・v0.17.0）
+
+同一サブモジュールをN個並べる（PE配列・並列レーン・多チャンネル）には、インスタンス宣言へ`#[sv::instance_array(N)]`を付けます。generate-forとして出力され、結線先が配列信号なら各レーンへ分配、スカラ信号なら全レーンへブロードキャストされます:
+
+```cm
+import ./pe_xor;
+
+uint[2] pa;
+uint[2] pb;
+uint[2] pr;
+
+#[sv::instance_array(2)]
+pe_xor::PeXorIo lanes = pe_xor::PeXorIo { a: pa, b: pb, r: pr };
+```
+
+```systemverilog
+genvar __gi_lanes;
+generate
+    for (__gi_lanes = 0; __gi_lanes < 2; __gi_lanes = __gi_lanes + 1) begin : lanes_gen
+        pe_xor lanes (
+            .a(pa[__gi_lanes]),
+            .b(pb[__gi_lanes]),
+            .r(pr[__gi_lanes])
+        );
+    end
+endgenerate
+```
+
+Nには`#[sv::parameter]`のパラメータ名も使えます。
+
+## module形importとフラット化（v0.17.0で整備）
+
+exportされたIO構造体を持たない相対import（`import ./name;`）は、従来どおり全シンボルが単一モジュールへフラット化されます。v0.17.0で以下が整備されました:
+
+- **名前空間参照の展開**: module形importのグローバル参照・関数呼び出し（`statemod::tick()`・`statemod::ready`）は、生成SVでは素の識別子（`tick()`・`ready`）へ剥がされます（従来は修飾名のまま出力され、Verilator/iverilogが「Package/class for '::' reference not found」で拒否していました）
+- **import先のSV方言解析**: `--target=sv`のコンパイルでは、import先のモジュールに `//! platform: sv` ディレクティブがなくてもSVレキサーで解析されます。初期化子なしのモジュールスコープ宣言（`uint scratch;`）も受理されます（値は使用前に代入すればx伝播しません）
+- **多段の親ディレクトリ参照**: `import ../../modules/x` のような多段相対importが使えます（[モジュールシステム](../../basics/modules.html)参照）
+
+```cm
+// statemod.cm（//! platform: 指定は不要）
+module statemod;
+
+uint scratch;                  // 初期化子なし宣言
+uint count = 0;
+export bool ready = false;
+
+export uint tick() {
+    count = (count + 1) as uint;
+    if (count >= 3) { ready = true; }
+    return count;
+}
+```
+
+```cm
+// top.cm
+import ./statemod;
+
+#[input] posedge clk;
+#[output] uint out = 0;
+#[output] bool flag = false;
+
+async void t(posedge clk) {
+    out = statemod::tick();    // 生成SVでは素の識別子として出力される
+    flag = statemod::ready;
+}
+```
+
+回帰テスト: `tests/sv/basic/modules/import_state`
 
 ---
 

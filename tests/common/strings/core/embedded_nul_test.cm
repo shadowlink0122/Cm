@@ -1,0 +1,37 @@
+//! platform: !sv
+// H9第4段回帰: 長さヘッダ付き文字列による埋め込みNUL保持とO(1)バイト長
+// from_bytesで構築したNUL含み文字列が、byte_len/len/substring/連結で切り詰められないこと
+import std::io::println;
+import std::strings::from_bytes;
+
+int main() {
+    // "A\0B" の3バイト
+    utiny[] raw = [];
+    raw.push(65 as utiny);
+    raw.push(0 as utiny);
+    raw.push(66 as utiny);
+    string s = from_bytes(raw);
+
+    // バイト長・コードポイント長はNULを越えて数える（従来はstrlenで1に切り詰め）
+    println(s.byte_len());
+    println(s.len());
+
+    // NULの後ろの文字が取得できる
+    println(s.codepoint_at(2));
+
+    // substringはNULを跨いで切り出せる
+    string tail = s.substring(2, 3);
+    println(tail.byte_len());
+    println(tail.codepoint_at(0));
+
+    // 連結してもNULと後続が保持される
+    string joined = s + s;
+    println(joined.byte_len());
+    println(joined.codepoint_at(5));
+
+    // 通常文字列（ヘッダ有無混在）との連結
+    string mixed = "x" + s;
+    println(mixed.byte_len());
+    println(mixed.codepoint_at(0));
+    return 0;
+}

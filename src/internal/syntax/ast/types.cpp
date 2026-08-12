@@ -207,25 +207,36 @@ std::string type_to_string(const Type& t) {
     }
 }
 
-// 型名のマングル化版（Container<int> → Container__int）
-std::string type_to_mangled_name(const Type& t) {
-    switch (t.kind) {
-        case TypeKind::Struct:
-        case TypeKind::Union:
-        case TypeKind::TypeAlias: {
-            std::string result = t.name;
-            // ジェネリック型引数がある場合
-            if (!t.type_args.empty()) {
-                for (size_t i = 0; i < t.type_args.size(); ++i) {
-                    result += "__" + type_to_mangled_name(*t.type_args[i]);
-                }
-            }
-            return result;
-        }
-        default:
-            // その他の型はtype_to_stringと同じ
-            return type_to_string(t);
+// 型パラメータ置換の正準実装（モノモーフィゼーション・MIRローワが共有）
+TypePtr substitute_type_params(const TypePtr& type,
+                               const std::unordered_map<std::string, TypePtr>& subst) {
+    if (!type)
+        return nullptr;
+
+    if (!type->name.empty()) {
+        auto it = subst.find(type->name);
+        if (it != subst.end())
+            return it->second;
     }
+
+    // 置換対象（element_type・type_args）を含まないリーフはそのまま共有する。
+    // クローンするとUnionType等の派生ノードがスライスされ変種情報を失うため、コピー自体を避ける
+    if (!type->element_type && type->type_args.empty())
+        return type;
+
+    auto result = std::make_shared<Type>(*type);
+    if (type->element_type)
+        result->element_type = substitute_type_params(type->element_type, subst);
+    for (auto& arg : result->type_args)
+        arg = substitute_type_params(arg, subst);
+
+    // "Box<T>" 表記が名前に残っている場合は基底名へ正規化する（type_argsが真実）
+    if (!result->type_args.empty()) {
+        auto lt = result->name.find('<');
+        if (lt != std::string::npos)
+            result->name = result->name.substr(0, lt);
+    }
+    return result;
 }
 
 }  // namespace cm::ast

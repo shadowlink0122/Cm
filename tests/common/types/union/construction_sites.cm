@@ -1,0 +1,53 @@
+// 回帰(Y1〜Y3): ユニオン構築（タグ+ペイロード書き込み）の全消費サイト検証
+// 従来は構造体リテラルフィールド・return・スライスpush/リテラル要素でタグ未構築となり、is判定全false・asで実行時パニックだった
+import std::io::println;
+typedef Val = int | string;
+typedef Num = int | double;
+struct Single { Val v; }
+struct Multi { string name; int n; Val v; }
+struct Big { long a; long b; long c; }
+typedef Wide = Big | int;
+Num give_int() {
+    return 10;
+}
+Num give_double() {
+    return 2.5;
+}
+void show(Num n) {
+    println("{n is int} {n is double}");
+}
+void with_default(Num n = 7) {
+    println("default: {n is int}");
+}
+int main() {
+    Single s = {v: 7};
+    println("field1: {s.v is int}");
+    Multi m = {name: "x", n: 1, v: 42};
+    println("fieldN: {m.v is int}");
+    m.v = "str";
+    println("assign: {m.v is string}");
+    Num r1 = give_int();
+    Num r2 = give_double();
+    println("ret: {r1 is int} {r2 is double}");
+    int r1v = r1 as int;
+    double r2v = r2 as double;
+    println("payload: {r1v} {r2v}");
+    Val[] xs = [];
+    xs.push(5);
+    xs.push("two");
+    println("push: {xs[0] is int} {xs[1] is string}");
+    int x0 = xs[0] as int;
+    string x1 = xs[1] as string;
+    println("elems: {x0} {x1}");
+    Val[] ys = [7, "eight"];
+    println("slicelit: {ys[0] is int} {ys[1] is string}");
+    Val[2] fixed = [1, "two"];
+    println("fixedlit: {fixed[0] is int} {fixed[1] is string}");
+    show(give_int());
+    with_default();
+    Wide w = Big { a: 1, b: 2, c: 3 };
+    println("bigvar: {w is Big}");
+    Big back = w as Big;
+    println("bigpayload: {back.c}");
+    return 0;
+}

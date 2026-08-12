@@ -1,0 +1,7 @@
+// std::strings - 文字列ユーティリティ
+// StringBuilder（可変文字列バッファ・償却O(1)追記）と分割（split/lines）
+module std.strings;
+
+export import std.strings.builder;
+export import std.strings.split;
+export import std.strings.from_bytes;

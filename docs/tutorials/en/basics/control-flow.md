@@ -90,6 +90,14 @@ string status = (age >= 20) ? "Adult" : "Minor";
 int sign = (x > 0) ? 1 : (x < 0) ? -1 : 0;
 ```
 
+Anonymous struct literals can be written in both branches (the type name is filled in from the expected type of the declaration, assignment, or argument).
+
+```cm
+struct Point { int x; int y; }
+
+Point p = cond ? {x: 1, y: 2} : {x: 3, y: 4};
+```
+
 ---
 
 ## while Loop
@@ -173,6 +181,15 @@ for (n in arr) {
 }
 ```
 
+Strings can also be iterated with for-in (v0.17.0). Each `char` is taken one at a time by byte, the same unit as indexing `s[i]` (for ASCII strings, one character per iteration).
+
+```cm
+string s = "abc";
+for (char ch in s) {
+    println(ch);   // → a / b / c
+}
+```
+
 ### Looping over Struct Arrays
 
 ```cm
@@ -195,11 +212,55 @@ int main() {
 }
 ```
 
+### Custom Iterators (the iter() Protocol)
+
+A struct with an `iter()` method can be used in for-in. The iterator type returned by `iter()` must implement both `bool has_next()` and a `next()` that returns the element type directly.
+
+```cm
+struct Counter { int cur; int max; }
+struct CounterIter { int cur; int max; }
+
+impl Counter {
+    CounterIter iter() { return CounterIter { cur: self.cur, max: self.max }; }
+}
+
+impl CounterIter {
+    bool has_next() { return self.cur < self.max; }
+    int next() { self.cur = self.cur + 1; return self.cur; }
+}
+
+int main() {
+    Counter c = Counter { cur: 0, max: 3 };
+    for (v in c) { println("{v}"); }  // 1 2 3
+    return 0;
+}
+```
+
+A missing `has_next()` or `next()`, a non-bool `has_next()` return type, and an `Option<T>`-returning `next()` are compile errors (v0.17.0; these previously surfaced as link errors or misleading type errors). `next()` returns the element type directly; termination is decided by `has_next()`.
+
 ---
 
 ## switch Statement
 
 **Important:** Cm's `switch` uses `case()` syntax and breaks automatically.
+The scrutinee can be an integer, a char, or a string (v0.17.0; string switches are desugared into a chain of content comparisons, and case values must be string literals).
+
+```cm
+string classify(string s) {
+    switch (s) {
+        case("alpha") {
+            return "a";
+        }
+        case("beta") {
+            return "b";
+        }
+        else {
+            return "other";
+        }
+    }
+    return "";
+}
+```
 
 ### Basic switch
 

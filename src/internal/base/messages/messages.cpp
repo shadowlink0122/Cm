@@ -18,7 +18,7 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"  async function detected: {0}\n",
      "  async関数が検出されました: {0}\n"},
     // CliAwaitExpressionDetectedFunction
-    {"  await expression detected (function: {0}）\n",
+    {"  await expression detected (function: {0})\n",
      "  await式が検出されました（関数: {0}）\n"},
     // CliCannotOpenFile
     {"error: cannot open file: {0}",
@@ -168,8 +168,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"=== MIR (before optimization) ===\n",
      "=== MIR (最適化前) ===\n"},
     // CliMirFunctions
-    {"MIR functions: {0}\n\n{1}",
-     "MIR関数数: {0}\n\n{1}"},
+    {"MIR functions: {0}\n\n",
+     "MIR関数数: {0}\n\n"},
     // CliMirOptimizationMs
     {"  MIR optimization: {0}ms\n",
      "  MIR最適化: {0}ms\n"},
@@ -285,7 +285,7 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"hint: specify the JS target with --target=js\n",
      "ヒント: --target=js オプションでJSターゲットを指定してください\n"},
     // CliStepIsOnlyAvailableIn
-    {"error: step() is only available in //! platform: sv tests (test function: {0}）\n",
+    {"error: step() is only available in //! platform: sv tests (test function: {0})\n",
      "エラー: step() は //! platform: sv のテストでのみ使用できます（テスト関数: {0}）\n"},
     // CliSvHierarchyError
     {"SV hierarchy error: {0}\n",
@@ -324,8 +324,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"the -o option requires an output file name",
      "-o オプションには出力ファイル名が必要です"},
     // CliThisFileTargetsPlatformCurrent
-    {"warning: this file targets platform '{0}' (current: {1}）\n",
-     "警告: このファイルはプラットフォーム '{0}' 向けです（現在: {1}）\n"},
+    {"error: this file targets platform '{0}' (current: {1})\n",
+     "エラー: このファイルはプラットフォーム '{0}' 向けです（現在: {1}）\n"},
     // CliToRunAFileUse
     {"to run a file, use: cm run {0}\n\n",
      "ファイルを実行するには次を使用してください: cm run {0}\n\n"},
@@ -351,8 +351,8 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     {"hint: use --target={0} to specify the target platform\n\n",
      "ヒント: --target={0} オプションで対象プラットフォームを指定してください\n\n"},
     // CliValidTargetsNativeWasmJs
-    {"valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n",
-     "valid targets: native, wasm, js, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n"},
+    {"valid targets: native, wasm, js, ts, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n",
+     "valid targets: native, wasm, js, ts, web, bm, bm-x86, baremetal-arm, baremetal-x86, uefi\n"},
     // CliWarningIsNotAvailableIn
     {"{0}:{1}: warning: '{2}' is not available in bare-metal environments [B001]\n",
      "{0}:{1}: warning: ベアメタル環境では '{2}' は使用できません [B001]\n"},
@@ -699,6 +699,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // NostdCatThread
     {"threading",
      "スレッド"},
+    // NostdFloatNotAvailable
+    {"error: function '{0}' uses floating-point types; floating point is not available on baremetal-x86 (SSE is disabled; UEFI targets support it)",
+     "エラー: 関数 '{0}' 内で浮動小数点型を使用しています。baremetal-x86では浮動小数点は使用できません（SSE無効。UEFIターゲットでは使用可能です）"},
+    // NostdForbiddenAddressOf
+    {"error: function '{0}' takes the address of '{1}'; {2} is not available in bare-metal environments (indirect calls cannot bypass freestanding restrictions)",
+     "エラー: 関数 '{0}' 内で '{1}' のアドレスを取得しています。{2} はベアメタル環境では使用できません（関数ポインタ経由の間接呼び出しでも制約は回避できません）"},
     // NostdForbiddenCall
     {"error: function '{0}' uses '{1}'; {2} is not available in bare-metal environments",
      "エラー: 関数 '{0}' 内で '{1}' を使用しています。{2} はベアメタル環境では使用できません"},
@@ -706,6 +712,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ParseASwitchStatementRequiresCase
     {"a switch statement requires case or else",
      "switch文内にはcaseまたはelseが必要です"},
+    // ParseCharEscapeNotSingleByte
+    {"escape sequence '{0}' decodes to multiple bytes and cannot be used in a char literal (use a string literal instead)",
+     "エスケープシーケンス '{0}' は複数バイトへデコードされるため文字リテラルでは使用できません（文字列リテラルを使用してください）"},
     // ParseDuplicateElseClause
     {"duplicate else clause",
      "重複するelse節"},
@@ -715,6 +724,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // ParseEnumValuesRequireAnInteger
     {"enum values require an integer or character literal",
      "enum値には整数リテラルまたは文字リテラルが必要です"},
+    // ParseInvalidEscapeSequence
+    {"invalid escape sequence '{0}' in string/char literal (supported: \\n \\t \\r \\b \\f \\v \\a \\0 \\\\ \\\" \\' \\$ \\{ \\} \\xHH \\uHHHH \\UHHHHHHHH; use \\\\ for a literal backslash)",
+     "文字列/文字リテラルの不正なエスケープシーケンス '{0}'（対応: \\n \\t \\r \\b \\f \\v \\a \\0 \\\\ \\\" \\' \\$ \\{ \\} \\xHH \\uHHHH \\UHHHHHHHH。バックスラッシュ自体は \\\\ と書いてください）"},
     // ParseIsRequiredAfterMatchMatch
     {"'{' is required after match; 'match' is a reserved word in Cm and cannot be used as a variable name",
      "'{' is required after match; 'match' is a reserved word in Cm and cannot be used as a variable name"},
@@ -791,6 +803,18 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv007UnsupportedStatementOnThe
     {"error[SV007]: unsupported statement on the SV target (MirStatement kind={0}）",
      "エラー[SV007]: SVターゲットで非対応の文です（MirStatement kind={0}）"},
+    // SvSv008AlwaysFfRequiresEdge
+    {"error[SV008]: always_ff function '{0}' has no edge parameter (add 'posedge clk' or similar; edge-less sequential logic would silently become combinational)",
+     "エラー[SV008]: always_ff関数 '{0}' にエッジパラメータがありません（'posedge clk'等を追加してください。エッジ無し順序回路は黙って組み合わせ回路になります）"},
+    // TcSvaBuiltinArity
+    {"error: '{0}' expects {1} argument(s)",
+     "エラー: '{0}' の引数は {1} です"},
+    // SvSv009PackedUnionWidthMismatch
+    {"error[SV009]: packed union '{0}' member '{1}' is {2} bits but the union view width is {3} bits; all members of a packed union must have the same bit width",
+     "エラー[SV009]: packed union '{0}' のメンバ '{1}' は{2}ビットですが、ユニオンのビュー幅は{3}ビットです。packed unionの全メンバは同一ビット幅である必要があります"},
+    // SvSv009PackedUnionUnsupportedMember
+    {"error[SV009]: packed union '{0}' member '{1}' has a type whose bit width cannot be determined for synthesis; use bit vectors, integer types, or packed structs",
+     "エラー[SV009]: packed union '{0}' のメンバ '{1}' の型は合成ビット幅を確定できません。ビットベクタ・整数型・packed structを使用してください"},
     // SvSvTargetFunctionAssignsState
     {"warning: SV target: function '{0}' assigns state variable '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n",
      "警告: SVターゲット: 関数 '{0}' 内で代入した状態変数 '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n"},
@@ -870,6 +894,773 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // TypeUnusedResultValueTheError
     {"unused Result value; the error is ignored. Handle it with match, is_ok(), unwrap(), etc., or assign it to a variable explicitly [must_use]",
      "unused Result value; the error is ignored. Handle it with match, is_ok(), unwrap(), etc., or assign it to a variable explicitly [must_use]"},
+    // TypeCannotCastNumericToString
+    {"cannot cast numeric type '{0}' to string with 'as'; use string interpolation or a to-string conversion instead",
+     "数値型 '{0}' を 'as' で string にキャストすることはできません（文字列補間または文字列化関数を使用してください）"},
+    // TypeIntegerLiteralNarrowingTruncates
+    {"integer literal {0} does not fit in target type '{1}' and will be truncated",
+     "整数リテラル {0} は変換先の型 '{1}' に収まらず切り捨てられます"},
+    // TypeGenericArgumentCountMismatch
+    {"generic type '{0}' expects {1} type argument(s) but {2} were provided",
+     "ジェネリック型 '{0}' は型引数を {1} 個必要としますが {2} 個指定されています"},
+    // TypeMangledSymbolCollision
+    {"symbol '{0}' is defined more than once: {1} conflicts with {2} (both lower to the same linkage name)",
+     "シンボル '{0}' が重複しています: {1} と {2} が同一のリンケージ名に縮退します"},
+    // TypeGenericTypeRequiresArguments
+    {"generic type '{0}' requires {1} type argument(s) (e.g. {0}<...>)",
+     "ジェネリック型 '{0}' には型引数が {1} 個必要です（例: {0}<...>）"},
+    // TypeUnknownTypeArgument
+    {"unknown type '{0}' in type argument of '{1}'",
+     "'{1}' の型引数に未定義の型 '{0}' が指定されています"},
+    // TypeGenericFunctionArgumentCountMismatch
+    {"generic function '{0}' expects {1} type argument(s) but {2} were provided",
+     "ジェネリック関数 '{0}' は型引数を {1} 個必要としますが {2} 個指定されています"},
+    // TypeGenericBoundMissing
+    {"type parameter '{0}' uses operator '{1}' but no interface bound is declared (declare <{0}: {2}>)",
+     "型パラメータ '{0}' は演算子 '{1}' を使用していますが、インターフェース境界が宣言されていません（<{0}: {2}> と宣言してください）"},
+    // TypeUseAfterMove
+    {"variable '{0}' used after move",
+     "move後の変数 '{0}' を使用しています"},
+    // TypeNotAllPathsReturn
+    {"non-void function '{0}' has a path that falls off the end without returning a value",
+     "非void関数 '{0}' に値を返さずに終了する経路があります"},
+    // TypeAssignToConstAggregate
+    {"assignment to a field or element of const value '{0}' (const is currently shallow for aggregates; this will become an error in a future version)",
+     "const値 '{0}' のフィールド/要素へ代入しています（集約のconstは現在浅い扱いですが、将来のバージョンでエラーになります）"},
+    // TypeAddrOfConst
+    {"taking a mutable pointer to const value '{0}' (writes through the pointer bypass const; this will become an error in a future version)",
+     "const値 '{0}' へのミュータブルなポインタを取得しています（ポインタ経由の書き込みはconstを迂回します。将来のバージョンでエラーになります）"},
+    // ImportDuplicateSymbol
+    {"symbol '{0}' is imported from both '{1}' and '{2}' and is ambiguous; use an alias (import ... as ...) or a qualified name",
+     "シンボル '{0}' は '{1}' と '{2}' の両方からimportされ曖昧です。エイリアス（import ... as ...）か修飾名を使ってください"},
+    // ImportNonExportedSymbol
+    {"function '{0}' selected by import is not exported from '{1}' (add 'export' to the definition or an export list)",
+     "importで指定された関数 '{0}' は '{1}' でexportされていません（定義にexportを付けるかexportリストへ追加してください）"},
+    // PpUnclosedConditional
+    {"unclosed conditional block for symbol '{0}' in '{1}' (opened at line {2}; close it with #end or #endif)",
+     "シンボル '{0}' の条件ブロックが閉じていません（'{1}' の {2} 行目で開始。#end または #endif で閉じてください）"},
+    // PpUnmatchedDirective
+    {"'#{0}' without a matching #ifdef/#ifndef in '{1}' (line {2})",
+     "対応する #ifdef/#ifndef のない '#{0}' があります（'{1}' の {2} 行目）"},
+    // PpDefineNotSupported
+    {"'#define' is not supported in '{0}' (line {1}); define symbols with the CLI option -D<name> (#ifdef also accepts built-in symbols like __macos__)",
+     "'#define' は未対応です（'{0}' の {1} 行目）。シンボルはCLIオプション -D<名前> で定義してください（#ifdefは__macos__等の組み込みシンボルも参照できます）"},
+    // TcDefaultArgReferencesParam
+    {"default value of parameter '{0}' cannot reference parameter '{1}' (default arguments are evaluated at the call site, before parameters are bound)",
+     "パラメータ '{0}' のデフォルト値はパラメータ '{1}' を参照できません（デフォルト引数はパラメータ束縛前に呼び出し側で評価されます）"},
+    // TcUnknownAttribute
+    {"unknown attribute '#[{0}]' is ignored (check the spelling; known attributes include #[test], #[derive(...)], #[target(...)], #[input], #[output], sv::*)",
+     "未知の属性 '#[{0}]' は無視されます（綴りを確認してください。既知の属性: #[test]・#[derive(...)]・#[target(...)]・#[input]・#[output]・sv::* 等）"},
+    // TcUnimplementedAttribute
+    {"attribute '#[{0}]' is not implemented yet and has no effect",
+     "属性 '#[{0}]' は未実装のため効果がありません"},
+    // TcUnknownTargetName
+    {"unknown target name '{0}' in #[target(...)] (known: native, js, web, wasm, sv, uefi, bm, baremetal-arm, baremetal-x86; use \"js\" for TypeScript output)",
+     "#[target(...)] の未知のターゲット名 '{0}' です（既知: native・js・web・wasm・sv・uefi・bm・baremetal-arm・baremetal-x86。TypeScript出力は \"js\" を使用してください）"},
+    // TcDeprecatedFunctionCall
+    {"function '{0}' is deprecated", "関数 '{0}' は非推奨（deprecated）です"},
+    // TcSvCannotAssignInputPort
+    {"cannot assign to input port '{0}' (input ports are driven by the outside; use #[output] or an internal signal)",
+     "入力ポート '{0}' へは代入できません（inputポートは外部から駆動されます。#[output]または内部信号を使用してください）"},
+    // TcSvPinRequiresStringArgument
+    {"attribute '{0}' requires a pin name argument (e.g. #[{0}(\"38\")])",
+     "属性 '{0}' にはピン名引数が必要です（例: #[{0}(\"38\")]）"},
+    // MirSliceReceiverUnresolved
+    {"could not resolve the slice receiver of a builtin call (the statement would be silently dropped)",
+     "スライス組み込み呼び出しのレシーバの場所を解決できませんでした（この文は黙って欠落します）"},
+    // MirErrorSymbol
+    {"internal error: unresolved type artifact '{0}' reached MIR in function '{1}' (a type checker recovery leaked downstream)",
+     "内部エラー: 未解決型の成果物 '{0}' が関数 '{1}' のMIRに到達しました（型検査のエラー回復が下流へ漏れています）"},
+    // PsExpectedBindingVariableNamePattern
+    {"Expected binding variable name in pattern",
+     "パターン内に束縛変数名が必要です"},
+    // PsExpectedMatchPattern
+    {"Expected match pattern",
+     "matchパターンが必要です"},
+    // PsExpectedFieldNameStructLiteral
+    {"Expected field name in struct literal (named initialization required)",
+     "構造体リテラルにはフィールド名が必要です（名前付き初期化が必須です）"},
+    // PsExpectedFieldNameStructLiteral2
+    {"Expected ':' after field name '{0}' in struct literal",
+     "構造体リテラルのフィールド名 '{0}' の後には ':' が必要です"},
+    // PsEmptyParenthesesWithoutLambdaBody
+    {"Empty parentheses without lambda body",
+     "ラムダ本体のない空の括弧です"},
+    // PsExpectedExpression
+    {"Expected expression",
+     "式が必要です"},
+    // PsExpectedAttributeStart
+    {"Expected attribute start '@' or '#'",
+     "属性の開始には '@' または '#' が必要です"},
+    // PsExpected
+    {"Expected '/' after '..'",
+     "'..' の後には '/' が必要です"},
+    // PsExpected2
+    {"Expected '/' after '.'",
+     "'.' の後には '/' が必要です"},
+    // PsExpectedFromExport
+    {"Expected 'from' after 'export *'",
+     "'export *' の後には 'from' が必要です"},
+    // PsExportAndPrivateConflict
+    {"a method cannot be both 'export' and 'private'",
+     "メソッドに 'export' と 'private' は同時に指定できません"},
+    // PsSvBitWidthZero
+    {"bit width must be at least 1 (bit[0] would generate invalid SystemVerilog)",
+     "bitの幅は1以上が必要です（bit[0]は不正なSystemVerilogを生成します）"},
+    // PsArraySizeNotConstant
+    {"array size must be a compile-time constant integer expression",
+     "配列サイズはコンパイル時定数の整数式である必要があります"},
+    // PsSvLiteralOverflowsWidth
+    {"sized literal '{0}' overflows its bit width (the value would be silently truncated by simulators)",
+     "幅付きリテラル '{0}' が指定ビット幅に収まりません（シミュレータで黙って切り詰められます）"},
+    // PsSvPinRequiresStringArgument
+    {"attribute '{0}' requires a string pin name (write #[{0}(\"38\")], not a numeric literal)",
+     "属性 '{0}' のピン名は文字列で指定してください（数値リテラルでなく #[{0}(\"38\")] と書きます）"},
+    // PsExpectedGlobalVariableInitializer
+    {"Expected '=' for global variable initializer",
+     "グローバル変数の初期化子には '=' が必要です"},
+    // PsDeriveNotSupportedEnumsYet
+    {"#[derive] is not supported on enums yet",
+     "#[derive] はenumではまだサポートされていません"},
+    // PsParserStuckNoProgressMade
+    {"Parser stuck - no progress made",
+     "パーサが停止しました - 解析が進行していません"},
+    // PsAttributesNotSupportedExportLists
+    {"Attributes are not supported on export lists",
+     "属性はexportリストではサポートされていません"},
+    // PsDirectiveNotYetImplemented
+    {"Directive '#{0}' is not yet implemented",
+     "ディレクティブ '#{0}' は未実装です"},
+    // PsUnknownInvalidDirective
+    {"Unknown or invalid directive after '#'",
+     "'#' の後のディレクティブが不明または不正です"},
+    // PsDefaultArgumentRequiredParameterDefault
+    {"Default argument required after parameter with default value",
+     "デフォルト値付きパラメータの後のパラメータにはデフォルト引数が必要です"},
+    // PsDeriveRequiresAtLeastOne
+    {"#[derive] requires at least one interface name",
+     "#[derive] には少なくとも1つのインターフェース名が必要です"},
+    // PsOnlyOneDefaultMemberAllowed
+    {"Only one default member allowed per struct",
+     "defaultメンバは構造体ごとに1つだけ許可されます"},
+    // PsExpectedOperatorSymbolOperator
+    {"Expected operator symbol after 'operator'",
+     "'operator' の後には演算子記号が必要です"},
+    // PsOnlyOneDestructorAllowedPer
+    {"Only one destructor allowed per impl block",
+     "デストラクタはimplブロックごとに1つだけ許可されます"},
+    // PsExpectedSelf
+    {"Expected 'self' after '~'",
+     "'~' の後には 'self' が必要です"},
+    // PsParserStuckBlockNoProgress
+    {"Parser stuck in block - no progress made",
+     "パーサがブロック内で停止しました - 解析が進行していません"},
+    // PsParserStuckSynchronizationTooMany
+    {"Parser stuck in synchronization - too many tokens skipped",
+     "パーサが同期処理で停止しました - スキップしたトークンが多すぎます"},
+    // PsExpectedIdentifier
+    {"Expected identifier after '::'",
+     "'::' の後には識別子が必要です"},
+    // PsExpectedType
+    {"Expected type",
+     "型が必要です"},
+    // PsSvMsbLsbBit3
+    {"型の幅・要素数は個数で指定します（SVの範囲表記 [msb:lsb] は型宣言では使えません）。例: bit[3:0] ではなく bit[4] と書きます（生成されるSVでは logic [3:0] になります）",
+     "型の幅・要素数は個数で指定します（SVの範囲表記 [msb:lsb] は型宣言では使えません）。例: bit[3:0] ではなく bit[4] と書きます（生成されるSVでは logic [3:0] になります）"},
+    // PsExpected3
+    {"Expected '>'",
+     "'>' が必要です"},
+    // PsExpectedIdentifierReservedWord
+    {"Expected identifier, got reserved word '{0}'",
+     "識別子が必要ですが、予約語 '{0}' が指定されました"},
+    // PsExpectedIdentifier2
+    {"Expected identifier, got '{0}'",
+     "識別子が必要ですが、'{0}' が指定されました"},
+    // TcUnknownInterfaceDerive
+    {"Unknown interface '{0}' in 'with' / #[derive]",
+     "'with' / #[derive] に不明なインターフェース '{0}' が指定されています"},
+    // TcInterfaceNotDerivableImpl
+    {"Interface '{0}' is not derivable; use 'impl {1} for {2}' instead",
+     "インターフェース '{0}' はderive不可です。代わりに 'impl {1} for {2}' を使用してください"},
+    // TcCannotDeriveStructField
+    {"Cannot derive '{0}' for struct '{1}': field '{2}' ({3})",
+     "構造体 '{1}' に '{0}' をderiveできません: フィールド '{2}' ({3})"},
+    // TcRequiresExactly1ArgumentAssembly
+    {"{0} requires exactly 1 argument (assembly code)",
+     "{0} にはちょうど1つの引数（アセンブリコード）が必要です"},
+    // TcArgumentMustStringLiteral
+    {"{0} argument must be a string literal",
+     "{0} の引数は文字列リテラルでなければなりません"},
+    // TcRequiresAtLeast1Argument
+    {"'{0}' requires at least 1 argument",
+     "'{0}' には少なくとも1つの引数が必要です"},
+    // TcTakesOnly1Argument
+    {"'{0}' takes only 1 argument, got {1}",
+     "'{0}' の引数は1つだけですが、{1}個指定されました"},
+    // TcMethodTypeNotStaticMethod
+    {"Method '{0}' of type '{1}' is not a static method",
+     "型 '{1}' のメソッド '{0}' はstaticメソッドではありません"},
+    // TcStaticMethodExpectsArguments
+    {"Static method '{0}' expects {1} arguments, got {2}",
+     "staticメソッド '{0}' は{1}個の引数を期待しますが、{2}個指定されました"},
+    // TcArgumentTypeMismatchCallExpected
+    {"Argument type mismatch in call to '{0}': expected {1}, got {2}",
+     "'{0}' の呼び出しで引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcArgumentTypeMismatchEnumConstructor
+    {"Argument type mismatch in enum constructor '{0}': expected {1}, got {2}",
+     "enumコンストラクタ '{0}' で引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcArgumentTypeMismatchExpected
+    {"Argument type mismatch in '{0}': expected {1}, got {2}",
+     "'{0}' で引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcNotFunction
+    {"'{0}' is not a function",
+     "'{0}' は関数ではありません"},
+    // TcFunctionPointerExpectsArguments
+    {"Function pointer '{0}' expects {1} arguments, got {2}",
+     "関数ポインタ '{0}' は{1}個の引数を期待しますが、{2}個指定されました"},
+    // TcArgumentTypeMismatchCallFunction
+    {"Argument type mismatch in call to function pointer '{0}': expected {1}, got {2}",
+     "関数ポインタ '{0}' の呼び出しで引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcVariadicFunctionRequiresAtLeast
+    {"Variadic function '{0}' requires at least {1} arguments, got {2}",
+     "可変長引数関数 '{0}' には少なくとも{1}個の引数が必要ですが、{2}個指定されました"},
+    // TcCannotPassCapturingClosureFunction
+    {"Cannot pass a capturing closure to function parameter {0} of '{1}': closures lose their captured environment when passed as values (bind to a local variable and call it directly, or use builtin higher-order methods like map/filter)",
+     "キャプチャ付きクロージャを '{1}' の関数パラメータ {0} へ渡せません: クロージャは値として渡すとキャプチャ環境を失います（ローカル変数へ束縛して直接呼び出すか、map/filter等の組み込み高階メソッドを使用してください）"},
+    // TcFunctionExpectsArguments
+    {"Function '{0}' expects {1} arguments, got {2}",
+     "関数 '{0}' は{1}個の引数を期待しますが、{2}個指定されました"},
+    // TcFunctionExpectsArguments2
+    {"Function '{0}' expects {1} to {2} arguments, got {3}",
+     "関数 '{0}' は{1}〜{2}個の引数を期待しますが、{3}個指定されました"},
+    // TcPointerTypeDoesNotSupport
+    {"Pointer type does not support method calls. Use (*ptr).method() instead.",
+     "ポインタ型はメソッド呼び出しをサポートしません。代わりに (*ptr).method() を使用してください。"},
+    // TcCannotCallPrivateMethodFrom
+    {"Cannot call private method '{0}' from outside impl block of '{1}'",
+     "privateメソッド '{0}' は '{1}' のimplブロック外から呼び出せません"},
+    // TcArgumentTypeMismatchMethodCall
+    {"Argument type mismatch in method call '{0}': expected {1}, got {2}",
+     "メソッド呼び出し '{0}' で引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcFunctionFieldExpectsArguments
+    {"Function field '{0}' expects {1} arguments, got {2}",
+     "関数フィールド '{0}' は{1}個の引数を期待しますが、{2}個指定されました"},
+    // TcArgumentTypeMismatchFunctionField
+    {"Argument type mismatch in function field call '{0}': expected {1}, got {2}",
+     "関数フィールド呼び出し '{0}' で引数型が一致しません: 期待 {1}、実際 {2}"},
+    // TcUnknownMethodType
+    {"Unknown method '{0}' for type '{1}'",
+     "型 '{1}' に不明なメソッド '{0}' が指定されました"},
+    // TcCannotAccessPrivateFieldFrom
+    {"Cannot access private field '{0}' from outside impl block of '{1}'",
+     "privateフィールド '{0}' は '{1}' のimplブロック外からアクセスできません"},
+    // TcUnknownFieldStruct
+    {"Unknown field '{0}' in struct '{1}'",
+     "構造体 '{1}' に不明なフィールド '{0}' が指定されました"},
+    // TcUnknownStructType
+    {"Unknown struct type '{0}'",
+     "不明な構造体型 '{0}' です"},
+    // TcCannotPointerTypeFieldAccess
+    {"Cannot use '.' on pointer type '{0}'. Use '->' for field access through pointers.",
+     "ポインタ型 '{0}' に '.' は使用できません。ポインタ経由のフィールドアクセスには '->' を使用してください。"},
+    // TcFieldAccessNonStructType
+    {"Field access on non-struct type '{0}'",
+     "構造体でない型 '{0}' へのフィールドアクセスです"},
+    // TcArrayTakesNoArguments
+    {"Array {0}() takes no arguments",
+     "配列の {0}() は引数を取りません"},
+    // TcSliceTakesNoArguments
+    {"Slice {0}() takes no arguments",
+     "スライスの {0}() は引数を取りません"},
+    // TcSlicePushTakes1Argument
+    {"Slice push() takes 1 argument",
+     "スライスの push() は1つの引数を取ります"},
+    // TcCannotPushCapturingClosureInto
+    {"Cannot push a capturing closure into a function-type slice: closures lose their captured environment when stored as values (bind to a local variable and call it directly)",
+     "キャプチャ付きクロージャを関数型スライスへpushできません: クロージャは値として格納するとキャプチャ環境を失います（ローカル変数へ束縛して直接呼び出してください）"},
+    // TcSlicePopTakesNoArguments
+    {"Slice pop() takes no arguments",
+     "スライスの pop() は引数を取りません"},
+    // TcSliceTakes1IndexArgument
+    {"Slice {0}() takes 1 index argument",
+     "スライスの {0}() は1つの添字引数を取ります"},
+    // TcSliceClearTakesNoArguments
+    {"Slice clear() takes no arguments",
+     "スライスの clear() は引数を取りません"},
+    // TcArrayIndexofTakes1Argument
+    {"Array indexOf() takes 1 argument",
+     "配列の indexOf() は1つの引数を取ります"},
+    // TcArraySearchUnsupportedElem
+    {"Array {0}() does not support element type '{1}'",
+     "配列の {0}() は要素型 '{1}' に対応していません"},
+    // TcSlicePushTypeMismatch
+    {"Slice push() element type mismatch: expected '{0}', got '{1}'",
+     "スライスの push() の要素型が一致しません: 期待 '{0}'、実際 '{1}'"},
+    // TcBreakOutsideLoop
+    {"'break' outside of a loop",
+     "ループの外では 'break' を使えません"},
+    // TcContinueOutsideLoop
+    {"'continue' outside of a loop",
+     "ループの外では 'continue' を使えません"},
+    // TcArrayTakes1Argument
+    {"Array {0}() takes 1 argument",
+     "配列の {0}() は1つの引数を取ります"},
+    // TcArraySomeTakes1Predicate
+    {"Array some() takes 1 predicate function",
+     "配列の some() は1つの述語関数を取ります"},
+    // TcArrayEveryTakes1Predicate
+    {"Array every() takes 1 predicate function",
+     "配列の every() は1つの述語関数を取ります"},
+    // TcArrayFindindexTakes1Predicate
+    {"Array findIndex() takes 1 predicate function",
+     "配列の findIndex() は1つの述語関数を取ります"},
+    // TcArrayReduceTakes12
+    {"Array reduce() takes 1-2 arguments (callback, [initial])",
+     "配列の reduce() は1〜2個の引数（コールバック、[初期値]）を取ります"},
+    // TcArrayForeachTakes1Callback
+    {"Array forEach() takes 1 callback function",
+     "配列の forEach() は1つのコールバック関数を取ります"},
+    // TcArrayMapTakes1Callback
+    {"Array map() takes 1 callback function",
+     "配列の map() は1つのコールバック関数を取ります"},
+    // TcArrayFilterTakes1Predicate
+    {"Array filter() takes 1 predicate function",
+     "配列の filter() は1つの述語関数を取ります"},
+    // TcArrayReverseTakesNoArguments
+    {"Array reverse() takes no arguments",
+     "配列の reverse() は引数を取りません"},
+    // TcArraySortTakesNoArguments
+    {"Array sort() takes no arguments (use sortBy for custom comparator)",
+     "配列の sort() は引数を取りません（カスタム比較子にはsortByを使用してください）"},
+    // TcArraySortbyTakes1Comparator
+    {"Array sortBy() takes 1 comparator function",
+     "配列の sortBy() は1つの比較関数を取ります"},
+    // TcArrayGetTakes1Index
+    {"Array get() takes 1 index argument",
+     "配列の get() は1つの添字引数を取ります"},
+    // TcArrayGetIndexMustInteger
+    {"Array get() index must be an integer",
+     "配列の get() の添字は整数でなければなりません"},
+    // TcArrayFirstTakesNoArguments
+    {"Array first() takes no arguments",
+     "配列の first() は引数を取りません"},
+    // TcArrayLastTakesNoArguments
+    {"Array last() takes no arguments",
+     "配列の last() は引数を取りません"},
+    // TcArrayFindTakes1Predicate
+    {"Array find() takes 1 predicate function",
+     "配列の find() は1つの述語関数を取ります"},
+    // TcArrayDimTakesNoArguments
+    {"Array dim() takes no arguments",
+     "配列の dim() は引数を取りません"},
+    // TcUnknownArrayMethod
+    {"Unknown array method '{0}'",
+     "不明な配列メソッド '{0}' です"},
+    // TcStringTakesNoArguments
+    {"String {0}() takes no arguments",
+     "文字列の {0}() は引数を取りません"},
+    // TcStringCharsTakesNoArguments
+    {"String chars() takes no arguments",
+     "文字列の chars() は引数を取りません"},
+    // TcStringCodepointAtTakes1
+    {"String codepoint_at() takes 1 argument",
+     "文字列の codepoint_at() は1つの引数を取ります"},
+    // TcStringCodepointAtIndexMust
+    {"String codepoint_at() index must be integer",
+     "文字列の codepoint_at() の添字は整数でなければなりません"},
+    // TcStringTakes1Argument
+    {"String {0}() takes 1 argument",
+     "文字列の {0}() は1つの引数を取ります"},
+    // TcStringIndexMustInteger
+    {"String {0}() index must be integer",
+     "文字列の {0}() の添字は整数でなければなりません"},
+    // TcStringTakes12Arguments
+    {"String {0}() takes 1-2 arguments",
+     "文字列の {0}() は1〜2個の引数を取ります"},
+    // TcStringArgumentsMustIntegers
+    {"String {0}() arguments must be integers",
+     "文字列の {0}() の引数は整数でなければなりません"},
+    // TcStringIndexofTakes1Argument
+    {"String indexOf() takes 1 argument",
+     "文字列の indexOf() は1つの引数を取ります"},
+    // TcStringIndexofArgumentMustString
+    {"String indexOf() argument must be string",
+     "文字列の indexOf() の引数は文字列でなければなりません"},
+    // TcStringArgumentMustString
+    {"String {0}() argument must be string",
+     "文字列の {0}() の引数は文字列でなければなりません"},
+    // TcStringRepeatTakes1Argument
+    {"String repeat() takes 1 argument",
+     "文字列の repeat() は1つの引数を取ります"},
+    // TcStringRepeatCountMustInteger
+    {"String repeat() count must be integer",
+     "文字列の repeat() の回数は整数でなければなりません"},
+    // TcStringReplaceTakes2Arguments
+    {"String replace() takes 2 arguments",
+     "文字列の replace() は2つの引数を取ります"},
+    // TcStringReplaceArgumentsMustStrings
+    {"String replace() arguments must be strings",
+     "文字列の replace() の引数は文字列でなければなりません"},
+    // TcStringFirstTakesNoArguments
+    {"String first() takes no arguments",
+     "文字列の first() は引数を取りません"},
+    // TcStringLastTakesNoArguments
+    {"String last() takes no arguments",
+     "文字列の last() は引数を取りません"},
+    // TcUnknownStringMethod
+    {"Unknown string method '{0}'",
+     "不明な文字列メソッド '{0}' です"},
+    // TcInterfaceSpecifiedMoreThanOnce
+    {"Interface '{0}' is specified more than once in 'with' / #[derive] for struct '{1}'",
+     "インターフェース '{0}' が構造体 '{1}' の 'with' / #[derive] で複数回指定されています"},
+    // TcNotDeclaredInterface
+    {"'{0}' is not a declared interface", "'{0}' は宣言されたインターフェースではありません"},
+    // TcDuplicateImplInterface
+    {"Duplicate impl: '{0}' already implements '{1}'",
+     "implが重複しています: '{0}' は既にインターフェース '{1}' を実装しています"},
+    // TcDuplicateMethodOnType
+    {"Duplicate method: '{0}' already has method '{1}'",
+     "メソッドが重複しています: '{0}' には既にメソッド '{1}' が定義されています"},
+    // TcUndefinedTypeGlobalVariable
+    {"Undefined type: '{0}' for global variable '{1}'",
+     "未定義の型: グローバル変数 '{1}' の '{0}'"},
+    // TcUndefinedTypeMacro
+    {"Undefined type: '{0}' for macro '{1}'",
+     "未定義の型: マクロ '{1}' の '{0}'"},
+    // TcUndefinedTypeFieldStruct
+    {"Undefined type: '{0}' for field '{1}' in struct '{2}'",
+     "未定義の型: 構造体 '{2}' のフィールド '{1}' の '{0}'"},
+    // TcNestedCssFieldRequiresType
+    {"Nested css field '{0}' requires type '{1}' to implement Css",
+     "ネストしたcssフィールド '{0}' には型 '{1}' のCss実装が必要です"},
+    // TcEnumVariantHasMultiplePayload
+    {"Enum variant '{0}::{1}' has multiple payload values; enum payloads are limited to a single value, wrap them in a struct (e.g. {2}({3}Data))",
+     "enumバリアント '{0}::{1}' に複数のペイロード値があります。enumペイロードは単一値に限定されるため、構造体で包んでください（例: {2}({3}Data)）"},
+    // TcUndefinedTypeFieldEnumVariant
+    {"Undefined type: '{0}' for field '{1}' in enum variant '{2}::{3}'",
+     "未定義の型: enumバリアント '{2}::{3}' のフィールド '{1}' の '{0}'"},
+    // TcUndefinedTypeTypedef
+    {"Undefined type: '{0}' in typedef '{1}'",
+     "未定義の型: typedef '{1}' の '{0}'"},
+    // TcUndefinedReturnTypeInterfaceMethod
+    {"Undefined return type: '{0}' in interface method '{1}::{2}'",
+     "未定義の戻り値型: インターフェースメソッド '{1}::{2}' の '{0}'"},
+    // TcUndefinedParameterTypeParameterInterface
+    {"Undefined parameter type: '{0}' for parameter '{1}' in interface method '{2}::{3}'",
+     "未定義のパラメータ型: インターフェースメソッド '{2}::{3}' のパラメータ '{1}' の '{0}'"},
+    // TcUndefinedReturnTypeFunction
+    {"Undefined return type: '{0}' in function '{1}'",
+     "未定義の戻り値型: 関数 '{1}' の '{0}'"},
+    // TcUndefinedParameterTypeParameterFunction
+    {"Undefined parameter type: '{0}' for parameter '{1}' in function '{2}'",
+     "未定義のパラメータ型: 関数 '{2}' のパラメータ '{1}' の '{0}'"},
+    // TcLambdaParameterMustHaveExplicit
+    {"Lambda parameter '{0}' must have an explicit type. Use: (Type param_name) => { ... }",
+     "ラムダパラメータ '{0}' には明示的な型が必要です。次の形式を使用してください: (Type param_name) => { ... }"},
+    // TcCannotAssignCapturedVar
+    {"Cannot assign to captured variable '{0}' inside a closure: closures capture by value, so the write would not affect the original variable (capture a pointer and write through it if mutation is needed)",
+     "クロージャ内でキャプチャした変数 '{0}' へ代入できません: クロージャは値キャプチャのため書き込みは元の変数に反映されません（変更が必要な場合はポインタをキャプチャして間接的に書き込んでください）"},
+    // TcCannotInferTypeMatchScrutinee
+    {"Cannot infer type of match scrutinee",
+     "matchの対象式の型を推論できません"},
+    // TcMatchGuardMustBooleanExpression
+    {"Match guard must be a boolean expression",
+     "matchガードはbool式でなければなりません"},
+    // TcMatchArmHasIncompatibleType
+    {"Match arm {0} has incompatible type (expected '{1}', got '{2}')",
+     "matchアーム {0} の型に互換性がありません（期待 '{1}'、実際 '{2}'）"},
+    // TcMatchStatementHasNoArms
+    {"Match statement has no arms",
+     "match文にアームがありません"},
+    // TcNonExhaustiveMatchMissingTrue
+    {"Non-exhaustive match: missing 'true' or 'false' pattern (or add '_' wildcard)",
+     "網羅的でないmatch: 'true' または 'false' パターンがありません（または '_' ワイルドカードを追加してください）"},
+    // TcNonExhaustiveMatchMissingPattern
+    {"Non-exhaustive match: missing pattern for '{0}' (or add '_' wildcard)",
+     "網羅的でないmatch: '{0}' のパターンがありません（または '_' ワイルドカードを追加してください）"},
+    // TcNonExhaustiveMatchIntegerPatterns
+    {"Non-exhaustive match: integer patterns require a '_' wildcard pattern",
+     "網羅的でないmatch: 整数パターンには '_' ワイルドカードパターンが必要です"},
+    // TcPatternTypeDoesNotMatch
+    {"Pattern type does not match scrutinee type",
+     "パターンの型が対象式の型と一致しません"},
+    // TcEnumPatternTypeDoesNot
+    {"Enum pattern type does not match scrutinee type",
+     "enumパターンの型が対象式の型と一致しません"},
+    // TcRangeStartTypeDoesNot
+    {"Range start type does not match scrutinee type",
+     "範囲の開始型が対象式の型と一致しません"},
+    // TcRangeEndTypeDoesNot
+    {"Range end type does not match scrutinee type",
+     "範囲の終了型が対象式の型と一致しません"},
+    // TcCannotAssignMovedVariableVariable
+    {"Cannot assign to moved variable '{0}': variable no longer exists after move",
+     "move済み変数 '{0}' へ代入できません: move後の変数は存在しません"},
+    // TcLogicalOperatorsRequireBoolOperands
+    {"Logical operators require bool operands",
+     "論理演算子にはboolオペランドが必要です"},
+    // TcCannotAssignConstVariable
+    {"Cannot assign to const variable '{0}'",
+     "const変数 '{0}' へ代入できません"},
+    // TcCannotAssignWhileItBorrowed
+    {"Cannot assign to '{0}' while it is borrowed",
+     "借用中の '{0}' へ代入できません"},
+    // TcCannotStoreReferenceMayDropped
+    {"Cannot store reference to '{0}' in '{1}': '{2}' may be dropped while '{3}' is still alive",
+     "'{0}' への参照を '{1}' へ格納できません: '{3}' の生存中に '{2}' が破棄される可能性があります"},
+    // TcCannotAssignThroughConstPointer
+    {"Cannot assign through const pointer",
+     "constポインタ経由で代入できません"},
+    // TcCannotAssignThroughPointerConst
+    {"Cannot assign through pointer to const",
+     "const対象へのポインタ経由で代入できません"},
+    // TcTypeDoesNotImplementOperator
+    {"Type '{0}' does not implement {1} operator for compound assignment",
+     "型 '{0}' は複合代入のための {1} 演算子を実装していません"},
+    // TcAssignmentTypeMismatch
+    {"Assignment type mismatch",
+     "代入の型が一致しません"},
+    // TcAddOperatorRequiresNumericOperands
+    {"Add operator requires numeric operands or string concatenation",
+     "加算演算子には数値オペランドまたは文字列連結が必要です"},
+    // TcSubOperatorRequiresNumericOperands
+    {"Sub operator requires numeric operands",
+     "減算演算子には数値オペランドが必要です"},
+    // TcArithmeticOperatorsRequireNumericOperands
+    {"Arithmetic operators require numeric operands",
+     "算術演算子には数値オペランドが必要です"},
+    // TcNegationRequiresNumericOperand
+    {"Negation requires numeric operand",
+     "符号反転には数値オペランドが必要です"},
+    // TcLogicalNotRequiresBoolOperand
+    {"Logical not requires bool operand",
+     "論理否定にはboolオペランドが必要です"},
+    // TcBitwiseNotRequiresIntegerOperand
+    {"Bitwise not requires integer operand",
+     "ビット否定には整数オペランドが必要です"},
+    // TcCannotDereferenceNonPointer
+    {"Cannot dereference non-pointer",
+     "ポインタでない値をデリファレンスできません"},
+    // TcCannotModifyConstVariable
+    {"Cannot modify const variable '{0}'",
+     "const変数 '{0}' を変更できません"},
+    // TcCannotModifyWhileItBorrowed
+    {"Cannot modify '{0}' while it is borrowed",
+     "借用中の '{0}' を変更できません"},
+    // TcIncrementDecrementRequiresNumericOperand
+    {"Increment/decrement requires numeric operand",
+     "インクリメント/デクリメントには数値オペランドが必要です"},
+    // TcTernaryConditionMustBoolInt
+    {"Ternary condition must be bool or int",
+     "三項演算子の条件はboolまたはintでなければなりません"},
+    // TcTernaryBranchesHaveIncompatibleTypes
+    {"Ternary branches have incompatible types",
+     "三項演算子の分岐の型に互換性がありません"},
+    // TcArrayIndexMustIntegerType
+    {"Array index must be an integer type",
+     "配列の添字は整数型でなければなりません"},
+    // TcIndexAccessNonArrayType
+    {"Index access on non-array type",
+     "配列でない型への添字アクセスです"},
+    // TcSliceStartIndexMustInteger
+    {"Slice start index must be an integer type",
+     "スライスの開始添字は整数型でなければなりません"},
+    // TcSliceEndIndexMustInteger
+    {"Slice end index must be an integer type",
+     "スライスの終了添字は整数型でなければなりません"},
+    // TcSliceStepMustIntegerType
+    {"Slice step must be an integer type",
+     "スライスのステップは整数型でなければなりません"},
+    // TcSliceAccessNonArrayString
+    {"Slice access on non-array/string type",
+     "配列・文字列でない型へのスライスアクセスです"},
+    // TcCannotMoveWhileItBorrowed
+    {"Cannot move '{0}' while it is borrowed",
+     "借用中の '{0}' をmoveできません"},
+    // TcUnknownStructType2
+    {"Unknown struct type: {0}",
+     "不明な構造体型: {0}"},
+    // TcCannotStoreCapturingClosureStruct
+    {"Cannot store a capturing closure in struct field '{0}' of '{1}': closures lose their captured environment when stored as values (bind to a local variable and call it directly)",
+     "キャプチャ付きクロージャを '{1}' の構造体フィールド '{0}' へ格納できません: クロージャは値として格納するとキャプチャ環境を失います（ローカル変数へ束縛して直接呼び出してください）"},
+    // TcUndefinedVariable
+    {"Undefined variable '{0}'",
+     "未定義の変数 '{0}' です"},
+    // TcGenericFunctionExpectsArguments
+    {"Generic function '{0}' expects {1} arguments, got {2}",
+     "ジェネリック関数 '{0}' は{1}個の引数を期待しますが、{2}個指定されました"},
+    // TcGenericFunctionExpectsArguments2
+    {"Generic function '{0}' expects {1} to {2} arguments, got {3}",
+     "ジェネリック関数 '{0}' は{1}〜{2}個の引数を期待しますが、{3}個指定されました"},
+    // TcTypeDoesNotSatisfyConstraint
+    {"Type '{0}' does not satisfy constraint '{1}' for type parameter '{2}' in function '{3}'",
+     "型 '{0}' は関数 '{3}' の型パラメータ '{2}' の制約 '{1}' を満たしません"},
+    // TcCannotInferTypeAutoVariable
+    {"Cannot infer type for 'auto' variable '{0}' without initializer",
+     "初期化子のない 'auto' 変数 '{0}' の型を推論できません"},
+    // TcTypeMismatchVariableDeclarationExpected
+    {"Type mismatch in variable declaration '{0}': expected '{1}', got '{2}'",
+     "変数宣言 '{0}' の型が一致しません: 期待 '{1}'、実際 '{2}'"},
+    // TcCannotInferType
+    {"Cannot infer type for '{0}'",
+     "'{0}' の型を推論できません"},
+    // TcReturnTypeMismatchExpected
+    {"Return type mismatch: expected '{0}', got '{1}'",
+     "戻り値型が一致しません: 期待 '{0}'、実際 '{1}'"},
+    // TcCannotReturnReferenceLocalVariable
+    {"Cannot return reference to local variable '{0}': variable will be dropped when function returns",
+     "ローカル変数 '{0}' への参照を返せません: 関数のreturn時に変数は破棄されます"},
+    // TcMissingReturnValueExpected
+    {"Missing return value: expected '{0}'",
+     "戻り値がありません: '{0}' が必要です"},
+    // TcIfConditionMustBool
+    {"If condition must be bool, got '{0}'",
+     "if条件はboolでなければなりませんが、'{0}' が指定されました"},
+    // TcWhileConditionMustBool
+    {"While condition must be bool, got '{0}'",
+     "while条件はboolでなければなりませんが、'{0}' が指定されました"},
+    // TcConditionMustBool
+    {"For condition must be bool, got '{0}'",
+     "for条件はboolでなければなりませんが、'{0}' が指定されました"},
+    // TcCannotInferTypeIterableExpression
+    {"Cannot infer type of iterable expression",
+     "反復対象式の型を推論できません"},
+    // TcRequiresIterableTypeArrayType
+    {"For-in requires an iterable type (array or type with iter() method), got '{0}'",
+     "for-inには反復可能な型（配列またはiter()メソッドを持つ型）が必要ですが、'{0}' が指定されました"},
+    // TcRequiresIterableTypeArray
+    {"For-in requires an iterable type (array), got '{0}'",
+     "for-inには反復可能な型（配列）が必要ですが、'{0}' が指定されました"},
+    // TcIteratorMissingHasNext
+    {"For-in iterator type '{0}' must implement 'bool has_next()'",
+     "for-inのイテレータ型 '{0}' には 'bool has_next()' の実装が必要です"},
+    // TcIteratorHasNextMustReturnBool
+    {"'has_next()' of for-in iterator type '{0}' must return bool, got '{1}'",
+     "for-inのイテレータ型 '{0}' の 'has_next()' はboolを返す必要がありますが、'{1}' が指定されています"},
+    // TcIteratorMissingNext
+    {"For-in iterator type '{0}' must implement 'next()' returning the element type",
+     "for-inのイテレータ型 '{0}' には要素型を返す 'next()' の実装が必要です"},
+    // TcIteratorNextMustNotReturnOption
+    {"'next()' of for-in iterator type '{0}' must return the element type directly, got '{1}' (implement 'bool has_next()' and a non-Option 'next()')",
+     "for-inのイテレータ型 '{0}' の 'next()' は要素型を直接返す必要がありますが、'{1}' が指定されています（'bool has_next()' と非Optionの 'next()' を実装してください）"},
+    // TcVariableTypeMismatchExpected
+    {"For-in variable type mismatch: expected '{0}', got '{1}'",
+     "for-in変数の型が一致しません: 期待 '{0}'、実際 '{1}'"},
+    // TcInvalidLiteralValueLiteralType
+    {"Invalid literal value {0} for literal type. Allowed values: {1}",
+     "リテラル型に不正なリテラル値 {0} が指定されました。許可される値: {1}"},
+    // TcVariableMayUsedBeforeInitialization
+    {"Variable '{0}' may be used before initialization",
+     "変数 '{0}' は初期化前に使用される可能性があります"},
+    // TcVariableNeverModifiedConsiderUsing
+    {"Variable '{0}' is never modified, consider using 'const'",
+     "変数 '{0}' は変更されていません。'const' の使用を検討してください"},
+    // TcVariableNeverUsedW001
+    {"Variable '{0}' is never used [W001]",
+     "変数 '{0}' は使用されていません [W001]"},
+    // TcArraySizeMustPositiveInteger
+    {"Array size must be a positive integer, got {0} for '{1}'",
+     "配列サイズは正の整数でなければなりませんが、'{1}' に {0} が指定されました"},
+    // TcArraySizeMustConstVariable
+    {"Array size must be a const variable, but '{0}' is not const",
+     "配列サイズはconst変数でなければなりませんが、'{0}' はconstではありません"},
+    // TcUndefinedVariableUsedArraySize
+    {"Undefined variable '{0}' used as array size",
+     "配列サイズに未定義の変数 '{0}' が使用されています"},
+    // TcConstVariableDoesNotHave
+    {"Const variable '{0}' does not have a compile-time integer value",
+     "const変数 '{0}' はコンパイル時整数値を持ちません"},
+    // SvSv008UnsynthesizableCallSkipped
+    {"warning[SV008]: '{0}' in a synthesis module is not synthesizable and will be skipped (output such as println is only available inside #[test] functions)\n",
+     "警告[SV008]: 合成モジュール内の '{0}' は合成不能のためスキップします（println等の出力は #[test] 関数内でのみ使用できます）\n"},
+    // SvSv002PointerTypesNotSupported
+    {"error[SV002]: Pointer types are not supported in SV target: {0}\n",
+     "エラー[SV002]: ポインタ型はSVターゲットではサポートされません: {0}\n"},
+    // SvSv005NonConstStringTooLong
+    {"error[SV005]: Non-const string longer than 3 characters is not synthesizable (would be truncated to logic [23:0]): {0} = \"{1}\"\n",
+     "エラー[SV005]: 3文字を超える非const文字列は合成不能です（logic [23:0] へ切り詰められます）: {0} = \"{1}\"\n"},
+    // SvSv002PointerTypesNotSupportedLocal
+    {"error[SV002]: Pointer types are not supported in SV target: {0}::{1}\n",
+     "エラー[SV002]: ポインタ型はSVターゲットではサポートされません: {0}::{1}\n"},
+    // CliEntryPointMainNotFound
+    {"error: entry point 'main' not found (the file is a module; import it from a program with main)\n",
+     "エラー: エントリポイント 'main' が見つかりません（このファイルはモジュールです。mainを持つプログラムからimportしてください）\n"},
+    // TcImplicitNarrowingConversion
+    {"Implicit narrowing conversion from '{0}' to '{1}' may lose information; use an explicit cast 'as {1}'",
+     "'{0}' から '{1}' への暗黙の縮小変換は情報を失う可能性があります。明示キャスト 'as {1}' を使用してください"},
+    // TcImplicitSignConversion
+    {"Implicit conversion from '{0}' to '{1}' changes the sign interpretation; use an explicit cast 'as {1}'",
+     "'{0}' から '{1}' への暗黙変換は符号の解釈を変えます。明示キャスト 'as {1}' を使用してください"},
+    // TcUndefinedTypeVariable
+    {"Undefined type: '{0}' for variable '{1}'", "未定義の型: 変数 '{1}' の '{0}'"},
+    // TcMacroInitTypeMismatch
+    {"Type mismatch in macro '{0}': declared type is '{1}' but initializer has type '{2}'",
+     "マクロ '{0}' の型不一致: 宣言型 '{1}' に対し初期化子の型は '{2}' です"},
+    // TcConstGenericUnsupported
+    {"const generic parameter '{0}' is not supported yet; use a macro or const value instead",
+     "constジェネリックパラメータ '{0}' は未対応です。macroまたはconst値を使用してください"},
+    // TcConstexprFunctionTreatedAsRegular
+    {"constexpr function '{0}' is treated as a regular function (compile-time evaluation is not implemented)",
+     "constexpr関数 '{0}' は通常関数として扱われます（コンパイル時評価は未実装）"},
+    // TcNegativeValueUnsignedFloat
+    {"Negative value assigned to unsigned floating-point type '{0}'",
+     "符号なし浮動小数型 '{0}' へ負値を代入しています"},
+    // PsConstexprVarUnsupported
+    {"constexpr variables are not supported yet; use 'const'",
+     "constexpr変数は未対応です。'const' を使用してください"},
+    // PsVolatileUnsupported
+    {"'volatile' is not supported yet; for cross-thread shared variables use native::sync atomics",
+     "'volatile' は未対応です。スレッド間共有変数にはnative::syncのatomicを使用してください"},
+    // CliSyntaxError
+    {"syntax error: {0}", "構文エラー: {0}"},
+    // CliUnknownPlatformDirective
+    {"error: unknown platform '{0}' in //! platform: directive (valid: native, jit, js, ts, web, wasm, sv, uefi, baremetal/bm)\n",
+     "エラー: //! platform: ディレクティブのプラットフォーム '{0}' は不明です（有効: native, jit, js, ts, web, wasm, sv, uefi, baremetal/bm）\n"},
+    // TcSvConstructRequiresSvTarget
+    {"'{0}' is a SystemVerilog construct; it is only available with --target=sv",
+     "'{0}' はSystemVerilog構文です。--target=sv でのみ使用できます"},
+    // PsReferenceTypeUnsupported
+    {"reference types 'T&' are not supported; use a pointer type 'T*'",
+     "参照型 'T&' は未対応です。ポインタ型 'T*' を使用してください"},
+    // PsOperatorIndexCallUnsupported
+    {"overloading the index operator '[]' or call operator '()' is not supported",
+     "添字演算子 '[]'・呼び出し演算子 '()' のオーバーロードは未対応です"},
+    // PsInterfaceDefaultBodyUnsupported
+    {"interface methods cannot have a default body; declare the signature with ';' and implement it in each impl",
+     "インターフェースメソッドのデフォルト実装（本体付き宣言）は未対応です。';'でシグネチャのみ宣言し、各implで実装してください"},
+    // PsVariadicParamsUnsupported
+    {"user-defined variadic parameters are not supported ('...' is only available in FFI extern declarations)",
+     "ユーザー定義関数の可変長引数は未対応です（'...' はFFIのextern宣言専用）"},
+    // PsDefaultTypeArgUnsupported
+    {"default type arguments '<T = int>' are not supported",
+     "デフォルト型引数 '<T = int>' は未対応です"},
+    // PsMethodOverloadUnsupported
+    {"method overloading with 'overload' is not supported ('overload' is for constructors only)",
+     "メソッドのオーバーロード（overload修飾子）は未対応です（overloadはコンストラクタ専用）"},
+    // TcInterpPlaceholderNotExpression
+    {"interpolation placeholder '{0}' is not a valid expression; it is printed literally (escape literal braces by doubling them)",
+     "補間プレースホルダ '{0}' は式として解釈できないためリテラル文字として出力されます（リテラル波括弧は二重化でエスケープ）"},
+    // TcArrayReduceUnsupportedAcc
+    {"Array reduce() does not support accumulator type '{0}' for element type '{1}'",
+     "配列の reduce() は要素型 '{1}' に対しアキュムレータ型 '{0}' に対応していません"},
+    // TcCastToArrayUnsupported
+    {"Cannot cast '{1}' to array type '{0}' with 'as' (fixed-length arrays convert to slices implicitly at assignment and call sites)",
+     "'as' で '{1}' から配列型 '{0}' へはキャストできません（固定長配列は代入・呼び出しで暗黙にスライスへ変換されます）"},
+    // TcIndirectCallExprUnsupported
+    {"calling a function pointer produced by an expression (such as fs[0](...) or getf()(...)) is not yet supported on this target; assign it to a variable first (e.g. auto f = fs[0]; f(...))",
+     "式が生む関数ポインタの直接呼び出し（fs[0](...) や getf()(...) 等）はこのターゲットでは未対応です。一旦変数へ束ねてから呼び出してください（例: auto f = fs[0]; f(...)）"},
+    // TcReductionArgMustBeBits
+    {"the argument to '{0}' must be an integer or bit[N] type",
+     "'{0}' の引数は整数型または bit[N] 型である必要があります"},
+    // PsStmtAttributeOnlyCaseModifier
+    {"statement attribute '{0}' is not supported here (only #[sv::priority] / #[sv::unique0] immediately before a switch/match statement)",
+     "文の属性 '{0}' はこの位置では使用できません（switch/match文の直前の #[sv::priority] / #[sv::unique0] のみ対応）"},
+    // TcPrintAggregateUnsupported
+    {"cannot format a value of type '{0}' in print/interpolation; print elements individually or use a string-returning method such as debug()",
+     "型 '{0}' の値は print/補間で直接整形できません（要素を個別に出力するか、debug() 等の string を返すメソッドを使用してください）"},
+    // PsTupleUnsupported
+    {"tuple types and destructuring assignment are not supported (use a struct to group values)",
+     "タプル型・分解代入は未対応です（値のグループ化には構造体を使用してください）"},
 };
 // clang-format on
 

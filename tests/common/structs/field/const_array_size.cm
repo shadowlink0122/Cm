@@ -1,0 +1,29 @@
+// 構造体フィールドのconstパラメータ配列サイズ（int[N]）が具体サイズへ解決される。
+// 旧: フィールドはローカルと違い配列サイズが未解決のままで、native/jit のレイアウトが壊れ無出力になっていた
+import std::io::println;
+
+const int N = 3;
+const int ROWS = 2;
+const int COLS = 3;
+
+struct Buf {
+    int[N] data;
+}
+
+struct Grid {
+    int[ROWS][COLS] cells;
+}
+
+int main() {
+    Buf b;
+    b.data[0] = 10;
+    b.data[2] = 30;
+    println(b.data[0]);
+    println(b.data[2]);
+
+    Grid g;
+    g.cells[1][2] = 42;
+    println(g.cells[1][2]);
+
+    return 0;
+}

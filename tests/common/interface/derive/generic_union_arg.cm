@@ -1,0 +1,24 @@
+// derive付きジェネリック構造体のユニオン型引数特殊化（Box<IU>のEq）
+// 特殊化キーのユニオン正準エンコード（$U）とtypedef同一視により、typedef名と表示形が単一の特殊化へ収束する
+// 等値比較は特殊化後正準化パスがタグ+ペイロード比較へ書き換える（タグのみ比較の誤値を防ぐ）
+import std::io::println;
+
+typedef IU = int | string;
+
+struct Box<T> with Eq {
+    T v;
+}
+
+int main() {
+    Box<IU> a = { v: 1 };
+    Box<IU> b = { v: 1 };
+    Box<IU> c = { v: 2 };
+    Box<IU> s = { v: "x" };
+    Box<IU> t = { v: "x" };
+    println("{a == b}");
+    println("{a == c}");
+    println("{a != c}");
+    println("{a == s}");
+    println("{s == t}");
+    return 0;
+}

@@ -234,6 +234,10 @@
               },
               "patterns": [
                 {
+                  "name": "storage.type.primitive.cm",
+                  "match": "\\b(as|from)\\b"
+                },
+                {
                   "name": "variable.other.readwrite.cm",
                   "match": "[a-zA-Z_][a-zA-Z0-9_]*"
                 },
@@ -242,6 +246,10 @@
                   "match": ","
                 }
               ]
+            },
+            {
+              "name": "storage.type.primitive.cm",
+              "match": "\\b(as|from)\\b"
             },
             {
               "name": "entity.name.type.module.cm",
@@ -277,8 +285,16 @@
               "end": "\"",
               "patterns": [
                 {
-                  "name": "constant.character.escape.cm",
-                  "match": "\\\\."
+                  "patterns": [
+                    {
+                      "name": "constant.character.escape.cm",
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
+                    },
+                    {
+                      "name": "invalid.illegal.escape.cm",
+                      "match": "\\\\."
+                    }
+                  ]
                 }
               ]
             },
@@ -338,8 +354,16 @@
               "end": "\"",
               "patterns": [
                 {
-                  "name": "constant.character.escape.cm",
-                  "match": "\\\\."
+                  "patterns": [
+                    {
+                      "name": "constant.character.escape.cm",
+                      "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
+                    },
+                    {
+                      "name": "invalid.illegal.escape.cm",
+                      "match": "\\\\."
+                    }
+                  ]
                 }
               ]
             },
@@ -397,6 +421,10 @@
       },
       "patterns": [
         {
+          "name": "constant.character.escape.cm",
+          "match": "\\\\`"
+        },
+        {
           "include": "#comments"
         },
         {
@@ -436,16 +464,24 @@
           "end": "\"",
           "patterns": [
             {
-              "name": "constant.character.escape.cm",
-              "match": "\\\\."
+              "patterns": [
+                {
+                  "name": "constant.character.escape.cm",
+                  "match": "\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[ntrbfva0\\\\\"'$\\{\\}])"
+                },
+                {
+                  "name": "invalid.illegal.escape.cm",
+                  "match": "\\\\."
+                }
+              ]
             },
             {
               "name": "constant.character.escape.cm",
               "match": "\\{\\{|\\}\\}"
             },
             {
-              "comment": "補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト",
-              "match": "(\\{)([^{}\"]*)(\\})",
+              "comment": "補間プレースホルダ: 同一行で } まで閉じる {式} / {式:書式} のみ着色する（閉じない単独の { はbegin/endを使わないため文字列色のまま）。中括弧は青（template-expressionスコープ）、内側の式は通常の構文ハイライト。式内のエスケープ文字（\\\"等）と構造体リテラルの波括弧2段までを許容する（{x.f(\\\"s\\\")}や{Point{x: 1}}が対象。文字列リテラル内の裸の\"は文字列終端なので式に現れない）",
+              "match": "(\\{)((?:[^{}\"\\\\]|\\\\.|\\{(?:[^{}\"\\\\]|\\\\.|\\{(?:[^{}\"\\\\]|\\\\.)*\\})*\\})*)(\\})",
               "captures": {
                 "1": {
                   "name": "punctuation.definition.template-expression.begin.cm"
@@ -466,7 +502,7 @@
         },
         {
           "name": "string.quoted.single.cm",
-          "match": "'(\\\\.|[^'\\\\])'"
+          "match": "'(\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)|[^'\\\\])'"
         }
       ]
     },
@@ -502,7 +538,7 @@
         },
         {
           "name": "storage.type.primitive.cm",
-          "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|is|from|where|auto)\\b"
+          "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|is|from|where|auto|var)\\b"
         },
         {
           "name": "keyword.operator.new.cm",
@@ -562,6 +598,11 @@
           "match": "\\b(nullptr|null)\\b"
         },
         {
+          "comment": "OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする",
+          "name": "storage.type.primitive.cm",
+          "match": "\\b(None)\\b"
+        },
+        {
           "name": "constant.numeric.cm",
           "match": "\\b[A-Z][A-Z0-9_]*\\b"
         },
@@ -575,7 +616,12 @@
       "patterns": [
         {
           "name": "support.function.builtin.cm",
-          "match": "\\b(print|println|printf|assert|panic|step|exit|eprintln|eprint)\\b"
+          "match": "\\b(print|println|printf|assert|panic|step|exit|eprintln|eprint|reduce_and|reduce_or|reduce_xor|reduce_nand|reduce_nor|reduce_xnor)\\b"
+        },
+        {
+          "comment": "SVA組み込み（sv_assert_property・時相演算子）。after/past等は変数名にも使える一般語のため、呼び出し位置のみ組み込み色にする",
+          "name": "support.function.builtin.cm",
+          "match": "\\b(sv_assert_property|implies|implies_next|after|rose|fell|stable|past)\\b(?=\\s*\\()"
         }
       ]
     },
@@ -619,7 +665,7 @@
       "patterns": [
         {
           "name": "keyword.operator.bitslice.cm",
-          "match": "\\+:"
+          "match": "\\+:|-:"
         },
         {
           "name": "keyword.operator.logical.cm",
@@ -672,23 +718,23 @@
         },
         {
           "name": "constant.numeric.hex.cm",
-          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+          "match": "\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\\b"
         },
         {
           "name": "constant.numeric.binary.cm",
-          "match": "\\b0[bB][01?]+\\b"
+          "match": "\\b0[bB][01?][01?_]*\\b"
         },
         {
           "name": "constant.numeric.octal.cm",
-          "match": "\\b0[oO][0-7]+\\b"
+          "match": "\\b0[oO][0-7][0-7_]*\\b"
         },
         {
           "name": "constant.numeric.float.cm",
-          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.cm",
-          "match": "\\b[0-9]+\\b"
+          "match": "\\b[0-9][0-9_]*\\b"
         }
       ]
     },
@@ -735,6 +781,11 @@
     "interpolation-expression": {
       "comment": "プレースホルダ内の式: トップレベルと同じinclude構成で任意の式（キャスト・namespace参照・ネストした関数呼び出し・演算子等）を通常コードと同様にハイライトする",
       "patterns": [
+        {
+          "comment": "プレースホルダ内のエスケープ文字列リテラル: \\\"...\\\" を区切りの\\\"ごと文字列色で着色する（{o.unwrap_or(\\\"None\\\")}等）。1プレースホルダに複数リテラルがあっても跨いで繋げないよう非貪欲で閉じる",
+          "name": "string.quoted.double.interpolation.cm",
+          "match": "\\\\\"(?:\\\\.|[^\"\\\\])*?\\\\\""
+        },
         {
           "include": "#keywords"
         },

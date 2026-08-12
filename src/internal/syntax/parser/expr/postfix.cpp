@@ -39,17 +39,15 @@ ast::ExprPtr Parser::parse_postfix() {
                     do {
                         // フィールド名:値 形式のみ（名前付き初期化必須）
                         if (!check(TokenKind::Ident)) {
-                            error(
-                                "Expected field name in struct literal (named initialization "
-                                "required)");
+                            error(i18n::msg(i18n::MsgId::PsExpectedFieldNameStructLiteral));
                         }
 
                         std::string field_name(current().get_string());
                         advance();  // フィールド名を消費
 
                         if (!check(TokenKind::Colon)) {
-                            error("Expected ':' after field name '" + field_name +
-                                  "' in struct literal");
+                            error(i18n::msgf(i18n::MsgId::PsExpectedFieldNameStructLiteral2,
+                                             field_name));
                         }
                         advance();  // : を消費
 
@@ -112,13 +110,16 @@ ast::ExprPtr Parser::parse_postfix() {
                 start_expr = parse_expr();
             }
 
-            // インデックスドパートセレクト: x[base +: width]（ビットスライス）
-            if (start_expr && consume_if(TokenKind::PlusColon)) {
+            // インデックスドパートセレクト: x[base +: width]（ビットスライス）・x[base -: width]（下降方向）
+            if (start_expr && (check(TokenKind::PlusColon) || check(TokenKind::MinusColon))) {
+                const bool down = check(TokenKind::MinusColon);
+                advance();
                 auto width_expr = parse_expr();
                 expect(TokenKind::RBracket);
                 auto slice = std::make_unique<ast::SliceExpr>(
                     std::move(expr), std::move(start_expr), std::move(width_expr));
                 slice->is_part_select = true;
+                slice->part_select_down = down;
                 expr = std::make_unique<ast::Expr>(std::move(slice));
                 continue;
             }
@@ -243,6 +244,16 @@ ast::ExprPtr Parser::parse_postfix() {
                     case TokenKind::Tilde:
                     case TokenKind::KwMatch:
                         next_starts_expr = true;
+                        break;
+                    // 配列リテラルの三項枝（cond ? [..] : [..]）。try演算子直後に添字[が続く形は括弧で書く（局所処理調査C4）
+                    case TokenKind::LBracket:
+                        next_starts_expr = true;
+                        break;
+                    // { ident : は無名構造体リテラルの三項枝（cond ? {x:..} : {x:..}）。ブロックと区別するためprimaryと同じ先読みで判定する（局所処理調査C4）
+                    case TokenKind::LBrace:
+                        next_starts_expr = pos_ + 3 < tokens_.size() &&
+                                           tokens_[pos_ + 2].kind == TokenKind::Ident &&
+                                           tokens_[pos_ + 3].kind == TokenKind::Colon;
                         break;
                     default:
                         break;

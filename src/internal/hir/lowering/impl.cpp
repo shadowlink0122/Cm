@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -416,6 +417,49 @@ std::string HirLowering::hir_unary_op_to_string(HirUnaryOp op) {
 }
 
 // 型アラインメント計算（sizeof/alignof用）
+// 型サイズ一本化: ジェネリック構造体の具体化インスタンス（Pair<char,int>等）の型引数を仮引数名へ束縛し、フィールド型を再帰置換する（sizeof/alignの実レイアウト計算用）
+// UnionType等のType派生はコピーがスライスするため置換対象外（そのまま返す。バリアント内の型パラメータは未対応）
+static ast::TypePtr substitute_generic_args(
+    const ast::TypePtr& t, const std::unordered_map<std::string, ast::TypePtr>& subst) {
+    if (!t) {
+        return t;
+    }
+    if ((t->kind == ast::TypeKind::Generic || t->kind == ast::TypeKind::Struct) &&
+        t->type_args.empty()) {
+        auto it = subst.find(t->name);
+        if (it != subst.end()) {
+            return it->second;
+        }
+    }
+    const bool plain_kind = t->kind == ast::TypeKind::Generic || t->kind == ast::TypeKind::Struct ||
+                            t->kind == ast::TypeKind::Pointer || t->kind == ast::TypeKind::Array;
+    const bool needs_recurse = t->element_type || !t->type_args.empty();
+    if (!plain_kind || !needs_recurse) {
+        return t;
+    }
+    auto copy = std::make_shared<ast::Type>(*t);
+    if (copy->element_type) {
+        copy->element_type = substitute_generic_args(copy->element_type, subst);
+    }
+    for (auto& arg : copy->type_args) {
+        arg = substitute_generic_args(arg, subst);
+    }
+    return copy;
+}
+
+// 型サイズ一本化: 具体化インスタンスの構造体定義から仮引数名→型引数の束縛表を作る
+static std::unordered_map<std::string, ast::TypePtr> build_generic_subst(
+    const ast::StructDecl* struct_def, const ast::TypePtr& type) {
+    std::unordered_map<std::string, ast::TypePtr> subst;
+    if (struct_def) {
+        for (size_t i = 0; i < struct_def->generic_params.size() && i < type->type_args.size();
+             ++i) {
+            subst[struct_def->generic_params[i]] = type->type_args[i];
+        }
+    }
+    return subst;
+}
+
 int64_t HirLowering::calculate_type_align(const TypePtr& type) {
     if (!type)
         return 1;
@@ -463,9 +507,15 @@ int64_t HirLowering::calculate_type_align(const TypePtr& type) {
             // 構造体のアラインメント = 最大フィールドのアラインメント
             auto it = struct_defs_.find(type->name);
             if (it != struct_defs_.end()) {
+                // 型サイズ一本化: 具体化インスタンスは置換後フィールドで最大アラインメントを取る
+                const auto subst = (!type->type_args.empty() && !it->second->generic_params.empty())
+                                       ? build_generic_subst(it->second, type)
+                                       : std::unordered_map<std::string, ast::TypePtr>{};
                 int64_t max_align = 1;
                 for (const auto& field : it->second->fields) {
-                    int64_t field_align = calculate_type_align(field.type);
+                    const auto ft =
+                        subst.empty() ? field.type : substitute_generic_args(field.type, subst);
+                    int64_t field_align = calculate_type_align(ft);
                     if (field_align > max_align)
                         max_align = field_align;
                 }
@@ -487,6 +537,24 @@ int64_t HirLowering::calculate_type_align(const TypePtr& type) {
                 }
             }
             return max_align;
+        }
+
+        case ast::TypeKind::Generic: {
+            // 型サイズ一本化: 具体化インスタンスは置換後フィールドの最大アラインメント（従来はdefaultの8で、charのみの特殊化を含む外側構造体のレイアウトが過大整列していた）
+            auto it = struct_defs_.find(type->name);
+            if (it != struct_defs_.end() && it->second) {
+                const auto subst = build_generic_subst(it->second, type);
+                int64_t max_align = 1;
+                for (const auto& field : it->second->fields) {
+                    int64_t field_align =
+                        calculate_type_align(substitute_generic_args(field.type, subst));
+                    if (field_align > max_align) {
+                        max_align = field_align;
+                    }
+                }
+                return max_align;
+            }
+            return 8;
         }
 
         case ast::TypeKind::TypeAlias: {
@@ -582,6 +650,20 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
             // アラインメントを考慮した構造体のサイズを計算
             auto it = struct_defs_.find(type->name);
             if (it != struct_defs_.end()) {
+                // 型サイズ一本化: 具体化インスタンス（Pair<char,int>等はStructキンドで届く）は型引数を仮引数へ束縛して置換後フィールドで畳む
+                // （従来は未置換のフィールド型（仮引数名A/B→default 8）で計算され、sizeof(Pair<char,int>)=16等の誤値をユーザーへ返していた）
+                if (!type->type_args.empty() && !it->second->generic_params.empty()) {
+                    const auto subst = build_generic_subst(it->second, type);
+                    std::vector<ast::Field> subst_fields;
+                    subst_fields.reserve(it->second->fields.size());
+                    for (const auto& field : it->second->fields) {
+                        ast::Field f;
+                        f.name = field.name;
+                        f.type = substitute_generic_args(field.type, subst);
+                        subst_fields.push_back(std::move(f));
+                    }
+                    return calculate_struct_layout(subst_fields).first;
+                }
                 auto [size, align] = calculate_struct_layout(it->second->fields);
                 return size;
             }
@@ -647,45 +729,29 @@ int64_t HirLowering::calculate_type_size(const TypePtr& type) {
             return 0;
 
         case ast::TypeKind::Generic: {
-            // ジェネリック型のサイズ計算
-            // 例: Node<T> や Node<Item>
-
-            // ジェネリック型引数がある場合、構造体定義を探して計算を試みる
+            // 型サイズ一本化: 具体化インスタンス（Pair<char,int>等）は型引数を仮引数へ束縛し、置換後フィールドの実レイアウトを畳む
+            // （従来はフィールド数×8の見積もりでsizeof(Pair<char,int>)=16等の誤値をユーザーへ返し、未知名は暫定256バイトだった）
             if (!type->name.empty() && struct_defs_.count(type->name) > 0) {
-                // 構造体定義が見つかった場合、レイアウトを計算
                 const auto* struct_def = struct_defs_.at(type->name);
-                if (struct_def && struct_def->fields.empty()) {
-                    // 空の構造体は最小1バイト
-                    return 1;
-                }
-
-                // 型引数がある場合でも、最大サイズを見積もる
-                // 各フィールドをポインタサイズ（8バイト）として計算
-                int64_t estimated_size = 0;
-                int64_t max_align = 8;
-
                 if (struct_def) {
+                    if (struct_def->fields.empty()) {
+                        // 空の構造体は最小1バイト
+                        return 1;
+                    }
+                    const auto subst = build_generic_subst(struct_def, type);
+                    std::vector<ast::Field> subst_fields;
+                    subst_fields.reserve(struct_def->fields.size());
                     for (const auto& field : struct_def->fields) {
-                        (void)field;  // 未使用警告を抑制（サイズはポインタサイズで見積もり）
-                        // ジェネリック型パラメータは最大でポインタサイズと仮定
-                        estimated_size += 8;
+                        ast::Field f;
+                        f.name = field.name;
+                        f.type = substitute_generic_args(field.type, subst);
+                        subst_fields.push_back(std::move(f));
                     }
-                    // アライメント調整
-                    if (estimated_size % max_align != 0) {
-                        estimated_size += max_align - (estimated_size % max_align);
-                    }
-                    return estimated_size > 0 ? estimated_size : 8;
+                    return calculate_struct_layout(subst_fields).first;
                 }
             }
-
-            // Phase 1: 緊急修正 - 安全側のサイズを返す
-            // TODO: Phase 2でモノモーフィゼーション後の実際のサイズを計算
-            // Generic type size requested for: + type->name;
-
-            // ジェネリック構造体の場合、暫定的に大きめのサイズを返す
-            // これにより、malloc時にメモリ不足によるクラッシュを防ぐ
-            // 256バイトは大抵の構造体に対して十分なサイズ
-            return 256;  // 暫定的な安全サイズ
+            // 未解決の型パラメータ・未知名はポインタサイズを仮定する（ジェネリック関数内のsizeof(T)はsizeof_forマーカー経路がモノモーフ化時に実レイアウトで解決する）
+            return 8;
         }
 
         default:

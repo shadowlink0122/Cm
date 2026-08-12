@@ -1,0 +1,57 @@
+import std::io::println;
+// B5回帰: キャスト付きnull比較（p == null as T*）がポインタ比較（icmp）になり、文字列比較（cm_strcmp）へ落ちないことを検証する
+
+struct Node {
+    int v;
+    Node* next;
+}
+
+int main() {
+    Node* p = null as Node*;
+
+    // if条件でのキャスト付きnull比較（==）
+    if (p == null as Node*) {
+        println("cast eq null: true");
+    } else {
+        println("cast eq null: false");
+    }
+
+    // if条件での素のnull比較（==）
+    if (p == null) {
+        println("plain eq null: true");
+    } else {
+        println("plain eq null: false");
+    }
+
+    // 変数代入でのキャスト付きnull比較（!=）
+    const bool ne_cast = p != null as Node*;
+    println("cast ne null: {ne_cast}");
+
+    // 変数代入での素のnull比較（!=）
+    const bool ne_plain = p != null;
+    println("plain ne null: {ne_plain}");
+
+    // 非nullポインタでの比較
+    Node n = {v: 42, next: null};
+    p = &n;
+
+    // if条件でのキャスト付きnull比較（!=）
+    if (p != null as Node*) {
+        println("nonnull cast ne: true");
+    } else {
+        println("nonnull cast ne: false");
+    }
+
+    // 変数代入でのキャスト付きnull比較（==）
+    const bool eq_cast = p == null as Node*;
+    println("nonnull cast eq: {eq_cast}");
+
+    // 素のnull比較（!=）
+    if (p != null) {
+        println("nonnull plain ne: true");
+    } else {
+        println("nonnull plain ne: false");
+    }
+
+    return 0;
+}

@@ -5,7 +5,7 @@
 //! test: op=15, cycles=2 -> kind=0
 
 // don't careビット付きmatch（0b1?00等）のSV検証（v0.16.0 設計04-4.2）。
-// (op & mask) == value のif-elseチェーンに脱糖される
+// SVターゲットでは native casez として出力される（SV-N3。互いに素なパターンのため unique casez）
 
 #[input] posedge clk;
 #[input] uint op;

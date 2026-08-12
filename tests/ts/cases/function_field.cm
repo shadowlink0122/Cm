@@ -1,0 +1,19 @@
+//! platform: ts
+// 関数型フィールド: TS上では (a: number, b: number) => number 注釈
+struct Calc {
+    int*(int, int) op;
+}
+int add(int a, int b) {
+    return a + b;
+}
+int mul(int a, int b) {
+    return a * b;
+}
+int main() {
+    Calc c;
+    c.op = add;
+    println("add={c.op(3, 4)}");
+    c.op = mul;
+    println("mul={c.op(3, 4)}");
+    return 0;
+}

@@ -1,0 +1,5 @@
+// 回帰(Z4穴3): ループ外のcontinueは診断
+int main() {
+    continue;
+    return 0;
+}

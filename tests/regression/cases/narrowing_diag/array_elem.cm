@@ -1,0 +1,6 @@
+// 配列要素リテラルへの縮小変換（int→tiny）は警告される（局所処理調査F系）
+int main() {
+    int big = 300;
+    tiny[] a = [big, 1];
+    return 0;
+}

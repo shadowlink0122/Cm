@@ -126,12 +126,22 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
             // ..
             if (consume_if(TokenKind::Slash)) {
                 path_prefix = "../";
+                // 多段の親ディレクトリ参照（import ../../modules/x 等）を1つのプレフィックスへ連結する
+                while (check(TokenKind::Dot) && peek_kind() == TokenKind::Dot) {
+                    advance();
+                    advance();
+                    if (!consume_if(TokenKind::Slash)) {
+                        error(i18n::msg(i18n::MsgId::PsExpected));
+                        return nullptr;
+                    }
+                    path_prefix += "../";
+                }
             } else {
-                error("Expected '/' after '..'");
+                error(i18n::msg(i18n::MsgId::PsExpected));
                 return nullptr;
             }
         } else {
-            error("Expected '/' after '.'");
+            error(i18n::msg(i18n::MsgId::PsExpected2));
             return nullptr;
         }
     }
@@ -146,17 +156,42 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
 
     path.segments.push_back(expect_ident());
 
-    // スラッシュで区切られた深い階層パス: import ./io/file
-    while (consume_if(TokenKind::Slash)) {
-        path.segments.push_back(expect_ident());
-    }
-
-    // または :: で区切られた階層パス: import std::io
-    while (consume_if(TokenKind::ColonColon)) {
-        path.segments.push_back(expect_ident());
+    // 階層パス: 区切りは :: / . のいずれも受け付ける（モジュールファイル方言はドット区切り）。
+    // :: の直後が * / { の場合はパスを終端し、後続のアイテム解析（::* / ::{...}）へ委ねる
+    std::vector<char> separators;
+    while (true) {
+        if (check(TokenKind::Slash) && peek_kind() == TokenKind::Star) {
+            // ディレクトリワイルドカード: import ./path/*; / import ./path/*::{mod1, mod2};
+            // "*"セグメントでパスを終端し、後続の::{...}はモジュール名の選択リストになる
+            advance();
+            advance();
+            separators.push_back('/');
+            path.segments.push_back("*");
+            break;
+        }
+        if (check(TokenKind::Slash) && peek_kind() == TokenKind::Ident) {
+            advance();
+            separators.push_back('/');
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        if (check(TokenKind::Dot) && peek_kind() == TokenKind::Ident) {
+            advance();
+            separators.push_back('.');
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        if (check(TokenKind::ColonColon) && peek_kind() == TokenKind::Ident) {
+            advance();
+            separators.push_back(':');
+            path.segments.push_back(expect_ident());
+            continue;
+        }
+        break;
     }
 
     ast::ImportDecl import_decl(std::move(path));
+    import_decl.separators = std::move(separators);
 
     // インポートアイテム
     if (consume_if(TokenKind::ColonColon)) {
@@ -170,7 +205,7 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
                 std::optional<std::string> alias;
 
                 // エイリアス: print as p
-                if (check(TokenKind::Ident) && current_text() == "as") {
+                if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
                     advance();
                     alias = expect_ident();
                 }
@@ -185,7 +220,7 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
             std::optional<std::string> alias;
 
             // エイリアス: import std.io.print as p;
-            if (check(TokenKind::Ident) && current_text() == "as") {
+            if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
                 advance();
                 alias = expect_ident();
             }
@@ -195,7 +230,7 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
     } else {
         // モジュール全体のインポート: import std.io;
         // またはエイリアス付き: import std.io as io;
-        if (check(TokenKind::Ident) && current_text() == "as") {
+        if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
             advance();
             std::string alias = expect_ident();
             import_decl.items.push_back(ast::ImportItem("", alias));
@@ -223,6 +258,17 @@ ast::DeclPtr Parser::parse_export() {
 
     // v4: エクスポートは名前のリストまたは再エクスポートのみ
 
+    // export import PATH...; （再エクスポート付きimport。モジュールファイル方言）
+    if (check(TokenKind::KwImport)) {
+        auto decl = parse_import_stmt({});
+        if (decl) {
+            if (auto* imp = decl->as<ast::ImportDecl>()) {
+                imp->is_reexport = true;
+            }
+        }
+        return decl;
+    }
+
     // export * from module; (ワイルドカード再エクスポート)
     if (consume_if(TokenKind::Star)) {
         if (check(TokenKind::Ident) && current_text() == "from") {
@@ -239,7 +285,7 @@ ast::DeclPtr Parser::parse_export() {
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});
         }
-        error("Expected 'from' after 'export *'");
+        error(i18n::msg(i18n::MsgId::PsExpectedFromExport));
         return nullptr;
     }
 
@@ -284,7 +330,7 @@ ast::DeclPtr Parser::parse_export() {
                 std::optional<std::string> alias;
 
                 // as エイリアス
-                if (check(TokenKind::Ident) && current_text() == "as") {
+                if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
                     advance();
                     alias = expect_ident();
                 }
@@ -303,14 +349,16 @@ ast::DeclPtr Parser::parse_export() {
             while (consume_if(TokenKind::ColonColon)) {
                 from_path.segments.push_back(expect_ident());
             }
-            expect(TokenKind::Semicolon);
+            // モジュールファイル方言では末尾セミコロンを省略できる
+            consume_if(TokenKind::Semicolon);
 
             auto export_decl =
                 std::make_unique<ast::ExportDecl>(std::move(items), std::move(from_path));
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});
         } else {
-            expect(TokenKind::Semicolon);
+            // モジュールファイル方言では末尾セミコロンを省略できる
+            consume_if(TokenKind::Semicolon);
             auto export_decl = std::make_unique<ast::ExportDecl>(std::move(items));
             return std::make_unique<ast::Decl>(std::move(export_decl),
                                                Span{start_pos, previous().end});
@@ -325,7 +373,7 @@ ast::DeclPtr Parser::parse_export() {
         std::optional<std::string> alias;
 
         // as エイリアス（v4では export NAME as ALIAS; をサポート）
-        if (check(TokenKind::Ident) && current_text() == "as") {
+        if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
             advance();
             alias = expect_ident();
         }
@@ -386,7 +434,7 @@ ast::DeclPtr Parser::parse_use(std::vector<ast::AttributeNode> attributes) {
 
         // エイリアス
         std::optional<std::string> alias;
-        if (check(TokenKind::Ident) && current_text() == "as") {
+        if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
             advance();
             alias = expect_ident();
         }
@@ -449,7 +497,7 @@ ast::DeclPtr Parser::parse_use(std::vector<ast::AttributeNode> attributes) {
 
     // エイリアス
     std::optional<std::string> alias;
-    if (check(TokenKind::Ident) && current_text() == "as") {
+    if (check(TokenKind::KwAs) || (check(TokenKind::Ident) && current_text() == "as")) {
         advance();
         alias = expect_ident();
     }

@@ -1,0 +1,7 @@
+len=5 blen=10
+c0=a c2=b c4=c
+c1_is_nul=true c3_is_nul=true
+cp1=26085 cp3=128512
+b0=97 b1=230 b4=98 oob=0
+ascii_count=3
+cont_bytes=5

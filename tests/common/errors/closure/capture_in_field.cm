@@ -1,0 +1,9 @@
+// 回帰(V6): キャプチャ付きクロージャの構造体フィールド格納は環境喪失のため診断付き拒否
+import std::io::println;
+struct Holder { const int*(int) f; }
+int main() {
+    int base = 5;
+    Holder h = Holder{f: (int x) => { return x + base; }};
+    println(h.f(10));
+    return 0;
+}

@@ -34,7 +34,14 @@ run_single_test() {
 
     # .skipファイルのチェック
     local skip_file="${test_file%.cm}.skip"
-    local category_skip_file="$(dirname "$test_file")/.skip"
+    # カテゴリ.skipはテストファイルのディレクトリから祖先方向へ最初に見つかったものを採用（サブフォルダの階層は問わない）
+    local category_skip_file=""
+    local _skip_dir="$(dirname "$test_file")"
+    while [ -n "$_skip_dir" ] && [ "$_skip_dir" != "/" ] && [ "$_skip_dir" != "." ]; do
+        if [ -f "$_skip_dir/.skip" ]; then category_skip_file="$_skip_dir/.skip"; break; fi
+        case "$_skip_dir" in */tests) break;; esac
+        _skip_dir="$(dirname "$_skip_dir")"
+    done
     local current_os=$(uname -s | tr '[:upper:]' '[:lower:]')
     local current_arch=$(uname -m)
     local current_opt="o${OPT_LEVEL:-3}"
@@ -366,8 +373,9 @@ PY
 
             if [ $exit_code -eq 0 ] && [ -f "$js_file" ]; then
                 # Node.jsで実行
+                # NODE_PATH: 生成JSは.tmp配下に置かれるため、テストディレクトリ同梱のnode_modules（FFIフィクスチャ）をフォールバック解決させる
                 if command -v node >/dev/null 2>&1; then
-                    run_with_timeout node "$js_file" > "$output_file" 2>&1 || exit_code=$?
+                    run_with_timeout env NODE_PATH="$test_dir/node_modules" node "$js_file" > "$output_file" 2>&1 || exit_code=$?
                 else
                     # 起動時チェック通過後にnodeが消えた異常事態はSKIPせず失敗させる
                     echo -e "${RED}[FAIL]${NC} $category/$test_name - Node.js not found"
@@ -408,6 +416,11 @@ PY
 
             # ベアメタルターゲットでコンパイル（オブジェクト出力のみ）
             (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-x86 -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+
+            # x86成功時はarmでもコンパイル検証する（armのみの起動コード生成経路がx86ゲートでは露見しないため。エラーテストはx86失敗時点で判定される）
+            if [ $exit_code -eq 0 ]; then
+                (cd "$test_dir" && run_with_timeout "$CM_EXECUTABLE" compile --emit-llvm --target=baremetal-arm -O$OPT_LEVEL $CACHE_OPTS "$test_basename" -o "$baremetal_obj" > "$output_file" 2>&1) || exit_code=$?
+            fi
 
             # コンパイル成功 = PASS（実行はしない）
             if [ $exit_code -eq 0 ]; then
@@ -458,8 +471,8 @@ PY
                         # iverilogでコンパイル
                         iverilog -g2012 -o "$sim_binary" "$sv_file" "$tb_file" >> "$output_file" 2>&1
                         if [ $? -eq 0 ]; then
-                            # vvpでシミュレーション実行
-                            vvp "$sim_binary" > "$sim_output" 2>&1
+                            # vvpでシミュレーション実行。テストベンチの $dumpfile は相対名のため、波形(.vcd)がリポジトリルートへ漏れないようTEMP_DIRをCWDにして実行する
+                            (cd "$TEMP_DIR" && vvp "$sim_binary") > "$sim_output" 2>&1
                             local sim_exit=$?
                             if grep -q "SIM_FAIL_EXPECTED" "$expect_file" 2>/dev/null; then
                                 # シミュレーション失敗を期待するテスト（assert不成立の$fatal等）

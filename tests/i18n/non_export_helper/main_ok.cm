@@ -1,0 +1,8 @@
+// 正常系: export関数経由の利用は従来どおり動作する
+import std::io::println;
+import helper::api;
+
+int main() {
+    println(api());
+    return 0;
+}

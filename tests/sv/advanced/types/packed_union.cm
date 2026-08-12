@@ -1,0 +1,27 @@
+//! platform: sv
+
+// packed union → typedef union packed テスト（SV-N6）
+// 同一32ビット領域を生ビットビュー（raw）とフィールド分解ビュー（fields）で再解釈する
+
+struct Fields {
+    bit[8] opcode;
+    bit[8] dst;
+    bit[16] imm;
+}
+
+#[sv::packed_union]
+struct Word {
+    bit[32] raw;
+    Fields fields;
+}
+
+#[input]  bool clk = false;
+#[input]  bit[32] in_word = 0;
+#[output] bit[8] opcode_out = 0;
+
+Word w;
+
+async void decode(posedge clk) {
+    w.raw = in_word;
+    opcode_out = w.fields.opcode;
+}

@@ -1,0 +1,1 @@
+Type mismatch in macro 'X': declared type is 'int' but initializer has type 'string'

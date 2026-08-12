@@ -1,5 +1,5 @@
 // std::fs - ファイルシステム操作（native/JITバックエンド）
-// ネイティブランタイム（runtime_file.c）のcm_file_*関数を呼び出す。
+// ネイティブランタイム（runtime/file.c）のcm_file_*関数を呼び出す。
 // JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
 module std.fs;
 
@@ -10,6 +10,13 @@ use libc {
     bool cm_file_exists(string path);
     bool cm_file_remove(string path);
     long cm_file_size(string path);
+    int mkdir(string path, int mode);
+    int rmdir(string path);
+    utiny[] cm_file_read_bytes(string path);
+    bool cm_file_write_bytes(string path, utiny[] data);
+    void* cm_dir_open(string path);
+    void* cm_dir_next(void* handle);
+    void cm_dir_close(void* handle);
 }
 
 // ============================================================
@@ -44,6 +51,58 @@ export bool remove(string path) {
 /// ファイルサイズ（バイト）を返す（失敗時は-1）
 export long size(string path) {
     return cm_file_size(path);
+}
+
+/// ディレクトリを作成する（パーミッション0755）。成功したらtrue
+export bool create_dir(string path) {
+    return mkdir(path, 0x1ED) == 0;
+}
+
+/// 空のディレクトリを削除する。成功したらtrue
+export bool remove_dir(string path) {
+    return rmdir(path) == 0;
+}
+
+/// ディレクトリ内のエントリ名を返す（"."と".."は除外、名前昇順）。開けなければ空
+export string[] read_dir(string path) {
+    string[] entries = [];
+    void* handle = cm_dir_open(path);
+    if (handle == 0 as void*) {
+        return entries;
+    }
+    while (true) {
+        void* name = cm_dir_next(handle);
+        if (name == 0 as void*) {
+            break;
+        }
+        // ランタイムの借用ポインタなので連結で所有コピーを作って格納する
+        entries.push("" + ((name as char*) as string));
+    }
+    cm_dir_close(handle);
+    // readdirの列挙順はOS依存のため名前昇順で決定化する（挿入ソート）
+    for (long i = 1; i < entries.len(); i++) {
+        const string key = entries[i];
+        long j = i - 1;
+        while (j >= 0 && entries[j] > key) {
+            entries[j + 1] = entries[j];
+            j = j - 1;
+        }
+        entries[j + 1] = key;
+    }
+    return entries;
+}
+
+/// バイト列をファイルへ書き込む（上書き。長さ明示のため埋め込みNULで切れない）
+export bool write_bytes(string path, utiny[] data) {
+    return cm_file_write_bytes(path, data);
+}
+
+/// ファイル全体をバイト列として読む（埋め込みNUL・非UTF-8も欠損しない）。存在しなければErr
+export Result<utiny[], string> read_bytes(string path) {
+    if (!cm_file_exists(path)) {
+        return Result::Err("no such file: " + path);
+    }
+    return Result::Ok(cm_file_read_bytes(path));
 }
 
 // ============================================================

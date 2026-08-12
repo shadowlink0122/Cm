@@ -9,6 +9,198 @@
 
 namespace cm::codegen::llvm_backend {
 
+/// 高階クロージャ呼び出しの環境化（C6）。
+/// MIRの書き換えパスは map/filter へ渡すクロージャを
+/// args = [arr, size, ラムダ参照, cap0, cap1, ...] の可変長引数で表現するが、
+/// ランタイムのシグネチャはキャプチャ数に依存できない。
+/// ここでキャプチャ列をスタック上のi64環境配列へ格納し、
+/// 環境からキャプチャを復元してラムダを呼ぶサンク関数を合成して固定4引数へ正規化する。
+void MIRToLLVM::normalizeHofClosureArgs(const mir::MirTerminator::CallData& callData,
+                                        const std::string& funcName,
+                                        std::vector<llvm::Value*>& args) {
+    // HOFごとのレイアウト: キャプチャ引数の開始位置と、サンクがenvの後に受け取る
+    // 追加パラメータ数（map/filter/述語系=要素1個、reduce=アキュムレータ+要素の2個）
+    size_t caps_start = 3;
+    size_t extra_params = 1;
+    const bool isReduce = funcName.find("_reduce_") != std::string::npos;
+    if (isReduce) {
+        caps_start = 4;  // [arr, size, fn, init, cap0...]
+        extra_params = 2;
+    }
+
+    if (args.size() < caps_start + 1) {
+        return;  // キャプチャ無し（_closure版はrewrite passがキャプチャ有りのみ生成する）
+    }
+
+    // ラムダ関数の実体を関数参照名から解決する
+    std::string lambdaName;
+    if (callData.args.size() > 2 && callData.args[2] &&
+        callData.args[2]->kind == mir::MirOperand::FunctionRef) {
+        lambdaName = std::get<std::string>(callData.args[2]->data);
+    }
+    llvm::Function* lambdaFunc = nullptr;
+    if (!lambdaName.empty()) {
+        auto it = functions.find(lambdaName);
+        lambdaFunc = (it != functions.end()) ? it->second : module->getFunction(lambdaName);
+    }
+    if (!lambdaFunc) {
+        return;  // 解決不能なら変換しない（従来どおり検証エラーで顕在化させ黙殺しない）
+    }
+
+    const size_t capCount = args.size() - caps_start;
+    auto* lambdaTy = lambdaFunc->getFunctionType();
+    // ラムダのパラメータは [cap0..capN-1, 追加パラメータ...] の並びであること
+    if (lambdaTy->getNumParams() != capCount + extra_params) {
+        return;
+    }
+
+    auto* i64Ty = ctx.getI64Type();
+    auto* i32Ty = ctx.getI32Type();
+    auto* ptrTy = ctx.getPtrType();
+
+    // キャプチャ型がi64スロットへ可逆に格納できることを事前検証する（整数・ポインタ・浮動小数のみ）
+    auto slot_representable = [&](llvm::Type* t) {
+        return t->isPointerTy() || t->isDoubleTy() || t->isFloatTy() ||
+               (t->isIntegerTy() && t->getIntegerBitWidth() <= 64);
+    };
+    for (size_t i = 0; i < capCount; ++i) {
+        if (!slot_representable(args[caps_start + i]->getType()) ||
+            !slot_representable(lambdaTy->getParamType(i))) {
+            return;  // 集約キャプチャ等は未対応（変換せず検証エラーで顕在化）
+        }
+    }
+
+    // ランタイム側の要素型・戻り値型
+    // map: elem→elem / filter・some・every・findIndex: 述語系はi8 / reduce: acc / forEach: void
+    // 要素型は関数名の幅サフィックスから導出する（局所処理調査E系。従来は_i64有無の二択でtiny/short/float/double要素のクロージャHOFが扱えなかった）
+    const bool isFilter = funcName.find("filter") != std::string::npos;
+    const bool isPredicate = funcName.find("_some_") != std::string::npos ||
+                             funcName.find("_every_") != std::string::npos;
+    const bool isFindIndex = funcName.find("_findIndex_") != std::string::npos;
+    const bool isForEach = funcName.find("_forEach_") != std::string::npos;
+    auto has_suffix = [&](const char* sfx) { return funcName.find(sfx) != std::string::npos; };
+    llvm::Type* elemTy = i32Ty;
+    if (has_suffix("_i8")) {
+        elemTy = ctx.getI8Type();
+    } else if (has_suffix("_i16")) {
+        elemTy = ctx.getI16Type();
+    } else if (has_suffix("_i64")) {
+        elemTy = i64Ty;
+    } else if (has_suffix("_f32")) {
+        elemTy = ctx.getF32Type();
+    } else if (has_suffix("_f64")) {
+        elemTy = ctx.getF64Type();
+    }
+    // アキュムレータ型は要素型と同じ。混合幅版（_i32_acc64）のみ64bit整数（従来はi32のサンクを合成しランタイムの(i64,i32)コールバックと食い違っていた）
+    llvm::Type* accTy = has_suffix("_acc64") ? i64Ty : elemTy;
+    llvm::Type* retTy = isReduce ? accTy : elemTy;
+    if (isFilter || isPredicate || isFindIndex) {
+        retTy = ctx.getI8Type();
+    } else if (isForEach) {
+        retTy = ctx.getVoidType();
+    }
+
+    // 環境配列は関数エントリブロックへalloca（ループ内呼び出しでスタックが伸び続けるのを防ぐ）
+    auto* envArrTy = llvm::ArrayType::get(i64Ty, capCount);
+    llvm::Function* curFn = builder->GetInsertBlock()->getParent();
+    llvm::IRBuilder<> entryBuilder(&curFn->getEntryBlock(), curFn->getEntryBlock().begin());
+    auto* envAlloca = entryBuilder.CreateAlloca(envArrTy, nullptr, "hof_env");
+
+    // キャプチャ値をi64へ正規化して環境へ格納する
+    for (size_t i = 0; i < capCount; ++i) {
+        llvm::Value* v = args[caps_start + i];
+        llvm::Type* t = v->getType();
+        llvm::Value* as64 = nullptr;
+        if (t->isPointerTy()) {
+            as64 = builder->CreatePtrToInt(v, i64Ty, "cap_p2i");
+        } else if (t->isDoubleTy()) {
+            as64 = builder->CreateBitCast(v, i64Ty, "cap_d2i");
+        } else if (t->isFloatTy()) {
+            as64 = builder->CreateZExt(builder->CreateBitCast(v, i32Ty, "cap_f2i"), i64Ty);
+        } else if (t->isIntegerTy(64)) {
+            as64 = v;
+        } else {
+            as64 = builder->CreateSExt(v, i64Ty, "cap_sext");
+        }
+        auto* slot = builder->CreateConstInBoundsGEP2_64(envArrTy, envAlloca, 0, i, "env_slot");
+        builder->CreateStore(as64, slot);
+    }
+
+    // サンクを取得または合成する（ラムダ×ランタイム変種ごとに1つ。名前はHOF名から導出）
+    std::string variant = funcName.substr(std::string("__builtin_array_").size());
+    std::string thunkName = lambdaName + "$env_thunk_" + variant;
+    llvm::Function* thunk = module->getFunction(thunkName);
+    if (!thunk) {
+        // サンクの引数: env + （reduceはacc, elem / それ以外はelem）
+        std::vector<llvm::Type*> thunkParams = {ptrTy};
+        if (isReduce) {
+            thunkParams.push_back(accTy);  // acc（混合幅版は要素型と異なる）
+        }
+        thunkParams.push_back(elemTy);  // elem
+        auto* thunkTy = llvm::FunctionType::get(retTy, thunkParams, false);
+        thunk = llvm::Function::Create(thunkTy, llvm::Function::InternalLinkage, thunkName, module);
+        auto* entry = llvm::BasicBlock::Create(ctx.getContext(), "entry", thunk);
+        llvm::IRBuilder<> tb(entry);
+
+        // 型調整ヘルパー（整数幅・ポインタ・浮動小数のi64スロットとの相互変換）
+        auto adjust = [&](llvm::Value* v, llvm::Type* target) -> llvm::Value* {
+            llvm::Type* src = v->getType();
+            if (src == target) {
+                return v;
+            }
+            if (target->isPointerTy()) {
+                return tb.CreateIntToPtr(v, target);
+            }
+            if (target->isDoubleTy()) {
+                return tb.CreateBitCast(v, target);
+            }
+            if (target->isFloatTy()) {
+                return tb.CreateBitCast(tb.CreateTrunc(v, i32Ty), target);
+            }
+            if (src->isPointerTy()) {
+                return tb.CreatePtrToInt(v, target);
+            }
+            if (src->getIntegerBitWidth() > target->getIntegerBitWidth()) {
+                return tb.CreateTrunc(v, target);
+            }
+            return tb.CreateSExt(v, target);
+        };
+
+        llvm::Value* envArg = thunk->getArg(0);
+        std::vector<llvm::Value*> lambdaArgs;
+        for (size_t i = 0; i < capCount; ++i) {
+            auto* slot = tb.CreateConstInBoundsGEP2_64(envArrTy, envArg, 0, i, "env_slot");
+            llvm::Value* raw = tb.CreateLoad(i64Ty, slot, "cap_raw");
+            lambdaArgs.push_back(adjust(raw, lambdaTy->getParamType(i)));
+        }
+        // 追加パラメータ（reduce: acc, elem / それ以外: elem）をラムダのパラメータ型へ調整して渡す
+        for (size_t e = 0; e < extra_params; ++e) {
+            llvm::Value* extraArg = thunk->getArg(static_cast<unsigned>(1 + e));
+            lambdaArgs.push_back(adjust(extraArg, lambdaTy->getParamType(capCount + e)));
+        }
+        llvm::Value* result = tb.CreateCall(lambdaFunc, lambdaArgs, "lambda_ret");
+        if (retTy->isVoidTy()) {
+            tb.CreateRetVoid();
+        } else {
+            // 戻り値をランタイム型へ調整（bool i1はzextで拡張）
+            if (result->getType() != retTy) {
+                if (result->getType()->isIntegerTy(1)) {
+                    result = tb.CreateZExt(result, retTy);
+                } else {
+                    result = adjust(result, retTy);
+                }
+            }
+            tb.CreateRet(result);
+        }
+    }
+
+    // 引数を正規化する: キャプチャ列を除去し、fnをサンクへ差し替え、envを末尾へ追加
+    // （map/filter/述語系: [arr, size, サンク, env] / reduce: [arr, size, サンク, init, env]）
+    args.resize(caps_start);
+    args[2] = thunk;
+    args.push_back(envAlloca);
+}
+
 /// 直接/間接呼び出しの生成本体（分離元のswitch脱出用breakはreturnに置換済み）
 void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData,
                                     const std::string& funcName, bool isIndirectCall,
@@ -22,6 +214,15 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
 
         callee = functions[funcId];
 
+        // sret関数は先頭に隠し出力ポインタを持つため、期待パラメータ数を+1して数え合わせる（C14 Phase 4）
+        auto expected_params = [&](const llvm::Function* f) {
+            size_t n = args.size();
+            if (f && f->arg_size() > 0 && f->hasParamAttribute(0, llvm::Attribute::StructRet)) {
+                n += 1;
+            }
+            return n;
+        };
+
         // Bug#45修正: functionsテーブルのcalleeが不正なシグネチャ(void())の場合がある
         // convertFunctionSignatureがMIR内のarg_locals空の関数をvoid()で作成するため。
         // 実引数の数とcalleeの引数数が一致しない場合はcalleeを無効化する。
@@ -32,7 +233,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                 if (args.size() < calleeType->getNumParams()) {
                     callee = nullptr;
                 }
-            } else if (calleeType->getNumParams() != args.size()) {
+            } else if (calleeType->getNumParams() != expected_params(callee)) {
                 callee = nullptr;
             }
         }
@@ -41,7 +242,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
             // Bug#45修正: ベース名の前方一致でfunctionsマップを検索
             for (const auto& [fName, fFunc] : functions) {
                 if (fFunc && fName.find(funcName + "_") == 0 &&
-                    fFunc->getFunctionType()->getNumParams() == args.size()) {
+                    fFunc->getFunctionType()->getNumParams() == expected_params(fFunc)) {
                     callee = fFunc;
                     break;
                 }
@@ -73,7 +274,7 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                         if (args.size() >= funcType->getNumParams()) {
                             callee = existingFunc;
                         }
-                    } else if (funcType->getNumParams() == args.size()) {
+                    } else if (funcType->getNumParams() == expected_params(existingFunc)) {
                         callee = existingFunc;
                     }
                 }
@@ -136,6 +337,25 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
         }
     }
 
+    // 呼び出し先がsret関数なら、引数型調整の前に格納先allocaを先頭へ挿入して位置を揃える（C14 Phase 4）。
+    // 戻り値はvoidになり、後段のdestination格納は自然にスキップされる（storeもmemcpyも不要のコピー0回）
+    if (callee && callee->arg_size() > 0 &&
+        callee->hasParamAttribute(0, llvm::Attribute::StructRet)) {
+        llvm::Value* sretDest = nullptr;
+        if (callData.destination && callData.destination->projections.empty() &&
+            allocatedLocals.count(callData.destination->local) > 0 &&
+            locals[callData.destination->local]) {
+            sretDest = locals[callData.destination->local];
+        }
+        if (!sretDest) {
+            // 格納先が無い（結果を捨てる）場合はダミーバッファを渡す
+            auto sretType =
+                callee->getParamAttribute(0, llvm::Attribute::StructRet).getValueAsType();
+            sretDest = builder->CreateAlloca(sretType, nullptr, "sret_discard");
+        }
+        args.insert(args.begin(), sretDest);
+    }
+
     if (callee) {
         auto funcType = callee->getFunctionType();
         for (size_t i = 0; i < args.size() && i < funcType->getNumParams(); ++i) {
@@ -158,72 +378,8 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
                     }
                 }
 
-                // 構造体をインターフェースパラメータに渡す場合、fat pointerを作成
-                if (!actualTypeName.empty() && !isInterfaceType(actualTypeName)) {
-                    std::string expectedInterfaceName;
-                    if (currentProgram) {
-                        for (const auto& func : currentProgram->functions) {
-                            if (func && func->name == funcName) {
-                                if (i < func->arg_locals.size()) {
-                                    auto argLocal = func->arg_locals[i];
-                                    if (argLocal < func->locals.size()) {
-                                        auto& paramLocal = func->locals[argLocal];
-                                        if (paramLocal.type &&
-                                            isInterfaceType(paramLocal.type->name)) {
-                                            expectedInterfaceName = paramLocal.type->name;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!expectedInterfaceName.empty()) {
-                        auto fatPtrType = getInterfaceFatPtrType(expectedInterfaceName);
-                        std::string vtableKey = actualTypeName + "_" + expectedInterfaceName;
-                        llvm::Value* vtablePtr = nullptr;
-                        auto vtableIt = vtableGlobals.find(vtableKey);
-                        if (vtableIt != vtableGlobals.end()) {
-                            vtablePtr = vtableIt->second;
-                        } else {
-                            vtablePtr = llvm::Constant::getNullValue(ctx.getPtrType());
-                        }
-
-                        // 引数が構造体へのポインタの場合、そのポインタをdata pointerとして使用
-                        llvm::Value* dataPtr = args[i];
-
-                        // 構造体値の場合は、その値をヒープにコピーする
-                        // これにより、インターフェース呼び出し後もデータが有効になる
-                        if (!dataPtr->getType()->isPointerTy()) {
-                            // スタック上に永続的なコピーを作成（呼び出し後も有効）
-                            auto structType = dataPtr->getType();
-                            auto structAlloca =
-                                builder->CreateAlloca(structType, nullptr, "interface_data");
-                            builder->CreateStore(dataPtr, structAlloca);
-                            dataPtr = structAlloca;
-                        }
-
-                        auto fatPtrAlloca = builder->CreateAlloca(fatPtrType, nullptr, "fat_ptr");
-                        auto dataFieldPtr =
-                            builder->CreateStructGEP(fatPtrType, fatPtrAlloca, 0, "data_field");
-                        auto dataPtrCast =
-                            builder->CreateBitCast(dataPtr, ctx.getPtrType(), "data_ptr_cast");
-                        builder->CreateStore(dataPtrCast, dataFieldPtr);
-
-                        auto vtableFieldPtr =
-                            builder->CreateStructGEP(fatPtrType, fatPtrAlloca, 1, "vtable_field");
-                        auto vtablePtrCast =
-                            builder->CreateBitCast(vtablePtr, ctx.getPtrType(), "vtable_ptr_cast");
-                        builder->CreateStore(vtablePtrCast, vtableFieldPtr);
-
-                        // Fat pointerを値として渡す
-                        auto fatPtrValue =
-                            builder->CreateLoad(fatPtrType, fatPtrAlloca, "fat_ptr_value");
-                        args[i] = fatPtrValue;
-                        continue;
-                    }
-                }
+                // 具象→interfaceパラメータのfat pointer構築はMIRのiface_upcast Cast構築物へ
+                // 一元化済みのため、引数側の認識ヒューリスティックはここには存在しない（coercion第2段）
 
                 if (expectedType->isPointerTy() && actualType->isPointerTy()) {
                     args[i] = builder->CreateBitCast(args[i], expectedType);
@@ -590,8 +746,20 @@ void MIRToLLVM::generateRegularCall(const mir::MirTerminator::CallData& callData
     } else {
         // success == INVALID_BLOCK または ブロックがDCEで削除された場合
         // ターミネータがないとLLVMがハングするため、適切なターミネータを生成
-        if (currentMIRFunction &&
-            currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
+        if (currentMIRFunction && needsSretReturn(*currentMIRFunction)) {
+            // sret関数のフォールバック終端（C14 Phase 4。retval→sretバッファへコピーしてret void）
+            auto retVal = locals[currentMIRFunction->return_local];
+            auto sretPtr = currentFunction->getArg(0);
+            if (retVal && llvm::isa<llvm::AllocaInst>(retVal)) {
+                auto allocaInst = llvm::cast<llvm::AllocaInst>(retVal);
+                auto dataLayout = module->getDataLayout();
+                auto allocSize = dataLayout.getTypeAllocSize(allocaInst->getAllocatedType());
+                builder->CreateMemCpy(sretPtr, llvm::MaybeAlign(), retVal, llvm::MaybeAlign(),
+                                      allocSize);
+            }
+            builder->CreateRetVoid();
+        } else if (currentMIRFunction &&
+                   currentMIRFunction->return_local < currentMIRFunction->locals.size()) {
             auto& returnLocal = currentMIRFunction->locals[currentMIRFunction->return_local];
             if (returnLocal.type && returnLocal.type->kind == hir::TypeKind::Void) {
                 // ベアメタル対応 - スタック配列は自動解放

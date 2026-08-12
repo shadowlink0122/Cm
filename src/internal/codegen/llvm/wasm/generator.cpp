@@ -20,7 +20,7 @@ std::string getWasmRuntimePath() {
     }
 
     // デフォルトパス
-    return "src/internal/codegen/llvm/wasm/runtime_wasm.c";
+    return "src/internal/codegen/llvm/wasm/runtime/core.c";
 }
 
 std::string getWasmJsGluePath() {

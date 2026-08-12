@@ -1,0 +1,20 @@
+//! platform: js
+// npmパッケージとの構造体互換: Cm structをそのままJSオブジェクトとして渡し、返却オブジェクトをstructで受ける
+
+struct Point {
+    int x;
+    int y;
+}
+
+use "cmtestpkg" {
+    Point scale(Point p, int factor);
+    string describe(Point p);
+}
+
+int main() {
+    Point p = { x: 3, y: 4 };
+    Point q = scale(p, 10);
+    println("{describe(q)}");
+    println("qx={q.x} qy={q.y}");
+    return 0;
+}

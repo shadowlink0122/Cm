@@ -1,0 +1,46 @@
+// 回帰(Z2): 固定長配列→スライス変換（impl T[]メソッド呼び出し）の要素サイズ
+// 従来は手書きswitchがshort/tiny/構造体/ターゲット依存ポインタ幅を誤り、wasmの文字列要素読みが崩れていた
+import std::io::println;
+interface Totaling {
+    int total();
+}
+impl short[] for Totaling {
+    int total() {
+        int s = 0;
+        for (int i = 0; i < self.len(); i++) {
+            s = s + self[i];
+        }
+        return s;
+    }
+}
+impl tiny[] for Totaling {
+    int total() {
+        int s = 0;
+        for (int i = 0; i < self.len(); i++) {
+            s = s + self[i];
+        }
+        return s;
+    }
+}
+interface Joining {
+    string join_all();
+}
+impl string[] for Joining {
+    string join_all() {
+        string s = "";
+        for (int i = 0; i < self.len(); i++) {
+            s = s + self[i] + ";";
+        }
+        return s;
+    }
+}
+int main() {
+    short[4] sh = [10, 20, 30, 40];
+    println("{sh.total()}");
+    tiny[3] tn = [1, 2, 3];
+    println("{tn.total()}");
+    string[3] arr = ["aa", "bb", "cc"];
+    string r = arr.join_all();
+    println("{r}");
+    return 0;
+}

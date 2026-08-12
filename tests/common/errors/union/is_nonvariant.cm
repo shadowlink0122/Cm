@@ -1,0 +1,7 @@
+// 回帰(エラーパターン): ユニオンの変種に無い型のis判定
+typedef V = int | string;
+int main() {
+    V v = 1;
+    bool b = v is bool;
+    return 0;
+}

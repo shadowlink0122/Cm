@@ -172,7 +172,26 @@ MirRvaluePtr MirRvalue::ref(MirPlace place, bool is_mutable) {
 MirRvaluePtr MirRvalue::cast(MirOperandPtr operand, hir::TypePtr target_type, bool check_only) {
     auto rv = std::make_unique<MirRvalue>();
     rv->kind = Cast;
-    rv->data = CastData{std::move(operand), target_type, check_only};
+    CastData data;
+    data.operand = std::move(operand);
+    data.target_type = target_type;
+    data.check_only = check_only;
+    rv->data = std::move(data);
+    return rv;
+}
+
+MirRvaluePtr MirRvalue::iface_upcast(MirOperandPtr operand, hir::TypePtr iface_type,
+                                     const std::string& concrete_name, bool from_pointer,
+                                     bool boxed) {
+    auto rv = std::make_unique<MirRvalue>();
+    rv->kind = Cast;
+    CastData data;
+    data.operand = std::move(operand);
+    data.target_type = iface_type;
+    data.iface_concrete = concrete_name;
+    data.iface_from_pointer = from_pointer;
+    data.iface_boxed = boxed;
+    rv->data = std::move(data);
     return rv;
 }
 
@@ -246,7 +265,7 @@ MirTerminatorPtr MirTerminator::switch_int(MirOperandPtr discriminant,
     auto term = std::make_unique<MirTerminator>();
     term->kind = SwitchInt;
     term->span = s;
-    term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise};
+    term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise, {}};
     return term;
 }
 

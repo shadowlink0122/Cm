@@ -2,8 +2,10 @@
 // ファイル単位の失敗はそのファイルのエラーとして数え、全体の走査は継続する（例外境界はファイル単位）
 
 #include "driver.hpp"
+#include "frontend.hpp"
+#include "internal/base/diag/emitter.hpp"
 #include "internal/base/i18n.hpp"
-#include "internal/base/source_location.hpp"
+#include "internal/base/source/location.hpp"
 #include "internal/lint/config.hpp"
 #include "internal/module/resolver.hpp"
 #include "internal/preprocessor/conditional.hpp"
@@ -12,10 +14,13 @@
 #include "internal/syntax/parser/parser.hpp"
 #include "internal/types/type_checker.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -73,60 +78,53 @@ int run_check(const cli::Options& opts) {
             std::string platform_directive = parse_platform_directive(code);
             bool is_baremetal_file = is_baremetal_platform(platform_directive);
 
-            // モジュールリゾルバ初期化
-            module::initialize_module_resolver();
+            // フロントエンド（import展開・条件コンパイル・字句・構文解析。共有パイプライン frontend.cpp）
+            cli::FrontendParams fparams;
+            fparams.input_file = file;
+            fparams.defines = opts.defines;
+            fparams.test_mode = opts.test_mode;
+            fparams.debug = opts.debug;
+            auto front = cli::run_frontend(fparams, std::move(code));
 
-            // Import処理
-            preprocessor::ImportPreprocessor import_preprocessor(opts.debug);
-            auto preprocess_result = import_preprocessor.process(code, file);
-
-            if (!preprocess_result.success) {
-                std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
-                                        preprocess_result.error_message);
+            if (!front.internal_error_stage.empty()) {
+                std::cerr << i18n::msgf(i18n::MsgId::CliInternalError, front.internal_error_stage,
+                                        front.internal_error);
                 total_errors++;
                 continue;
             }
-
-            code = preprocess_result.processed_source;
-
-            // 条件付きコンパイル
-            preprocessor::ConditionalPreprocessor conditional;
-            for (const auto& def : opts.defines) {
-                conditional.define(def);
+            if (!front.preprocess_ok) {
+                // R14: 位置情報付きの構文エラーはsyntax errorとして表示する（ファイル名は位置情報に含まれる）
+                if (front.preprocess_error_has_location) {
+                    std::cerr << i18n::msgf(i18n::MsgId::CliSyntaxError, front.preprocess_error);
+                } else {
+                    std::cerr << i18n::msgf(i18n::MsgId::CliPreprocessorError, file,
+                                            front.preprocess_error);
+                }
+                total_errors++;
+                continue;
             }
-            // テストモード（--test）: TEST を自動定義
-            if (opts.test_mode) {
-                conditional.define("TEST");
-            }
-            code = conditional.process(code);
-
-            // パース
-            Lexer lexer(code);  // lint/checkではディレクティブで自動検出
-            auto tokens = lexer.tokenize();
-            Parser parser(std::move(tokens), lexer.is_sv());
-            auto program = parser.parse();
+            code = front.code;
+            auto& preprocess_result = front.preprocess;
+            auto& program = front.program;
 
             // コンパイルと同様に、テストモード以外では #[test] 宣言を除去する（#[test] 関数だけが参照するシンボルの誤検出を防ぐ）
             {
-                Target lint_target = lexer.is_sv() ? Target::SV : Target::Native;
+                Target lint_target = front.is_sv ? Target::SV : Target::Native;
                 ast::TargetFilteringVisitor target_filter(lint_target, opts.test_mode);
                 target_filter.visit(program);
             }
 
-            if (parser.has_errors()) {
-                SourceLocationManager loc_mgr(code, file);
-                for (const auto& diag : parser.diagnostics()) {
-                    std::string error_type =
-                        (diag.severity == DiagKind::Error ? "error" : "warning");
-                    std::cerr << loc_mgr.format_error_location(diag.span,
-                                                               error_type + ": " + diag.message);
-                }
-                total_errors += parser.diagnostics().size();
+            if (!front.parse_ok) {
+                // 診断表示はDiagnosticEmitterへ一元化（source_map写像・参照ファイル読込を含む。X5）
+                DiagnosticEmitter emitter(code, file, &preprocess_result.source_map);
+                emitter.emit_all(front.parser_diagnostics);
+                total_errors += front.parser_diagnostics.size();
                 continue;
             }
 
             // 型チェック
             TypeChecker checker;
+            checker.set_sv_platform(front.is_sv);  // SV入力ポート代入検査（R16）
             // check/lintではLint警告（W001等）を有効化する
             checker.set_enable_lint_warnings(true);
             // --strict指定時は宣言の命名規則チェック（L001）を有効化
@@ -136,8 +134,9 @@ int run_check(const cli::Options& opts) {
             bool type_check_ok = checker.check(program);
             (void)type_check_ok;  // 警告抑制：将来のエラー処理で使用予定
 
-            // 診断情報を表示
-            SourceLocationManager loc_mgr(code, file);
+            // 診断表示はDiagnosticEmitterへ一元化（従来はsource_map未適用で展開後の行番号を表示していた）
+            DiagnosticEmitter emitter(code, file, &preprocess_result.source_map);
+            const SourceLocationManager& loc_mgr = emitter.location_manager();
 
             // インラインコメントによる無効化を解析
             config.clear_line_disables();
@@ -200,7 +199,7 @@ int run_check(const cli::Options& opts) {
                     count_as_error = (diag.severity == DiagKind::Error);
                 }
 
-                std::cerr << loc_mgr.format_error_location(diag.span, prefix + ": " + diag.message);
+                emitter.emit(diag, prefix);
                 if (count_as_error) {
                     total_errors++;
                 } else {

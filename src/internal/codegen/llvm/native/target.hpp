@@ -75,6 +75,11 @@ class TargetManager {
     /// オブジェクトファイル生成（安全版）
     void emitObjectFile(llvm::Module& module, const std::string& filename);
 
+    /// オブジェクトファイル生成（直接版）
+    /// fork分離・タイムアウト監視・事前検証を行わず現在のスレッドでそのままemitする。
+    /// モジュール並列コンパイル用（ワーカスレッドからのforkはmallocロック競合でデッドロックしうるため。空モジュールも正常な.oとして出力する）
+    void emitObjectFileDirect(llvm::Module& module, const std::string& filename);
+
     /// アセンブリ出力（安全版）
     void emitAssembly(llvm::Module& module, const std::string& filename);
 

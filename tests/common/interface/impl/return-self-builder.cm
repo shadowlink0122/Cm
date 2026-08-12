@@ -1,0 +1,36 @@
+import std::io::println;
+// return_self_builder.cm - C1回帰: return self が構造体値を返すこと（ポインタビットでない）
+// 以前はselfのポインタを構造体値スロットへコピーしていたため、native/wasm/jitでビルダーAPIが全滅していた
+
+struct Builder {
+    int count;
+    int total;
+}
+
+impl Builder {
+    self() {
+        self.count = 0;
+        self.total = 0;
+    }
+    Builder add(int n) {
+        self.count = self.count + 1;
+        self.total = self.total + n;
+        return self;
+    }
+    int count_val() {
+        return self.count;
+    }
+    int total_val() {
+        return self.total;
+    }
+}
+
+int main() {
+    Builder b = Builder();
+    Builder b2 = b.add(10);
+    Builder b3 = b2.add(20);
+    const int c = b3.count_val();
+    const int t = b3.total_val();
+    println("count={c} total={t}");
+    return 0;
+}

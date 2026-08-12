@@ -42,6 +42,14 @@ jobs:
       - name: Check C++ format
         run: scripts/ci/check_cpp_format.sh ${{ env.LLVM_VERSION }}
 
+      # src/internal層間の依存規律（逆依存・層違反の検出。compiler-architecture-restructure 第1段）
+      - name: Check layer dependencies
+        run: python3 scripts/check_layer_deps.py --matrix
+
+      # ビルトインレジストリとランタイムC実装のシグネチャ突き合わせ（runtime-builtin-registry 第3段）
+      - name: Check builtin signatures
+        run: python3 scripts/check_builtin_signatures.py
+
   # ========================================
   # Extension Lint - VSCode拡張機能チェック（独立・並列）
   # ========================================
@@ -100,7 +108,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: cache-llvm
         with:
           path: |
@@ -176,7 +184,7 @@ jobs:
       - run: chmod +x build/bin/* cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -220,7 +228,7 @@ jobs:
       - run: chmod +x build/bin/* cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -270,7 +278,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -297,6 +305,16 @@ jobs:
         if: matrix.config.backend == 'sv'
         id: sv_tools
         run: scripts/ci/install_sv_tools.sh
+
+      # native O3のparse_option_test/sync_basicが特定ランナーでのみSIGILLになる
+      # 断続的失敗の調査用（CPUモデル依存のコード生成問題の切り分け。arm64ローカル・
+      # x86_64 qemuとも再現せず、失敗runとCPUモデルの相関を取るための計装）
+      - name: Log runner CPU
+        run: |
+          lscpu 2>/dev/null | grep -E "Model name" || sysctl -n machdep.cpu.brand_string || true
+          (grep -m1 flags /proc/cpuinfo | tr " " "\n" | grep -E "fp16|amx|avx" | sort -u | tr "\n" " "; echo) 2>/dev/null || true
+          echo 'int main() { return 0; }' > /tmp/cpu_probe.cm
+          CM_DUMP_TARGET=1 ./cm compile /tmp/cpu_probe.cm -o /tmp/cpu_probe.out 2>&1 | grep "CM_TARGET" || true
 
       - name: Run ${{ matrix.config.name }} Tests
         id: run_tests
@@ -330,7 +348,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
           key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest
@@ -354,7 +372,7 @@ jobs:
   # サニタイザはOS依存が強い（ASan/TSanランタイム・MSanのLinux限定）ため両OSで検証する
   # ========================================
   tooling-test:
-    name: Tooling (cm test / i18n / lint / sanitize) (${{ matrix.os }})
+    name: Tooling (cm test / i18n / lint / sanitize / ts) (${{ matrix.os }})
     needs: build
     strategy:
       fail-fast: false
@@ -372,7 +390,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /usr/lib/llvm-${{ env.LLVM_VERSION }}
@@ -398,6 +416,15 @@ jobs:
       - name: Run sanitizer E2E
         run: make test-sanitize
 
+      # TypeScriptバックエンドE2E: npx経由でtypescript(tsc)を取得し型検査まで実行する（Node.jsはbuildアーティフォクトのjobに既にセットアップ不要、npxはNode同梱）
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Run TypeScript backend E2E
+        run: make test-ts
+
   # ========================================
   # Benchmark - パフォーマンスベンチマーク
   # ========================================
@@ -417,7 +444,7 @@ jobs:
       - run: chmod +x cm 2>/dev/null || true
 
       - name: Cache LLVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/lib/llvm-${{ env.LLVM_VERSION }}
           key: llvm-${{ env.LLVM_VERSION }}-ubuntu-latest

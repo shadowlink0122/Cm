@@ -1,0 +1,51 @@
+// ユニオンの等値比較（==/!=）: タグ一致＋アクティブ変種のペイロード比較。
+// 従来は生表現比較に落ち、native/jitはタグのみ比較（1==2がtrue）、jsはオブジェクト参照比較（1==1がfalse）と全バックエンドで誤値だった
+import std::io::println;
+
+typedef IU = int | string;
+typedef SU = int[] | string;
+
+int main() {
+    // 同変種・値不一致
+    IU a = 1 as IU;
+    IU c = 2 as IU;
+    println(a == c);
+
+    // 同変種・値一致
+    IU b = 1 as IU;
+    println(a == b);
+
+    // 文字列変種の内容比較
+    IU s1 = "hello" as IU;
+    IU s2 = "hello" as IU;
+    IU s3 = "world" as IU;
+    println(s1 == s2);
+    println(s1 == s3);
+
+    // 変種違い
+    println(a == s1);
+
+    // != は反転
+    println(a != c);
+    println(a != b);
+
+    // 片側union: 変種値との比較
+    println(a == 1);
+    println(a == 2);
+    println(s1 == "hello");
+    println(1 == a);
+
+    // スライス変種の内容比較（固定長配列はwrap前にスライスへ実体化される）
+    int[3] arr1 = [1, 2, 3];
+    int[3] arr2 = [1, 2, 3];
+    int[3] arr3 = [9, 9, 9];
+    SU u1 = arr1 as SU;
+    SU u2 = arr2 as SU;
+    SU u3 = arr3 as SU;
+    SU us = "text" as SU;
+    println(u1 == u2);
+    println(u1 == u3);
+    println(u1 == us);
+
+    return 0;
+}

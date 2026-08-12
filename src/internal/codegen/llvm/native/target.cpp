@@ -1,6 +1,7 @@
 // ターゲットマネージャ実装
 #include "target.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -176,6 +177,29 @@ void TargetManager::emitObjectFile(llvm::Module& module, const std::string& file
     }
 }
 
+// オブジェクトファイル生成（直接版）
+// モジュール並列コンパイル用: fork分離・タイムアウト監視・事前検証なしで現在のスレッドでemitする
+void TargetManager::emitObjectFileDirect(llvm::Module& module, const std::string& filename) {
+#if LLVM_VERSION_MAJOR >= 18
+    auto fileType = llvm::CodeGenFileType::ObjectFile;
+#else
+    auto fileType = llvm::CGFT_ObjectFile;
+#endif
+
+    std::error_code ec;
+    llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+    if (ec) {
+        throw std::runtime_error("Failed to open object file: " + filename + ": " + ec.message());
+    }
+
+    llvm::legacy::PassManager pass;
+    if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+        throw std::runtime_error("TargetMachine cannot emit object file");
+    }
+    pass.run(module);
+    dest.flush();
+}
+
 // アセンブリ出力
 void TargetManager::emitAssembly(llvm::Module& module, const std::string& filename) {
     if (!SafeCodeGenerator::checkComplexity(module)) {
@@ -284,38 +308,40 @@ void TargetManager::generateStartupCode(llvm::Module& module) {
 // データセクション初期化
 void TargetManager::generateDataInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
     auto& ctx = module.getContext();
+    auto i8Ty = llvm::Type::getInt8Ty(ctx);
+    // リンカシンボルはアドレス自体が境界を表すため、値をloadせずシンボルのアドレスを直接使う
+    auto sdata = module.getOrInsertGlobal("_sdata", i8Ty);
+    auto edata = module.getOrInsertGlobal("_edata", i8Ty);
+    auto sidata = module.getOrInsertGlobal("_sidata", i8Ty);
+
     auto ptrTy = llvm::PointerType::get(ctx, 0);
-    auto sdata = module.getOrInsertGlobal("_sdata", ptrTy);
-    auto edata = module.getOrInsertGlobal("_edata", ptrTy);
-    auto sidata = module.getOrInsertGlobal("_sidata", ptrTy);
+    // size引数の型はターゲットのポインタ幅に合わせる（arm=i32。CreatePtrDiffの結果もこの型へ揃えないとLLVM検証で型不一致になる）
+    auto sizeTy = module.getDataLayout().getIntPtrType(ctx);
+    auto memcpy = module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, sizeTy);
 
-    auto memcpy =
-        module.getOrInsertFunction("memcpy", ptrTy, ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx));
-
-    auto sdataPtr = builder.CreateLoad(ptrTy, sdata, "sdata_ptr");
-    auto edataPtr = builder.CreateLoad(ptrTy, edata, "edata_ptr");
-    auto sidataPtr = builder.CreateLoad(ptrTy, sidata, "sidata_ptr");
-
-    auto size = builder.CreatePtrDiff(ptrTy, edataPtr, sdataPtr);
-    builder.CreateCall(memcpy, {sdataPtr, sidataPtr, size});
+    // i8要素のptrdiffでバイト数を得る（ポインタ型要素だと要素数=バイト数/ポインタ幅になってしまう）
+    auto size = builder.CreatePtrDiff(i8Ty, edata, sdata, "data_size");
+    auto sizeArg = builder.CreateIntCast(size, sizeTy, false);
+    builder.CreateCall(memcpy, {sdata, sidata, sizeArg});
 }
 
 // BSSセクション初期化
 void TargetManager::generateBssInit(llvm::Module& module, llvm::IRBuilder<>& builder) {
     auto& ctx = module.getContext();
+    auto i8Ty = llvm::Type::getInt8Ty(ctx);
+    // リンカシンボルはアドレス自体が境界を表すため、値をloadせずシンボルのアドレスを直接使う
+    auto sbss = module.getOrInsertGlobal("_sbss", i8Ty);
+    auto ebss = module.getOrInsertGlobal("_ebss", i8Ty);
+
     auto ptrTy = llvm::PointerType::get(ctx, 0);
-    auto sbss = module.getOrInsertGlobal("_sbss", ptrTy);
-    auto ebss = module.getOrInsertGlobal("_ebss", ptrTy);
+    auto sizeTy = module.getDataLayout().getIntPtrType(ctx);
+    auto memset =
+        module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt32Ty(ctx), sizeTy);
 
-    auto memset = module.getOrInsertFunction("memset", ptrTy, ptrTy, llvm::Type::getInt8Ty(ctx),
-                                             llvm::Type::getInt32Ty(ctx));
-
-    auto sbssPtr = builder.CreateLoad(ptrTy, sbss);
-    auto ebssPtr = builder.CreateLoad(ptrTy, ebss);
-
-    auto size = builder.CreatePtrDiff(ptrTy, ebssPtr, sbssPtr);
-    auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(ctx), 0);
-    builder.CreateCall(memset, {sbssPtr, zero, size});
+    auto size = builder.CreatePtrDiff(i8Ty, ebss, sbss, "bss_size");
+    auto sizeArg = builder.CreateIntCast(size, sizeTy, false);
+    auto zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0);
+    builder.CreateCall(memset, {sbss, zero, sizeArg});
 }
 
 // TargetConfig::getNative() 実装
@@ -360,13 +386,33 @@ TargetConfig TargetConfig::getNative() {
     llvm::sys::getHostCPUFeatures(features);
     std::string featureStr;
     if (cpu != "generic") {
+        // 有効な機能の加算に加えて、無効な機能を明示的に否定する（-feature）。
+        // CPU名（znver4等）はそのCPUの既定機能（AVX-512等）を含意するため、
+        // 加算のみだとハイパーバイザが機能をマスクしたVM（例: Azure EPYC 9V74の一部で
+        // AVX-512が無効）でも既定機能の命令が生成され、実行時SIGILLになる。
+        // clangの-march=nativeと同様に+/-両方を渡して実ホストの機能へ正確に一致させる
         for (const auto& feature : features) {
-            if (feature.second) {
-                if (!featureStr.empty())
-                    featureStr += ",";
-                featureStr += "+" + feature.first().str();
-            }
+            if (!featureStr.empty())
+                featureStr += ",";
+            featureStr += (feature.second ? "+" : "-") + feature.first().str();
         }
+    }
+
+    // 環境変数によるターゲット上書き（CIのflaky SIGILL調査・特定CPU向けの回避用）。
+    // CM_TARGET_CPU: LLVMのCPU名（例: znver4, x86-64-v3, generic）
+    // CM_TARGET_FEATURES: 機能文字列そのもの（例: "+avx2,-avx512f"。空文字で機能指定なし）
+    if (const char* cpu_env = std::getenv("CM_TARGET_CPU")) {
+        if (*cpu_env) {
+            cpu = cpu_env;
+        }
+    }
+    if (const char* feat_env = std::getenv("CM_TARGET_FEATURES")) {
+        featureStr = feat_env;
+    }
+    // CM_DUMP_TARGET=1 でコード生成に使う実際のCPU名・機能文字列をstderrへ出力する
+    if (std::getenv("CM_DUMP_TARGET")) {
+        std::cerr << "[CM_TARGET] triple=" << triple << " cpu=" << cpu << " features=" << featureStr
+                  << "\n";
     }
 
     TargetConfig config;
