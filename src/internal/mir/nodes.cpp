@@ -265,7 +265,7 @@ MirTerminatorPtr MirTerminator::switch_int(MirOperandPtr discriminant,
     auto term = std::make_unique<MirTerminator>();
     term->kind = SwitchInt;
     term->span = s;
-    term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise};
+    term->data = SwitchIntData{std::move(discriminant), std::move(targets), otherwise, {}};
     return term;
 }
 

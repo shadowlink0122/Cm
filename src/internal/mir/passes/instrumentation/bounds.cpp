@@ -133,15 +133,18 @@ bool BoundsCheckInstrumentation::run(MirFunction& func) {
             LocalId t1 = func.add_local("_bounds_neg", hir::make_bool(), true, false);
             auto zero = std::make_unique<MirOperand>();
             zero->kind = MirOperand::Constant;
-            zero->data = MirConstant{int64_t{0}, hir::make_long()};
+            zero->data = MirConstant{int64_t{0}, hir::make_long(), {}};
             zero->type = hir::make_long();
             cmp1->add_statement(MirStatement::assign(
                 MirPlace{t1}, MirRvalue::binary(MirBinaryOp::Lt, std::move(index_for_cmp1),
                                                 std::move(zero), hir::make_bool())));
             auto sw = std::make_unique<MirTerminator>();
             sw->kind = MirTerminator::SwitchInt;
-            sw->data = MirTerminator::SwitchIntData{
-                MirOperand::copy(MirPlace{t1}, hir::make_bool()), {{0, cmp2_block}}, error_block};
+            sw->data =
+                MirTerminator::SwitchIntData{MirOperand::copy(MirPlace{t1}, hir::make_bool()),
+                                             {{0, cmp2_block}},
+                                             error_block,
+                                             {}};
             cmp1->set_terminator(std::move(sw));
         }
 
@@ -156,8 +159,11 @@ bool BoundsCheckInstrumentation::run(MirFunction& func) {
                                   hir::make_bool())));
             auto sw = std::make_unique<MirTerminator>();
             sw->kind = MirTerminator::SwitchInt;
-            sw->data = MirTerminator::SwitchIntData{
-                MirOperand::copy(MirPlace{t2}, hir::make_bool()), {{0, error_block}}, cont_block};
+            sw->data =
+                MirTerminator::SwitchIntData{MirOperand::copy(MirPlace{t2}, hir::make_bool()),
+                                             {{0, error_block}},
+                                             cont_block,
+                                             {}};
             cmp2->set_terminator(std::move(sw));
         }
 

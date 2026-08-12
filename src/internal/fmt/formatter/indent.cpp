@@ -17,11 +17,10 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
     std::ostringstream result;
     std::string line;
     bool first = true;
-    int brace_depth = 0;          // 現在のブレース深さ
-    int bracket_depth = 0;        // 現在のブラケット深さ（配列[]）
-    int paren_depth = 0;          // 現在の丸括弧深さ（関数引数等）
-    bool in_backtick = false;     // バッククォート文字列内かどうか
-    int backtick_base_depth = 0;  // バッククォート開始時の深さ
+    int brace_depth = 0;       // 現在のブレース深さ
+    int bracket_depth = 0;     // 現在のブラケット深さ（配列[]）
+    int paren_depth = 0;       // 現在の丸括弧深さ（関数引数等）
+    bool in_backtick = false;  // バッククォート文字列内かどうか
 
     // 条件付きコンパイルブロック（#ifdef/#ifndef〜#end）をブロック扱いするためのスタック。
     // #else/#end を対応する #ifdef と同列に揃え、#else では分岐開始時点の括弧カウンタを復元する（分岐ごとに波括弧が不均衡でも崩れない）
@@ -227,7 +226,6 @@ std::string Formatter::normalize_indentation(const std::string& code, size_t& ch
                     in_backtick = true;
                     // paren_depthはステートメントの一部（__asm__(` の `(`等）なので
                     // バッククォートのベース深さには含めない
-                    backtick_base_depth = brace_depth + bracket_depth;
                     break;
                 }
             }

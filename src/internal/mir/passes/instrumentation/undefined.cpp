@@ -202,7 +202,7 @@ BlockId create_panic_block(MirFunction& func, const char* message) {
 
     auto message_operand = std::make_unique<MirOperand>();
     message_operand->kind = MirOperand::Constant;
-    message_operand->data = MirConstant{std::string(message), hir::make_string()};
+    message_operand->data = MirConstant{std::string(message), hir::make_string(), {}};
     message_operand->type = hir::make_string();
 
     auto call_term = std::make_unique<MirTerminator>();
@@ -234,19 +234,19 @@ void emit_guard_chain(MirFunction& func, BlockId guard_block, BlockId cont_block
         if (guard.panic_on_zero) {
             // ゼロ除算: 除数が0ならpanic、それ以外は続行
             switch_term->data = MirTerminator::SwitchIntData{
-                std::move(guard.discriminant), {{0, panic_block}}, next};
+                std::move(guard.discriminant), {{0, panic_block}}, next, {}};
         } else {
             // null参照: %t = Eq(ポインタ, null) を挿入し、%tが非0（=null）ならpanic
             LocalId temp = func.add_local("_san_null_check", hir::make_bool(), true, false);
             auto null_constant = std::make_unique<MirOperand>();
             null_constant->kind = MirOperand::Constant;
-            null_constant->data = MirConstant{int64_t{0}, guard.pointer_type};
+            null_constant->data = MirConstant{int64_t{0}, guard.pointer_type, {}};
             null_constant->type = guard.pointer_type;
             func.get_block(current)->add_statement(MirStatement::assign(
                 MirPlace{temp}, MirRvalue::binary(MirBinaryOp::Eq, std::move(guard.discriminant),
                                                   std::move(null_constant), hir::make_bool())));
             switch_term->data = MirTerminator::SwitchIntData{
-                MirOperand::copy(MirPlace{temp}, hir::make_bool()), {{0, next}}, panic_block};
+                MirOperand::copy(MirPlace{temp}, hir::make_bool()), {{0, next}}, panic_block, {}};
         }
         func.get_block(current)->set_terminator(std::move(switch_term));
         current = next;

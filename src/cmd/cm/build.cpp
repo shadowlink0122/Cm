@@ -68,7 +68,7 @@ std::optional<int> run_protected(const char* stage, Fn&& fn) {
 }  // namespace
 
 int run_build(cli::Options& opts, const char* argv0) {
-    BuildContext ctx{opts, argv0};
+    BuildContext ctx{.opts = opts, .argv0 = argv0};
 
     if (opts.command == Command::None || opts.input_file.empty()) {
         if (opts.command == Command::None) {

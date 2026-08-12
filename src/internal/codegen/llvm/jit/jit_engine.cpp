@@ -277,7 +277,7 @@ JITResult JITEngine::execute(const mir::MirProgram& program, const std::string& 
             argvPtrs.push_back(nullptr);
             result.exitCode = mainFn(static_cast<int>(programArgs.size()), argvPtrs.data());
         } else {
-            result.exitCode = reinterpret_cast<PlainFnType>(mainFn)();
+            result.exitCode = reinterpret_cast<PlainFnType>(reinterpret_cast<void*>(mainFn))();
         }
     } catch (const std::exception& e) {
         result.success = false;
