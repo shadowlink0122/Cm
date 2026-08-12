@@ -232,11 +232,6 @@ void check() {
 
 ---
 
-<!-- nav -->
-← 前: [SVバックエンド - 制御構文とループ](control-flow.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) →
-
----
-
 ## interfaceとimplメソッド
 
 `interface` / `impl` で定義した構造体メソッドはSVの `function automatic` として合成されます。
@@ -271,3 +266,8 @@ void compute() {
 - `self` のフィールドへ書き込むメソッドは未対応（`error[SV010]`。値渡しでは呼び出し元へ反映されないため）
 - interface型変数経由の動的ディスパッチは未対応（`error[SV011]`。呼び出し先が静的に決まる具体型経由の呼び出しを使う）
 - `self` のポインタ値をメソッド呼び出し以外へ持ち出す使い方は未対応（`error[SV012]`）
+
+---
+
+<!-- nav -->
+← 前: [SVバックエンド - 制御構文とループ](control-flow.html) ｜ [目次](index.html) ｜ 次: [SVバックエンド - メモリ初期化（ROM/RAM）](memory.html) →

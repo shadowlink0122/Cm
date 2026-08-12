@@ -166,7 +166,7 @@ long l = i;      // int -> long (OK: widening)
 
 Narrowing conversions that may lose information (`double→int`, `long→int`, `int→short`, ...) and sign-changing conversions (`int→uint`, ...) produce a warning (an error under `check/lint --strict`).
 The diagnostic applies uniformly to variable declarations, assignments, and returns, as well as function arguments, array literal elements, and struct field initializers.
-Literals that fit the declared type (`short s = 5;`, `float f = 2.5;`) are exempt.
+Literals that fit the declared type (`short s = 5;`, `float f = 2.5;`) and `uint`/`usize`→`int` (for the `len()`/`sizeof` result idiom) are exempt.
 
 ```cm
 double pi = 3.14;

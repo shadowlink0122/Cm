@@ -155,11 +155,6 @@ async void update(posedge clk) {
 ```
 
 
----
-
-<!-- nav -->
-← Prev: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) | [Contents](index.html) | Next: [SV Backend - Board I/O (Pin Constraints, Tristate, CDC)](board-io.html) →
-
 ## Module instance arrays (#[sv::instance_array], v0.17.0)
 
 To replicate a submodule N times (PE arrays, parallel lanes, multi-channel), annotate the instance declaration with `#[sv::instance_array(N)]`. The instances are emitted as a generate-for; connections to array signals are distributed per lane, and scalar signals are broadcast to all lanes:
@@ -189,3 +184,47 @@ endgenerate
 ```
 
 N can also be a `#[sv::parameter]` name.
+
+## Module-form imports and flattening (hardened in v0.17.0)
+
+Relative imports whose target has no exported IO struct (`import ./name;`) are still flattened into the single module. v0.17.0 hardened the following:
+
+- **Namespace references are expanded**: global references and function calls through a module-form import (`statemod::tick()`, `statemod::ready`) are emitted as plain identifiers (`tick()`, `ready`) in the generated SV (previously the qualified names leaked into the output and Verilator/iverilog rejected them with "Package/class for '::' reference not found")
+- **Imported files are parsed with the SV dialect**: when compiling with `--target=sv`, imported modules are lexed as SV even without a `//! platform: sv` directive of their own. Module-scope declarations without an initializer (`uint scratch;`) are accepted (assign before use to avoid x propagation)
+- **Multi-level parent references**: imports such as `import ../../modules/x` work (see [Modules](../../basics/modules.html))
+
+```cm
+// statemod.cm (no //! platform: directive needed)
+module statemod;
+
+uint scratch;                  // declaration without initializer
+uint count = 0;
+export bool ready = false;
+
+export uint tick() {
+    count = (count + 1) as uint;
+    if (count >= 3) { ready = true; }
+    return count;
+}
+```
+
+```cm
+// top.cm
+import ./statemod;
+
+#[input] posedge clk;
+#[output] uint out = 0;
+#[output] bool flag = false;
+
+async void t(posedge clk) {
+    out = statemod::tick();    // emitted as a plain identifier in the generated SV
+    flag = statemod::ready;
+}
+```
+
+Regression test: `tests/sv/basic/modules/import_state`
+
+---
+
+<!-- nav -->
+← Prev: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) | [Contents](index.html) | Next: [SV Backend - Board I/O (Pin Constraints, Tristate, CDC)](board-io.html) →

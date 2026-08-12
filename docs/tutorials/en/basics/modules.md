@@ -49,6 +49,23 @@ int main() {
 
 ---
 
+## Relative-Path Imports
+
+Local modules are imported by a path relative to the current file. `./` refers to the same directory, `../` to the parent directory, and multi-level parent references such as `../../` also work (v0.17.0; previously only a single `../` was accepted and deeper paths were a syntax error):
+
+```cm
+import ./utils;              // utils.cm in the same directory
+import ../shared/helper;     // shared/helper.cm under the parent directory
+import ../../lib/consts;     // lib/consts.cm two levels up (v0.17.0)
+
+int main() {
+    int r = twice(MAGIC);    // exported function/const from ../../lib/consts.cm
+    return 0;
+}
+```
+
+---
+
 ## Wildcard Imports
 
 Import everything from a module using `*`.

@@ -94,6 +94,8 @@ a != c    // true
 
 > **Note for versions before v0.17.0:** comparisons fell through to raw-representation compares — native/JIT compared tags only (`1 == 2` was true) and JS compared references (`1 == 1` was false) — wrong on every backend.
 
+Unions can also be passed as type arguments of generic structs (`Box<IU>`). Specializations of generic structs with `#[derive(Eq)]` work since v0.17.0, and equality uses the same tag + payload comparison (see [Auto Implementation (with / #[derive])](../advanced/with-keyword.html)).
+
 ### Runtime Type Discrimination: the `is` Operator and Match Type Patterns (v0.16.0)
 
 The `is` operator safely discriminates the active variant of a union value at runtime. Check with `is` first, then extract with `as` without panicking.

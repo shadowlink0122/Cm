@@ -126,6 +126,35 @@ localparam logic [31:0] CNT_MAX = CLK_FREQ / 2 - 32'd1;
 > To generate a module parameter (`module name #(parameter ...)`),
 > declare it with `#[sv::parameter] const` (since v0.16.0; see [Module hierarchy](hierarchy.html)).
 
+### Derived constant expressions and `$rtoi` for float expressions (v0.17.0)
+
+A const initializer may be an arithmetic expression referring to other consts (e.g. `H_TOTAL = H_ACTIVE + H_FP + H_SYNC + H_BP`). A float expression assigned to an integer const (e.g. `CLK_FREQ * 0.02`) is emitted with an explicit `$rtoi()` conversion, truncating toward zero (the same semantics as Cm's narrowing conversion). Previously the raw real expression was emitted and triggered Verilator's REALCVT warning:
+
+```cm
+const uint CLK_FREQ = 210000000 / 4;
+const uint DEBOUNCE_LIMIT = CLK_FREQ * 0.02;
+```
+
+```systemverilog
+localparam logic [31:0] CLK_FREQ = 32'd52500000;
+localparam logic [31:0] DEBOUNCE_LIMIT = $rtoi((CLK_FREQ * 0.020000));
+```
+
+### Constant float expressions in function bodies fold to integers (v0.17.0)
+
+The same "integer constant × float literal" expression written inside a function body is folded to an integer constant at compile time when every value in the float chain is constant, so it no longer triggers SV004 (previously such expressions were only accepted in const declarations and rejected inside function bodies):
+
+```cm
+const uint LIMIT = 100;
+
+async void t(posedge clk) {
+    uint s = LIMIT * 0.5;   // → folded to scaled <= 32'd50;
+    scaled = s;
+}
+```
+
+Float expressions involving runtime values are still rejected with `error[SV004]`. The implicit double→uint narrowing warning still applies; write `(LIMIT * 0.5) as uint` to state the intent explicitly.
+
 ---
 
 ## SV Attributes

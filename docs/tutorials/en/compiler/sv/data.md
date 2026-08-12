@@ -232,11 +232,6 @@ void check() {
 
 ---
 
-<!-- nav -->
-← Prev: [SV Backend - Control Flow and Loops](control-flow.html) | [Contents](index.html) | Next: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) →
-
----
-
 ## Interfaces and impl methods
 
 Struct methods defined with `interface` / `impl` are synthesized as SV `function automatic`.
@@ -271,3 +266,8 @@ Restrictions (reported as clear diagnostics):
 - Methods that write to `self` fields are not supported (`error[SV010]`; pass-by-value would not propagate to the caller)
 - Dynamic dispatch through interface-typed variables is not supported (`error[SV011]`; call through a concrete struct type so the target resolves statically)
 - Escaping the `self` pointer value outside a method call is not supported (`error[SV012]`)
+
+---
+
+<!-- nav -->
+← Prev: [SV Backend - Control Flow and Loops](control-flow.html) | [Contents](index.html) | Next: [SV Backend - Memory Initialization (ROM/RAM)](memory.html) →

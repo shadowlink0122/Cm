@@ -166,7 +166,7 @@ long l = i;      // int → long（OK: 拡大変換）
 
 情報を失いうる縮小変換（`double→int`・`long→int`・`int→short`等）や符号解釈が変わる変換（`int→uint`等）は警告になります（`check/lint --strict` ではエラー）。
 この診断は変数宣言・代入・returnに加え、関数引数・配列要素リテラル・構造体フィールド初期化でも同じ規則で出ます。
-宣言型に適合するリテラル（`short s = 5;`・`float f = 2.5;`）は例外として無診断です。
+宣言型に適合するリテラル（`short s = 5;`・`float f = 2.5;`）と、`len()`・`sizeof` の結果を受けるイディオムのための `uint`/`usize`→`int` は例外として無診断です。
 
 ```cm
 double pi = 3.14;

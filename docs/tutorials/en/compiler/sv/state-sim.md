@@ -126,8 +126,6 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 
 ---
 
-← [Data Structures](data.html) | [Semantic Guarantees](semantics.html) →
-
 ## Assertions (std::debug::assert)
 
 `std::debug::assert` is emitted as an **immediate assertion** for the SV target — checked in simulation and ignored by synthesis tools:

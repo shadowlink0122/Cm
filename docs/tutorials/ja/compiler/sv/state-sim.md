@@ -126,8 +126,6 @@ make debug-x86 FILE=tests/sv/basic/adder.cm
 
 ---
 
-← [データ構造](data.html) | [意味論保証](semantics.html) →
-
 ## アサーション（std::debug::assert）
 
 `std::debug::assert` は SVターゲットでは**即時アサーション**として出力されます。シミュレーションで検証され、合成ツールでは無視されます:

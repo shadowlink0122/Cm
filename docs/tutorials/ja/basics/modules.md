@@ -49,6 +49,23 @@ int main() {
 
 ---
 
+## 相対パスのインポート
+
+自作モジュールはファイル位置からの相対パスでインポートします。`./` は同じディレクトリ、`../` は親ディレクトリを参照し、`../../` 以上の多段の親ディレクトリ参照も書けます（v0.17.0。従来は一段の `../` までで、多段は構文エラーでした）:
+
+```cm
+import ./utils;              // 同じディレクトリの utils.cm
+import ../shared/helper;     // 親ディレクトリ配下の shared/helper.cm
+import ../../lib/consts;     // 2段上の lib/consts.cm（v0.17.0）
+
+int main() {
+    int r = twice(MAGIC);    // ../../lib/consts.cm のexport関数・定数
+    return 0;
+}
+```
+
+---
+
 ## ワイルドカードインポート
 
 モジュール内のすべてをインポートできます：
@@ -246,6 +263,7 @@ import ./b::{compute as compute_b};
 | 構文 | 用途 |
 |------|------|
 | `import mod::func;` | 単一シンボル |
+| `import ../../lib/mod;` | 相対パス（多段の親参照可） |
 | `import mod::*;` | 全シンボル |
 | `import mod as alias;` | エイリアス |
 | `import mod::{a, b};` | 選択的 |
