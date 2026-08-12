@@ -25,10 +25,51 @@ env:
 
 jobs:
   # ========================================
+  # 変更検出 - コンパイラ本体に影響する変更があるジョブだけを実行する
+  # （ドキュメントのみの変更ではビルド・テストのマトリクスを起動しない。
+  # docsのビルド検証はdocs-build.yml、Pagesデプロイはdeploy-pages.ymlが担当）
+  # ========================================
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      extension: ${{ steps.filter.outputs.extension }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # code: コンパイラのビルド・テスト結果に影響しうる変更（src/tests/libs/examples/ビルド定義/CIスクリプト）
+      # extension: VSCode拡張のみに影響する変更
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'libs/**'
+              - 'examples/**'
+              - 'CMakeLists.txt'
+              - 'Makefile'
+              - 'VERSION'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            extension:
+              - 'vscode-extension/**'
+              - '.github/workflows/ci.yml'
+
+  # ========================================
   # Lint - コードフォーマットチェック（独立・並列）
   # ========================================
   lint:
     name: Lint
+    needs: changes
+    # 手動実行（workflow_dispatch）は変更内容に関わらずフルで走らせる
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,6 +96,8 @@ jobs:
   # ========================================
   extension-lint:
     name: Extension Lint
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.extension == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -92,7 +135,9 @@ jobs:
   # ========================================
   build:
     name: Build (${{ matrix.os }})
-    needs: lint
+    needs: [changes, lint]
+    # lintがスキップされた場合（コード変更なし）はビルド以下の全ジョブがneeds連鎖でスキップされる
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
