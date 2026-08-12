@@ -1111,7 +1111,11 @@ struct Builder {
         }
         rewrite_dir_wildcards(info.source);
 
-        Lexer lexer(info.source);
+        // ターゲットがSVの場合は依存ファイルもSVレキサーで解析する。
+        // //! platform: 指定のないimport先モジュール（自動生成のROM定義等）にもSV方言（初期化子なしグローバル・posedge型等）を許可するため
+        const bool sv_target =
+            params.target == "sv" || params.target == "verilog" || params.target == "systemverilog";
+        Lexer lexer(info.source, sv_target ? LexerPlatform::SV : LexerPlatform::Default);
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens), lexer.is_sv());
         ast::Program program = parser.parse();

@@ -1,0 +1,18 @@
+//! platform: sv
+//! test: cycles=4 -> out=4, doubled=9, flag=1
+
+// module形importの回帰: 名前空間修飾されたグローバル参照・関数/task呼び出し（statemod::count等）が
+// 生成SVでは素の識別子へ剥がされること（従来はVerilator/iverilogで「Package/class '::' not found」）。
+// import先の初期化子なし宣言（statemod.cmのscratch）の受理も兼ねる
+import ./statemod;
+
+#[input] posedge clk;
+#[output] uint out = 0;
+#[output] uint doubled = 0;
+#[output] bool flag = false;
+
+async void t(posedge clk) {
+    out = statemod::tick();
+    doubled = statemod::calc(4);
+    flag = statemod::ready;
+}

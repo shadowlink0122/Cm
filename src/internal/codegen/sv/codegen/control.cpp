@@ -1153,14 +1153,21 @@ void SVCodeGen::emitCallGeneric(const std::string& func_name,
         }
     }
 
+    // module形import由来の名前空間修飾（animation_ctrl::f等）は剥がす。
+    // 関数定義側（analyzeの関数出力）はstrip_namespace済みの素の名前で出力されるため、
+    // 呼び出し側が修飾名のままだとVerilatorで「Package/class for '::' not found」になる
+    std::string callee = func_name;
+    if (callee.find("::") != std::string::npos) {
+        callee = strip_namespace(callee);
+    }
+
     // 戻り値がある場合は代入文として出力
     if (cd.destination) {
         std::string lhs = emitPlace(*cd.destination, func);
-        ss << indent() << lhs << (use_nb ? " <= " : " = ") << func_name << "(" << args_str
-           << ");\n";
+        ss << indent() << lhs << (use_nb ? " <= " : " = ") << callee << "(" << args_str << ");\n";
     } else {
         // void関数呼び出し（taskの場合等）
-        ss << indent() << func_name << "(" << args_str << ");\n";
+        ss << indent() << callee << "(" << args_str << ");\n";
     }
 }
 

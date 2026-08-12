@@ -34,6 +34,13 @@ std::string SVCodeGen::emitPlace(const mir::MirPlace& place, const mir::MirFunct
         name = name.substr(5);
     }
 
+    // importモジュール由来のグローバル参照は名前空間を剥がす（core::pc等）。
+    // 宣言側（analyzeのポート/内部シグナル生成）はstrip_namespace済みの名前で出力するため、
+    // 参照側が修飾名のままだとVerilatorで「Package/class for '::' not found」になる
+    if (name.find("::") != std::string::npos) {
+        name = strip_namespace(name);
+    }
+
     // フィールド/インデックスアクセスの投影を適用
     hir::TypePtr current_type =
         (place.local < func.locals.size()) ? func.locals[place.local].type : nullptr;
