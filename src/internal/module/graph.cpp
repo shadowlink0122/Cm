@@ -882,13 +882,29 @@ struct Builder {
         return c.empty() ? p.string() : c;
     }
 
+    // 相対プレフィックスセグメントか（"./" または "../" の1回以上の繰り返し。import ../../x 等の多段親参照を含む）
+    static bool is_relative_prefix(const std::string& seg) {
+        if (seg == "./") {
+            return true;
+        }
+        if (seg.empty() || seg.size() % 3 != 0) {
+            return false;
+        }
+        for (size_t i = 0; i < seg.size(); i += 3) {
+            if (seg.compare(i, 3, "../") != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // モジュールパスの指定子文字列（ソースの区切りを保存: '/'=パス連結・':'/'.'=::。
     // 相対プレフィックス ./ ../ は先頭セグメントとして連結する）
     static std::string spec_of(const std::vector<std::string>& segs, const std::vector<char>& seps,
                                size_t count) {
         std::string spec;
         size_t start = 0;
-        if (!segs.empty() && (segs[0] == "./" || segs[0] == "../")) {
+        if (!segs.empty() && is_relative_prefix(segs[0])) {
             spec = segs[0];
             start = 1;
         }
@@ -983,7 +999,7 @@ struct Builder {
         const std::string full_spec = spec_of(segs, imp.separators, segs.size());
         std::filesystem::path path;
         size_t resolved_count = 0;
-        const bool has_rel_prefix = !segs.empty() && (segs[0] == "./" || segs[0] == "../");
+        const bool has_rel_prefix = !segs.empty() && is_relative_prefix(segs[0]);
         for (size_t k = segs.size(); k >= 1; --k) {
             // 相対プレフィックス単独（"./"のみ）は有効なモジュール指定子ではないため除外する
             if (has_rel_prefix && k == 1) {

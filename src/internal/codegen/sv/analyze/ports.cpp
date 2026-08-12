@@ -353,7 +353,20 @@ void SVCodeGen::analyzeGlobalPorts(const mir::MirProgram& program, SVModule& mod
             if (gv->init_value) {
                 localparam_decl += " = " + emitConstant(*gv->init_value, gv->type);
             } else if (gv->init_expr) {
-                localparam_decl += " = " + emitHirExpr(*gv->init_expr);
+                // 整数宣言へのfloat式（CLK_FREQ * 0.02等の派生定数）は$rtoiで明示変換する。
+                // 生のreal式のままではVerilatorのREALCVT警告（implicit real→integer）になる。
+                // $rtoiはゼロ方向切り捨てでCmの縮小変換意味論と一致する
+                const bool int_decl_float_expr =
+                    gv->type && gv->type->is_integer() && gv->init_expr->type &&
+                    (gv->init_expr->type->kind == hir::TypeKind::Float ||
+                     gv->init_expr->type->kind == hir::TypeKind::Double ||
+                     gv->init_expr->type->kind == hir::TypeKind::UFloat ||
+                     gv->init_expr->type->kind == hir::TypeKind::UDouble);
+                if (int_decl_float_expr) {
+                    localparam_decl += " = $rtoi(" + emitHirExpr(*gv->init_expr) + ")";
+                } else {
+                    localparam_decl += " = " + emitHirExpr(*gv->init_expr);
+                }
             }
             localparam_decl += ";";
             mod.parameters.push_back(localparam_decl);

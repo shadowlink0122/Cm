@@ -1,0 +1,10 @@
+// 多段の親ディレクトリ参照import（import ../../lib/consts）の回帰。
+// 従来は ../ 一段のみ対応で「Expected identifier, got '.'」の構文エラーだった
+import std::io::println;
+import ../../lib/consts;
+
+int main() {
+    println("{MAGIC}");
+    println("{twice(21)}");
+    return 0;
+}

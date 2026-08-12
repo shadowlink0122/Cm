@@ -126,6 +126,16 @@ ast::DeclPtr Parser::parse_import_stmt(std::vector<ast::AttributeNode> attribute
             // ..
             if (consume_if(TokenKind::Slash)) {
                 path_prefix = "../";
+                // 多段の親ディレクトリ参照（import ../../modules/x 等）を1つのプレフィックスへ連結する
+                while (check(TokenKind::Dot) && peek_kind() == TokenKind::Dot) {
+                    advance();
+                    advance();
+                    if (!consume_if(TokenKind::Slash)) {
+                        error(i18n::msg(i18n::MsgId::PsExpected));
+                        return nullptr;
+                    }
+                    path_prefix += "../";
+                }
             } else {
                 error(i18n::msg(i18n::MsgId::PsExpected));
                 return nullptr;
