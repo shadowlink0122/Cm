@@ -1,3 +1,4 @@
+{% raw %}
 # print系ビルトインと文字列補間
 
 `println("x = {x}")` のような補間付き出力は、型検査時にプレースホルダを実AST部分式へ脱糖し（`LiteralExpr.interp_parts`）、MIR loweringが型検査済みの部分式を「位置プレースホルダ化されたフォーマット文字列＋値ローカル列」として消費し、LLVMコード生成が引数の型ごとに `cm_print_*`／`cm_format_replace_*` などのランタイム関数呼び出しへディスパッチする三段構成で実装されている。書式化の実体はC実装のランタイム（`runtime/print.c`／`runtime/format.c`）に一本化されており、nativeはAOTリンク、jitはホストプロセス内シンボル解決で同一の実装を共有するため、両者の出力は常に一致する。
@@ -120,3 +121,4 @@ print・format系ランタイムの実体は `runtime/print.c`/`runtime/format.c
 - [../codegen-jit/lljit-engine.md](../codegen-jit/lljit-engine.md) — jitのホストプロセスシンボル解決
 - [../strings/representation.md](../strings/representation.md) — 文字列表現と `cm_string_concat` の前提
 - [../lowering/enums-and-match.md](../lowering/enums-and-match.md) — タグ付きユニオンの表現とタグ規約
+{% endraw %}

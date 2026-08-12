@@ -2,6 +2,7 @@
 title: String Interpolation
 parent: Tutorials
 ---
+{% raw %}
 
 [日本語](../../ja/basics/string-interpolation.html)
 
@@ -235,3 +236,4 @@ On the SystemVerilog target, strings are treated as packed vector constants, so 
 
 <!-- nav -->
 ← Prev: [Basics - Modules](modules.html) | [Contents](index.html) | Next: [Type System](../types/index.html) →
+{% endraw %}

@@ -1,0 +1,36 @@
+# GitHub Pagesのビルド検証（デプロイなし）。
+# 本番デプロイ（deploy-pages.yml）はmainのみだが、Liquid構文エラー等のPagesビルド破壊を
+# どのブランチでもpush時点で検出できるよう、docs変更を含む全ブランチで同一ビルダーを回す
+name: Docs Build
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-build.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jekyll-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # 本番（deploy-pages.yml）と同じビルダーでdocsをビルドする（デプロイはしない）
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site

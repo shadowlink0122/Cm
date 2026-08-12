@@ -2,6 +2,7 @@
 title: 文字列補間
 parent: Tutorials
 ---
+{% raw %}
 
 [English](../../en/basics/string-interpolation.html)
 
@@ -235,3 +236,4 @@ SystemVerilog ターゲットでは、文字列は packed ベクトル定数と�
 
 <!-- nav -->
 ← 前: [モジュールシステム](modules.html) ｜ [目次](index.html) ｜ 次: [型システム編](../types/index.html) →
+{% endraw %}
