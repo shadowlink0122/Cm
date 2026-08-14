@@ -115,6 +115,53 @@ int main() {
 
 ---
 
+## スマートポインタ（std::mem::smart・v0.17.1）
+
+ヒープ確保した値の解放をRAII（スコープ末尾のデストラクタ）で自動化します。
+
+```cm
+import std::mem::smart::*;
+
+int main() {
+    // UniquePtr<T>: 単独所有。スコープを抜けると自動解放
+    UniquePtr<int> u(42);
+    println("{u.get()}");     // 42
+    u.set(43);
+    int* p = u.raw();         // 借用ビュー（所有権は移動しない）
+
+    // 所有権の移動は必ず move で行う
+    UniquePtr<int> v = move u;
+
+    // SharedPtr<T>: 参照カウント共有。共有は必ず clone() で行う
+    SharedPtr<int> a(100);
+    SharedPtr<int> b = a.clone();   // rc=2
+    println("rc={a.use_count()}");  // 2
+    b.set(200);                     // 全共有者から見える
+    return 0;
+}
+
+// 所有型を返す関数は必ず return move で書く
+UniquePtr<int> make(int v) {
+    UniquePtr<int> b(v);
+    return move b;
+}
+```
+
+**所有規律（重要）:**
+
+- 暗黙コピー（`b = a;`）は浅いコピーで両方のデストラクタが走り**二重解放**になります。移動は `move`、SharedPtrの共有は `clone()` を必ず使ってください。
+- 所有型を関数から返すときは `return move local;` と書きます（`return local;` はローカルのデストラクタが先に走りdanglingになります）。
+- `raw()` の生ポインタはスマートポインタより長生きさせないでください。
+
+| API | UniquePtr | SharedPtr |
+|---|---|---|
+| 構築 | `UniquePtr<T> u(value);` | `SharedPtr<T> a(value);` |
+| 読み書き | `get()` / `set(v)` / `raw()` | `get()` / `set(v)` / `raw()` |
+| 共有 | 不可（moveのみ） | `clone()`（参照カウント+1） |
+| その他 | `release()` / `reset()` / `is_null()` | `use_count()` / `is_null()` |
+
+---
+
 ## libc FFI
 
 内部的に使用可能なlibc関数:

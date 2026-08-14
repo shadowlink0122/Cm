@@ -1,0 +1,153 @@
+// std/mem/smart.cm - スマートポインタ（UniquePtr / SharedPtr）
+// ヒープ確保した値の解放をRAII（スコープ末尾のデストラクタ）で自動化する。
+//
+// 所有規律（重要）:
+//   - 所有権の移動は必ず move で行う（UniquePtr<T> b = move a;）。
+//     暗黙コピー（b = a;）は浅いコピーで両方のデストラクタが走り二重解放になる。
+//   - SharedPtrの共有は必ず clone() で行う（参照カウントを増やす唯一の手段）。
+//   - 所有型を関数から返すときは必ず return move local; と書く。
+//
+// 対応ターゲット: native系（jit/native/wasm/uefi/baremetal）。
+// JS/TSはポインタ操作が禁止（GCのため不要）、SVは対象外。
+module std.mem.smart;
+
+import std::mem::{alloc, dealloc};
+
+// =============================================================
+// UniquePtr<T> - 単独所有スマートポインタ（移動のみ・共有不可）
+// =============================================================
+
+export struct UniquePtr<T> {
+    T* ptr;
+}
+
+export impl<T> UniquePtr<T> {
+    // 値をヒープへ移して所有する
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+    }
+
+    // 中身の読み出し（コピーを返す）
+    T get() {
+        return *self.ptr;
+    }
+
+    // 中身の書き換え
+    void set(T value) {
+        *self.ptr = value;
+    }
+
+    // 生ポインタの借用ビュー（所有権は移動しない。UniquePtrより長生きさせないこと）
+    T* raw() {
+        return self.ptr;
+    }
+
+    // 無効（null）状態か（移動済み・release/reset済み・宣言のみのゼロ初期化状態）
+    bool is_null() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        return p == null_ptr;
+    }
+
+    // 所有権を放棄して生ポインタを返す（以後デストラクタは何もしない。解放は呼び出し側の責任）
+    T* release() {
+        T* p = self.ptr;
+        void* null_ptr = 0 as void*;
+        self.ptr = null_ptr as T*;
+        return p;
+    }
+
+    // いま所有している値を即時解放してnull状態にする
+    void reset() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            dealloc(p);
+            self.ptr = null_ptr as T*;
+        }
+    }
+
+    // デストラクタ: 所有中なら解放する（解放処理はメソッドに依存せずインラインで行う）
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            dealloc(p);
+            self.ptr = null_ptr as T*;
+        }
+    }
+}
+
+// =============================================================
+// SharedPtr<T> - 参照カウント共有スマートポインタ（共有は明示clone）
+// =============================================================
+
+export struct SharedPtr<T> {
+    T* ptr;
+    int* count;
+}
+
+export impl<T> SharedPtr<T> {
+    // 値をヒープへ移して所有する（参照カウント=1）
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+        void* craw = alloc(4);
+        self.count = craw as int*;
+        *self.count = 1;
+    }
+
+    // 共有: 参照カウントを増やした複製を返す（共有はこのメソッドのみで行うこと）
+    SharedPtr<T> clone() {
+        *self.count = *self.count + 1;
+        SharedPtr<T> copy;
+        copy.ptr = self.ptr;
+        copy.count = self.count;
+        return move copy;
+    }
+
+    // 中身の読み出し（コピーを返す）
+    T get() {
+        return *self.ptr;
+    }
+
+    // 中身の書き換え（全共有者から見える）
+    void set(T value) {
+        *self.ptr = value;
+    }
+
+    // 生ポインタの借用ビュー（所有権は移動しない）
+    T* raw() {
+        return self.ptr;
+    }
+
+    // 現在の参照カウント
+    int use_count() {
+        return *self.count;
+    }
+
+    // 無効（null）状態か（移動済み・宣言のみのゼロ初期化状態）
+    bool is_null() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        return p == null_ptr;
+    }
+
+    // デストラクタ: 参照カウントを減らし、最後の所有者ならペイロードとカウントを解放する
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            *self.count = *self.count - 1;
+            if (*self.count == 0) {
+                dealloc(p);
+                dealloc(self.count as void*);
+            }
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as int*;
+        }
+    }
+}

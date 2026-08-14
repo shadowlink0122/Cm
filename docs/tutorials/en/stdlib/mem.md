@@ -113,6 +113,53 @@ The registered functions must have the signatures `void*(long)` / `void(void*)` 
 
 ---
 
+## Smart Pointers (std::mem::smart, v0.17.1)
+
+Automate freeing heap-allocated values with RAII (destructor at scope exit).
+
+```cm
+import std::mem::smart::*;
+
+int main() {
+    // UniquePtr<T>: sole ownership; freed automatically at scope exit
+    UniquePtr<int> u(42);
+    println("{u.get()}");     // 42
+    u.set(43);
+    int* p = u.raw();         // borrowed view (ownership is not transferred)
+
+    // Always transfer ownership with move
+    UniquePtr<int> v = move u;
+
+    // SharedPtr<T>: reference-counted sharing; always share via clone()
+    SharedPtr<int> a(100);
+    SharedPtr<int> b = a.clone();   // rc=2
+    println("rc={a.use_count()}");  // 2
+    b.set(200);                     // visible to all sharers
+    return 0;
+}
+
+// Functions returning an owning type must use return move
+UniquePtr<int> make(int v) {
+    UniquePtr<int> b(v);
+    return move b;
+}
+```
+
+**Ownership discipline (important):**
+
+- An implicit copy (`b = a;`) is a shallow copy and both destructors run, causing a **double free**. Always use `move` for transfers and `clone()` for SharedPtr sharing.
+- Functions returning an owning type must write `return move local;` (`return local;` runs the local's destructor first and returns a dangling pointer).
+- Never let the raw pointer from `raw()` outlive the smart pointer.
+
+| API | UniquePtr | SharedPtr |
+|---|---|---|
+| Construct | `UniquePtr<T> u(value);` | `SharedPtr<T> a(value);` |
+| Read/Write | `get()` / `set(v)` / `raw()` | `get()` / `set(v)` / `raw()` |
+| Share | Not allowed (move only) | `clone()` (refcount +1) |
+| Others | `release()` / `reset()` / `is_null()` | `use_count()` / `is_null()` |
+
+---
+
 ## libc FFI
 
 libc functions available internally:

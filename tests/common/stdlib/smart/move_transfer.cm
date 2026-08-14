@@ -1,0 +1,39 @@
+//! platform: !js|sv
+// UniquePtrの所有権移動: move代入・move関数渡し・return moveによるfactory
+import std::io::println;
+import std::mem::smart::*;
+
+int consume(UniquePtr<int> p) {
+    return p.get() * 2;
+}
+
+UniquePtr<int> make(int v) {
+    UniquePtr<int> b(v);
+    return move b;
+}
+
+UniquePtr<int> pass_through(UniquePtr<int> p) {
+    p.set(p.get() + 1);
+    return move p;
+}
+
+int main() {
+    // move代入
+    UniquePtr<int> a(1);
+    UniquePtr<int> b = move a;
+    println("{b.get()}");
+
+    // moveで関数へ所有権を渡す（関数側のdtorが解放する）
+    UniquePtr<int> c(21);
+    println("{consume(move c)}");
+
+    // factory（return move）
+    UniquePtr<int> u = make(7);
+    println("{u.get()}");
+
+    // 関数を経由した往復
+    UniquePtr<int> d(10);
+    UniquePtr<int> e = pass_through(move d);
+    println("{e.get()}");
+    return 0;
+}
