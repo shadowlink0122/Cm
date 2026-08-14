@@ -259,6 +259,7 @@ import ./b::{compute as compute_b};
 ---
 
 **Previous:** [Pointers](pointers.html)  
+
 ---
 
 **Last Updated:** 2026-02-08

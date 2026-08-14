@@ -58,6 +58,7 @@ cm compile program.cm -g -o program
 ---
 
 **Previous:** [Compiler Usage](../common/usage.html)  
+
 ---
 
 **Last Updated:** 2026-02-08

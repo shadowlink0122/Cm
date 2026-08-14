@@ -121,7 +121,7 @@ src/main.cm:8:9: warning: Variable 'x' is never used [W001]
 
 ## 関連項目
 
-- [Formatter](formatter.md) - コードフォーマッター
+- [Formatter](formatter.html) - コードフォーマッター
 
 ---
 

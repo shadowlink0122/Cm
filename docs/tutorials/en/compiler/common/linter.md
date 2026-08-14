@@ -121,7 +121,7 @@ src/main.cm:8:9: warning: Variable 'x' is never used [W001]
 
 ## See Also
 
-- [Formatter](formatter.md) - Code formatter
+- [Formatter](formatter.html) - Code formatter
 
 ---
 

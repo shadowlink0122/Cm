@@ -211,7 +211,7 @@ To check code style in CI:
 
 ## Related Topics
 
-- [Linter](linter.md) - Static analysis tool
+- [Linter](linter.html) - Static analysis tool
 
 ---
 

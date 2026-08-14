@@ -276,6 +276,7 @@ import ./b::{compute as compute_b};
 
 - [FFI](../advanced/ffi.html) - 外部関数インターフェース
 - [コンパイラの使い方](../compiler/common/usage.html) - ビルドオプション
+
 ---
 
 **最終更新:** 2026-02-08

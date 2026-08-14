@@ -537,6 +537,7 @@ int main() {
 
 **前の章:** [構造体](structs.html)  
 **次の章:** [typedef型エイリアス](typedef.html)
+
 ---
 
 **最終更新:** 2026-02-08

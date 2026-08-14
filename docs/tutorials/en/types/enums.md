@@ -531,6 +531,7 @@ int main() {
 ---
 
 **Previous:** [Structs](structs.html)  
+
 ---
 
 **Last Updated:** 2026-02-08
