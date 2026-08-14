@@ -106,7 +106,8 @@ export const constants: TmRepositoryEntry = {
       match: words(NULL_CONSTANTS),
     },
     {
-      comment: 'OptionのNoneバリアント: C++/Rustのenumメンバと同じスコープ（Dark+等が専用色で塗る）にする',
+      comment:
+        'OptionのNoneバリアント: C++/Rustのenumメンバと同じスコープ（Dark+等が専用色で塗る）にする',
       name: 'variable.other.enummember.cm',
       match: words(PRELUDE_VALUE_VARIANTS),
     },

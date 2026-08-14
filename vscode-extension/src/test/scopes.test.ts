@@ -25,7 +25,10 @@ test('裸のSCREAMING_CASEは定数スコープ・単一大文字Tは型スコ�
   const grammar = await loadGrammar();
   const line = 'const int MAX_SIZE = 10; T value = make<T>();';
   assert.deepEqual(tokensWithScope(grammar, line, CONSTANT), ['MAX_SIZE']);
-  assert.ok(tokensWithScope(grammar, line, TYPE).includes('T'), 'TはenumメンバでなくPascalCase型色');
+  assert.ok(
+    tokensWithScope(grammar, line, TYPE).includes('T'),
+    'TはenumメンバでなくPascalCase型色',
+  );
 });
 
 test('struct/enumキーワードはstorage.type・const/exportはstorage.modifierになる', async () => {
@@ -34,7 +37,10 @@ test('struct/enumキーワードはstorage.type・const/exportはstorage.modifie
   const storage = tokensWithScope(grammar, line, STORAGE_TYPE);
   assert.ok(storage.includes('struct'), 'structはstorage.type');
   const modifiers = tokensWithScope(grammar, line, STORAGE_MODIFIER);
-  assert.ok(modifiers.includes('export') && modifiers.includes('const'), 'export/constはstorage.modifier');
+  assert.ok(
+    modifiers.includes('export') && modifiers.includes('const'),
+    'export/constはstorage.modifier',
+  );
 });
 
 test('匿名struct（struct { ... } 宣言子;）でもキーワードはstorage.typeで着色される', async () => {

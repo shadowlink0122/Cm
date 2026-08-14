@@ -15,10 +15,7 @@ test('bareのNoneはenumメンバスコープで着色される', async () => {
   const grammar = await loadGrammar();
   const line = 'Option<int> o = None;';
   const members = tokensWithScope(grammar, line, ENUM_MEMBER_SCOPE);
-  assert.ok(
-    members.includes('None'),
-    `Noneがenumメンバ色になるべき: ${JSON.stringify(members)}`,
-  );
+  assert.ok(members.includes('None'), `Noneがenumメンバ色になるべき: ${JSON.stringify(members)}`);
   const primitives = tokensWithScope(grammar, line, PRIMITIVE_SCOPE);
   assert.ok(
     primitives.includes('int'),
