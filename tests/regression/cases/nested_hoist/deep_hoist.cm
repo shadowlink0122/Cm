@@ -1,0 +1,14 @@
+struct Outer {
+    struct Mid {
+        struct Inner {
+            int mem;
+        };
+        Inner deep;
+    };
+    Mid m;
+    Mid::Inner direct;
+};
+
+int main() {
+    return 0;
+}

@@ -158,9 +158,9 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
             // HirEnumConstructノードを生成（タグ+ペイロード）
             auto enum_construct = std::make_unique<HirEnumConstruct>();
 
-            // enum名とバリアント名を分解（"EnumName::VariantName" 形式）
+            // enum名とバリアント名を分解（"EnumName::VariantName" 形式。variantは常に最終セグメントのため、ネストenumのOuter::Inner::Varも正しくOuter::Inner+Varに分かれる）
             std::string full_name = ident->name;
-            auto sep = full_name.find("::");
+            auto sep = full_name.rfind("::");
             if (sep != std::string::npos) {
                 enum_construct->enum_name = full_name.substr(0, sep);
                 enum_construct->variant_name = full_name.substr(sep + 2);
@@ -242,6 +242,17 @@ HirExprPtr HirLowering::lower_call(ast::CallExpr& call, TypePtr type) {
         size_t first_colon = func_name.find("::");
         if (first_colon != std::string::npos) {
             size_t second_colon = func_name.find("::", first_colon + 2);
+            // ネスト型の静的呼び出し（Outer::Inner::method）は、最後の::より前の全体が既知の型名の場合に変換する
+            // （モジュールパスstd::io::printlnは型名に一致しないため誤変換されない）
+            size_t last_colon = func_name.rfind("::");
+            if (second_colon != std::string::npos) {
+                std::string full_type_part = func_name.substr(0, last_colon);
+                std::string last_method_part = func_name.substr(last_colon + 2);
+                if (struct_defs_.count(full_type_part) > 0 ||
+                    enum_defs_.count(full_type_part) > 0) {
+                    func_name = mangle::method_name(full_type_part, last_method_part);
+                }
+            }
             // ::が1つだけ存在する場合
             if (second_colon == std::string::npos) {
                 std::string type_part = func_name.substr(0, first_colon);

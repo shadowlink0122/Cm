@@ -1,0 +1,21 @@
+// ネストstruct定義の基本: 内側型の宣言・フィールドチェーンアクセス・修飾型パスでの利用
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    Inner inner;
+    int x;
+};
+
+int main() {
+    Outer o;
+    o.inner.mem = 42;
+    o.x = 1;
+    println(o.inner.mem);
+    println(o.x);
+
+    Outer::Inner i;
+    i.mem = 99;
+    println(i.mem);
+    return 0;
+}

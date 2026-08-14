@@ -991,10 +991,11 @@ HirExprPtr HirLowering::lower_member_string_builtin(ast::MemberExpr& mem, const 
 std::string HirLowering::resolve_method_type_name(const TypePtr& obj_type,
                                                   const std::string& type_name,
                                                   bool& needs_array_to_slice) {
-    // 名前空間を除去した型名を取得
+    // 名前空間を除去した型名を取得（ネスト型のOuter::Innerは完全名で登録済みのため除去しない）
     std::string method_type_name = type_name;
     size_t last_colon = type_name.rfind("::");
-    if (last_colon != std::string::npos) {
+    if (last_colon != std::string::npos && struct_defs_.count(type_name) == 0 &&
+        enum_defs_.count(type_name) == 0) {
         method_type_name = type_name.substr(last_colon + 2);
     }
 

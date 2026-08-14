@@ -54,6 +54,8 @@ class Parser {
     std::vector<ast::Param> parse_params();
     ast::DeclPtr parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes = {},
                               bool is_extern = false);
+    ast::DeclPtr parse_nested_type_decl(bool is_export, std::vector<ast::AttributeNode> attributes,
+                                        bool outer_is_generic, bool outer_is_extern);
     std::optional<ast::OperatorKind> parse_operator_kind();
     ast::DeclPtr parse_interface(bool is_export, std::vector<ast::AttributeNode> attributes = {});
     ast::DeclPtr parse_impl(std::vector<ast::AttributeNode> attributes = {});

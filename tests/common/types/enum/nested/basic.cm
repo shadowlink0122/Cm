@@ -1,0 +1,22 @@
+// enum内のネストenum定義: 値の割り当てが素通しであること・Outer::Inner::MEMチェーンアクセス
+enum Category {
+    enum Sub {
+        MEM = 10,
+        REG,
+    },
+    A = 5,
+    B,
+}
+
+int main() {
+    println(Category::A as int);
+    println(Category::B as int);
+    println(Category::Sub::MEM as int);
+    println(Category::Sub::REG as int);
+
+    Category c = Category::A;
+    Category::Sub s = Category::Sub::REG;
+    println(c as int);
+    println(s as int);
+    return 0;
+}

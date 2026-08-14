@@ -1,0 +1,11 @@
+// ネスト型宣言自身へのジェネリックパラメータ付与は未対応（明示診断）
+struct Outer {
+    struct Inner<T> {
+        T mem;
+    };
+    int x;
+};
+
+int main() {
+    return 0;
+}

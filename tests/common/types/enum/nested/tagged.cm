@@ -1,0 +1,32 @@
+// enum内のネストstruct/enum: タグ付きユニオンのペイロード型としての利用とmatch束縛
+enum Msg {
+    struct Payload {
+        int code;
+    },
+    enum Kind {
+        INFO,
+        WARN,
+    },
+    Data(Msg::Payload),
+    Quit,
+}
+
+int main() {
+    Msg::Payload p;
+    p.code = 7;
+    Msg m = Msg::Data(p);
+    match (m) {
+        Msg::Data(d) => { println(d.code); }
+        Msg::Quit => { println(-1); }
+    }
+    println(Msg::Kind::INFO as int);
+    println(Msg::Kind::WARN as int);
+
+    // ネストenum自身がタグ付きユニオンの場合
+    m = Msg::Quit;
+    match (m) {
+        Msg::Data(d) => { println(d.code); }
+        Msg::Quit => { println(-1); }
+    }
+    return 0;
+}

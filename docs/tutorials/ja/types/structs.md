@@ -280,6 +280,44 @@ int main() {
 }
 ```
 
+### ネスト型宣言（struct内struct・struct内enum）
+
+構造体の本体の中に別のstruct/enum型を宣言できます。
+ネスト型は外側の型の名前空間に属する独立した型で、外側からは `Outer::Inner` という修飾パスで参照します。
+
+```cm
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    enum Mode {
+        FAST,
+        SLOW,
+    }
+    Inner inner;
+    Mode mode;
+}
+
+int main() {
+    Outer o;
+    o.inner.mem = 42;            // メンバチェーンでアクセス
+    o.mode = Outer::Mode::FAST;  // ネストenum値は修飾チェーンで参照
+
+    Outer::Inner i;              // 外側からは修飾パスで型を利用
+    i.mem = 99;
+    return 0;
+}
+```
+
+ネストの深さは任意で、`Outer::Mid::Inner` のように多段の修飾パスで参照できます。
+`impl Outer::Inner { ... }` でネスト型にメソッドを定義することもできます。
+
+**制限事項:**
+
+- ジェネリックstruct/enumの本体にはネスト型を宣言できません
+- ネスト型宣言自身にジェネリックパラメータは付けられません
+- 匿名ネスト（`struct { ... } field;`）は未対応です（フィールドは別行で `Inner field;` と宣言します）
+
 ---
 
 ## 構造体配列

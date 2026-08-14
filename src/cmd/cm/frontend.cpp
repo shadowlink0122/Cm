@@ -3,6 +3,7 @@
 #include "internal/base/i18n.hpp"
 #include "internal/module/graph.hpp"
 #include "internal/module/resolver.hpp"
+#include "internal/syntax/ast/nested.hpp"
 #include "internal/syntax/lexer/lexer.hpp"
 #include "internal/syntax/parser/parser.hpp"
 
@@ -71,6 +72,8 @@ FrontendResult run_frontend(const FrontendParams& params, std::string code) {
         result.is_sv = lexer.is_sv();
         Parser parser(std::move(tokens), result.is_sv);
         result.program = parser.parse();
+        // ネスト型宣言をOuter::Inner名のトップレベル宣言へ平坦化する（型チェック前のASTパス）
+        ast::hoist_nested_types(result.program);
         result.parser_diagnostics = parser.diagnostics();
         result.parse_ok = !parser.has_errors();
         result.phase_parse_ms = std::chrono::duration_cast<std::chrono::milliseconds>(

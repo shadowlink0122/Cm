@@ -57,7 +57,13 @@ function_decl ::= generic_params? type identifier '(' param_list? ')' where_clau
 struct_decl ::= 'struct' identifier generic_params? where_clause? '{' struct_member* '}'
 
 struct_member ::= type identifier ';'
-               | function_decl
+                | function_decl
+                | nested_type_decl
+
+# ネスト型宣言（v0.17.1）: 外側の型の名前空間に属する独立した型を宣言する（Outer::Innerで参照）。
+# ジェネリックstruct/enum内・ネスト型自身へのgeneric_paramsは不可
+nested_type_decl ::= struct_decl ';'?
+                   | enum_decl ';'?
 ```
 
 ### トレイト宣言
@@ -91,7 +97,11 @@ typedef_decl ::= 'typedef' identifier generic_params? '=' type ';'
 macro_decl ::= 'macro' type identifier '=' literal ';'                          # 定数マクロ
              | 'macro' type '*(' type_list? ')' identifier '=' lambda_expr ';'  # 関数マクロ
 
-enum_decl ::= 'enum' identifier generic_params? '{' enum_variant (',' enum_variant)* ','? '}'
+enum_decl ::= 'enum' identifier generic_params? '{' enum_body_item (',' enum_body_item)* ','? '}'
+
+# ネスト型宣言（v0.17.1）はvariantではなく値スロットを消費しない（Outer::Inner::MEMで参照）
+enum_body_item ::= enum_variant
+                 | nested_type_decl
 
 enum_variant ::= identifier
                | identifier '(' type_list ')'

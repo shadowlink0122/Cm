@@ -25,6 +25,7 @@ Cm言語コンパイラおよびランタイムで現在利用可能な機能の
 | **構造体 (struct)** | ✅ | 定義、初期化、メンバアクセス、コンストラクタ(`self()`) |
 | **デストラクタ** | ✅ | `~self()`によるリソース自動解放 |
 | **列挙型 (enum)** | ✅ | 強型付け列挙型、整数値指定 |
+| **ネスト型宣言** | ✅ | struct/enum本体内のstruct/enum宣言、`Outer::Inner` 型パス・`Outer::Inner::MEM` チェーンアクセス（v0.17.1） |
 | **Tagged Union** | ✅ | 関連データ付きenum、match分解 |
 | **組み込みResult/Option** | ✅ | `Result<T,E>` / `Option<T>`、`is_ok`/`unwrap`/`unwrap_or`/`expect` 等のメソッド、`?` 演算子によるエラー伝播、must_use警告（v0.16.0） |
 | **ユニオン実行時型判別** | ✅ | `is` 演算子、match型パターン（`int i => ...`）、`as` のタグ検査（v0.16.0） |

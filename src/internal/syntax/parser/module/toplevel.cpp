@@ -178,11 +178,22 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     expect(TokenKind::LBrace);
 
     std::vector<ast::EnumMember> members;
+    std::vector<ast::DeclPtr> nested_types;
     int64_t next_value = 0;                   // オートインクリメント用
     std::unordered_set<int64_t> used_values;  // 重複チェック用
     bool has_associated_data = false;         // Associated dataがあればtrueになる
 
     while (!check(TokenKind::RBrace) && !is_at_end()) {
+        // ネスト型宣言（enum/struct）: 値スロットを消費せず、hoistパスでOuter::Inner名へ平坦化される
+        if (check(TokenKind::KwEnum) || check(TokenKind::KwStruct)) {
+            auto nested = parse_nested_type_decl(is_export, {}, !generic_params.empty(), false);
+            if (nested) {
+                nested_types.push_back(std::move(nested));
+            }
+            consume_if(TokenKind::Comma);
+            continue;
+        }
+
         std::string member_name = expect_ident();
 
         // Associated dataをチェック: Variant(int x, string y)
@@ -279,6 +290,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     enum_decl->attributes = std::move(attributes);
     enum_decl->generic_params = std::move(generic_params);
+    enum_decl->nested_types = std::move(nested_types);
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});
 }
 

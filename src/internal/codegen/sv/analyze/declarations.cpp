@@ -66,7 +66,8 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
                 ss << ",";
             ss << "\n";
         }
-        ss << "} " << e->name << ";";
+        // ネスト型のOuter::Inner名はSV識別子にできないため最終セグメント名で出力する（参照側もstrip_namespaceで一致させる）
+        ss << "} " << strip_namespace(e->name) << ";";
         mod.type_declarations.push_back(ss.str());
     }
 
@@ -176,7 +177,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
             for (const auto& f : st->fields) {
                 ss << "    " << mapType(f.type) << " " << f.name << ";\n";
             }
-            ss << "} " << st->name << ";";
+            ss << "} " << strip_namespace(st->name) << ";";
             mod.type_declarations.push_back(ss.str());
             continue;
         }
@@ -185,7 +186,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
         for (const auto& f : st->fields) {
             ss << "    " << mapType(f.type) << " " << f.name << ";\n";
         }
-        ss << "} " << st->name << ";";
+        ss << "} " << strip_namespace(st->name) << ";";
         mod.type_declarations.push_back(ss.str());
     }
 

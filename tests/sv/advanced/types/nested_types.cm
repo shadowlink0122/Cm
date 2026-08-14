@@ -1,0 +1,29 @@
+//! platform: sv
+
+// ネスト型定義のSV変換: ネストstruct→typedef struct packed（最終セグメント名）・ネストenum→typedef enum logic
+
+struct Pack {
+    struct Pair {
+        int lo;
+        int hi;
+    };
+    Pair p;
+};
+
+enum Ctrl {
+    enum St {
+        IDLE,
+        RUN,
+    },
+    NOP,
+}
+
+#[input]  int a = 0;
+#[output] int y = 0;
+
+void step() {
+    Pack k;
+    k.p.lo = a;
+    k.p.hi = 2;
+    y = k.p.lo + k.p.hi + (Ctrl::St::RUN as int);
+}

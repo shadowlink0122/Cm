@@ -566,6 +566,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     expect(TokenKind::LBrace);
 
     std::vector<ast::Field> fields;
+    std::vector<ast::DeclPtr> nested_types;
     bool has_default_field = false;
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         ast::Field field;
@@ -573,6 +574,17 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         // フィールド属性（#[sv::param], #[input], #[output] 等）
         while (check(TokenKind::Hash)) {
             field.attributes.push_back(parse_attribute());
+        }
+
+        // ネスト型宣言（struct/enum）: hoistパスでOuter::Inner名のトップレベル型へ平坦化される
+        if (check(TokenKind::KwStruct) || check(TokenKind::KwEnum)) {
+            bool outer_is_generic = !generic_params.empty() || !generic_params_v2.empty();
+            auto nested = parse_nested_type_decl(is_export, std::move(field.attributes),
+                                                 outer_is_generic, is_extern);
+            if (nested) {
+                nested_types.push_back(std::move(nested));
+            }
+            continue;
         }
 
         field.visibility =
@@ -621,6 +633,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     decl->auto_impls = std::move(auto_impls);
     decl->attributes = std::move(attributes);
+    decl->nested_types = std::move(nested_types);
 
     if (!generic_params.empty()) {
         decl->generic_params = std::move(generic_params);
@@ -634,6 +647,39 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     }
 
     return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
+}
+
+// ネスト型宣言（struct/enum本体内のstruct/enum）を1件パースし、初版の制限を検査する
+ast::DeclPtr Parser::parse_nested_type_decl(bool is_export,
+                                            std::vector<ast::AttributeNode> attributes,
+                                            bool outer_is_generic, bool outer_is_extern) {
+    if (outer_is_generic) {
+        error(i18n::msg(i18n::MsgId::PsNestedTypeInGenericTypeUnsupported));
+    }
+    if (outer_is_extern) {
+        error(i18n::msg(i18n::MsgId::PsNestedTypeInExternStructUnsupported));
+    }
+
+    auto nested = check(TokenKind::KwStruct) ? parse_struct(is_export, std::move(attributes))
+                                             : parse_enum_decl(is_export, std::move(attributes));
+    // ネストenum宣言の直後もstruct同様に任意の;を許容する
+    consume_if(TokenKind::Semicolon);
+    if (!nested) {
+        return nullptr;
+    }
+
+    // ネスト型宣言自身のジェネリクスは初版では未対応
+    bool nested_is_generic = false;
+    if (auto* st = nested->as<ast::StructDecl>()) {
+        nested_is_generic = !st->generic_params.empty() || !st->generic_params_v2.empty();
+    } else if (auto* en = nested->as<ast::EnumDecl>()) {
+        nested_is_generic = en->is_generic();
+    }
+    if (nested_is_generic) {
+        error(i18n::msg(i18n::MsgId::PsNestedTypeGenericParamsUnsupported));
+        return nullptr;
+    }
+    return nested;
 }
 
 // 演算子の種類をパース

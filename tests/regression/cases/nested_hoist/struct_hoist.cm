@@ -1,0 +1,10 @@
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    Inner inner;
+};
+
+int main() {
+    return 0;
+}

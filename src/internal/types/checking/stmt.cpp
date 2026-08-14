@@ -448,8 +448,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
             bool is_enum_variant_coercion = false;
             if (let.init) {
                 if (auto* ident = let.init->as<ast::IdentExpr>()) {
-                    // Option::None, Result::Err 等のenum variant名かチェック
-                    auto sep = ident->name.find("::");
+                    // Option::None, Result::Err 等のenum variant名かチェック（variantは常に最終セグメントのため、ネストenumも最後の::で分割する）
+                    auto sep = ident->name.rfind("::");
                     if (sep != std::string::npos) {
                         std::string enum_name = ident->name.substr(0, sep);
                         // 宣言型の名前がenum名と一致するか
@@ -570,7 +570,8 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
             // ジェネリクスenum variant型推論: return Option::None のようなケース
             bool is_enum_variant_coercion = false;
             if (auto* ident = ret.value->as<ast::IdentExpr>()) {
-                auto sep = ident->name.find("::");
+                // variantは常に最終セグメントのため、ネストenumも最後の::で分割する
+                auto sep = ident->name.rfind("::");
                 if (sep != std::string::npos) {
                     std::string enum_name = ident->name.substr(0, sep);
                     // モノモーフ化された型名（Option__ulong等）にも対応

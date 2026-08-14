@@ -270,9 +270,13 @@ export function extractSymbols(text: string): CmSymbol[] {
       let m: RegExpExecArray | null;
       if (atTop && (m = MODULE_RE.exec(trimmed))) {
         push('module', m[1], lineNo);
-      } else if (atTop && (m = TYPE_DECL_RE.exec(trimmed))) {
+      } else if (
+        (atTop || top?.type === 'struct' || top?.type === 'enum') &&
+        (m = TYPE_DECL_RE.exec(trimmed))
+      ) {
+        // ネスト型宣言（struct/enum本体内のstruct/enum）はコンテナ名付きで索引化する（v0.17.1）
         const kind = m[1] as CmSymbolKind;
-        const sym = push(kind, m[2], lineNo);
+        const sym = push(kind, m[2], lineNo, top?.name);
         const ctxType = m[1] === 'union' ? 'other' : (m[1] as Context['type']);
         pending = { type: ctxType, name: m[2], symbol: sym };
       } else if (atTop && (m = TYPEDEF_RE.exec(trimmed))) {

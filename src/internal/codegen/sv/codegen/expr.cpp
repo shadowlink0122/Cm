@@ -431,7 +431,9 @@ SVExprPtr SVCodeGen::buildRvalueTree(const mir::MirRvalue& rvalue, const mir::Mi
                 const bool is_packed_struct = cast.target_type->kind == hir::TypeKind::Struct &&
                                               struct_defs_.count(tname) > 0;
                 if (is_enum_typedef || is_packed_struct) {
-                    return SVExpr::atom(tname + "'(" + operand_tree->to_string() + ")");
+                    // typedef宣言側と同じ規約で最終セグメント名として出力する（ネスト型のOuter::Inner対策）
+                    return SVExpr::atom(strip_namespace(tname) + "'(" + operand_tree->to_string() +
+                                        ")");
                 }
             }
             // 整数型への幅変更キャストはSVのサイズキャストとして明示的に出力する。

@@ -1076,6 +1076,15 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsExpectedIdentifier2
     {"Expected identifier, got '{0}'",
      "識別子が必要ですが、'{0}' が指定されました"},
+    // PsNestedTypeInGenericTypeUnsupported
+    {"Nested type declarations are not supported inside a generic struct/enum",
+     "ジェネリックstruct/enumの本体にネスト型宣言は書けません"},
+    // PsNestedTypeGenericParamsUnsupported
+    {"Generic parameters are not supported on nested type declarations",
+     "ネスト型宣言自身にジェネリックパラメータは付けられません"},
+    // PsNestedTypeInExternStructUnsupported
+    {"Nested type declarations are not supported inside an extern struct",
+     "extern structの本体にネスト型宣言は書けません"},
     // TcUnknownInterfaceDerive
     {"Unknown interface '{0}' in 'with' / #[derive]",
      "'with' / #[derive] に不明なインターフェース '{0}' が指定されています"},

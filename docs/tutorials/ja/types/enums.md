@@ -189,6 +189,51 @@ int main() {
 
 ---
 
+## ネスト型宣言（enum内enum・enum内struct）
+
+enumの本体の中に別のenum/struct型を宣言できます。
+ネスト型は外側のenumの名前空間に属する独立した型で、値は `Outer::Inner::MEM` という修飾チェーンで参照します。
+ネスト型宣言はvariantではないため、外側enumの値割り当てには影響しません。
+
+```cm
+enum Category {
+    enum Sub {
+        MEM = 10,
+        REG,
+    },
+    A = 5,
+    B,
+}
+
+enum Msg {
+    struct Payload {
+        int code;
+    },
+    Data(Msg::Payload),
+    Quit,
+}
+
+int main() {
+    println("{Category::A as int}");         // 5（ネスト宣言は値を消費しない）
+    println("{Category::Sub::MEM as int}");  // 10
+
+    Category::Sub s = Category::Sub::REG;
+    match (s) {
+        Category::Sub::MEM => { println("mem"); }
+        Category::Sub::REG => { println("reg"); }
+    }
+
+    Msg::Payload p;
+    p.code = 7;
+    Msg m = Msg::Data(p);
+    return 0;
+}
+```
+
+構造体と同じ制限（ジェネリックとの併用不可）が適用されます。
+
+---
+
 ## ユニオン型配列によるタプル風パターン
 
 Cmには `typedef` で定義するユニオン型があります。ユニオン型の配列を使うと、異なる型の値をまとめて返す「タプル」のような使い方ができます。

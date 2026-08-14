@@ -1,0 +1,26 @@
+// 3段ネストとOuter::Mid::Inner修飾パス・多段メンバチェーン
+struct Outer {
+    struct Mid {
+        struct Inner {
+            int mem;
+        };
+        Inner deep;
+        int y;
+    };
+    Mid str;
+};
+
+int main() {
+    Outer o;
+    o.str.deep.mem = 7;
+    o.str.y = 3;
+    println(o.str.deep.mem);
+    println(o.str.y);
+
+    Outer::Mid::Inner i;
+    i.mem = 21;
+    Outer::Mid m;
+    m.deep = i;
+    println(m.deep.mem);
+    return 0;
+}

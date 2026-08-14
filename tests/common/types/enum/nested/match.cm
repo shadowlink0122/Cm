@@ -1,0 +1,33 @@
+// ネストenumのmatch: 網羅性検査が内側enumのvariantのみを要求すること
+enum Category {
+    enum Sub {
+        MEM,
+        REG,
+    },
+    A,
+    B,
+}
+
+int describe(Category::Sub s) {
+    match (s) {
+        Category::Sub::MEM => { return 1; }
+        Category::Sub::REG => { return 2; }
+    }
+    return 0;
+}
+
+int outer(Category c) {
+    match (c) {
+        Category::A => { return 10; }
+        Category::B => { return 20; }
+    }
+    return 0;
+}
+
+int main() {
+    println(describe(Category::Sub::MEM));
+    println(describe(Category::Sub::REG));
+    println(outer(Category::A));
+    println(outer(Category::B));
+    return 0;
+}

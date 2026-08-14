@@ -2,6 +2,7 @@
 // SVコード生成: 型写像（Cm型 → SV型文字列・ビット幅・配列サフィックス）
 // ============================================================
 #include "internal/codegen/sv/codegen.hpp"
+#include "internal/codegen/sv/internal.hpp"
 
 #include <string>
 
@@ -67,7 +68,8 @@ std::string SVCodeGen::mapType(const hir::TypePtr& type) const {
             }
             return "logic [31:0]";
         case hir::TypeKind::Struct:
-            return type->name;
+            // ネスト型・名前空間型のOuter::Inner名は、typedef宣言側と同じ規約で最終セグメント名として出力する
+            return strip_namespace(type->name);
         case hir::TypeKind::String:
             return "logic [23:0]";
         default:

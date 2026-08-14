@@ -256,6 +256,44 @@ int main() {
 }
 ```
 
+### Nested Type Declarations (struct/enum inside a struct)
+
+You can declare another struct/enum type inside a struct body.
+A nested type is an independent type that belongs to the outer type's namespace, and it is referenced from outside with the qualified path `Outer::Inner`.
+
+```cm
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    enum Mode {
+        FAST,
+        SLOW,
+    }
+    Inner inner;
+    Mode mode;
+}
+
+int main() {
+    Outer o;
+    o.inner.mem = 42;            // access through a member chain
+    o.mode = Outer::Mode::FAST;  // nested enum values use a qualified chain
+
+    Outer::Inner i;              // use the qualified path outside the struct
+    i.mem = 99;
+    return 0;
+}
+```
+
+Nesting depth is arbitrary, so multi-segment paths such as `Outer::Mid::Inner` work as well.
+You can also define methods on a nested type with `impl Outer::Inner { ... }`.
+
+**Limitations:**
+
+- Nested type declarations are not allowed inside a generic struct/enum
+- Generic parameters are not supported on nested type declarations themselves
+- Anonymous nesting (`struct { ... } field;`) is not supported (declare the field separately as `Inner field;`)
+
 ---
 
 ## Arrays of Structs
