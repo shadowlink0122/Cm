@@ -29,7 +29,7 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | ドキュメント | 内容 |
 |---|---|
 | [ネスト型宣言](../archive/v0.17.1/nested-type-declarations.html) | struct/enum本体内のstruct/enum宣言と `Outer::Inner` / `Outer::Inner::MEM` 修飾アクセスチェーンの設計（実装完了） |
-| [スマートポインタ](../archive/v0.17.1/smart-pointers.html) | UniquePtr/SharedPtr（std::mem::smart）のRAII設計・move/clone所有規律・実測に基づく制約（実装完了） |
+| [スマートポインタ](../archive/v0.17.2/smart-pointers.html) | UniquePtr/SharedPtr（std::mem::smart）のRAII設計・move/clone所有規律・実測に基づく制約（実装完了・v0.17.2収載） |
 
 ## v0.17.0 設計（全件完遂・アーカイブ済み）
 

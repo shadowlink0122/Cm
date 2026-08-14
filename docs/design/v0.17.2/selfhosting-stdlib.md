@@ -12,7 +12,7 @@ Cmコンパイラ自身をCmで記述する（セルフホスティング）た�
 | コレクション | `Vector<T>`・`HashMap<K,V>`・`TreeMap<K,V>`・`Queue<T>` | Set系・Stack/Dequeなし。Vector.sortはバブル・プリミティブ限定 |
 | 文字列 | `StringBuilder`・`split/lines`・`from_bytes`・組み込みメソッド（startsWith/endsWith/includes/indexOf/substring/replace/trim/repeat/toLowerCase/toUpperCase/charAt/len/byte_at/codepoint_at） | 文字単位の分類（is_digit等）なし |
 | 数値変換 | `parse_int`（`std::io`内・`Option<int>`返し） | 配置が不自然（io内）。parse_float/基数指定なし |
-| メモリ | `alloc/dealloc/size_of`・`Allocator`インターフェース・グローバルアロケータ差し替え・`UniquePtr/SharedPtr`（v0.17.1） | Arena/Poolなし・WeakPtrなし |
+| メモリ | `alloc/dealloc/size_of`・`Allocator`インターフェース・グローバルアロケータ差し替え・`UniquePtr/SharedPtr`（v0.17.2先行実装済み） | Arena/Poolなし・WeakPtrなし |
 | イテレータ | `std::iter`（traits/adapters/range/array） | |
 | OS連携 | `fs`・`path`・`env`・`process`・`bytes`・args | 行単位の逐次読みなし（全読みのみ） |
 | その他 | `json`・`core`（min/max/clamp/abs/panic）・`core::time`（now_ms/sleep）・native系（http/net/sync/gpu/math） | |
@@ -57,7 +57,7 @@ Cmコンパイラ自身をCmで記述する（セルフホスティング）た�
 
 - **dtorを持つstructの暗黙コピーを警告/エラー化**: `b = a;` の浅いコピーで両dtorが走る二重解放をコンパイラが検出する（UniquePtr/SharedPtrのmove/clone規律の強制）。
 - **所有型の`return local;`検出**: dtor持ちローカルの非move返却（dangling）を警告する。
-- 上記2つはスマートポインタ設計（archive/v0.17.1/smart-pointers.md）の既知制約であり、v0.17.2の言語側設計として別文書化する。
+- 上記2つはスマートポインタ設計（archive/v0.17.2/smart-pointers.md）の既知制約であり、v0.17.2の言語側設計として別文書化する。
 
 ## テスト計画
 

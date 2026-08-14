@@ -113,7 +113,7 @@ The registered functions must have the signatures `void*(long)` / `void(void*)` 
 
 ---
 
-## Smart Pointers (std::mem::smart, v0.17.1)
+## Smart Pointers (std::mem::smart, v0.17.2)
 
 Automate freeing heap-allocated values with RAII (destructor at scope exit).
 
