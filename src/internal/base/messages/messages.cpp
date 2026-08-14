@@ -815,6 +815,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv009PackedUnionUnsupportedMember
     {"error[SV009]: packed union '{0}' member '{1}' has a type whose bit width cannot be determined for synthesis; use bit vectors, integer types, or packed structs",
      "エラー[SV009]: packed union '{0}' のメンバ '{1}' の型は合成ビット幅を確定できません。ビットベクタ・整数型・packed structを使用してください"},
+    // SvTypeNameCollision
+    {"error[SV013]: SV type name '{0}' collides: '{1}' and '{2}' map to the same identifier ('::' is mangled to '__' for SystemVerilog); rename one of the types",
+     "エラー[SV013]: SV型名 '{0}' が衝突しています: '{1}' と '{2}' が同一識別子へ写像されます（SystemVerilog向けに'::'は'__'へ変換されます）。どちらかの型名を変更してください"},
     // SvSvTargetFunctionAssignsState
     {"warning: SV target: function '{0}' assigns state variable '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n",
      "警告: SVターゲット: 関数 '{0}' 内で代入した状態変数 '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n"},

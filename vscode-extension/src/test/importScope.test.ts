@@ -8,29 +8,32 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { loadGrammar, tokensWithScope } from './tokenize';
 
-const PRIMITIVE = 'storage.modifier.cm';
+const MODIFIER_SCOPE = 'storage.modifier.cm';
 const MODULE = 'entity.name.type.module.cm';
 
 test('import * as M: as は修飾子スコープ(storage.modifier)、モジュール名の緑に拾われない', async () => {
   const grammar = await loadGrammar();
   const line = 'import * as M;';
-  assert.deepEqual(tokensWithScope(grammar, line, PRIMITIVE), ['as']);
+  assert.deepEqual(tokensWithScope(grammar, line, MODIFIER_SCOPE), ['as']);
   assert.ok(!tokensWithScope(grammar, line, MODULE).includes('as'), 'as が緑になってはいけない');
   assert.ok(tokensWithScope(grammar, line, MODULE).includes('M'), 'M はモジュール名(緑)のまま');
 });
 
 test('import ./math as M: エイリアスの as も青', async () => {
   const grammar = await loadGrammar();
-  assert.deepEqual(tokensWithScope(grammar, 'import ./math as M;', PRIMITIVE), ['as']);
+  assert.deepEqual(tokensWithScope(grammar, 'import ./math as M;', MODIFIER_SCOPE), ['as']);
 });
 
 test('選択import {compute as compute_b} 内の as も青', async () => {
   const grammar = await loadGrammar();
   const line = 'import ./m::{compute as compute_b};';
-  assert.deepEqual(tokensWithScope(grammar, line, PRIMITIVE), ['as']);
+  assert.deepEqual(tokensWithScope(grammar, line, MODIFIER_SCOPE), ['as']);
 });
 
 test('export * from mod: from は修飾子スコープ(storage.modifier)', async () => {
   const grammar = await loadGrammar();
-  assert.deepEqual(tokensWithScope(grammar, 'export * from mod;', PRIMITIVE), ['export', 'from']);
+  assert.deepEqual(tokensWithScope(grammar, 'export * from mod;', MODIFIER_SCOPE), [
+    'export',
+    'from',
+  ]);
 });

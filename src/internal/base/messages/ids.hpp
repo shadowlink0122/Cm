@@ -293,6 +293,7 @@ enum class MsgId : int {
     TcSvaBuiltinArity,
     SvSv009PackedUnionWidthMismatch,
     SvSv009PackedUnionUnsupportedMember,
+    SvTypeNameCollision,
     SvSvTargetFunctionAssignsState,
     SvSystemverilogGenerationComplete,
     SvVariable,

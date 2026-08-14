@@ -1,6 +1,6 @@
 //! platform: sv
 
-// C/C++スタイル宣言子（匿名structメンバ）のSV変換: __anon_名のtypedefとして出力される
+// C/C++スタイル宣言子（匿名structメンバ）のSV変換: ::を__へ写像した一意名（Pack____anon_p）のtypedefとして出力される
 
 struct Pack {
     struct {

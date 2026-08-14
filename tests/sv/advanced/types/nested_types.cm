@@ -1,6 +1,6 @@
 //! platform: sv
 
-// ネスト型定義のSV変換: ネストstruct→typedef struct packed（最終セグメント名）・ネストenum→typedef enum logic
+// ネスト型定義のSV変換: ネストstruct/enumは::を__へ写像した一意名（Pack__Pair・Ctrl__St）のtypedefとして出力される
 
 struct Pack {
     struct Pair {

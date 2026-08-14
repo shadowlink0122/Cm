@@ -21,7 +21,7 @@
 | 自動実装 `with` / `#[derive]`（Eq/Ord/Copy/Clone/Hash/Debug/Display/Css） | ✅ | ✅ | ✅ | ✅ Cssはjs/web専用 | ⚠️ Eq/Ord等の演算子は式写像の範囲、Debug/Displayはstring制約（SV005）に従う | ⚠️ 未検証（string出力はテキストAPI経由） | ⚠️ 未検証（Debug/Displayは出力手段なし） |
 | enum（タグのみ） | ✅ | ✅ | ✅ | ✅ | ✅ typedef enum化 | ✅ | ✅ |
 | enum（ペイロード付き / tagged union） | ✅ | ✅ | ✅ | ✅ | ❌ 非合成型 | ✅ | ✅ |
-| ネスト型宣言（struct/enum内のstruct/enum・`Outer::Inner`／v0.17.1） | ✅ | ✅ | ✅ | ✅ | ✅ 最終セグメント名のtypedef | ✅ | ✅ |
+| ネスト型宣言（struct/enum内のstruct/enum・`Outer::Inner`／v0.17.1） | ✅ | ✅ | ✅ | ✅ | ✅ `::`→`__` 写像名のtypedef（衝突はSV013） | ✅ | ✅ |
 | C/C++スタイル単一宣言（匿名struct/enum＋宣言子 `struct {...} STR;`／v0.17.1） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ジェネリクス | ✅ | ✅ | ✅ | ✅ | ⚠️ `#[sv::parameter]` によるモジュールパラメータ写像 | ✅ | ✅ |
 | クロージャ / ラムダ | ✅ | ✅ | ✅ | ✅ | ❌ 非合成 | ✅ | ✅ |
@@ -32,7 +32,7 @@
 | サニタイザ `--sanitize` | ⚠️ bounds/undefined | ✅ address/thread/bounds/undefined（memoryはLinuxのみ） | ⚠️ bounds/undefined | ⚠️ undefined | ❌ 非対応 | ― | ― |
 | インラインアセンブリ `__asm__` | ✅ | ✅ | ⚠️ WASM命令のみ | ❌ 実行不可 | ― | ✅ | ✅ |
 
-ネスト型宣言と単一宣言はパース直後のhoistパスでトップレベルの通常struct/enumへ平坦化されるため、バックエンド適用可否は既存のstruct/enum対応に帰着する（interpreter/llvm/js/svは共通テスト、wasmはコンパイル・実行を個別確認済み）。
+ネスト型宣言と単一宣言はパース直後のhoistパスでトップレベルの通常struct/enumへ平坦化されるため、バックエンド適用可否は既存のstruct/enum対応に帰着する（interpreter/llvm/js/svは共通テスト、wasmはコンパイル・実行を個別確認済み）。SVの型名は `::` を `__` へ写像した一意名で出力し、写像後の衝突は明示エラー（SV013）にする。
 
 ## 型
 

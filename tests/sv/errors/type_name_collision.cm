@@ -1,0 +1,24 @@
+//! platform: sv
+
+// SV013: ::を__へ写像した後のSV型名衝突（ネスト型 Pack::Pair と実名 Pack__Pair が同一識別子になる）は明示エラー
+struct Pack__Pair {
+    int a;
+};
+
+struct Pack {
+    struct Pair {
+        int lo;
+    };
+    Pair p;
+};
+
+#[input]  int x = 0;
+#[output] int y = 0;
+
+void step() {
+    Pack k;
+    Pack__Pair q;
+    k.p.lo = x;
+    q.a = x;
+    y = k.p.lo + q.a;
+}
