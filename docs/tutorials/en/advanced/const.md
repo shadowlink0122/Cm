@@ -86,8 +86,8 @@ Current implementation has the following limitations:
 
 ## Related Topics
 
-- [Variables](../basics/variables.md) - Variable basics
-- [Arrays](../basics/arrays.md) - Array usage
+- [Variables](../basics/variables.html) - Variable basics
+- [Arrays](../basics/arrays.html) - Array usage
 
 ---
 

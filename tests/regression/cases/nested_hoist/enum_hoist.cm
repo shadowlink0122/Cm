@@ -1,0 +1,12 @@
+enum Category {
+    enum Sub {
+        MEM = 10,
+        REG,
+    },
+    A = 5,
+    B,
+}
+
+int main() {
+    return 0;
+}

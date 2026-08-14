@@ -213,6 +213,7 @@ impl Circle for Shape {
 ---
 
 **Previous:** [Generics](generics.html)  
+
 ---
 
 **Last Updated:** 2026-02-08

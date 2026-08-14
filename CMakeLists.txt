@@ -245,6 +245,7 @@ set(CM_AST_SOURCES
     src/internal/syntax/ast/types.cpp
     src/internal/syntax/ast/typekey.cpp
     src/internal/syntax/ast/convkind.cpp
+    src/internal/syntax/ast/nested.cpp
 )
 # メッセージi18nカタログ本文テーブル（i18n::msg/msgf を使うターゲットは必ずリンクする）
 # 型検査（cm本体と回帰テストターゲットで共有。型情報に依存するMIR loweringの検証に必要）
@@ -795,6 +796,21 @@ if(BUILD_TESTING)
         target_include_directories(hir_lowering_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(hir_lowering_test gtest_main cm_frontend)
         gtest_discover_tests(hir_lowering_test PROPERTIES LABELS "regression")
+
+        # Regression tests - ネスト型宣言hoistパス（Outer::Inner平坦化と型参照書き換え）
+        add_executable(nested_hoist_test
+            tests/regression/nested_hoist_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(nested_hoist_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(nested_hoist_test PRIVATE
+            CM_NESTED_HOIST_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/nested_hoist")
+        target_include_directories(nested_hoist_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src)
+        target_link_libraries(nested_hoist_test gtest_main)
+        gtest_discover_tests(nested_hoist_test PROPERTIES LABELS "regression")
 
         # Integration tests - HIR型不変条件の監査（typed-hir-single-source）
         add_executable(hir_type_audit_test

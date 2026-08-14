@@ -86,8 +86,8 @@ int[SUM] data;  // int[30]
 
 ## 関連項目
 
-- [変数](../basics/variables.md) - 変数の基本
-- [配列](../basics/arrays.md) - 配列の使い方
+- [変数](../basics/variables.html) - 変数の基本
+- [配列](../basics/arrays.html) - 配列の使い方
 
 ---
 

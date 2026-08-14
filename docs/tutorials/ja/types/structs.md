@@ -280,6 +280,76 @@ int main() {
 }
 ```
 
+### ネスト型宣言（struct内struct・struct内enum）
+
+構造体の本体の中に別のstruct/enum型を宣言できます。
+ネスト型は外側の型の名前空間に属する独立した型で、外側からは `Outer::Inner` という修飾パスで参照します。
+
+```cm
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    enum Mode {
+        FAST,
+        SLOW,
+    }
+    Inner inner;
+    Mode mode;
+}
+
+int main() {
+    Outer o;
+    o.inner.mem = 42;            // メンバチェーンでアクセス
+    o.mode = Outer::Mode::FAST;  // ネストenum値は修飾チェーンで参照
+
+    Outer::Inner i;              // 外側からは修飾パスで型を利用
+    i.mem = 99;
+    return 0;
+}
+```
+
+ネストの深さは任意で、`Outer::Mid::Inner` のように多段の修飾パスで参照できます。
+`impl Outer::Inner { ... }` でネスト型にメソッドを定義することもできます。
+
+### C/C++スタイルの単一宣言（宣言子）
+
+C/C++と同様に、型定義と同時に変数やフィールドを宣言できます。
+匿名struct/enumは宣言子が必須です。
+
+```cm
+// トップレベル: 宣言子はゼロ初期化のグローバル変数になる
+struct {
+    struct {
+        int mem;
+    } str;
+} STR;
+
+// struct本体内: 宣言子はフィールドになる（カンマ区切りで複数可）
+struct Outer {
+    struct Inner {
+        int mem;
+    } a, b;
+    enum { FAST, SLOW } mode;
+};
+
+int main() {
+    STR.str.mem = 42;   // 匿名ネストもチェーンでアクセスできる
+    println(STR.str.mem);
+
+    Outer o;
+    o.a.mem = 1;
+    o.b.mem = 2;
+    return 0;
+}
+```
+
+**制限事項:**
+
+- ジェネリックstruct/enumの本体にはネスト型を宣言できません
+- ネスト型宣言自身にジェネリックパラメータは付けられず、ジェネリック型宣言に宣言子は付けられません
+- 宣言子への初期化子（`struct X {} g = ...;`）は未対応です（別文 `X g = ...;` で書きます）
+
 ---
 
 ## 構造体配列

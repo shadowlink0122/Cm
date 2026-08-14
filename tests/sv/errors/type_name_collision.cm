@@ -1,0 +1,25 @@
+//! platform: sv
+
+// '__'を含む識別子の宣言はコンパイラ予約のため拒否される（v0.17.1）。
+// SV側の写像衝突検出（SV013）は防御的に残っているが、ユーザーコードからはこの禁止が先行して到達しない
+struct Pack__Pair {
+    int a;
+};
+
+struct Pack {
+    struct Pair {
+        int lo;
+    };
+    Pair p;
+};
+
+#[input]  int x = 0;
+#[output] int y = 0;
+
+void step() {
+    Pack k;
+    Pack__Pair q;
+    k.p.lo = x;
+    q.a = x;
+    y = k.p.lo + q.a;
+}

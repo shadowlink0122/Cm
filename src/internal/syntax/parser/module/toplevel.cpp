@@ -28,6 +28,7 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::Attribute
 
     // 変数名
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     // 初期化子
     expect(TokenKind::Eq);
@@ -57,6 +58,7 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
 
     // 変数名
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     // 初期化子省略をSVポート型/アトリビュートに限定
     // posedge/negedge型、または#[input]/#[output]属性付きはport宣言のため初期化子不要
@@ -101,6 +103,7 @@ ast::DeclPtr Parser::parse_constexpr() {
     // constexpr変数またはconstexpr関数
     auto type = parse_type_with_union();
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     if (check(TokenKind::LParen)) {
         // constexpr関数
@@ -160,11 +163,17 @@ ast::DeclPtr Parser::parse_template_decl() {
 // ============================================================
 // Enum宣言（Tagged Union & ジェネリック対応）
 // ============================================================
-ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
+ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes,
+                                     bool allow_anonymous) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 
-    std::string name = expect_ident();
+    // C/C++スタイルの匿名enum（enum { ... } 宣言子;）は名前を省略でき、呼び出し元が宣言子から名前を合成する
+    std::string name;
+    if (!allow_anonymous || check(TokenKind::Ident)) {
+        name = expect_ident();
+        reject_reserved_ident(name);
+    }
 
     // ジェネリックパラメータ: enum Result<T, E> { ... }
     std::vector<std::string> generic_params;
@@ -178,12 +187,24 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     expect(TokenKind::LBrace);
 
     std::vector<ast::EnumMember> members;
+    std::vector<ast::DeclPtr> nested_types;
     int64_t next_value = 0;                   // オートインクリメント用
     std::unordered_set<int64_t> used_values;  // 重複チェック用
     bool has_associated_data = false;         // Associated dataがあればtrueになる
 
     while (!check(TokenKind::RBrace) && !is_at_end()) {
+        // ネスト型宣言（enum/struct）: 値スロットを消費せず、hoistパスでOuter::Inner名へ平坦化される
+        if (check(TokenKind::KwEnum) || check(TokenKind::KwStruct)) {
+            auto nested = parse_nested_type_decl(is_export, {}, !generic_params.empty(), false);
+            if (nested) {
+                nested_types.push_back(std::move(nested));
+            }
+            consume_if(TokenKind::Comma);
+            continue;
+        }
+
         std::string member_name = expect_ident();
+        reject_reserved_ident(member_name);
 
         // Associated dataをチェック: Variant(int x, string y)
         if (consume_if(TokenKind::LParen)) {
@@ -279,6 +300,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     enum_decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     enum_decl->attributes = std::move(attributes);
     enum_decl->generic_params = std::move(generic_params);
+    enum_decl->nested_types = std::move(nested_types);
     return std::make_unique<ast::Decl>(std::move(enum_decl), Span{start_pos, previous().end});
 }
 
@@ -293,6 +315,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
     expect(TokenKind::KwTypedef);
 
     std::string name = expect_ident();
+    reject_reserved_ident(name);
     expect(TokenKind::Eq);
 
     // ユニオン型 or リテラル型をパース

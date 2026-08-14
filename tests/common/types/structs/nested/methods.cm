@@ -1,0 +1,30 @@
+// ネスト型へのimpl: インスタンスメソッドと静的メソッド（Outer::Inner::create）
+struct Outer {
+    struct Inner {
+        int mem;
+    };
+    Inner inner;
+};
+
+impl Outer::Inner {
+    int doubled() {
+        return self.mem * 2;
+    }
+
+    static Outer::Inner create(int v) {
+        Outer::Inner i;
+        i.mem = v;
+        return i;
+    }
+}
+
+int main() {
+    Outer o;
+    o.inner.mem = 21;
+    println(o.inner.doubled());
+
+    Outer::Inner i = Outer::Inner::create(5);
+    println(i.mem);
+    println(i.doubled());
+    return 0;
+}

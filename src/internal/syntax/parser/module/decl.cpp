@@ -92,6 +92,11 @@ ast::DeclPtr Parser::parse_namespace() {
         auto decl = parse_top_level();
         if (decl) {
             declarations.push_back(std::move(decl));
+            // C/C++スタイル宣言子が合成したグローバル変数宣言を型宣言の直後へ排出する
+            for (auto& pending : pending_decls_) {
+                declarations.push_back(std::move(pending));
+            }
+            pending_decls_.clear();
         }
         ns_iterations++;
     }

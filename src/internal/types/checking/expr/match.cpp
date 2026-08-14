@@ -175,6 +175,32 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
     std::set<std::string> covered_values;
     std::string detected_enum_name;
 
+    // 修飾パターン名からenum名部分を最長一致で切り出す（ネストenumのOuter::Inner::MEMはOuterでなくOuter::Innerを検出する）
+    auto detect_enum_name = [&](const std::string& qualified) -> std::string {
+        size_t pos = qualified.rfind("::");
+        while (pos != std::string::npos && pos > 0) {
+            std::string prefix = qualified.substr(0, pos);
+            if (enum_names_.count(prefix)) {
+                return prefix;
+            }
+            pos = qualified.rfind("::", pos - 1);
+        }
+        return "";
+    };
+
+    // enum直下のvariantキーのみ収集する（ネストenum型のより深いOuter::Inner::MEMキーは外側enumのvariantではない）
+    auto collect_direct_variants = [&](const std::string& enum_name) {
+        std::set<std::string> variants;
+        const std::string prefix = enum_name + "::";
+        for (const auto& [key, value] : enum_values_) {
+            if (key.size() > prefix.size() && key.compare(0, prefix.size(), prefix) == 0 &&
+                key.find("::", prefix.size()) == std::string::npos) {
+                variants.insert(key);
+            }
+        }
+        return variants;
+    };
+
     for (const auto& arm : match.arms) {
         if (!arm.pattern)
             continue;
@@ -203,12 +229,9 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 if (arm.pattern->value) {
                     if (auto* ident = arm.pattern->value->as<ast::IdentExpr>()) {
                         covered_values.insert(ident->name);
-                        auto pos = ident->name.find("::");
-                        if (pos != std::string::npos) {
-                            std::string enum_name = ident->name.substr(0, pos);
-                            if (enum_names_.count(enum_name)) {
-                                detected_enum_name = enum_name;
-                            }
+                        std::string enum_name = detect_enum_name(ident->name);
+                        if (!enum_name.empty()) {
+                            detected_enum_name = enum_name;
                         }
                     }
                 }
@@ -217,12 +240,9 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
                 // EnumType::Variant(binding) パターン
                 if (!arm.pattern->enum_variant.empty()) {
                     covered_values.insert(arm.pattern->enum_variant);
-                    auto pos = arm.pattern->enum_variant.find("::");
-                    if (pos != std::string::npos) {
-                        std::string enum_name = arm.pattern->enum_variant.substr(0, pos);
-                        if (enum_names_.count(enum_name)) {
-                            detected_enum_name = enum_name;
-                        }
+                    std::string enum_name = detect_enum_name(arm.pattern->enum_variant);
+                    if (!enum_name.empty()) {
+                        detected_enum_name = enum_name;
                     }
                 }
                 break;
@@ -257,12 +277,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
     }
 
     if (!detected_enum_name.empty()) {
-        std::set<std::string> all_variants;
-        for (const auto& [key, value] : enum_values_) {
-            if (key.find(detected_enum_name + "::") == 0) {
-                all_variants.insert(key);
-            }
-        }
+        std::set<std::string> all_variants = collect_direct_variants(detected_enum_name);
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {
@@ -277,12 +292,7 @@ void TypeChecker::check_match_exhaustiveness(ast::MatchExpr& match, ast::TypePtr
 
     std::string type_name = ast::type_to_string(*scrutinee_type);
     if (enum_names_.count(type_name)) {
-        std::set<std::string> all_variants;
-        for (const auto& [key, value] : enum_values_) {
-            if (key.find(type_name + "::") == 0) {
-                all_variants.insert(key);
-            }
-        }
+        std::set<std::string> all_variants = collect_direct_variants(type_name);
 
         for (const auto& variant : all_variants) {
             if (!covered_values.count(variant)) {

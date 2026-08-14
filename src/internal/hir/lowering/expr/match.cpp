@@ -273,9 +273,9 @@ HirExprPtr HirLowering::build_single_pattern_condition(const HirExprPtr& scrutin
                         }
                     }
                 } else if (auto* ident = pattern.value->as<ast::IdentExpr>()) {
-                    // IdentExpr形式: EnumName::Variant（::を含む場合）
+                    // IdentExpr形式: EnumName::Variant（::を含む場合。variantは常に最終セグメントのため、ネストenumも最後の::で分割する）
                     variant_full_name = ident->name;
-                    size_t pos = ident->name.find("::");
+                    size_t pos = ident->name.rfind("::");
                     if (pos != std::string::npos) {
                         std::string enum_name = ident->name.substr(0, pos);
                         auto it = enum_defs_.find(enum_name);

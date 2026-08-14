@@ -545,6 +545,8 @@ int expand_derives(ast::Program& program) {
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
     Parser parser(std::move(tokens));
+    // コンパイラ合成ソースは'__'予約識別子の検査対象外
+    parser.set_allow_reserved_idents(true);
     ast::Program generated = parser.parse();
     if (parser.has_errors()) {
         // 合成コードの構文エラーは展開器のバグ（ユーザー入力では発生しない）。

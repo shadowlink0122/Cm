@@ -45,8 +45,10 @@ cm build -O2 main.cm
 
 ```cm
 // 最適化前
+int x = 2 * 3 + 4;
 
 // 最適化後（コンパイル時に計算済み）
+int x = 10;
 ```
 
 **アルゴリズム:** 定数オペランドの演算を即座に評価
@@ -80,6 +82,12 @@ int x = 20;
 
 ```cm
 // 最適化前
+int unused = heavy_calc();  // 結果がどこでも使われない
+int x = 1;
+return x;
+
+// 最適化後（未使用の計算を除去。heavy_calcに副作用がない場合）
+int x = 1;
 return x;
 ```
 
@@ -93,7 +101,12 @@ return x;
 
 ```cm
 // 最適化前
+int x = 10;  // この代入は読まれる前に上書きされる
 x = 20;
+return x;
+
+// 最適化後
+int x = 20;
 return x;
 ```
 
@@ -105,8 +118,13 @@ return x;
 
 ```cm
 // 最適化前
+int a = x * y + 1;
+int b = x * y + 2;  // x * y を再計算している
 
-// 最適化後
+// 最適化後（共通部分式 x * y を1回だけ計算して再利用）
+int t = x * y;
+int a = t + 1;
+int b = t + 2;
 ```
 
 **アルゴリズム:** 式ハッシュによる等価性検出
@@ -122,12 +140,13 @@ return x;
 ```cm
 // 最適化前
 for (int i = 0; i < n; i++) {
-    arr[i] = constant + i;
+    arr[i] = base * scale + i;  // base * scale はループ内で不変
 }
 
-// 最適化後
+// 最適化後（不変式をループ外へ移動）
+int inv = base * scale;
 for (int i = 0; i < n; i++) {
-    arr[i] = constant + i;
+    arr[i] = inv + i;
 }
 ```
 
@@ -153,10 +172,15 @@ for (int i = 0; i < n; i++) {
 
 ```cm
 // 元の関数
+int add(int a, int b) {
+    return a + b;
+}
 
 // 呼び出し側
+int r = add(x, y);
 
-// インライン化後
+// インライン化後（呼び出しコストが消え、さらに他の最適化が効きやすくなる）
+int r = x + y;
 ```
 
 **制限:**
@@ -215,6 +239,7 @@ cm build --dump-mir main.cm
 
 - [LLVMバックエンド](../native/index.html) - LLVMによる追加最適化
 - [WASMバックエンド](../wasm/index.html) - WebAssembly向け最適化
+
 ---
 
 **最終更新:** 2026-02-08

@@ -184,6 +184,7 @@ struct Point with Debug {
 ---
 
 **次の章:** [環境構築](setup.html)
+
 ---
 
 **最終更新:** 2026-02-08

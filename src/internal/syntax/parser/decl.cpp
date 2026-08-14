@@ -54,6 +54,11 @@ ast::Program Parser::parse() {
 
         if (auto decl = parse_top_level()) {
             program.declarations.push_back(std::move(decl));
+            // C/C++スタイル宣言子が合成したグローバル変数宣言を型宣言の直後へ排出する
+            for (auto& pending : pending_decls_) {
+                program.declarations.push_back(std::move(pending));
+            }
+            pending_decls_.clear();
         } else {
             synchronize();
         }
@@ -107,7 +112,7 @@ ast::DeclPtr Parser::parse_top_level() {
 
         // export struct, export interface, export enum, export typedef, export const
         if (check(TokenKind::KwStruct)) {
-            return parse_struct(true, std::move(attrs));
+            return parse_type_decl_with_declarators(true, std::move(attrs), false);
         }
         if (check(TokenKind::KwExtern)) {
             advance();  // consume 'extern'
@@ -125,7 +130,7 @@ ast::DeclPtr Parser::parse_top_level() {
             return parse_interface(true, std::move(attrs));
         }
         if (check(TokenKind::KwEnum)) {
-            return parse_enum_decl(true, std::move(attrs));
+            return parse_type_decl_with_declarators(true, std::move(attrs), true);
         }
         if (check(TokenKind::KwTypedef)) {
             return parse_typedef_decl(true, std::move(attrs));
@@ -241,7 +246,7 @@ ast::DeclPtr Parser::parse_top_level() {
 
     // struct
     if (check(TokenKind::KwStruct)) {
-        return parse_struct(false, std::move(attrs));
+        return parse_type_decl_with_declarators(false, std::move(attrs), false);
     }
 
     // interface
@@ -261,7 +266,7 @@ ast::DeclPtr Parser::parse_top_level() {
 
     // enum
     if (check(TokenKind::KwEnum)) {
-        return parse_enum_decl(false, std::move(attrs));
+        return parse_type_decl_with_declarators(false, std::move(attrs), true);
     }
 
     // typedef
@@ -419,6 +424,7 @@ ast::DeclPtr Parser::parse_function(bool is_export, bool is_static, bool is_inli
     // 名前のスパンを記録（Lint警告用）
     uint32_t name_start = current().start;
     std::string name = expect_ident();
+    reject_reserved_ident(name);
     uint32_t name_end = previous().end;
 
     // main関数はエクスポート不可
@@ -481,6 +487,7 @@ std::vector<ast::Param> Parser::parse_params() {
             }
 
             param.name = expect_ident();
+            reject_reserved_ident(param.name);
 
             // デフォルト引数をパース
             if (consume_if(TokenKind::Eq)) {
@@ -499,14 +506,21 @@ std::vector<ast::Param> Parser::parse_params() {
 
 // 構造体
 ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode> attributes,
-                                  bool is_extern) {
+                                  bool is_extern, bool allow_anonymous) {
     uint32_t start_pos = current().start;
     debug::par::log(debug::par::Id::StructDef, "", debug::Level::Trace);
 
     expect(TokenKind::KwStruct);
 
+    // C/C++スタイルの匿名struct（struct { ... } 宣言子;）は名前を省略でき、呼び出し元が宣言子から名前を合成する
     uint32_t name_start = current().start;
-    std::string name = expect_ident();
+    std::string name;
+    if (!allow_anonymous || check(TokenKind::Ident)) {
+        name = expect_ident();
+        if (!is_extern) {
+            reject_reserved_ident(name);
+        }
+    }
     uint32_t name_end = previous().end;
 
     auto [generic_params, generic_params_v2] = parse_generic_params_v2();
@@ -566,6 +580,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     expect(TokenKind::LBrace);
 
     std::vector<ast::Field> fields;
+    std::vector<ast::DeclPtr> nested_types;
     bool has_default_field = false;
     while (!check(TokenKind::RBrace) && !is_at_end()) {
         ast::Field field;
@@ -573,6 +588,32 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         // フィールド属性（#[sv::param], #[input], #[output] 等）
         while (check(TokenKind::Hash)) {
             field.attributes.push_back(parse_attribute());
+        }
+
+        // ネスト型宣言（struct/enum）: hoistパスでOuter::Inner名のトップレベル型へ平坦化される
+        if (check(TokenKind::KwStruct) || check(TokenKind::KwEnum)) {
+            bool outer_is_generic = !generic_params.empty() || !generic_params_v2.empty();
+            std::vector<std::string> declarators;
+            auto nested = parse_nested_type_decl(is_export, std::move(field.attributes),
+                                                 outer_is_generic, is_extern, &declarators);
+            if (nested) {
+                // C/C++スタイルの宣言子（struct { ... } f;）はネスト型を型とするフィールドになる
+                std::string nested_name;
+                if (const auto* st = nested->as<ast::StructDecl>()) {
+                    nested_name = st->name;
+                } else if (const auto* en = nested->as<ast::EnumDecl>()) {
+                    nested_name = en->name;
+                }
+                for (auto& decl_name : declarators) {
+                    ast::Field decl_field;
+                    decl_field.type = ast::make_named(nested_name);
+                    decl_field.name = std::move(decl_name);
+                    decl_field.visibility = ast::Visibility::Export;
+                    fields.push_back(std::move(decl_field));
+                }
+                nested_types.push_back(std::move(nested));
+            }
+            continue;
         }
 
         field.visibility =
@@ -595,6 +636,9 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         field.type = parse_type_with_union();
 
         field.name = expect_ident();
+        if (!is_extern) {
+            reject_reserved_ident(field.name);
+        }
 
         // フィールドのデフォルト値（= expr）: extern struct、IOフィールド（#[input]/#[output]/#[inout] 属性付き）、パラメータフィールド（#[sv::param] 属性付き）で許可する
         bool has_dir_attr = false;
@@ -621,6 +665,7 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     decl->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
     decl->auto_impls = std::move(auto_impls);
     decl->attributes = std::move(attributes);
+    decl->nested_types = std::move(nested_types);
 
     if (!generic_params.empty()) {
         decl->generic_params = std::move(generic_params);
@@ -634,6 +679,127 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     }
 
     return std::make_unique<ast::Decl>(std::move(decl), Span{start_pos, previous().end});
+}
+
+// ネスト型宣言（struct/enum本体内のstruct/enum）を1件パースし、初版の制限を検査する。
+// declaratorsが非nullの場合はC/C++スタイルの宣言子（struct Inner { ... } f1, f2;）を受理し、匿名型は先頭宣言子から__anon_名を合成する
+ast::DeclPtr Parser::parse_nested_type_decl(bool is_export,
+                                            std::vector<ast::AttributeNode> attributes,
+                                            bool outer_is_generic, bool outer_is_extern,
+                                            std::vector<std::string>* declarators) {
+    if (outer_is_generic) {
+        error(i18n::msg(i18n::MsgId::PsNestedTypeInGenericTypeUnsupported));
+    }
+    if (outer_is_extern) {
+        error(i18n::msg(i18n::MsgId::PsNestedTypeInExternStructUnsupported));
+    }
+
+    bool allow_anonymous = declarators != nullptr;
+    auto nested = check(TokenKind::KwStruct)
+                      ? parse_struct(is_export, std::move(attributes), false, allow_anonymous)
+                      : parse_enum_decl(is_export, std::move(attributes), allow_anonymous);
+    if (!nested) {
+        return nullptr;
+    }
+
+    // C/C++スタイルの宣言子（} f1, f2;）を収集する。
+    // 末尾;省略構文（struct X {}）の直後に来る通常宣言（Inner inner; 等）と区別するため、Identの直後が ; か , の場合のみ宣言子とみなす
+    if (declarators && check(TokenKind::Ident) &&
+        (peek_kind() == TokenKind::Semicolon || peek_kind() == TokenKind::Comma)) {
+        do {
+            declarators->push_back(expect_ident());
+            reject_reserved_ident(declarators->back());
+        } while (consume_if(TokenKind::Comma));
+        expect(TokenKind::Semicolon);
+    } else {
+        // ネストenum宣言の直後もstruct同様に任意の;を許容する
+        consume_if(TokenKind::Semicolon);
+    }
+
+    // ネスト型宣言自身のジェネリクスは初版では未対応（宣言子付きも不可）
+    std::string* type_name = nullptr;
+    bool nested_is_generic = false;
+    if (auto* st = nested->as<ast::StructDecl>()) {
+        nested_is_generic = !st->generic_params.empty() || !st->generic_params_v2.empty();
+        type_name = &st->name;
+    } else if (auto* en = nested->as<ast::EnumDecl>()) {
+        nested_is_generic = en->is_generic();
+        type_name = &en->name;
+    }
+    if (nested_is_generic) {
+        if (declarators && !declarators->empty()) {
+            error(i18n::msg(i18n::MsgId::PsDeclaratorOnGenericTypeUnsupported));
+        }
+        error(i18n::msg(i18n::MsgId::PsNestedTypeGenericParamsUnsupported));
+        return nullptr;
+    }
+
+    // 匿名型は先頭宣言子から名前を合成する（宣言子なしの匿名は不可）
+    if (type_name && type_name->empty()) {
+        if (!declarators || declarators->empty()) {
+            error(i18n::msg(i18n::MsgId::PsAnonymousTypeRequiresDeclarator));
+            return nullptr;
+        }
+        *type_name = "__anon_" + (*declarators)[0];
+    }
+    return nested;
+}
+
+// C/C++スタイルの単一宣言（struct {...} STR; / struct Name {...} STR;）対応のトップレベル型宣言パース。
+// 宣言子は初期化子なし（ゼロ初期化）のグローバル変数として合成され、pending_decls_経由でトップレベルへ排出される
+ast::DeclPtr Parser::parse_type_decl_with_declarators(bool is_export,
+                                                      std::vector<ast::AttributeNode> attributes,
+                                                      bool is_enum) {
+    auto decl = is_enum ? parse_enum_decl(is_export, std::move(attributes), true)
+                        : parse_struct(is_export, std::move(attributes), false, true);
+    if (!decl) {
+        return nullptr;
+    }
+
+    std::string* type_name = nullptr;
+    bool is_generic = false;
+    if (auto* st = decl->as<ast::StructDecl>()) {
+        type_name = &st->name;
+        is_generic = !st->generic_params.empty() || !st->generic_params_v2.empty();
+    } else if (auto* en = decl->as<ast::EnumDecl>()) {
+        type_name = &en->name;
+        is_generic = en->is_generic();
+    }
+
+    // 末尾;省略構文（struct X {}）の直後に来る通常宣言（P make() 等）と区別するため、Identの直後が ; か , の場合のみ宣言子とみなす
+    std::vector<std::string> declarators;
+    if (check(TokenKind::Ident) &&
+        (peek_kind() == TokenKind::Semicolon || peek_kind() == TokenKind::Comma)) {
+        do {
+            declarators.push_back(expect_ident());
+            reject_reserved_ident(declarators.back());
+        } while (consume_if(TokenKind::Comma));
+        expect(TokenKind::Semicolon);
+    }
+
+    if (declarators.empty()) {
+        if (type_name && type_name->empty()) {
+            error(i18n::msg(i18n::MsgId::PsAnonymousTypeRequiresDeclarator));
+            return nullptr;
+        }
+        return decl;
+    }
+    if (is_generic) {
+        error(i18n::msg(i18n::MsgId::PsDeclaratorOnGenericTypeUnsupported));
+        return decl;
+    }
+    if (type_name && type_name->empty()) {
+        *type_name = "__anon_" + declarators[0];
+    }
+
+    for (auto& var_name : declarators) {
+        auto gvar = std::make_unique<ast::GlobalVarDecl>(std::move(var_name),
+                                                         ast::make_named(*type_name), nullptr);
+        gvar->visibility = is_export ? ast::Visibility::Export : ast::Visibility::Private;
+        pending_decls_.push_back(
+            std::make_unique<ast::Decl>(std::move(gvar), Span{previous().start, previous().end}));
+    }
+    return decl;
 }
 
 // 演算子の種類をパース
@@ -732,6 +898,7 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
     expect(TokenKind::KwInterface);
 
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
@@ -782,6 +949,7 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
             sig.return_type = parse_type_with_union();
             sig.return_type = check_array_suffix(std::move(sig.return_type));
             sig.name = expect_ident();
+            reject_reserved_ident(sig.name);
             expect(TokenKind::LParen);
             sig.params = parse_params();
             expect(TokenKind::RParen);
@@ -1102,6 +1270,21 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
 
     expect(TokenKind::RBrace);
     return stmts;
+}
+
+// ユーザ宣言名の予約検査: '__'を含む識別子はコンパイラ予約（マングル名・__anon_合成名・SV写像名との衝突防止）のため拒否する。
+// extern宣言・use(FFI)ブロックは外部シンボル名を写すため対象外（専用パース経路のためこの検査を通らない）
+void Parser::reject_reserved_ident(const std::string& name) {
+    if (allow_reserved_idents_) {
+        return;
+    }
+    // モジュールflattenがprivateシンボルへ付与する内部プレフィックスは通す（改名後の結合ソースが再パースされるため）
+    if (name.rfind("__cm_priv_", 0) == 0) {
+        return;
+    }
+    if (name.find("__") != std::string::npos) {
+        error(i18n::msgf(i18n::MsgId::PsReservedDoubleUnderscore, name));
+    }
 }
 
 // エラー報告

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace cm::codegen::sv {
 
@@ -31,6 +32,17 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
         analyzeFunction(*func, mod);
     }
 
+    // SV型名（::→__写像後）の衝突検出: 異なるCm型（A::BとA__B等）が同一SV識別子へ写像される場合は明示エラーにする
+    std::unordered_map<std::string, std::string> emitted_sv_type_names;
+    auto check_sv_type_name = [&](const std::string& cm_name) {
+        const std::string sv_name = sv_type_name(cm_name);
+        auto [it, inserted] = emitted_sv_type_names.emplace(sv_name, cm_name);
+        if (!inserted && it->second != cm_name) {
+            throw std::runtime_error(
+                i18n::msgf(i18n::MsgId::SvTypeNameCollision, sv_name, it->second, cm_name));
+        }
+    };
+
     // enum → typedef enum logic 出力
     for (const auto& e : program.enums) {
         if (!e)
@@ -38,6 +50,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
         // Tagged Union（ペイロード付きenum）はSVでは直接変換しない
         if (e->is_tagged_union())
             continue;
+        check_sv_type_name(e->name);
 
         std::ostringstream ss;
         // ビット幅計算: 最大タグ値を表現できるビット数を算出（明示的なタグ値はメンバー数-1 より大きい場合があるため、メンバー数ではなく実際の値の最大から求める）
@@ -66,7 +79,8 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
                 ss << ",";
             ss << "\n";
         }
-        ss << "} " << e->name << ";";
+        // ネスト型のOuter::Inner名はSV識別子にできないため::を__へ写像した一意名で出力する（参照側もsv_type_nameで一致させる）
+        ss << "} " << sv_type_name(e->name) << ";";
         mod.type_declarations.push_back(ss.str());
     }
 
@@ -91,6 +105,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
         }
         if (is_io_contract)
             continue;
+        check_sv_type_name(st->name);
         // #[sv::unpacked] 属性でpacked性を制御する（既定はpacked。SV-N8）
         bool is_unpacked = false;
         // #[sv::packed_union] は同一ビット幅の複数ビューを持つpacked unionとして出力する（SV-N6）
@@ -176,7 +191,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
             for (const auto& f : st->fields) {
                 ss << "    " << mapType(f.type) << " " << f.name << ";\n";
             }
-            ss << "} " << st->name << ";";
+            ss << "} " << sv_type_name(st->name) << ";";
             mod.type_declarations.push_back(ss.str());
             continue;
         }
@@ -185,7 +200,7 @@ void SVCodeGen::analyzeDeclarations(const mir::MirProgram& program, SVModule& mo
         for (const auto& f : st->fields) {
             ss << "    " << mapType(f.type) << " " << f.name << ";\n";
         }
-        ss << "} " << st->name << ";";
+        ss << "} " << sv_type_name(st->name) << ";";
         mod.type_declarations.push_back(ss.str());
     }
 

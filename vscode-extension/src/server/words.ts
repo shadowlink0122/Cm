@@ -16,6 +16,7 @@ import {
   NULL_CONSTANTS,
   PRIMITIVE_TYPES,
   SIZEOF_KEYWORDS,
+  STORAGE_TYPE_KEYWORDS,
 } from '../grammar/terms';
 
 // キーワード・プリミティブ型はホバー対象外（言語仕様の説明までは提供しない）
@@ -30,6 +31,7 @@ const SKIP_WORDS = new Set<string>([
   ...CONTROL_EXPORT,
   ...CONTROL_EXCEPTION,
   ...DECLARATION_KEYWORDS,
+  ...STORAGE_TYPE_KEYWORDS,
   ...MODIFIER_KEYWORDS,
   ...SIZEOF_KEYWORDS,
   'self',

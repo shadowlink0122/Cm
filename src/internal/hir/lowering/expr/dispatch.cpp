@@ -35,12 +35,26 @@ HirExprPtr HirLowering::lower_expr(ast::Expr& expr) {
 
             // Tagged Union enumの場合はHirEnumConstructを生成
             // これにより、Option::Noneのようなペイロードなしバリアントも__TaggedUnion_型で正しく初期化される（tag + payload）
+            // ネストenum（Outer::Inner::MEM）を外側enumのvariantと誤認しないよう、enum名は登録名との最長一致で切り出す
             std::string enum_name;
             std::string variant_name;
-            auto sep = ident->name.find("::");
-            if (sep != std::string::npos) {
-                enum_name = ident->name.substr(0, sep);
-                variant_name = ident->name.substr(sep + 2);
+            size_t sep = ident->name.rfind("::");
+            while (sep != std::string::npos && sep > 0) {
+                std::string prefix = ident->name.substr(0, sep);
+                if (enum_defs_.count(prefix)) {
+                    enum_name = prefix;
+                    variant_name = ident->name.substr(sep + 2);
+                    break;
+                }
+                sep = ident->name.rfind("::", sep - 1);
+            }
+            if (enum_name.empty()) {
+                // 登録名に一致しない場合（組み込みResult/Option等）は従来どおり先頭セグメントで分割する
+                sep = ident->name.find("::");
+                if (sep != std::string::npos) {
+                    enum_name = ident->name.substr(0, sep);
+                    variant_name = ident->name.substr(sep + 2);
+                }
             }
 
             bool is_tagged = false;

@@ -1,0 +1,33 @@
+// C/C++スタイルの宣言子: ネスト型定義と同時のフィールド宣言（名前付き・匿名・カンマ区切り）
+struct Outer {
+    struct Inner {
+        int mem;
+    } a, b;
+    struct {
+        int lo;
+        int hi;
+    } pair;
+    enum {
+        FAST,
+        SLOW,
+    } mode;
+};
+
+int main() {
+    Outer o;
+    o.a.mem = 1;
+    o.b.mem = 2;
+    o.pair.lo = 10;
+    o.pair.hi = 20;
+    println(o.a.mem + o.b.mem);
+    println(o.pair.lo + o.pair.hi);
+
+    o.mode = Outer::__anon_mode::SLOW;
+    println(o.mode as int);
+
+    // 名前付きネスト型は宣言子と併用しても修飾パスで利用できる
+    Outer::Inner i;
+    i.mem = 5;
+    println(i.mem);
+    return 0;
+}

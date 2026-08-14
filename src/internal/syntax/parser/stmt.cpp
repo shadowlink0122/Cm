@@ -270,6 +270,7 @@ ast::StmtPtr Parser::parse_stmt() {
                 var_type = parse_type_with_union();
             }
             std::string var_name = expect_ident();
+            reject_reserved_ident(var_name);
             expect(TokenKind::KwIn);
             auto iterable = parse_expr();
             expect(TokenKind::RParen);
@@ -378,6 +379,7 @@ ast::StmtPtr Parser::parse_stmt() {
         // 名前のスパンを記録（Lint警告用）
         uint32_t name_start = current().start;
         std::string name = expect_ident();
+        reject_reserved_ident(name);
         uint32_t name_end = previous().end;
         debug::par::log(debug::par::Id::VarName, "Variable name: " + name, debug::Level::Debug);
 

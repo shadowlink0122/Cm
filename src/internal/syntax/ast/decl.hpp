@@ -178,6 +178,9 @@ struct StructDecl {
     std::vector<std::string> generic_params;      // 後方互換性のため維持
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
 
+    // 本体内にネスト宣言されたstruct/enum型（hoistパスでOuter::Inner名のトップレベル宣言へ平坦化される）
+    std::vector<DeclPtr> nested_types;
+
     StructDecl(std::string n, std::vector<Field> f) : name(std::move(n)), fields(std::move(f)) {}
 };
 
@@ -348,6 +351,9 @@ struct EnumDecl {
     // ジェネリックパラメータ（例: Result<T, E>）
     std::vector<std::string> generic_params;      // 後方互換性
     std::vector<GenericParam> generic_params_v2;  // 型制約付き
+
+    // 本体内にネスト宣言されたstruct/enum型（hoistパスでOuter::Inner名のトップレベル宣言へ平坦化される）
+    std::vector<DeclPtr> nested_types;
 
     EnumDecl(std::string n, std::vector<EnumMember> m)
         : name(std::move(n)), members(std::move(m)) {}

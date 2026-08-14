@@ -23,6 +23,13 @@ using cm::text::contains_identifier;
 using cm::text::replace_all;
 using cm::text::strip_namespace;
 
+// SV出力用の型名変換: Cmの修飾名（Outer::Inner）を一意なSV識別子（Outer__Inner）へ写像する。
+// 最終セグメントへ落とすと異なるCm型（A::InnerとB::Inner）が同一SV型名へ衝突するため全セグメントを保持する。
+// 実名にA__Bが存在して写像後も衝突する場合はtypedef出力側（analyzeDeclarations）が明示エラーにする
+inline std::string sv_type_name(const std::string& name) {
+    return replace_all(name, "::", "__");
+}
+
 // 符号付き整数型であるか判定
 inline bool is_signed_type(const hir::TypePtr& type) {
     if (!type)

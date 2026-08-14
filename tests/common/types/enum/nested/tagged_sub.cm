@@ -1,0 +1,23 @@
+// ネストenum自身がタグ付きユニオン: Outer::Sub::A(payload)の構築とmatch束縛
+enum Box {
+    enum Sub {
+        A(int),
+        B,
+    },
+    X,
+}
+
+int main() {
+    Box::Sub s = Box::Sub::A(9);
+    match (s) {
+        Box::Sub::A(v) => { println(v); }
+        Box::Sub::B => { println(-1); }
+    }
+
+    s = Box::Sub::B;
+    match (s) {
+        Box::Sub::A(v) => { println(v); }
+        Box::Sub::B => { println(-1); }
+    }
+    return 0;
+}

@@ -204,6 +204,8 @@ ast::ExprPtr parse_interp_content(const std::string& content) {
     Lexer lex(src);
     auto tokens = lex.tokenize();
     Parser parser(std::move(tokens));
+    // 合成ラッパー__interp_part__自身が'__'予約識別子検査に落ちないようにする
+    parser.set_allow_reserved_idents(true);
     auto program = parser.parse();
     if (parser.has_errors()) {
         return nullptr;

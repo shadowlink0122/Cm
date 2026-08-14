@@ -149,7 +149,7 @@ utiny buffer[16];                    // → logic [7:0] buffer [0:15];
 
 ---
 
-## 文字列
+## 文字列 {#strings}
 
 ### const文字列（推奨）
 

@@ -188,6 +188,51 @@ For plain enums, `self` is passed by value (int representation), so reassigning 
 
 ---
 
+## Nested Type Declarations (enum/struct inside an enum)
+
+You can declare another enum/struct type inside an enum body.
+A nested type is an independent type that belongs to the outer enum's namespace, and its values are referenced with the qualified chain `Outer::Inner::MEM`.
+Nested type declarations are not variants, so they do not affect the outer enum's value assignment.
+
+```cm
+enum Category {
+    enum Sub {
+        MEM = 10,
+        REG,
+    },
+    A = 5,
+    B,
+}
+
+enum Msg {
+    struct Payload {
+        int code;
+    },
+    Data(Msg::Payload),
+    Quit,
+}
+
+int main() {
+    println("{Category::A as int}");         // 5 (nested declarations consume no value slot)
+    println("{Category::Sub::MEM as int}");  // 10
+
+    Category::Sub s = Category::Sub::REG;
+    match (s) {
+        Category::Sub::MEM => { println("mem"); }
+        Category::Sub::REG => { println("reg"); }
+    }
+
+    Msg::Payload p;
+    p.code = 7;
+    Msg m = Msg::Data(p);
+    return 0;
+}
+```
+
+The same restrictions as structs apply (no combination with generics).
+
+---
+
 ## Union Type Arrays as Tuples
 
 Cm has union types defined with `typedef`. Using an array of union types, you can return multiple values of different types — like a tuple.
@@ -486,6 +531,7 @@ int main() {
 ---
 
 **Previous:** [Structs](structs.html)  
+
 ---
 
 **Last Updated:** 2026-02-08

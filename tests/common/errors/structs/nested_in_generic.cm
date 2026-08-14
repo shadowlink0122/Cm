@@ -1,0 +1,11 @@
+// ジェネリックstructの本体へのネスト型宣言は未対応（明示診断）
+struct Box<T> {
+    struct Inner {
+        int mem;
+    };
+    T value;
+};
+
+int main() {
+    return 0;
+}

@@ -537,6 +537,7 @@ int main() {
 
 **前の章:** [型制約](../types/constraints.html)  
 **次の章:** [with自動実装](with-keyword.html)
+
 ---
 
 **最終更新:** 2026-02-08

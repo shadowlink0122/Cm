@@ -234,7 +234,7 @@
               },
               "patterns": [
                 {
-                  "name": "storage.type.primitive.cm",
+                  "name": "storage.modifier.cm",
                   "match": "\\b(as|from)\\b"
                 },
                 {
@@ -248,7 +248,7 @@
               ]
             },
             {
-              "name": "storage.type.primitive.cm",
+              "name": "storage.modifier.cm",
               "match": "\\b(as|from)\\b"
             },
             {
@@ -525,7 +525,7 @@
           "match": "\\b(async|await)\\b"
         },
         {
-          "name": "keyword.control.export.cm",
+          "name": "storage.modifier.cm",
           "match": "\\b(export|private)\\b"
         },
         {
@@ -533,15 +533,19 @@
           "match": "\\b(try|must)\\b"
         },
         {
-          "name": "keyword.other.cm",
-          "match": "\\b(typedef|struct|enum|interface|impl|with|module|macro|namespace|overload|operator|template)\\b"
+          "name": "storage.type.cm",
+          "match": "\\b(typedef|struct|enum|union|interface|impl|module|namespace|template)\\b"
         },
         {
-          "name": "storage.type.primitive.cm",
+          "name": "keyword.other.cm",
+          "match": "\\b(with|macro|overload|operator)\\b"
+        },
+        {
+          "name": "storage.modifier.cm",
           "match": "\\b(const|constexpr|static|extern|inline|volatile|move|as|is|from|where|auto|var)\\b"
         },
         {
-          "name": "keyword.operator.new.cm",
+          "name": "keyword.operator.sizeof.cm",
           "match": "\\b(sizeof|typeof|typename)\\b"
         },
         {
@@ -559,13 +563,13 @@
       ]
     },
     "type-declaration": {
-      "comment": "型宣言（struct/enum/interface/impl/union/typedef の直後の識別子）を型名として着色する。プリミティブ以外の任意の型はimportのモジュール名と同じ entity.name.type 系スコープになり、変数（variable.other）とは別色になる",
+      "comment": "型宣言（struct/enum/interface/impl/union/typedef の直後の識別子）を型名として着色する。キーワードはC++/Rust同様のstorage.type、型名はentity.name.type系スコープ。匿名宣言（struct { ... } 宣言子;）は識別子が続かないためこのルールを通らず、keywordsのstorage.typeで着色される",
       "patterns": [
         {
           "match": "\\b(struct|enum|interface|impl|union|typedef)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
-              "name": "keyword.other.cm"
+              "name": "storage.type.cm"
             },
             "2": {
               "name": "entity.name.type.cm"
@@ -598,13 +602,19 @@
           "match": "\\b(nullptr|null)\\b"
         },
         {
-          "comment": "OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする",
-          "name": "storage.type.primitive.cm",
+          "comment": "OptionのNoneバリアント: C++/Rustのenumメンバと同じスコープ（Dark+等が専用色で塗る）にする",
+          "name": "variable.other.enummember.cm",
           "match": "\\b(None)\\b"
         },
         {
-          "name": "constant.numeric.cm",
-          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+          "comment": "::修飾されたSCREAMING_CASE識別子（Color::RED・Outer::Mode::FAST等）はC++のenumメンバと同じスコープにする",
+          "name": "variable.other.enummember.cm",
+          "match": "(?<=::)[A-Z][A-Z0-9_]*\\b"
+        },
+        {
+          "comment": "裸のSCREAMING_CASE識別子（2文字以上）はC++/Rustの定数と同じスコープにする。単一大文字（ジェネリックパラメータT等）は型色に落とすため対象外",
+          "name": "variable.other.constant.cm",
+          "match": "\\b[A-Z][A-Z0-9_]+\\b"
         },
         {
           "name": "variable.language.self.cm",
@@ -676,7 +686,7 @@
           "match": "(==|!=|<=|>=)"
         },
         {
-          "name": "punctuation.definition.typeparameters.cm",
+          "name": "keyword.operator.comparison.cm",
           "match": "(<(?!<)|>(?!>))"
         },
         {

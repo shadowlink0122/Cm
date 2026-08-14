@@ -236,3 +236,42 @@ test('sanitizeSourceは文字列・コメントの中身だけを空白化し長
   assert.ok(!lines[1].includes('a{b}c'));
   assert.ok(lines[1].startsWith('string s = "'));
 });
+
+test('ネスト型宣言（struct内struct・enum内enum）をコンテナ名付きで抽出する', () => {
+  const src = [
+    'struct Outer {',
+    '    struct Inner {',
+    '        int mem;',
+    '    };',
+    '    enum Mode {',
+    '        FAST,',
+    '        SLOW,',
+    '    }',
+    '    Inner inner;',
+    '}',
+    '',
+    'enum Category {',
+    '    enum Sub {',
+    '        MEM,',
+    '    },',
+    '    A,',
+    '}',
+  ].join('\n');
+  const symbols = extractSymbols(src);
+
+  const inner = byName(symbols, 'Inner');
+  assert.equal(inner?.kind, 'struct');
+  assert.equal(inner?.container, 'Outer');
+  assert.equal(byName(symbols, 'mem')?.container, 'Inner');
+
+  const mode = byName(symbols, 'Mode');
+  assert.equal(mode?.kind, 'enum');
+  assert.equal(mode?.container, 'Outer');
+  assert.equal(byName(symbols, 'FAST')?.container, 'Mode');
+
+  const sub = byName(symbols, 'Sub');
+  assert.equal(sub?.kind, 'enum');
+  assert.equal(sub?.container, 'Category');
+  assert.equal(byName(symbols, 'MEM')?.container, 'Sub');
+  assert.equal(byName(symbols, 'A')?.container, 'Category');
+});

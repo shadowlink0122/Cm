@@ -1,5 +1,5 @@
-// C16回帰: モジュールholder2の関数method(holder2::method)とユーザーが定義する自由関数
-// holder2__methodは同一マングル名へ縮退するため、コンパイルエラーになることを検証する
+// C16回帰改め: '__'を含む識別子はコンパイラ予約のため宣言時点で拒否される
+// （旧: モジュールholder2::methodとの同一マングル名縮退をC16が検出していたが、v0.17.1で予約識別子の禁止が先行するようになった）
 import std::io::println;
 import ./mangle_mod/holder2;
 

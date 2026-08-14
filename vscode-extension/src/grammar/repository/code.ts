@@ -19,6 +19,7 @@ import {
   MODIFIER_KEYWORDS,
   PRIMITIVE_TYPES,
   SIZEOF_KEYWORDS,
+  STORAGE_TYPE_KEYWORDS,
   SVA_FUNCTIONS,
   SV_CONTROL_KEYWORDS,
   SV_MODIFIER_KEYWORDS,
@@ -45,7 +46,8 @@ export const keywords: TmRepositoryEntry = {
       match: words(CONTROL_FLOW),
     },
     {
-      name: 'keyword.control.export.cm',
+      // C++のpublic/private・Rustのpubと同じ可視性修飾のスコープ（storage.modifier）にする
+      name: 'storage.modifier.cm',
       match: words(CONTROL_EXPORT),
     },
     {
@@ -53,15 +55,22 @@ export const keywords: TmRepositoryEntry = {
       match: words(CONTROL_EXCEPTION),
     },
     {
+      // C++/Rustのstruct/enum/typedef等と同じstorage.typeスコープにする
+      name: 'storage.type.cm',
+      match: words(STORAGE_TYPE_KEYWORDS),
+    },
+    {
       name: 'keyword.other.cm',
       match: words(DECLARATION_KEYWORDS),
     },
     {
-      name: 'storage.type.primitive.cm',
+      // C++のconst/static/extern等と同じ修飾子スコープ（storage.modifier）にする
+      name: 'storage.modifier.cm',
       match: words(MODIFIER_KEYWORDS),
     },
     {
-      name: 'keyword.operator.new.cm',
+      // C++のsizeof・JSのtypeofと同じスコープ系（Dark+等がkeyword.operator.sizeofを青に塗る）
+      name: 'keyword.operator.sizeof.cm',
       match: words(SIZEOF_KEYWORDS),
     },
     {
@@ -81,12 +90,12 @@ export const keywords: TmRepositoryEntry = {
 
 export const typeDeclaration: TmRepositoryEntry = {
   comment:
-    '型宣言（struct/enum/interface/impl/union/typedef の直後の識別子）を型名として着色する。プリミティブ以外の任意の型はimportのモジュール名と同じ entity.name.type 系スコープになり、変数（variable.other）とは別色になる',
+    '型宣言（struct/enum/interface/impl/union/typedef の直後の識別子）を型名として着色する。キーワードはC++/Rust同様のstorage.type、型名はentity.name.type系スコープ。匿名宣言（struct { ... } 宣言子;）は識別子が続かないためこのルールを通らず、keywordsのstorage.typeで着色される',
   patterns: [
     {
       match: `\\b(${TYPE_DECLARATION_KEYWORDS.join('|')})\\s+(${IDENT_ALT})`,
       captures: {
-        '1': { name: 'keyword.other.cm' },
+        '1': { name: 'storage.type.cm' },
         '2': { name: 'entity.name.type.cm' },
       },
     },
@@ -175,7 +184,8 @@ export const operators: TmRepositoryEntry = {
       match: '(==|!=|<=|>=)',
     },
     {
-      name: 'punctuation.definition.typeparameters.cm',
+      // C/C++と同様、単独の < > は比較演算子スコープにする（ジェネリック引数のかっこもC++のTextMate文法と同じ扱い）
+      name: 'keyword.operator.comparison.cm',
       match: '(<(?!<)|>(?!>))',
     },
     {

@@ -12,20 +12,20 @@ parent: Tutorials
 
 ## 📋 目次
 
-- [基本的な使い方](#基本的な使い方)
-- [導出可能なインターフェース](#導出可能なインターフェース)
-- [Eq - 等価比較](#eq---等価比較)
-- [Ord - 順序比較](#ord---順序比較)
-- [Clone - 複製](#clone---複製)
-- [Hash - ハッシュ計算](#hash---ハッシュ計算)
-- [Debug / Display - 文字列化](#debug--display---文字列化)
-- [複数インターフェースの指定](#複数インターフェースの指定)
-- [ジェネリック構造体](#ジェネリック構造体)
-- [フィールド型の対応範囲](#フィールド型の対応範囲)
-- [エラーになる指定](#エラーになる指定)
-- [実装の仕組み](#実装の仕組み)
+- [基本的な使い方](#basic-usage)
+- [導出可能なインターフェース](#derivable-interfaces)
+- [Eq - 等価比較](#eq)
+- [Ord - 順序比較](#ord)
+- [Clone - 複製](#clone)
+- [Hash - ハッシュ計算](#hash)
+- [Debug / Display - 文字列化](#debug-display)
+- [複数インターフェースの指定](#multiple-interfaces)
+- [ジェネリック構造体](#generic-structs)
+- [フィールド型の対応範囲](#supported-field-types)
+- [エラーになる指定](#invalid-usages)
+- [実装の仕組み](#how-it-works)
 
-## 基本的な使い方
+## 基本的な使い方 {#basic-usage}
 
 ```cm
 // 推奨: #[derive(...)] 属性
@@ -57,7 +57,7 @@ int main() {
 }
 ```
 
-## 導出可能なインターフェース
+## 導出可能なインターフェース {#derivable-interfaces}
 
 導出できるのはコンパイラ組み込みの8種のみです（ユーザー定義インターフェースは `impl <型> for <interface>` で実装します）。
 
@@ -72,7 +72,7 @@ int main() {
 | **Display** | 文字列化 | `.toString()` |
 | **Css** | CSS生成（js/web専用） | `.css()`, `.to_css()`, `.isCss()` |
 
-## Eq - 等価比較
+## Eq - 等価比較 {#eq}
 
 ```cm
 #[derive(Eq)]
@@ -97,7 +97,7 @@ int main() {
 
 ネストした構造体フィールドは再帰的に比較され、固定長1次元配列フィールドは要素ごとに比較されます。
 
-## Ord - 順序比較
+## Ord - 順序比較 {#ord}
 
 ```cm
 #[derive(Ord)]
@@ -114,7 +114,7 @@ struct Person {
 
 比較はフィールド宣言順の辞書式順序です。
 
-## Clone - 複製
+## Clone - 複製 {#clone}
 
 ```cm
 #[derive(Clone)]
@@ -133,7 +133,7 @@ int main() {
 }
 ```
 
-## Hash - ハッシュ計算
+## Hash - ハッシュ計算 {#hash}
 
 ```cm
 #[derive(Hash)]
@@ -153,7 +153,7 @@ int main() {
 
 ネスト構造体フィールドは各構造体の `hash()` を再帰的に呼び出して混合されます。
 
-## Debug / Display - 文字列化
+## Debug / Display - 文字列化 {#debug-display}
 
 ```cm
 #[derive(Debug, Display)]
@@ -172,7 +172,7 @@ int main() {
 }
 ```
 
-## 複数インターフェースの指定
+## 複数インターフェースの指定 {#multiple-interfaces}
 
 カンマ区切りで複数指定できます。
 複数の `#[derive]` 属性はマージされ、`with` との併用も可能です（同一インターフェースの重複指定はエラー）。
@@ -200,7 +200,7 @@ struct Item with Eq {
 }
 ```
 
-## ジェネリック構造体
+## ジェネリック構造体 {#generic-structs}
 
 ```cm
 #[derive(Eq)]
@@ -254,7 +254,7 @@ int main() {
 }
 ```
 
-## フィールド型の対応範囲
+## フィールド型の対応範囲 {#supported-field-types}
 
 | フィールド型 | Eq | Ord | Hash | Debug/Display | Clone/Copy |
 |---|---|---|---|---|---|
@@ -271,7 +271,7 @@ int main() {
 ❌の組み合わせはコンパイルエラーになります（不正なコード生成は行いません）。ジェネリック構造体では型引数を代入した後のフィールド型で同じ規則が検証されます。
 値enumフィールドはint意味論で扱われ、Debug/Displayでは数値（例: `c: 5`）として整形されます。
 
-## エラーになる指定
+## エラーになる指定 {#invalid-usages}
 
 ```cm
 #[derive(Foo)]        // エラー: 未知のインターフェース
@@ -284,7 +284,7 @@ struct P { int x; }
 enum Color { Red }    // エラー: enumへのderiveは未対応
 ```
 
-## 実装の仕組み
+## 実装の仕組み {#how-it-works}
 
 `with` / `#[derive]` はパーサで同一の自動実装リストに合流し、MIRローワリング時に実装関数（`Point__op_eq` 等）が自動生成されます。
 使用されない自動実装はデッドコード削除（DCE）で除去されるため、指定してもコストはかかりません。

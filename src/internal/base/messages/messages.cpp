@@ -815,6 +815,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // SvSv009PackedUnionUnsupportedMember
     {"error[SV009]: packed union '{0}' member '{1}' has a type whose bit width cannot be determined for synthesis; use bit vectors, integer types, or packed structs",
      "エラー[SV009]: packed union '{0}' のメンバ '{1}' の型は合成ビット幅を確定できません。ビットベクタ・整数型・packed structを使用してください"},
+    // SvTypeNameCollision
+    {"error[SV013]: SV type name '{0}' collides: '{1}' and '{2}' map to the same identifier ('::' is mangled to '__' for SystemVerilog); rename one of the types",
+     "エラー[SV013]: SV型名 '{0}' が衝突しています: '{1}' と '{2}' が同一識別子へ写像されます（SystemVerilog向けに'::'は'__'へ変換されます）。どちらかの型名を変更してください"},
     // SvSvTargetFunctionAssignsState
     {"warning: SV target: function '{0}' assigns state variable '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n",
      "警告: SVターゲット: 関数 '{0}' 内で代入した状態変数 '{1}' and reads it afterwards; assignments in posedge functions take effect next cycle (non-blocking), so this read sees the previous-cycle value\n"},
@@ -1076,6 +1079,24 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsExpectedIdentifier2
     {"Expected identifier, got '{0}'",
      "識別子が必要ですが、'{0}' が指定されました"},
+    // PsNestedTypeInGenericTypeUnsupported
+    {"Nested type declarations are not supported inside a generic struct/enum",
+     "ジェネリックstruct/enumの本体にネスト型宣言は書けません"},
+    // PsNestedTypeGenericParamsUnsupported
+    {"Generic parameters are not supported on nested type declarations",
+     "ネスト型宣言自身にジェネリックパラメータは付けられません"},
+    // PsNestedTypeInExternStructUnsupported
+    {"Nested type declarations are not supported inside an extern struct",
+     "extern structの本体にネスト型宣言は書けません"},
+    // PsAnonymousTypeRequiresDeclarator
+    {"An anonymous struct/enum requires a declarator (e.g. 'struct { ... } name;')",
+     "匿名struct/enumには宣言子が必要です（例: struct { ... } name;）"},
+    // PsDeclaratorOnGenericTypeUnsupported
+    {"Declarators are not supported on generic struct/enum declarations",
+     "ジェネリックstruct/enum宣言に宣言子は付けられません"},
+    // PsReservedDoubleUnderscore
+    {"Identifiers containing '__' are reserved for the compiler: '{0}'",
+     "'__' を含む識別子はコンパイラ予約のため宣言に使用できません: '{0}'"},
     // TcUnknownInterfaceDerive
     {"Unknown interface '{0}' in 'with' / #[derive]",
      "'with' / #[derive] に不明なインターフェース '{0}' が指定されています"},

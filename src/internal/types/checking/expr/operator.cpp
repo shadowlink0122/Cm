@@ -350,7 +350,26 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
                 }
             }
             if (!types_compatible(ltype, rtype)) {
-                error(binary.left->span, i18n::msg(i18n::MsgId::TcAssignmentTypeMismatch));
+                // enum variant識別子の再代入（m = Msg::Quit等）は、let/returnの型推論と同様に左辺のenum型へ強制する
+                bool is_enum_variant_coercion = false;
+                if (binary.op == ast::BinaryOp::Assign && ltype) {
+                    if (auto* rhs_ident = binary.right->as<ast::IdentExpr>()) {
+                        // variantは常に最終セグメントのため、ネストenumも最後の::で分割する
+                        auto sep = rhs_ident->name.rfind("::");
+                        if (sep != std::string::npos) {
+                            std::string enum_name = rhs_ident->name.substr(0, sep);
+                            if ((ltype->name == enum_name ||
+                                 get_enum_base_name(ltype->name) == enum_name) &&
+                                enum_values_.count(rhs_ident->name) > 0) {
+                                is_enum_variant_coercion = true;
+                                binary.right->type = ltype;
+                            }
+                        }
+                    }
+                }
+                if (!is_enum_variant_coercion) {
+                    error(binary.left->span, i18n::msg(i18n::MsgId::TcAssignmentTypeMismatch));
+                }
             }
             return ltype;
         }

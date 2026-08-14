@@ -1,0 +1,23 @@
+// struct内のネストenum定義とOuter::Mode::FASTアクセス
+struct Machine {
+    enum Mode {
+        FAST,
+        SLOW,
+    }
+    Mode mode;
+    int speed;
+};
+
+int main() {
+    Machine m;
+    m.mode = Machine::Mode::FAST;
+    m.speed = 100;
+    println(m.mode as int);
+
+    m.mode = Machine::Mode::SLOW;
+    println(m.mode as int);
+    if (m.mode == Machine::Mode::SLOW) {
+        println(1);
+    }
+    return 0;
+}

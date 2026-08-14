@@ -54,10 +54,23 @@ function_decl ::= generic_params? type identifier '(' param_list? ')' where_clau
 ### 構造体宣言
 
 ```bnf
-struct_decl ::= 'struct' identifier generic_params? where_clause? '{' struct_member* '}'
+struct_decl ::= 'struct' identifier generic_params? where_clause? '{' struct_member* '}' declarator_list?
+              | 'struct' '{' struct_member* '}' declarator_list  # 匿名struct（C/C++スタイル、宣言子必須）
+
+# C/C++スタイルの宣言子（v0.17.1）: トップレベルではゼロ初期化のグローバル変数、struct本体内ではフィールドを同時宣言する。
+# 末尾;省略構文（struct X {}）との曖昧性回避のため、identifierの直後が ; か , の場合のみ宣言子とみなす
+declarator_list ::= identifier (',' identifier)* ';'
+
+# 識別子の予約（v0.17.1）: '__'を含むidentifierはコンパイラ予約のためユーザ宣言に使用できない（extern/use(FFI)宣言は対象外）
 
 struct_member ::= type identifier ';'
-               | function_decl
+                | function_decl
+                | nested_type_decl
+
+# ネスト型宣言（v0.17.1）: 外側の型の名前空間に属する独立した型を宣言する（Outer::Innerで参照）。
+# 匿名の場合は先頭宣言子から __anon_<宣言子> 名を合成する。ジェネリックstruct/enum内・ネスト型自身へのgeneric_params・宣言子とジェネリクスの併用は不可
+nested_type_decl ::= struct_decl ';'?
+                   | enum_decl declarator_list? ';'?
 ```
 
 ### トレイト宣言
@@ -91,7 +104,12 @@ typedef_decl ::= 'typedef' identifier generic_params? '=' type ';'
 macro_decl ::= 'macro' type identifier '=' literal ';'                          # 定数マクロ
              | 'macro' type '*(' type_list? ')' identifier '=' lambda_expr ';'  # 関数マクロ
 
-enum_decl ::= 'enum' identifier generic_params? '{' enum_variant (',' enum_variant)* ','? '}'
+enum_decl ::= 'enum' identifier generic_params? '{' enum_body_item (',' enum_body_item)* ','? '}' declarator_list?
+            | 'enum' '{' enum_body_item (',' enum_body_item)* ','? '}' declarator_list  # 匿名enum（宣言子必須）
+
+# ネスト型宣言（v0.17.1）はvariantではなく値スロットを消費しない（Outer::Inner::MEMで参照）
+enum_body_item ::= enum_variant
+                 | nested_type_decl
 
 enum_variant ::= identifier
                | identifier '(' type_list ')'

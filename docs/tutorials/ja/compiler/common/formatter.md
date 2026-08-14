@@ -211,7 +211,7 @@ int main() {
 
 ## 関連項目
 
-- [Linter](linter.md) - 静的解析ツール
+- [Linter](linter.html) - 静的解析ツール
 
 ---
 
