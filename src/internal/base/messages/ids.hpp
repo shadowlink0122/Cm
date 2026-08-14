@@ -384,6 +384,8 @@ enum class MsgId : int {
     PsNestedTypeInGenericTypeUnsupported,
     PsNestedTypeGenericParamsUnsupported,
     PsNestedTypeInExternStructUnsupported,
+    PsAnonymousTypeRequiresDeclarator,
+    PsDeclaratorOnGenericTypeUnsupported,
     TcUnknownInterfaceDerive,
     TcInterfaceNotDerivableImpl,
     TcCannotDeriveStructField,

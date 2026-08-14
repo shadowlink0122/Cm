@@ -90,6 +90,43 @@ TEST_F(NestedHoistTest, EnumInEnum) {
     EXPECT_EQ(outer->members[1].value.value_or(-1), 6);
 }
 
+// C/C++スタイル宣言子: 宣言子はフィールドになり、匿名型は__anon_名合成のうえOuter::__anon_名へ展開される。トップレベル宣言子はグローバル変数を合成する
+TEST_F(NestedHoistTest, CStyleDeclarators) {
+    auto prog = parse_and_hoist("declarator_hoist");
+    // Outer::Inner, Outer::__anon_pair, Outer, __anon_G, (global G), main
+    ASSERT_EQ(prog.declarations.size(), 6u);
+
+    const auto* inner = struct_at(prog, 0);
+    ASSERT_NE(inner, nullptr);
+    EXPECT_EQ(inner->name, "Outer::Inner");
+
+    const auto* pair = struct_at(prog, 1);
+    ASSERT_NE(pair, nullptr);
+    EXPECT_EQ(pair->name, "Outer::__anon_pair");
+
+    const auto* outer = struct_at(prog, 2);
+    ASSERT_NE(outer, nullptr);
+    EXPECT_EQ(outer->name, "Outer");
+    ASSERT_EQ(outer->fields.size(), 3u);
+    EXPECT_EQ(outer->fields[0].name, "a");
+    EXPECT_EQ(outer->fields[0].type->name, "Outer::Inner");
+    EXPECT_EQ(outer->fields[1].name, "b");
+    EXPECT_EQ(outer->fields[1].type->name, "Outer::Inner");
+    EXPECT_EQ(outer->fields[2].name, "pair");
+    EXPECT_EQ(outer->fields[2].type->name, "Outer::__anon_pair");
+
+    const auto* anon_g = struct_at(prog, 3);
+    ASSERT_NE(anon_g, nullptr);
+    EXPECT_EQ(anon_g->name, "__anon_G");
+
+    auto* gvar = const_cast<ast::Decl&>(*prog.declarations[4]).as<ast::GlobalVarDecl>();
+    ASSERT_NE(gvar, nullptr);
+    EXPECT_EQ(gvar->name, "G");
+    ASSERT_NE(gvar->type, nullptr);
+    EXPECT_EQ(gvar->type->name, "__anon_G");
+    EXPECT_EQ(gvar->init_expr, nullptr);
+}
+
 // 3段ネストは内側優先の順（Outer::Mid::Inner → Outer::Mid → Outer）で展開され、部分修飾参照も書き換わる
 TEST_F(NestedHoistTest, DeepNesting) {
     auto prog = parse_and_hoist("deep_hoist");

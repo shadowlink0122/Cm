@@ -1085,6 +1085,12 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsNestedTypeInExternStructUnsupported
     {"Nested type declarations are not supported inside an extern struct",
      "extern structの本体にネスト型宣言は書けません"},
+    // PsAnonymousTypeRequiresDeclarator
+    {"An anonymous struct/enum requires a declarator (e.g. 'struct { ... } name;')",
+     "匿名struct/enumには宣言子が必要です（例: struct { ... } name;）"},
+    // PsDeclaratorOnGenericTypeUnsupported
+    {"Declarators are not supported on generic struct/enum declarations",
+     "ジェネリックstruct/enum宣言に宣言子は付けられません"},
     // TcUnknownInterfaceDerive
     {"Unknown interface '{0}' in 'with' / #[derive]",
      "'with' / #[derive] に不明なインターフェース '{0}' が指定されています"},

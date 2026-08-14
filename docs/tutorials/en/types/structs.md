@@ -288,11 +288,43 @@ int main() {
 Nesting depth is arbitrary, so multi-segment paths such as `Outer::Mid::Inner` work as well.
 You can also define methods on a nested type with `impl Outer::Inner { ... }`.
 
+### C/C++-Style Single Declarations (declarators)
+
+As in C/C++, you can declare variables or fields together with the type definition.
+Anonymous structs/enums require a declarator.
+
+```cm
+// Top level: the declarator becomes a zero-initialized global variable
+struct {
+    struct {
+        int mem;
+    } str;
+} STR;
+
+// Inside a struct body: declarators become fields (comma-separated lists allowed)
+struct Outer {
+    struct Inner {
+        int mem;
+    } a, b;
+    enum { FAST, SLOW } mode;
+};
+
+int main() {
+    STR.str.mem = 42;   // anonymous nesting is accessible through member chains
+    println(STR.str.mem);
+
+    Outer o;
+    o.a.mem = 1;
+    o.b.mem = 2;
+    return 0;
+}
+```
+
 **Limitations:**
 
 - Nested type declarations are not allowed inside a generic struct/enum
-- Generic parameters are not supported on nested type declarations themselves
-- Anonymous nesting (`struct { ... } field;`) is not supported (declare the field separately as `Inner field;`)
+- Generic parameters are not supported on nested type declarations, and declarators cannot be attached to generic type declarations
+- Initializers on declarators (`struct X {} g = ...;`) are not supported (write `X g = ...;` as a separate statement)
 
 ---
 

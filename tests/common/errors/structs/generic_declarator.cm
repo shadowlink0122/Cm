@@ -1,0 +1,8 @@
+// ジェネリックstruct宣言への宣言子付与は未対応（明示診断）
+struct Box<T> {
+    T v;
+} b;
+
+int main() {
+    return 0;
+}

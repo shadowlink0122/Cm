@@ -1,0 +1,16 @@
+struct Outer {
+    struct Inner {
+        int mem;
+    } a, b;
+    struct {
+        int lo;
+    } pair;
+};
+
+struct {
+    int x;
+} G;
+
+int main() {
+    return 0;
+}

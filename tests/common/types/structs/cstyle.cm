@@ -1,0 +1,37 @@
+// C/C++スタイルの単一宣言: トップレベルの型定義と同時のグローバル変数宣言（ゼロ初期化）
+struct {
+    struct {
+        int mem;
+    } str;
+    int x;
+} STR;
+
+struct Named {
+    int v;
+} g1, g2;
+
+enum {
+    RED,
+    GREEN,
+} color;
+
+int main() {
+    println(STR.str.mem);
+    println(STR.x);
+    STR.str.mem = 42;
+    STR.x = 1;
+    println(STR.str.mem);
+    println(STR.x);
+
+    g1.v = 10;
+    g2.v = 20;
+    println(g1.v + g2.v);
+
+    println(color as int);
+
+    // 名前付き型は通常どおり型名でも利用できる
+    Named n;
+    n.v = 3;
+    println(n.v);
+    return 0;
+}

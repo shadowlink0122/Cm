@@ -160,11 +160,16 @@ ast::DeclPtr Parser::parse_template_decl() {
 // ============================================================
 // Enum宣言（Tagged Union & ジェネリック対応）
 // ============================================================
-ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes) {
+ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeNode> attributes,
+                                     bool allow_anonymous) {
     uint32_t start_pos = current().start;
     expect(TokenKind::KwEnum);
 
-    std::string name = expect_ident();
+    // C/C++スタイルの匿名enum（enum { ... } 宣言子;）は名前を省略でき、呼び出し元が宣言子から名前を合成する
+    std::string name;
+    if (!allow_anonymous || check(TokenKind::Ident)) {
+        name = expect_ident();
+    }
 
     // ジェネリックパラメータ: enum Result<T, E> { ... }
     std::vector<std::string> generic_params;

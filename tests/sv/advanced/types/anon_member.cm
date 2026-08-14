@@ -1,0 +1,20 @@
+//! platform: sv
+
+// C/C++スタイル宣言子（匿名structメンバ）のSV変換: __anon_名のtypedefとして出力される
+
+struct Pack {
+    struct {
+        int lo;
+        int hi;
+    } p;
+};
+
+#[input]  int a = 0;
+#[output] int y = 0;
+
+void step() {
+    Pack k;
+    k.p.lo = a;
+    k.p.hi = 2;
+    y = k.p.lo + k.p.hi;
+}

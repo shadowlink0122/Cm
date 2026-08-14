@@ -1,0 +1,8 @@
+// 匿名structは宣言子必須（C/C++と同様、宣言しない匿名型は不可）
+struct {
+    int x;
+};
+
+int main() {
+    return 0;
+}
