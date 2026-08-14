@@ -22,9 +22,17 @@ parent: Advanced
 ## 基本構文
 
 ```cm
-// 基本形
+// 基本形: (型付き引数リスト) => { 文... } または (型付き引数リスト) => 式
+int*(int) double_it = (int x) => { return x * 2; };
 
-// 例
+// 例: ブロックを省略した式形式（returnを書かない）
+int*(int) triple = (int x) => x * 3;
+
+int main() {
+    println("{double_it(5)}");  // 10
+    println("{triple(5)}");     // 15
+    return 0;
+}
 ```
 
 ---
@@ -34,31 +42,36 @@ parent: Advanced
 ### 変数への代入
 
 ```cm
-// 関数ポインタに代入
-func<int, int> double_it = (int x) => { return x * 2; };
-
+// 関数ポインタ型 戻り値型*(引数型) の変数に代入する
+int*(int) double_it = (int x) => { return x * 2; };
+const int result = double_it(5);  // 10
 ```
 
 ### 高階関数への渡し
 
 ```cm
+int[5] arr = [1, 2, 3, 4, 5];
 
 // map でラムダ式を使用
-// [2, 4, 6, 8, 10]
+int[] doubled = arr.map((int x) => x * 2);   // [2, 4, 6, 8, 10]
 
 // filter でラムダ式を使用
-// [2, 4]
+int[] evens = arr.filter((int x) => x % 2 == 0);   // [2, 4]
+
+// reduce でラムダ式を使用（初期値0から畳み込み）
+int total = arr.reduce((int acc, int x) => acc + x, 0);   // 15
 ```
 
 ---
 
 ## 型推論
 
-引数の型は推論されることがあります：
+引数の型は推論されないため、必ず明示します（`(x) => ...` は構文エラー）。
+一方、式形式のラムダの戻り値型は式から推論されます：
 
 ```cm
-
-// 型推論により x は int
+// 戻り値型は式 x * 2 から int と推論される
+int*(int) double_it = (int x) => x * 2;
 ```
 
 ---
@@ -66,8 +79,9 @@ func<int, int> double_it = (int x) => { return x * 2; };
 ## 複数引数
 
 ```cm
-func<int, int, int> add = (int a, int b) => { return a + b; };
+int*(int, int) add = (int a, int b) => { return a + b; };
 
+println("{add(3, 4)}");  // 7
 ```
 
 ---
@@ -75,7 +89,7 @@ func<int, int, int> add = (int a, int b) => { return a + b; };
 ## 戻り値なし
 
 ```cm
-func<int, void> print_it = (int x) => {
+void*(int) print_it = (int x) => {
     println("Value: {x}");
 };
 
@@ -89,24 +103,23 @@ print_it(42);  // "Value: 42"
 ### コールバック
 
 ```cm
-void process_async(func<int, void> callback) {
-    callback(result);
+void process(int*(int) callback, int value) {
+    println("{callback(value)}");
 }
 
-process_async((int x) => {
-    println("Got: {x}");
-});
+int main() {
+    process((int x) => x + 100, 5);  // 105
+    return 0;
+}
 ```
 
 ### ソートのカスタム比較
 
 ```cm
-Person[] people = [...];
+int[4] a = [3, 1, 4, 2];
 
-// 年齢でソート
-people.sort((Person a, Person b) => {
-    return a.age - b.age;
-});
+// sortByに比較ラムダを渡して降順ソート（sort()は引数なしの昇順専用）
+int[] desc = a.sortBy((int x, int y) => y - x);   // [4, 3, 2, 1]
 ```
 
 ---

@@ -44,9 +44,11 @@ cm build -O2 main.cm
 コンパイル時に定数式を評価します。
 
 ```cm
-// 最適化前
+// Before
+int x = 2 * 3 + 4;
 
-// 最適化後（コンパイル時に計算済み）
+// After (computed at compile time)
+int x = 10;
 ```
 
 **アルゴリズム:** 定数オペランドの演算を即座に評価
@@ -79,7 +81,13 @@ int x = 20;
 使用されないコードを除去します。
 
 ```cm
-// 最適化前
+// Before
+int unused = heavy_calc();  // result is never used
+int x = 1;
+return x;
+
+// After (the unused computation is removed when heavy_calc has no side effects)
+int x = 1;
 return x;
 ```
 
@@ -92,8 +100,13 @@ return x;
 上書きされる代入を除去します。
 
 ```cm
-// 最適化前
+// Before
+int x = 10;  // this store is overwritten before being read
 x = 20;
+return x;
+
+// After
+int x = 20;
 return x;
 ```
 
@@ -104,9 +117,14 @@ return x;
 共通部分式を検出して再利用します。
 
 ```cm
-// 最適化前
+// Before
+int a = x * y + 1;
+int b = x * y + 2;  // x * y is recomputed
 
-// 最適化後
+// After (the common subexpression x * y is computed once and reused)
+int t = x * y;
+int a = t + 1;
+int b = t + 2;
 ```
 
 **アルゴリズム:** 式ハッシュによる等価性検出
@@ -120,14 +138,15 @@ return x;
 ループ内で変化しない計算をループ外に移動します。
 
 ```cm
-// 最適化前
+// Before
 for (int i = 0; i < n; i++) {
-    arr[i] = constant + i;
+    arr[i] = base * scale + i;  // base * scale is loop-invariant
 }
 
-// 最適化後
+// After (the invariant expression is hoisted out of the loop)
+int inv = base * scale;
 for (int i = 0; i < n; i++) {
-    arr[i] = constant + i;
+    arr[i] = inv + i;
 }
 ```
 
@@ -152,11 +171,16 @@ for (int i = 0; i < n; i++) {
 小規模な関数を呼び出し元に埋め込みます。
 
 ```cm
-// 元の関数
+// Original function
+int add(int a, int b) {
+    return a + b;
+}
 
-// 呼び出し側
+// Call site
+int r = add(x, y);
 
-// インライン化後
+// After inlining (call overhead disappears and further optimizations apply)
+int r = x + y;
 ```
 
 **制限:**

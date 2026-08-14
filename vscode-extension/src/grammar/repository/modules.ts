@@ -6,11 +6,11 @@ import { TmRepositoryEntry, TmRule } from '../tmTypes';
 import { ESCAPE_RULE, FUNCTION_PROTOTYPE_MATCH, IDENT, MODULE_NAME_RULE } from '../terms';
 
 // import/export文中のキーワード（as/from）。
-// 通常コードのMODIFIER_KEYWORDSと同じ storage.type.primitive スコープにして、
-// モジュール名（entity.name.type.module=緑）と別色（プリミティブと同じ青）で着色する。
+// 通常コードのMODIFIER_KEYWORDSと同じ storage.modifier スコープ（C++/Rustの修飾子と同系色）にして、
+// モジュール名（entity.name.type.module=緑）と別色で着色する。
 // MODULE_NAME_RULE より前に置き、asやfromがモジュール名として緑に拾われるのを防ぐ。
 const IMPORT_KEYWORD_RULE: TmRule = {
-  name: 'storage.type.primitive.cm',
+  name: 'storage.modifier.cm',
   match: '\\b(as|from)\\b',
 };
 

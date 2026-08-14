@@ -106,13 +106,21 @@ export const constants: TmRepositoryEntry = {
       match: words(NULL_CONSTANTS),
     },
     {
-      comment: 'OptionのNoneバリアント: プリミティブ型と同一スコープにして全テーマで同色にする',
-      name: 'storage.type.primitive.cm',
+      comment: 'OptionのNoneバリアント: C++/Rustのenumメンバと同じスコープ（Dark+等が専用色で塗る）にする',
+      name: 'variable.other.enummember.cm',
       match: words(PRELUDE_VALUE_VARIANTS),
     },
     {
-      name: 'constant.numeric.cm',
-      match: '\\b[A-Z][A-Z0-9_]*\\b',
+      comment:
+        '::修飾されたSCREAMING_CASE識別子（Color::RED・Outer::Mode::FAST等）はC++のenumメンバと同じスコープにする',
+      name: 'variable.other.enummember.cm',
+      match: '(?<=::)[A-Z][A-Z0-9_]*\\b',
+    },
+    {
+      comment:
+        '裸のSCREAMING_CASE識別子（2文字以上）はC++/Rustの定数と同じスコープにする。単一大文字（ジェネリックパラメータT等）は型色に落とすため対象外',
+      name: 'variable.other.constant.cm',
+      match: '\\b[A-Z][A-Z0-9_]+\\b',
     },
     {
       name: 'variable.language.self.cm',

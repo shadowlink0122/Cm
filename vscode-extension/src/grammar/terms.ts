@@ -25,21 +25,20 @@ export const CONTROL_EXPORT = ['export', 'private'] as const;
 export const CONTROL_EXCEPTION = ['try', 'must'] as const;
 
 // ---- 宣言キーワード ----
-// DECLARATION_KEYWORDSは文中のキーワード着色用、TYPE_DECLARATION_KEYWORDSは直後の識別子を型名として拾う宣言頭のみ（unionを含む）
-export const DECLARATION_KEYWORDS = [
+// STORAGE_TYPE_KEYWORDSはC++/Rustのstruct/enum等と同じstorage.type系スコープ、DECLARATION_KEYWORDSは残りの宣言語（keyword.other系）。
+// TYPE_DECLARATION_KEYWORDSは直後の識別子を型名として拾う宣言頭のみ（unionを含む）
+export const STORAGE_TYPE_KEYWORDS = [
   'typedef',
   'struct',
   'enum',
+  'union',
   'interface',
   'impl',
-  'with',
   'module',
-  'macro',
   'namespace',
-  'overload',
-  'operator',
   'template',
 ] as const;
+export const DECLARATION_KEYWORDS = ['with', 'macro', 'overload', 'operator'] as const;
 export const TYPE_DECLARATION_KEYWORDS = [
   'struct',
   'enum',

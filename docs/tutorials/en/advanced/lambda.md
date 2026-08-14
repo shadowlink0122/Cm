@@ -19,63 +19,77 @@ parent: Advanced
 
 ---
 
-## 基本構文
+## Basic Syntax
 
 ```cm
-// 基本形
+// Basic form: (typed parameter list) => { statements } or (typed parameter list) => expression
+int*(int) double_it = (int x) => { return x * 2; };
 
-// 例
+// Example: expression form without a block (no explicit return)
+int*(int) triple = (int x) => x * 3;
+
+int main() {
+    println("{double_it(5)}");  // 10
+    println("{triple(5)}");     // 15
+    return 0;
+}
 ```
 
 ---
 
-## 使用例
+## Usage
 
-### 変数への代入
+### Assigning to a Variable
 
 ```cm
-// 関数ポインタに代入
-func<int, int> double_it = (int x) => { return x * 2; };
-
+// Assign to a function-pointer variable of type ReturnType*(ParamTypes)
+int*(int) double_it = (int x) => { return x * 2; };
+const int result = double_it(5);  // 10
 ```
 
-### 高階関数への渡し
+### Passing to Higher-Order Functions
 
 ```cm
+int[5] arr = [1, 2, 3, 4, 5];
 
-// map でラムダ式を使用
-// [2, 4, 6, 8, 10]
+// Use a lambda with map
+int[] doubled = arr.map((int x) => x * 2);   // [2, 4, 6, 8, 10]
 
-// filter でラムダ式を使用
-// [2, 4]
-```
+// Use a lambda with filter
+int[] evens = arr.filter((int x) => x % 2 == 0);   // [2, 4]
 
----
-
-## 型推論
-
-引数の型は推論されることがあります：
-
-```cm
-
-// 型推論により x は int
+// Use a lambda with reduce (fold starting from 0)
+int total = arr.reduce((int acc, int x) => acc + x, 0);   // 15
 ```
 
 ---
 
-## 複数引数
+## Type Inference
+
+Parameter types are not inferred and must always be written explicitly (`(x) => ...` is a syntax error).
+The return type of an expression-form lambda, however, is inferred from the expression:
 
 ```cm
-func<int, int, int> add = (int a, int b) => { return a + b; };
-
+// The return type is inferred as int from the expression x * 2
+int*(int) double_it = (int x) => x * 2;
 ```
 
 ---
 
-## 戻り値なし
+## Multiple Parameters
 
 ```cm
-func<int, void> print_it = (int x) => {
+int*(int, int) add = (int a, int b) => { return a + b; };
+
+println("{add(3, 4)}");  // 7
+```
+
+---
+
+## No Return Value
+
+```cm
+void*(int) print_it = (int x) => {
     println("Value: {x}");
 };
 
@@ -84,29 +98,28 @@ print_it(42);  // "Value: 42"
 
 ---
 
-## よくある使用パターン
+## Common Patterns
 
-### コールバック
+### Callbacks
 
 ```cm
-void process_async(func<int, void> callback) {
-    callback(result);
+void process(int*(int) callback, int value) {
+    println("{callback(value)}");
 }
 
-process_async((int x) => {
-    println("Got: {x}");
-});
+int main() {
+    process((int x) => x + 100, 5);  // 105
+    return 0;
+}
 ```
 
-### ソートのカスタム比較
+### Custom Sort Comparison
 
 ```cm
-Person[] people = [...];
+int[4] a = [3, 1, 4, 2];
 
-// 年齢でソート
-people.sort((Person a, Person b) => {
-    return a.age - b.age;
-});
+// Pass a comparison lambda to sortBy for descending order (sort() takes no arguments and is ascending only)
+int[] desc = a.sortBy((int x, int y) => y - x);   // [4, 3, 2, 1]
 ```
 
 ---
