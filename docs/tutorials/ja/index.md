@@ -206,9 +206,8 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
 
 - [正式言語仕様](../../design/CANONICAL_SPEC.html) - 言語の完全な仕様
 - [設計ドキュメント](../../design/) - アーキテクチャ・設計文書
-- [テストケース](https://github.com/shadowlink0122/Cm/tree/main/tests/common/) - 376ファイル
+- [テストケース](https://github.com/shadowlink0122/Cm/tree/main/tests/common/) - 全バックエンド共通の機能テスト
 
-**チュートリアル総数:** 65ファイル  
 **推定学習時間:** 18-22時間  
 **対象バージョン:** v0.17.1
 

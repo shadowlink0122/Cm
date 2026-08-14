@@ -1,21 +1,21 @@
 ---
-title: ラムダ式
+title: Lambda Expressions
 parent: Advanced
 ---
 
 [日本語](../../ja/advanced/lambda.html)
 
-# ラムダ式
+# Lambda Expressions
 
-**学習目標:** Cm言語のラムダ式（無名関数）の使い方を学びます。  
-**所要時間:** 15分  
-**難易度:** 🟡 中級
+**Goal:** Learn how to use lambda expressions (anonymous functions) in Cm.  
+**Time:** 15 minutes  
+**Difficulty:** 🟡 Intermediate
 
 ---
 
-## 概要
+## Overview
 
-ラムダ式は関数をその場で定義できる構文です。
+A lambda expression lets you define a function inline.
 
 ---
 
@@ -148,10 +148,10 @@ println("{x}");  // 42
 
 ---
 
-## 次のステップ
+## Next Steps
 
-- [関数ポインタ](function-pointers.html) - 関数の詳細
-- [スライス型](slices.html) - 高階関数の詳細
+- [Function Pointers](function-pointers.html) - More about functions
+- [Slices](slices.html) - More about higher-order functions
 
 ---
 
