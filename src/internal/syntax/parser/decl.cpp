@@ -424,6 +424,7 @@ ast::DeclPtr Parser::parse_function(bool is_export, bool is_static, bool is_inli
     // 名前のスパンを記録（Lint警告用）
     uint32_t name_start = current().start;
     std::string name = expect_ident();
+    reject_reserved_ident(name);
     uint32_t name_end = previous().end;
 
     // main関数はエクスポート不可
@@ -486,6 +487,7 @@ std::vector<ast::Param> Parser::parse_params() {
             }
 
             param.name = expect_ident();
+            reject_reserved_ident(param.name);
 
             // デフォルト引数をパース
             if (consume_if(TokenKind::Eq)) {
@@ -515,6 +517,9 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
     std::string name;
     if (!allow_anonymous || check(TokenKind::Ident)) {
         name = expect_ident();
+        if (!is_extern) {
+            reject_reserved_ident(name);
+        }
     }
     uint32_t name_end = previous().end;
 
@@ -631,6 +636,9 @@ ast::DeclPtr Parser::parse_struct(bool is_export, std::vector<ast::AttributeNode
         field.type = parse_type_with_union();
 
         field.name = expect_ident();
+        if (!is_extern) {
+            reject_reserved_ident(field.name);
+        }
 
         // フィールドのデフォルト値（= expr）: extern struct、IOフィールド（#[input]/#[output]/#[inout] 属性付き）、パラメータフィールド（#[sv::param] 属性付き）で許可する
         bool has_dir_attr = false;
@@ -700,6 +708,7 @@ ast::DeclPtr Parser::parse_nested_type_decl(bool is_export,
         (peek_kind() == TokenKind::Semicolon || peek_kind() == TokenKind::Comma)) {
         do {
             declarators->push_back(expect_ident());
+            reject_reserved_ident(declarators->back());
         } while (consume_if(TokenKind::Comma));
         expect(TokenKind::Semicolon);
     } else {
@@ -763,6 +772,7 @@ ast::DeclPtr Parser::parse_type_decl_with_declarators(bool is_export,
         (peek_kind() == TokenKind::Semicolon || peek_kind() == TokenKind::Comma)) {
         do {
             declarators.push_back(expect_ident());
+            reject_reserved_ident(declarators.back());
         } while (consume_if(TokenKind::Comma));
         expect(TokenKind::Semicolon);
     }
@@ -888,6 +898,7 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
     expect(TokenKind::KwInterface);
 
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     auto [generic_params, generic_params_v2] = parse_generic_params_v2();
 
@@ -938,6 +949,7 @@ ast::DeclPtr Parser::parse_interface(bool is_export, std::vector<ast::AttributeN
             sig.return_type = parse_type_with_union();
             sig.return_type = check_array_suffix(std::move(sig.return_type));
             sig.name = expect_ident();
+            reject_reserved_ident(sig.name);
             expect(TokenKind::LParen);
             sig.params = parse_params();
             expect(TokenKind::RParen);
@@ -1258,6 +1270,21 @@ std::vector<ast::StmtPtr> Parser::parse_block() {
 
     expect(TokenKind::RBrace);
     return stmts;
+}
+
+// ユーザ宣言名の予約検査: '__'を含む識別子はコンパイラ予約（マングル名・__anon_合成名・SV写像名との衝突防止）のため拒否する。
+// extern宣言・use(FFI)ブロックは外部シンボル名を写すため対象外（専用パース経路のためこの検査を通らない）
+void Parser::reject_reserved_ident(const std::string& name) {
+    if (allow_reserved_idents_) {
+        return;
+    }
+    // モジュールflattenがprivateシンボルへ付与する内部プレフィックスは通す（改名後の結合ソースが再パースされるため）
+    if (name.rfind("__cm_priv_", 0) == 0) {
+        return;
+    }
+    if (name.find("__") != std::string::npos) {
+        error(i18n::msgf(i18n::MsgId::PsReservedDoubleUnderscore, name));
+    }
 }
 
 // エラー報告

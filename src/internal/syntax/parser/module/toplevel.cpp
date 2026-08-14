@@ -28,6 +28,7 @@ ast::DeclPtr Parser::parse_const_decl(bool is_export, std::vector<ast::Attribute
 
     // 変数名
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     // 初期化子
     expect(TokenKind::Eq);
@@ -57,6 +58,7 @@ ast::DeclPtr Parser::parse_global_var_decl(bool is_export,
 
     // 変数名
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     // 初期化子省略をSVポート型/アトリビュートに限定
     // posedge/negedge型、または#[input]/#[output]属性付きはport宣言のため初期化子不要
@@ -101,6 +103,7 @@ ast::DeclPtr Parser::parse_constexpr() {
     // constexpr変数またはconstexpr関数
     auto type = parse_type_with_union();
     std::string name = expect_ident();
+    reject_reserved_ident(name);
 
     if (check(TokenKind::LParen)) {
         // constexpr関数
@@ -169,6 +172,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
     std::string name;
     if (!allow_anonymous || check(TokenKind::Ident)) {
         name = expect_ident();
+        reject_reserved_ident(name);
     }
 
     // ジェネリックパラメータ: enum Result<T, E> { ... }
@@ -200,6 +204,7 @@ ast::DeclPtr Parser::parse_enum_decl(bool is_export, std::vector<ast::AttributeN
         }
 
         std::string member_name = expect_ident();
+        reject_reserved_ident(member_name);
 
         // Associated dataをチェック: Variant(int x, string y)
         if (consume_if(TokenKind::LParen)) {
@@ -310,6 +315,7 @@ ast::DeclPtr Parser::parse_typedef_decl(bool is_export,
     expect(TokenKind::KwTypedef);
 
     std::string name = expect_ident();
+    reject_reserved_ident(name);
     expect(TokenKind::Eq);
 
     // ユニオン型 or リテラル型をパース

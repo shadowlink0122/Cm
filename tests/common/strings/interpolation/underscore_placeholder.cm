@@ -2,7 +2,7 @@
 // （従来は受理リストに'_'が無く文字列全体が未変換素通り、検出側リストは!~-(のR20追従も漏れていた）
 import std::io::println;
 
-int __helper() {
+int _helper() {
     return 3;
 }
 
@@ -12,7 +12,7 @@ string neg_str(int a) {
 
 int main() {
     int _count = 5;
-    println("a={_count} b={__helper()}");
+    println("a={_count} b={_helper()}");
     println(neg_str(7));
     return 0;
 }

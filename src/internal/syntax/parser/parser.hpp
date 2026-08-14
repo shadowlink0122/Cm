@@ -34,6 +34,9 @@ class Parser {
     ast::Program parse();
 
     const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
+
+    // コンパイラ合成ソース（補間の__interp_part__ラッパー等）のパース時に'__'予約識別子の検査を無効化する
+    void set_allow_reserved_idents(bool allow) { allow_reserved_idents_ = allow; }
     bool has_errors() const {
         for (const auto& d : diagnostics_) {
             if (d.severity == DiagKind::Error)
@@ -70,6 +73,7 @@ class Parser {
     std::vector<ast::StmtPtr> parse_block();
     void error(const std::string& msg);
     void synchronize();
+    void reject_reserved_ident(const std::string& name);
 
     // グローバル変数宣言のパース（module/toplevel.cppで実装）
     ast::DeclPtr parse_global_var_decl(bool is_export,
@@ -202,6 +206,8 @@ class Parser {
     std::vector<Diagnostic> diagnostics_;
     // C/C++スタイル宣言子（struct {...} STR;）が合成するグローバル変数宣言。型宣言の直後にトップレベルへ排出される
     std::vector<ast::DeclPtr> pending_decls_;
+    // コンパイラ合成ソースのパースでは'__'予約識別子の検査を無効化する
+    bool allow_reserved_idents_ = false;
     uint32_t last_error_line_ = 0;  // 連続エラー抑制用
     int pending_gt_count_ = 0;  // ネストジェネリクス用: GtGtから分割された残りの'>'カウント
     bool in_operator_return_type_ =

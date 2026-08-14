@@ -1094,6 +1094,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsDeclaratorOnGenericTypeUnsupported
     {"Declarators are not supported on generic struct/enum declarations",
      "ジェネリックstruct/enum宣言に宣言子は付けられません"},
+    // PsReservedDoubleUnderscore
+    {"Identifiers containing '__' are reserved for the compiler: '{0}'",
+     "'__' を含む識別子はコンパイラ予約のため宣言に使用できません: '{0}'"},
     // TcUnknownInterfaceDerive
     {"Unknown interface '{0}' in 'with' / #[derive]",
      "'with' / #[derive] に不明なインターフェース '{0}' が指定されています"},

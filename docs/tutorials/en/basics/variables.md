@@ -92,6 +92,16 @@ var name = "Cm";    // inferred as string (var is an alias of auto)
 auto pi = 3.14;     // inferred as double
 ```
 
+### Reserved Names (v0.17.1)
+
+Names containing `__` (two consecutive underscores) are reserved for the compiler and cannot be used in declarations of variables, functions, types, etc. (the same policy as C/C++).
+A single underscore (`_count`, `_helper`) is free to use.
+
+```cm
+int x__y = 1;    // ❌ error: identifiers containing '__' are reserved for the compiler
+int _count = 5;  // ✅ OK
+```
+
 ---
 
 ## const Modifier (Required in v0.11.0+)

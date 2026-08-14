@@ -61,6 +61,8 @@ struct_decl ::= 'struct' identifier generic_params? where_clause? '{' struct_mem
 # 末尾;省略構文（struct X {}）との曖昧性回避のため、identifierの直後が ; か , の場合のみ宣言子とみなす
 declarator_list ::= identifier (',' identifier)* ';'
 
+# 識別子の予約（v0.17.1）: '__'を含むidentifierはコンパイラ予約のためユーザ宣言に使用できない（extern/use(FFI)宣言は対象外）
+
 struct_member ::= type identifier ';'
                 | function_decl
                 | nested_type_decl
