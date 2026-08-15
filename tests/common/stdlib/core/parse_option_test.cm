@@ -1,7 +1,7 @@
 // M17回帰: std::ioのパース関数がOption返しになり、失敗を0で握り潰さないことを検証する
 // （空文字列・非数字先頭はNone、有効入力はSome。チェーン形unwrap_orのレシーバ退避も検証）
 import std::io::println;
-import std::io::console::input::*;
+import std::strings::parse::*;
 
 int main() {
     println(parse_int("123").unwrap_or(-1));

@@ -20,7 +20,7 @@ Cm標準ライブラリのモジュール群です。
 |-----------|------|------------|
 | `std::io` | 入出力 (println, input) | [入出力](io.html) |
 | `std::fs` | ファイルシステム操作 (read_file/write_file・Result API) | [入出力](io.html) |
-| `std::mem` | メモリ管理 (alloc, size_of, Allocator) | [メモリ管理](mem.html) |
+| `std::mem` | メモリ管理 (alloc, size_of, Allocator, スマートポインタ, Arena) | [メモリ管理](mem.html) |
 | `std::math` | 数学関数 (sin, sqrt, PI, gcd等) | [数学関数](math.html) |
 | `std::core` | ユーティリティ (min, max, clamp, 型エイリアス) | [コア](core-utils.html) |
 | `std::env` / `std::process` | 環境変数・args・サブプロセス (Native/JIT) | [OS連携](os.html) |
@@ -70,7 +70,8 @@ Cm標準ライブラリのモジュール群です。
 | `std::collections::vector` | `Vector<T>` 動的配列 | [Vector](collections/vector.html) |
 | `std::collections::queue` | `Queue<T>` FIFO | [Queue](collections/queue.html) |
 | `std::collections::hashmap` | `HashMap<K,V>` ハッシュマップ（getはOption返し） | [HashMap](collections/hashmap.html) |
-| `std::collections::treemap` | `TreeMap<K,V>` 順序付きマップ（AVL木・O(log n)） | [TreeMap](collections/treemap.html) |
+| `std::collections::treemap` | `TreeMap<K,V>` 順序付きマップ（AVL木・O(log n)・remove/keys_in_order対応） | [TreeMap](collections/treemap.html) |
+| `std::collections::treeset` / `hashset` | `TreeSet<T>` 順序付き集合・`HashSet<T>` ハッシュ集合（v0.17.2） | [TreeSet / HashSet](collections/sets.html) |
 
 ---
 
@@ -79,6 +80,7 @@ Cm標準ライブラリのモジュール群です。
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
 | `std::strings::builder` | `StringBuilder` 可変文字列バッファ（償却O(1)追記） | [StringBuilder](strings/builder.html) |
+| `std::strings::chars` / `parse` | 文字分類・変換と数値解析（基数対応・Option返し。v0.17.2） | [文字分類と数値解析](strings/chars-parse.html) |
 | 文字列組み込み | `len()`（コードポイント数）/ `byte_len()`（バイト数） | [文字列の長さ](strings/length.html) |
 
 ---

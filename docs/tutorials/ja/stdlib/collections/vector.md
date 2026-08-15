@@ -50,7 +50,10 @@ int main() {
 | `capacity()` | `int` | 確保済み容量 |
 | `is_empty()` | `bool` | 空かどうか |
 | `clear()` | `void` | 全要素削除（メモリは保持） |
-| `sort()` | `void` | 昇順ソート（プリミティブ型のみ） |
+| `reserve(n)` | `void` | 容量をn以上へ事前拡張（縮小はしない）（v0.17.2） |
+| `last()` | `T*` | 末尾要素へのポインタ（popせず参照）（v0.17.2） |
+| `sort()` | `void` | 昇順ソート（挿入ソート・プリミティブ型のみ） |
+| `sortBy(cmp)` | `void` | 比較関数`int*(T, T)`によるソート（v0.17.2） |
 
 ---
 
@@ -133,6 +136,18 @@ v.sort();
 println("{*v.get(0)}");  // 10
 println("{*v.get(1)}");  // 20
 println("{*v.get(2)}");  // 30
+```
+
+比較関数を渡す `sortBy` で任意の順序にできます（負=aが先・正=bが先。v0.17.2）。
+
+```cm
+v.sortBy((int a, int b) => b - a);   // 降順
+println("{*v.get(0)}");  // 30
+
+Vector<double> d();
+d.push(2.5);
+d.push(0.5);
+d.sortBy((double a, double b) => (a < b) ? -1 : 1);  // 昇順
 ```
 
 ---

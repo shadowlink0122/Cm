@@ -1,0 +1,17 @@
+// std::strings::chars: 文字分類・変換・基数付き数字値
+import std::io::println;
+import std::strings::chars::*;
+
+int main() {
+    println("{is_digit('0')} {is_digit('9')} {is_digit('a')}");
+    println("{is_alpha('A')} {is_alpha('z')} {is_alpha('1')}");
+    println("{is_alnum('x')} {is_alnum('5')} {is_alnum('_')}");
+    println("{is_space(' ')} {is_space('a')}");
+    println("{is_upper('Q')} {is_upper('q')} {is_lower('q')} {is_lower('Q')}");
+    println("{is_hex_digit('f')} {is_hex_digit('F')} {is_hex_digit('g')}");
+    println("{is_ident_start('_')} {is_ident_start('9')} {is_ident_continue('9')} {is_ident_continue('-')}");
+    println("{to_upper('a')} {to_upper('Z')} {to_lower('B')} {to_lower('#')}");
+    println("{digit_value('7', 10).unwrap_or(-1)} {digit_value('f', 16).unwrap_or(-1)} {digit_value('z', 36).unwrap_or(-1)}");
+    println("{digit_value('9', 8).unwrap_or(-1)} {digit_value('a', 10).unwrap_or(-1)} {digit_value('0', 1).unwrap_or(-1)}");
+    return 0;
+}

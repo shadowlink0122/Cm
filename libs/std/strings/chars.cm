@@ -1,0 +1,95 @@
+// std/strings/chars.cm - 文字分類・変換（ASCII範囲）
+// 字句解析の基盤となるC標準のctype相当。対象はASCII範囲で、非ASCIIはすべてfalse/恒等を返す
+// （識別子・数値リテラルはASCIIで十分。コードポイント単位の処理はstringのcodepoint_atを使う）
+module std.strings.chars;
+
+// 10進数字（'0'-'9'）か
+export bool is_digit(char c) {
+    const int v = c as int;
+    return v >= 48 && v <= 57;
+}
+
+// 英字（'A'-'Z' / 'a'-'z'）か
+export bool is_alpha(char c) {
+    const int v = c as int;
+    return (v >= 65 && v <= 90) || (v >= 97 && v <= 122);
+}
+
+// 英数字か
+export bool is_alnum(char c) {
+    return is_alpha(c) || is_digit(c);
+}
+
+// 空白（スペース・タブ・改行・復帰・改ページ・垂直タブ）か
+export bool is_space(char c) {
+    const int v = c as int;
+    return v == 32 || (v >= 9 && v <= 13);
+}
+
+// 大文字（'A'-'Z'）か
+export bool is_upper(char c) {
+    const int v = c as int;
+    return v >= 65 && v <= 90;
+}
+
+// 小文字（'a'-'z'）か
+export bool is_lower(char c) {
+    const int v = c as int;
+    return v >= 97 && v <= 122;
+}
+
+// 16進数字（'0'-'9' / 'A'-'F' / 'a'-'f'）か
+export bool is_hex_digit(char c) {
+    const int v = c as int;
+    return (v >= 48 && v <= 57) || (v >= 65 && v <= 70) || (v >= 97 && v <= 102);
+}
+
+// 識別子の先頭文字（英字または'_'）か
+export bool is_ident_start(char c) {
+    return is_alpha(c) || (c as int) == 95;
+}
+
+// 識別子の継続文字（英数字または'_'）か
+export bool is_ident_continue(char c) {
+    return is_alnum(c) || (c as int) == 95;
+}
+
+// 大文字化（'a'-'z'のみ変換、それ以外は恒等）
+export char to_upper(char c) {
+    const int v = c as int;
+    if (v >= 97 && v <= 122) {
+        return (v - 32) as char;
+    }
+    return c;
+}
+
+// 小文字化（'A'-'Z'のみ変換、それ以外は恒等）
+export char to_lower(char c) {
+    const int v = c as int;
+    if (v >= 65 && v <= 90) {
+        return (v + 32) as char;
+    }
+    return c;
+}
+
+// 基数base（2〜36）における数字の値を返す（'0'-'9'→0-9、'a'/'A'-'z'/'Z'→10-35。基数外はNone）。
+// SVターゲットはOption（タグ付きユニオン）が非合成のため除外する
+#[target(!sv)]
+export Option<int> digit_value(char c, int base) {
+    if (base < 2 || base > 36) {
+        return Option::None;
+    }
+    const int v = c as int;
+    int d = -1;
+    if (v >= 48 && v <= 57) {
+        d = v - 48;
+    } else if (v >= 65 && v <= 90) {
+        d = v - 55;
+    } else if (v >= 97 && v <= 122) {
+        d = v - 87;
+    }
+    if (d < 0 || d >= base) {
+        return Option::None;
+    }
+    return Option::Some(d);
+}

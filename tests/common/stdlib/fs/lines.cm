@@ -1,0 +1,18 @@
+//! platform: !wasm|js|sv
+// std::fs::read_lines: 行分割読み（LF・末尾改行あり/なし）
+import std::io::println;
+import std::fs::{write_file, read_lines, remove};
+
+int main() {
+    const string path = "/tmp/cm_read_lines_test.txt";
+    write_file(path, "alpha\nbeta\ngamma\n");
+    string[] ls = read_lines(path);
+    println("n={ls.len()} l0={ls[0]} l1={ls[1]} l2={ls[2]}");
+
+    write_file(path, "solo");
+    string[] one = read_lines(path);
+    println("n={one.len()} l0={one[0]}");
+
+    remove(path);
+    return 0;
+}

@@ -1,0 +1,23 @@
+//! platform: !wasm|js|sv
+// AtomicSharedPtr: 単一スレッドでの機能検証（clone/use_count/共有可視性/段階的解放）。
+// アトミック増減の実効性はネイティブC++ランタイム（<atomic>）に依存し、マルチスレッドの
+// 競合検証はstd::syncのスレッドAPIと合わせた将来のストレステストで扱う
+import std::io::println;
+import std::mem::smart::atomic::*;
+
+int main() {
+    AtomicSharedPtr<int> a(42);
+    println("rc={a.use_count()}");
+
+    {
+        AtomicSharedPtr<int> b = a.clone();
+        println("b={b.get()} rc={b.use_count()}");
+        b.set(100);
+        println("a={a.get()}");
+    }
+    println("rc={a.use_count()}");
+
+    AtomicSharedPtr<int> c = move a;
+    println("c={c.get()} rc={c.use_count()}");
+    return 0;
+}

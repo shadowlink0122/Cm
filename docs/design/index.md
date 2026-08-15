@@ -18,18 +18,23 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [v1.0.0ロードマップ](roadmap_v1.0.0.html) | v1.0.0までのマイルストーン別計画 |
 | [v0.16.0 SVバックエンド拡充（アーカイブ）](../archive/v0.16.0/roadmap.html) | v0.16.0開発時のロードマップ（Verilogギャップ分析・tcl/cst統合検討） |
 
-## v0.17.2 設計
+## v0.17.2 設計（実装済み・アーカイブ済み）
 
 | ドキュメント | 内容 |
 |---|---|
-| [セルフホスティング向け標準ライブラリ整備計画](v0.17.2/selfhosting-stdlib.html) | コンパイラ実装に必要なstdの棚卸しとArena・文字分類・parse・Set等の実装計画 |
+| [セルフホスティング向け標準ライブラリ整備計画](../archive/v0.17.2/selfhosting-stdlib.html) | コンパイラ実装に必要なstdの棚卸しとArena・文字分類・parse・Set等の実装計画（実装完了） |
+| [スマートポインタ](../archive/v0.17.2/smart-pointers.html) | UniquePtr/SharedPtr（std::mem::smart）のRAII設計・move/clone所有規律・実測に基づく制約（実装完了） |
+| [バグ修正: ジェネリック特殊化とメソッドレシーバ](../archive/v0.17.2/bugfix-generic-mir.html) | 標準ライブラリ実装で顕在化した3件のコンパイラバグ（フィールドレシーバのコピー・関数ポインタ引数の未置換・スライス要素幅ずれ）の記録（修正完了） |
+| [バグ修正: HashSetの二重解放](../archive/v0.17.2/bugfix-hashset-double-free.html) | dtor持ち構造体の暗黙コピーによる非決定的クラッシュの真因と修正・言語側の設計課題の記録（修正完了） |
+| [バグ修正: ユーザ定義Optionの衝突波及](../archive/v0.17.2/bugfix-option-namespace-collision.html) | 選択importの即時型検査とプレリュードOptionのフラット上書きの合成問題の記録（ライブラリ構成で回避） |
+| [バグ修正: ポインタ経由参照のみの構造体のDCE誤削除](../archive/v0.17.2/bugfix-aot-struct-dce.html) | AOT限定で不正IRになるプログラムDCEの使用中struct収集漏れの記録（修正完了） |
+| [バグ記録: JSのスライスポインタ引数未対応](../archive/v0.17.2/bugfix-js-slice-pointer-arg.html) | K[]*引数の再帰渡しがJSバックエンドで壊れる制限の記録（ライブラリ側は反復走査で回避・バックエンド側は残課題） |
 
 ## v0.17.1 設計（実装済み・アーカイブ済み）
 
 | ドキュメント | 内容 |
 |---|---|
 | [ネスト型宣言](../archive/v0.17.1/nested-type-declarations.html) | struct/enum本体内のstruct/enum宣言と `Outer::Inner` / `Outer::Inner::MEM` 修飾アクセスチェーンの設計（実装完了） |
-| [スマートポインタ](../archive/v0.17.2/smart-pointers.html) | UniquePtr/SharedPtr（std::mem::smart）のRAII設計・move/clone所有規律・実測に基づく制約（実装完了・v0.17.2収載） |
 
 ## v0.17.0 設計（全件完遂・アーカイブ済み）
 

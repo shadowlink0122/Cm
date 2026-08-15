@@ -1,0 +1,23 @@
+//! platform: !js|sv
+// パフォーマンススモーク: Arenaの大量小口確保（10万件）がタイムアウト内で完了し、
+// reset一括解放後も再利用できる（個別freeなしのフェーズ運用）
+import std::io::println;
+import std::mem::arena::*;
+
+int main() {
+    Arena a(65536);
+    const int rounds = 10;
+    const int per_round = 10000;
+    long checksum = 0;
+    for (int r = 0; r < rounds; r++) {
+        for (int i = 0; i < per_round; i++) {
+            int* p = a.alloc_bytes(4) as int*;
+            *p = i;
+            checksum = checksum + (*p as long);
+        }
+        a.reset();
+    }
+    println("checksum={checksum}");
+    println("after final reset={a.allocated_bytes()}");
+    return 0;
+}

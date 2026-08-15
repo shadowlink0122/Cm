@@ -156,7 +156,56 @@ UniquePtr<int> make(int v) {
 | Construct | `UniquePtr<T> u(value);` | `SharedPtr<T> a(value);` |
 | Read/Write | `get()` / `set(v)` / `raw()` | `get()` / `set(v)` / `raw()` |
 | Share | Not allowed (move only) | `clone()` (refcount +1) |
-| Others | `release()` / `reset()` / `is_null()` | `use_count()` / `is_null()` |
+| Others | `release()` / `reset()` / `is_null()` | `use_count()` / `weak_count()` / `reset()` / `downgrade()` / `is_null()` |
+
+`move` is an alias (destruction happens at the end of the source variable's scope), so moving into an inner scope does not release earlier. Use `reset()` to release at a deterministic point (v0.17.2).
+
+### WeakPtr - non-owning reference (v0.17.2)
+
+Created with `SharedPtr.downgrade()`; does not increment the strong count, so it breaks reference cycles.
+
+```cm
+SharedPtr<int> a(42);
+WeakPtr<int> w = a.downgrade();
+SharedPtr<int> up = w.upgrade();   // Some-like: null SharedPtr once all strongs are gone
+```
+
+| API | Description |
+|-----|-------------|
+| `SharedPtr.downgrade()` | Create a `WeakPtr<T>` (weak +1) |
+| `is_alive()` | Whether any strong reference remains |
+| `upgrade()` | `SharedPtr<T>` (strong +1) while alive; a null SharedPtr afterwards |
+| `clone()` | Duplicate the WeakPtr itself (weak +1) |
+
+The control block outlives the payload while weak references remain and is freed with the last WeakPtr.
+
+### AtomicSharedPtr - thread-safe refcount (v0.17.2)
+
+A variant whose refcount updates use atomic instructions (native C++ `<atomic>` runtime); pass `clone()`d instances to other threads. Same API and ownership discipline as `SharedPtr`; guard the payload itself with a Mutex. Import `std::mem::smart::atomic::*` (Native / JIT only).
+
+---
+
+## Arena allocator (std::mem::arena, v0.17.2)
+
+A bump allocator for many short-lived objects: allocate in bulk, free in bulk.
+It skips per-object bookkeeping, so it is faster than per-object `alloc`/`dealloc` (about 4x in the benchmark).
+
+```cm
+import std::mem::arena::*;
+
+Arena a();                        // default 4096-byte chunks (Arena a(65536) to override)
+int* x = a.alloc_bytes(4) as int*;
+a.reset();                        // free every chunk at once (Arena stays reusable)
+```
+
+| API | Description |
+|-----|-------------|
+| `Arena a();` / `Arena a(chunk_bytes);` | Construct (data-section chunk size optional) |
+| `alloc_bytes(size)` | Bump-allocate, 8-byte aligned (auto-grows; oversized requests get a dedicated chunk) |
+| `reset()` | Free every chunk and return to empty |
+| `allocated_bytes()` | Total allocated data bytes (statistics) |
+
+There is no per-object `dealloc` — suited to objects with a common lifetime (parser ASTs, per-request scratch space).
 
 ---
 

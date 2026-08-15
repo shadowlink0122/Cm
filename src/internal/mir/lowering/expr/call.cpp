@@ -208,7 +208,23 @@ LocalId ExprLowering::lower_call(const hir::HirCall& call, const hir::TypePtr& r
                     }
                 }
 
-                // フォールバック: 通常のlower_expressionを使用
+                // フィールド・インデックス・デリファレンスのチェーンがレシーバの場合は、
+                // 場所化（lower_place）して実体のアドレスをselfとして渡す。
+                // 従来は下のフォールバックで一時コピーへの参照が渡り、w.c.bump()のような
+                // フィールドレシーバのメソッド内フィールド変異が呼び出し元に反映されなかった
+                {
+                    MirPlace recv_place{0};
+                    hir::TypePtr recv_type = nullptr;
+                    if (lower_place(arg.get(), ctx, recv_place, recv_type)) {
+                        LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
+                        ctx.push_statement(MirStatement::assign(MirPlace{ref_temp},
+                                                                MirRvalue::ref(recv_place, false)));
+                        args.push_back(MirOperand::copy(MirPlace{ref_temp}));
+                        continue;
+                    }
+                }
+
+                // フォールバック: 通常のlower_expressionを使用（関数戻り値等の右辺値レシーバ）
                 LocalId arg_local = lower_expression(*arg, ctx);
                 LocalId ref_temp = ctx.new_temp(hir::make_pointer(arg_type));
                 ctx.push_statement(MirStatement::assign(

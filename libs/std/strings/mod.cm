@@ -1,7 +1,10 @@
 // std::strings - 文字列ユーティリティ
-// StringBuilder（可変文字列バッファ・償却O(1)追記）と分割（split/lines）
+// StringBuilder（可変文字列バッファ・償却O(1)追記）・分割（split/lines）・文字分類（chars）・数値解析（parse）
+// chars/parseはOption返しAPIを含むため、他モジュールから内部利用する際は選択import（::{名前}）でなくワイルドカードimportにすること（選択importは対象関数本体を即時型検査し、ユーザ定義Optionとプレリュード Option<T> のフラット名衝突を無関係なプログラムへ波及させる。export importとワイルドカードは利用時まで遅延）
 module std.strings;
 
 export import std.strings.builder;
 export import std.strings.split;
 export import std.strings.from_bytes;
+export import std.strings.chars;
+export import std.strings.parse;

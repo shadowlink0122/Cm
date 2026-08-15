@@ -1,0 +1,114 @@
+// std/mem/arena.cm - Arenaアロケータ（バンプアロケータ＋チャンク連結）
+// フェーズ単位で大量の小オブジェクトを確保し、個別解放せずreset()/デストラクタで一括解放する
+// （AST構築などコンパイラ実装の定石。個別freeが不要なためUniquePtr等のmove規律も不要になる）。
+//
+// チャンク構造: 先頭にメタデータ（next/used/cap の3ワード）を置き、続くデータ部をバンプ確保する。
+//   [next: long][used: long][cap: long][data ...]
+// 要求サイズがチャンクの既定サイズを超える場合は要求サイズちょうどの専用チャンクを作る。
+// 確保は8バイト整列。対応ターゲットはnative系（JS/TSはポインタ禁止のため対象外）
+module std.mem.arena;
+
+import std::mem::{alloc, dealloc};
+
+// チャンクメタデータのワード数（next/used/cap）とバイト数
+const int ARENA_META_WORDS = 3;
+const long ARENA_META_BYTES = 24;
+
+export struct Arena {
+    void* head;       // 現在のチャンク（未確保ならnull）
+    long chunk_size;  // データ部の既定サイズ（バイト）
+    long total;       // データ部の総確保バイト（統計用）
+}
+
+export impl Arena {
+    // 既定チャンクサイズ4KiBで作る
+    self() {
+        void* null_ptr = 0 as void*;
+        self.head = null_ptr;
+        self.chunk_size = 4096;
+        self.total = 0;
+    }
+
+    // チャンクサイズを指定して作る（1KiB未満は1KiBへ切り上げ）
+    overload self(int chunk_bytes) {
+        void* null_ptr = 0 as void*;
+        self.head = null_ptr;
+        long size = chunk_bytes as long;
+        if (size < 1024) {
+            size = 1024;
+        }
+        self.chunk_size = size;
+        self.total = 0;
+    }
+
+    // 新しいチャンクを確保して先頭へ連結する（data_bytesはデータ部のサイズ）
+    void grow(long data_bytes) {
+        void* raw = alloc((ARENA_META_BYTES + data_bytes) as int);
+        long* meta = raw as long*;
+        meta[0] = self.head as long;  // next
+        meta[1] = 0;                  // used
+        meta[2] = data_bytes;         // cap
+        self.head = raw;
+    }
+
+    // sizeバイトを確保して先頭ポインタを返す（8バイト整列・ゼロ初期化はしない）
+    void* alloc_bytes(int size) {
+        // 8バイト整列へ切り上げ
+        long need = ((size as long) + 7) / 8 * 8;
+        void* null_ptr = 0 as void*;
+        if (self.head == null_ptr) {
+            long data = self.chunk_size;
+            if (need > data) {
+                data = need;
+            }
+            self.grow(data);
+        }
+        long* meta = self.head as long*;
+        if (meta[1] + need > meta[2]) {
+            long data = self.chunk_size;
+            if (need > data) {
+                data = need;
+            }
+            self.grow(data);
+            meta = self.head as long*;
+        }
+        long base = self.head as long;
+        void* p = (base + ARENA_META_BYTES + meta[1]) as void*;
+        meta[1] = meta[1] + need;
+        self.total = self.total + need;
+        return p;
+    }
+
+    // 全チャンクを解放して空へ戻す（確保済みポインタはすべて無効になる）
+    void reset() {
+        void* null_ptr = 0 as void*;
+        void* cur = self.head;
+        while (cur != null_ptr) {
+            long* meta = cur as long*;
+            void* next = meta[0] as void*;
+            dealloc(cur);
+            cur = next;
+        }
+        self.head = null_ptr;
+        self.total = 0;
+    }
+
+    // データ部の総確保バイト（統計用）
+    long allocated_bytes() {
+        return self.total;
+    }
+
+    // デストラクタ: 全チャンクを一括解放する
+    ~self() {
+        void* null_ptr = 0 as void*;
+        void* cur = self.head;
+        while (cur != null_ptr) {
+            long* meta = cur as long*;
+            void* next = meta[0] as void*;
+            dealloc(cur);
+            cur = next;
+        }
+        self.head = null_ptr;
+        self.total = 0;
+    }
+}

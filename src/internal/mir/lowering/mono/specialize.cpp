@@ -4,6 +4,7 @@
 #include "internal/base/target.hpp"
 #include "internal/mir/lowering/context.hpp"
 #include "internal/mir/lowering/expr.hpp"
+#include "internal/mir/lowering/layout.hpp"
 #include "internal/mir/lowering/mono/internal.hpp"
 #include "internal/mir/lowering/mono/monomorphization.hpp"
 #include "internal/mir/lowering/mono/utils.hpp"
@@ -373,6 +374,75 @@ void Monomorphization::generate_generic_specializations(
                     }
                 }
             }
+        }
+
+        // ターミネータ（呼び出しの引数・戻り値格納先・分岐判別値）の型も置換する。
+        // 従来はstatementの場所・オペランドのみが対象で、terminator側のplace型
+        // （フィールド宛先のresult_type等）が未置換のまま残っていた
+        for (auto& block : specialized->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+            if (block->terminator->kind == MirTerminator::Call) {
+                auto& term_call = std::get<MirTerminator::CallData>(block->terminator->data);
+                for (auto& term_arg : term_call.args) {
+                    substitute_operand_types(term_arg);
+                }
+                if (term_call.destination) {
+                    substitute_place_types(*term_call.destination);
+                }
+            } else if (block->terminator->kind == MirTerminator::SwitchInt) {
+                auto& term_sw = std::get<MirTerminator::SwitchIntData>(block->terminator->data);
+                substitute_operand_types(term_sw.discriminant);
+            }
+        }
+
+        // cm_slice_new の要素サイズ定数を置換後の宛先スライス型から再計算する。
+        // ジェネリック関数のMIRは要素サイズを未解決のK（blob幅の既定値）で定数化しており、
+        // 特殊化後もヘッダelem_sizeが誤ったままだと呼び出し側の静的ストライドと食い違い、
+        // K[]戻り値の要素読みがずれる（交互にゴミ値が混入）。blob系push/getはサイズ非依存の
+        // 呼び出し規約（アドレス渡し＋ヘッダelem_sizeバイトのインラインコピー）のため、
+        // ヘッダサイズの補正だけで全経路が整合する
+        for (auto& block : specialized->basic_blocks) {
+            if (!block || !block->terminator)
+                continue;
+            if (block->terminator->kind != MirTerminator::Call)
+                continue;
+            auto& call_data = std::get<MirTerminator::CallData>(block->terminator->data);
+            if (!call_data.func || call_data.func->kind != MirOperand::FunctionRef)
+                continue;
+            const std::string& slice_fn = std::get<std::string>(call_data.func->data);
+            const bool is_slice_new = slice_fn == "cm_slice_new";
+            const bool is_array_to_slice = slice_fn == "cm_array_to_slice";
+            if (!is_slice_new && !is_array_to_slice)
+                continue;
+            // elem_size引数の位置: cm_slice_new(elem_size, cap)は第1引数、
+            // cm_array_to_slice(ptr, len, elem_size)は第3引数
+            const size_t size_arg_idx = is_slice_new ? 0 : 2;
+            if (call_data.args.size() <= size_arg_idx || !call_data.destination)
+                continue;
+            // 宛先スライス型を解決する: 投影付きplace（self.tmp等のフィールド宛先）は最後の投影の
+            // result_type / placeのtype、投影なしはローカル型を使う（いずれもmono置換済み）
+            hir::TypePtr dest_type = nullptr;
+            if (!call_data.destination->projections.empty()) {
+                dest_type = call_data.destination->projections.back().result_type;
+                if (!dest_type) {
+                    dest_type = call_data.destination->type;
+                }
+            } else if (call_data.destination->local < specialized->locals.size()) {
+                dest_type = specialized->locals[call_data.destination->local].type;
+            }
+            if (!dest_type || dest_type->kind != hir::TypeKind::Array ||
+                dest_type->array_size.has_value() || !dest_type->element_type)
+                continue;
+            const int64_t stride = layout::slice_elem_stride_of(
+                dest_type->element_type,
+                [this](const hir::TypePtr& t) { return calculate_specialized_type_size(t); });
+            MirConstant stride_const;
+            stride_const.value = stride;
+            stride_const.type = hir::make_long();
+            call_data.args[size_arg_idx] = MirOperand::constant(stride_const);
+            debug_msg("MONO", "Recomputed " + slice_fn + " elem_size=" + std::to_string(stride) +
+                                  " in specialized function " + specialized_name);
         }
 
         // メソッド呼び出しの self 引数に対する参照修正

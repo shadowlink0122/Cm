@@ -27,7 +27,9 @@ export struct TreeMap<K, V> {
     int[] left;    // 左の子のindex（-1で無し）
     int[] right;   // 右の子のindex（-1で無し）
     int[] height;  // 部分木の高さ（AVL平衡用）
-    int count;     // 確保済みノード数
+    int[] free_slots;  // remove済みノードindex（alloc_nodeが再利用する）
+    int count;     // 確保済みノード数（スロット総数）
+    int live;      // 実要素数（remove対応でcountと分離）
     int root;      // 根のindex（-1で空）
 }
 
@@ -39,7 +41,9 @@ export impl<K, V> TreeMap<K, V> {
         self.left = [];
         self.right = [];
         self.height = [];
+        self.free_slots = [];
         self.count = 0;
+        self.live = 0;
         self.root = -1;
     }
 
@@ -89,8 +93,18 @@ export impl<K, V> TreeMap<K, V> {
         return y;
     }
 
-    // 新しいノードを確保してindexを返す。スライスへpushするので容量は自動拡張される。
+    // 新しいノードを確保してindexを返す。remove済みスロットがあれば再利用し、無ければスライスへpushする（容量は自動拡張）。
     int alloc_node(K k, V v) {
+        self.live = self.live + 1;
+        if (self.free_slots.len() > 0) {
+            int idx = self.free_slots.pop();
+            self.keys[idx] = k;
+            self.vals[idx] = v;
+            self.left[idx] = -1;
+            self.right[idx] = -1;
+            self.height[idx] = 1;
+            return idx;
+        }
         int idx = self.count;
         self.keys.push(k);
         self.vals.push(v);
@@ -99,6 +113,64 @@ export impl<K, V> TreeMap<K, V> {
         self.height.push(1);
         self.count = self.count + 1;
         return idx;
+    }
+
+    // 部分木の最小キーノードindexを返す（remove時の後継探索用）。
+    int min_index(int node) {
+        int cur = node;
+        while (self.left[cur] >= 0) {
+            cur = self.left[cur];
+        }
+        return cur;
+    }
+
+    // 削除後の平衡化（削除は挿入と違いキーでなく子の平衡係数で回転方向を決める）。
+    int rebalance_after_remove(int node) {
+        self.update_height(node);
+        int b = self.balance_factor(node);
+        if (b > 1) {
+            if (self.balance_factor(self.left[node]) >= 0) {
+                return self.rotate_right(node);
+            }
+            self.left[node] = self.rotate_left(self.left[node]);
+            return self.rotate_right(node);
+        }
+        if (b < -1) {
+            if (self.balance_factor(self.right[node]) <= 0) {
+                return self.rotate_left(node);
+            }
+            self.right[node] = self.rotate_right(self.right[node]);
+            return self.rotate_left(node);
+        }
+        return node;
+    }
+
+    // node を根とする部分木から k を削除し、平衡化後の新しい根indexを返す（kの存在は呼び出し側で確認済み）。
+    int remove_at(int node, K k) {
+        if (node < 0) {
+            return -1;
+        }
+        if (k < self.keys[node]) {
+            self.left[node] = self.remove_at(self.left[node], k);
+        } else if (self.keys[node] < k) {
+            self.right[node] = self.remove_at(self.right[node], k);
+        } else {
+            // 子が1つ以下: そのまま子を持ち上げ、スロットをfree listへ返す
+            if (self.left[node] < 0 || self.right[node] < 0) {
+                int child = self.left[node];
+                if (child < 0) {
+                    child = self.right[node];
+                }
+                self.free_slots.push(node);
+                return child;
+            }
+            // 子が2つ: 右部分木の最小（後継）のキー/値をコピーし、後継を右部分木から削除する
+            int succ = self.min_index(self.right[node]);
+            self.keys[node] = self.keys[succ];
+            self.vals[node] = self.vals[succ];
+            self.right[node] = self.remove_at(self.right[node], self.keys[node]);
+        }
+        return self.rebalance_after_remove(node);
     }
 
     // node を根とする部分木へ (k, v) を挿入し、平衡化後の新しい根indexを返す。
@@ -185,8 +257,53 @@ export impl<K, V> TreeMap<K, V> {
         return self.vals[idx];
     }
 
+    // キーを削除する（存在しなければ何もしない）。O(log n)。
+    void remove(K key) {
+        if (self.find_index(key) < 0) {
+            return;
+        }
+        self.root = self.remove_at(self.root, key);
+        self.live = self.live - 1;
+    }
+
+    // 昇順（in-order）の全キーを返す。O(n)。
+    // 明示スタックの反復in-order走査（JSバックエンドがスライスポインタ引数（K[]*）の再帰渡しに未対応のため、再帰ヘルパーを使わない）
+    K[] keys_in_order() {
+        K[] out = [];
+        int[] stack = [];
+        int cur = self.root;
+        while (cur >= 0 || stack.len() > 0) {
+            while (cur >= 0) {
+                stack.push(cur);
+                cur = self.left[cur];
+            }
+            cur = stack.pop();
+            out.push(self.keys[cur]);
+            cur = self.right[cur];
+        }
+        return out;
+    }
+
+    // 全要素を削除して空にする。
+    void clear() {
+        self.keys = [];
+        self.vals = [];
+        self.left = [];
+        self.right = [];
+        self.height = [];
+        self.free_slots = [];
+        self.count = 0;
+        self.live = 0;
+        self.root = -1;
+    }
+
+    // 木の高さ（平衡性の検証用。AVLなら高さ <= 1.44*log2(n)+2 に収まる）。
+    int tree_height() {
+        return self.node_height(self.root);
+    }
+
     // 保持している要素数。
     int size() {
-        return self.count;
+        return self.live;
     }
 }

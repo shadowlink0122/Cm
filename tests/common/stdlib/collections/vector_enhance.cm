@@ -1,0 +1,35 @@
+//! platform: !js|sv
+// Vector強化: reserve/last/挿入ソート/sortBy（比較ラムダ）
+import std::io::println;
+import std::collections::vector::*;
+
+int main() {
+    Vector<int> v();
+    v.reserve(64);
+    println("cap={v.capacity()} len={v.len()}");
+
+    v.push(5);
+    v.push(2);
+    v.push(9);
+    v.push(1);
+    println("last={*v.last()}");
+
+    v.sort();
+    println("{*v.get(0)} {*v.get(1)} {*v.get(2)} {*v.get(3)}");
+
+    v.sortBy((int a, int b) => b - a);
+    println("{*v.get(0)} {*v.get(1)} {*v.get(2)} {*v.get(3)}");
+
+    // reserveは縮小しない
+    v.reserve(4);
+    println("cap={v.capacity() >= 64}");
+
+    // doubleでもsortByが動く
+    Vector<double> d();
+    d.push(2.5);
+    d.push(0.5);
+    d.push(1.5);
+    d.sortBy((double a, double b) => (a < b) ? -1 : 1);
+    println("{*d.get(0)} {*d.get(1)} {*d.get(2)}");
+    return 0;
+}

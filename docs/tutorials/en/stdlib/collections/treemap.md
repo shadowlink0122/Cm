@@ -50,6 +50,9 @@ int main() {
 | `get(key)` | `Option<V>` | Fetch (`Some(value)` if present, `None` otherwise). O(log n) |
 | `get_or(key, default)` | `V` | Fetch with an explicit default for absent keys. O(log n) |
 | `contains(key)` | `bool` | Key existence check. O(log n) |
+| `remove(key)` | `void` | Delete a key (rebalances with AVL rotations, ignores absent keys, recycles free slots). O(log n) (v0.17.2) |
+| `keys_in_order()` | `K[]` | All keys in ascending order (in-order traversal) (v0.17.2) |
+| `clear()` | `void` | Remove all entries (v0.17.2) |
 | `size()` | `int` | Number of entries |
 
 ---
@@ -67,4 +70,4 @@ The value type `V` is unconstrained.
 ---
 
 <!-- nav -->
-[Contents](../../index.html) | Next: [std::json — JSON parser](../json.html) →
+[Contents](../../index.html) | Next: [TreeSet / HashSet - Sets](sets.html) →

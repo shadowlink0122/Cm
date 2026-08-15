@@ -200,6 +200,32 @@ hir::TypePtr substitute_type_in_type(
         }
     }
 
+    // 2.6 関数ポインタ型の場合（int*(T, T) → int*(int, int)）
+    // param_types/return_typeを再帰的に置換する。これがないとジェネリック関数/メソッドの
+    // 関数ポインタ引数のシグネチャが未置換（Tのまま）で残り、間接呼び出しがLLVM検証エラー
+    // （Call parameter type does not match function signature）になる
+    if (type->kind == hir::TypeKind::Function) {
+        bool fn_changed = false;
+        auto new_fn = std::make_shared<hir::Type>(*type);
+        for (auto& pt : new_fn->param_types) {
+            auto sub = substitute_type_in_type(pt, type_subst, mono);
+            if (sub && (sub != pt || (pt && sub->name != pt->name))) {
+                fn_changed = true;
+            }
+            pt = sub;
+        }
+        if (new_fn->return_type) {
+            auto sub = substitute_type_in_type(new_fn->return_type, type_subst, mono);
+            if (sub && (sub != new_fn->return_type || sub->name != new_fn->return_type->name)) {
+                fn_changed = true;
+            }
+            new_fn->return_type = sub;
+        }
+        if (fn_changed) {
+            return new_fn;
+        }
+    }
+
     // 3a. $エンコード名に型パラメータが埋め込まれている場合（Container$1$1$T → 復号・置換・再エンコード）
     if ((type->kind == hir::TypeKind::Struct || type->kind == hir::TypeKind::TypeAlias) &&
         ast::typekey::is_encoded_key(type->name)) {

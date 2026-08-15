@@ -1,0 +1,59 @@
+// std::collections::treeset - 順序付き集合（平衡二分探索木）
+// TreeMap<T, bool>（AVL木）のキーのみ薄ラッパー。挿入・存在判定・削除をO(log n)で行い、
+// values_in_order()で昇順の全要素を取り出せる（コンパイラのシンボル集合・訪問済み集合向け）。
+// 要素型Tは順序比較（< と ==）が必要（int/string等は組み込み、構造体は with Ord, Eq を付ける）
+module std.collections.treeset;
+
+import std::collections::treemap::*;
+
+export struct TreeSet<T> {
+    TreeMap<T, bool> map;
+}
+
+export impl<T> TreeSet<T> {
+    // 空の集合を作る
+    self() {
+        TreeMap<T, bool> m();
+        self.map = m;
+    }
+
+    // 値を追加する（既存なら何もしない）。O(log n)
+    void insert(T value) {
+        self.map.put(value, true);
+    }
+
+    // 値が含まれるか。O(log n)
+    bool contains(T value) {
+        return self.map.contains(value);
+    }
+
+    // 値を削除する（存在しなければ何もしない）。O(log n)
+    void remove(T value) {
+        self.map.remove(value);
+    }
+
+    // 要素数
+    int len() {
+        return self.map.size();
+    }
+
+    // 空か
+    bool is_empty() {
+        return self.map.size() == 0;
+    }
+
+    // 全要素を削除する
+    void clear() {
+        self.map.clear();
+    }
+
+    // 昇順（in-order）の全要素を返す。O(n)
+    T[] values_in_order() {
+        return self.map.keys_in_order();
+    }
+
+    // 内部AVL木の高さ（平衡性の検証用）
+    int tree_height() {
+        return self.map.tree_height();
+    }
+}

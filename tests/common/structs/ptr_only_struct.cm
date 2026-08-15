@@ -1,0 +1,57 @@
+//! platform: !js|sv
+// v0.17.2バグ修正回帰: ポインタ経由でしか参照されない構造体がプログラムDCEで削除されない
+// （旧: 値型ローカルだけを「使用中」と数えるため、Ctr*のようなポインタ・フィールド経由のみの
+//   構造体定義がAOTで消え、フィールド投影の型解決失敗で命令が黙って脱落し不正IRになっていた）
+import std::io::println;
+import std::mem::{alloc, dealloc};
+
+// ポインタ経由でのみ参照される構造体（値型のローカル・フィールドを作らない）
+struct Ctr {
+    int strong;
+    int weak;
+}
+
+struct Box<T> {
+    T* ptr;
+    Ctr* count;
+}
+
+impl<T> Box<T> {
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+        void* craw = alloc(8);
+        self.count = craw as Ctr*;
+        self.count->strong = 1;
+        self.count->weak = 0;
+    }
+
+    int strong() {
+        return self.count->strong;
+    }
+
+    void inc() {
+        self.count->strong = self.count->strong + 1;
+    }
+
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            dealloc(p);
+            dealloc(self.count as void*);
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as Ctr*;
+        }
+    }
+}
+
+int main() {
+    Box<int> b(42);
+    println("v={*b.ptr} rc={b.strong()}");
+    b.inc();
+    b.inc();
+    println("rc={b.strong()} weak={b.count->weak}");
+    return 0;
+}

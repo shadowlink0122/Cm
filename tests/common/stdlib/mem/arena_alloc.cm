@@ -1,0 +1,47 @@
+//! platform: !js|sv
+// Arenaアロケータ: バンプ確保・整列・チャンク拡張・大型確保・reset・統計
+import std::io::println;
+import std::mem::arena::*;
+
+struct Node {
+    int value;
+    long tag;
+}
+
+int main() {
+    Arena a();
+
+    // 基本確保と書き込み
+    int* x = a.alloc_bytes(4) as int*;
+    *x = 42;
+    long* y = a.alloc_bytes(8) as long*;
+    *y = 99;
+    println("{*x} {*y}");
+
+    // 8バイト整列（4バイト要求でも8単位で進む）
+    println("aligned={a.allocated_bytes()}");
+
+    // 構造体の確保
+    Node* n = a.alloc_bytes(16) as Node*;
+    n->value = 7;
+    n->tag = 77;
+    println("{n->value} {n->tag}");
+
+    // 既定チャンク（4096）を跨ぐ大量確保と、チャンク超過の大型確保
+    for (int i = 0; i < 1000; i++) {
+        int* p = a.alloc_bytes(8) as int*;
+        *p = i;
+    }
+    void* big = a.alloc_bytes(10000);
+    long bigv = 123456789;
+    *(big as long*) = bigv;
+    println("big={*(big as long*)} total={a.allocated_bytes()}");
+
+    // reset後は統計が0へ戻り、再確保できる
+    a.reset();
+    println("reset={a.allocated_bytes()}");
+    int* z = a.alloc_bytes(4) as int*;
+    *z = 5;
+    println("{*z}");
+    return 0;
+}
