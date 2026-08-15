@@ -5,6 +5,7 @@ module parser.decl.impls;
 
 import ../../lexer/token::*;
 import ../state::*;
+import ../../diag/messages::*;
 
 // impl内の1メソッドを解析し、メソッド名を返す
 export Option<string> parse_method(Parser* p) {
@@ -28,7 +29,7 @@ export Option<string> parse_method(Parser* p) {
     string name = "";
     while (!p->at_text("(")) {
         if (p->at_eof() || p->at_text("{") || p->at_text("}")) {
-            return p->fail_str("expected method signature but found " + p->found_text());
+            return p->fail_str(msg_expected_thing("method signature", p->found_text()));
         }
         if (p->at_text("~")) {
             name = "~";
@@ -45,7 +46,7 @@ export Option<string> parse_method(Parser* p) {
         p->bump();
     }
     if (name == "") {
-        return p->fail_str("could not determine method name before '('");
+        return p->fail_str(msg_cannot_determine("method name before '('"));
     }
     const Option<bool> params = p->skip_balanced("(", ")");
     if (params.is_none()) {
@@ -60,8 +61,7 @@ export Option<string> parse_method(Parser* p) {
     } else if (p->at_text(";")) {
         p->bump();
     } else {
-        return p->fail_str("expected '{' or ';' after method signature but found " +
-                           p->found_text());
+        return p->fail_str(msg_expected_body_or_semi("method signature", p->found_text()));
     }
     return Option::Some(name);
 }
@@ -101,7 +101,7 @@ export Option<bool> parse_impl(Parser* p) {
     string[] methods = [];
     while (!p->at_text("}")) {
         if (p->at_eof()) {
-            return p->fail("unexpected end of file in impl body");
+            return p->fail(msg_eof_in("impl body"));
         }
         const Option<string> m = parse_method(p);
         if (m.is_none()) {

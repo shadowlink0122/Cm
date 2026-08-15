@@ -4,6 +4,7 @@ module parser.decl.funcs;
 
 import ../../lexer/token::*;
 import ../state::*;
+import ../../diag/messages::*;
 
 // typedef宣言（"typedef"の上から）
 export Option<bool> parse_typedef(Parser* p) {
@@ -26,7 +27,7 @@ export Option<bool> parse_const(Parser* p) {
     string last_ident = "";
     while (!p->at_text("=")) {
         if (p->at_eof() || p->at_text(";")) {
-            return p->fail("expected '=' in const declaration but found " + p->found_text());
+            return p->fail(msg_expected_in("=", "const declaration", p->found_text()));
         }
         if (p->at_ident()) {
             last_ident = p->text();
@@ -38,7 +39,7 @@ export Option<bool> parse_const(Parser* p) {
         return Option::None;
     }
     if (last_ident == "") {
-        return p->fail("could not determine const name");
+        return p->fail(msg_cannot_determine("const name"));
     }
     p->record_const(last_ident);
     return Option::Some(true);
@@ -56,7 +57,7 @@ export Option<bool> parse_func_or_var(Parser* p) {
     string name = "";
     while (!p->at_text("(")) {
         if (p->at_eof()) {
-            return p->fail("unexpected end of file in declaration");
+            return p->fail(msg_eof_in("declaration"));
         }
         if (p->at_text(";") || p->at_text("=")) {
             // 関数でなくグローバル変数宣言だった
@@ -65,13 +66,13 @@ export Option<bool> parse_func_or_var(Parser* p) {
                 return Option::None;
             }
             if (name == "") {
-                return p->fail("could not determine declaration name");
+                return p->fail(msg_cannot_determine("declaration name"));
             }
             p->record_const(name);
             return Option::Some(true);
         }
         if (p->at_text("{") || p->at_text("}")) {
-            return p->fail("expected declaration but found " + p->found_text());
+            return p->fail(msg_expected_thing("declaration", p->found_text()));
         }
         if (p->at_ident()) {
             if (name != "") {
@@ -93,7 +94,7 @@ export Option<bool> parse_func_or_var(Parser* p) {
         p->bump();
     }
     if (name == "") {
-        return p->fail("could not determine function name before '('");
+        return p->fail(msg_cannot_determine("function name before '('"));
     }
     const Option<bool> params = p->skip_balanced("(", ")");
     if (params.is_none()) {
@@ -107,8 +108,7 @@ export Option<bool> parse_func_or_var(Parser* p) {
     } else if (p->at_text(";")) {
         p->bump();
     } else {
-        return p->fail("expected '{' or ';' after function signature but found " +
-                       p->found_text());
+        return p->fail(msg_expected_body_or_semi("function signature", p->found_text()));
     }
     p->record_func(ret + " " + name + gp.unwrap() + "()");
     return Option::Some(true);

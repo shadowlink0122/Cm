@@ -1,0 +1,44 @@
+// セルフホストパーサ: 診断メッセージ定義
+// Cmコンパイラのi18nメッセージ表と同じく、エラーメッセージの文面を解析ロジックから分離して一元管理する。
+// 文面の変更・多言語化はこのモジュールだけで完結し、テストも同じビルダーを参照するため文面変更に追従する
+module diag.messages;
+
+// 「expected '<期待字句>' but found <実際>」
+export string msg_expected(string expected, string found) {
+    return "expected '" + expected + "' but found " + found;
+}
+
+// 「expected <期待物> but found <実際>」（字句でなく概念を期待する場合）
+export string msg_expected_thing(string what, string found) {
+    return "expected " + what + " but found " + found;
+}
+
+// 「expected '<期待字句>' in <文脈> but found <実際>」
+export string msg_expected_in(string expected, string context, string found) {
+    return "expected '" + expected + "' in " + context + " but found " + found;
+}
+
+// 「expected '{' or ';' after <対象> but found <実際>」（本体または宣言終端の欠落）
+export string msg_expected_body_or_semi(string after, string found) {
+    return "expected '{' or ';' after " + after + " but found " + found;
+}
+
+// 「unexpected end of file in <文脈>」
+export string msg_eof_in(string context) {
+    return "unexpected end of file in " + context;
+}
+
+// 「unexpected end of file while looking for '<区切り>'」
+export string msg_eof_looking_for(string delimiter) {
+    return "unexpected end of file while looking for '" + delimiter + "'";
+}
+
+// 「unterminated <対象>」（未終端リテラル・コメント）
+export string msg_unterminated(string what) {
+    return "unterminated " + what;
+}
+
+// 「could not determine <対象>」（名前の特定失敗）
+export string msg_cannot_determine(string what) {
+    return "could not determine " + what;
+}

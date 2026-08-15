@@ -4,6 +4,7 @@
 module parser.state;
 
 import ../lexer/token::*;
+import ../diag/messages::*;
 
 // 解析器本体（収集結果もここに持つ。全てスライスバックでデストラクタ無し）
 export struct Parser {
@@ -137,7 +138,7 @@ export impl Parser {
 
     // ---- トークン読み取りの基本操作 ----
 
-    int kind() {
+    TokenKind kind() {
         return self.toks.kind_at(self.pos);
     }
 
@@ -150,19 +151,19 @@ export impl Parser {
     }
 
     bool at_text(string t) {
-        return self.text() == t && self.kind() != TK_EOF;
+        return self.text() == t && self.kind() != TokenKind::Eof;
     }
 
     bool at_eof() {
-        return self.kind() == TK_EOF;
+        return self.kind() == TokenKind::Eof;
     }
 
     bool at_ident() {
-        return self.kind() == TK_IDENT;
+        return self.kind() == TokenKind::Ident;
     }
 
     bool at_string() {
-        return self.kind() == TK_STRING;
+        return self.kind() == TokenKind::StringLit;
     }
 
     // 失敗を記録してNoneを返すための共通処理（最初のエラーだけを保持する）
@@ -196,7 +197,7 @@ export impl Parser {
     // 指定の字句を要求して読み進める（違えばNone）
     Option<bool> expect_text(string t) {
         if (!self.at_text(t)) {
-            return self.fail("expected '" + t + "' but found " + self.found_text());
+            return self.fail(msg_expected(t, self.found_text()));
         }
         self.bump();
         return Option::Some(true);
@@ -204,8 +205,8 @@ export impl Parser {
 
     // 識別子を要求して返す（予約語・記号ならNone）
     Option<string> expect_ident() {
-        if (self.kind() != TK_IDENT) {
-            return self.fail_str("expected identifier but found " + self.found_text());
+        if (self.kind() != TokenKind::Ident) {
+            return self.fail_str(msg_expected_thing("identifier", self.found_text()));
         }
         const string name = self.text();
         self.bump();
@@ -221,7 +222,7 @@ export impl Parser {
         int depth = 1;
         while (depth > 0) {
             if (self.at_eof()) {
-                return self.fail("unexpected end of file while looking for '" + close + "'");
+                return self.fail(msg_eof_looking_for(close));
             }
             if (self.at_text(open)) {
                 depth = depth + 1;
@@ -237,7 +238,7 @@ export impl Parser {
     Option<bool> skip_to_semicolon() {
         while (!self.at_text(";")) {
             if (self.at_eof()) {
-                return self.fail("unexpected end of file while looking for ';'");
+                return self.fail(msg_eof_looking_for(";"));
             }
             if (self.at_text("{")) {
                 const Option<bool> b = self.skip_balanced("{", "}");
@@ -262,7 +263,7 @@ export impl Parser {
         bool first = true;
         while (!self.at_text(">")) {
             if (self.at_eof()) {
-                return self.fail_str("unexpected end of file in generic parameter list");
+                return self.fail_str(msg_eof_in("generic parameter list"));
             }
             if (self.at_text(",")) {
                 self.bump();

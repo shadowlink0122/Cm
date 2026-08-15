@@ -4,6 +4,7 @@ import ../../lexer/token::*;
 import ../../lexer/scan::*;
 import ../state::*;
 import ./funcs::*;
+import ../../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -59,4 +60,26 @@ void function_without_body_or_semicolon_is_error() {
 void const_without_assign_is_error() {
     Parser p = parser_of("const int NO_VALUE;");
     assert(parse_const(&p).is_none(), "const without '=' is an error");
+}
+
+#[test]
+void function_pointer_parameter_nests_parens() {
+    Parser p = parser_of("void sort_by(int[] xs, int*(int, int) cmp) { }");
+    assert(parse_func_or_var(&p).is_some(), "fnptr parameter parses");
+    assert(p.funcs_of()[0] == "void sort_by()", "name extracted before first paren");
+}
+
+#[test]
+void global_var_without_const_is_recorded() {
+    Parser p = parser_of("int counter = 0;");
+    assert(parse_func_or_var(&p).is_some(), "global var parses");
+    assert(p.consts_of()[0] == "counter", "declaration name recorded");
+}
+
+#[test]
+void func_error_uses_catalog_message() {
+    Parser p = parser_of("int broken()");
+    assert(parse_func_or_var(&p).is_none(), "missing body fails");
+    assert(p.error_message() == msg_expected_body_or_semi("function signature", "end of file"),
+           "catalog message");
 }

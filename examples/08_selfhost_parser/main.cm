@@ -10,12 +10,17 @@ import ./lexer/scan::*;
 import ./parser/state::*;
 import ./parser/decl/dispatch::*;
 
+// エラー表示の行番号欄の幅
+const int LINE_NUMBER_WIDTH = 4;
+// 10進表示の基数
+const int RADIX_DECIMAL = 10;
+
 // エラー位置のソース行をキャレット付きで表示する
 void print_error_context(string path, string src, int line, int col) {
     string[] ls = lines(src);
     if (line >= 1 && line <= ls.len()) {
-        const string ln = to_radix(line as long, 10);
-        println("{pad_left(ln, 4, ' ')} | {ls[line - 1]}");
+        const string ln = to_radix(line as long, RADIX_DECIMAL);
+        println("{pad_left(ln, LINE_NUMBER_WIDTH, ' ')} | {ls[line - 1]}");
         println("     | {pad_left(\"^\", col, ' ')}");
     }
 }

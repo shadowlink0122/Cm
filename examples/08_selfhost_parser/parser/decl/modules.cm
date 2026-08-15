@@ -4,13 +4,14 @@ module parser.decl.modules;
 
 import ../../lexer/token::*;
 import ../state::*;
+import ../../diag/messages::*;
 
 // "::"区切りのパス（import経路等）を";"まで表示形で読み取る
 export Option<string> parse_path_to_semicolon(Parser* p) {
     string out = "";
     while (!p->at_text(";")) {
         if (p->at_eof()) {
-            return p->fail_str("unexpected end of file in import path");
+            return p->fail_str(msg_eof_in("import path"));
         }
         if (p->at_text("{")) {
             // 選択import "{a, b}" は中身ごと表示形へ
@@ -19,7 +20,7 @@ export Option<string> parse_path_to_semicolon(Parser* p) {
             bool first = true;
             while (!p->at_text("}")) {
                 if (p->at_eof()) {
-                    return p->fail_str("unexpected end of file in import list");
+                    return p->fail_str(msg_eof_in("import list"));
                 }
                 if (p->at_text(",")) {
                     p->bump();

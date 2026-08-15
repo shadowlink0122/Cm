@@ -4,6 +4,7 @@ import ../../lexer/token::*;
 import ../../lexer/scan::*;
 import ../state::*;
 import ./modules::*;
+import ../../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -49,4 +50,11 @@ void unterminated_import_is_error() {
     Parser p = parser_of("import std::io");
     assert(parse_import_decl(&p).is_none(), "missing semicolon is an error");
     assert(p.error_message() == "unexpected end of file in import path", "error message");
+}
+
+#[test]
+void import_error_uses_catalog_message() {
+    Parser p = parser_of("import std::io");
+    assert(parse_import_decl(&p).is_none(), "missing semicolon fails");
+    assert(p.error_message() == msg_eof_in("import path"), "catalog message");
 }

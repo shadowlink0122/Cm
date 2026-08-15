@@ -4,6 +4,7 @@ import ../../lexer/token::*;
 import ../../lexer/scan::*;
 import ../state::*;
 import ./dispatch::*;
+import ../../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -49,4 +50,23 @@ void error_position_propagates() {
     assert(parse_program(&p).is_none(), "missing field semicolon is an error");
     assert(p.error_line() == 4, "error reported at closing line");
     assert(p.structs_of().len() == 1, "first struct was already recorded");
+}
+
+#[test]
+void reexport_and_decl_sequence() {
+    Parser p = parser_of(
+        "export import std::strings::parse::*; use libc { void free(void* p); } typedef Id = int; const int N = 1;");
+    assert(parse_program(&p).is_some(), "re-export and decl sequence parses");
+    assert(p.imports_of()[0] == "std::strings::parse::*", "re-export recorded as import");
+    assert(p.uses_of().len() == 1, "use recorded");
+    assert(p.typedefs_of().len() == 1, "typedef recorded");
+    assert(p.consts_of().len() == 1, "const recorded");
+}
+
+#[test]
+void second_decl_error_position() {
+    Parser p = parser_of("int ok() { return 1; }\nstruct Broken;");
+    assert(parse_program(&p).is_none(), "second decl fails");
+    assert(p.error_line() == 2, "error on second line");
+    assert(p.funcs_of().len() == 1, "first decl already recorded");
 }

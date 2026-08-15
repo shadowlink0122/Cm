@@ -6,6 +6,33 @@ module lexer.scan;
 import std::collections::strset::*;
 import std::strings::from_bytes::*;
 import ./token::*;
+import ../diag/messages::*;
+
+// ---- バイト値定数（マジックナンバー排除。文字はキャストで定義する） ----
+
+const int BYTE_EOF = -1;             // 入力終端の番兵
+const int BYTE_TAB = '\t' as int;
+const int BYTE_LF = '\n' as int;
+const int BYTE_CR = '\r' as int;
+const int BYTE_SPACE = ' ' as int;
+const int BYTE_DQUOTE = '"' as int;
+const int BYTE_SQUOTE = '\'' as int;
+const int BYTE_BACKSLASH = '\\' as int;
+const int BYTE_SLASH = '/' as int;
+const int BYTE_STAR = '*' as int;
+const int BYTE_COLON = ':' as int;
+const int BYTE_UNDERSCORE = '_' as int;
+const int BYTE_DOT = '.' as int;
+const int BYTE_PLUS = '+' as int;
+const int BYTE_MINUS = '-' as int;
+const int BYTE_LOWER_E = 'e' as int;
+const int BYTE_UPPER_E = 'E' as int;
+const int BYTE_DIGIT_0 = '0' as int;
+const int BYTE_DIGIT_9 = '9' as int;
+const int BYTE_LOWER_A = 'a' as int;
+const int BYTE_LOWER_Z = 'z' as int;
+const int BYTE_UPPER_A = 'A' as int;
+const int BYTE_UPPER_Z = 'Z' as int;
 
 // 字句解析器本体
 // トークン列は内部に保持し、run()成功後にtake_tokens()で受け取る
@@ -29,34 +56,17 @@ export impl Lexer {
         self.pos = 0;
         self.line = 1;
         self.col = 1;
+        // キーワード定義: 一覧の宣言と登録ループを分離する
+        string[] keywords = [
+            "module", "import", "export", "use", "struct", "enum", "impl", "interface",
+            "typedef", "const", "static", "private", "overload", "extern", "operator",
+            "for", "with", "self", "return", "if", "else", "while", "match", "switch",
+            "move", "as", "is"
+        ];
         StringSet kw();
-        kw.insert("module");
-        kw.insert("import");
-        kw.insert("export");
-        kw.insert("use");
-        kw.insert("struct");
-        kw.insert("enum");
-        kw.insert("impl");
-        kw.insert("interface");
-        kw.insert("typedef");
-        kw.insert("const");
-        kw.insert("static");
-        kw.insert("private");
-        kw.insert("overload");
-        kw.insert("extern");
-        kw.insert("operator");
-        kw.insert("for");
-        kw.insert("with");
-        kw.insert("self");
-        kw.insert("return");
-        kw.insert("if");
-        kw.insert("else");
-        kw.insert("while");
-        kw.insert("match");
-        kw.insert("switch");
-        kw.insert("move");
-        kw.insert("as");
-        kw.insert("is");
+        for (int i = 0; i < keywords.len(); i++) {
+            kw.insert(keywords[i]);
+        }
         self.keywords = kw;
         TokenStream ts();
         self.tokens = ts;
@@ -78,17 +88,17 @@ export impl Lexer {
         return self.err_col;
     }
 
-    // 現在位置のバイト（終端は-1）
+    // 現在位置のバイト（終端はBYTE_EOF）
     private int peek_byte() {
         if (self.pos >= self.src.byte_len()) {
-            return -1;
+            return BYTE_EOF;
         }
         return self.src.byte_at(self.pos);
     }
 
     private int peek_byte2() {
         if (self.pos + 1 >= self.src.byte_len()) {
-            return -1;
+            return BYTE_EOF;
         }
         return self.src.byte_at(self.pos + 1);
     }
@@ -96,7 +106,7 @@ export impl Lexer {
     // 1バイト進める（改行で行・桁を更新）
     private void advance() {
         if (self.pos < self.src.byte_len()) {
-            if (self.src.byte_at(self.pos) == 10) {
+            if (self.src.byte_at(self.pos) == BYTE_LF) {
                 self.line = self.line + 1;
                 self.col = 1;
             } else {
@@ -107,11 +117,12 @@ export impl Lexer {
     }
 
     private bool is_digit_b(int b) {
-        return b >= 48 && b <= 57;
+        return b >= BYTE_DIGIT_0 && b <= BYTE_DIGIT_9;
     }
 
     private bool is_ident_start_b(int b) {
-        return (b >= 97 && b <= 122) || (b >= 65 && b <= 90) || b == 95;
+        return (b >= BYTE_LOWER_A && b <= BYTE_LOWER_Z) || (b >= BYTE_UPPER_A && b <= BYTE_UPPER_Z) ||
+               b == BYTE_UNDERSCORE;
     }
 
     private bool is_ident_cont_b(int b) {
@@ -122,22 +133,22 @@ export impl Lexer {
     private Option<bool> skip_trivia() {
         while (true) {
             const int b = self.peek_byte();
-            if (b == 32 || b == 9 || b == 13 || b == 10) {
+            if (b == BYTE_SPACE || b == BYTE_TAB || b == BYTE_CR || b == BYTE_LF) {
                 self.advance();
-            } else if (b == 47 && self.peek_byte2() == 47) {
+            } else if (b == BYTE_SLASH && self.peek_byte2() == BYTE_SLASH) {
                 // 行コメント
-                while (self.peek_byte() != 10 && self.peek_byte() != -1) {
+                while (self.peek_byte() != BYTE_LF && self.peek_byte() != BYTE_EOF) {
                     self.advance();
                 }
-            } else if (b == 47 && self.peek_byte2() == 42) {
+            } else if (b == BYTE_SLASH && self.peek_byte2() == BYTE_STAR) {
                 // ブロックコメント
                 const int start_line = self.line;
                 const int start_col = self.col;
                 self.advance();
                 self.advance();
                 bool closed = false;
-                while (self.peek_byte() != -1) {
-                    if (self.peek_byte() == 42 && self.peek_byte2() == 47) {
+                while (self.peek_byte() != BYTE_EOF) {
+                    if (self.peek_byte() == BYTE_STAR && self.peek_byte2() == BYTE_SLASH) {
                         self.advance();
                         self.advance();
                         closed = true;
@@ -146,7 +157,7 @@ export impl Lexer {
                     self.advance();
                 }
                 if (!closed) {
-                    self.err_msg = "unterminated block comment";
+                    self.err_msg = msg_unterminated("block comment");
                     self.err_line = start_line;
                     self.err_col = start_col;
                     return Option::None;
@@ -181,8 +192,8 @@ export impl Lexer {
                 return Option::None;
             }
             const int b = self.peek_byte();
-            if (b == -1) {
-                self.tokens.push_token(TK_EOF, "", self.line, self.col);
+            if (b == BYTE_EOF) {
+                self.tokens.push_token(TokenKind::Eof, "", self.line, self.col);
                 return Option::Some(true);
             }
             const int tok_line = self.line;
@@ -196,9 +207,9 @@ export impl Lexer {
                 }
                 const string text = self.slice_text(start);
                 if (self.keywords.contains(text)) {
-                    self.tokens.push_token(TK_KEYWORD, text, tok_line, tok_col);
+                    self.tokens.push_token(TokenKind::Keyword, text, tok_line, tok_col);
                 } else {
-                    self.tokens.push_token(TK_IDENT, text, tok_line, tok_col);
+                    self.tokens.push_token(TokenKind::Ident, text, tok_line, tok_col);
                 }
             } else if (self.is_digit_b(b)) {
                 // 数値リテラル（10進・16進・小数・指数をまとめて消費する）
@@ -206,71 +217,74 @@ export impl Lexer {
                     const int c = self.peek_byte();
                     if (self.is_ident_cont_b(c)) {
                         self.advance();
-                    } else if (c == 46 && self.is_digit_b(self.peek_byte2())) {
+                    } else if (c == BYTE_DOT && self.is_digit_b(self.peek_byte2())) {
                         // 小数点（直後が数字のときのみ）
                         self.advance();
-                    } else if ((c == 43 || c == 45) && self.pos > start &&
-                               (self.src.byte_at(self.pos - 1) == 101 ||
-                                self.src.byte_at(self.pos - 1) == 69)) {
+                    } else if ((c == BYTE_PLUS || c == BYTE_MINUS) && self.pos > start &&
+                               (self.src.byte_at(self.pos - 1) == BYTE_LOWER_E ||
+                                self.src.byte_at(self.pos - 1) == BYTE_UPPER_E)) {
                         // 指数の符号（e/Eの直後のみ）
                         self.advance();
                     } else {
                         break;
                     }
                 }
-                self.tokens.push_token(TK_NUMBER, self.slice_text(start), tok_line, tok_col);
-            } else if (b == 34) {
+                self.tokens.push_token(TokenKind::Number, self.slice_text(start), tok_line, tok_col);
+            } else if (b == BYTE_DQUOTE) {
                 // 文字列リテラル（エスケープ対応・未終端はエラー）
                 self.advance();
                 bool closed = false;
-                while (self.peek_byte() != -1) {
+                while (self.peek_byte() != BYTE_EOF) {
                     const int c = self.peek_byte();
-                    if (c == 92) {
+                    if (c == BYTE_BACKSLASH) {
                         self.advance();
                         self.advance();
-                    } else if (c == 34) {
+                    } else if (c == BYTE_DQUOTE) {
                         self.advance();
                         closed = true;
                         break;
-                    } else if (c == 10) {
+                    } else if (c == BYTE_LF) {
                         break;
                     } else {
                         self.advance();
                     }
                 }
                 if (!closed) {
-                    self.err_msg = "unterminated string literal";
+                    self.err_msg = msg_unterminated("string literal");
                     self.err_line = tok_line;
                     self.err_col = tok_col;
                     return Option::None;
                 }
-                self.tokens.push_token(TK_STRING, self.slice_text(start), tok_line, tok_col);
-            } else if (b == 39) {
+                self.tokens.push_token(TokenKind::StringLit, self.slice_text(start), tok_line,
+                                       tok_col);
+            } else if (b == BYTE_SQUOTE) {
                 // 文字リテラル（未終端はエラー）
                 self.advance();
-                if (self.peek_byte() == 92) {
+                if (self.peek_byte() == BYTE_BACKSLASH) {
                     self.advance();
                     self.advance();
-                } else if (self.peek_byte() != -1 && self.peek_byte() != 39) {
+                } else if (self.peek_byte() != BYTE_EOF && self.peek_byte() != BYTE_SQUOTE) {
                     self.advance();
                 }
-                if (self.peek_byte() != 39) {
-                    self.err_msg = "unterminated char literal";
+                if (self.peek_byte() != BYTE_SQUOTE) {
+                    self.err_msg = msg_unterminated("char literal");
                     self.err_line = tok_line;
                     self.err_col = tok_col;
                     return Option::None;
                 }
                 self.advance();
-                self.tokens.push_token(TK_CHAR, self.slice_text(start), tok_line, tok_col);
-            } else if (b == 58 && self.peek_byte2() == 58) {
+                self.tokens.push_token(TokenKind::CharLit, self.slice_text(start), tok_line,
+                                       tok_col);
+            } else if (b == BYTE_COLON && self.peek_byte2() == BYTE_COLON) {
                 // "::" は1トークンに融合する（import経路・修飾名の解析用）
                 self.advance();
                 self.advance();
-                self.tokens.push_token(TK_SYMBOL, "::", tok_line, tok_col);
+                self.tokens.push_token(TokenKind::Symbol, "::", tok_line, tok_col);
             } else {
                 // その他は1文字記号
                 self.advance();
-                self.tokens.push_token(TK_SYMBOL, self.slice_text(start), tok_line, tok_col);
+                self.tokens.push_token(TokenKind::Symbol, self.slice_text(start), tok_line,
+                                       tok_col);
             }
         }
         return Option::None;

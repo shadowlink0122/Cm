@@ -4,6 +4,7 @@ import ../../lexer/token::*;
 import ../../lexer/scan::*;
 import ../state::*;
 import ./impls::*;
+import ../../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -43,4 +44,23 @@ void method_without_body_or_semicolon_is_error() {
     assert(parse_impl(&p).is_none(), "missing body is an error");
     assert(p.error_message() == "expected '{' or ';' after method signature but found '}'",
            "error message");
+}
+
+#[test]
+void overload_ctor_and_empty_impl() {
+    Parser p = parser_of("impl A { self() { } overload self(int n) { } }");
+    assert(parse_impl(&p).is_some(), "overload ctor parses");
+    const string expected = "impl A {" + " self, self " + "}";
+    assert(p.impls_of()[0] == expected, "both ctors listed");
+
+    Parser q = parser_of("impl B { }");
+    assert(parse_impl(&q).is_some(), "empty impl parses");
+}
+
+#[test]
+void method_error_uses_catalog_message() {
+    Parser p = parser_of("impl X { int broken() }");
+    assert(parse_impl(&p).is_none(), "missing body fails");
+    assert(p.error_message() == msg_expected_body_or_semi("method signature", "'}'"),
+           "catalog message");
 }

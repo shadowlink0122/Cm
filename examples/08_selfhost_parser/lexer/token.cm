@@ -1,19 +1,21 @@
 // セルフホストパーサ: トークン定義
-// トークン種別定数と、字句解析結果のトークン列（種別・字句・行・桁のパラレルスライス）を提供する
+// トークン種別enumと、字句解析結果のトークン列（種別・字句・行・桁のパラレルスライス）を提供する
 module lexer.token;
 
-// トークン種別（パーサはこの定数とトークン字句で判定する)
-export const int TK_EOF = 0;
-export const int TK_IDENT = 1;    // 識別子
-export const int TK_KEYWORD = 2;  // 予約語（識別子のうちキーワード表に載っているもの）
-export const int TK_NUMBER = 3;   // 数値リテラル
-export const int TK_STRING = 4;   // 文字列リテラル（引用符ごと保持）
-export const int TK_CHAR = 5;     // 文字リテラル
-export const int TK_SYMBOL = 6;   // 記号（"::"のみ2文字、他は1文字）
+// トークン種別（パーサはこの種別とトークン字句で判定する）
+export enum TokenKind {
+    Eof,        // 入力終端
+    Ident,      // 識別子
+    Keyword,    // 予約語（識別子のうちキーワード表に載っているもの）
+    Number,     // 数値リテラル
+    StringLit,  // 文字列リテラル（引用符ごと保持）
+    CharLit,    // 文字リテラル
+    Symbol      // 記号（"::"のみ2文字、他は1文字）
+}
 
 // 字句解析の結果トークン列（スライスバックでデストラクタ無し）
 export struct TokenStream {
-    private int[] kinds;
+    private TokenKind[] kinds;
     private string[] texts;
     private int[] lines;
     private int[] cols;
@@ -27,22 +29,22 @@ export impl TokenStream {
         self.cols = [];
     }
 
-    void push_token(int kind, string text, int line, int col) {
+    void push_token(TokenKind kind, string text, int line, int col) {
         self.kinds.push(kind);
         self.texts.push(text);
         self.lines.push(line);
         self.cols.push(col);
     }
 
-    // トークン数（終端のTK_EOFを含む）
+    // トークン数（終端のEofを含む）
     int len() {
         return self.kinds.len();
     }
 
-    // 範囲外はEOF扱いで安全に読める
-    int kind_at(int i) {
+    // 範囲外はEof扱いで安全に読める
+    TokenKind kind_at(int i) {
         if (i < 0 || i >= self.kinds.len()) {
-            return TK_EOF;
+            return TokenKind::Eof;
         }
         return self.kinds[i];
     }

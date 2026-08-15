@@ -3,6 +3,7 @@ import std::debug::assert;
 import ../lexer/token::*;
 import ../lexer/scan::*;
 import ./state::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -18,7 +19,7 @@ void expect_text_consumes_or_fails() {
     Parser p = parser_of("( )");
     assert(p.expect_text("(").is_some(), "matching text consumed");
     assert(p.expect_text("]").is_none(), "mismatch returns None");
-    assert(p.error_message() == "expected ']' but found ')'", "error message");
+    assert(p.error_message() == msg_expected("]", "')'"), "catalog message");
     assert(p.error_line() == 1, "error line");
     assert(p.error_col() == 3, "error col points at the found token");
 }
@@ -66,4 +67,22 @@ void recorders_accumulate() {
     assert(p.structs_of().len() == 2, "two structs recorded");
     assert(p.funcs_of().len() == 1, "one function recorded");
     assert(join_names(p.structs_of()) == "A(x), B(y)", "join_names order");
+}
+
+#[test]
+void first_error_is_preserved() {
+    Parser p = parser_of("a");
+    assert(p.expect_text("(").is_none(), "first failure");
+    const string first = p.error_message();
+    const int first_col = p.error_col();
+    assert(p.expect_text(")").is_none(), "second failure");
+    assert(p.error_message() == first, "message not overwritten");
+    assert(p.error_col() == first_col, "position not overwritten");
+}
+
+#[test]
+void expect_at_eof_reports_eof() {
+    Parser p = parser_of("");
+    assert(p.expect_text(";").is_none(), "expect at EOF fails");
+    assert(p.error_message() == msg_expected(";", "end of file"), "EOF wording");
 }

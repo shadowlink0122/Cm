@@ -4,6 +4,7 @@ import ../../lexer/token::*;
 import ../../lexer/scan::*;
 import ../state::*;
 import ./types::*;
+import ../../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -50,4 +51,28 @@ void struct_without_brace_is_error() {
     assert(parse_struct(&p, "").is_none(), "missing body is an error");
     assert(p.error_message() == "expected '{' in struct declaration but found ';'",
            "error message");
+}
+
+#[test]
+void empty_struct_and_trailing_comma_enum() {
+    Parser p = parser_of("struct Empty { }");
+    assert(parse_struct(&p, "").is_some(), "empty struct parses");
+    Parser q = parser_of("enum E { A, B, }");
+    assert(parse_enum(&q, "").is_some(), "trailing comma enum parses");
+}
+
+#[test]
+void field_attribute_is_skipped() {
+    Parser p = parser_of("struct S { #[target(!sv)] int x; int y; }");
+    assert(parse_struct(&p, "").is_some(), "attributed field parses");
+    const string expected = "S {" + " x, y " + "}";
+    assert(p.structs_of()[0] == expected, "both fields collected");
+}
+
+#[test]
+void struct_error_uses_catalog_message() {
+    Parser p = parser_of("struct Broken;");
+    assert(parse_struct(&p, "").is_none(), "missing body fails");
+    assert(p.error_message() == msg_expected_in("{", "struct declaration", "';'"),
+           "catalog message");
 }
