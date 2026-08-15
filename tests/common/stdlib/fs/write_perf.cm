@@ -26,8 +26,10 @@ int main() {
     println("sb lines={ls.len()} first={ls[0]} last={ls[n - 1]}");
 
     // 2) BufWriterで行単位追記（バッファリング書き込みの経路）
-    // O_WRONLY|O_CREAT|O_TRUNC = 0x0601, mode 0644
-    const int fd = open(path2, 1537, 420);
+    // O_CREAT/O_TRUNCの値はOSごとに異なる（macOS: 0x200/0x400, Linux: 0x40/0x200）ため、
+    // ファイルはwrite_fileで空作成してから両OSで同値のO_WRONLY(=1)だけでopenする
+    write_file(path2, "");
+    const int fd = open(path2, 1, 0);
     BufWriter w = BufWriter::from_fd(fd);
     utiny[] line = [];
     const string text = "buffered line payload\n";
