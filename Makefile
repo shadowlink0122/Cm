@@ -283,12 +283,6 @@ install-vscode-extension: vscode-extension
 	"$$CODE_BIN" --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
 	echo "✅ VSCode拡張をインストールしました (cm-language-$$VERSION)"
 
-# 旧名の互換エイリアス（操作ターゲットは動詞先頭の命名規約に合わせinstall-vscode-extensionへ改名済み）
-.PHONY: vscode-extension-install
-vscode-extension-install:
-	@echo "⚠ 'make vscode-extension-install' は非推奨です。'make install-vscode-extension' を使ってください"
-	@$(MAKE) install-vscode-extension
-
 .PHONY: dist
 dist: release
 	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
