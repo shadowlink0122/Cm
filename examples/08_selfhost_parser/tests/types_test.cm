@@ -1,10 +1,10 @@
 // parser/types.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../../lexer/token::*;
-import ../../lexer/scan::*;
-import ../state::*;
-import ./types::*;
-import ../../diag/messages::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/types::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -50,7 +50,7 @@ void struct_without_brace_is_error() {
     Parser p = parser_of("struct Broken;");
     assert(parse_struct(&p, "").is_none(), "missing body is an error");
     assert(p.error_message() == "expected '{' in struct declaration but found ';'",
-           "error message");
+        "error message");
 }
 
 #[test]
@@ -73,6 +73,6 @@ void field_attribute_is_skipped() {
 void struct_error_uses_catalog_message() {
     Parser p = parser_of("struct Broken;");
     assert(parse_struct(&p, "").is_none(), "missing body fails");
-    assert(p.error_message() == msg_expected_in("{", "struct declaration", "';'"),
-           "catalog message");
+    assert(p.error_message() == msgf(MsgId::ExpectedIn, ["{", "struct declaration", "';'"]),
+        "catalog message");
 }

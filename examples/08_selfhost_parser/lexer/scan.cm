@@ -121,8 +121,9 @@ export impl Lexer {
     }
 
     private bool is_ident_start_b(int b) {
-        return (b >= BYTE_LOWER_A && b <= BYTE_LOWER_Z) || (b >= BYTE_UPPER_A && b <= BYTE_UPPER_Z) ||
-               b == BYTE_UNDERSCORE;
+        return (b >= BYTE_LOWER_A && b <= BYTE_LOWER_Z)
+            || (b >= BYTE_UPPER_A && b <= BYTE_UPPER_Z) ||
+            b == BYTE_UNDERSCORE;
     }
 
     private bool is_ident_cont_b(int b) {
@@ -157,7 +158,7 @@ export impl Lexer {
                     self.advance();
                 }
                 if (!closed) {
-                    self.err_msg = msg_unterminated("block comment");
+                    self.err_msg = msgf(MsgId::Unterminated, ["block comment"]);
                     self.err_line = start_line;
                     self.err_col = start_col;
                     return Option::None;
@@ -222,15 +223,20 @@ export impl Lexer {
                         // 小数点（直後が数字のときのみ）
                         self.advance();
                     } else if ((c == BYTE_PLUS || c == BYTE_MINUS) && self.pos > start &&
-                               (self.src.byte_at(self.pos - 1) == BYTE_LOWER_E ||
-                                self.src.byte_at(self.pos - 1) == BYTE_UPPER_E)) {
+                        (self.src.byte_at(self.pos - 1) == BYTE_LOWER_E ||
+                            self.src.byte_at(self.pos - 1) == BYTE_UPPER_E)) {
                         // 指数の符号（e/Eの直後のみ）
                         self.advance();
                     } else {
                         break;
                     }
                 }
-                self.tokens.push_token(TokenKind::Number, self.slice_text(start), tok_line, tok_col);
+                self.tokens.push_token(
+                    TokenKind::Number,
+                    self.slice_text(start),
+                    tok_line,
+                    tok_col
+                );
             } else if (b == BYTE_DQUOTE) {
                 // 文字列リテラル（エスケープ対応・未終端はエラー）
                 self.advance();
@@ -251,13 +257,13 @@ export impl Lexer {
                     }
                 }
                 if (!closed) {
-                    self.err_msg = msg_unterminated("string literal");
+                    self.err_msg = msgf(MsgId::Unterminated, ["string literal"]);
                     self.err_line = tok_line;
                     self.err_col = tok_col;
                     return Option::None;
                 }
                 self.tokens.push_token(TokenKind::StringLit, self.slice_text(start), tok_line,
-                                       tok_col);
+                    tok_col);
             } else if (b == BYTE_SQUOTE) {
                 // 文字リテラル（未終端はエラー）
                 self.advance();
@@ -268,14 +274,14 @@ export impl Lexer {
                     self.advance();
                 }
                 if (self.peek_byte() != BYTE_SQUOTE) {
-                    self.err_msg = msg_unterminated("char literal");
+                    self.err_msg = msgf(MsgId::Unterminated, ["char literal"]);
                     self.err_line = tok_line;
                     self.err_col = tok_col;
                     return Option::None;
                 }
                 self.advance();
                 self.tokens.push_token(TokenKind::CharLit, self.slice_text(start), tok_line,
-                                       tok_col);
+                    tok_col);
             } else if (b == BYTE_COLON && self.peek_byte2() == BYTE_COLON) {
                 // "::" は1トークンに融合する（import経路・修飾名の解析用）
                 self.advance();
@@ -285,7 +291,7 @@ export impl Lexer {
                 // その他は1文字記号
                 self.advance();
                 self.tokens.push_token(TokenKind::Symbol, self.slice_text(start), tok_line,
-                                       tok_col);
+                    tok_col);
             }
         }
         return Option::None;

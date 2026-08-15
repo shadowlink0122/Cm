@@ -1,10 +1,10 @@
 // parser/funcs.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../../lexer/token::*;
-import ../../lexer/scan::*;
-import ../state::*;
-import ./funcs::*;
-import ../../diag/messages::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/funcs::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -52,8 +52,8 @@ void function_without_body_or_semicolon_is_error() {
     Parser p = parser_of("int broken()");
     assert(parse_func_or_var(&p).is_none(), "missing body is an error");
     assert(p.error_message() ==
-               "expected '{' or ';' after function signature but found end of file",
-           "error message");
+        "expected '{' or ';' after function signature but found end of file",
+        "error message");
 }
 
 #[test]
@@ -80,6 +80,7 @@ void global_var_without_const_is_recorded() {
 void func_error_uses_catalog_message() {
     Parser p = parser_of("int broken()");
     assert(parse_func_or_var(&p).is_none(), "missing body fails");
-    assert(p.error_message() == msg_expected_body_or_semi("function signature", "end of file"),
-           "catalog message");
+    assert(p.error_message()
+        == msgf(MsgId::ExpectedBodyOrSemi, ["function signature", "end of file"]),
+        "catalog message");
 }

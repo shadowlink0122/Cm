@@ -21,7 +21,7 @@ export Option<bool> parse_struct(Parser* p, string prefix) {
     // "with Trait, ..." は"{"まで読み飛ばす
     while (!p->at_text("{")) {
         if (p->at_eof() || p->at_text(";") || p->at_text("}")) {
-            return p->fail(msg_expected_in("{", "struct declaration", p->found_text()));
+            return p->fail(msgf(MsgId::ExpectedIn, ["{", "struct declaration", p->found_text()]));
         }
         p->bump();
     }
@@ -30,7 +30,7 @@ export Option<bool> parse_struct(Parser* p, string prefix) {
     string[] fields = [];
     while (!p->at_text("}")) {
         if (p->at_eof()) {
-            return p->fail(msg_eof_in("struct body"));
+            return p->fail(msgf(MsgId::EofIn, ["struct body"]));
         }
         if (p->at_text("#")) {
             const Option<bool> a = p->skip_attribute();
@@ -70,7 +70,7 @@ export Option<bool> parse_struct(Parser* p, string prefix) {
         string last_ident = "";
         while (!p->at_text(";")) {
             if (p->at_eof()) {
-                return p->fail(msg_eof_in("struct field"));
+                return p->fail(msgf(MsgId::EofIn, ["struct field"]));
             }
             if (p->at_ident()) {
                 last_ident = p->text();
@@ -111,7 +111,7 @@ export Option<bool> parse_enum(Parser* p, string prefix) {
     string[] variants = [];
     while (!p->at_text("}")) {
         if (p->at_eof()) {
-            return p->fail(msg_eof_in("enum body"));
+            return p->fail(msgf(MsgId::EofIn, ["enum body"]));
         }
         if (p->at_text(",")) {
             p->bump();
@@ -126,7 +126,7 @@ export Option<bool> parse_enum(Parser* p, string prefix) {
             continue;
         }
         if (!p->at_ident()) {
-            return p->fail(msg_expected_thing("enum variant name", p->found_text()));
+            return p->fail(msgf(MsgId::ExpectedThing, ["enum variant name", p->found_text()]));
         }
         variants.push(p->text());
         p->bump();
@@ -141,7 +141,7 @@ export Option<bool> parse_enum(Parser* p, string prefix) {
             p->bump();
             while (!p->at_text(",") && !p->at_text("}")) {
                 if (p->at_eof()) {
-                    return p->fail(msg_eof_in("enum value"));
+                    return p->fail(msgf(MsgId::EofIn, ["enum value"]));
                 }
                 p->bump();
             }

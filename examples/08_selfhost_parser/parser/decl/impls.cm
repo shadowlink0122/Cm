@@ -29,7 +29,7 @@ export Option<string> parse_method(Parser* p) {
     string name = "";
     while (!p->at_text("(")) {
         if (p->at_eof() || p->at_text("{") || p->at_text("}")) {
-            return p->fail_str(msg_expected_thing("method signature", p->found_text()));
+            return p->fail_str(msgf(MsgId::ExpectedThing, ["method signature", p->found_text()]));
         }
         if (p->at_text("~")) {
             name = "~";
@@ -46,7 +46,7 @@ export Option<string> parse_method(Parser* p) {
         p->bump();
     }
     if (name == "") {
-        return p->fail_str(msg_cannot_determine("method name before '('"));
+        return p->fail_str(msgf(MsgId::CannotDetermine, ["method name before '('"]));
     }
     const Option<bool> params = p->skip_balanced("(", ")");
     if (params.is_none()) {
@@ -61,7 +61,7 @@ export Option<string> parse_method(Parser* p) {
     } else if (p->at_text(";")) {
         p->bump();
     } else {
-        return p->fail_str(msg_expected_body_or_semi("method signature", p->found_text()));
+        return p->fail_str(msgf(MsgId::ExpectedBodyOrSemi, ["method signature", p->found_text()]));
     }
     return Option::Some(name);
 }
@@ -101,7 +101,7 @@ export Option<bool> parse_impl(Parser* p) {
     string[] methods = [];
     while (!p->at_text("}")) {
         if (p->at_eof()) {
-            return p->fail(msg_eof_in("impl body"));
+            return p->fail(msgf(MsgId::EofIn, ["impl body"]));
         }
         const Option<string> m = parse_method(p);
         if (m.is_none()) {
@@ -111,7 +111,7 @@ export Option<bool> parse_impl(Parser* p) {
     }
     p->bump();
     p->record_impl("impl " + tname.unwrap() + targs.unwrap() + iface + " { " +
-                   join_names(methods) + " }");
+        join_names(methods) + " }");
     return Option::Some(true);
 }
 

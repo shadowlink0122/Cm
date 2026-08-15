@@ -2,7 +2,7 @@
 import std::debug::assert;
 import ../lexer/token::*;
 import ../lexer/scan::*;
-import ./state::*;
+import ../parser/state::*;
 import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
@@ -19,7 +19,7 @@ void expect_text_consumes_or_fails() {
     Parser p = parser_of("( )");
     assert(p.expect_text("(").is_some(), "matching text consumed");
     assert(p.expect_text("]").is_none(), "mismatch returns None");
-    assert(p.error_message() == msg_expected("]", "')'"), "catalog message");
+    assert(p.error_message() == msgf(MsgId::ExpectedButFound, ["]", "')'"]), "catalog message");
     assert(p.error_line() == 1, "error line");
     assert(p.error_col() == 3, "error col points at the found token");
 }
@@ -84,5 +84,5 @@ void first_error_is_preserved() {
 void expect_at_eof_reports_eof() {
     Parser p = parser_of("");
     assert(p.expect_text(";").is_none(), "expect at EOF fails");
-    assert(p.error_message() == msg_expected(";", "end of file"), "EOF wording");
+    assert(p.error_message() == msgf(MsgId::ExpectedButFound, [";", "end of file"]), "EOF wording");
 }

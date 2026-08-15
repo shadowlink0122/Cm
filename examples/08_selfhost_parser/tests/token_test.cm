@@ -1,6 +1,6 @@
 // token.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ./token::*;
+import ../lexer/token::*;
 
 #[test]
 void push_and_read_back() {

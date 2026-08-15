@@ -43,27 +43,29 @@ parser/                  構文解析
 samples/                 パーサへ入力するサンプル
   ok.cm                  正常系（全宣言種別を含む）
   error.cm               エラー系（メソッド本体欠落）
+tests/                   単体テスト（#[test]。対象モジュール名 + _test.cm）
 ```
 
 関数本体・メソッド本体は波括弧の対応で読み飛ばす「定義リスタ」としての解析です（文字列リテラル内の波括弧は字句解析済みのため誤検出しません）。
 
 ## 単体テスト
 
-各ファイルに`#[test]`ディレクティブの単体テスト（`*_test.cm`）が付属します。
+`tests/`フォルダに`#[test]`ディレクティブの単体テスト（対象モジュール名 + `_test.cm`）を集約しています。
 
 ```bash
-cm test examples/08_selfhost_parser/lexer/scan_test.cm
-cm test examples/08_selfhost_parser/parser/decl/types_test.cm
-# ...（lexer/token / parser/state / parser/decl/{modules, impls, funcs, dispatch} も同様）
+cm test examples/08_selfhost_parser/tests/scan_test.cm
+cm test examples/08_selfhost_parser/tests/types_test.cm
+# ...（messages / token / state / modules / impls / funcs / dispatch も同様）
 ```
 
-CI（`scripts/ci/check_examples.sh`）は全`.cm`の型検査に加えて、9ファイル・60テストの単体実行・正常/エラーサンプル・自己解析を検証します。
-エラーメッセージの検証はテストも`diag/messages.cm`のビルダーを参照するため、文面変更に自動で追従します。
+CI（`scripts/ci/check_examples.sh`）は全`.cm`の型検査に加えて、`tests/`配下の単体実行・正常/エラーサンプル・自己解析を検証します。
+エラーメッセージの検証はテストも`diag/messages.cm`の`msgf`とテンプレート表を参照するため、文面変更に自動で追従します。
 
 ## エラーメッセージのi18n
 
 Cmコンパイラ本体と同じ構成で、メッセージID（`enum MsgId`）×言語（`enum Lang`）の2次元テンプレート表に文面を集約しています。
 テンプレートは`{0}`〜`{2}`のプレースホルダを持つ完結した1文で、語順が言語ごとに異なるため断片連結による文組み立ては行いません。
+プレースホルダ埋めはC++側`i18n::msgf`と同じ方式の`msgf(MsgId, string[])`1本で、呼び出し側が`msgf(MsgId::ExpectedButFound, [expected, found])`のようにIDと引数配列を直接渡します。
 
 ```bash
 # 日本語診断（既定は英語）

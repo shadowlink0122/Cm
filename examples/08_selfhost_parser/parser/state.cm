@@ -197,7 +197,7 @@ export impl Parser {
     // 指定の字句を要求して読み進める（違えばNone）
     Option<bool> expect_text(string t) {
         if (!self.at_text(t)) {
-            return self.fail(msg_expected(t, self.found_text()));
+            return self.fail(msgf(MsgId::ExpectedButFound, [t, self.found_text()]));
         }
         self.bump();
         return Option::Some(true);
@@ -206,7 +206,7 @@ export impl Parser {
     // 識別子を要求して返す（予約語・記号ならNone）
     Option<string> expect_ident() {
         if (self.kind() != TokenKind::Ident) {
-            return self.fail_str(msg_expected_thing("identifier", self.found_text()));
+            return self.fail_str(msgf(MsgId::ExpectedThing, ["identifier", self.found_text()]));
         }
         const string name = self.text();
         self.bump();
@@ -222,7 +222,7 @@ export impl Parser {
         int depth = 1;
         while (depth > 0) {
             if (self.at_eof()) {
-                return self.fail(msg_eof_looking_for(close));
+                return self.fail(msgf(MsgId::EofLookingFor, [close]));
             }
             if (self.at_text(open)) {
                 depth = depth + 1;
@@ -238,7 +238,7 @@ export impl Parser {
     Option<bool> skip_to_semicolon() {
         while (!self.at_text(";")) {
             if (self.at_eof()) {
-                return self.fail(msg_eof_looking_for(";"));
+                return self.fail(msgf(MsgId::EofLookingFor, [";"]));
             }
             if (self.at_text("{")) {
                 const Option<bool> b = self.skip_balanced("{", "}");
@@ -263,7 +263,7 @@ export impl Parser {
         bool first = true;
         while (!self.at_text(">")) {
             if (self.at_eof()) {
-                return self.fail_str(msg_eof_in("generic parameter list"));
+                return self.fail_str(msgf(MsgId::EofIn, ["generic parameter list"]));
             }
             if (self.at_text(",")) {
                 self.bump();

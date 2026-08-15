@@ -26,10 +26,10 @@ cmp /tmp/drill_jit.bin /tmp/drill_native.bin
 echo "✅ selfhost drill passed (jit/native artifacts identical)"
 
 # セルフホストパーサ（examples/08_selfhost_parser）の検証:
-# 各モジュールの#[test]単体テスト → 正常サンプルの定義一覧出力（rc=0） → エラーサンプルの位置報告（rc=1） → パーサ自身の全ソース自己解析
+# tests/配下の#[test]単体テスト → 正常サンプルの定義一覧出力（rc=0） → エラーサンプルの位置報告（rc=1） → パーサ自身の全ソース自己解析
 SHP=examples/08_selfhost_parser
-for t in diag/messages_test lexer/token_test lexer/scan_test parser/state_test parser/decl/modules_test parser/decl/types_test parser/decl/impls_test parser/decl/funcs_test parser/decl/dispatch_test; do
-    ./cm test "$SHP/$t.cm" >/dev/null
+for t in "$SHP"/tests/*_test.cm; do
+    ./cm test "$t" >/dev/null
 done
 ./cm run "$SHP/main.cm" -- "$SHP/samples/ok.cm" >/dev/null
 if ./cm run "$SHP/main.cm" -- "$SHP/samples/error.cm" >/dev/null 2>&1; then

@@ -1,10 +1,10 @@
 // parser/decl.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../../lexer/token::*;
-import ../../lexer/scan::*;
-import ../state::*;
-import ./dispatch::*;
-import ../../diag/messages::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/dispatch::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {

@@ -1,10 +1,10 @@
 // parser/impls.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../../lexer/token::*;
-import ../../lexer/scan::*;
-import ../state::*;
-import ./impls::*;
-import ../../diag/messages::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/impls::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -21,7 +21,7 @@ void parses_impl_with_ctor_dtor_and_modifiers() {
         "impl Counter { self() { self.n = 0; } ~self() { } private int helper() { return 1; } static Counter zero() { Counter c(); return c; } }");
     assert(parse_impl(&p).is_some(), "impl parses");
     assert(p.impls_of()[0] == "impl Counter { self, ~self, helper, zero }",
-           "ctor/dtor/private/static methods collected");
+        "ctor/dtor/private/static methods collected");
 }
 
 #[test]
@@ -43,7 +43,7 @@ void method_without_body_or_semicolon_is_error() {
     Parser p = parser_of("impl X { int broken() }");
     assert(parse_impl(&p).is_none(), "missing body is an error");
     assert(p.error_message() == "expected '{' or ';' after method signature but found '}'",
-           "error message");
+        "error message");
 }
 
 #[test]
@@ -61,6 +61,6 @@ void overload_ctor_and_empty_impl() {
 void method_error_uses_catalog_message() {
     Parser p = parser_of("impl X { int broken() }");
     assert(parse_impl(&p).is_none(), "missing body fails");
-    assert(p.error_message() == msg_expected_body_or_semi("method signature", "'}'"),
-           "catalog message");
+    assert(p.error_message() == msgf(MsgId::ExpectedBodyOrSemi, ["method signature", "'}'"]),
+        "catalog message");
 }

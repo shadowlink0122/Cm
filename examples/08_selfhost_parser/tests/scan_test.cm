@@ -1,7 +1,7 @@
 // lexer.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ./token::*;
-import ./scan::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
 import ../diag/messages::*;
 
 // テスト用: ソースを字句解析してトークン列を返す（成功前提）
@@ -99,5 +99,5 @@ void unterminated_message_comes_from_catalog() {
     Lexer lx("\"open");
     const Option<bool> r = lx.run();
     assert(r.is_none(), "unterminated string fails");
-    assert(lx.error_message() == msg_unterminated("string literal"), "catalog message");
+    assert(lx.error_message() == msgf(MsgId::Unterminated, ["string literal"]), "catalog message");
 }

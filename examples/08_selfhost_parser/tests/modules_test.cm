@@ -1,10 +1,10 @@
 // parser/modules.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../../lexer/token::*;
-import ../../lexer/scan::*;
-import ../state::*;
-import ./modules::*;
-import ../../diag/messages::*;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/modules::*;
+import ../diag/messages::*;
 
 // テスト用: ソースから解析器を組み立てる
 Parser parser_of(string src) {
@@ -56,5 +56,5 @@ void unterminated_import_is_error() {
 void import_error_uses_catalog_message() {
     Parser p = parser_of("import std::io");
     assert(parse_import_decl(&p).is_none(), "missing semicolon fails");
-    assert(p.error_message() == msg_eof_in("import path"), "catalog message");
+    assert(p.error_message() == msgf(MsgId::EofIn, ["import path"]), "catalog message");
 }
