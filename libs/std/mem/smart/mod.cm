@@ -106,7 +106,7 @@ export impl<T> SharedPtr<T> {
         void* raw = alloc(__sizeof__(T) as int);
         self.ptr = raw as T*;
         *self.ptr = value;
-        void* craw = alloc(8);
+        void* craw = alloc(__sizeof__(SharedCount) as int);
         self.count = craw as SharedCount*;
         self.count->strong = 1;
         self.count->weak = 0;
