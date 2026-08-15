@@ -1,0 +1,14 @@
+// std/strings/hash.cm - 文字列の内容ハッシュ
+// StringMap/StringSet/Internerの基礎部品。同一内容の文字列は生成方法（リテラル・連結・補間）によらず同じ値を返す
+module std.strings.hash;
+
+// FNV-1a 32bitの内容ハッシュ（非負intを返す）
+// long演算＋0xFFFFFFFFマスクで32bitラップを再現し、最上位ビットを落として非負に揃える
+export int hash_string(string s) {
+    long h = 2166136261;
+    const int n = s.byte_len();
+    for (int i = 0; i < n; i++) {
+        h = ((h ^ (s.byte_at(i) as long)) * 16777619) & 4294967295;
+    }
+    return (h & 2147483647) as int;
+}

@@ -1,5 +1,5 @@
 // std::collections - コレクション型
-// Vector, HashMap, Queue, TreeMap（平衡二分探索木・O(log n)）, HashSet, TreeSet
+// Vector, HashMap, Queue, TreeMap（平衡二分探索木・O(log n)）, HashSet, TreeSet, StringMap/StringSet（文字列キー・内容ハッシュ）
 module std.collections;
 
 export import std.collections.vector;
@@ -8,3 +8,5 @@ export import std.collections.queue;
 export import std.collections.treemap;
 export import std.collections.hashset;
 export import std.collections.treeset;
+export import std.collections.strmap;
+export import std.collections.strset;

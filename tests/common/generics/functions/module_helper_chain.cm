@@ -1,0 +1,20 @@
+// v0.17.2バグ修正回帰: importしたモジュール内の総称free関数から別の総称ヘルパーを呼ぶ連鎖の型引数伝播
+// （旧: 総称本体のスキャンが推論不能→既定intの偽特殊化を作り、その即時書き換えがclone前の総称本体を汚染して
+//   呼び出し元の実型（string等）でなくint版ヘルパーが呼ばれ、ソート等が無言で無効化されていた）
+import std::io::println;
+import std::slices::*;
+
+int main() {
+    // stringはintと辞書順が異なるため、int版siftが呼ばれると並びが壊れる
+    string[] s = ["delta", "alpha", "charlie", "bravo"];
+    sort(s);
+    println("{s[0]} {s[1]} {s[2]} {s[3]}");
+
+    long[] l = [30, 10, 20];
+    sort(l);
+    println("{l[0]} {l[1]} {l[2]}");
+
+    sort_by(s, (string a, string b) => (a < b) ? 1 : -1);
+    println("{s[0]} {s[3]}");
+    return 0;
+}

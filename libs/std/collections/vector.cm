@@ -123,32 +123,68 @@ export impl<T> Vector<T> {
         self.size = 0;
     }
 
-    // ソート（昇順、挿入ソート）
-    // プリミティブ型（int, long, double等）で動作
-    void sort() {
-        const int n = self.size;
-        for (int i = 1; i < n; i++) {
-            const T key = self.data[i];
-            int j = i - 1;
-            while (j >= 0 && self.data[j] > key) {
-                self.data[j + 1] = self.data[j];
-                j = j - 1;
+    // 内部: data[root..end) をsift-down（<比較・最大ヒープ）
+    private void sift_lt(int root, int end) {
+        int r = root;
+        while (r * 2 + 1 < end) {
+            int child = r * 2 + 1;
+            if (child + 1 < end && self.data[child] < self.data[child + 1]) {
+                child = child + 1;
             }
-            self.data[j + 1] = key;
+            if (self.data[child] < self.data[r]) {
+                return;
+            }
+            const T tmp = self.data[r];
+            self.data[r] = self.data[child];
+            self.data[child] = tmp;
+            r = child;
         }
     }
 
-    // 比較関数によるソート（挿入ソート。cmp(a,b)<0でaがbより前）
+    // ソート（昇順、ヒープソート: O(n log n)・追加確保なし・非安定）
+    // プリミティブ型（int, long, double等）で動作
+    void sort() {
+        const int n = self.size;
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            self.sift_lt(i, n);
+        }
+        for (int end = n - 1; end > 0; end--) {
+            const T tmp = self.data[0];
+            self.data[0] = self.data[end];
+            self.data[end] = tmp;
+            self.sift_lt(0, end);
+        }
+    }
+
+    // 内部: 比較関数版sift-down（cmpが負=aが先）
+    private void sift_cmp(int root, int end, int*(T, T) cmp) {
+        int r = root;
+        while (r * 2 + 1 < end) {
+            int child = r * 2 + 1;
+            if (child + 1 < end && cmp(self.data[child], self.data[child + 1]) < 0) {
+                child = child + 1;
+            }
+            if (cmp(self.data[child], self.data[r]) < 0) {
+                return;
+            }
+            const T tmp = self.data[r];
+            self.data[r] = self.data[child];
+            self.data[child] = tmp;
+            r = child;
+        }
+    }
+
+    // 比較関数によるソート（ヒープソート。cmp(a,b)<0でaがbより前・非安定）
     void sortBy(int*(T, T) cmp) {
         const int n = self.size;
-        for (int i = 1; i < n; i++) {
-            const T key = self.data[i];
-            int j = i - 1;
-            while (j >= 0 && cmp(self.data[j], key) > 0) {
-                self.data[j + 1] = self.data[j];
-                j = j - 1;
-            }
-            self.data[j + 1] = key;
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            self.sift_cmp(i, n, cmp);
+        }
+        for (int end = n - 1; end > 0; end--) {
+            const T tmp = self.data[0];
+            self.data[0] = self.data[end];
+            self.data[end] = tmp;
+            self.sift_cmp(0, end, cmp);
         }
     }
 

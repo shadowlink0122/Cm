@@ -1,0 +1,8 @@
+len=3 a=1 x=-1
+dyn=1 interp=true get=3 i2=ok
+overwrite=100 len=3
+removed=false len=2
+reuse len=3 date=4
+keys n=3 k0=apple k1=date k2=cherry
+grown len=43 g0=0 g39=39 a=100
+cleared len=0 empty=true

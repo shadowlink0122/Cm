@@ -1,5 +1,6 @@
 // std::collections::hashmap - ジェネリック連想配列
 // HashMap<K, V> - キーと値の両方がジェネリック
+// 制約: ハッシュは `key as int` のため、intへキャスト可能なキー専用。文字列キーはポインタ値ハッシュになり実行時生成キーが外れるため、StringMap / StringSet（std::collections::strmap / strset）を使うこと
 module std.collections.hashmap;
 
 // 確保はstd::mem経由にして、set_allocator_fnsで登録したカスタムアロケータを通す（R9。従来は生malloc直呼びで素通しだった）

@@ -1,0 +1,32 @@
+// パフォーマンス+正しさスモーク: 実行時生成キー10000件の全ヒット（旧HashMap<string,V>は2000件中1件しか当たらない）
+import std::io::println;
+import std::collections::strmap::*;
+
+int main() {
+    StringMap<int> m();
+    const int n = 10000;
+    for (int i = 0; i < n; i++) {
+        m.insert("symbol_table_entry_{i}", i);
+    }
+    println("len={m.len()}");
+
+    int hit = 0;
+    for (int i = 0; i < n; i++) {
+        if (m.get_or("symbol_table_entry_{i}", -1) == i) {
+            hit = hit + 1;
+        }
+    }
+    int miss = 0;
+    for (int i = 0; i < 100; i++) {
+        if (m.contains("absent_key_{i}")) {
+            miss = miss + 1;
+        }
+    }
+    println("hit={hit} miss={miss}");
+
+    for (int i = 0; i < n; i = i + 2) {
+        m.remove("symbol_table_entry_{i}");
+    }
+    println("after remove len={m.len()}");
+    return 0;
+}

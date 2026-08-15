@@ -1,0 +1,179 @@
+// std::collections::strmap - 文字列キー連想配列
+// StringMap<V> - キーを文字列に固定し、内容ハッシュ（FNV-1a）で探索する。
+// HashMap<K, V>のハッシュ（key as int）は文字列では実質ポインタ値になり実行時生成キーが外れるため、文字列キーは本型を使う。
+// スライスバックでデストラクタを持たない構造（dtor持ち構造体の暗黙コピーによる二重解放を構造的に避ける。TreeMapで実証済みのパターン）
+module std.collections.strmap;
+
+import std::strings::hash::*;
+
+export struct StringMap<V> {
+    private string[] keys;   // 密配列: キー（挿入順・削除スロットは再利用）
+    private V[] vals;        // 密配列: 値
+    private bool[] alive;    // 密配列: 生存フラグ（remove済みはfalse）
+    private int[] slots;     // 探索表: 密配列index（-1=空、-2=墓石）
+    private int[] free_idx;  // 削除済み密indexの再利用リスト
+    private int cap;         // 探索表のスロット数
+    private int size;        // 生存要素数
+}
+
+export impl<V> StringMap<V> {
+    // 空のマップを作る（探索表16スロット）
+    self() {
+        self.keys = [];
+        self.vals = [];
+        self.alive = [];
+        self.slots = [];
+        self.free_idx = [];
+        self.cap = 16;
+        self.size = 0;
+        for (int i = 0; i < 16; i++) {
+            self.slots.push(-1);
+        }
+    }
+
+    // keyの現在スロット位置（生存一致）を返す。不在は-1
+    private int find_slot(string key) {
+        const int h = hash_string(key);
+        for (int i = 0; i < self.cap; i++) {
+            const int pos = (h + i) % self.cap;
+            const int idx = self.slots[pos];
+            if (idx == -1) {
+                return -1;
+            }
+            if (idx >= 0 && self.alive[idx] && self.keys[idx] == key) {
+                return pos;
+            }
+        }
+        return -1;
+    }
+
+    // 探索表を2倍へ拡張し、生存キーのみ再挿入する（密配列は不変）
+    private void grow() {
+        const int new_cap = self.cap * 2;
+        int[] new_slots = [];
+        for (int i = 0; i < new_cap; i++) {
+            new_slots.push(-1);
+        }
+        for (int idx = 0; idx < self.keys.len(); idx++) {
+            if (!self.alive[idx]) {
+                continue;
+            }
+            const int h = hash_string(self.keys[idx]);
+            for (int i = 0; i < new_cap; i++) {
+                const int pos = (h + i) % new_cap;
+                if (new_slots[pos] == -1) {
+                    new_slots[pos] = idx;
+                    break;
+                }
+            }
+        }
+        self.slots = new_slots;
+        self.cap = new_cap;
+    }
+
+    // 挿入（既存キーは上書き）。負荷率50%で自動拡張
+    void insert(string key, V value) {
+        const int existing = self.find_slot(key);
+        if (existing >= 0) {
+            self.vals[self.slots[existing]] = value;
+            return;
+        }
+        if ((self.size + 1) * 2 >= self.cap) {
+            self.grow();
+        }
+        // 密スロットを確保（削除済みがあれば上書き再利用、無ければ末尾へ追加）
+        int idx = -1;
+        if (self.free_idx.len() > 0) {
+            idx = self.free_idx.pop();
+            self.keys[idx] = key;
+            self.vals[idx] = value;
+            self.alive[idx] = true;
+        } else {
+            idx = self.keys.len();
+            self.keys.push(key);
+            self.vals.push(value);
+            self.alive.push(true);
+        }
+        // 探索表へ登録（空きまたは墓石を再利用）
+        const int h = hash_string(key);
+        for (int i = 0; i < self.cap; i++) {
+            const int pos = (h + i) % self.cap;
+            if (self.slots[pos] == -1 || self.slots[pos] == -2) {
+                self.slots[pos] = idx;
+                break;
+            }
+        }
+        self.size = self.size + 1;
+    }
+
+    // 取得（不在はNone）
+    Option<V> get(string key) {
+        const int pos = self.find_slot(key);
+        if (pos < 0) {
+            return Option::None;
+        }
+        return Option::Some(self.vals[self.slots[pos]]);
+    }
+
+    // 取得（不在時はdefault_valを返す非Option版）
+    V get_or(string key, V default_val) {
+        const int pos = self.find_slot(key);
+        if (pos < 0) {
+            return default_val;
+        }
+        return self.vals[self.slots[pos]];
+    }
+
+    // 存在確認
+    bool contains(string key) {
+        return self.find_slot(key) >= 0;
+    }
+
+    // 削除（不在キーは無視）。スロットは墓石化し、密indexは再利用リストへ
+    void remove(string key) {
+        const int pos = self.find_slot(key);
+        if (pos < 0) {
+            return;
+        }
+        const int idx = self.slots[pos];
+        self.slots[pos] = -2;
+        self.alive[idx] = false;
+        self.free_idx.push(idx);
+        self.size = self.size - 1;
+    }
+
+    // 生存キーを挿入順で返す
+    string[] keys_in_order() {
+        string[] out = [];
+        for (int idx = 0; idx < self.keys.len(); idx++) {
+            if (self.alive[idx]) {
+                out.push(self.keys[idx]);
+            }
+        }
+        return out;
+    }
+
+    // 生存要素数
+    int len() {
+        return self.size;
+    }
+
+    // 空か
+    bool is_empty() {
+        return self.size == 0;
+    }
+
+    // 全要素を削除する
+    void clear() {
+        self.keys = [];
+        self.vals = [];
+        self.alive = [];
+        self.free_idx = [];
+        self.slots = [];
+        self.cap = 16;
+        self.size = 0;
+        for (int i = 0; i < 16; i++) {
+            self.slots.push(-1);
+        }
+    }
+}

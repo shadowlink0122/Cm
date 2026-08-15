@@ -1,0 +1,22 @@
+// StringSet: 挿入・重複・存在判定・削除・挿入順values・clear
+import std::io::println;
+import std::collections::strset::*;
+
+int main() {
+    StringSet s();
+    s.insert("red");
+    s.insert("green");
+    s.insert("blue");
+    s.insert("red");  // 重複は無視
+    println("len={s.len()} has={s.contains(\"green\")} dyn={s.contains(\"re\" + \"d\")}");
+
+    s.remove("green");
+    println("removed={s.contains(\"green\")} len={s.len()}");
+
+    string[] vs = s.values_in_order();
+    println("v0={vs[0]} v1={vs[1]} n={vs.len()}");
+
+    s.clear();
+    println("cleared len={s.len()} empty={s.is_empty()}");
+    return 0;
+}

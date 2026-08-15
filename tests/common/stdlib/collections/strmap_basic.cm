@@ -1,0 +1,40 @@
+// StringMap: 挿入・上書き・削除・墓石スロット再利用・成長・挿入順keys
+import std::io::println;
+import std::collections::strmap::*;
+
+int main() {
+    StringMap<int> m();
+    m.insert("apple", 1);
+    m.insert("banana", 2);
+    m.insert("cherry", 3);
+    println("len={m.len()} a={m.get_or(\"apple\", -1)} x={m.get_or(\"nope\", -1)}");
+
+    // 実行時生成キーでも内容ハッシュで一致する（P0バグの再現条件）
+    string dyn = "app" + "le";
+    int i = 2;
+    println("dyn={m.get_or(dyn, -1)} interp={m.contains(\"banana\")} get={m.get(\"cherry\").unwrap_or(-1)} i{i}=ok");
+
+    // 上書き
+    m.insert("apple", 100);
+    println("overwrite={m.get_or(\"apple\", -1)} len={m.len()}");
+
+    // 削除と墓石スロット再利用
+    m.remove("banana");
+    println("removed={m.contains(\"banana\")} len={m.len()}");
+    m.insert("date", 4);
+    println("reuse len={m.len()} date={m.get_or(\"date\", -1)}");
+
+    // 挿入順keys（生存のみ。bananaの密スロットはdateが再利用）
+    string[] ks = m.keys_in_order();
+    println("keys n={ks.len()} k0={ks[0]} k1={ks[1]} k2={ks[2]}");
+
+    // 成長をまたぐ挿入（cap16 → 負荷率50%超で拡張）
+    for (int j = 0; j < 40; j++) {
+        m.insert("grow_key_{j}", j);
+    }
+    println("grown len={m.len()} g0={m.get_or(\"grow_key_0\", -1)} g39={m.get_or(\"grow_key_39\", -1)} a={m.get_or(\"apple\", -1)}");
+
+    m.clear();
+    println("cleared len={m.len()} empty={m.is_empty()}");
+    return 0;
+}

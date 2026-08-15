@@ -1,0 +1,53 @@
+// std::collections::strset - 文字列集合
+// StringMap<bool>のキーのみ薄ラッパー。内容ハッシュで挿入・存在判定・削除を行う
+// （HashSet<string>はハッシュがポインタ値になり実行時生成キーが外れるため、文字列は本型を使う）
+module std.collections.strset;
+
+import std::collections::strmap::*;
+
+export struct StringSet {
+    private StringMap<bool> map;
+}
+
+export impl StringSet {
+    // 空の集合を作る（StringMapはdtorを持たないスライスバック構造のため、値コピーで安全に初期化できる）
+    self() {
+        StringMap<bool> m();
+        self.map = m;
+    }
+
+    // 値を追加する（既存なら何もしない）
+    void insert(string value) {
+        self.map.insert(value, true);
+    }
+
+    // 値が含まれるか
+    bool contains(string value) {
+        return self.map.contains(value);
+    }
+
+    // 値を削除する（存在しなければ何もしない）
+    void remove(string value) {
+        self.map.remove(value);
+    }
+
+    // 要素数
+    int len() {
+        return self.map.len();
+    }
+
+    // 空か
+    bool is_empty() {
+        return self.map.is_empty();
+    }
+
+    // 全要素を削除する
+    void clear() {
+        self.map.clear();
+    }
+
+    // 生存要素を挿入順で返す
+    string[] values_in_order() {
+        return self.map.keys_in_order();
+    }
+}

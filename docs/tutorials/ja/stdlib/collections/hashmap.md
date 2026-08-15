@@ -6,6 +6,8 @@ title: HashMap
 
 `HashMap<K, V>` はジェネリックなキー・バリュー連想配列です。
 
+> **キー型の制約:** ハッシュは `key as int` のため、**intへキャスト可能なキー専用**です。文字列キーはポインタ値ハッシュになり実行時生成キーが外れるため、[StringMap / StringSet](#stringmap---文字列キー連想配列v0172) を使ってください。
+
 > **対応バックエンド:** Native (LLVM) のみ
 
 **最終更新:** 2026-02-08
@@ -120,6 +122,43 @@ entries: [  ][K1:V1][  ][  ][K2:V2][  ][K3:V3][  ]...
 ---
 
 **関連:** [Vector](vector.html) · [Queue](queue.html)
+
+---
+
+## StringMap - 文字列キー連想配列（v0.17.2）
+
+キーを文字列に固定し、内容ハッシュ（FNV-1a）で探索する連想配列です。同一内容の文字列は生成方法（リテラル・連結・補間）によらず正しくヒットします。
+
+```cm
+import std::collections::strmap::*;
+import std::io::println;
+
+int main() {
+    StringMap<int> m();
+    for (int i = 0; i < 100; i++) {
+        m.insert("symbol_{i}", i);        // 実行時生成キー
+    }
+    println("{m.get_or(\"symbol_42\", -1)}");  // 42
+    println("{m.contains(\"sym\" + \"bol_7\")}");  // true（内容ハッシュ）
+
+    m.remove("symbol_0");
+    string[] ks = m.keys_in_order();       // 生存キーの挿入順
+    println("len={m.len()} keys={ks.len()}");
+    return 0;
+}
+```
+
+| メソッド | 戻り値 | 説明 |
+|---------|--------|------|
+| `insert(key, value)` | `void` | 挿入（既存キーは上書き）。平均O(1)・負荷率50%で自動拡張 |
+| `get(key)` | `Option<V>` | 取得（不在は`None`） |
+| `get_or(key, default)` | `V` | 取得（不在時は`default`） |
+| `contains(key)` / `remove(key)` | `bool` / `void` | 存在確認 / 削除（墓石方式・スロット再利用） |
+| `keys_in_order()` | `string[]` | 生存キーを挿入順で返す |
+| `len()` / `is_empty()` / `clear()` | - | 要素数 / 空判定 / 全削除 |
+
+スライスバックでデストラクタを持たないため、他の構造体のフィールドとしても安全に使えます（全バックエンド対応）。
+集合が欲しい場合は `StringSet`（`std::collections::strset`）を使います。
 
 ---
 

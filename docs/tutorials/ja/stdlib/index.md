@@ -72,6 +72,8 @@ Cm標準ライブラリのモジュール群です。
 | `std::collections::hashmap` | `HashMap<K,V>` ハッシュマップ（getはOption返し） | [HashMap](collections/hashmap.html) |
 | `std::collections::treemap` | `TreeMap<K,V>` 順序付きマップ（AVL木・O(log n)・remove/keys_in_order対応） | [TreeMap](collections/treemap.html) |
 | `std::collections::treeset` / `hashset` | `TreeSet<T>` 順序付き集合・`HashSet<T>` ハッシュ集合（v0.17.2） | [TreeSet / HashSet](collections/sets.html) |
+| `std::collections::strmap` / `strset` | `StringMap<V>` / `StringSet` 文字列キー・内容ハッシュ（v0.17.2） | [HashMap内のStringMap節](collections/hashmap.html) |
+| `std::slices` | スライスのヒープソート sort / sort_by（v0.17.2） | [Vector内のソート節](collections/vector.html) |
 
 ---
 
@@ -80,7 +82,7 @@ Cm標準ライブラリのモジュール群です。
 | モジュール | 説明 | ドキュメント |
 |-----------|------|------------|
 | `std::strings::builder` | `StringBuilder` 可変文字列バッファ（償却O(1)追記） | [StringBuilder](strings/builder.html) |
-| `std::strings::chars` / `parse` | 文字分類・変換と数値解析（基数対応・Option返し。v0.17.2） | [文字分類と数値解析](strings/chars-parse.html) |
+| `std::strings::chars` / `parse` / `format` / `hash` / `intern` | 文字分類・数値解析・基数フォーマット・内容ハッシュ・interning（v0.17.2） | [文字分類・数値解析・フォーマット](strings/chars-parse.html) |
 | 文字列組み込み | `len()`（コードポイント数）/ `byte_len()`（バイト数） | [文字列の長さ](strings/length.html) |
 
 ---

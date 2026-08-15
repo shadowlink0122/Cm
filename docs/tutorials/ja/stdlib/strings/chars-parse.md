@@ -1,12 +1,12 @@
 ---
-title: 文字分類と数値解析
+title: 文字分類・数値解析・フォーマット
 ---
 
 [English](../../../en/stdlib/strings/chars-parse.html)
 
-# std::strings::chars / parse - 文字分類と数値解析
+# std::strings - 文字分類・数値解析・フォーマット・ハッシュ・interning
 
-字句解析やテキスト処理の基礎部品として、文字1つの分類・変換（`chars`）と文字列から数値への解析（`parse`）を提供します（v0.17.2で追加。parse系はstd::ioから移設）。
+字句解析やテキスト処理の基礎部品として、文字1つの分類・変換（`chars`）、文字列から数値への解析（`parse`）、数値→基数文字列（`format`）、内容ハッシュ（`hash`）、文字列interning（`intern`）を提供します（v0.17.2で追加。parse系はstd::ioから移設）。
 
 > **対応バックエンド:** charsは全バックエンド（`digit_value`のみSV除く）、parseはSV以外（`Option`返しAPIのため）
 
@@ -87,6 +87,63 @@ int main() {
 | `parse_bool(s)` | `Option<bool>` | `true/1/yes` → `Some(true)`、`false/0/no` → `Some(false)`、他は`None` |
 
 **注意:** ライブラリ内部から `chars` / `parse` を利用する場合はワイルドカードimport（`import std::strings::parse::*;`）を使ってください（選択importは本体の即時型検査により、ユーザ定義`Option`を持つプログラムへ型衝突を波及させます）。
+
+---
+
+## std::strings::format - 数値→基数文字列と幅揃え
+
+`parse` の逆方向です。コード生成の16進出力・桁揃えに使います。
+
+```cm
+import std::strings::format::*;
+
+to_hex(255)                     // "ff"
+to_hex(0 - 255)                 // "-ff"
+to_bin(10)                      // "1010"
+to_radix(35 as long, 36)        // "z"
+pad_left(to_hex(255), 4, '0')   // "00ff"
+pad_right("ab", 5, '.')         // "ab..."
+```
+
+| 関数 | 説明 |
+|------|------|
+| `to_radix(v, base)` | 基数2〜36の文字列（小文字・負数は'-'前置・long最小値も正確。基数範囲外は空文字列） |
+| `to_hex(v)` / `to_bin(v)` / `to_oct(v)` | 16進 / 2進 / 8進 |
+| `pad_left(s, width, fill)` / `pad_right` | 幅揃え（既にwidth以上ならそのまま） |
+
+---
+
+## std::strings::hash - 内容ハッシュ
+
+FNV-1a 32bitの内容ハッシュです。同一内容の文字列は生成方法（リテラル・連結・補間）によらず同じ値を返します。`StringMap` / `StringSet` / `Interner` の基礎部品です。
+
+```cm
+import std::strings::hash::*;
+
+int h = hash_string("hello");   // 非負int（内容ベース）
+```
+
+---
+
+## std::strings::intern - 文字列interning（Symbol化）
+
+同一内容の文字列へ一意な整数id（symbol）を割り当てます。コンパイラのシンボルテーブル・識別子管理の基礎部品で、idの比較は整数比較（O(1)）になります。
+
+```cm
+import std::strings::intern::*;
+
+Interner it();
+const int a = it.intern("foo");     // 0（新規採番）
+const int b = it.intern("fo" + "o"); // 0（同一内容 → 同じid）
+string s = it.name_of(a);           // "foo"
+```
+
+| メソッド | 説明 |
+|---------|------|
+| `intern(s)` | idを返す（既存なら同じid、新規なら連番採番） |
+| `contains(s)` | internせず登録済みかを確認 |
+| `name_of(id)` | idから文字列を引き戻す（範囲外は空文字列） |
+| `len()` | 登録済みシンボル数 |
 
 ---
 

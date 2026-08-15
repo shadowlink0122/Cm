@@ -83,7 +83,7 @@ int main() {
 | `len()` / `is_empty()` | `int` / `bool` | Element count / emptiness |
 | `clear()` | `void` | Remove all elements |
 
-Element types castable to `int` are recommended (same simple hash as HashMap).
+The element type must be castable to `int` (same simple hash as HashMap). For strings use the content-hashing `StringSet` (`std::collections::strset`, same API plus `values_in_order`, v0.17.2).
 
 ---
 

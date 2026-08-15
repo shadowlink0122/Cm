@@ -82,6 +82,11 @@ void Monomorphization::monomorphize(
             // 2パス目: 新規生成された特殊化関数のみスキャン
             if (pass > 0 && all_generated.count(func->name) == 0)
                 continue;
+            // 総称本体そのものはスキャンしない。総称本体内の総称呼び出しは型パラメータが未確定で
+            // 推論が既定intへ退化した偽リクエストを作り、その即時書き換えがclone前の総称本体を汚染する
+            // （呼び出し先は特殊化された呼び出し元を次パスで走査したときに正しい実型で要求される）
+            if (generic_funcs.count(func->name) > 0)
+                continue;
             scan_generic_calls(func.get(), generic_funcs, hir_functions, needed);
         }
 

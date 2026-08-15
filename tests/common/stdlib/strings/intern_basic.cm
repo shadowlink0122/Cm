@@ -1,0 +1,21 @@
+// std::strings::intern: 同一内容の同id・採番順・name_of往復
+import std::io::println;
+import std::strings::intern::*;
+
+int main() {
+    Interner it();
+    const int a = it.intern("foo");
+    const int b = it.intern("bar");
+    const int c = it.intern("foo");        // 同一内容 → 同じid
+    const int d = it.intern("fo" + "o");   // 実行時生成でも同じid
+    println("a={a} b={b} c={c} d={d} len={it.len()}");
+    println("names={it.name_of(a)},{it.name_of(b)} oob=[{it.name_of(99)}]");
+    println("has={it.contains(\"bar\")} nohas={it.contains(\"baz\")}");
+
+    // 大量intern（重複50%）でも件数はユニーク数
+    for (int i = 0; i < 200; i++) {
+        it.intern("sym_{i % 100}");
+    }
+    println("bulk len={it.len()}");
+    return 0;
+}

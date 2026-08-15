@@ -81,7 +81,7 @@ Cm言語の全機能を段階的に学べる包括的なチュートリアル集
    - [HashMap](stdlib/collections/hashmap.html) - 連想配列
    - [TreeMap](stdlib/collections/treemap.html) - 順序付きマップ（AVL木）
    - [TreeSet / HashSet](stdlib/collections/sets.html) - 集合（順序付き/ハッシュ・v0.17.2）
-   - [文字分類と数値解析](stdlib/strings/chars-parse.html) - chars/parse（v0.17.2）
+   - [文字分類・数値解析・フォーマット](stdlib/strings/chars-parse.html) - chars/parse/format/hash/intern（v0.17.2）
    - [HTTP通信](stdlib/http.html) - HttpClient/HttpServer/HTTPS
    - [TCP/UDP通信](stdlib/network/tcp.html) - ソケット/DNS/poll
    - [並行処理](stdlib/concurrency/) - スレッド/Mutex/Channel/Atomic

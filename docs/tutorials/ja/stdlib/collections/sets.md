@@ -91,7 +91,7 @@ int main() {
 | `is_empty()` | `bool` | 空か |
 | `clear()` | `void` | 全要素を削除 |
 
-値型 `T` は `int` にキャスト可能な型が推奨です（HashMapと同じ簡易ハッシュ）。
+値型 `T` は `int` にキャスト可能な型**専用**です（HashMapと同じ簡易ハッシュ）。文字列は内容ハッシュの `StringSet`（`std::collections::strset`・API同一＋`values_in_order`）を使ってください（v0.17.2）。
 
 ---
 

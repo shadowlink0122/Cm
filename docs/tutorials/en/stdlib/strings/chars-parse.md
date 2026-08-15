@@ -1,12 +1,12 @@
 ---
-title: Character Classification & Number Parsing
+title: Character Classification, Parsing & Formatting
 ---
 
 [日本語](../../../ja/stdlib/strings/chars-parse.html)
 
-# std::strings::chars / parse - Character Classification & Number Parsing
+# std::strings - Classification, Parsing, Formatting, Hashing & Interning
 
-Building blocks for lexers and text processing: single-character classification/conversion (`chars`) and string-to-number parsing (`parse`), added in v0.17.2 (the parse functions moved from std::io).
+Building blocks for lexers and text processing: single-character classification/conversion (`chars`), string-to-number parsing (`parse`), number-to-radix-string formatting (`format`), content hashing (`hash`) and string interning (`intern`), added in v0.17.2 (the parse functions moved from std::io).
 
 > **Supported backends:** chars runs everywhere (`digit_value` excluded on SV); parse runs everywhere except SV (Option-returning APIs).
 
@@ -68,6 +68,57 @@ int main() {
 | `parse_bool(s)` | `Option<bool>` | `true/1/yes` → `Some(true)`, `false/0/no` → `Some(false)`, otherwise `None` |
 
 **Note:** when using `chars` / `parse` from inside library modules, use wildcard imports (`import std::strings::parse::*;`) — selective imports type-check the target bodies eagerly and leak type collisions into programs that redefine `Option`.
+
+---
+
+## std::strings::format
+
+The reverse of `parse`: number-to-string in a given radix, plus width padding for code generation output.
+
+```cm
+import std::strings::format::*;
+
+to_hex(255)                     // "ff"
+to_radix(35 as long, 36)        // "z"
+pad_left(to_hex(255), 4, '0')   // "00ff"
+```
+
+| Function | Description |
+|----------|-------------|
+| `to_radix(v, base)` | Radix 2-36 (lowercase, `-` prefix for negatives, exact for long min; empty string for invalid radix) |
+| `to_hex(v)` / `to_bin(v)` / `to_oct(v)` | Hex / binary / octal |
+| `pad_left(s, width, fill)` / `pad_right` | Width padding (returned unchanged when already wide enough) |
+
+---
+
+## std::strings::hash
+
+FNV-1a 32-bit content hash; identical contents hash identically regardless of how the string was built. The foundation of `StringMap` / `StringSet` / `Interner`.
+
+```cm
+import std::strings::hash::*;
+int h = hash_string("hello");   // non-negative, content-based
+```
+
+---
+
+## std::strings::intern
+
+Assigns a unique integer id (symbol) to each distinct string content — the basis for compiler symbol tables; id comparison is O(1).
+
+```cm
+import std::strings::intern::*;
+
+Interner it();
+const int a = it.intern("foo");      // 0 (newly numbered)
+const int b = it.intern("fo" + "o"); // 0 (same content, same id)
+string s = it.name_of(a);            // "foo"
+```
+
+| Method | Description |
+|--------|-------------|
+| `intern(s)` / `contains(s)` | Get-or-assign id / check without interning |
+| `name_of(id)` / `len()` | Reverse lookup (empty when out of range) / symbol count |
 
 ---
 

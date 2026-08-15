@@ -29,6 +29,8 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [バグ修正: ユーザ定義Optionの衝突波及](../archive/v0.17.2/bugfix-option-namespace-collision.html) | 選択importの即時型検査とプレリュードOptionのフラット上書きの合成問題の記録（ライブラリ構成で回避） |
 | [バグ修正: ポインタ経由参照のみの構造体のDCE誤削除](../archive/v0.17.2/bugfix-aot-struct-dce.html) | AOT限定で不正IRになるプログラムDCEの使用中struct収集漏れの記録（修正完了） |
 | [バグ記録: JSのスライスポインタ引数未対応](../archive/v0.17.2/bugfix-js-slice-pointer-arg.html) | K[]*引数の再帰渡しがJSバックエンドで壊れる制限の記録（ライブラリ側は反復走査で回避・バックエンド側は残課題） |
+| [セルフホスティング補強: 文字列ハッシュ・フォーマッタ・ソート・Interner](../archive/v0.17.2/stdlib-hardening.html) | StringMap/StringSet（内容ハッシュ）・to_radix/pad・ヒープソート・Interner・書き込み性能検証の実装計画（実装完了） |
+| [バグ修正: 総称ヘルパー連鎖の既定int汚染](../archive/v0.17.2/bugfix-mono-generic-helper.html) | 総称本体スキャンの偽特殊化がclone前の本体を汚染しint版ヘルパーが呼ばれる問題の記録（修正完了） |
 
 ## v0.17.1 設計（実装済み・アーカイブ済み）
 

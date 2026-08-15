@@ -1,0 +1,68 @@
+// std::slices - スライスユーティリティ
+// スライス（T[]）のin-placeソート。ヒープソート（O(n log n)・追加確保なし・非安定）
+// 要素はスワップ時にコピーされるため、所有権型（dtor持ち構造体）の要素は対象外
+module std.slices;
+
+// 内部: xs[root..end) をsift-down（<比較・最大ヒープ）
+<T> void sift_lt(T[] xs, int root, int end) {
+    int r = root;
+    while (r * 2 + 1 < end) {
+        int child = r * 2 + 1;
+        if (child + 1 < end && xs[child] < xs[child + 1]) {
+            child = child + 1;
+        }
+        if (xs[child] < xs[r]) {
+            return;
+        }
+        T tmp = xs[r];
+        xs[r] = xs[child];
+        xs[child] = tmp;
+        r = child;
+    }
+}
+
+// 昇順ソート（<比較が定義された型）
+export <T> void sort(T[] xs) {
+    const int n = xs.len();
+    for (int i = n / 2 - 1; i >= 0; i--) {
+        sift_lt(xs, i, n);
+    }
+    for (int end = n - 1; end > 0; end--) {
+        T tmp = xs[0];
+        xs[0] = xs[end];
+        xs[end] = tmp;
+        sift_lt(xs, 0, end);
+    }
+}
+
+// 内部: 比較関数版sift-down（cmpが負=aが先）
+<T> void sift_cmp(T[] xs, int root, int end, int*(T, T) cmp) {
+    int r = root;
+    while (r * 2 + 1 < end) {
+        int child = r * 2 + 1;
+        if (child + 1 < end && cmp(xs[child], xs[child + 1]) < 0) {
+            child = child + 1;
+        }
+        if (cmp(xs[child], xs[r]) < 0) {
+            return;
+        }
+        T tmp = xs[r];
+        xs[r] = xs[child];
+        xs[child] = tmp;
+        r = child;
+    }
+}
+
+// 比較関数によるソート（負=aが先・正=bが先）
+export <T> void sort_by(T[] xs, int*(T, T) cmp) {
+    const int n = xs.len();
+    for (int i = n / 2 - 1; i >= 0; i--) {
+        sift_cmp(xs, i, n, cmp);
+    }
+    for (int end = n - 1; end > 0; end--) {
+        T tmp = xs[0];
+        xs[0] = xs[end];
+        xs[end] = tmp;
+        sift_cmp(xs, 0, end, cmp);
+    }
+}

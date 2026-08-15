@@ -8,3 +8,6 @@ export import std.strings.split;
 export import std.strings.from_bytes;
 export import std.strings.chars;
 export import std.strings.parse;
+export import std.strings.hash;
+export import std.strings.format;
+export import std.strings.intern;
