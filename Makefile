@@ -267,8 +267,8 @@ vscode-extension:
 	@echo "✅ VSCode拡張ビルド完了:"
 	@ls -lh vscode-extension/cm-language-*.vsix | awk '{print "  " $$9 " (" $$5 ")"}'
 
-.PHONY: vscode-extension-install
-vscode-extension-install: vscode-extension
+.PHONY: install-vscode-extension
+install-vscode-extension: vscode-extension
 	@VERSION=$$(cat VERSION | tr -d '[:space:]'); \
 	CODE_BIN=$$(command -v code || true); \
 	if [ -z "$$CODE_BIN" ] && [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]; then \
@@ -282,6 +282,12 @@ vscode-extension-install: vscode-extension
 	fi; \
 	"$$CODE_BIN" --install-extension "vscode-extension/cm-language-$$VERSION.vsix" && \
 	echo "✅ VSCode拡張をインストールしました (cm-language-$$VERSION)"
+
+# 旧名の互換エイリアス（操作ターゲットは動詞先頭の命名規約に合わせinstall-vscode-extensionへ改名済み）
+.PHONY: vscode-extension-install
+vscode-extension-install:
+	@echo "⚠ 'make vscode-extension-install' は非推奨です。'make install-vscode-extension' を使ってください"
+	@$(MAKE) install-vscode-extension
 
 .PHONY: dist
 dist: release
