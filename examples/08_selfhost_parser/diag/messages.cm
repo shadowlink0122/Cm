@@ -1,44 +1,186 @@
-// セルフホストパーサ: 診断メッセージ定義
-// Cmコンパイラのi18nメッセージ表と同じく、エラーメッセージの文面を解析ロジックから分離して一元管理する。
-// 文面の変更・多言語化はこのモジュールだけで完結し、テストも同じビルダーを参照するため文面変更に追従する
+// セルフホストパーサ: 診断メッセージ定義（i18n対応）
+// Cmコンパイラ本体のi18n構成と同じく、メッセージID（enum MsgId）×言語（enum Lang）の2次元テンプレート表で文面を一元管理する。
+// テンプレートは "{0}" "{1}" のプレースホルダを持つ完結した1文で、断片連結による文組み立ては行わない（語順が言語ごとに異なるため）。
+// 言語は環境変数 CM_LANG（"ja"で日本語、それ以外は英語）で切り替える
 module diag.messages;
+
+import std::env::*;
+
+// メッセージID（診断の種類ごとに1つ）
+export enum MsgId {
+    ExpectedButFound,    // 期待字句と実際: expected '{0}' but found {1}
+    ExpectedThing,       // 期待概念と実際: expected {0} but found {1}
+    ExpectedIn,          // 文脈付き期待: expected '{0}' in {1} but found {2}
+    ExpectedBodyOrSemi,  // 本体または終端の欠落: expected '{' or ';' after {0} but found {1}
+    EofIn,               // 文脈内での入力終端: unexpected end of file in {0}
+    EofLookingFor,       // 区切り探索中の入力終端: unexpected end of file while looking for '{0}'
+    Unterminated,        // 未終端リテラル・コメント: unterminated {0}
+    CannotDetermine,     // 名前の特定失敗: could not determine {0}
+    LexErrorLabel,       // 字句エラー行の見出し: lex error: {0}
+    SyntaxErrorLabel,    // 構文エラー行の見出し: syntax error: {0}
+    FileNotFound         // 入力ファイル不在: error: file not found: {0}
+}
+
+// 対応言語
+export enum Lang {
+    En,
+    Ja
+}
+
+// 現在の言語（環境変数CM_LANGが"ja"なら日本語、既定は英語）
+export Lang current_lang() {
+    const Option<string> v = get("CM_LANG");
+    if (v.is_some() && v.unwrap() == "ja") {
+        return Lang::Ja;
+    }
+    return Lang::En;
+}
+
+// メッセージID×言語のテンプレート表（プレースホルダ{0}〜{2}を持つ完結した1文）
+string template_of(MsgId id, Lang lang) {
+    if (lang == Lang::Ja) {
+        if (id == MsgId::ExpectedButFound) {
+            return "'{0}' が必要ですが {1} が見つかりました";
+        }
+        if (id == MsgId::ExpectedThing) {
+            return "{0} が必要ですが {1} が見つかりました";
+        }
+        if (id == MsgId::ExpectedIn) {
+            return "{1} には '{0}' が必要ですが {2} が見つかりました";
+        }
+        if (id == MsgId::ExpectedBodyOrSemi) {
+            return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
+        }
+        if (id == MsgId::EofIn) {
+            return "{0} の途中で入力が終端しました";
+        }
+        if (id == MsgId::EofLookingFor) {
+            return "'{0}' を探索中に入力が終端しました";
+        }
+        if (id == MsgId::Unterminated) {
+            return "{0} が終端していません";
+        }
+        if (id == MsgId::CannotDetermine) {
+            return "{0} を特定できません";
+        }
+        if (id == MsgId::LexErrorLabel) {
+            return "字句エラー: {0}";
+        }
+        if (id == MsgId::SyntaxErrorLabel) {
+            return "構文エラー: {0}";
+        }
+        if (id == MsgId::FileNotFound) {
+            return "エラー: ファイルが見つかりません: {0}";
+        }
+        return "";
+    }
+    if (id == MsgId::ExpectedButFound) {
+        return "expected '{0}' but found {1}";
+    }
+    if (id == MsgId::ExpectedThing) {
+        return "expected {0} but found {1}";
+    }
+    if (id == MsgId::ExpectedIn) {
+        return "expected '{0}' in {1} but found {2}";
+    }
+    if (id == MsgId::ExpectedBodyOrSemi) {
+        return "expected '{' or ';' after {0} but found {1}";
+    }
+    if (id == MsgId::EofIn) {
+        return "unexpected end of file in {0}";
+    }
+    if (id == MsgId::EofLookingFor) {
+        return "unexpected end of file while looking for '{0}'";
+    }
+    if (id == MsgId::Unterminated) {
+        return "unterminated {0}";
+    }
+    if (id == MsgId::CannotDetermine) {
+        return "could not determine {0}";
+    }
+    if (id == MsgId::LexErrorLabel) {
+        return "lex error: {0}";
+    }
+    if (id == MsgId::SyntaxErrorLabel) {
+        return "syntax error: {0}";
+    }
+    if (id == MsgId::FileNotFound) {
+        return "error: file not found: {0}";
+    }
+    return "";
+}
+
+// ---- フォーマッタ（プレースホルダをこの場で埋める。引数数ごとに提供） ----
+
+// 引数1つのメッセージを組み立てる
+export string msgf1(MsgId id, string a0) {
+    return template_of(id, current_lang()).replace("{0}", a0);
+}
+
+// 引数2つのメッセージを組み立てる
+export string msgf2(MsgId id, string a0, string a1) {
+    return template_of(id, current_lang()).replace("{0}", a0).replace("{1}", a1);
+}
+
+// 引数3つのメッセージを組み立てる
+export string msgf3(MsgId id, string a0, string a1, string a2) {
+    return template_of(id, current_lang()).replace("{0}", a0).replace("{1}", a1).replace("{2}",
+                                                                                         a2);
+}
+
+// ---- 診断ビルダー（呼び出し側の公開API。IDと引数の対応をここで固定する） ----
 
 // 「expected '<期待字句>' but found <実際>」
 export string msg_expected(string expected, string found) {
-    return "expected '" + expected + "' but found " + found;
+    return msgf2(MsgId::ExpectedButFound, expected, found);
 }
 
 // 「expected <期待物> but found <実際>」（字句でなく概念を期待する場合）
 export string msg_expected_thing(string what, string found) {
-    return "expected " + what + " but found " + found;
+    return msgf2(MsgId::ExpectedThing, what, found);
 }
 
 // 「expected '<期待字句>' in <文脈> but found <実際>」
 export string msg_expected_in(string expected, string context, string found) {
-    return "expected '" + expected + "' in " + context + " but found " + found;
+    return msgf3(MsgId::ExpectedIn, expected, context, found);
 }
 
 // 「expected '{' or ';' after <対象> but found <実際>」（本体または宣言終端の欠落）
 export string msg_expected_body_or_semi(string after, string found) {
-    return "expected '{' or ';' after " + after + " but found " + found;
+    return msgf2(MsgId::ExpectedBodyOrSemi, after, found);
 }
 
 // 「unexpected end of file in <文脈>」
 export string msg_eof_in(string context) {
-    return "unexpected end of file in " + context;
+    return msgf1(MsgId::EofIn, context);
 }
 
 // 「unexpected end of file while looking for '<区切り>'」
 export string msg_eof_looking_for(string delimiter) {
-    return "unexpected end of file while looking for '" + delimiter + "'";
+    return msgf1(MsgId::EofLookingFor, delimiter);
 }
 
 // 「unterminated <対象>」（未終端リテラル・コメント）
 export string msg_unterminated(string what) {
-    return "unterminated " + what;
+    return msgf1(MsgId::Unterminated, what);
 }
 
 // 「could not determine <対象>」（名前の特定失敗）
 export string msg_cannot_determine(string what) {
-    return "could not determine " + what;
+    return msgf1(MsgId::CannotDetermine, what);
+}
+
+// 「lex error: <詳細>」（エラー出力の見出し行）
+export string msg_lex_error(string detail) {
+    return msgf1(MsgId::LexErrorLabel, detail);
+}
+
+// 「syntax error: <詳細>」（エラー出力の見出し行）
+export string msg_syntax_error(string detail) {
+    return msgf1(MsgId::SyntaxErrorLabel, detail);
+}
+
+// 「error: file not found: <パス>」
+export string msg_file_not_found(string path) {
+    return msgf1(MsgId::FileNotFound, path);
 }

@@ -28,7 +28,7 @@ echo "✅ selfhost drill passed (jit/native artifacts identical)"
 # セルフホストパーサ（examples/08_selfhost_parser）の検証:
 # 各モジュールの#[test]単体テスト → 正常サンプルの定義一覧出力（rc=0） → エラーサンプルの位置報告（rc=1） → パーサ自身の全ソース自己解析
 SHP=examples/08_selfhost_parser
-for t in lexer/token_test lexer/scan_test parser/state_test parser/decl/modules_test parser/decl/types_test parser/decl/impls_test parser/decl/funcs_test parser/decl/dispatch_test; do
+for t in diag/messages_test lexer/token_test lexer/scan_test parser/state_test parser/decl/modules_test parser/decl/types_test parser/decl/impls_test parser/decl/funcs_test parser/decl/dispatch_test; do
     ./cm test "$SHP/$t.cm" >/dev/null
 done
 ./cm run "$SHP/main.cm" -- "$SHP/samples/ok.cm" >/dev/null

@@ -6,6 +6,7 @@ import std::env::args;
 import std::fs::{read_file, exists};
 import std::strings::split::{lines};
 import std::strings::format::*;
+import ./diag/messages::*;
 import ./lexer/scan::*;
 import ./parser/state::*;
 import ./parser/decl/dispatch::*;
@@ -48,7 +49,7 @@ int main() {
     for (int ai = 1; ai < argv.len(); ai++) {
         const string path = argv[ai];
         if (!exists(path)) {
-            println("error: file not found: {path}");
+            println("{msg_file_not_found(path)}");
             failures = failures + 1;
             continue;
         }
@@ -59,7 +60,7 @@ int main() {
         const Option<bool> lexed = lx.run();
         if (lexed.is_none()) {
             println("== {path}");
-            println("lex error: {lx.error_message()}");
+            println("{msg_lex_error(lx.error_message())}");
             println("  --> {path}:{lx.error_line()}:{lx.error_col()}");
             print_error_context(path, src, lx.error_line(), lx.error_col());
             failures = failures + 1;
@@ -71,7 +72,7 @@ int main() {
         const Option<bool> parsed = parse_program(&ps);
         if (parsed.is_none()) {
             println("== {path}");
-            println("syntax error: {ps.error_message()}");
+            println("{msg_syntax_error(ps.error_message())}");
             println("  --> {path}:{ps.error_line()}:{ps.error_col()}");
             print_error_context(path, src, ps.error_line(), ps.error_col());
             failures = failures + 1;
