@@ -9,68 +9,73 @@ import ./types::*;
 import ./impls::*;
 import ./funcs::*;
 
-// トップレベル宣言を1つ解析する
+// トップレベル宣言を1つ解析する（先頭字句のswitchで宣言種別ごとの解析へ振り分ける）
 export Option<bool> parse_decl(Parser* p) {
-    // 属性は読み飛ばす
-    if (p->at_text("#")) {
-        return p->skip_attribute();
-    }
-    // exportは接頭辞として無視して次を見る
-    if (p->at_text("export")) {
-        p->bump();
-        return parse_decl(p);
-    }
-    if (p->at_text("module")) {
-        return parse_module_decl(p);
-    }
-    if (p->at_text("import")) {
-        return parse_import_decl(p);
-    }
-    if (p->at_text("use")) {
-        return parse_use_decl(p);
-    }
-    if (p->at_text("typedef")) {
-        return parse_typedef(p);
-    }
-    if (p->at_text("const")) {
-        return parse_const(p);
-    }
-    if (p->at_text("extern")) {
-        return parse_extern(p);
-    }
-    if (p->at_text("struct")) {
-        const Option<bool> r = parse_struct(p, "");
-        if (r.is_none()) {
-            return Option::None;
+    switch (p->text()) {
+        case("#") {
+            // 属性は読み飛ばす
+            return p->skip_attribute();
         }
-        // 無名/宣言子付きの "STR;" 形式が続く場合は消費する
-        if (p->at_text(";")) {
+        case("export") {
+            // exportは接頭辞として無視して次を見る
             p->bump();
-        } else if (p->at_ident()) {
-            const Option<bool> d = p->skip_to_semicolon();
-            if (d.is_none()) {
+            return parse_decl(p);
+        }
+        case("module") {
+            return parse_module_decl(p);
+        }
+        case("import") {
+            return parse_import_decl(p);
+        }
+        case("use") {
+            return parse_use_decl(p);
+        }
+        case("typedef") {
+            return parse_typedef(p);
+        }
+        case("const") {
+            return parse_const(p);
+        }
+        case("extern") {
+            return parse_extern(p);
+        }
+        case("struct") {
+            const Option<bool> r = parse_struct(p, "");
+            if (r.is_none()) {
                 return Option::None;
             }
+            // 無名/宣言子付きの "STR;" 形式が続く場合は消費する
+            if (p->at_text(";")) {
+                p->bump();
+            } else if (p->at_ident()) {
+                const Option<bool> d = p->skip_to_semicolon();
+                if (d.is_none()) {
+                    return Option::None;
+                }
+            }
+            return Option::Some(true);
         }
-        return Option::Some(true);
-    }
-    if (p->at_text("enum")) {
-        const Option<bool> r = parse_enum(p, "");
-        if (r.is_none()) {
-            return Option::None;
+        case("enum") {
+            const Option<bool> r = parse_enum(p, "");
+            if (r.is_none()) {
+                return Option::None;
+            }
+            if (p->at_text(";")) {
+                p->bump();
+            }
+            return Option::Some(true);
         }
-        if (p->at_text(";")) {
-            p->bump();
+        case("impl") {
+            return parse_impl(p);
         }
-        return Option::Some(true);
+        case("interface") {
+            return parse_interface(p);
+        }
+        else {
+            // それ以外は関数またはグローバル定義とみなす
+            return parse_func_or_var(p);
+        }
     }
-    if (p->at_text("impl")) {
-        return parse_impl(p);
-    }
-    if (p->at_text("interface")) {
-        return parse_interface(p);
-    }
-    // それ以外は関数またはグローバル定義とみなす
     return parse_func_or_var(p);
 }
 

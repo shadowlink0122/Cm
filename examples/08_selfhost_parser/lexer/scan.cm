@@ -185,6 +185,7 @@ export impl Lexer {
     }
 
     // 全体を字句解析する（成功はSome(true)、失敗はNoneで位置はerror_line/error_col）
+    // バイト値の分岐はifで行う（switchのcase(const変数)は現状値が解決されないため、リテラル以外をcaseに使えない。範囲判定・2バイト先読みもあるためifが適切）
     Option<bool> run() {
         while (true) {
             const Option<bool> trivia = self.skip_trivia();

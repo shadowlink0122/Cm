@@ -38,74 +38,81 @@ export Lang current_lang() {
 
 // メッセージID×言語のテンプレート表（プレースホルダ{0}〜{2}を持つ完結した1文）
 string template_of(MsgId id, Lang lang) {
-    if (lang == Lang::Ja) {
-        if (id == MsgId::ExpectedButFound) {
-            return "'{0}' が必要ですが {1} が見つかりました";
+    match (lang) {
+        Lang::Ja => {
+            match (id) {
+                MsgId::ExpectedButFound => {
+                    return "'{0}' が必要ですが {1} が見つかりました";
+                }
+                MsgId::ExpectedThing => {
+                    return "{0} が必要ですが {1} が見つかりました";
+                }
+                MsgId::ExpectedIn => {
+                    return "{1} には '{0}' が必要ですが {2} が見つかりました";
+                }
+                MsgId::ExpectedBodyOrSemi => {
+                    return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
+                }
+                MsgId::EofIn => {
+                    return "{0} の途中で入力が終端しました";
+                }
+                MsgId::EofLookingFor => {
+                    return "'{0}' を探索中に入力が終端しました";
+                }
+                MsgId::Unterminated => {
+                    return "{0} が終端していません";
+                }
+                MsgId::CannotDetermine => {
+                    return "{0} を特定できません";
+                }
+                MsgId::LexErrorLabel => {
+                    return "字句エラー: {0}";
+                }
+                MsgId::SyntaxErrorLabel => {
+                    return "構文エラー: {0}";
+                }
+                MsgId::FileNotFound => {
+                    return "エラー: ファイルが見つかりません: {0}";
+                }
+            }
         }
-        if (id == MsgId::ExpectedThing) {
-            return "{0} が必要ですが {1} が見つかりました";
+        Lang::En => {
+            match (id) {
+                MsgId::ExpectedButFound => {
+                    return "expected '{0}' but found {1}";
+                }
+                MsgId::ExpectedThing => {
+                    return "expected {0} but found {1}";
+                }
+                MsgId::ExpectedIn => {
+                    return "expected '{0}' in {1} but found {2}";
+                }
+                MsgId::ExpectedBodyOrSemi => {
+                    return "expected '{' or ';' after {0} but found {1}";
+                }
+                MsgId::EofIn => {
+                    return "unexpected end of file in {0}";
+                }
+                MsgId::EofLookingFor => {
+                    return "unexpected end of file while looking for '{0}'";
+                }
+                MsgId::Unterminated => {
+                    return "unterminated {0}";
+                }
+                MsgId::CannotDetermine => {
+                    return "could not determine {0}";
+                }
+                MsgId::LexErrorLabel => {
+                    return "lex error: {0}";
+                }
+                MsgId::SyntaxErrorLabel => {
+                    return "syntax error: {0}";
+                }
+                MsgId::FileNotFound => {
+                    return "error: file not found: {0}";
+                }
+            }
         }
-        if (id == MsgId::ExpectedIn) {
-            return "{1} には '{0}' が必要ですが {2} が見つかりました";
-        }
-        if (id == MsgId::ExpectedBodyOrSemi) {
-            return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
-        }
-        if (id == MsgId::EofIn) {
-            return "{0} の途中で入力が終端しました";
-        }
-        if (id == MsgId::EofLookingFor) {
-            return "'{0}' を探索中に入力が終端しました";
-        }
-        if (id == MsgId::Unterminated) {
-            return "{0} が終端していません";
-        }
-        if (id == MsgId::CannotDetermine) {
-            return "{0} を特定できません";
-        }
-        if (id == MsgId::LexErrorLabel) {
-            return "字句エラー: {0}";
-        }
-        if (id == MsgId::SyntaxErrorLabel) {
-            return "構文エラー: {0}";
-        }
-        if (id == MsgId::FileNotFound) {
-            return "エラー: ファイルが見つかりません: {0}";
-        }
-        return "";
-    }
-    if (id == MsgId::ExpectedButFound) {
-        return "expected '{0}' but found {1}";
-    }
-    if (id == MsgId::ExpectedThing) {
-        return "expected {0} but found {1}";
-    }
-    if (id == MsgId::ExpectedIn) {
-        return "expected '{0}' in {1} but found {2}";
-    }
-    if (id == MsgId::ExpectedBodyOrSemi) {
-        return "expected '{' or ';' after {0} but found {1}";
-    }
-    if (id == MsgId::EofIn) {
-        return "unexpected end of file in {0}";
-    }
-    if (id == MsgId::EofLookingFor) {
-        return "unexpected end of file while looking for '{0}'";
-    }
-    if (id == MsgId::Unterminated) {
-        return "unterminated {0}";
-    }
-    if (id == MsgId::CannotDetermine) {
-        return "could not determine {0}";
-    }
-    if (id == MsgId::LexErrorLabel) {
-        return "lex error: {0}";
-    }
-    if (id == MsgId::SyntaxErrorLabel) {
-        return "syntax error: {0}";
-    }
-    if (id == MsgId::FileNotFound) {
-        return "error: file not found: {0}";
     }
     return "";
 }
