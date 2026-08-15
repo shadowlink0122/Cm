@@ -1,0 +1,35 @@
+import std::io::println;
+// move初期化・move代入で移動元のdtorが抑止され、dtorが移動先の1回だけ走ることを検証する
+// （dtor持ち構造体の暗黙コピー診断の対になる正しい書き方。moveなしのコピーは両方でdtorが走り二重解放になる）
+struct Resource {
+    int id;
+}
+
+impl Resource {
+    self(int id) {
+        self.id = id;
+        println("C{self.id}");
+    }
+
+    ~self() {
+        println("D{self.id}");
+    }
+}
+
+struct Holder {
+    Resource r;
+}
+
+int main() {
+    // move初期化: aのdtorは走らず、bのdtorだけがスコープ終了時に走る
+    Resource a(1);
+    Resource b = move a;
+
+    // move代入: cのdtorは走らない（h.rはlet宣言でないためdtor登録されず、フィールドへ移した資源はここでは追跡されない）
+    Resource c(2);
+    Holder h;
+    h.r = move c;
+
+    println("M");
+    return 0;
+}

@@ -1,0 +1,16 @@
+// dtor持ち構造体のlet初期化コピー（moveなし）は警告される
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() {
+        self.p = 0 as int*;
+    }
+}
+
+int main() {
+    Res a;
+    Res b = a;
+    return 0;
+}

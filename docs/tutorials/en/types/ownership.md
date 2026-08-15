@@ -90,6 +90,53 @@ int main() {
 }
 ```
 
+### Implicit-copy diagnostic for structs with destructors (v0.17.2)
+
+Struct assignment is a shallow copy, so copying a struct that has a destructor (`~self()`) by value runs the destructor for both instances and causes a double free.
+The compiler detects this pattern and reports a warning (an error under `cm check --strict` / `cm lint --strict`).
+
+```cm
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() { /* free self.p */ }
+}
+
+struct Holder {
+    Res r;
+}
+
+int main() {
+    Res a;
+    Res b = a;      // warning: implicit copy of a struct with a destructor (double free)
+    Holder h;
+    h.r = a;        // warning: assignment copy into a field as well
+    return 0;
+}
+```
+
+Use `move` when you intend to transfer ownership. It works in initialization, assignment, and return, and the source's destructor no longer runs:
+
+```cm
+int main() {
+    Res a;
+    Res b = move a;   // OK: ownership transfer (a's dtor does not run)
+    Res c;
+    Holder h;
+    h.r = move c;     // OK: move assignment
+    return 0;
+}
+
+Res make() {
+    Res r;
+    return move r;    // OK: return by value with return move
+}
+```
+
+Assigning temporaries whose source does not outlive the copy (constructor calls, method return values) is not diagnosed.
+
 ---
 
 ## Borrowing (Address-based Borrow Counting)

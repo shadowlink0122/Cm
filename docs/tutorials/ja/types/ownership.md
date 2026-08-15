@@ -90,6 +90,53 @@ int main() {
 }
 ```
 
+### デストラクタ持ち構造体の暗黙コピー診断（v0.17.2）
+
+構造体の代入は浅いコピーのため、デストラクタ（`~self()`）を持つ構造体を値としてコピーすると、両方のインスタンスでデストラクタが実行され二重解放になります。
+このパターンはコンパイラが検出して警告します（`cm check --strict` / `cm lint --strict` ではエラー）。
+
+```cm
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() { /* self.p を解放 */ }
+}
+
+struct Holder {
+    Res r;
+}
+
+int main() {
+    Res a;
+    Res b = a;      // 警告: dtor持ち構造体の暗黙コピー（二重解放）
+    Holder h;
+    h.r = a;        // 警告: フィールドへの代入コピーも同様
+    return 0;
+}
+```
+
+所有権を渡す意図なら `move` を使います。moveは初期化・代入・returnのいずれでも使え、移動元のデストラクタは実行されなくなります：
+
+```cm
+int main() {
+    Res a;
+    Res b = move a;   // OK: 所有権移動（aのdtorは走らない）
+    Res c;
+    Holder h;
+    h.r = move c;     // OK: move代入
+    return 0;
+}
+
+Res make() {
+    Res r;
+    return move r;    // OK: 値返しはreturn moveで
+}
+```
+
+コンストラクタ呼び出しやメソッドの戻り値など、コピー元が残らない一時値の代入は診断されません。
+
 ---
 
 ## 借用（アドレス取得による借用カウント）

@@ -32,6 +32,7 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [バグ記録: JSのスライスポインタ引数未対応](../archive/v0.17.2/bugfix-js-slice-pointer-arg.html) | K[]*引数の再帰渡しがJSバックエンドで壊れる制限の記録（ライブラリ側は反復走査で回避・バックエンド側は残課題） |
 | [セルフホスティング補強: 文字列ハッシュ・フォーマッタ・ソート・Interner](../archive/v0.17.2/stdlib-hardening.html) | StringMap/StringSet（内容ハッシュ）・to_radix/pad・ヒープソート・Interner・書き込み性能検証の実装計画（実装完了） |
 | [バグ修正: 総称ヘルパー連鎖の既定int汚染](../archive/v0.17.2/bugfix-mono-generic-helper.html) | 総称本体スキャンの偽特殊化がclone前の本体を汚染しint版ヘルパーが呼ばれる問題の記録（修正完了） |
+| [dtor持ち構造体の暗黙コピー診断](../archive/v0.17.2/dtor-copy-diagnostic.html) | 二重解放ハザードの言語側対策（受理サイトでの場所式コピー警告・--strictエラー・move代入の確認）（実装完了） |
 
 ## v0.17.1 設計（実装済み・アーカイブ済み）
 
