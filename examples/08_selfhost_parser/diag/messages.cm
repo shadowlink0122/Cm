@@ -5,6 +5,7 @@
 module diag.messages;
 
 import std::env::*;
+import std::strings::format::*;
 
 // メッセージID（診断の種類ごとに1つ）
 export enum MsgId {
@@ -41,22 +42,37 @@ export Lang current_lang() {
 string[] templates_of(MsgId id) {
     match (id) {
         MsgId::ExpectedButFound => {
-            return ["expected '{0}' but found {1}", "'{0}' が必要ですが {1} が見つかりました"];
+            return [
+                "expected '{0}' but found {1}",
+                "'{0}' が必要ですが {1} が見つかりました"
+            ];
         }
         MsgId::ExpectedThing => {
-            return ["expected {0} but found {1}", "{0} が必要ですが {1} が見つかりました"];
+            return [
+                "expected {0} but found {1}",
+                "{0} が必要ですが {1} が見つかりました"
+            ];
         }
         MsgId::ExpectedIn => {
-            return ["expected '{0}' in {1} but found {2}", "{1} には '{0}' が必要ですが {2} が見つかりました"];
+            return [
+                "expected '{0}' in {1} but found {2}",
+                "{1} には '{0}' が必要ですが {2} が見つかりました"
+            ];
         }
         MsgId::ExpectedBodyOrSemi => {
-            return ["expected '{' or ';' after {0} but found {1}", "{0} の後には '{' または ';' が必要ですが {1} が見つかりました"];
+            return [
+                "expected '{' or ';' after {0} but found {1}",
+                "{0} の後には '{' または ';' が必要ですが {1} が見つかりました"
+            ];
         }
         MsgId::EofIn => {
             return ["unexpected end of file in {0}", "{0} の途中で入力が終端しました"];
         }
         MsgId::EofLookingFor => {
-            return ["unexpected end of file while looking for '{0}'", "'{0}' を探索中に入力が終端しました"];
+            return [
+                "unexpected end of file while looking for '{0}'",
+                "'{0}' を探索中に入力が終端しました"
+            ];
         }
         MsgId::Unterminated => {
             return ["unterminated {0}", "{0} が終端していません"];
@@ -71,7 +87,10 @@ string[] templates_of(MsgId id) {
             return ["syntax error: {0}", "構文エラー: {0}"];
         }
         MsgId::FileNotFound => {
-            return ["error: file not found: {0}", "エラー: ファイルが見つかりません: {0}"];
+            return [
+                "error: file not found: {0}",
+                "エラー: ファイルが見つかりません: {0}"
+            ];
         }
     }
     return [""];
@@ -87,77 +106,70 @@ string template_of(MsgId id, Lang lang) {
     return t[li];
 }
 
-// ---- フォーマッタ（プレースホルダをこの場で埋める。引数数ごとに提供） ----
+// ---- フォーマッタ（C++側 i18n::msgf と同じ方式で、引数数によらず1本で埋める） ----
 
-// 引数1つのメッセージを組み立てる
-export string msgf1(MsgId id, string a0) {
-    return template_of(id, current_lang()).replace("{0}", a0);
-}
-
-// 引数2つのメッセージを組み立てる
-export string msgf2(MsgId id, string a0, string a1) {
-    return template_of(id, current_lang()).replace("{0}", a0).replace("{1}", a1);
-}
-
-// 引数3つのメッセージを組み立てる
-export string msgf3(MsgId id, string a0, string a1, string a2) {
-    return template_of(id, current_lang()).replace("{0}", a0).replace("{1}", a1).replace("{2}",
-                                                                                         a2);
+// テンプレート中の {0} {1} ... を args の各要素で順に置換してメッセージを組み立てる
+export string msgf(MsgId id, string[] args) {
+    string text = template_of(id, current_lang());
+    for (int i = 0; i < args.len(); i++) {
+        text = text.replace("{" + to_radix(i, 10) + "}", args[i]);
+    }
+    return text;
 }
 
 // ---- 診断ビルダー（呼び出し側の公開API。IDと引数の対応をここで固定する） ----
 
 // 「expected '<期待字句>' but found <実際>」
 export string msg_expected(string expected, string found) {
-    return msgf2(MsgId::ExpectedButFound, expected, found);
+    return msgf(MsgId::ExpectedButFound, [expected, found]);
 }
 
 // 「expected <期待物> but found <実際>」（字句でなく概念を期待する場合）
 export string msg_expected_thing(string what, string found) {
-    return msgf2(MsgId::ExpectedThing, what, found);
+    return msgf(MsgId::ExpectedThing, [what, found]);
 }
 
 // 「expected '<期待字句>' in <文脈> but found <実際>」
 export string msg_expected_in(string expected, string context, string found) {
-    return msgf3(MsgId::ExpectedIn, expected, context, found);
+    return msgf(MsgId::ExpectedIn, [expected, context, found]);
 }
 
 // 「expected '{' or ';' after <対象> but found <実際>」（本体または宣言終端の欠落）
 export string msg_expected_body_or_semi(string after, string found) {
-    return msgf2(MsgId::ExpectedBodyOrSemi, after, found);
+    return msgf(MsgId::ExpectedBodyOrSemi, [after, found]);
 }
 
 // 「unexpected end of file in <文脈>」
 export string msg_eof_in(string context) {
-    return msgf1(MsgId::EofIn, context);
+    return msgf(MsgId::EofIn, [context]);
 }
 
 // 「unexpected end of file while looking for '<区切り>'」
 export string msg_eof_looking_for(string delimiter) {
-    return msgf1(MsgId::EofLookingFor, delimiter);
+    return msgf(MsgId::EofLookingFor, [delimiter]);
 }
 
 // 「unterminated <対象>」（未終端リテラル・コメント）
 export string msg_unterminated(string what) {
-    return msgf1(MsgId::Unterminated, what);
+    return msgf(MsgId::Unterminated, [what]);
 }
 
 // 「could not determine <対象>」（名前の特定失敗）
 export string msg_cannot_determine(string what) {
-    return msgf1(MsgId::CannotDetermine, what);
+    return msgf(MsgId::CannotDetermine, [what]);
 }
 
 // 「lex error: <詳細>」（エラー出力の見出し行）
 export string msg_lex_error(string detail) {
-    return msgf1(MsgId::LexErrorLabel, detail);
+    return msgf(MsgId::LexErrorLabel, [detail]);
 }
 
 // 「syntax error: <詳細>」（エラー出力の見出し行）
 export string msg_syntax_error(string detail) {
-    return msgf1(MsgId::SyntaxErrorLabel, detail);
+    return msgf(MsgId::SyntaxErrorLabel, [detail]);
 }
 
 // 「error: file not found: <パス>」
 export string msg_file_not_found(string path) {
-    return msgf1(MsgId::FileNotFound, path);
+    return msgf(MsgId::FileNotFound, [path]);
 }
