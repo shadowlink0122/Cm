@@ -270,9 +270,11 @@ static void collect_struct_names_from_type(const ast::TypePtr& type, std::set<st
         }
     }
     collect_struct_names_from_type(type->element_type, used, worklist);
-    for (const auto& targ : type->type_args) {
+    for (const auto& targ : type->type_args)
         collect_struct_names_from_type(targ, used, worklist);
-    }
+    for (const auto& pt : type->param_types)
+        collect_struct_names_from_type(pt, used, worklist);
+    collect_struct_names_from_type(type->return_type, used, worklist);
 }
 
 void ProgramDeadCodeElimination::collect_used_structs(const MirProgram& program,
