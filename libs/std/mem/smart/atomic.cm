@@ -30,7 +30,7 @@ export impl<T> AtomicSharedPtr<T> {
         void* raw = alloc(__sizeof__(T) as int);
         self.ptr = raw as T*;
         *self.ptr = value;
-        void* craw = alloc(8);
+        void* craw = alloc(__sizeof__(AtomicSharedCount) as int);
         self.count = craw as AtomicSharedCount*;
         self.count->strong = 1;
         self.count->weak = 0;
