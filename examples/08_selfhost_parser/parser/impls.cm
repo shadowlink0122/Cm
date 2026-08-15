@@ -1,0 +1,135 @@
+// セルフホストパーサ: 実装ブロック（impl / interface）の解析
+// impl<T> Name (for Iface)? { メソッド... } のメソッド名収集と、interface宣言を扱う。
+// メソッドはコンストラクタ self / デストラクタ ~self / private / static / overload / operator に対応する
+module parser.impls;
+
+import ../token::*;
+import ./state::*;
+
+// impl内の1メソッドを解析し、メソッド名を返す
+export Option<string> parse_method(Parser* p) {
+    // 修飾子・属性を読み飛ばす
+    while (true) {
+        if (p->at_text("#")) {
+            const Option<bool> a = p->skip_attribute();
+            if (a.is_none()) {
+                return Option::None;
+            }
+            continue;
+        }
+        if (p->at_text("private") || p->at_text("static") || p->at_text("overload") ||
+            p->at_text("export")) {
+            p->bump();
+            continue;
+        }
+        break;
+    }
+    // シグネチャ: "("直前の識別子（self / ~self / operator込み）がメソッド名
+    string name = "";
+    while (!p->at_text("(")) {
+        if (p->at_eof() || p->at_text("{") || p->at_text("}")) {
+            return p->fail_str("expected method signature but found " + p->found_text());
+        }
+        if (p->at_text("~")) {
+            name = "~";
+            p->bump();
+            continue;
+        }
+        if (p->at_ident() || p->at_text("self") || p->at_text("operator")) {
+            if (name == "~") {
+                name = "~" + p->text();
+            } else {
+                name = p->text();
+            }
+        }
+        p->bump();
+    }
+    if (name == "") {
+        return p->fail_str("could not determine method name before '('");
+    }
+    const Option<bool> params = p->skip_balanced("(", ")");
+    if (params.is_none()) {
+        return Option::None;
+    }
+    // 本体 or 宣言のみ
+    if (p->at_text("{")) {
+        const Option<bool> b = p->skip_balanced("{", "}");
+        if (b.is_none()) {
+            return Option::None;
+        }
+    } else if (p->at_text(";")) {
+        p->bump();
+    } else {
+        return p->fail_str("expected '{' or ';' after method signature but found " +
+                           p->found_text());
+    }
+    return Option::Some(name);
+}
+
+// implブロック（"impl"の上から）。メソッド名の一覧を収集する
+export Option<bool> parse_impl(Parser* p) {
+    p->bump();
+    const Option<string> gp = p->parse_generic_params();
+    if (gp.is_none()) {
+        return Option::None;
+    }
+    const Option<string> tname = p->expect_ident();
+    if (tname.is_none()) {
+        return Option::None;
+    }
+    const Option<string> targs = p->parse_generic_params();
+    if (targs.is_none()) {
+        return Option::None;
+    }
+    string iface = "";
+    if (p->at_text("for")) {
+        p->bump();
+        const Option<string> iname = p->expect_ident();
+        if (iname.is_none()) {
+            return Option::None;
+        }
+        const Option<string> iargs = p->parse_generic_params();
+        if (iargs.is_none()) {
+            return Option::None;
+        }
+        iface = " for " + iname.unwrap() + iargs.unwrap();
+    }
+    const Option<bool> o = p->expect_text("{");
+    if (o.is_none()) {
+        return Option::None;
+    }
+    string[] methods = [];
+    while (!p->at_text("}")) {
+        if (p->at_eof()) {
+            return p->fail("unexpected end of file in impl body");
+        }
+        const Option<string> m = parse_method(p);
+        if (m.is_none()) {
+            return Option::None;
+        }
+        methods.push(m.unwrap());
+    }
+    p->bump();
+    p->record_impl("impl " + tname.unwrap() + targs.unwrap() + iface + " { " +
+                   join_names(methods) + " }");
+    return Option::Some(true);
+}
+
+// interface宣言（"interface"の上から）。名前だけ収集する
+export Option<bool> parse_interface(Parser* p) {
+    p->bump();
+    const Option<string> name = p->expect_ident();
+    if (name.is_none()) {
+        return Option::None;
+    }
+    const Option<string> gp = p->parse_generic_params();
+    if (gp.is_none()) {
+        return Option::None;
+    }
+    const Option<bool> b = p->skip_balanced("{", "}");
+    if (b.is_none()) {
+        return Option::None;
+    }
+    p->record_impl("interface " + name.unwrap() + gp.unwrap());
+    return Option::Some(true);
+}

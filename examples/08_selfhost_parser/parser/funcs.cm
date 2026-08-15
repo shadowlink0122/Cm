@@ -1,0 +1,124 @@
+// セルフホストパーサ: 関数・定数・typedef・extern宣言の解析
+// トップレベルの「型トークン列から始まる宣言」（関数 / グローバル定義）と、typedef・const・extern "C" を扱う
+module parser.funcs;
+
+import ../token::*;
+import ./state::*;
+
+// typedef宣言（"typedef"の上から）
+export Option<bool> parse_typedef(Parser* p) {
+    p->bump();
+    const Option<string> name = p->expect_ident();
+    if (name.is_none()) {
+        return Option::None;
+    }
+    const Option<bool> d = p->skip_to_semicolon();
+    if (d.is_none()) {
+        return Option::None;
+    }
+    p->record_typedef(name.unwrap());
+    return Option::Some(true);
+}
+
+// グローバル定数宣言（"const"の上から）: "const TYPE NAME = ...;" のNAME（"="直前の識別子）を収集
+export Option<bool> parse_const(Parser* p) {
+    p->bump();
+    string last_ident = "";
+    while (!p->at_text("=")) {
+        if (p->at_eof() || p->at_text(";")) {
+            return p->fail("expected '=' in const declaration but found " + p->found_text());
+        }
+        if (p->at_ident()) {
+            last_ident = p->text();
+        }
+        p->bump();
+    }
+    const Option<bool> d = p->skip_to_semicolon();
+    if (d.is_none()) {
+        return Option::None;
+    }
+    if (last_ident == "") {
+        return p->fail("could not determine const name");
+    }
+    p->record_const(last_ident);
+    return Option::Some(true);
+}
+
+// トップレベルの関数またはグローバル変数（型トークン列から始まる宣言）
+export Option<bool> parse_func_or_var(Parser* p) {
+    // "<T>"付きの総称free関数
+    const Option<string> gp = p->parse_generic_params();
+    if (gp.is_none()) {
+        return Option::None;
+    }
+    // "("の直前の識別子が関数名。それより前が戻り値型
+    string ret = "";
+    string name = "";
+    while (!p->at_text("(")) {
+        if (p->at_eof()) {
+            return p->fail("unexpected end of file in declaration");
+        }
+        if (p->at_text(";") || p->at_text("=")) {
+            // 関数でなくグローバル変数宣言だった
+            const Option<bool> d = p->skip_to_semicolon();
+            if (d.is_none()) {
+                return Option::None;
+            }
+            if (name == "") {
+                return p->fail("could not determine declaration name");
+            }
+            p->record_const(name);
+            return Option::Some(true);
+        }
+        if (p->at_text("{") || p->at_text("}")) {
+            return p->fail("expected declaration but found " + p->found_text());
+        }
+        if (p->at_ident()) {
+            if (name != "") {
+                if (ret != "") {
+                    ret = ret + " ";
+                }
+                ret = ret + name;
+            }
+            name = p->text();
+        } else {
+            // 型の記号（* [ ] :: 等）は戻り値型の一部として保持
+            if (name != "") {
+                ret = ret + name + p->text();
+                name = "";
+            } else {
+                ret = ret + p->text();
+            }
+        }
+        p->bump();
+    }
+    if (name == "") {
+        return p->fail("could not determine function name before '('");
+    }
+    const Option<bool> params = p->skip_balanced("(", ")");
+    if (params.is_none()) {
+        return Option::None;
+    }
+    if (p->at_text("{")) {
+        const Option<bool> b = p->skip_balanced("{", "}");
+        if (b.is_none()) {
+            return Option::None;
+        }
+    } else if (p->at_text(";")) {
+        p->bump();
+    } else {
+        return p->fail("expected '{' or ';' after function signature but found " +
+                       p->found_text());
+    }
+    p->record_func(ret + " " + name + gp.unwrap() + "()");
+    return Option::Some(true);
+}
+
+// extern宣言（"extern"の上から）: extern "C" の関数宣言を収集
+export Option<bool> parse_extern(Parser* p) {
+    p->bump();
+    if (p->at_string()) {
+        p->bump();
+    }
+    return parse_func_or_var(p);
+}

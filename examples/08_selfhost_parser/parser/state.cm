@@ -1,0 +1,299 @@
+// セルフホストパーサ: 解析器の状態と基本操作
+// トークン列の読み取り・期待・読み飛ばしと、エラー診断・定義収集の置き場。
+// 各宣言の解析は機能別モジュール（modules/types/impls/funcs/decl）のフリー関数が本モジュールの公開APIで行う
+module parser.state;
+
+import ../token::*;
+
+// 解析器本体（収集結果もここに持つ。全てスライスバックでデストラクタ無し）
+export struct Parser {
+    private TokenStream toks;
+    private int pos;
+    // エラー診断（Noneを返した関数がセットする。最初のエラーを保持）
+    private bool failed;
+    private string err_msg;
+    private int err_line;
+    private int err_col;
+    // 収集した定義（表示用に整形済みの文字列）
+    private string module_name;
+    private string[] imports;
+    private string[] uses;
+    private string[] typedefs;
+    private string[] consts;
+    private string[] structs;
+    private string[] enums;
+    private string[] impls;
+    private string[] funcs;
+}
+
+export impl Parser {
+    self(TokenStream tokens) {
+        self.toks = tokens;
+        self.pos = 0;
+        self.failed = false;
+        self.err_msg = "";
+        self.err_line = 0;
+        self.err_col = 0;
+        self.module_name = "";
+        self.imports = [];
+        self.uses = [];
+        self.typedefs = [];
+        self.consts = [];
+        self.structs = [];
+        self.enums = [];
+        self.impls = [];
+        self.funcs = [];
+    }
+
+    // ---- エラー診断アクセサ ----
+
+    string error_message() {
+        return self.err_msg;
+    }
+
+    int error_line() {
+        return self.err_line;
+    }
+
+    int error_col() {
+        return self.err_col;
+    }
+
+    // ---- 収集結果アクセサ ----
+
+    string module_of() {
+        return self.module_name;
+    }
+
+    string[] imports_of() {
+        return self.imports;
+    }
+
+    string[] uses_of() {
+        return self.uses;
+    }
+
+    string[] typedefs_of() {
+        return self.typedefs;
+    }
+
+    string[] consts_of() {
+        return self.consts;
+    }
+
+    string[] structs_of() {
+        return self.structs;
+    }
+
+    string[] enums_of() {
+        return self.enums;
+    }
+
+    string[] impls_of() {
+        return self.impls;
+    }
+
+    string[] funcs_of() {
+        return self.funcs;
+    }
+
+    // ---- 収集レコーダ（機能別モジュールが呼ぶ） ----
+
+    void record_module(string path) {
+        self.module_name = path;
+    }
+
+    void record_import(string path) {
+        self.imports.push(path);
+    }
+
+    void record_use(string target) {
+        self.uses.push(target);
+    }
+
+    void record_typedef(string name) {
+        self.typedefs.push(name);
+    }
+
+    void record_const(string name) {
+        self.consts.push(name);
+    }
+
+    void record_struct(string display) {
+        self.structs.push(display);
+    }
+
+    void record_enum(string display) {
+        self.enums.push(display);
+    }
+
+    void record_impl(string display) {
+        self.impls.push(display);
+    }
+
+    void record_func(string display) {
+        self.funcs.push(display);
+    }
+
+    // ---- トークン読み取りの基本操作 ----
+
+    int kind() {
+        return self.toks.kind_at(self.pos);
+    }
+
+    string text() {
+        return self.toks.text_at(self.pos);
+    }
+
+    void bump() {
+        self.pos = self.pos + 1;
+    }
+
+    bool at_text(string t) {
+        return self.text() == t && self.kind() != TK_EOF;
+    }
+
+    bool at_eof() {
+        return self.kind() == TK_EOF;
+    }
+
+    bool at_ident() {
+        return self.kind() == TK_IDENT;
+    }
+
+    bool at_string() {
+        return self.kind() == TK_STRING;
+    }
+
+    // 失敗を記録してNoneを返すための共通処理（最初のエラーだけを保持する）
+    Option<bool> fail(string msg) {
+        if (!self.failed) {
+            self.failed = true;
+            self.err_msg = msg;
+            self.err_line = self.toks.line_at(self.pos);
+            self.err_col = self.toks.col_at(self.pos);
+        }
+        return Option::None;
+    }
+
+    // fail()のOption<string>版
+    Option<string> fail_str(string msg) {
+        const Option<bool> e = self.fail(msg);
+        if (e.is_none()) {
+            return Option::None;
+        }
+        return Option::None;
+    }
+
+    // 現在トークンの表示形（エラーメッセージ用）
+    string found_text() {
+        if (self.at_eof()) {
+            return "end of file";
+        }
+        return "'" + self.text() + "'";
+    }
+
+    // 指定の字句を要求して読み進める（違えばNone）
+    Option<bool> expect_text(string t) {
+        if (!self.at_text(t)) {
+            return self.fail("expected '" + t + "' but found " + self.found_text());
+        }
+        self.bump();
+        return Option::Some(true);
+    }
+
+    // 識別子を要求して返す（予約語・記号ならNone）
+    Option<string> expect_ident() {
+        if (self.kind() != TK_IDENT) {
+            return self.fail_str("expected identifier but found " + self.found_text());
+        }
+        const string name = self.text();
+        self.bump();
+        return Option::Some(name);
+    }
+
+    // open/closeの対応を取って読み飛ばす（現在位置はopenの上にあること）
+    Option<bool> skip_balanced(string open, string close) {
+        const Option<bool> o = self.expect_text(open);
+        if (o.is_none()) {
+            return Option::None;
+        }
+        int depth = 1;
+        while (depth > 0) {
+            if (self.at_eof()) {
+                return self.fail("unexpected end of file while looking for '" + close + "'");
+            }
+            if (self.at_text(open)) {
+                depth = depth + 1;
+            } else if (self.at_text(close)) {
+                depth = depth - 1;
+            }
+            self.bump();
+        }
+        return Option::Some(true);
+    }
+
+    // ";"まで読み飛ばす（初期化式内の"{...}"は対応を取って飛ばす）
+    Option<bool> skip_to_semicolon() {
+        while (!self.at_text(";")) {
+            if (self.at_eof()) {
+                return self.fail("unexpected end of file while looking for ';'");
+            }
+            if (self.at_text("{")) {
+                const Option<bool> b = self.skip_balanced("{", "}");
+                if (b.is_none()) {
+                    return Option::None;
+                }
+            } else {
+                self.bump();
+            }
+        }
+        self.bump();
+        return Option::Some(true);
+    }
+
+    // ジェネリックパラメータ "<T, K>" を読み、表示形を返す（無ければ空文字列）
+    Option<string> parse_generic_params() {
+        if (!self.at_text("<")) {
+            return Option::Some("");
+        }
+        self.bump();
+        string out = "<";
+        bool first = true;
+        while (!self.at_text(">")) {
+            if (self.at_eof()) {
+                return self.fail_str("unexpected end of file in generic parameter list");
+            }
+            if (self.at_text(",")) {
+                self.bump();
+                continue;
+            }
+            if (!first) {
+                out = out + ", ";
+            }
+            out = out + self.text();
+            first = false;
+            self.bump();
+        }
+        self.bump();
+        return Option::Some(out + ">");
+    }
+
+    // 属性 "#[...]" を読み飛ばす（現在位置は"#"の上）
+    Option<bool> skip_attribute() {
+        self.bump();
+        return self.skip_balanced("[", "]");
+    }
+}
+
+// 名前一覧を", "で連結する（表示用）
+export string join_names(string[] names) {
+    string out = "";
+    for (int i = 0; i < names.len(); i++) {
+        if (i > 0) {
+            out = out + ", ";
+        }
+        out = out + names[i];
+    }
+    return out;
+}

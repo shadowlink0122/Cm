@@ -1,0 +1,63 @@
+// lexer.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ./token::*;
+import ./lexer::*;
+
+// テスト用: ソースを字句解析してトークン列を返す（成功前提）
+TokenStream lex_ok(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    return lx.take_tokens();
+}
+
+#[test]
+void tokenizes_idents_keywords_and_symbols() {
+    TokenStream ts = lex_ok("struct Point { int x; }");
+    assert(ts.kind_at(0) == TK_KEYWORD, "struct is keyword");
+    assert(ts.text_at(0) == "struct", "struct text");
+    assert(ts.kind_at(1) == TK_IDENT, "Point is ident");
+    assert(ts.kind_at(2) == TK_SYMBOL, "brace is symbol");
+    assert(ts.kind_at(ts.len() - 1) == TK_EOF, "stream ends with EOF");
+}
+
+#[test]
+void merges_double_colon() {
+    TokenStream ts = lex_ok("std::io::println");
+    assert(ts.text_at(1) == "::", "double colon merged");
+    assert(ts.text_at(3) == "::", "second double colon merged");
+    assert(ts.len() == 6, "5 tokens + EOF");
+}
+
+#[test]
+void skips_comments_and_tracks_lines() {
+    TokenStream ts = lex_ok("// comment\n/* block\ncomment */ answer");
+    assert(ts.text_at(0) == "answer", "comments skipped");
+    assert(ts.line_at(0) == 3, "line number after comments");
+}
+
+#[test]
+void lexes_string_char_and_number_literals() {
+    TokenStream ts = lex_ok("\"a\\\"b\" 'x' 0x1f 1.5e3");
+    assert(ts.kind_at(0) == TK_STRING, "string literal with escape");
+    assert(ts.kind_at(1) == TK_CHAR, "char literal");
+    assert(ts.kind_at(2) == TK_NUMBER, "hex number");
+    assert(ts.text_at(3) == "1.5e3", "float with exponent");
+}
+
+#[test]
+void reports_unterminated_string_position() {
+    Lexer lx("int x;\n\"never closed");
+    const Option<bool> r = lx.run();
+    assert(r.is_none(), "unterminated string is a lex error");
+    assert(lx.error_line() == 2, "error line");
+    assert(lx.error_col() == 1, "error col");
+}
+
+#[test]
+void reports_unterminated_block_comment() {
+    Lexer lx("/* no end");
+    const Option<bool> r = lx.run();
+    assert(r.is_none(), "unterminated block comment is a lex error");
+    assert(lx.error_line() == 1, "error line");
+}

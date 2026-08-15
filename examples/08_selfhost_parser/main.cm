@@ -1,0 +1,95 @@
+// セルフホストパーサ: エントリポイント
+// Cmソースファイルを字句解析→宣言解析し、成功なら各種定義一覧を、失敗ならエラー箇所（行:桁とキャレット付きソース行）を出力する。
+// 実行例: cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/main.cm
+import std::io::println;
+import std::env::args;
+import std::fs::{read_file, exists};
+import std::strings::split::{lines};
+import std::strings::format::*;
+import ./lexer::*;
+import ./parser/state::*;
+import ./parser/decl::*;
+
+// エラー位置のソース行をキャレット付きで表示する
+void print_error_context(string path, string src, int line, int col) {
+    string[] ls = lines(src);
+    if (line >= 1 && line <= ls.len()) {
+        const string ln = to_radix(line as long, 10);
+        println("{pad_left(ln, 4, ' ')} | {ls[line - 1]}");
+        println("     | {pad_left(\"^\", col, ' ')}");
+    }
+}
+
+// 定義一覧のセクションを見出し付きで出力する
+void print_section(string title, string[] items) {
+    if (items.len() == 0) {
+        return;
+    }
+    println("  {title} ({items.len()}):");
+    for (int i = 0; i < items.len(); i++) {
+        println("    {items[i]}");
+    }
+}
+
+int main() {
+    const string[] argv = args();
+    if (argv.len() < 2) {
+        println("usage: selfhost_parser <file.cm> [more files...]");
+        println("  Cmソースの宣言を解析し、成功なら定義一覧を、失敗ならエラー箇所を出力します");
+        return 1;
+    }
+
+    int failures = 0;
+    for (int ai = 1; ai < argv.len(); ai++) {
+        const string path = argv[ai];
+        if (!exists(path)) {
+            println("error: file not found: {path}");
+            failures = failures + 1;
+            continue;
+        }
+        const string src = read_file(path);
+
+        // 1. 字句解析（失敗はOption::Noneで返り、位置はLexerが保持）
+        Lexer lx(src);
+        const Option<bool> lexed = lx.run();
+        if (lexed.is_none()) {
+            println("== {path}");
+            println("lex error: {lx.error_message()}");
+            println("  --> {path}:{lx.error_line()}:{lx.error_col()}");
+            print_error_context(path, src, lx.error_line(), lx.error_col());
+            failures = failures + 1;
+            continue;
+        }
+
+        // 2. 宣言解析（失敗はOption::Noneで返り、位置はParserが保持）
+        Parser ps(lx.take_tokens());
+        const Option<bool> parsed = parse_program(&ps);
+        if (parsed.is_none()) {
+            println("== {path}");
+            println("syntax error: {ps.error_message()}");
+            println("  --> {path}:{ps.error_line()}:{ps.error_col()}");
+            print_error_context(path, src, ps.error_line(), ps.error_col());
+            failures = failures + 1;
+            continue;
+        }
+
+        // 3. 定義一覧の出力
+        println("== {path}: OK");
+        if (ps.module_of() != "") {
+            println("  module {ps.module_of()}");
+        }
+        print_section("imports", ps.imports_of());
+        print_section("use", ps.uses_of());
+        print_section("typedefs", ps.typedefs_of());
+        print_section("consts", ps.consts_of());
+        print_section("structs", ps.structs_of());
+        print_section("enums", ps.enums_of());
+        print_section("impls", ps.impls_of());
+        print_section("functions", ps.funcs_of());
+    }
+
+    if (failures > 0) {
+        return 1;
+    }
+    return 0;
+}

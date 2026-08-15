@@ -37,6 +37,11 @@ Cmの機能を示す公式サンプル集です。
 - `main.cm` - コンパイラの縮図となるCLIツール。`env::args()`で引数解析、`fs::read_bytes`で読み込み、`strings::lines/split`でトークン数を集計、`bytes::push_u32_le`+`fs::write_bytes`でバイナリ成果物を出力、`process::run`で外部コマンド呼び出し
 - `sample_input.cm` - 入力サンプル。`cm run examples/07_selfhost_drill/main.cm -- examples/07_selfhost_drill/sample_input.cm -o out.bin` で実行
 
+### 08_selfhost_parser - セルフホストパーサ（宣言リスタ）
+- Cmで書いたCmソースの宣言レベルパーサ。成功なら定義一覧（struct/enum/impl/関数等）、失敗ならエラー箇所（行:桁+キャレット）を出力
+- 機能別にファイル分割（token/lexer/parser/state・modules・types・impls・funcs・decl）し、各ファイルに`#[test]`単体テストが付属
+- `cm run examples/08_selfhost_parser/main.cm -- <file.cm>` で実行。自分自身の全ソースを自己解析できる
+
 ### uefi - UEFI アプリケーション
 - `hello_world.cm` - UEFI Hello World（画面出力）
 - `memory_test.cm` - メモリ管理テスト（AllocatePool/FreePool）

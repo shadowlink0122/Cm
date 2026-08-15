@@ -1,0 +1,25 @@
+// token.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ./token::*;
+
+#[test]
+void push_and_read_back() {
+    TokenStream ts();
+    ts.push_token(TK_IDENT, "foo", 1, 5);
+    ts.push_token(TK_SYMBOL, "::", 1, 8);
+    assert(ts.len() == 2, "len after two pushes");
+    assert(ts.kind_at(0) == TK_IDENT, "kind of first token");
+    assert(ts.text_at(0) == "foo", "text of first token");
+    assert(ts.line_at(1) == 1, "line of second token");
+    assert(ts.col_at(1) == 8, "col of second token");
+}
+
+#[test]
+void out_of_range_is_eof() {
+    TokenStream ts();
+    ts.push_token(TK_NUMBER, "42", 3, 1);
+    assert(ts.kind_at(99) == TK_EOF, "past-end kind is EOF");
+    assert(ts.kind_at(-1) == TK_EOF, "negative index kind is EOF");
+    assert(ts.text_at(99) == "", "past-end text is empty");
+    assert(ts.line_at(99) == 0, "past-end line is 0");
+}

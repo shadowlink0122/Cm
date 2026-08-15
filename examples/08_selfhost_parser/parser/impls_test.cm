@@ -1,0 +1,46 @@
+// parser/impls.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../token::*;
+import ../lexer::*;
+import ./state::*;
+import ./impls::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void parses_impl_with_ctor_dtor_and_modifiers() {
+    Parser p = parser_of(
+        "impl Counter { self() { self.n = 0; } ~self() { } private int helper() { return 1; } static Counter zero() { Counter c(); return c; } }");
+    assert(parse_impl(&p).is_some(), "impl parses");
+    assert(p.impls_of()[0] == "impl Counter { self, ~self, helper, zero }",
+           "ctor/dtor/private/static methods collected");
+}
+
+#[test]
+void parses_generic_impl_for_interface() {
+    Parser p = parser_of("impl<T> Box<T> for Container<T> { void put(T v) { } T take() { } }");
+    assert(parse_impl(&p).is_some(), "generic impl-for parses");
+    assert(p.impls_of()[0] == "impl Box<T> for Container<T> { put, take }", "display form");
+}
+
+#[test]
+void parses_interface_decl() {
+    Parser p = parser_of("interface Shape { double area(); }");
+    assert(parse_interface(&p).is_some(), "interface parses");
+    assert(p.impls_of()[0] == "interface Shape", "interface recorded");
+}
+
+#[test]
+void method_without_body_or_semicolon_is_error() {
+    Parser p = parser_of("impl X { int broken() }");
+    assert(parse_impl(&p).is_none(), "missing body is an error");
+    assert(p.error_message() == "expected '{' or ';' after method signature but found '}'",
+           "error message");
+}

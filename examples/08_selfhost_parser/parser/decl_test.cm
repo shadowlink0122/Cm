@@ -1,0 +1,52 @@
+// parser/decl.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../token::*;
+import ../lexer::*;
+import ./state::*;
+import ./decl::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void parses_full_program() {
+    Parser p = parser_of(
+        "module demo; import std::io::println; #[derive(Debug)] struct P { int x; } enum E { A, B } impl P { self() { } } int main() { return 0; }");
+    assert(parse_program(&p).is_some(), "program parses");
+    assert(p.module_of() == "demo", "module recorded");
+    assert(p.imports_of().len() == 1, "import recorded");
+    assert(p.structs_of().len() == 1, "struct recorded");
+    assert(p.enums_of().len() == 1, "enum recorded");
+    assert(p.impls_of().len() == 1, "impl recorded");
+    assert(p.funcs_of().len() == 1, "function recorded");
+}
+
+#[test]
+void export_prefix_is_transparent() {
+    Parser p = parser_of("export struct S { int v; } export int f() { return 1; }");
+    assert(parse_program(&p).is_some(), "exported decls parse");
+    assert(p.structs_of().len() == 1, "exported struct recorded");
+    assert(p.funcs_of().len() == 1, "exported function recorded");
+}
+
+#[test]
+void anonymous_struct_with_declarator() {
+    Parser p = parser_of("struct { int a; } CONFIG;");
+    assert(parse_program(&p).is_some(), "anonymous struct with declarator parses");
+    const string expected = "(anonymous) {" + " a " + "}";
+    assert(p.structs_of()[0] == expected, "anonymous display");
+}
+
+#[test]
+void error_position_propagates() {
+    Parser p = parser_of("struct Ok { int v; }\nstruct Broken {\n  int x\n}");
+    assert(parse_program(&p).is_none(), "missing field semicolon is an error");
+    assert(p.error_line() == 4, "error reported at closing line");
+    assert(p.structs_of().len() == 1, "first struct was already recorded");
+}

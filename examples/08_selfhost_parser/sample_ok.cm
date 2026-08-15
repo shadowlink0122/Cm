@@ -1,0 +1,66 @@
+// セルフホストパーサの入力サンプル（正常系）: 主要な宣言種別を一通り含む
+module sample.ok;
+
+import std::io::println;
+import std::collections::strmap::*;
+
+use libc {
+    void* malloc(int size);
+    void free(void* ptr);
+}
+
+typedef Meters = double;
+
+const int LIMIT = 100;
+
+#[derive(Debug)]
+struct Point<T> with Clone {
+    T x;
+    T y;
+    private int cached;
+}
+
+struct Outer {
+    struct Inner {
+        int value;
+    } inner;
+    int tag;
+}
+
+enum Shape {
+    Dot,
+    Circle(double),
+    Named(string)
+}
+
+interface Area {
+    double area();
+}
+
+impl<T> Point<T> {
+    self() {
+        self.cached = 0;
+    }
+
+    ~self() {
+    }
+
+    private int helper() {
+        return self.cached;
+    }
+
+    static int origin_count() {
+        return 1;
+    }
+}
+
+extern "C" long cm_now_ms();
+
+<T> T pick_first(T[] xs) {
+    return xs[0];
+}
+
+int main() {
+    println("sample");
+    return 0;
+}
