@@ -2,7 +2,7 @@
   "name": "cm-language",
   "displayName": "Cm Language Support",
   "description": "Syntax highlighting and language support for the Cm programming language",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "publisher": "cm-lang",
   "engines": {
     "vscode": "^1.125.0"

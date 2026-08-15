@@ -1,0 +1,20 @@
+// dtor持ち構造体のローカルを値返し（moveなし）するとコピー元のdtorが走るため警告される
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() {
+        self.p = 0 as int*;
+    }
+}
+
+Res make() {
+    Res a;
+    return a;
+}
+
+int main() {
+    Res b = make();
+    return 0;
+}

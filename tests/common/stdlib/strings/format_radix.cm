@@ -1,0 +1,20 @@
+// std::strings::format: 基数変換・負数・パディング・long境界
+import std::io::println;
+import std::strings::format::*;
+
+int main() {
+    println("{to_hex(255)} {to_hex(0 - 255)} {to_hex(0)} {to_hex(4096)}");
+    println("{to_bin(10)} {to_oct(64)} {to_radix(35 as long, 36)} {to_radix(36 as long, 36)}");
+    println("{to_radix(4294967295, 16)}");
+
+    // long最小値・最大値
+    println("{to_hex(-9223372036854775807 - 1)} {to_hex(9223372036854775807)}");
+
+    // 不正基数は空文字列
+    println("[{to_radix(1 as long, 1)}] [{to_radix(1 as long, 37)}]");
+
+    // パディング（幅超過はそのまま）
+    println("[{pad_left(\"7f\", 8, '0')}] [{pad_right(\"ab\", 5, '.')}] [{pad_left(\"long\", 2, 'x')}]");
+    println("[{pad_left(to_hex(255), 4, '0')}]");
+    return 0;
+}

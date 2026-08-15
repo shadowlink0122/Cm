@@ -23,9 +23,9 @@ use libc {
 // ============================================================
 // O_RDONLY = 0
 // O_WRONLY = 1
-// O_CREAT  = 0x0200
-// O_TRUNC  = 0x0400
-// O_WRONLY | O_CREAT | O_TRUNC = 0x0601
+// O_CREAT / O_TRUNC はOSごとに値が異なる:
+//   macOS/BSD: O_CREAT=0x0200, O_TRUNC=0x0400 → O_WRONLY|O_CREAT|O_TRUNC = 0x0601
+//   Linux:     O_CREAT=0x0040, O_TRUNC=0x0200 → O_WRONLY|O_CREAT|O_TRUNC = 0x0241
 // SEEK_SET = 0
 // SEEK_END = 2
 // DEFAULT_MODE = 0x1A4 (0644 octal)
@@ -73,9 +73,12 @@ export string read_file(string path) {
 
 /// ファイルに書き込み（簡易版、成功時true）
 export bool write_file(string path, string content) {
-    // O_WRONLY | O_CREAT | O_TRUNC = 0x0601
-    // DEFAULT_MODE = 0x1A4 (rw-r--r--)
-    const int fd = open(path, 0x0601, 0x1A4);
+    // O_WRONLY | O_CREAT | O_TRUNC（OS別の値。DEFAULT_MODE = 0x1A4 = rw-r--r--）
+    #ifdef __linux__
+        const int fd = open(path, 0x0241, 0x1A4);
+    #else
+        const int fd = open(path, 0x0601, 0x1A4);
+    #end
     if (fd < 0) {
         return false;
     }

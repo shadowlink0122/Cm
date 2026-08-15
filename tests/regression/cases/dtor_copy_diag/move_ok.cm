@@ -1,0 +1,29 @@
+// move付きの所有権移動は警告されない（let初期化・代入・return move）
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() {
+        self.p = 0 as int*;
+    }
+}
+
+struct Holder {
+    Res r;
+}
+
+Res make() {
+    Res a;
+    return move a;
+}
+
+int main() {
+    Res a;
+    Res b = move a;
+    Res c;
+    Holder h;
+    h.r = move c;
+    Res d = make();
+    return 0;
+}

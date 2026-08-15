@@ -200,6 +200,12 @@ class TypeChecker {
     // 宛先に適合するリテラルは対象外。通常は警告、--strict（check/lint）ではエラーへ昇格する（段階導入）
     void check_numeric_conversion_policy(const ast::TypePtr& target, const ast::TypePtr& source,
                                          const ast::Expr* value_expr, Span span);
+    // 型が明示的なデストラクタ（~self）を持つ構造体か（typedef解決・ジェネリックはベース名・名前空間剥ぎで判定）
+    bool type_has_destructor(const ast::TypePtr& type);
+    // 受理サイト（let初期化・代入・return・構造体リテラルのフィールド初期化）でのdtor持ち構造体の暗黙コピー診断。
+    // 場所式（変数・フィールド・要素参照）のコピーのみ対象で、move式・一時値は対象外。通常は警告、--strict（check/lint）ではエラーへ昇格する
+    void check_dtor_copy_policy(const ast::TypePtr& source_type, const ast::Expr* value_expr,
+                                Span span);
     std::vector<std::string> extract_format_variables(const std::string& format_str);
 
     // 文字列リテラルの補間プレースホルダを一度だけ実ASTへ脱糖する（第4段b）。
@@ -375,6 +381,9 @@ class TypeChecker {
     // derive合成された総称impl（#[__derived]マーカー付き）の基底名→トレイト集合。
     // 特殊化時のフィールド型検証（validate_derive_instantiation）が展開後もderive規則を適用するために使う
     std::unordered_map<std::string, std::set<std::string>> derived_generic_impls_;
+
+    // 明示的なデストラクタ（~self）を持つ構造体のベース型名（impl登録時に記録。暗黙コピー診断で参照する）
+    std::unordered_set<std::string> types_with_destructor_;
 
     // 組み込みインターフェースのジェネリックパラメータ
     std::unordered_map<std::string, std::vector<std::string>> builtin_interface_generic_params_;

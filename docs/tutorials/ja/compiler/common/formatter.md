@@ -105,6 +105,23 @@ out = (q0 | (q1 << 1) | (q2 << 2)
     | (1 << 8)) as ushort;
 ```
 
+### 2.2.1 メソッドチェーンの折り返し（v0.17.2）
+
+文レベルのメソッドチェーン（`.method(...)` の呼び出しが2つ以上）が最大行幅（100桁）を超える場合は、カンマ・演算子の折り返しより優先して各チェーンの `.` 直前で折り返されます（TypeScript/Prettier風）：
+
+```cm
+// Before
+return template_text().replace("{0}", first_argument).replace("{1}", second_argument).replace("{2}", third_argument);
+
+// After
+return template_text()
+    .replace("{0}", first_argument)
+    .replace("{1}", second_argument)
+    .replace("{2}", third_argument);
+```
+
+フィールド参照の `.`（`self.value` 等）や `if (...)` ヘッダなど括弧内のチェーンは対象にならず、従来どおりカンマ・演算子で折り返されます。
+
 ### 2.3 行末コメントの位置（v0.16.0）
 
 行末コメントの位置は手動調整が尊重されます。コードとコメントの間隔が2スペース未満の場合のみ、2スペースへ広げられます：

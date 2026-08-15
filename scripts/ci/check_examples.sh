@@ -10,7 +10,7 @@ while IFS= read -r file; do
         ./cm check "$file" 2>&1 | head -20 || true
         fail=1
     fi
-done < <(find examples -name '*.cm' -not -path 'examples/uefi/util/*' -not -path 'examples/uefi/libs/*')
+done < <(find examples -name '*.cm' -not -path 'examples/uefi/util/*' -not -path 'examples/uefi/libs/*' -not -path 'examples/08_selfhost_parser/samples/error.cm')
 
 if [ "$fail" -eq 0 ]; then
     echo "✅ examples check passed"
@@ -24,5 +24,21 @@ DRILL=examples/07_selfhost_drill
 /tmp/drill_bin "$DRILL/sample_input.cm" -o /tmp/drill_native.bin
 cmp /tmp/drill_jit.bin /tmp/drill_native.bin
 echo "✅ selfhost drill passed (jit/native artifacts identical)"
+
+# セルフホストパーサ（examples/08_selfhost_parser）の検証:
+# tests/配下の#[test]単体テスト → 正常サンプルの定義一覧出力（rc=0） → エラーサンプルの位置報告（rc=1） → パーサ自身の全ソース自己解析
+SHP=examples/08_selfhost_parser
+for t in "$SHP"/tests/*_test.cm; do
+    ./cm test "$t" >/dev/null
+done
+./cm run "$SHP/main.cm" -- "$SHP/samples/ok.cm" >/dev/null
+if ./cm run "$SHP/main.cm" -- "$SHP/samples/error.cm" >/dev/null 2>&1; then
+    echo "::error::selfhost parser should report an error for samples/error.cm"
+    exit 1
+fi
+./cm run "$SHP/main.cm" -- "$SHP/main.cm" "$SHP/lexer/token.cm" "$SHP/lexer/scan.cm" \
+    "$SHP/parser/state.cm" "$SHP/parser/decl/modules.cm" "$SHP/parser/decl/types.cm" \
+    "$SHP/parser/decl/impls.cm" "$SHP/parser/decl/funcs.cm" "$SHP/parser/decl/dispatch.cm" >/dev/null
+echo "✅ selfhost parser passed (unit tests / ok-sample / error-sample / self-parse)"
 
 exit "$fail"

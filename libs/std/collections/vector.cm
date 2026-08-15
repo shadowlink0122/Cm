@@ -14,9 +14,9 @@ use libc {
 // =============================================================
 
 export struct Vector<T> {
-    T* data;
-    int size;
-    int cap;
+    private T* data;
+    private int size;
+    private int cap;
 }
 
 export impl<T> Vector<T> {
@@ -89,23 +89,102 @@ export impl<T> Vector<T> {
         return self.size == 0;
     }
 
+    // 容量をn要素ぶん先行確保する（既に足りていれば何もしない。push連打の再確保を避ける）
+    void reserve(int n) {
+        if (n <= self.cap) {
+            return;
+        }
+        const long elem_size = __sizeof__(T) as long;
+        const long alloc_size = (n as long) * elem_size;
+        void* raw_ptr = alloc(alloc_size as int);
+        T* new_data = raw_ptr as T*;
+        if (self.size > 0) {
+            void* src = self.data as void*;
+            void* dst = new_data as void*;
+            const long copy_size = (self.size as long) * elem_size;
+            memcpy(dst, src, copy_size as int);
+        }
+        void* old_ptr = self.data as void*;
+        void* null_ptr = 0 as void*;
+        if (old_ptr != null_ptr) {
+            dealloc(old_ptr);
+        }
+        self.data = new_data;
+        self.cap = n;
+    }
+
+    // 末尾要素への参照を返す（スタック用途のtop相当。空のときは呼ばないこと）
+    T* last() {
+        return &self.data[self.size - 1];
+    }
+
     // クリア（データは保持、サイズのみリセット）
     void clear() {
         self.size = 0;
     }
 
-    // ソート（昇順、バブルソート）
+    // 内部: data[root..end) をsift-down（<比較・最大ヒープ）
+    private void sift_lt(int root, int end) {
+        int r = root;
+        while (r * 2 + 1 < end) {
+            int child = r * 2 + 1;
+            if (child + 1 < end && self.data[child] < self.data[child + 1]) {
+                child = child + 1;
+            }
+            if (self.data[child] < self.data[r]) {
+                return;
+            }
+            const T tmp = self.data[r];
+            self.data[r] = self.data[child];
+            self.data[child] = tmp;
+            r = child;
+        }
+    }
+
+    // ソート（昇順、ヒープソート: O(n log n)・追加確保なし・非安定）
     // プリミティブ型（int, long, double等）で動作
     void sort() {
         const int n = self.size;
-        for (int i = 0; i < n - 1; i++) {
-            for (int j = 0; j < n - i - 1; j++) {
-                if (self.data[j] > self.data[j + 1]) {
-                    const T temp = self.data[j];
-                    self.data[j] = self.data[j + 1];
-                    self.data[j + 1] = temp;
-                }
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            self.sift_lt(i, n);
+        }
+        for (int end = n - 1; end > 0; end--) {
+            const T tmp = self.data[0];
+            self.data[0] = self.data[end];
+            self.data[end] = tmp;
+            self.sift_lt(0, end);
+        }
+    }
+
+    // 内部: 比較関数版sift-down（cmpが負=aが先）
+    private void sift_cmp(int root, int end, int*(T, T) cmp) {
+        int r = root;
+        while (r * 2 + 1 < end) {
+            int child = r * 2 + 1;
+            if (child + 1 < end && cmp(self.data[child], self.data[child + 1]) < 0) {
+                child = child + 1;
             }
+            if (cmp(self.data[child], self.data[r]) < 0) {
+                return;
+            }
+            const T tmp = self.data[r];
+            self.data[r] = self.data[child];
+            self.data[child] = tmp;
+            r = child;
+        }
+    }
+
+    // 比較関数によるソート（ヒープソート。cmp(a,b)<0でaがbより前・非安定）
+    void sortBy(int*(T, T) cmp) {
+        const int n = self.size;
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            self.sift_cmp(i, n, cmp);
+        }
+        for (int end = n - 1; end > 0; end--) {
+            const T tmp = self.data[0];
+            self.data[0] = self.data[end];
+            self.data[end] = tmp;
+            self.sift_cmp(0, end, cmp);
         }
     }
 

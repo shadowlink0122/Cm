@@ -1,0 +1,5 @@
+len=3 c3=true c2=false
+len=2 c3=false
+len=2
+cleared len=0 empty=true
+reuse len=1 c7=true

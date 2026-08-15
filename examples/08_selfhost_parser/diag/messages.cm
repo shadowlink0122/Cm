@@ -1,0 +1,118 @@
+// セルフホストパーサ: 診断メッセージ定義（i18n対応）
+// Cmコンパイラ本体のi18n構成と同じく、メッセージID（enum MsgId）×言語（enum Lang）の2次元テンプレート表で文面を一元管理する。
+// テンプレートは "{0}" "{1}" のプレースホルダを持つ完結した1文で、断片連結による文組み立ては行わない（語順が言語ごとに異なるため）。
+// 言語は環境変数 CM_LANG（"ja"で日本語、それ以外は英語）で切り替える
+module diag.messages;
+
+import std::env::*;
+import std::strings::format::*;
+
+// メッセージID（診断の種類ごとに1つ）
+export enum MsgId {
+    ExpectedButFound,    // 期待字句と実際: expected '{0}' but found {1}
+    ExpectedThing,       // 期待概念と実際: expected {0} but found {1}
+    ExpectedIn,          // 文脈付き期待: expected '{0}' in {1} but found {2}
+    ExpectedBodyOrSemi,  // 本体または終端の欠落: expected '{' or ';' after {0} but found {1}
+    EofIn,               // 文脈内での入力終端: unexpected end of file in {0}
+    EofLookingFor,       // 区切り探索中の入力終端: unexpected end of file while looking for '{0}'
+    Unterminated,        // 未終端リテラル・コメント: unterminated {0}
+    CannotDetermine,     // 名前の特定失敗: could not determine {0}
+    LexErrorLabel,       // 字句エラー行の見出し: lex error: {0}
+    SyntaxErrorLabel,    // 構文エラー行の見出し: syntax error: {0}
+    FileNotFound         // 入力ファイル不在: error: file not found: {0}
+}
+
+// 対応言語
+export enum Lang {
+    En,
+    Ja
+}
+
+// 現在の言語（環境変数CM_LANGが"ja"なら日本語、既定は英語）
+export Lang current_lang() {
+    const Option<string> v = get("CM_LANG");
+    if (v.is_some() && v.unwrap() == "ja") {
+        return Lang::Ja;
+    }
+    return Lang::En;
+}
+
+// メッセージID→対訳配列の表（プレースホルダ{0}〜{2}を持つ完結した1文）
+// 添字はLangのタグ値（En=0, Ja=1）。言語のmatchは持たず、1メッセージの全対訳を1つの配列リテラルで管理する
+string[] templates_of(MsgId id) {
+    match (id) {
+        MsgId::ExpectedButFound => {
+            return [
+                "expected '{0}' but found {1}",
+                "'{0}' が必要ですが {1} が見つかりました"
+            ];
+        }
+        MsgId::ExpectedThing => {
+            return [
+                "expected {0} but found {1}",
+                "{0} が必要ですが {1} が見つかりました"
+            ];
+        }
+        MsgId::ExpectedIn => {
+            return [
+                "expected '{0}' in {1} but found {2}",
+                "{1} には '{0}' が必要ですが {2} が見つかりました"
+            ];
+        }
+        MsgId::ExpectedBodyOrSemi => {
+            return [
+                "expected '{' or ';' after {0} but found {1}",
+                "{0} の後には '{' または ';' が必要ですが {1} が見つかりました"
+            ];
+        }
+        MsgId::EofIn => {
+            return ["unexpected end of file in {0}", "{0} の途中で入力が終端しました"];
+        }
+        MsgId::EofLookingFor => {
+            return [
+                "unexpected end of file while looking for '{0}'",
+                "'{0}' を探索中に入力が終端しました"
+            ];
+        }
+        MsgId::Unterminated => {
+            return ["unterminated {0}", "{0} が終端していません"];
+        }
+        MsgId::CannotDetermine => {
+            return ["could not determine {0}", "{0} を特定できません"];
+        }
+        MsgId::LexErrorLabel => {
+            return ["lex error: {0}", "字句エラー: {0}"];
+        }
+        MsgId::SyntaxErrorLabel => {
+            return ["syntax error: {0}", "構文エラー: {0}"];
+        }
+        MsgId::FileNotFound => {
+            return [
+                "error: file not found: {0}",
+                "エラー: ファイルが見つかりません: {0}"
+            ];
+        }
+    }
+    return [""];
+}
+
+// テンプレートの取り出し（対訳が未整備の言語は英語＝添字0へフォールバックする）
+string template_of(MsgId id, Lang lang) {
+    const string[] t = templates_of(id);
+    const int li = lang as int;
+    if (li < 0 || li >= t.len()) {
+        return t[0];
+    }
+    return t[li];
+}
+
+// ---- フォーマッタ（C++側 i18n::msgf と同じ方式で、引数数によらず1本で埋める） ----
+
+// テンプレート中の {0} {1} ... を args の各要素で順に置換してメッセージを組み立てる
+export string msgf(MsgId id, string[] args) {
+    string text = template_of(id, current_lang());
+    for (int i = 0; i < args.len(); i++) {
+        text = text.replace("{" + to_radix(i, 10) + "}", args[i]);
+    }
+    return text;
+}

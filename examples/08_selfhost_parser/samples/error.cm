@@ -1,0 +1,17 @@
+// セルフホストパーサの入力サンプル（エラー系）: 12行目のメソッドに本体が無い
+module sample.error;
+
+struct Ok {
+    int fine;
+}
+
+impl Ok {
+    int works() {
+        return 1;
+    }
+    int broken()
+}
+
+int main() {
+    return 0;
+}

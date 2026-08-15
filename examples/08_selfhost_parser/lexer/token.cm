@@ -1,0 +1,72 @@
+// セルフホストパーサ: トークン定義
+// トークン種別enumと、字句解析結果のトークン列（種別・字句・行・桁のパラレルスライス）を提供する
+module lexer.token;
+
+// トークン種別（パーサはこの種別とトークン字句で判定する）
+export enum TokenKind {
+    Eof,        // 入力終端
+    Ident,      // 識別子
+    Keyword,    // 予約語（識別子のうちキーワード表に載っているもの）
+    Number,     // 数値リテラル
+    StringLit,  // 文字列リテラル（引用符ごと保持）
+    CharLit,    // 文字リテラル
+    Symbol      // 記号（"::"のみ2文字、他は1文字）
+}
+
+// 字句解析の結果トークン列（スライスバックでデストラクタ無し）
+export struct TokenStream {
+    private TokenKind[] kinds;
+    private string[] texts;
+    private int[] lines;
+    private int[] cols;
+}
+
+export impl TokenStream {
+    self() {
+        self.kinds = [];
+        self.texts = [];
+        self.lines = [];
+        self.cols = [];
+    }
+
+    void push_token(TokenKind kind, string text, int line, int col) {
+        self.kinds.push(kind);
+        self.texts.push(text);
+        self.lines.push(line);
+        self.cols.push(col);
+    }
+
+    // トークン数（終端のEofを含む）
+    int len() {
+        return self.kinds.len();
+    }
+
+    // 範囲外はEof扱いで安全に読める
+    TokenKind kind_at(int i) {
+        if (i < 0 || i >= self.kinds.len()) {
+            return TokenKind::Eof;
+        }
+        return self.kinds[i];
+    }
+
+    string text_at(int i) {
+        if (i < 0 || i >= self.texts.len()) {
+            return "";
+        }
+        return self.texts[i];
+    }
+
+    int line_at(int i) {
+        if (i < 0 || i >= self.lines.len()) {
+            return 0;
+        }
+        return self.lines[i];
+    }
+
+    int col_at(int i) {
+        if (i < 0 || i >= self.cols.len()) {
+            return 0;
+        }
+        return self.cols[i];
+    }
+}

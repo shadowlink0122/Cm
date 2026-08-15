@@ -19,6 +19,11 @@ void TypeChecker::register_impl(ast::ImplDecl& impl) {
 
     std::string type_name = ast::type_to_string(*impl.target_type);
 
+    // dtor持ち型のベース名を記録する（暗黙コピー診断 check_dtor_copy_policy が参照）
+    if (impl.destructor && impl.target_type) {
+        types_with_destructor_.insert(impl.target_type->name);
+    }
+
     // コンストラクタ/デストラクタの登録（is_ctor_implの場合）
     if (impl.is_ctor_impl) {
         for (const auto& ctor : impl.constructors) {

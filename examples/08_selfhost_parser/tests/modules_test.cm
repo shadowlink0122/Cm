@@ -1,0 +1,60 @@
+// parser/modules.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/modules::*;
+import ../diag/messages::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void parses_module_path() {
+    Parser p = parser_of("module std.collections.strmap;");
+    assert(parse_module_decl(&p).is_some(), "module decl parses");
+    assert(p.module_of() == "std.collections.strmap", "dotted path display");
+}
+
+#[test]
+void parses_selective_import() {
+    Parser p = parser_of("import std::fs::{read_file, exists};");
+    assert(parse_import_decl(&p).is_some(), "import parses");
+    assert(p.imports_of().len() == 1, "one import recorded");
+    assert(p.imports_of()[0] == "std::fs::{read_file, exists}", "selective list display");
+}
+
+#[test]
+void parses_wildcard_and_relative_import() {
+    Parser p = parser_of("import ../token::*;");
+    assert(parse_import_decl(&p).is_some(), "relative import parses");
+    assert(p.imports_of()[0] == "../token::*", "relative path display");
+}
+
+#[test]
+void parses_use_libc_block() {
+    Parser p = parser_of("use libc { void* malloc(int size); void free(void* p); }");
+    assert(parse_use_decl(&p).is_some(), "use block parses");
+    assert(p.uses_of()[0] == "libc", "use target recorded");
+    assert(p.at_eof(), "block consumed");
+}
+
+#[test]
+void unterminated_import_is_error() {
+    Parser p = parser_of("import std::io");
+    assert(parse_import_decl(&p).is_none(), "missing semicolon is an error");
+    assert(p.error_message() == "unexpected end of file in import path", "error message");
+}
+
+#[test]
+void import_error_uses_catalog_message() {
+    Parser p = parser_of("import std::io");
+    assert(parse_import_decl(&p).is_none(), "missing semicolon fails");
+    assert(p.error_message() == msgf(MsgId::EofIn, ["import path"]), "catalog message");
+}

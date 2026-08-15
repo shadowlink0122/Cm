@@ -1,0 +1,36 @@
+//! platform: !js|sv
+// 構造体ペイロード: 構造体値の所有・フィールド更新・SharedPtr共有
+import std::io::println;
+import std::mem::smart::*;
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main() {
+    Point p;
+    p.x = 3;
+    p.y = 4;
+
+    UniquePtr<Point> u(p);
+    Point got = u.get();
+    println("{got.x},{got.y}");
+
+    // 生ポインタ経由でフィールドを直接更新
+    Point* raw = u.raw();
+    raw->x = 30;
+    println("{u.get().x}");
+
+    Point q;
+    q.x = 1;
+    q.y = 2;
+    SharedPtr<Point> s(q);
+    SharedPtr<Point> t = s.clone();
+    Point r;
+    r.x = 9;
+    r.y = 9;
+    t.set(r);
+    println("{s.get().x},{s.get().y} rc={s.use_count()}");
+    return 0;
+}

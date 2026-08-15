@@ -1,0 +1,35 @@
+// TreeMap: AVL削除（葉・子1・子2）・スロット再利用・順序維持・clear
+import std::io::println;
+import std::collections::treemap::*;
+
+int main() {
+    TreeMap<int, int> m();
+    for (int i = 0; i < 20; i++) {
+        m.put(i, i * 10);
+    }
+    println("size={m.size()}");
+
+    // 葉・内部・根寄りの削除
+    m.remove(0);
+    m.remove(10);
+    m.remove(19);
+    println("size={m.size()} c10={m.contains(10)} c11={m.contains(11)}");
+
+    // 順序が維持される
+    int[] ks = m.keys_in_order();
+    println("first={ks[0]} last={ks[ks.len()-1]} n={ks.len()}");
+
+    // 削除済みキーの再挿入（free listのスロット再利用）
+    m.put(10, 999);
+    println("size={m.size()} v10={m.get_or(10, -1)}");
+
+    // 存在しないキーの削除は無視
+    m.remove(1000);
+    println("size={m.size()}");
+
+    m.clear();
+    println("cleared size={m.size()} h={m.tree_height()}");
+    m.put(1, 1);
+    println("reuse size={m.size()}");
+    return 0;
+}

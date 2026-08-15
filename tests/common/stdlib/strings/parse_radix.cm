@@ -1,0 +1,41 @@
+// std::strings::parse: 基数指定の数値解析と境界値
+import std::io::println;
+import std::strings::parse::*;
+
+int main() {
+    // 基数16/2/8/36
+    int hex = parse_int_radix("ff", 16).unwrap_or(-1);
+    int neg = parse_int_radix("-ff", 16).unwrap_or(-1);
+    int bin = parse_int_radix("1010", 2).unwrap_or(-1);
+    int oct = parse_int_radix("777", 8).unwrap_or(-1);
+    int b36 = parse_int_radix("zz", 36).unwrap_or(-1);
+    println("{hex} {neg} {bin} {oct} {b36}");
+
+    // 失敗系: 空・符号のみ・基数外の先頭・不正基数
+    bool e1 = parse_int_radix("", 16).is_none();
+    bool e2 = parse_int_radix("-", 16).is_none();
+    bool e3 = parse_int_radix("g", 16).is_none();
+    bool e4 = parse_int_radix("1", 1).is_none();
+    bool e5 = parse_int_radix("1", 37).is_none();
+    println("{e1} {e2} {e3} {e4} {e5}");
+
+    // 途中の基数外文字で停止（先頭の数値部分をパース）
+    int partial = parse_int_radix("1f2g", 16).unwrap_or(-1);
+    println("{partial}");
+
+    // long版（32bit超）
+    long big = parse_long_radix("ffffffff", 16).unwrap_or(-1 as long);
+    println("{big}");
+
+    // 移設後も既存関数が同一挙動
+    int m1 = parse_int("-123").unwrap_or(0);
+    int m2 = parse_int("12ab").unwrap_or(0);
+    bool m3 = parse_int("ab").is_none();
+    println("{m1} {m2} {m3}");
+    long l1 = parse_long("9000000000").unwrap_or(0 as long);
+    println("{l1}");
+    bool b1 = parse_bool("yes").unwrap_or(false);
+    bool b2 = parse_bool("maybe").is_none();
+    println("{b1} {b2}");
+    return 0;
+}

@@ -1,0 +1,88 @@
+// parser/state.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../diag/messages::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void expect_text_consumes_or_fails() {
+    Parser p = parser_of("( )");
+    assert(p.expect_text("(").is_some(), "matching text consumed");
+    assert(p.expect_text("]").is_none(), "mismatch returns None");
+    assert(p.error_message() == msgf(MsgId::ExpectedButFound, ["]", "')'"]), "catalog message");
+    assert(p.error_line() == 1, "error line");
+    assert(p.error_col() == 3, "error col points at the found token");
+}
+
+#[test]
+void expect_ident_rejects_keyword() {
+    Parser p = parser_of("struct");
+    assert(p.expect_ident().is_none(), "keyword is not an identifier");
+}
+
+#[test]
+void skip_balanced_handles_nesting_and_eof() {
+    Parser p = parser_of("{ a { b } c }");
+    assert(p.skip_balanced("{", "}").is_some(), "nested braces");
+    assert(p.at_eof(), "consumed to end");
+
+    Parser q = parser_of("{ never closed");
+    assert(q.skip_balanced("{", "}").is_none(), "unclosed block is an error");
+}
+
+#[test]
+void skip_to_semicolon_jumps_over_blocks() {
+    Parser p = parser_of("int[] xs = { 1, 2 };");
+    assert(p.skip_to_semicolon().is_some(), "initializer block skipped");
+    assert(p.at_eof(), "consumed to end");
+}
+
+#[test]
+void generic_params_display() {
+    Parser p = parser_of("<K, V> rest");
+    const Option<string> gp = p.parse_generic_params();
+    assert(gp.is_some(), "generic list parsed");
+    assert(gp.unwrap() == "<K, V>", "display form");
+
+    Parser q = parser_of("plain");
+    assert(q.parse_generic_params().unwrap() == "", "no generics yields empty string");
+}
+
+#[test]
+void recorders_accumulate() {
+    Parser p = parser_of("");
+    p.record_struct("A(x)");
+    p.record_struct("B(y)");
+    p.record_func("int main()");
+    assert(p.structs_of().len() == 2, "two structs recorded");
+    assert(p.funcs_of().len() == 1, "one function recorded");
+    assert(join_names(p.structs_of()) == "A(x), B(y)", "join_names order");
+}
+
+#[test]
+void first_error_is_preserved() {
+    Parser p = parser_of("a");
+    assert(p.expect_text("(").is_none(), "first failure");
+    const string first = p.error_message();
+    const int first_col = p.error_col();
+    assert(p.expect_text(")").is_none(), "second failure");
+    assert(p.error_message() == first, "message not overwritten");
+    assert(p.error_col() == first_col, "position not overwritten");
+}
+
+#[test]
+void expect_at_eof_reports_eof() {
+    Parser p = parser_of("");
+    assert(p.expect_text(";").is_none(), "expect at EOF fails");
+    assert(p.error_message() == msgf(MsgId::ExpectedButFound, [";", "end of file"]), "EOF wording");
+}

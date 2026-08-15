@@ -1,0 +1,299 @@
+// セルフホストパーサ: 字句解析器
+// Cmソースをトークン列へ分解する。
+// エラーハンドリングはOption型で行い、失敗（未終端文字列・未終端コメント等）の位置はLexer側に保持する
+module lexer.scan;
+
+import std::collections::strset::*;
+import std::strings::from_bytes::*;
+import ./token::*;
+import ../diag/messages::*;
+
+// ---- バイト値定数（マジックナンバー排除。文字はキャストで定義する） ----
+
+const int BYTE_EOF = -1;             // 入力終端の番兵
+const int BYTE_TAB = '\t' as int;
+const int BYTE_LF = '\n' as int;
+const int BYTE_CR = '\r' as int;
+const int BYTE_SPACE = ' ' as int;
+const int BYTE_DQUOTE = '"' as int;
+const int BYTE_SQUOTE = '\'' as int;
+const int BYTE_BACKSLASH = '\\' as int;
+const int BYTE_SLASH = '/' as int;
+const int BYTE_STAR = '*' as int;
+const int BYTE_COLON = ':' as int;
+const int BYTE_UNDERSCORE = '_' as int;
+const int BYTE_DOT = '.' as int;
+const int BYTE_PLUS = '+' as int;
+const int BYTE_MINUS = '-' as int;
+const int BYTE_LOWER_E = 'e' as int;
+const int BYTE_UPPER_E = 'E' as int;
+const int BYTE_DIGIT_0 = '0' as int;
+const int BYTE_DIGIT_9 = '9' as int;
+const int BYTE_LOWER_A = 'a' as int;
+const int BYTE_LOWER_Z = 'z' as int;
+const int BYTE_UPPER_A = 'A' as int;
+const int BYTE_UPPER_Z = 'Z' as int;
+
+// 字句解析器本体
+// トークン列は内部に保持し、run()成功後にtake_tokens()で受け取る
+// （Option<TokenStream>のような大きな構造体ペイロードのユニオンを避け、Optionは成否のみを運ぶ）
+export struct Lexer {
+    private string src;
+    private int pos;
+    private int line;
+    private int col;
+    private StringSet keywords;
+    private TokenStream tokens;
+    // 失敗時の診断（run()がNoneを返したときに参照する）
+    private string err_msg;
+    private int err_line;
+    private int err_col;
+}
+
+export impl Lexer {
+    self(string source) {
+        self.src = source;
+        self.pos = 0;
+        self.line = 1;
+        self.col = 1;
+        // キーワード定義: 一覧の宣言と登録ループを分離する
+        string[] keywords = [
+            "module", "import", "export", "use", "struct", "enum", "impl", "interface",
+            "typedef", "const", "static", "private", "overload", "extern", "operator",
+            "for", "with", "self", "return", "if", "else", "while", "match", "switch",
+            "move", "as", "is"
+        ];
+        StringSet kw();
+        for (int i = 0; i < keywords.len(); i++) {
+            kw.insert(keywords[i]);
+        }
+        self.keywords = kw;
+        TokenStream ts();
+        self.tokens = ts;
+        self.err_msg = "";
+        self.err_line = 0;
+        self.err_col = 0;
+    }
+
+    // 失敗時の診断アクセサ
+    string error_message() {
+        return self.err_msg;
+    }
+
+    int error_line() {
+        return self.err_line;
+    }
+
+    int error_col() {
+        return self.err_col;
+    }
+
+    // 現在位置のバイト（終端はBYTE_EOF）
+    private int peek_byte() {
+        if (self.pos >= self.src.byte_len()) {
+            return BYTE_EOF;
+        }
+        return self.src.byte_at(self.pos);
+    }
+
+    private int peek_byte2() {
+        if (self.pos + 1 >= self.src.byte_len()) {
+            return BYTE_EOF;
+        }
+        return self.src.byte_at(self.pos + 1);
+    }
+
+    // 1バイト進める（改行で行・桁を更新）
+    private void advance() {
+        if (self.pos < self.src.byte_len()) {
+            if (self.src.byte_at(self.pos) == BYTE_LF) {
+                self.line = self.line + 1;
+                self.col = 1;
+            } else {
+                self.col = self.col + 1;
+            }
+            self.pos = self.pos + 1;
+        }
+    }
+
+    private bool is_digit_b(int b) {
+        return b >= BYTE_DIGIT_0 && b <= BYTE_DIGIT_9;
+    }
+
+    private bool is_ident_start_b(int b) {
+        return (b >= BYTE_LOWER_A && b <= BYTE_LOWER_Z)
+            || (b >= BYTE_UPPER_A && b <= BYTE_UPPER_Z) ||
+            b == BYTE_UNDERSCORE;
+    }
+
+    private bool is_ident_cont_b(int b) {
+        return self.is_ident_start_b(b) || self.is_digit_b(b);
+    }
+
+    // 空白とコメントを読み飛ばす（未終端ブロックコメントはNone）
+    private Option<bool> skip_trivia() {
+        while (true) {
+            const int b = self.peek_byte();
+            if (b == BYTE_SPACE || b == BYTE_TAB || b == BYTE_CR || b == BYTE_LF) {
+                self.advance();
+            } else if (b == BYTE_SLASH && self.peek_byte2() == BYTE_SLASH) {
+                // 行コメント
+                while (self.peek_byte() != BYTE_LF && self.peek_byte() != BYTE_EOF) {
+                    self.advance();
+                }
+            } else if (b == BYTE_SLASH && self.peek_byte2() == BYTE_STAR) {
+                // ブロックコメント
+                const int start_line = self.line;
+                const int start_col = self.col;
+                self.advance();
+                self.advance();
+                bool closed = false;
+                while (self.peek_byte() != BYTE_EOF) {
+                    if (self.peek_byte() == BYTE_STAR && self.peek_byte2() == BYTE_SLASH) {
+                        self.advance();
+                        self.advance();
+                        closed = true;
+                        break;
+                    }
+                    self.advance();
+                }
+                if (!closed) {
+                    self.err_msg = msgf(MsgId::Unterminated, ["block comment"]);
+                    self.err_line = start_line;
+                    self.err_col = start_col;
+                    return Option::None;
+                }
+            } else {
+                return Option::Some(true);
+            }
+        }
+        return Option::Some(true);
+    }
+
+    // src[start..pos) をバイト単位で文字列へ切り出す
+    // （substringはコードポイント添字のため、バイト位置ベースの字句切り出しにはfrom_bytesを使う）
+    private string slice_text(int start) {
+        utiny[] buf = [];
+        for (int i = start; i < self.pos; i++) {
+            buf.push(self.src.byte_at(i) as utiny);
+        }
+        return from_bytes(buf);
+    }
+
+    // 成功後にトークン列を受け取る（スライスバックの値コピーで安全）
+    TokenStream take_tokens() {
+        return self.tokens;
+    }
+
+    // 全体を字句解析する（成功はSome(true)、失敗はNoneで位置はerror_line/error_col）
+    // バイト値の分岐はifで行う（switchのcase(const変数)は現状値が解決されないため、リテラル以外をcaseに使えない。範囲判定・2バイト先読みもあるためifが適切）
+    Option<bool> run() {
+        while (true) {
+            const Option<bool> trivia = self.skip_trivia();
+            if (trivia.is_none()) {
+                return Option::None;
+            }
+            const int b = self.peek_byte();
+            if (b == BYTE_EOF) {
+                self.tokens.push_token(TokenKind::Eof, "", self.line, self.col);
+                return Option::Some(true);
+            }
+            const int tok_line = self.line;
+            const int tok_col = self.col;
+            const int start = self.pos;
+
+            if (self.is_ident_start_b(b)) {
+                // 識別子または予約語
+                while (self.is_ident_cont_b(self.peek_byte())) {
+                    self.advance();
+                }
+                const string text = self.slice_text(start);
+                if (self.keywords.contains(text)) {
+                    self.tokens.push_token(TokenKind::Keyword, text, tok_line, tok_col);
+                } else {
+                    self.tokens.push_token(TokenKind::Ident, text, tok_line, tok_col);
+                }
+            } else if (self.is_digit_b(b)) {
+                // 数値リテラル（10進・16進・小数・指数をまとめて消費する）
+                while (true) {
+                    const int c = self.peek_byte();
+                    if (self.is_ident_cont_b(c)) {
+                        self.advance();
+                    } else if (c == BYTE_DOT && self.is_digit_b(self.peek_byte2())) {
+                        // 小数点（直後が数字のときのみ）
+                        self.advance();
+                    } else if ((c == BYTE_PLUS || c == BYTE_MINUS) && self.pos > start &&
+                        (self.src.byte_at(self.pos - 1) == BYTE_LOWER_E ||
+                            self.src.byte_at(self.pos - 1) == BYTE_UPPER_E)) {
+                        // 指数の符号（e/Eの直後のみ）
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                self.tokens.push_token(
+                    TokenKind::Number,
+                    self.slice_text(start),
+                    tok_line,
+                    tok_col
+                );
+            } else if (b == BYTE_DQUOTE) {
+                // 文字列リテラル（エスケープ対応・未終端はエラー）
+                self.advance();
+                bool closed = false;
+                while (self.peek_byte() != BYTE_EOF) {
+                    const int c = self.peek_byte();
+                    if (c == BYTE_BACKSLASH) {
+                        self.advance();
+                        self.advance();
+                    } else if (c == BYTE_DQUOTE) {
+                        self.advance();
+                        closed = true;
+                        break;
+                    } else if (c == BYTE_LF) {
+                        break;
+                    } else {
+                        self.advance();
+                    }
+                }
+                if (!closed) {
+                    self.err_msg = msgf(MsgId::Unterminated, ["string literal"]);
+                    self.err_line = tok_line;
+                    self.err_col = tok_col;
+                    return Option::None;
+                }
+                self.tokens.push_token(TokenKind::StringLit, self.slice_text(start), tok_line,
+                    tok_col);
+            } else if (b == BYTE_SQUOTE) {
+                // 文字リテラル（未終端はエラー）
+                self.advance();
+                if (self.peek_byte() == BYTE_BACKSLASH) {
+                    self.advance();
+                    self.advance();
+                } else if (self.peek_byte() != BYTE_EOF && self.peek_byte() != BYTE_SQUOTE) {
+                    self.advance();
+                }
+                if (self.peek_byte() != BYTE_SQUOTE) {
+                    self.err_msg = msgf(MsgId::Unterminated, ["char literal"]);
+                    self.err_line = tok_line;
+                    self.err_col = tok_col;
+                    return Option::None;
+                }
+                self.advance();
+                self.tokens.push_token(TokenKind::CharLit, self.slice_text(start), tok_line,
+                    tok_col);
+            } else if (b == BYTE_COLON && self.peek_byte2() == BYTE_COLON) {
+                // "::" は1トークンに融合する（import経路・修飾名の解析用）
+                self.advance();
+                self.advance();
+                self.tokens.push_token(TokenKind::Symbol, "::", tok_line, tok_col);
+            } else {
+                // その他は1文字記号
+                self.advance();
+                self.tokens.push_token(TokenKind::Symbol, self.slice_text(start), tok_line,
+                    tok_col);
+            }
+        }
+        return Option::None;
+    }
+}

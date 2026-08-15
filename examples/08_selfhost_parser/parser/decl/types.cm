@@ -1,0 +1,154 @@
+// セルフホストパーサ: 型定義（struct / enum）の解析
+// ネスト型（struct内struct・enum内enum、v0.17.1）と無名struct宣言子・with句・ジェネリクスに対応する
+module parser.decl.types;
+
+import ../../lexer/token::*;
+import ../state::*;
+import ../../diag/messages::*;
+
+// struct宣言（"struct"の上から）。prefixは"Outer::"のようなネスト名の接頭辞
+export Option<bool> parse_struct(Parser* p, string prefix) {
+    p->bump();
+    string name = "";
+    if (p->at_ident()) {
+        name = p->text();
+        p->bump();
+    }
+    const Option<string> gp = p->parse_generic_params();
+    if (gp.is_none()) {
+        return Option::None;
+    }
+    // "with Trait, ..." は"{"まで読み飛ばす
+    while (!p->at_text("{")) {
+        if (p->at_eof() || p->at_text(";") || p->at_text("}")) {
+            return p->fail(msgf(MsgId::ExpectedIn, ["{", "struct declaration", p->found_text()]));
+        }
+        p->bump();
+    }
+    p->bump();
+    // 本体: フィールドとネスト型を収集
+    string[] fields = [];
+    while (!p->at_text("}")) {
+        if (p->at_eof()) {
+            return p->fail(msgf(MsgId::EofIn, ["struct body"]));
+        }
+        if (p->at_text("#")) {
+            const Option<bool> a = p->skip_attribute();
+            if (a.is_none()) {
+                return Option::None;
+            }
+            continue;
+        }
+        if (p->at_text("private")) {
+            p->bump();
+            continue;
+        }
+        if (p->at_text("struct")) {
+            const Option<bool> n = parse_struct(p, prefix + name + "::");
+            if (n.is_none()) {
+                return Option::None;
+            }
+            // ネスト型直後の宣言子付き ";" または "NAME;" を消費
+            const Option<bool> d = p->skip_to_semicolon();
+            if (d.is_none()) {
+                return Option::None;
+            }
+            continue;
+        }
+        if (p->at_text("enum")) {
+            const Option<bool> n = parse_enum(p, prefix + name + "::");
+            if (n.is_none()) {
+                return Option::None;
+            }
+            const Option<bool> d = p->skip_to_semicolon();
+            if (d.is_none()) {
+                return Option::None;
+            }
+            continue;
+        }
+        // 通常フィールド: ";"までの最後の識別子がフィールド名
+        string last_ident = "";
+        while (!p->at_text(";")) {
+            if (p->at_eof()) {
+                return p->fail(msgf(MsgId::EofIn, ["struct field"]));
+            }
+            if (p->at_ident()) {
+                last_ident = p->text();
+            }
+            p->bump();
+        }
+        p->bump();
+        if (last_ident != "") {
+            fields.push(last_ident);
+        }
+    }
+    p->bump();
+    // 無名structの宣言子（"struct {...} NAME;"）は呼び出し元が拾う
+    string display = prefix + name + gp.unwrap();
+    if (name == "") {
+        display = prefix + "(anonymous)" + gp.unwrap();
+    }
+    p->record_struct(display + " { " + join_names(fields) + " }");
+    return Option::Some(true);
+}
+
+// enum宣言（"enum"の上から）。ペイロード付きバリアント・明示値・ネストenumに対応
+export Option<bool> parse_enum(Parser* p, string prefix) {
+    p->bump();
+    string name = "";
+    if (p->at_ident()) {
+        name = p->text();
+        p->bump();
+    }
+    const Option<string> gp = p->parse_generic_params();
+    if (gp.is_none()) {
+        return Option::None;
+    }
+    const Option<bool> o = p->expect_text("{");
+    if (o.is_none()) {
+        return Option::None;
+    }
+    string[] variants = [];
+    while (!p->at_text("}")) {
+        if (p->at_eof()) {
+            return p->fail(msgf(MsgId::EofIn, ["enum body"]));
+        }
+        if (p->at_text(",")) {
+            p->bump();
+            continue;
+        }
+        if (p->at_text("enum")) {
+            // ネストenum（v0.17.1）
+            const Option<bool> n = parse_enum(p, prefix + name + "::");
+            if (n.is_none()) {
+                return Option::None;
+            }
+            continue;
+        }
+        if (!p->at_ident()) {
+            return p->fail(msgf(MsgId::ExpectedThing, ["enum variant name", p->found_text()]));
+        }
+        variants.push(p->text());
+        p->bump();
+        // ペイロード "(...)" と明示値 "= n" を読み飛ばす
+        if (p->at_text("(")) {
+            const Option<bool> pay = p->skip_balanced("(", ")");
+            if (pay.is_none()) {
+                return Option::None;
+            }
+        }
+        if (p->at_text("=")) {
+            p->bump();
+            while (!p->at_text(",") && !p->at_text("}")) {
+                if (p->at_eof()) {
+                    return p->fail(msgf(MsgId::EofIn, ["enum value"]));
+                }
+                p->bump();
+            }
+        }
+    }
+    p->bump();
+    string display = prefix + name + gp.unwrap();
+    p->record_enum(display + " { " + join_names(variants) + " }");
+    return Option::Some(true);
+}

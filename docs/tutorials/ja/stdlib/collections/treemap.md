@@ -50,6 +50,9 @@ int main() {
 | `get(key)` | `Option<V>` | 値を取得（存在すれば`Some(値)`、不在なら`None`）。O(log n) |
 | `get_or(key, default)` | `V` | 値を取得（不在時は`default`を返す非Option版）。O(log n) |
 | `contains(key)` | `bool` | キーが存在するか。O(log n) |
+| `remove(key)` | `void` | キーを削除（AVL回転で平衡を維持・不在キーは無視・空きスロットは再利用）。O(log n)（v0.17.2） |
+| `keys_in_order()` | `K[]` | 全キーを昇順で取得（in-order走査）（v0.17.2） |
+| `clear()` | `void` | 全要素を削除（v0.17.2） |
 | `size()` | `int` | 要素数 |
 
 ---
@@ -73,7 +76,7 @@ int main() {
 | 探索・挿入 | O(log n) | 平均O(1)（線形探索の衝突解決） |
 | キーの制約 | 順序比較（`<`・`==`） | `int` にキャスト可能な型が推奨 |
 | 内部構造 | AVL木（挿入ごとに平衡化） | オープンアドレス法 |
-| 容量 | 自動拡張（スライスのアリーナ） | 固定16エントリ（自動リサイズ未実装） |
+| 容量 | 自動拡張（スライスのアリーナ） | 負荷率50%で自動2倍拡張 |
 
 キー数が多い・キーが文字列・容量を事前に見積もれない場合はTreeMapが向いています。
 
@@ -84,4 +87,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [std::collections::hashmap - 連想配列](hashmap.html) ｜ [目次](../index.html) ｜ 次: [std::json — JSONパーサ](../json.html) →
+← 前: [std::collections::hashmap - 連想配列](hashmap.html) ｜ [目次](../index.html) ｜ 次: [TreeSet / HashSet - 集合](sets.html) →

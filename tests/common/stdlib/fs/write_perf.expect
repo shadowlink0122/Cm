@@ -1,0 +1,2 @@
+sb lines=8000 first=line_0: emitted code text last=line_7999: emitted code text
+bw size_ok=true

@@ -1,0 +1,17 @@
+// dtorを持たない構造体のコピーは警告されない
+struct Point {
+    int x;
+    int y;
+}
+
+struct Holder {
+    Point p;
+}
+
+int main() {
+    Point a;
+    Point b = a;
+    Holder h;
+    h.p = a;
+    return 0;
+}

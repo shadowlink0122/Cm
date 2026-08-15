@@ -1,0 +1,7 @@
+alive=true strong=1 weak=1
+up=42 strong=2
+after up.reset strong=1
+weak=2
+alive=true strong=1
+alive=false
+dead null=true

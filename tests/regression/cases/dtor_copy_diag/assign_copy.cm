@@ -1,0 +1,21 @@
+// dtor持ち構造体のフィールドへの代入コピー（moveなし）は警告される（HashSet二重解放と同型のパターン）
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() {
+        self.p = 0 as int*;
+    }
+}
+
+struct Holder {
+    Res r;
+}
+
+int main() {
+    Res a;
+    Holder h;
+    h.r = a;
+    return 0;
+}

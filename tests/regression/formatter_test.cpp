@@ -74,6 +74,11 @@ TEST_F(FormatterIntegrationTest, WrapExplodesLongArgs) {
     expect_format_case("wrap/long_args");
 }
 
+// 文レベルのメソッドチェーン（.method(...) が2つ以上）はカンマ折り返しより優先して各チェーンの . 直前で折り返す（TS風）。フィールド参照の . しかない長い行は従来どおりカンマ折り返しになる
+TEST_F(FormatterIntegrationTest, WrapBreaksMethodChain) {
+    expect_format_case("wrap/method_chain");
+}
+
 // 1行に詰め込まれた文ブロック（{ 文; 文; }）はブロック展開する（演算子折り返しだと if ヘッダの途中で折れ、`; }` 継続行が次回実行のセミコロン改行で再分割されて冪等性が崩れるため）
 TEST_F(FormatterIntegrationTest, WrapExpandsInlineBlock) {
     expect_format_case("wrap/inline_block");

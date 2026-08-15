@@ -584,6 +584,7 @@ enum class MsgId : int {
     PsStmtAttributeOnlyCaseModifier,
     TcPrintAggregateUnsupported,
     PsTupleUnsupported,
+    TcImplicitDtorCopy,
     Count,
 };
 

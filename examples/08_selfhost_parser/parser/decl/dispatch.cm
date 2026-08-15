@@ -1,0 +1,91 @@
+// セルフホストパーサ: トップレベル宣言のディスパッチ
+// 先頭トークンで宣言種別を判定し、機能別モジュール（modules/types/impls/funcs）へ振り分ける
+module parser.decl.dispatch;
+
+import ../../lexer/token::*;
+import ../state::*;
+import ./modules::*;
+import ./types::*;
+import ./impls::*;
+import ./funcs::*;
+
+// トップレベル宣言を1つ解析する（先頭字句のswitchで宣言種別ごとの解析へ振り分ける）
+export Option<bool> parse_decl(Parser* p) {
+    switch (p->text()) {
+        case("#") {
+            // 属性は読み飛ばす
+            return p->skip_attribute();
+        }
+        case("export") {
+            // exportは接頭辞として無視して次を見る
+            p->bump();
+            return parse_decl(p);
+        }
+        case("module") {
+            return parse_module_decl(p);
+        }
+        case("import") {
+            return parse_import_decl(p);
+        }
+        case("use") {
+            return parse_use_decl(p);
+        }
+        case("typedef") {
+            return parse_typedef(p);
+        }
+        case("const") {
+            return parse_const(p);
+        }
+        case("extern") {
+            return parse_extern(p);
+        }
+        case("struct") {
+            const Option<bool> r = parse_struct(p, "");
+            if (r.is_none()) {
+                return Option::None;
+            }
+            // 無名/宣言子付きの "STR;" 形式が続く場合は消費する
+            if (p->at_text(";")) {
+                p->bump();
+            } else if (p->at_ident()) {
+                const Option<bool> d = p->skip_to_semicolon();
+                if (d.is_none()) {
+                    return Option::None;
+                }
+            }
+            return Option::Some(true);
+        }
+        case("enum") {
+            const Option<bool> r = parse_enum(p, "");
+            if (r.is_none()) {
+                return Option::None;
+            }
+            if (p->at_text(";")) {
+                p->bump();
+            }
+            return Option::Some(true);
+        }
+        case("impl") {
+            return parse_impl(p);
+        }
+        case("interface") {
+            return parse_interface(p);
+        }
+        else {
+            // それ以外は関数またはグローバル定義とみなす
+            return parse_func_or_var(p);
+        }
+    }
+    return parse_func_or_var(p);
+}
+
+// プログラム全体を解析する（成功はSome(true)、失敗はNone）
+export Option<bool> parse_program(Parser* p) {
+    while (!p->at_eof()) {
+        const Option<bool> d = parse_decl(p);
+        if (d.is_none()) {
+            return Option::None;
+        }
+    }
+    return Option::Some(true);
+}

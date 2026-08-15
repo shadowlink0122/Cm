@@ -1,0 +1,34 @@
+//! platform: !js|sv
+// UniquePtr基本: 確保・読み書き・生ポインタ借用・release/reset・null状態
+import std::io::println;
+import std::mem::smart::*;
+import std::mem::{dealloc};
+
+int main() {
+    UniquePtr<int> u(42);
+    println("{u.get()}");
+
+    u.set(43);
+    println("{u.get()}");
+
+    // 借用ビュー経由の書き換えは所有者から見える
+    int* p = u.raw();
+    *p = 44;
+    println("{u.get()}");
+
+    // release: 所有権を放棄して手動解放する
+    UniquePtr<int> r(7);
+    int* raw = r.release();
+    println("released={*raw} null={r.is_null()}");
+    dealloc(raw as void*);
+
+    // reset: 即時解放してnull化
+    UniquePtr<int> s(8);
+    s.reset();
+    println("after reset null={s.is_null()}");
+
+    // 宣言のみはゼロ初期化でnull状態（dtorは何もしない）
+    UniquePtr<int> empty;
+    println("empty null={empty.is_null()}");
+    return 0;
+}

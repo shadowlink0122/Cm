@@ -1,0 +1,20 @@
+// 構造体リテラルのフィールド初期化でのdtor持ち構造体コピーも警告される
+struct Res {
+    int* p;
+}
+
+impl Res {
+    ~self() {
+        self.p = 0 as int*;
+    }
+}
+
+struct Holder {
+    Res r;
+}
+
+int main() {
+    Res a;
+    Holder h = {r: a};
+    return 0;
+}

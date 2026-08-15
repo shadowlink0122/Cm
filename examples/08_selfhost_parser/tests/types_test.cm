@@ -1,0 +1,78 @@
+// parser/types.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/types::*;
+import ../diag/messages::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void parses_struct_with_fields() {
+    Parser p = parser_of("struct Point { double x; double y; }");
+    assert(parse_struct(&p, "").is_some(), "struct parses");
+    assert(p.structs_of()[0] == "Point {{ x, y }}", "name and field list");
+}
+
+#[test]
+void parses_generic_struct_with_traits_and_private() {
+    Parser p = parser_of("struct Pair<K, V> with Debug { private K key; V val; }");
+    assert(parse_struct(&p, "").is_some(), "generic struct with with-clause parses");
+    assert(p.structs_of()[0] == "Pair<K, V> {{ key, val }}", "generics kept, private stripped");
+}
+
+#[test]
+void parses_nested_struct_and_enum() {
+    Parser p = parser_of("struct Outer { struct Inner { int v; } in; enum Mode { A, B } m; int t; }");
+    assert(parse_struct(&p, "").is_some(), "nested types parse");
+    assert(p.structs_of().len() == 2, "outer and inner recorded");
+    assert(p.structs_of()[0] == "Outer::Inner {{ v }}", "nested name is qualified");
+    assert(p.enums_of()[0] == "Outer::Mode {{ A, B }}", "nested enum qualified");
+}
+
+#[test]
+void parses_enum_with_payload_and_value() {
+    Parser p = parser_of("enum Shape { Dot, Circle(double), Rect(double, double), Alias = 7 }");
+    assert(parse_enum(&p, "").is_some(), "enum parses");
+    assert(p.enums_of()[0] == "Shape {{ Dot, Circle, Rect, Alias }}", "variant names collected");
+}
+
+#[test]
+void struct_without_brace_is_error() {
+    Parser p = parser_of("struct Broken;");
+    assert(parse_struct(&p, "").is_none(), "missing body is an error");
+    assert(p.error_message() == "expected '{' in struct declaration but found ';'",
+        "error message");
+}
+
+#[test]
+void empty_struct_and_trailing_comma_enum() {
+    Parser p = parser_of("struct Empty { }");
+    assert(parse_struct(&p, "").is_some(), "empty struct parses");
+    Parser q = parser_of("enum E { A, B, }");
+    assert(parse_enum(&q, "").is_some(), "trailing comma enum parses");
+}
+
+#[test]
+void field_attribute_is_skipped() {
+    Parser p = parser_of("struct S { #[target(!sv)] int x; int y; }");
+    assert(parse_struct(&p, "").is_some(), "attributed field parses");
+    const string expected = "S {" + " x, y " + "}";
+    assert(p.structs_of()[0] == expected, "both fields collected");
+}
+
+#[test]
+void struct_error_uses_catalog_message() {
+    Parser p = parser_of("struct Broken;");
+    assert(parse_struct(&p, "").is_none(), "missing body fails");
+    assert(p.error_message() == msgf(MsgId::ExpectedIn, ["{", "struct declaration", "';'"]),
+        "catalog message");
+}

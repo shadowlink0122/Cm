@@ -87,4 +87,4 @@ int main() {
 ---
 
 <!-- nav -->
-← 前: [TreeMap](collections/treemap.html) ｜ [目次](index.html) ｜ 次: [標準ライブラリの拡張方法](extending.html) →
+← 前: [TreeSet / HashSet - 集合](collections/sets.html) ｜ [目次](index.html) ｜ 次: [標準ライブラリの拡張方法](extending.html) →

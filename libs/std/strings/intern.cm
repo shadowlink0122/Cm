@@ -1,0 +1,50 @@
+// std/strings/intern.cm - 文字列interning（Symbol化）
+// 同一内容の文字列へ一意な整数id（symbol）を割り当てる。コンパイラのシンボルテーブル・識別子管理の基礎部品
+// idの比較は整数比較（O(1)）になり、id→文字列はname_ofで引き戻せる
+module std.strings.intern;
+
+import std::collections::strmap::*;
+
+export struct Interner {
+    private StringMap<int> ids;   // 内容→id
+    private string[] names;      // id→内容（idは採番順の連番）
+}
+
+export impl Interner {
+    // 空のInternerを作る（StringMapはdtor無しのスライスバック構造のため値コピーで安全に初期化できる）
+    self() {
+        StringMap<int> m();
+        self.ids = m;
+        self.names = [];
+    }
+
+    // 文字列をintern して idを返す（既存の内容は同じid、新規は連番を採番）
+    int intern(string s) {
+        const int found = self.ids.get_or(s, -1);
+        if (found >= 0) {
+            return found;
+        }
+        const int id = self.names.len();
+        self.ids.insert(s, id);
+        self.names.push(s);
+        return id;
+    }
+
+    // 登録済みかを返す（internせず確認のみ）
+    bool contains(string s) {
+        return self.ids.contains(s);
+    }
+
+    // idから文字列を引き戻す（範囲外は空文字列）
+    string name_of(int id) {
+        if (id < 0 || id >= self.names.len()) {
+            return "";
+        }
+        return self.names[id];
+    }
+
+    // 登録済みシンボル数
+    int len() {
+        return self.names.len();
+    }
+}

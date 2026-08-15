@@ -219,9 +219,10 @@ TypePtr substitute_type_params(const TypePtr& type,
             return it->second;
     }
 
-    // 置換対象（element_type・type_args）を含まないリーフはそのまま共有する。
+    // 置換対象（element_type・type_args・関数型のparam_types/return_type）を含まないリーフはそのまま共有する。
     // クローンするとUnionType等の派生ノードがスライスされ変種情報を失うため、コピー自体を避ける
-    if (!type->element_type && type->type_args.empty())
+    if (!type->element_type && type->type_args.empty() && type->param_types.empty() &&
+        !type->return_type)
         return type;
 
     auto result = std::make_shared<Type>(*type);
@@ -229,6 +230,13 @@ TypePtr substitute_type_params(const TypePtr& type,
         result->element_type = substitute_type_params(type->element_type, subst);
     for (auto& arg : result->type_args)
         arg = substitute_type_params(arg, subst);
+    // 関数ポインタ型（int*(T, T)等）の引数・戻り値も置換する。
+    // 従来は未置換のまま共有され、ジェネリック関数/メソッドの関数ポインタ引数経由の間接呼び出しが
+    // LLVM検証エラー（Call parameter type does not match）になっていた
+    for (auto& pt : result->param_types)
+        pt = substitute_type_params(pt, subst);
+    if (type->return_type)
+        result->return_type = substitute_type_params(type->return_type, subst);
 
     // "Box<T>" 表記が名前に残っている場合は基底名へ正規化する（type_argsが真実）
     if (!result->type_args.empty()) {

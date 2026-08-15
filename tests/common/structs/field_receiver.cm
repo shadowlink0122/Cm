@@ -1,0 +1,66 @@
+// v0.17.2バグ修正回帰: フィールドをレシーバにしたメソッド呼び出しの変異が呼び出し元へ反映される
+// （旧: HirMemberレシーバがフォールバックの一時コピー参照に落ち、selfフィールド変異が消えていた）
+import std::io::println;
+
+struct Counter {
+    int n;
+}
+
+impl Counter {
+    void bump() {
+        self.n = self.n + 1;
+    }
+}
+
+struct Wrap {
+    Counter c;
+}
+
+impl Wrap {
+    void bump_via_field() {
+        self.c.bump();
+    }
+}
+
+struct GWrap<T> {
+    Counter c;
+    T dummy;
+}
+
+impl<T> GWrap<T> {
+    void bump_via_field() {
+        self.c.bump();
+    }
+}
+
+struct Deep {
+    Wrap w;
+}
+
+int main() {
+    // mainからフィールド経由
+    Wrap w;
+    w.c.n = 0;
+    w.c.bump();
+    w.c.bump();
+    println("{w.c.n}");
+
+    // 非ジェネリックimplのメソッド内からフィールド経由
+    w.c.n = 10;
+    w.bump_via_field();
+    println("{w.c.n}");
+
+    // ジェネリックimplのメソッド内からフィールド経由
+    GWrap<int> g;
+    g.c.n = 100;
+    g.dummy = 0;
+    g.bump_via_field();
+    println("{g.c.n}");
+
+    // 2段ネストのフィールドレシーバ
+    Deep d;
+    d.w.c.n = 5;
+    d.w.c.bump();
+    println("{d.w.c.n}");
+    return 0;
+}

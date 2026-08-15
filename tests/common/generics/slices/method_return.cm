@@ -1,0 +1,51 @@
+// v0.17.2バグ修正回帰: ジェネリックメソッドが構築して返すK[]スライスの要素幅
+// （旧: cm_slice_new/cm_array_to_sliceの要素サイズ定数が未解決K幅のまま残り、呼び出し側の読みが交互にゴミ化していた）
+import std::io::println;
+
+struct Holder<K, V> {
+    K[] keys;
+    V[] vals;
+    K[] tmp;
+}
+
+impl<K, V> Holder<K, V> {
+    // ローカル構築して返す
+    K[] copy_keys() {
+        K[] out = [];
+        for (int i = 0; i < self.keys.len(); i++) {
+            out.push(self.keys[i]);
+        }
+        return out;
+    }
+
+    // フィールドへ構築して返す
+    K[] via_field() {
+        self.tmp = [];
+        for (int i = 0; i < self.keys.len(); i++) {
+            self.tmp.push(self.keys[i]);
+        }
+        return self.tmp;
+    }
+}
+
+int main() {
+    Holder<int, int> h;
+    h.keys = [10, 20, 30, 40];
+    h.vals = [1, 2, 3, 4];
+    h.tmp = [];
+
+    int[] a = h.copy_keys();
+    println("local: {a[0]} {a[1]} {a[2]} {a[3]} n={a.len()}");
+
+    int[] b = h.via_field();
+    println("field: {b[0]} {b[1]} {b[2]} {b[3]} n={b.len()}");
+
+    // long要素（8バイト）でも同様に一致する
+    Holder<long, int> hl;
+    hl.keys = [100 as long, 200 as long];
+    hl.vals = [1, 2];
+    hl.tmp = [];
+    long[] c = hl.copy_keys();
+    println("long: {c[0]} {c[1]} n={c.len()}");
+    return 0;
+}

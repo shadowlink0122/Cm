@@ -1,0 +1,7 @@
+ff -ff 0 1000
+1010 100 z 10
+ffffffff
+-8000000000000000 7fffffffffffffff
+[] []
+[0000007f] [ab...] [long]
+[00ff]

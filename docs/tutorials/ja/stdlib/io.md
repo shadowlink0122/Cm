@@ -109,6 +109,7 @@ int main() {
 | 関数 | 戻り値 | 説明 |
 |------|--------|------|
 | `read_file(path)` | `string` | ファイル全体を読み込み（失敗時は空文字列） |
+| `read_lines(path)` | `string[]` | 行単位で読み込み（改行区切り・失敗時は空スライス。v0.17.2） |
 | `write_file(path, content)` | `bool` | 上書き書き込み |
 | `append_file(path, content)` | `bool` | 追記 |
 | `exists(path)` | `bool` | 存在確認 |

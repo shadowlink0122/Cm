@@ -1,0 +1,86 @@
+// parser/funcs.cm の単体テスト（#[test] 関数を `cm test` が実行する）
+import std::debug::assert;
+import ../lexer/token::*;
+import ../lexer/scan::*;
+import ../parser/state::*;
+import ../parser/decl/funcs::*;
+import ../diag/messages::*;
+
+// テスト用: ソースから解析器を組み立てる
+Parser parser_of(string src) {
+    Lexer lx(src);
+    const Option<bool> r = lx.run();
+    assert(r.is_some(), "lex should succeed");
+    Parser p(lx.take_tokens());
+    return p;
+}
+
+#[test]
+void parses_plain_function() {
+    Parser p = parser_of("int main() { return 0; }");
+    assert(parse_func_or_var(&p).is_some(), "function parses");
+    assert(p.funcs_of()[0] == "int main()", "return type and name");
+}
+
+#[test]
+void parses_generic_function_with_complex_return() {
+    Parser p = parser_of("<T> Option<string> find(T[] xs) { return Option::None; }");
+    assert(parse_func_or_var(&p).is_some(), "generic function parses");
+    assert(p.funcs_of()[0] == "Option<string> find<T>()", "generics and return type kept");
+}
+
+#[test]
+void parses_typedef_and_const() {
+    Parser p = parser_of("typedef Meters = double;");
+    assert(parse_typedef(&p).is_some(), "typedef parses");
+    assert(p.typedefs_of()[0] == "Meters", "typedef name");
+
+    Parser q = parser_of("const int LIMIT = 100;");
+    assert(parse_const(&q).is_some(), "const parses");
+    assert(q.consts_of()[0] == "LIMIT", "const name is the ident before '='");
+}
+
+#[test]
+void parses_extern_c_declaration() {
+    Parser p = parser_of("extern \"C\" int cm_now(int* out);");
+    assert(parse_extern(&p).is_some(), "extern decl parses");
+    assert(p.funcs_of()[0] == "int cm_now()", "extern function recorded");
+}
+
+#[test]
+void function_without_body_or_semicolon_is_error() {
+    Parser p = parser_of("int broken()");
+    assert(parse_func_or_var(&p).is_none(), "missing body is an error");
+    assert(p.error_message() ==
+        "expected '{' or ';' after function signature but found end of file",
+        "error message");
+}
+
+#[test]
+void const_without_assign_is_error() {
+    Parser p = parser_of("const int NO_VALUE;");
+    assert(parse_const(&p).is_none(), "const without '=' is an error");
+}
+
+#[test]
+void function_pointer_parameter_nests_parens() {
+    Parser p = parser_of("void sort_by(int[] xs, int*(int, int) cmp) { }");
+    assert(parse_func_or_var(&p).is_some(), "fnptr parameter parses");
+    assert(p.funcs_of()[0] == "void sort_by()", "name extracted before first paren");
+}
+
+#[test]
+void global_var_without_const_is_recorded() {
+    Parser p = parser_of("int counter = 0;");
+    assert(parse_func_or_var(&p).is_some(), "global var parses");
+    assert(p.consts_of()[0] == "counter", "declaration name recorded");
+}
+
+#[test]
+void func_error_uses_catalog_message() {
+    Parser p = parser_of("int broken()");
+    assert(parse_func_or_var(&p).is_none(), "missing body fails");
+    assert(p.error_message()
+        == msgf(MsgId::ExpectedBodyOrSemi, ["function signature", "end of file"]),
+        "catalog message");
+}

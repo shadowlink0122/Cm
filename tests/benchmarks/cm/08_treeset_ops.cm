@@ -1,0 +1,39 @@
+// ベンチマーク8: TreeSet（平衡二分探索木）の挿入・検索・順序走査
+// 20,000要素の昇順挿入（素朴なBSTの最悪ケース）+ 全件検索 + in-order走査
+
+import std::io;
+import std::collections::treeset::*;
+import std::core::time::*;
+
+int main() {
+    const int n = 20000;
+    Timer t = Timer::start();
+
+    TreeSet<int> s();
+    for (int i = 0; i < n; i++) {
+        s.insert(i);
+    }
+    ulong insert_ms = t.elapsed_ms();
+
+    t.reset();
+    int hit = 0;
+    for (int i = 0; i < n; i++) {
+        if (s.contains(i)) {
+            hit = hit + 1;
+        }
+    }
+    ulong lookup_ms = t.elapsed_ms();
+
+    t.reset();
+    int[] v = s.values_in_order();
+    ulong iter_ms = t.elapsed_ms();
+
+    println("TreeSet n={n} height={s.tree_height()} hit={hit} iter_n={v.len()}");
+    println("insert={insert_ms}ms lookup={lookup_ms}ms iterate={iter_ms}ms");
+    if (hit == n && v.len() == n && s.tree_height() <= 22) {
+        println("Successfully verified balanced TreeSet with {n} elements");
+        return 0;
+    }
+    println("verification failed");
+    return 1;
+}

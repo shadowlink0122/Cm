@@ -1,0 +1,36 @@
+// TreeSet（平衡二分探索木）: 挿入・存在判定・削除・昇順走査・clear
+import std::io::println;
+import std::collections::treeset::*;
+
+int main() {
+    TreeSet<int> s();
+    s.insert(5);
+    s.insert(1);
+    s.insert(9);
+    s.insert(5);
+    s.insert(3);
+    println("len={s.len()} c5={s.contains(5)} c2={s.contains(2)}");
+
+    // 昇順走査
+    int[] v = s.values_in_order();
+    println("{v[0]} {v[1]} {v[2]} {v[3]} n={v.len()}");
+
+    // 削除（葉・子1つ・子2つのケースを通す）
+    s.remove(1);
+    s.remove(5);
+    println("len={s.len()} c1={s.contains(1)} c5={s.contains(5)} c9={s.contains(9)}");
+    int[] w = s.values_in_order();
+    println("{w[0]} {w[1]} n={w.len()}");
+
+    // 文字列要素
+    TreeSet<string> t();
+    t.insert("banana");
+    t.insert("apple");
+    t.insert("cherry");
+    string[] u = t.values_in_order();
+    println("{u[0]} {u[1]} {u[2]}");
+
+    s.clear();
+    println("cleared len={s.len()} empty={s.is_empty()}");
+    return 0;
+}

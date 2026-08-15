@@ -1,0 +1,3 @@
+len=10000
+hit=10000 miss=0
+after remove len=5000

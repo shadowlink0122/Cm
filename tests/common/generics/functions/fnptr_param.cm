@@ -1,0 +1,27 @@
+// v0.17.2バグ修正回帰: ジェネリック関数/implメソッドの関数ポインタ引数（int*(T, T)）のシグネチャ置換
+// （旧: param_types/return_typeが未置換のまま共有され、間接呼び出しがLLVM検証エラーになっていた）
+import std::io::println;
+
+<T> int call_cmp(int*(T, T) f, T a, T b) {
+    return f(a, b);
+}
+
+struct Box<T> {
+    T v;
+}
+
+impl<T> Box<T> {
+    int apply(int*(T, T) f, T other) {
+        return f(self.v, other);
+    }
+}
+
+int main() {
+    println("{call_cmp((int x, int y) => x - y, 10, 3)}");
+    println("{call_cmp((double x, double y) => (x < y) ? -1 : 1, 1.5, 2.5)}");
+
+    Box<int> b;
+    b.v = 21;
+    println("{b.apply((int a, int c) => a * c, 2)}");
+    return 0;
+}

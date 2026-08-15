@@ -271,6 +271,7 @@ set(CM_TYPECHECK_SOURCES
     src/internal/types/checking/auto_impl.cpp
     src/internal/types/checking/utils/compat.cpp
     src/internal/types/checking/utils/conversion.cpp
+    src/internal/types/checking/utils/ownership.cpp
     src/internal/types/checking/utils/interp.cpp
     src/internal/types/checking/utils/diagnostics.cpp
     src/internal/types/checking/utils/naming.cpp
@@ -844,6 +845,23 @@ if(BUILD_TESTING)
         target_include_directories(narrowing_diag_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
         target_link_libraries(narrowing_diag_test gtest_main cm_frontend)
         gtest_discover_tests(narrowing_diag_test PROPERTIES LABELS "regression")
+
+        # Integration tests - dtor持ち構造体の暗黙コピー診断（二重解放ハザードの言語側対策）
+        # （Cmプログラムを tests/regression/cases/dtor_copy_diag/ から読み込む）
+        add_executable(dtor_copy_diag_test
+            tests/regression/dtor_copy_diag_test.cpp
+            ${CM_LEXER_SOURCES}
+            ${CM_AST_SOURCES}
+            ${CM_PARSER_SOURCES}
+            ${CM_TYPECHECK_SOURCES}
+            ${CM_I18N_SOURCES}
+        )
+        set_target_properties(dtor_copy_diag_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${TEST_RUNTIME_OUTPUT_DIRECTORY})
+        target_compile_definitions(dtor_copy_diag_test PRIVATE
+            CM_DTOR_COPY_DIAG_CASE_DIR="${CMAKE_SOURCE_DIR}/tests/regression/cases/dtor_copy_diag")
+        target_include_directories(dtor_copy_diag_test BEFORE PRIVATE ${GTEST_INCLUDE_DIR})
+        target_link_libraries(dtor_copy_diag_test gtest_main cm_frontend)
+        gtest_discover_tests(dtor_copy_diag_test PROPERTIES LABELS "regression")
 
         # Integration tests - MIR Lowering
         # （Cmプログラムを tests/regression/cases/mir_lowering/ から読み込む）

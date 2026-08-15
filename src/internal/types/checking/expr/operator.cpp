@@ -199,6 +199,11 @@ ast::TypePtr TypeChecker::infer_binary(ast::BinaryExpr& binary) {
             ltype, rtype_before_promotion, rhs_expr_before_promotion,
             binary.right->span.start != 0 ? binary.right->span : current_span_);
     }
+    // dtor持ち構造体の暗黙コピーを診断（単純代入のみ。moveなしの場所式コピーは二重解放になる）
+    if (binary.op == ast::BinaryOp::Assign) {
+        check_dtor_copy_policy(rtype_before_promotion, rhs_expr_before_promotion,
+                               binary.right->span.start != 0 ? binary.right->span : current_span_);
+    }
 
     switch (binary.op) {
         case ast::BinaryOp::Eq:

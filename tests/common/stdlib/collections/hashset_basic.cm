@@ -1,0 +1,25 @@
+//! platform: !js|sv
+// HashSet: 挿入・重複・存在判定・削除・clear
+import std::io::println;
+import std::collections::hashset::*;
+
+int main() {
+    HashSet<int> s();
+    s.insert(3);
+    s.insert(1);
+    s.insert(4);
+    s.insert(3);
+    println("len={s.len()} c3={s.contains(3)} c2={s.contains(2)}");
+
+    s.remove(3);
+    println("len={s.len()} c3={s.contains(3)}");
+    s.remove(99);
+    println("len={s.len()}");
+
+    s.clear();
+    println("cleared len={s.len()} empty={s.is_empty()}");
+
+    s.insert(7);
+    println("reuse len={s.len()} c7={s.contains(7)}");
+    return 0;
+}

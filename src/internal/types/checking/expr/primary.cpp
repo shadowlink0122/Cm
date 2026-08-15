@@ -664,6 +664,8 @@ ast::TypePtr TypeChecker::infer_struct_literal(ast::StructLiteralExpr& lit) {
             if (field_expected && field_value_type) {
                 check_numeric_conversion_policy(field_expected, field_value_type, field.value.get(),
                                                 field.value->span);
+                // dtor持ち構造体の暗黙コピーもlet/代入/returnと同じ規則で診断する
+                check_dtor_copy_policy(field_value_type, field.value.get(), field.value->span);
             }
         }
         // キャプチャ付きクロージャの構造体フィールド格納は環境喪失でゴミ値になるため拒否（V6）

@@ -105,6 +105,23 @@ out = (q0 | (q1 << 1) | (q2 << 2)
     | (1 << 8)) as ushort;
 ```
 
+### 2.2.1 Method-chain wrapping (v0.17.2)
+
+When a statement-level method chain (two or more `.method(...)` calls) exceeds the maximum line width (100 columns), it is wrapped right before each chained `.`, taking priority over comma/operator wrapping (TypeScript/Prettier style):
+
+```cm
+// Before
+return template_text().replace("{0}", first_argument).replace("{1}", second_argument).replace("{2}", third_argument);
+
+// After
+return template_text()
+    .replace("{0}", first_argument)
+    .replace("{1}", second_argument)
+    .replace("{2}", third_argument);
+```
+
+Field-access dots (such as `self.value`) and chains inside parentheses (such as an `if (...)` header) are not affected and keep the conventional comma/operator wrapping.
+
 ### 2.3 Trailing-comment position (v0.16.0)
 
 Manually adjusted trailing-comment positions are respected. The gap between code and comment is widened to two spaces only when it is smaller than that:

@@ -1,0 +1,80 @@
+// std/strings/format.cm - 数値→基数文字列と幅揃え
+// std::strings::parse（文字列→数値）の逆方向。コード生成の16進出力・桁揃え等に使う
+module std.strings.format;
+
+import std::strings::from_bytes::*;
+
+// 基数の数字文字（10以上は小文字・モジュール内部用）
+const string FORMAT_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+// 値vを基数base（2〜36）の文字列にする（負数は'-'前置。基数が範囲外なら空文字列）
+// long最小値はulong経由で絶対値を取り正しく扱う
+export string to_radix(long v, int base) {
+    if (base < 2 || base > 36) {
+        return "";
+    }
+    if (v == 0) {
+        return "0";
+    }
+    const bool neg = v < 0;
+    ulong mag = v as ulong;
+    if (neg) {
+        mag = (0 as ulong) - mag;
+    }
+    const ulong ubase = base as ulong;
+    utiny[] rev = [];
+    while (mag > (0 as ulong)) {
+        const int d = (mag % ubase) as int;
+        rev.push(FORMAT_DIGITS.byte_at(d) as utiny);
+        mag = mag / ubase;
+    }
+    utiny[] buf = [];
+    if (neg) {
+        buf.push(45 as utiny);  // '-'
+    }
+    for (int i = rev.len() - 1; i >= 0; i--) {
+        buf.push(rev[i]);
+    }
+    return from_bytes(buf);
+}
+
+// 16進文字列（小文字・prefix無し）
+export string to_hex(long v) {
+    return to_radix(v, 16);
+}
+
+// 2進文字列
+export string to_bin(long v) {
+    return to_radix(v, 2);
+}
+
+// 8進文字列
+export string to_oct(long v) {
+    return to_radix(v, 8);
+}
+
+// 幅widthまで左側をfillで埋める（既にwidth以上ならそのまま）
+export string pad_left(string s, int width, char fill) {
+    int need = width - s.len();
+    if (need <= 0) {
+        return s;
+    }
+    utiny[] buf = [];
+    for (int i = 0; i < need; i++) {
+        buf.push(fill as utiny);
+    }
+    return from_bytes(buf) + s;
+}
+
+// 幅widthまで右側をfillで埋める（既にwidth以上ならそのまま）
+export string pad_right(string s, int width, char fill) {
+    int need = width - s.len();
+    if (need <= 0) {
+        return s;
+    }
+    utiny[] buf = [];
+    for (int i = 0; i < need; i++) {
+        buf.push(fill as utiny);
+    }
+    return s + from_bytes(buf);
+}

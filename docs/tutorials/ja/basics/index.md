@@ -32,4 +32,4 @@ Cm言語の基礎を学ぶチュートリアル集です。推定学習時間: 3
 ---
 
 <!-- nav -->
-← 前: [Cm言語チュートリアル v0.17.1](../index.html) ｜ [目次](../index.html) ｜ 次: [はじめに - Cm言語とは](introduction.html) →
+← 前: [Cm言語チュートリアル v0.17.2](../index.html) ｜ [目次](../index.html) ｜ 次: [はじめに - Cm言語とは](introduction.html) →

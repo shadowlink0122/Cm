@@ -1,0 +1,32 @@
+//! platform: !js|sv
+// WeakPtr: downgrade/upgrade/生存判定/reset連動/制御ブロックの遅延解放
+import std::io::println;
+import std::mem::smart::*;
+
+int main() {
+    // 生存中のupgrade
+    SharedPtr<int> a(42);
+    WeakPtr<int> w = a.downgrade();
+    println("alive={w.is_alive()} strong={a.use_count()} weak={a.weak_count()}");
+
+    SharedPtr<int> up = w.upgrade();
+    println("up={up.get()} strong={a.use_count()}");
+    up.reset();
+    println("after up.reset strong={a.use_count()}");
+
+    // weakのclone
+    WeakPtr<int> w2 = w.clone();
+    println("weak={a.weak_count()}");
+
+    // 共有を増やしてから段階的にreset（moveのエイリアス破棄タイミングに依存しない決定的検証）
+    SharedPtr<int> b = a.clone();
+    a.reset();
+    println("alive={w.is_alive()} strong={b.use_count()}");
+    b.reset();
+    println("alive={w.is_alive()}");
+
+    // 全strong消滅後のupgradeはnull
+    SharedPtr<int> dead = w.upgrade();
+    println("dead null={dead.is_null()}");
+    return 0;
+}

@@ -1,0 +1,247 @@
+// std/strings/parse.cm - 文字列→数値/真偽値の解析
+// std::io::console::inputに置かれていたparse系を文字列モジュールへ集約し、基数指定版を追加した
+// （std::io側は互換のため再エクスポートを維持する）。
+// 方針: 空文字列・符号のみ・非数字先頭はNone、先頭の数値部分をパースしてSome（M17のOption契約を踏襲）。
+// SVターゲットはOption（タグ付きユニオン）が非合成のため全関数を#[target(!sv)]で除外する
+module std.strings.parse;
+
+import std::strings::chars::{digit_value};
+
+/// 文字列を整数に変換（失敗はNone。先頭の数値部分をパース）
+#[target(!sv)]
+export Option<int> parse_int(string s) {
+    int result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return Option::None;
+    }
+
+    // 符号チェック
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 先頭が数字でなければ失敗
+    if (i >= len || (s[i] as int) < 48 || (s[i] as int) > 57) {
+        return Option::None;
+    }
+
+    // 数字を処理
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result * 10 + (c - 48);
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return Option::Some(result);
+}
+
+/// 基数base（2〜36）で文字列を整数に変換（失敗はNone。0x等のプレフィックスは扱わない）
+#[target(!sv)]
+export Option<int> parse_int_radix(string s, int base) {
+    if (base < 2 || base > 36) {
+        return Option::None;
+    }
+    int result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return Option::None;
+    }
+
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 先頭が基数内の数字でなければ失敗
+    if (i >= len || digit_value(s[i], base).is_none()) {
+        return Option::None;
+    }
+
+    while (i < len) {
+        Option<int> d = digit_value(s[i], base);
+        if (d.is_none()) {
+            break;
+        }
+        result = result * base + d.unwrap();
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return Option::Some(result);
+}
+
+/// 基数base（2〜36）で文字列をlongに変換（失敗はNone）
+#[target(!sv)]
+export Option<long> parse_long_radix(string s, int base) {
+    if (base < 2 || base > 36) {
+        return Option::None;
+    }
+    long result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return Option::None;
+    }
+
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    if (i >= len || digit_value(s[i], base).is_none()) {
+        return Option::None;
+    }
+
+    while (i < len) {
+        Option<int> d = digit_value(s[i], base);
+        if (d.is_none()) {
+            break;
+        }
+        result = result * (base as long) + (d.unwrap() as long);
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return Option::Some(result);
+}
+
+/// 文字列をboolに変換（"true"/"1"/"yes"はtrue、"false"/"0"/"no"はfalse、それ以外はNone）
+#[target(!sv)]
+export Option<bool> parse_bool(string s) {
+    if (s == "true" || s == "1" || s == "yes") {
+        return Option::Some(true);
+    }
+    if (s == "false" || s == "0" || s == "no") {
+        return Option::Some(false);
+    }
+    return Option::None;
+}
+
+/// 文字列をlongに変換（失敗はNone）
+#[target(!sv)]
+export Option<long> parse_long(string s) {
+    long result = 0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return Option::None;
+    }
+
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    if (i >= len || (s[i] as int) < 48 || (s[i] as int) > 57) {
+        return Option::None;
+    }
+
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result * 10 + (c - 48);
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return Option::Some(result);
+}
+
+/// 文字列をdoubleに変換（簡易実装。失敗はNone。指数表記は未対応）
+/// SVターゲットは浮動小数非対応（SV004）のため宣言ごと除外する
+#[target(!sv)]
+export Option<double> parse_double(string s) {
+    double result = 0.0;
+    bool negative = false;
+    int i = 0;
+    int len = s.len();
+
+    if (len == 0) {
+        return Option::None;
+    }
+
+    if (s[0] == '-') {
+        negative = true;
+        i = 1;
+    } else if (s[0] == '+') {
+        i = 1;
+    }
+
+    // 先頭が数字か小数点でなければ失敗
+    if (i >= len || (((s[i] as int) < 48 || (s[i] as int) > 57) && (s[i] as int) != 46)) {
+        return Option::None;
+    }
+
+    // 整数部
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result * 10.0 + (c - 48) as double;
+        } else if (c == 46) {
+            i = i + 1;
+            break;
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    // 小数部
+    double fraction = 0.1;
+    while (i < len) {
+        int c = s[i] as int;
+        if (c >= 48 && c <= 57) {
+            result = result + ((c - 48) as double) * fraction;
+            fraction = fraction * 0.1;
+        } else {
+            break;
+        }
+        i = i + 1;
+    }
+
+    if (negative) {
+        result = -result;
+    }
+
+    return Option::Some(result);
+}

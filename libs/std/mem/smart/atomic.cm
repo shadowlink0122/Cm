@@ -1,0 +1,86 @@
+// std/mem/smart/atomic.cm - Atomic参照カウント版SharedPtr
+// 制御ブロックの増減をアトミック命令（C++ <atomic> backing）で行い、
+// スレッド間で共有できる参照カウントを提供する（clone済みの各インスタンスを別スレッドへ渡す用途）。
+// API・所有規律は単一スレッド版SharedPtrと同一（共有はclone・移動はmove・返却はreturn move）。
+// 対応ターゲット: native（jit/native。アトミックランタイムはネイティブC++実装のためwasm/js/svは対象外）
+module std.mem.smart.atomic;
+
+import std::mem::{alloc, dealloc};
+
+// アトミック操作ランタイム（native.syncと同じC++ backing）
+extern "C" int cm_atomic_load_i32(int* ptr);
+extern "C" int cm_atomic_fetch_add_i32(int* ptr, int value);
+extern "C" int cm_atomic_fetch_sub_i32(int* ptr, int value);
+
+// 制御ブロック（strong/weakをアトミックに増減する）
+// フィールドはAtomicSharedPtrのimplがcount->経由でアトミック操作へ渡すためpublicのまま（privateはimpl粒度の検査のため他型implから触れなくなる）
+export struct AtomicSharedCount {
+    int strong;
+    int weak;
+}
+
+export struct AtomicSharedPtr<T> {
+    private T* ptr;
+    private AtomicSharedCount* count;
+}
+
+export impl<T> AtomicSharedPtr<T> {
+    // 値をヒープへ移して所有する（strong=1, weak=0）
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+        void* craw = alloc(__sizeof__(AtomicSharedCount) as int);
+        self.count = craw as AtomicSharedCount*;
+        self.count->strong = 1;
+        self.count->weak = 0;
+    }
+
+    // 共有: 参照カウントをアトミックに増やした複製を返す
+    AtomicSharedPtr<T> clone() {
+        cm_atomic_fetch_add_i32(&self.count->strong, 1);
+        AtomicSharedPtr<T> copy;
+        copy.ptr = self.ptr;
+        copy.count = self.count;
+        return move copy;
+    }
+
+    // 中身の読み出し（コピーを返す。ペイロード自体の同期は別途Mutexなどで守ること）
+    T get() {
+        return *self.ptr;
+    }
+
+    // 中身の書き換え（ペイロード自体の同期は別途Mutexなどで守ること）
+    void set(T value) {
+        *self.ptr = value;
+    }
+
+    // 現在の強参照カウント（アトミックload）
+    int use_count() {
+        return cm_atomic_load_i32(&self.count->strong);
+    }
+
+    // 無効（null）状態か
+    bool is_null() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        return p == null_ptr;
+    }
+
+    // デストラクタ: strongをアトミックに減らし、最後の所有者ならペイロードと制御ブロックを解放する
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            const int prev = cm_atomic_fetch_sub_i32(&self.count->strong, 1);
+            if (prev == 1) {
+                dealloc(p);
+                if (cm_atomic_load_i32(&self.count->weak) == 0) {
+                    dealloc(self.count as void*);
+                }
+            }
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as AtomicSharedCount*;
+        }
+    }
+}

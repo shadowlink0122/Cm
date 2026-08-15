@@ -1,0 +1,259 @@
+// std/mem/smart.cm - スマートポインタ（UniquePtr / SharedPtr）
+// ヒープ確保した値の解放をRAII（スコープ末尾のデストラクタ）で自動化する。
+//
+// 所有規律（重要）:
+//   - 所有権の移動は必ず move で行う（UniquePtr<T> b = move a;）。
+//     暗黙コピー（b = a;）は浅いコピーで両方のデストラクタが走り二重解放になる。
+//   - SharedPtrの共有は必ず clone() で行う（参照カウントを増やす唯一の手段）。
+//   - 所有型を関数から返すときは必ず return move local; と書く。
+//   - moveはエイリアス（真のゼロコスト移動）であり、デストラクタは移動元変数のスコープ末尾で1回だけ走る。
+//     内側スコープへmoveしても破棄は早まらない。決定的に手放すにはreset()を使う。
+//
+// 対応ターゲット: native系（jit/native/wasm/uefi/baremetal）。
+// JS/TSはポインタ操作が禁止（GCのため不要）、SVは対象外。
+module std.mem.smart;
+
+import std::mem::{alloc, dealloc};
+
+// =============================================================
+// UniquePtr<T> - 単独所有スマートポインタ（移動のみ・共有不可）
+// =============================================================
+
+export struct UniquePtr<T> {
+    private T* ptr;
+}
+
+export impl<T> UniquePtr<T> {
+    // 値をヒープへ移して所有する
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+    }
+
+    // 中身の読み出し（コピーを返す）
+    T get() {
+        return *self.ptr;
+    }
+
+    // 中身の書き換え
+    void set(T value) {
+        *self.ptr = value;
+    }
+
+    // 生ポインタの借用ビュー（所有権は移動しない。UniquePtrより長生きさせないこと）
+    T* raw() {
+        return self.ptr;
+    }
+
+    // 無効（null）状態か（移動済み・release/reset済み・宣言のみのゼロ初期化状態）
+    bool is_null() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        return p == null_ptr;
+    }
+
+    // 所有権を放棄して生ポインタを返す（以後デストラクタは何もしない。解放は呼び出し側の責任）
+    T* release() {
+        T* p = self.ptr;
+        void* null_ptr = 0 as void*;
+        self.ptr = null_ptr as T*;
+        return p;
+    }
+
+    // いま所有している値を即時解放してnull状態にする
+    void reset() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            dealloc(p);
+            self.ptr = null_ptr as T*;
+        }
+    }
+
+    // デストラクタ: 所有中なら解放する（解放処理はメソッドに依存せずインラインで行う）
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            dealloc(p);
+            self.ptr = null_ptr as T*;
+        }
+    }
+}
+
+// =============================================================
+// SharedPtr<T> - 参照カウント共有スマートポインタ（共有は明示clone）
+// =============================================================
+
+// 制御ブロック: strong（SharedPtrの数）とweak（WeakPtrの数）を保持する。
+// ペイロードはstrong==0で解放、制御ブロック自体はstrong==0かつweak==0で解放する
+// フィールドはSharedPtr/WeakPtr両方のimplがcount->経由で増減するためpublicのまま（privateはimpl粒度の検査のため他型implから触れなくなる）
+export struct SharedCount {
+    int strong;
+    int weak;
+}
+
+// フィールドはWeakPtr.upgrade()がSharedPtrを構築する際に直接書くためpublicのまま
+export struct SharedPtr<T> {
+    T* ptr;
+    SharedCount* count;
+}
+
+export impl<T> SharedPtr<T> {
+    // 値をヒープへ移して所有する（strong=1, weak=0）
+    self(T value) {
+        void* raw = alloc(__sizeof__(T) as int);
+        self.ptr = raw as T*;
+        *self.ptr = value;
+        void* craw = alloc(__sizeof__(SharedCount) as int);
+        self.count = craw as SharedCount*;
+        self.count->strong = 1;
+        self.count->weak = 0;
+    }
+
+    // 共有: 参照カウントを増やした複製を返す（共有はこのメソッドのみで行うこと）
+    SharedPtr<T> clone() {
+        self.count->strong = self.count->strong + 1;
+        SharedPtr<T> copy;
+        copy.ptr = self.ptr;
+        copy.count = self.count;
+        return move copy;
+    }
+
+    // 弱参照を作る（strongは増やさない。循環参照の切断用）
+    WeakPtr<T> downgrade() {
+        self.count->weak = self.count->weak + 1;
+        WeakPtr<T> w;
+        w.ptr = self.ptr;
+        w.count = self.count;
+        return move w;
+    }
+
+    // 中身の読み出し（コピーを返す）
+    T get() {
+        return *self.ptr;
+    }
+
+    // 中身の書き換え（全共有者から見える）
+    void set(T value) {
+        *self.ptr = value;
+    }
+
+    // 生ポインタの借用ビュー（所有権は移動しない）
+    T* raw() {
+        return self.ptr;
+    }
+
+    // 現在の強参照カウント
+    int use_count() {
+        return self.count->strong;
+    }
+
+    // 現在の弱参照カウント
+    int weak_count() {
+        return self.count->weak;
+    }
+
+    // 無効（null）状態か（移動済み・reset済み・宣言のみのゼロ初期化状態）
+    bool is_null() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        return p == null_ptr;
+    }
+
+    // この強参照を即時手放してnull状態にする（最後の所有者ならペイロードを解放する）。
+    // moveはエイリアス（破棄は移動元スコープ末尾）のため、決定的なタイミングで手放したい場合はresetを使う
+    void reset() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            self.count->strong = self.count->strong - 1;
+            if (self.count->strong == 0) {
+                dealloc(p);
+                if (self.count->weak == 0) {
+                    dealloc(self.count as void*);
+                }
+            }
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as SharedCount*;
+        }
+    }
+
+    // デストラクタ: strongを減らし、0でペイロード解放。weakも0なら制御ブロックも解放する
+    ~self() {
+        void* p = self.ptr as void*;
+        void* null_ptr = 0 as void*;
+        if (p != null_ptr) {
+            self.count->strong = self.count->strong - 1;
+            if (self.count->strong == 0) {
+                dealloc(p);
+                if (self.count->weak == 0) {
+                    dealloc(self.count as void*);
+                }
+            }
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as SharedCount*;
+        }
+    }
+}
+
+// =============================================================
+// WeakPtr<T> - 弱参照（所有しない参照。循環参照の切断用）
+// =============================================================
+
+// フィールドはSharedPtr.downgrade()がWeakPtrを構築する際に直接書くためpublicのまま
+export struct WeakPtr<T> {
+    T* ptr;
+    SharedCount* count;
+}
+
+export impl<T> WeakPtr<T> {
+    // 対象がまだ生きているか（strong > 0）
+    bool is_alive() {
+        void* c = self.count as void*;
+        void* null_ptr = 0 as void*;
+        if (c == null_ptr) {
+            return false;
+        }
+        return self.count->strong > 0;
+    }
+
+    // 強参照へ昇格する。対象が解放済みならnull状態のSharedPtrを返す（is_null()で判定）
+    SharedPtr<T> upgrade() {
+        SharedPtr<T> result;
+        if (self.is_alive()) {
+            self.count->strong = self.count->strong + 1;
+            result.ptr = self.ptr;
+            result.count = self.count;
+        }
+        return move result;
+    }
+
+    // 複製（weakを増やす）
+    WeakPtr<T> clone() {
+        void* c = self.count as void*;
+        void* null_ptr = 0 as void*;
+        WeakPtr<T> w;
+        if (c != null_ptr) {
+            self.count->weak = self.count->weak + 1;
+            w.ptr = self.ptr;
+            w.count = self.count;
+        }
+        return move w;
+    }
+
+    // デストラクタ: weakを減らし、strongもweakも0なら制御ブロックを解放する
+    ~self() {
+        void* c = self.count as void*;
+        void* null_ptr = 0 as void*;
+        if (c != null_ptr) {
+            self.count->weak = self.count->weak - 1;
+            if (self.count->strong == 0 && self.count->weak == 0) {
+                dealloc(self.count as void*);
+            }
+            self.ptr = null_ptr as T*;
+            self.count = null_ptr as SharedCount*;
+        }
+    }
+}

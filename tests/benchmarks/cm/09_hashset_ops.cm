@@ -1,0 +1,41 @@
+// ベンチマーク9: HashSetの挿入・検索・削除
+// 50,000要素の挿入 + 全件検索 + 半数削除
+
+import std::io;
+import std::collections::hashset::*;
+import std::core::time::*;
+
+int main() {
+    const int n = 50000;
+    Timer t = Timer::start();
+
+    HashSet<int> s();
+    for (int i = 0; i < n; i++) {
+        s.insert(i * 3);
+    }
+    ulong insert_ms = t.elapsed_ms();
+
+    t.reset();
+    int hit = 0;
+    for (int i = 0; i < n; i++) {
+        if (s.contains(i * 3)) {
+            hit = hit + 1;
+        }
+    }
+    ulong lookup_ms = t.elapsed_ms();
+
+    t.reset();
+    for (int i = 0; i < n; i = i + 2) {
+        s.remove(i * 3);
+    }
+    ulong remove_ms = t.elapsed_ms();
+
+    println("HashSet n={n} hit={hit} after_remove={s.len()}");
+    println("insert={insert_ms}ms lookup={lookup_ms}ms remove={remove_ms}ms");
+    if (hit == n && s.len() == n / 2) {
+        println("Successfully verified HashSet with {n} elements");
+        return 0;
+    }
+    println("verification failed");
+    return 1;
+}

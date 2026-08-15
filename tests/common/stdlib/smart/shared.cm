@@ -1,0 +1,32 @@
+//! platform: !js|sv
+// SharedPtr: 明示cloneによる共有・参照カウント・共有者間の可視性・段階的解放
+import std::io::println;
+import std::mem::smart::*;
+
+int main() {
+    SharedPtr<int> a(42);
+    println("rc={a.use_count()}");
+
+    {
+        SharedPtr<int> b = a.clone();
+        println("b={b.get()} rc={b.use_count()}");
+
+        // 書き換えは全共有者から見える
+        b.set(100);
+        println("a={a.get()}");
+
+        {
+            SharedPtr<int> c = b.clone();
+            println("rc={c.use_count()}");
+        }
+        // cのdtorでrcが1減る
+        println("rc={a.use_count()}");
+    }
+    // bのdtorでrcが1減る
+    println("rc={a.use_count()}");
+
+    // moveは参照カウントを変えない（所有スロットの移動のみ）
+    SharedPtr<int> d = move a;
+    println("d={d.get()} rc={d.use_count()}");
+    return 0;
+}

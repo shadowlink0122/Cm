@@ -1,0 +1,5 @@
+len=4096
+height_ok=true logn_bound=20
+all=true miss=false
+len=2048 height2_ok=true
+first=0 second=2 last=4094

@@ -1682,6 +1682,9 @@ constexpr const char* kMessages[kMessageCount][kLangCount] = {
     // PsTupleUnsupported
     {"tuple types and destructuring assignment are not supported (use a struct to group values)",
      "タプル型・分解代入は未対応です（値のグループ化には構造体を使用してください）"},
+    // TcImplicitDtorCopy
+    {"implicit copy of '{0}' which has a destructor; the destructor runs for both copies and causes a double free. Use 'move' to transfer ownership",
+     "デストラクタを持つ '{0}' の暗黙コピーです。両方のコピーでデストラクタが実行され二重解放になります。所有権の移動には 'move' を使用してください"},
 };
 // clang-format on
 

@@ -1,0 +1,21 @@
+// std::strings::hash: FNV-1a 32bitの既知値と内容同一性
+import std::io::println;
+import std::strings::hash::*;
+
+int main() {
+    // FNV-1a既知値（0x7FFFFFFFマスク後）: ""=2166136261-2^31, "a"=0xE40C292C-2^31
+    println("{hash_string(\"\")} {hash_string(\"a\")}");
+
+    // 生成方法によらず同一内容は同値
+    int n = 42;
+    const int h1 = hash_string("num_42");
+    const int h2 = hash_string("num_" + "42");
+    const int h3 = hash_string("num_{n}");
+    println("{h1 == h2} {h2 == h3}");
+
+    // 異なる内容は（この例では）異なる値・非負
+    const int ha = hash_string("abc");
+    const int hb = hash_string("abd");
+    println("{ha != hb} {ha >= 0} {hb >= 0}");
+    return 0;
+}

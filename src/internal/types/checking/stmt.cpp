@@ -485,6 +485,8 @@ void TypeChecker::check_let(ast::LetStmt& let) {
         // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
         if (init_type) {
             check_numeric_conversion_policy(resolved_type, init_type, let.init.get(), stmt_span);
+            // dtor持ち構造体の暗黙コピーを診断（moveなしの場所式コピーは二重解放になる）
+            check_dtor_copy_policy(init_type, let.init.get(), stmt_span);
         }
         // リテラル型チェック（typedef HttpMethod = "GET" | "POST" など）
         if (let.init) {
@@ -593,6 +595,8 @@ void TypeChecker::check_return(ast::ReturnStmt& ret) {
         }
         // 数値の縮小/符号変化の暗黙変換を診断（Z5。適合リテラルは対象外、--strictではエラー昇格）
         check_numeric_conversion_policy(current_return_type_, val_type, ret.value.get(), stmt_span);
+        // dtor持ち構造体をreturnで値返しする場合もコピー元ローカルのdtorが走るため診断する（return moveを促す）
+        check_dtor_copy_policy(val_type, ret.value.get(), stmt_span);
 
         // ライフタイムチェック: ローカル変数への参照を返すことを禁止
         // return &x の場合、xがローカル変数ならダングリングポインタになる

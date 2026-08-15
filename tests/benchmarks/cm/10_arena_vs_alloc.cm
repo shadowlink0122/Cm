@@ -1,0 +1,40 @@
+// ベンチマーク10: Arenaアロケータ vs 都度alloc/dealloc
+// 200,000件の小口確保をArenaのバンプ確保と、グローバルアロケータの都度確保・解放で比較
+
+import std::io;
+import std::mem::arena::*;
+import std::mem::{alloc, dealloc};
+import std::core::time::*;
+
+int main() {
+    const int n = 200000;
+
+    Timer t = Timer::start();
+    Arena a(65536);
+    long arena_sum = 0;
+    for (int i = 0; i < n; i++) {
+        int* p = a.alloc_bytes(4) as int*;
+        *p = i;
+        arena_sum = arena_sum + (*p as long);
+    }
+    a.reset();
+    ulong arena_ms = t.elapsed_ms();
+
+    t.reset();
+    long alloc_sum = 0;
+    for (int i = 0; i < n; i++) {
+        int* p = alloc(4) as int*;
+        *p = i;
+        alloc_sum = alloc_sum + (*p as long);
+        dealloc(p as void*);
+    }
+    ulong alloc_ms = t.elapsed_ms();
+
+    println("arena={arena_ms}ms alloc/dealloc={alloc_ms}ms n={n}");
+    if (arena_sum == alloc_sum) {
+        println("Successfully verified {n} allocations (checksum match)");
+        return 0;
+    }
+    println("verification failed");
+    return 1;
+}

@@ -1,0 +1,48 @@
+// std::collections::hashset - ハッシュ集合
+// HashMap<T, bool>のキーのみ薄ラッパー。挿入・存在判定・削除をO(1)期待で行う
+module std.collections.hashset;
+
+import std::collections::hashmap::*;
+
+export struct HashSet<T> {
+    private HashMap<T, bool> map;
+}
+
+export impl<T> HashSet<T> {
+    // 空の集合を作る
+    self() {
+        HashMap<T, bool> m();
+        // 所有権をself.mapへ移動する（moveで移動元mのdtor登録が解除され二重解放しない）
+        self.map = move m;
+    }
+
+    // 値を追加する（既存なら何もしない）
+    void insert(T value) {
+        self.map.insert(value, true);
+    }
+
+    // 値が含まれるか
+    bool contains(T value) {
+        return self.map.contains(value);
+    }
+
+    // 値を削除する（存在しなければ何もしない）
+    void remove(T value) {
+        self.map.remove(value);
+    }
+
+    // 要素数
+    int len() {
+        return self.map.len();
+    }
+
+    // 空か
+    bool is_empty() {
+        return self.map.len() == 0;
+    }
+
+    // 全要素を削除する
+    void clear() {
+        self.map.clear();
+    }
+}

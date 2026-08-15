@@ -1,0 +1,82 @@
+// セルフホストパーサ: モジュール系宣言の解析
+// module宣言・import（選択/ワイルドカード/再エクスポート）・use libc ブロックを扱う
+module parser.decl.modules;
+
+import ../../lexer/token::*;
+import ../state::*;
+import ../../diag/messages::*;
+
+// "::"区切りのパス（import経路等）を";"まで表示形で読み取る
+export Option<string> parse_path_to_semicolon(Parser* p) {
+    string out = "";
+    while (!p->at_text(";")) {
+        if (p->at_eof()) {
+            return p->fail_str(msgf(MsgId::EofIn, ["import path"]));
+        }
+        if (p->at_text("{")) {
+            // 選択import "{a, b}" は中身ごと表示形へ
+            out = out + "{";
+            p->bump();
+            bool first = true;
+            while (!p->at_text("}")) {
+                if (p->at_eof()) {
+                    return p->fail_str(msgf(MsgId::EofIn, ["import list"]));
+                }
+                if (p->at_text(",")) {
+                    p->bump();
+                    continue;
+                }
+                if (!first) {
+                    out = out + ", ";
+                }
+                out = out + p->text();
+                first = false;
+                p->bump();
+            }
+            out = out + "}";
+            p->bump();
+        } else {
+            out = out + p->text();
+            p->bump();
+        }
+    }
+    p->bump();
+    return Option::Some(out);
+}
+
+// module宣言（"module"の上から）
+export Option<bool> parse_module_decl(Parser* p) {
+    p->bump();
+    const Option<string> path = parse_path_to_semicolon(p);
+    if (path.is_none()) {
+        return Option::None;
+    }
+    p->record_module(path.unwrap());
+    return Option::Some(true);
+}
+
+// import宣言（"import"の上から）
+export Option<bool> parse_import_decl(Parser* p) {
+    p->bump();
+    const Option<string> path = parse_path_to_semicolon(p);
+    if (path.is_none()) {
+        return Option::None;
+    }
+    p->record_import(path.unwrap());
+    return Option::Some(true);
+}
+
+// use宣言 "use libc { ... }"（"use"の上から）
+export Option<bool> parse_use_decl(Parser* p) {
+    p->bump();
+    const Option<string> target = p->expect_ident();
+    if (target.is_none()) {
+        return Option::None;
+    }
+    const Option<bool> b = p->skip_balanced("{", "}");
+    if (b.is_none()) {
+        return Option::None;
+    }
+    p->record_use(target.unwrap());
+    return Option::Some(true);
+}

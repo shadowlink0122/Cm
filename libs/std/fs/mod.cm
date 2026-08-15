@@ -3,6 +3,8 @@
 // JS/WASMバックエンドは未対応（バックエンド対応マトリクス参照）
 module std.fs;
 
+import std::strings::split::{lines};
+
 use libc {
     string cm_file_read_all(string path);
     bool cm_file_write_all(string path, string content);
@@ -125,6 +127,12 @@ export Result<bool, string> write_all(string path, string content) {
         return Result::Ok(true);
     }
     return Result::Err("failed to write: " + path);
+}
+
+/// ファイルを読み込んで行の配列を返す（改行コードはLF/CRLF両対応。ファイル全体を読むため大ファイルは注意）
+export string[] read_lines(string path) {
+    string content = read_file(path);
+    return lines(content);
 }
 
 /// 文字列をファイル末尾へ追記する

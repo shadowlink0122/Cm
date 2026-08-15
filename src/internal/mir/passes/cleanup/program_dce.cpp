@@ -258,10 +258,31 @@ bool ProgramDeadCodeElimination::remove_unused_functions(MirProgram& program,
     return changed;
 }
 
+// 型ノードからポインタ・配列・型引数を再帰的に辿り、参照される構造体名を収集する。
+// 従来は値型の構造体（と配列直下）だけを見ており、Ctr*のようにポインタ経由でしか現れない構造体が「未使用」と誤判定されて定義ごと削除され、AOTのフィールド投影がstruct型を解決できず命令が黙って脱落していた（JITはプログラムDCEを通らないため顕在化しない）
+static void collect_struct_names_from_type(const ast::TypePtr& type, std::set<std::string>& used,
+                                           std::queue<std::string>& worklist) {
+    if (!type)
+        return;
+    if (type->kind == ast::TypeKind::Struct || type->kind == ast::TypeKind::Generic) {
+        if (!type->name.empty() && used.insert(type->name).second) {
+            worklist.push(type->name);
+        }
+    }
+    collect_struct_names_from_type(type->element_type, used, worklist);
+    for (const auto& targ : type->type_args)
+        collect_struct_names_from_type(targ, used, worklist);
+    for (const auto& pt : type->param_types)
+        collect_struct_names_from_type(pt, used, worklist);
+    collect_struct_names_from_type(type->return_type, used, worklist);
+}
+
 void ProgramDeadCodeElimination::collect_used_structs(const MirProgram& program,
                                                       std::set<std::string>& used,
                                                       const std::set<std::string>& used_functions) {
-    // 使用される関数の引数・戻り値・ローカル変数から構造体を収集
+    std::queue<std::string> worklist;
+
+    // 使用される関数の引数・戻り値・ローカル変数から構造体を収集（ポインタ・配列・型引数の中も辿る）
     for (const auto& func : program.functions) {
         if (!func)
             continue;
@@ -269,25 +290,11 @@ void ProgramDeadCodeElimination::collect_used_structs(const MirProgram& program,
             continue;
 
         for (const auto& local : func->locals) {
-            if (local.type && local.type->kind == ast::TypeKind::Struct) {
-                used.insert(local.type->name);
-            }
-            // 配列の要素型も検査
-            if (local.type && local.type->kind == ast::TypeKind::Array &&
-                local.type->element_type) {
-                if (local.type->element_type->kind == ast::TypeKind::Struct) {
-                    used.insert(local.type->element_type->name);
-                }
-            }
+            collect_struct_names_from_type(local.type, used, worklist);
         }
     }
 
-    // 構造体のフィールドからも収集（再帰的）
-    std::queue<std::string> worklist;
-    for (const auto& s : used) {
-        worklist.push(s);
-    }
-
+    // 構造体のフィールドからも収集（再帰的。フィールドのポインタ・配列型の中も辿る）
     while (!worklist.empty()) {
         std::string current = worklist.front();
         worklist.pop();
@@ -297,12 +304,7 @@ void ProgramDeadCodeElimination::collect_used_structs(const MirProgram& program,
             continue;
 
         for (const auto& field : st->fields) {
-            if (field.type && field.type->kind == ast::TypeKind::Struct) {
-                if (used.find(field.type->name) == used.end()) {
-                    used.insert(field.type->name);
-                    worklist.push(field.type->name);
-                }
-            }
+            collect_struct_names_from_type(field.type, used, worklist);
         }
     }
 }

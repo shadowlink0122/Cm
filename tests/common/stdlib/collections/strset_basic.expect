@@ -1,0 +1,4 @@
+len=3 has=true dyn=true
+removed=false len=2
+v0=red v1=blue n=2
+cleared len=0 empty=true
