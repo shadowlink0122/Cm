@@ -5,7 +5,7 @@ module std.collections.hashset;
 import std::collections::hashmap::*;
 
 export struct HashSet<T> {
-    HashMap<T, bool> map;
+    private HashMap<T, bool> map;
 }
 
 export impl<T> HashSet<T> {

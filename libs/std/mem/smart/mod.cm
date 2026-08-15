@@ -20,7 +20,7 @@ import std::mem::{alloc, dealloc};
 // =============================================================
 
 export struct UniquePtr<T> {
-    T* ptr;
+    private T* ptr;
 }
 
 export impl<T> UniquePtr<T> {
@@ -88,11 +88,13 @@ export impl<T> UniquePtr<T> {
 
 // 制御ブロック: strong（SharedPtrの数）とweak（WeakPtrの数）を保持する。
 // ペイロードはstrong==0で解放、制御ブロック自体はstrong==0かつweak==0で解放する
+// フィールドはSharedPtr/WeakPtr両方のimplがcount->経由で増減するためpublicのまま（privateはimpl粒度の検査のため他型implから触れなくなる）
 export struct SharedCount {
     int strong;
     int weak;
 }
 
+// フィールドはWeakPtr.upgrade()がSharedPtrを構築する際に直接書くためpublicのまま
 export struct SharedPtr<T> {
     T* ptr;
     SharedCount* count;
@@ -200,6 +202,7 @@ export impl<T> SharedPtr<T> {
 // WeakPtr<T> - 弱参照（所有しない参照。循環参照の切断用）
 // =============================================================
 
+// フィールドはSharedPtr.downgrade()がWeakPtrを構築する際に直接書くためpublicのまま
 export struct WeakPtr<T> {
     T* ptr;
     SharedCount* count;

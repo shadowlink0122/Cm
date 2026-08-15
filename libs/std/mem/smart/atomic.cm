@@ -13,14 +13,15 @@ extern "C" int cm_atomic_fetch_add_i32(int* ptr, int value);
 extern "C" int cm_atomic_fetch_sub_i32(int* ptr, int value);
 
 // 制御ブロック（strong/weakをアトミックに増減する）
+// フィールドはAtomicSharedPtrのimplがcount->経由でアトミック操作へ渡すためpublicのまま（privateはimpl粒度の検査のため他型implから触れなくなる）
 export struct AtomicSharedCount {
     int strong;
     int weak;
 }
 
 export struct AtomicSharedPtr<T> {
-    T* ptr;
-    AtomicSharedCount* count;
+    private T* ptr;
+    private AtomicSharedCount* count;
 }
 
 export impl<T> AtomicSharedPtr<T> {

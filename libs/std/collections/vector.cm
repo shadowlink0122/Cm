@@ -14,9 +14,9 @@ use libc {
 // =============================================================
 
 export struct Vector<T> {
-    T* data;
-    int size;
-    int cap;
+    private T* data;
+    private int size;
+    private int cap;
 }
 
 export impl<T> Vector<T> {

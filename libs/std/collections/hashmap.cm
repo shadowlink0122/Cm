@@ -18,9 +18,10 @@ export struct Entry<K, V> {
 }
 
 export struct HashMap<K, V> {
+    // entriesはHashSetコンストラクタの所有権移動処理（dtor無効化のためのnull代入）が直接触るためpublicのまま
     Entry<K, V>* entries;
-    int cap;
-    int size;
+    private int cap;
+    private int size;
 }
 
 export impl<K, V> HashMap<K, V> {
@@ -40,7 +41,7 @@ export impl<K, V> HashMap<K, V> {
     }
 
     // 容量を2倍へ拡張し全エントリを再ハッシュする（Q7: 従来はresize未実装で、満杯時のinsertが黙って喪失していた）
-    void grow() {
+    private void grow() {
         const int old_cap = self.cap;
         Entry<K, V>* old_entries = self.entries;
         const int new_cap = old_cap * 2;

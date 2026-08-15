@@ -7,7 +7,7 @@ module std.collections.treeset;
 import std::collections::treemap::*;
 
 export struct TreeSet<T> {
-    TreeMap<T, bool> map;
+    private TreeMap<T, bool> map;
 }
 
 export impl<T> TreeSet<T> {

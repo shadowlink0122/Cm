@@ -15,9 +15,9 @@ const int ARENA_META_WORDS = 3;
 const long ARENA_META_BYTES = 24;
 
 export struct Arena {
-    void* head;       // 現在のチャンク（未確保ならnull）
-    long chunk_size;  // データ部の既定サイズ（バイト）
-    long total;       // データ部の総確保バイト（統計用）
+    private void* head;       // 現在のチャンク（未確保ならnull）
+    private long chunk_size;  // データ部の既定サイズ（バイト）
+    private long total;       // データ部の総確保バイト（統計用）
 }
 
 export impl Arena {
@@ -42,7 +42,7 @@ export impl Arena {
     }
 
     // 新しいチャンクを確保して先頭へ連結する（data_bytesはデータ部のサイズ）
-    void grow(long data_bytes) {
+    private void grow(long data_bytes) {
         void* raw = alloc((ARENA_META_BYTES + data_bytes) as int);
         long* meta = raw as long*;
         meta[0] = self.head as long;  // next
