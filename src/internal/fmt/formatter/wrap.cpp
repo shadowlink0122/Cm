@@ -169,6 +169,7 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
         };
         std::vector<Candidate> cands;
         std::map<size_t, size_t> close_of;  // 開き括弧位置 → 対応する閉じ括弧位置
+        std::vector<size_t> chain_dots;  // 文レベルの .method( チェーン呼び出しの . 位置
         size_t comment_start = std::string::npos;
         {
             bool in_string = false;
@@ -214,6 +215,20 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
                     size_t group_open =
                         bracket_stack.empty() ? std::string::npos : bracket_stack.back().second;
                     cands.push_back({i + 1, depth, true, group, group_open});
+                } else if (c == '.' && bracket_stack.empty()) {
+                    // 文レベルの .method( をチェーン折り返し候補として収集する（直後が識別子＋開き括弧の場合のみ。フィールド参照や数値リテラルの小数点は除外）
+                    size_t j = i + 1;
+                    if (j < line.size() &&
+                        (std::isalpha(static_cast<unsigned char>(line[j])) || line[j] == '_')) {
+                        while (
+                            j < line.size() &&
+                            (std::isalnum(static_cast<unsigned char>(line[j])) || line[j] == '_')) {
+                            ++j;
+                        }
+                        if (j < line.size() && line[j] == '(') {
+                            chain_dots.push_back(i);
+                        }
+                    }
                 } else if (c == ' ' && i + 1 < line.size()) {
                     // " op " の形の二項演算子: 演算子の直前で折り返す
                     for (const char* op : kWrapOps) {
@@ -284,6 +299,47 @@ std::string Formatter::wrap_long_lines(const std::string& code, size_t& changes)
                     changes++;
                     continue;
                 }
+            }
+        }
+
+        // 文レベルのチェーン呼び出し（.method(...)）が2つ以上ある行は、カンマ・演算子折り返しより優先して各チェーンの . 直前で折り返す（TS風。最後の呼び出しの引数リスト途中で折れるのを防ぐ）
+        {
+            std::vector<size_t> dots;
+            for (size_t d : chain_dots) {
+                if (d < code_end) {
+                    dots.push_back(d);
+                }
+            }
+            if (dots.size() >= 2) {
+                // 継続行は1段深く仮置きする（後段のインデント正規化の継続行+1段の規則と一致し冪等になる）
+                size_t cont_indent = content_start + static_cast<size_t>(indent_width_);
+                std::vector<std::string> out_lines;
+                size_t seg_start = 0;
+                for (size_t dot : dots) {
+                    std::string seg = line.substr(seg_start, dot - seg_start);
+                    while (!seg.empty() && seg.back() == ' ')
+                        seg.pop_back();
+                    out_lines.push_back(seg_start == 0 ? seg : std::string(cont_indent, ' ') + seg);
+                    seg_start = dot;
+                }
+                std::string tail = line.substr(seg_start, code_end - seg_start);
+                while (!tail.empty() && tail.back() == ' ')
+                    tail.pop_back();
+                if (comment_start != std::string::npos) {
+                    tail += "  " + line.substr(comment_start);
+                }
+                out_lines.push_back(std::string(cont_indent, ' ') + tail);
+                std::string joined;
+                for (size_t li = 0; li < out_lines.size(); ++li) {
+                    if (li > 0)
+                        joined += '\n';
+                    joined += out_lines[li];
+                }
+                // 折り返し後もなお長いセグメント（長い引数リスト等）はカンマ折り返しへ委ねる。
+                // 各セグメントのチェーン . は高々1つなので再帰でチェーン折り返しは再発しない
+                result << wrap_long_lines(joined, changes);
+                changes++;
+                continue;
             }
         }
 

@@ -1,0 +1,26 @@
+module wrap_chain;
+
+string template_text() {
+    return "expected '{0}' in {1} but found {2}";
+}
+
+string localized(string first_argument, string second_argument, string third_argument) {
+    return template_text()
+        .replace("{0}", first_argument)
+        .replace("{1}", second_argument)
+        .replace("{2}", third_argument);
+}
+
+struct Reporter {
+    string error_message_text;
+    string template_source;
+
+    void remember(string first_argument_text, string second_argument_text, string third_text) {
+        self.error_message_text = build_message(
+            self.template_source,
+            first_argument_text,
+            second_argument_text,
+            third_text
+        );
+    }
+}
