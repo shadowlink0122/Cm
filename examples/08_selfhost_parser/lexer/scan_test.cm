@@ -1,7 +1,7 @@
 // lexer.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
 import ./token::*;
-import ./lexer::*;
+import ./scan::*;
 
 // テスト用: ソースを字句解析してトークン列を返す（成功前提）
 TokenStream lex_ok(string src) {

@@ -1,8 +1,8 @@
 // parser/modules.cm の単体テスト（#[test] 関数を `cm test` が実行する）
 import std::debug::assert;
-import ../token::*;
-import ../lexer::*;
-import ./state::*;
+import ../../lexer/token::*;
+import ../../lexer/scan::*;
+import ../state::*;
 import ./modules::*;
 
 // テスト用: ソースから解析器を組み立てる

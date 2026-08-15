@@ -3,7 +3,7 @@
 // 各宣言の解析は機能別モジュール（modules/types/impls/funcs/decl）のフリー関数が本モジュールの公開APIで行う
 module parser.state;
 
-import ../token::*;
+import ../lexer/token::*;
 
 // 解析器本体（収集結果もここに持つ。全てスライスバックでデストラクタ無し）
 export struct Parser {

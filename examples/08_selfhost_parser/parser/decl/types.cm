@@ -1,9 +1,9 @@
 // セルフホストパーサ: 型定義（struct / enum）の解析
 // ネスト型（struct内struct・enum内enum、v0.17.1）と無名struct宣言子・with句・ジェネリクスに対応する
-module parser.types;
+module parser.decl.types;
 
-import ../token::*;
-import ./state::*;
+import ../../lexer/token::*;
+import ../state::*;
 
 // struct宣言（"struct"の上から）。prefixは"Outer::"のようなネスト名の接頭辞
 export Option<bool> parse_struct(Parser* p, string prefix) {

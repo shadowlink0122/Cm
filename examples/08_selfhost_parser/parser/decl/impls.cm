@@ -1,10 +1,10 @@
 // セルフホストパーサ: 実装ブロック（impl / interface）の解析
 // impl<T> Name (for Iface)? { メソッド... } のメソッド名収集と、interface宣言を扱う。
 // メソッドはコンストラクタ self / デストラクタ ~self / private / static / overload / operator に対応する
-module parser.impls;
+module parser.decl.impls;
 
-import ../token::*;
-import ./state::*;
+import ../../lexer/token::*;
+import ../state::*;
 
 // impl内の1メソッドを解析し、メソッド名を返す
 export Option<string> parse_method(Parser* p) {

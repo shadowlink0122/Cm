@@ -6,9 +6,9 @@ import std::env::args;
 import std::fs::{read_file, exists};
 import std::strings::split::{lines};
 import std::strings::format::*;
-import ./lexer::*;
+import ./lexer/scan::*;
 import ./parser/state::*;
-import ./parser/decl::*;
+import ./parser/decl/dispatch::*;
 
 // エラー位置のソース行をキャレット付きで表示する
 void print_error_context(string path, string src, int line, int col) {

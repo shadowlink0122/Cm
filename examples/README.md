@@ -39,7 +39,7 @@ Cmの機能を示す公式サンプル集です。
 
 ### 08_selfhost_parser - セルフホストパーサ（宣言リスタ）
 - Cmで書いたCmソースの宣言レベルパーサ。成功なら定義一覧（struct/enum/impl/関数等）、失敗ならエラー箇所（行:桁+キャレット）を出力
-- 機能別にファイル分割（token/lexer/parser/state・modules・types・impls・funcs・decl）し、各ファイルに`#[test]`単体テストが付属
+- トップは`main.cm`のみで、段階ごとに`lexer/`（token・scan）・`parser/`（state）・`parser/decl/`（modules・types・impls・funcs・dispatch）・`samples/`へ分割し、各モジュールに`#[test]`単体テストが付属
 - `cm run examples/08_selfhost_parser/main.cm -- <file.cm>` で実行。自分自身の全ソースを自己解析できる
 
 ### uefi - UEFI アプリケーション

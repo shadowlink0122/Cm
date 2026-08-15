@@ -1,9 +1,9 @@
 // セルフホストパーサ: 関数・定数・typedef・extern宣言の解析
 // トップレベルの「型トークン列から始まる宣言」（関数 / グローバル定義）と、typedef・const・extern "C" を扱う
-module parser.funcs;
+module parser.decl.funcs;
 
-import ../token::*;
-import ./state::*;
+import ../../lexer/token::*;
+import ../state::*;
 
 // typedef宣言（"typedef"の上から）
 export Option<bool> parse_typedef(Parser* p) {

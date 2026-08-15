@@ -17,25 +17,31 @@ cm run examples/08_selfhost_parser/main.cm -- path/to/file.cm [more.cm ...]
 cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/main.cm
 
 # 正常系サンプル: 定義一覧が出る
-cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/sample_ok.cm
+cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/samples/ok.cm
 
 # エラー系サンプル: 13行目のメソッド本体欠落を位置付きで報告する
-cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/sample_error.cm
+cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/samples/error.cm
 ```
 
-## ファイル構成（機能ごとに分割）
+## ディレクトリ構成（トップは`main.cm`のみ・段階ごとにフォルダ分割）
 
-| ファイル | 役割 |
-|---|---|
-| `token.cm` | トークン種別定数と`TokenStream`（パラレルスライス） |
-| `lexer.cm` | 字句解析器（コメント/文字列/文字/数値/`::`融合、キーワード判定は`StringSet`） |
-| `parser/state.cm` | `Parser`状態・基本操作（expect/skip/ジェネリクス読取）・エラー診断・定義レコーダ |
-| `parser/modules.cm` | module / import（選択・相対・ワイルドカード）/ use libc |
-| `parser/types.cm` | struct / enum（ネスト型・無名struct宣言子・with句・ペイロード付きバリアント） |
-| `parser/impls.cm` | impl / interface（self・~self・private・static・overload） |
-| `parser/funcs.cm` | 関数 / typedef / const / extern "C" |
-| `parser/decl.cm` | トップレベル宣言のディスパッチと`parse_program` |
-| `main.cm` | CLI（引数解析・読み込み・結果出力） |
+```
+main.cm                  CLI（引数解析・読み込み・結果出力）
+lexer/                   字句解析
+  token.cm               トークン種別定数とTokenStream（パラレルスライス）
+  scan.cm                字句解析器（コメント/文字列/文字/数値/::融合、キーワード判定はStringSet）
+parser/                  構文解析
+  state.cm               Parser状態・基本操作（expect/skip/ジェネリクス読取）・エラー診断・定義レコーダ
+  decl/                  宣言種別ごとの解析
+    modules.cm           module / import（選択・相対・ワイルドカード）/ use libc
+    types.cm             struct / enum（ネスト型・無名struct宣言子・with句・ペイロード付きバリアント）
+    impls.cm             impl / interface（self・~self・private・static・overload）
+    funcs.cm             関数 / typedef / const / extern "C"
+    dispatch.cm          トップレベル宣言のディスパッチとparse_program
+samples/                 パーサへ入力するサンプル
+  ok.cm                  正常系（全宣言種別を含む）
+  error.cm               エラー系（メソッド本体欠落）
+```
 
 関数本体・メソッド本体は波括弧の対応で読み飛ばす「定義リスタ」としての解析です（文字列リテラル内の波括弧は字句解析済みのため誤検出しません）。
 
@@ -44,9 +50,9 @@ cm run examples/08_selfhost_parser/main.cm -- examples/08_selfhost_parser/sample
 各ファイルに`#[test]`ディレクティブの単体テスト（`*_test.cm`）が付属します。
 
 ```bash
-cm test examples/08_selfhost_parser/lexer_test.cm
-cm test examples/08_selfhost_parser/parser/types_test.cm
-# ...（token / state / modules / impls / funcs / decl も同様）
+cm test examples/08_selfhost_parser/lexer/scan_test.cm
+cm test examples/08_selfhost_parser/parser/decl/types_test.cm
+# ...（lexer/token / parser/state / parser/decl/{modules, impls, funcs, dispatch} も同様）
 ```
 
 CI（`scripts/ci/check_examples.sh`）は全`.cm`の型検査に加えて、8ファイルの単体テスト・正常/エラーサンプル・自己解析を検証します。

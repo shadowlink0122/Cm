@@ -1,9 +1,9 @@
 // セルフホストパーサ: トップレベル宣言のディスパッチ
 // 先頭トークンで宣言種別を判定し、機能別モジュール（modules/types/impls/funcs）へ振り分ける
-module parser.decl;
+module parser.decl.dispatch;
 
-import ../token::*;
-import ./state::*;
+import ../../lexer/token::*;
+import ../state::*;
 import ./modules::*;
 import ./types::*;
 import ./impls::*;

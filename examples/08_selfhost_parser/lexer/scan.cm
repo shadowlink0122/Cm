@@ -1,7 +1,7 @@
 // セルフホストパーサ: 字句解析器
 // Cmソースをトークン列へ分解する。
 // エラーハンドリングはOption型で行い、失敗（未終端文字列・未終端コメント等）の位置はLexer側に保持する
-module lexer;
+module lexer.scan;
 
 import std::collections::strset::*;
 import std::strings::from_bytes::*;

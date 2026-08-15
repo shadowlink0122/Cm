@@ -10,7 +10,7 @@ while IFS= read -r file; do
         ./cm check "$file" 2>&1 | head -20 || true
         fail=1
     fi
-done < <(find examples -name '*.cm' -not -path 'examples/uefi/util/*' -not -path 'examples/uefi/libs/*' -not -path 'examples/08_selfhost_parser/sample_error.cm')
+done < <(find examples -name '*.cm' -not -path 'examples/uefi/util/*' -not -path 'examples/uefi/libs/*' -not -path 'examples/08_selfhost_parser/samples/error.cm')
 
 if [ "$fail" -eq 0 ]; then
     echo "✅ examples check passed"
@@ -28,17 +28,17 @@ echo "✅ selfhost drill passed (jit/native artifacts identical)"
 # セルフホストパーサ（examples/08_selfhost_parser）の検証:
 # 各モジュールの#[test]単体テスト → 正常サンプルの定義一覧出力（rc=0） → エラーサンプルの位置報告（rc=1） → パーサ自身の全ソース自己解析
 SHP=examples/08_selfhost_parser
-for t in token_test lexer_test parser/state_test parser/modules_test parser/types_test parser/impls_test parser/funcs_test parser/decl_test; do
+for t in lexer/token_test lexer/scan_test parser/state_test parser/decl/modules_test parser/decl/types_test parser/decl/impls_test parser/decl/funcs_test parser/decl/dispatch_test; do
     ./cm test "$SHP/$t.cm" >/dev/null
 done
-./cm run "$SHP/main.cm" -- "$SHP/sample_ok.cm" >/dev/null
-if ./cm run "$SHP/main.cm" -- "$SHP/sample_error.cm" >/dev/null 2>&1; then
-    echo "::error::selfhost parser should report an error for sample_error.cm"
+./cm run "$SHP/main.cm" -- "$SHP/samples/ok.cm" >/dev/null
+if ./cm run "$SHP/main.cm" -- "$SHP/samples/error.cm" >/dev/null 2>&1; then
+    echo "::error::selfhost parser should report an error for samples/error.cm"
     exit 1
 fi
-./cm run "$SHP/main.cm" -- "$SHP/main.cm" "$SHP/token.cm" "$SHP/lexer.cm" \
-    "$SHP/parser/state.cm" "$SHP/parser/modules.cm" "$SHP/parser/types.cm" \
-    "$SHP/parser/impls.cm" "$SHP/parser/funcs.cm" "$SHP/parser/decl.cm" >/dev/null
+./cm run "$SHP/main.cm" -- "$SHP/main.cm" "$SHP/lexer/token.cm" "$SHP/lexer/scan.cm" \
+    "$SHP/parser/state.cm" "$SHP/parser/decl/modules.cm" "$SHP/parser/decl/types.cm" \
+    "$SHP/parser/decl/impls.cm" "$SHP/parser/decl/funcs.cm" "$SHP/parser/decl/dispatch.cm" >/dev/null
 echo "✅ selfhost parser passed (unit tests / ok-sample / error-sample / self-parse)"
 
 exit "$fail"
