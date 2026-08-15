@@ -37,79 +37,116 @@ export Lang current_lang() {
 }
 
 // メッセージID×言語のテンプレート表（プレースホルダ{0}〜{2}を持つ完結した1文）
+// 外側をメッセージID・内側を言語のmatchにして、1つのメッセージの全対訳を1箇所へ集める（ID追加時は対訳を並べて書く）
 string template_of(MsgId id, Lang lang) {
-    match (lang) {
-        Lang::Ja => {
-            match (id) {
-                MsgId::ExpectedButFound => {
+    match (id) {
+        MsgId::ExpectedButFound => {
+            match (lang) {
+                Lang::En => {
+                    return "expected '{0}' but found {1}";
+                }
+                Lang::Ja => {
                     return "'{0}' が必要ですが {1} が見つかりました";
-                }
-                MsgId::ExpectedThing => {
-                    return "{0} が必要ですが {1} が見つかりました";
-                }
-                MsgId::ExpectedIn => {
-                    return "{1} には '{0}' が必要ですが {2} が見つかりました";
-                }
-                MsgId::ExpectedBodyOrSemi => {
-                    return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
-                }
-                MsgId::EofIn => {
-                    return "{0} の途中で入力が終端しました";
-                }
-                MsgId::EofLookingFor => {
-                    return "'{0}' を探索中に入力が終端しました";
-                }
-                MsgId::Unterminated => {
-                    return "{0} が終端していません";
-                }
-                MsgId::CannotDetermine => {
-                    return "{0} を特定できません";
-                }
-                MsgId::LexErrorLabel => {
-                    return "字句エラー: {0}";
-                }
-                MsgId::SyntaxErrorLabel => {
-                    return "構文エラー: {0}";
-                }
-                MsgId::FileNotFound => {
-                    return "エラー: ファイルが見つかりません: {0}";
                 }
             }
         }
-        Lang::En => {
-            match (id) {
-                MsgId::ExpectedButFound => {
-                    return "expected '{0}' but found {1}";
-                }
-                MsgId::ExpectedThing => {
+        MsgId::ExpectedThing => {
+            match (lang) {
+                Lang::En => {
                     return "expected {0} but found {1}";
                 }
-                MsgId::ExpectedIn => {
+                Lang::Ja => {
+                    return "{0} が必要ですが {1} が見つかりました";
+                }
+            }
+        }
+        MsgId::ExpectedIn => {
+            match (lang) {
+                Lang::En => {
                     return "expected '{0}' in {1} but found {2}";
                 }
-                MsgId::ExpectedBodyOrSemi => {
+                Lang::Ja => {
+                    return "{1} には '{0}' が必要ですが {2} が見つかりました";
+                }
+            }
+        }
+        MsgId::ExpectedBodyOrSemi => {
+            match (lang) {
+                Lang::En => {
                     return "expected '{' or ';' after {0} but found {1}";
                 }
-                MsgId::EofIn => {
+                Lang::Ja => {
+                    return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
+                }
+            }
+        }
+        MsgId::EofIn => {
+            match (lang) {
+                Lang::En => {
                     return "unexpected end of file in {0}";
                 }
-                MsgId::EofLookingFor => {
+                Lang::Ja => {
+                    return "{0} の途中で入力が終端しました";
+                }
+            }
+        }
+        MsgId::EofLookingFor => {
+            match (lang) {
+                Lang::En => {
                     return "unexpected end of file while looking for '{0}'";
                 }
-                MsgId::Unterminated => {
+                Lang::Ja => {
+                    return "'{0}' を探索中に入力が終端しました";
+                }
+            }
+        }
+        MsgId::Unterminated => {
+            match (lang) {
+                Lang::En => {
                     return "unterminated {0}";
                 }
-                MsgId::CannotDetermine => {
+                Lang::Ja => {
+                    return "{0} が終端していません";
+                }
+            }
+        }
+        MsgId::CannotDetermine => {
+            match (lang) {
+                Lang::En => {
                     return "could not determine {0}";
                 }
-                MsgId::LexErrorLabel => {
+                Lang::Ja => {
+                    return "{0} を特定できません";
+                }
+            }
+        }
+        MsgId::LexErrorLabel => {
+            match (lang) {
+                Lang::En => {
                     return "lex error: {0}";
                 }
-                MsgId::SyntaxErrorLabel => {
+                Lang::Ja => {
+                    return "字句エラー: {0}";
+                }
+            }
+        }
+        MsgId::SyntaxErrorLabel => {
+            match (lang) {
+                Lang::En => {
                     return "syntax error: {0}";
                 }
-                MsgId::FileNotFound => {
+                Lang::Ja => {
+                    return "構文エラー: {0}";
+                }
+            }
+        }
+        MsgId::FileNotFound => {
+            match (lang) {
+                Lang::En => {
                     return "error: file not found: {0}";
+                }
+                Lang::Ja => {
+                    return "エラー: ファイルが見つかりません: {0}";
                 }
             }
         }
