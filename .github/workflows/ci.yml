@@ -308,8 +308,7 @@ jobs:
           - { id: js-o3,   name: "JSコード生成+実行 O3",  target: tjp3,   backend: js,        needs_node: true  }
           - { id: sv-o0,   name: "SV生成テスト O0",       target: tsvp0,  backend: sv,        needs_node: false }
           - { id: sv-o3,   name: "SV生成テスト O3",       target: tsvp3,  backend: sv,        needs_node: false }
-          # make test（ローカル既定）に含まれるinterpreterスイートをCIでも検証する
-          - { id: interp-o3, name: "インタプリタ実行 O3",  target: tip3,   backend: interpreter, needs_node: false }
+          # interpreterスイート（MIRインタプリタ）はCIでは実行しない（jit系と検証範囲が重複するためジョブを削減。ローカルのmake testには残置）
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
