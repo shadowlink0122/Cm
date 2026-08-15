@@ -10,6 +10,7 @@ Cm言語コンパイラの設計文書の一覧。実装が完了した設計文
 | [文法定義（cm_grammar）](cm_grammar.html) | BNFベースの文法定義 |
 | [バックエンド対応マトリクス](backend_support_matrix.html) | 構文・機能×バックエンドの対応可否とテスト方針 |
 | [エラー処理方針](error_handling_policy.html) | 例外/Result/診断APIの使い分け方針 |
+| [C++・Rustとの比較](language-comparison.html) | Cmの有効な部分とデメリットの現状評価（採用・設計判断の材料） |
 
 ## ロードマップ
 
