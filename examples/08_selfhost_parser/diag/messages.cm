@@ -36,122 +36,55 @@ export Lang current_lang() {
     return Lang::En;
 }
 
-// メッセージID×言語のテンプレート表（プレースホルダ{0}〜{2}を持つ完結した1文）
-// 外側をメッセージID・内側を言語のmatchにして、1つのメッセージの全対訳を1箇所へ集める（ID追加時は対訳を並べて書く）
-string template_of(MsgId id, Lang lang) {
+// メッセージID→対訳配列の表（プレースホルダ{0}〜{2}を持つ完結した1文）
+// 添字はLangのタグ値（En=0, Ja=1）。言語のmatchは持たず、1メッセージの全対訳を1つの配列リテラルで管理する
+string[] templates_of(MsgId id) {
     match (id) {
         MsgId::ExpectedButFound => {
-            match (lang) {
-                Lang::En => {
-                    return "expected '{0}' but found {1}";
-                }
-                Lang::Ja => {
-                    return "'{0}' が必要ですが {1} が見つかりました";
-                }
-            }
+            return ["expected '{0}' but found {1}", "'{0}' が必要ですが {1} が見つかりました"];
         }
         MsgId::ExpectedThing => {
-            match (lang) {
-                Lang::En => {
-                    return "expected {0} but found {1}";
-                }
-                Lang::Ja => {
-                    return "{0} が必要ですが {1} が見つかりました";
-                }
-            }
+            return ["expected {0} but found {1}", "{0} が必要ですが {1} が見つかりました"];
         }
         MsgId::ExpectedIn => {
-            match (lang) {
-                Lang::En => {
-                    return "expected '{0}' in {1} but found {2}";
-                }
-                Lang::Ja => {
-                    return "{1} には '{0}' が必要ですが {2} が見つかりました";
-                }
-            }
+            return ["expected '{0}' in {1} but found {2}", "{1} には '{0}' が必要ですが {2} が見つかりました"];
         }
         MsgId::ExpectedBodyOrSemi => {
-            match (lang) {
-                Lang::En => {
-                    return "expected '{' or ';' after {0} but found {1}";
-                }
-                Lang::Ja => {
-                    return "{0} の後には '{' または ';' が必要ですが {1} が見つかりました";
-                }
-            }
+            return ["expected '{' or ';' after {0} but found {1}", "{0} の後には '{' または ';' が必要ですが {1} が見つかりました"];
         }
         MsgId::EofIn => {
-            match (lang) {
-                Lang::En => {
-                    return "unexpected end of file in {0}";
-                }
-                Lang::Ja => {
-                    return "{0} の途中で入力が終端しました";
-                }
-            }
+            return ["unexpected end of file in {0}", "{0} の途中で入力が終端しました"];
         }
         MsgId::EofLookingFor => {
-            match (lang) {
-                Lang::En => {
-                    return "unexpected end of file while looking for '{0}'";
-                }
-                Lang::Ja => {
-                    return "'{0}' を探索中に入力が終端しました";
-                }
-            }
+            return ["unexpected end of file while looking for '{0}'", "'{0}' を探索中に入力が終端しました"];
         }
         MsgId::Unterminated => {
-            match (lang) {
-                Lang::En => {
-                    return "unterminated {0}";
-                }
-                Lang::Ja => {
-                    return "{0} が終端していません";
-                }
-            }
+            return ["unterminated {0}", "{0} が終端していません"];
         }
         MsgId::CannotDetermine => {
-            match (lang) {
-                Lang::En => {
-                    return "could not determine {0}";
-                }
-                Lang::Ja => {
-                    return "{0} を特定できません";
-                }
-            }
+            return ["could not determine {0}", "{0} を特定できません"];
         }
         MsgId::LexErrorLabel => {
-            match (lang) {
-                Lang::En => {
-                    return "lex error: {0}";
-                }
-                Lang::Ja => {
-                    return "字句エラー: {0}";
-                }
-            }
+            return ["lex error: {0}", "字句エラー: {0}"];
         }
         MsgId::SyntaxErrorLabel => {
-            match (lang) {
-                Lang::En => {
-                    return "syntax error: {0}";
-                }
-                Lang::Ja => {
-                    return "構文エラー: {0}";
-                }
-            }
+            return ["syntax error: {0}", "構文エラー: {0}"];
         }
         MsgId::FileNotFound => {
-            match (lang) {
-                Lang::En => {
-                    return "error: file not found: {0}";
-                }
-                Lang::Ja => {
-                    return "エラー: ファイルが見つかりません: {0}";
-                }
-            }
+            return ["error: file not found: {0}", "エラー: ファイルが見つかりません: {0}"];
         }
     }
-    return "";
+    return [""];
+}
+
+// テンプレートの取り出し（対訳が未整備の言語は英語＝添字0へフォールバックする）
+string template_of(MsgId id, Lang lang) {
+    const string[] t = templates_of(id);
+    const int li = lang as int;
+    if (li < 0 || li >= t.len()) {
+        return t[0];
+    }
+    return t[li];
 }
 
 // ---- フォーマッタ（プレースホルダをこの場で埋める。引数数ごとに提供） ----
